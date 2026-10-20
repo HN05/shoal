@@ -19,7 +19,10 @@ use crate::{
     cli::client,
     paths::Paths,
     process::identity::Identity,
-    protocol::{self, Body, Control, ExecutionEvent, Method, Reattach, Request, Response, timing},
+    protocol::{
+        self, Body, Control, ExecutionEvent, Method, Protection, Reattach, Request, Response,
+        timing,
+    },
 };
 
 pub(super) struct Link {
@@ -105,13 +108,27 @@ impl Link {
         if let Some(reattach) = &mut self.reattach {
             reattach.request.child = child;
             reattach.request.group_id = group_id;
+            reattach.request.awaiting_restore = None;
             reattach.armed = Some(Instant::now());
+        }
+    }
+
+    /// Keep reattaching while the wrapper waits to restore its stopped agent,
+    /// so the next daemon continues the wait.
+    pub(super) fn await_restore(&mut self, protection: Protection) {
+        if let Some(reattach) = &mut self.reattach
+            && reattach.armed.is_some()
+        {
+            reattach.request.awaiting_restore = Some(protection);
+        } else {
+            self.disarm();
         }
     }
 
     /// Stop reattaching: the daemon's record no longer names a running child.
     pub(super) fn disarm(&mut self) {
         if let Some(reattach) = &mut self.reattach {
+            reattach.request.awaiting_restore = None;
             reattach.armed = None;
         }
     }

@@ -274,50 +274,74 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
     serving.abort();
 }
 
-/// Protection stops the agent and the daemon dies while its wrapper waits for
-/// an automatic restore. The wrapper exits, and the next daemon reconciles.
-async fn crash_while_protected(stop: impl AsyncFnOnce(&Manager)) {
+/// How the daemon goes away while a stopped agent waits for its restore.
+enum Interruption {
+    Crash,
+    Shutdown,
+}
+
+/// Protection stops the agent and the daemon goes away while its wrapper waits
+/// for an automatic restore. The wrapper reattaches to the next daemon, which
+/// continues the wait and restores the agent once load recovers.
+async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncFnOnce(&Manager)) {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     stop(&manager).await;
     wait_paused(&manager, &workspace).await;
-    serving.abort();
-    assert_eq!(bounded(launched).await.unwrap().unwrap(), 1);
     let id = executions(&manager, &workspace).await[0].id.clone();
+    if let Interruption::Shutdown = interruption {
+        // A daemon stops accepting before it shuts down.
+        fs::remove_file(&manager.paths.socket).unwrap();
+        bounded(manager.stop_for_shutdown()).await;
+    }
+    serving.abort();
     let reopened = restart(&manager).await;
-    assert!(
-        reopened
-            .reconcile_interrupted_agents()
-            .await
-            .unwrap()
-            .waiting
-            .is_empty()
-    );
-    assert!(executions(&reopened, &workspace).await.is_empty());
+    // The waiting wrapper restores the agent, so only cleanup counts it as
+    // stopped work.
     let saved = record(&reopened, &workspace, &id).unwrap();
     assert_eq!(saved.stage, Some(Stage::Stopped));
-    assert!(saved.stop_reason.is_some());
+    assert!(saved.waiting.is_some());
     assert!(crate::execution::recovery::pending(&reopened.paths, &workspace.id).unwrap());
-    assert!(blocked(&reopened).await.is_empty());
-    reopened.store.shutdown().await;
-}
-
-#[tokio::test]
-async fn daemon_crash_under_memory_pressure_leaves_the_agent_resumable() {
-    crash_while_protected(async |manager| {
-        assert!(
-            manager
-                .stop_agent_for_overload("test memory pressure")
-                .await
-        );
+    assert!(!crate::execution::recovery::any_pending(&reopened.paths));
+    let serving = serve_fixture(reopened.clone());
+    bounded(async {
+        while executions(&reopened, &workspace).await[0].state != ExecutionState::Running {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
     })
     .await;
+    assert!(reopened.agent_was_overloaded(&id).await);
+    assert!(!launched.is_finished());
+    assert!(!workspace.path.join("restored").exists());
+    publish_recovery(&reopened);
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    assert!(record(&reopened, &workspace, &id).is_none());
+    assert!(blocked(&reopened).await.is_empty());
+    reopened.store.shutdown().await;
+    serving.abort();
+}
+
+async fn stop_for_memory(manager: &Manager) {
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
 }
 
 #[tokio::test]
-async fn daemon_crash_under_disk_pressure_leaves_the_agent_resumable() {
-    crash_while_protected(async |manager| {
+async fn daemon_crash_under_memory_pressure_keeps_the_agent_waiting_for_its_restore() {
+    interrupt_while_protected(Interruption::Crash, stop_for_memory).await;
+}
+
+#[tokio::test]
+async fn daemon_crash_under_disk_pressure_keeps_the_agent_waiting_for_its_restore() {
+    interrupt_while_protected(Interruption::Crash, async |manager| {
         let protection = crate::daemon::workspace::Protection {
             reason: "test disk pressure".into(),
             resumes_when: "free disk space recovers".into(),
@@ -328,6 +352,11 @@ async fn daemon_crash_under_disk_pressure_leaves_the_agent_resumable() {
         );
     })
     .await;
+}
+
+#[tokio::test]
+async fn daemon_shutdown_hands_an_agent_waiting_for_its_restore_to_the_next_daemon() {
+    interrupt_while_protected(Interruption::Shutdown, stop_for_memory).await;
 }
 
 /// Protection saved its stop, then an update restarted the daemon before the

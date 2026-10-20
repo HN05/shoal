@@ -611,7 +611,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
             .await
     );
     drop(monitor);
-    // An update would cancel the restore, so the stop holds one back.
+    // An update waits for the restore, so the stop holds one back.
     assert!(manager.background_operations.try_write().is_err());
     wait_paused(&manager, &workspace).await;
     assert!(manager.background_operations.try_write().is_err());
@@ -830,7 +830,12 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
         .collect::<Vec<_>>();
     assert_eq!(records.len(), 1);
     let text = fs::read_to_string(&records[0]).unwrap();
-    let record: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let mut record: serde_json::Value = serde_json::from_str(&text).unwrap();
+    // The wrapper that waited has exited, so resume restores the agent.
+    let waiting = record.as_object_mut().unwrap().remove("waiting").unwrap();
+    let waiting: crate::process::identity::Identity = serde_json::from_value(waiting).unwrap();
+    assert!(!crate::process::identity::alive(&waiting).unwrap());
+    assert!(crate::execution::recovery::any_pending(&manager.paths));
     assert_eq!(
         record,
         serde_json::json!({
@@ -846,34 +851,6 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             .unwrap()
             .is_none()
     );
-    serving.abort();
-}
-
-#[tokio::test]
-async fn shutdown_finishes_an_agent_waiting_for_overload_recovery() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
-    wait_started(&manager, &workspace).await;
-    assert!(
-        manager
-            .stop_agent_for_overload("test memory pressure")
-            .await
-    );
-    wait_paused(&manager, &workspace).await;
-    // The stop watch already holds `true`; sending it again must still wake
-    // the waiting recovery so the wrapper finishes before shutdown completes.
-    bounded(manager.stop_for_shutdown()).await;
-    bounded(launched).await.unwrap().unwrap();
-    assert!(
-        manager
-            .inspect_workspace(&workspace.id)
-            .await
-            .unwrap()
-            .executions
-            .is_empty()
-    );
-    assert!(!workspace.path.join("restored").exists());
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 

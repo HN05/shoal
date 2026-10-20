@@ -104,8 +104,10 @@ session recovery is automatic for built-in Codex and Claude resume commands, or
 when explicitly configured for another agent, and load and disk space have
 recovered. Manual and automatic restores prompt the agent to continue its
 unfinished assignment; configured restore commands receive that prompt through
-`{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked, serialize
-restores, and preserve manual recovery across restarts. Saved recovery represents
+`{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
+like running commands, so a daemon restart or crash hands the wait to the next
+daemon instead of cancelling the restore. Serialize restores, and preserve
+manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded. A record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an

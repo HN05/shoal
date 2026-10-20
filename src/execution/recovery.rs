@@ -13,6 +13,7 @@ use crate::{
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
+    process::identity::{self, Identity},
     protocol::ConfigTarget,
     state::states,
 };
@@ -51,6 +52,9 @@ pub(crate) struct Record {
     /// resume --all` can restore it there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<String>,
+    /// The wrapper that restores the agent automatically while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<Identity>,
 }
 
 impl Recovery {
@@ -137,6 +141,7 @@ impl Recovery {
         })
     }
 
+    /// `waiting` names this wrapper when it restores the agent automatically.
     pub(super) fn save(
         &self,
         paths: &Paths,
@@ -144,8 +149,10 @@ impl Recovery {
         id: &str,
         reason: Option<&str>,
         place: Option<String>,
+        waiting: Option<Identity>,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.agent, reason, Stage::Stopped, place);
+        let mut record = Record::new(&self.agent, reason, Stage::Stopped, place);
+        record.waiting = waiting;
         write_record(paths, workspace_id, id, record)
     }
 }
@@ -157,6 +164,7 @@ impl Record {
             stop_reason: reason.map(str::to_owned),
             stage: Some(stage),
             place,
+            waiting: None,
         }
     }
 
@@ -200,6 +208,7 @@ fn write_record(
     if let Ok(Some(saved)) = Record::load(&path) {
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
         record.place = record.place.or(saved.place);
+        record.waiting = record.waiting.or(saved.waiting);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
@@ -280,22 +289,38 @@ pub(super) enum Waited {
     Cancelled(Option<String>),
 }
 
+/// Wait for the daemon's verdict. While the daemon restarts, the link
+/// reattaches and the next daemon continues the wait.
 pub(super) async fn wait(link: &mut super::Link) -> Result<Waited> {
+    use super::link::{Received, Refused};
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
     let signalled = || Ok(Waited::Cancelled(Some("interrupted".into())));
-    tokio::select! {
-        control = link.control() => match control? {
-            Control::Resume { ports } => Ok(Waited::Resume(ports)),
-            Control::Stop { reason } => Ok(Waited::Cancelled(reason)),
-            _ => anyhow::bail!("unexpected recovery control"),
-        },
-        _ = interrupt.recv() => signalled(),
-        _ = terminate.recv() => signalled(),
-        _ = quit.recv() => signalled(),
+    loop {
+        tokio::select! {
+            received = link.recv() => match received {
+                Ok(Received::Detached | Received::Reattached) => {}
+                Ok(Received::Control(Control::Resume { ports })) => {
+                    // The restored child reattaches once it is registered.
+                    link.disarm();
+                    return Ok(Waited::Resume(ports));
+                }
+                Ok(Received::Control(Control::Stop { reason })) => {
+                    return Ok(Waited::Cancelled(reason));
+                }
+                Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
+                Err(error) if error.is::<Refused>() => {
+                    return Ok(Waited::Cancelled(Some(error.to_string())));
+                }
+                Err(error) => return Err(error),
+            },
+            _ = interrupt.recv() => return signalled(),
+            _ = terminate.recv() => return signalled(),
+            _ = quit.recv() => return signalled(),
+        }
     }
 }
 
@@ -361,18 +386,33 @@ impl Saved {
     pub fn is_empty(&self) -> bool {
         self.agents.is_empty() && self.commands.is_empty()
     }
+
+    /// Drop agents whose wrapper is still waiting to restore them, since
+    /// `shoal resume` has nothing to do for them.
+    pub fn retain_unattended(&mut self) {
+        self.agents.retain(|(_, path)| {
+            !Record::load(path).is_ok_and(|record| {
+                record
+                    .and_then(|record| record.waiting)
+                    .is_some_and(|wrapper| identity::alive(&wrapper).unwrap_or(false))
+            })
+        });
+    }
 }
 
-/// Whether any workspace has stopped work; readable while the daemon is down.
+/// Whether any workspace has stopped work that waits for `shoal resume`;
+/// readable while the daemon is down.
 pub fn any_pending(paths: &Paths) -> bool {
     let Ok(entries) = std::fs::read_dir(paths.state.join("workspaces")) else {
         return false;
     };
     entries.flatten().any(|entry| {
-        entry
-            .file_name()
-            .to_str()
-            .is_some_and(|id| pending(paths, id).unwrap_or(false))
+        entry.file_name().to_str().is_some_and(|id| {
+            Saved::load(paths, id).is_ok_and(|mut saved| {
+                saved.retain_unattended();
+                !saved.is_empty()
+            })
+        })
     })
 }
 
@@ -458,7 +498,14 @@ mod tests {
             handoff_delivered: false,
         };
         recovery
-            .save(&paths, "workspace", "execution", None, Some("w1:p2".into()))
+            .save(
+                &paths,
+                "workspace",
+                "execution",
+                None,
+                Some("w1:p2".into()),
+                None,
+            )
             .unwrap();
         save_record(&paths, "workspace", "execution", "codex", None).unwrap();
         let record: Record = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();

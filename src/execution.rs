@@ -34,7 +34,7 @@ use crate::{
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process,
-    protocol::{Control, ExecutionEvent, Method, Reattach, timing},
+    protocol::{Control, ExecutionEvent, Method, Protection, Reattach, timing},
 };
 use link::{Link, Received, Refused};
 
@@ -424,6 +424,7 @@ async fn run_tracked(
                         &plan.id,
                         stop.saved_reason(),
                         place,
+                        automatic.then(this_wrapper).flatten(),
                     );
                     match &saved {
                         Ok(path) => {
@@ -435,8 +436,18 @@ async fn run_tracked(
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
                     }
                     if link.refusal().is_none() {
-                        // Once paused, the daemon may forget the stopped child.
-                        link.disarm();
+                        match &stop {
+                            Halt::Protection {
+                                reason,
+                                resumes_when,
+                                ..
+                            } if automatic => link.await_restore(Protection {
+                                reason: reason.clone(),
+                                resumes_when: resumes_when.clone(),
+                            }),
+                            // Once paused, the daemon may forget the stopped child.
+                            _ => link.disarm(),
+                        }
                         link.send(&ExecutionEvent::Paused).await?;
                         if let Halt::Protection { resumes_when, .. } = &stop
                             && automatic
@@ -565,6 +576,7 @@ async fn open_execution(
                 agent,
                 recover,
                 running_ms: 0,
+                awaiting_restore: None,
             },
         );
     }
@@ -629,6 +641,13 @@ enum Outcome {
         code: i32,
         stop: Halt,
     },
+}
+
+/// This wrapper, as a recovery record names the one restoring its agent.
+fn this_wrapper() -> Option<process::identity::Identity> {
+    process::identity::capture(std::process::id())
+        .ok()
+        .flatten()
 }
 
 /// Why the daemon stopped a command it expects to be restored.

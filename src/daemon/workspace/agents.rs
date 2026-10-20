@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{GuardMode, Manager};
+pub(crate) use crate::protocol::Protection;
+
 use crate::daemon::log;
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
 
@@ -17,26 +19,8 @@ pub(super) struct Agent {
     /// Set while an overload stop awaits automatic recovery.
     overload: Option<Protection>,
     /// Holds back a daemon update from the stop until the execution's
-    /// connection takes over, since an update would cancel the restore.
+    /// connection takes over, so an update waits for the restore.
     update_hold: Option<OwnedRwLockReadGuard<()>>,
-}
-
-/// Why protection stopped an agent, and what its automatic restore waits for.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Protection {
-    pub reason: String,
-    /// Completes "once …"; recovery also waits for every other signal.
-    pub resumes_when: String,
-}
-
-impl Protection {
-    /// Memory or CPU pressure.
-    pub(crate) fn load(reason: &str) -> Self {
-        Self {
-            reason: reason.into(),
-            resumes_when: crate::protocol::default_resumes_when(),
-        }
-    }
 }
 
 impl Agent {
@@ -266,7 +250,12 @@ impl Manager {
                 Err(error) => format!("{issue}; {error:#}"),
             });
         }
-        (!processes.visibility_complete()).then(|| "its launch identity is incomplete".into())
+        // The daemon forgets a stopped child only after proving the stop, so
+        // a reattached waiting wrapper's record needs no launch identity.
+        let proven_before =
+            record.wrapper.is_some() && record.child.is_none() && record.group_id.is_none();
+        (!processes.visibility_complete() && !proven_before)
+            .then(|| "its launch identity is incomplete".into())
     }
 
     /// Tell the user why a protection-stopped agent's automatic restore waits
@@ -316,6 +305,14 @@ impl Manager {
         )
         .await;
         Ok(true)
+    }
+
+    /// Restore the protection stop of an agent whose wrapper reattached
+    /// while waiting for its automatic restore.
+    pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
+        if let Some(agent) = self.agents.lock().await.get_mut(id) {
+            agent.overload = Some(protection);
+        }
     }
 
     pub(crate) async fn agent_overload(&self, id: &str) -> Option<Protection> {

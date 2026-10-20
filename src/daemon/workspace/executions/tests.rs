@@ -489,6 +489,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         agent: Some("codex".into()),
         recover: true,
         running_ms: 0,
+        awaiting_restore: None,
     };
     let stranger = Identity {
         pid: wrapper.pid,
@@ -548,6 +549,59 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     assert!(error.to_string().contains("already connected"), "{error:#}");
 }
 
+/// A wrapper waiting to restore its stopped agent reattaches after the daemon
+/// forgot the stopped child, and the agent stays stopped for the restore.
+#[tokio::test]
+async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten() {
+    let (_root, manager, workspace) = fixture("true").await;
+    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
+    let started = manager
+        .begin_execution(
+            &workspace.id,
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    let request = Reattach {
+        execution: id.clone(),
+        wrapper: wrapper.clone(),
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
+        scope_token: started.plan.scope_token.clone(),
+        agent: Some("codex".into()),
+        recover: true,
+        running_ms: 0,
+        awaiting_restore: None,
+    };
+    drop(started);
+    // The record names no child, as after a proven pause, and a restart
+    // marks it unknown.
+    manager.detach_execution(&id).await;
+    manager
+        .store
+        .quarantine_interrupted_operations()
+        .await
+        .unwrap();
+    let error = manager.reattach_execution(&request).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("process identity does not match"),
+        "{error:#}"
+    );
+    let protection = crate::protocol::Protection::load("test memory pressure");
+    let reattached = manager
+        .reattach_execution(&Reattach {
+            awaiting_restore: Some(protection.clone()),
+            ..request
+        })
+        .await
+        .unwrap();
+    assert!(*reattached.stop.borrow());
+    assert_eq!(manager.agent_overload(&id).await, Some(protection));
+}
+
 #[tokio::test]
 async fn setup_executions_cannot_reattach() {
     let (_root, manager, workspace) = fixture("exit 0").await;
@@ -572,6 +626,7 @@ async fn setup_executions_cannot_reattach() {
             agent: None,
             recover: false,
             running_ms: 0,
+            awaiting_restore: None,
         })
         .await
         .unwrap_err();

@@ -235,7 +235,8 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     let mut stopped = Vec::new();
     for workspace in client::workspaces(&ctx.paths).await? {
-        let saved = Saved::load(&ctx.paths, &workspace.id)?;
+        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+        saved.retain_unattended();
         if !saved.is_empty() {
             stopped.push((workspace, saved));
         }

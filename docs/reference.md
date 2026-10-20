@@ -100,8 +100,9 @@ state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux s
 ### Daemon restarts
 
 Stopping, restarting or losing the daemon does not interrupt tracked agents and
-commands. Their wrappers keep the command and terminal, write nothing while it
-runs, and reconnect once a daemon listens again; until then the command's own
+commands, nor an agent's wait for its automatic restore after a protection stop.
+Their wrappers keep the command and terminal, write nothing while it runs, and
+reconnect once a daemon listens again, which continues the wait; until then the command's own
 `shoal` calls fail. The new daemon checks the execution record, scope token and
 process identities, then restores the agent's name and automatic recovery
 setting, so stop, overload protection, exit notifications and
@@ -230,7 +231,7 @@ headroom below each enabled signal’s recovery threshold, whose thresholds must
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
-readings, manual stop/removal, lost connections, or changed workspace ownership
+readings, manual stop/removal, an exited wrapper, or changed workspace ownership
 prevent recovery. Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` notification names them, and the wrapper keeps
 waiting until they exit. Reloading with recovery disabled
@@ -252,7 +253,8 @@ Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal exec` commands. Either way they are reported once.
-`--all` resumes every workspace and reports commands without an agent. In an
+`--all` resumes every workspace and reports commands without an agent,
+skipping agents whose wrapper still waits to restore them. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
 pane it stopped in once that pane is back at its prompt. Otherwise it restores a
 single agent in the current terminal and starts several in the background, as

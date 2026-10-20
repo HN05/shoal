@@ -274,7 +274,8 @@ configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   The protection stop also stops the agent's identity-verified processes outside
   its process group; a wrapper whose stop cannot be proven keeps waiting.
-  Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
+  Keep waiting wrappers tracked and reattachable across daemon restarts and crashes,
+  serialize restores and honor manual stop/removal.
   Persist overload recovery and its reason before delivering the stop, reporting save failures
   without disabling protection. Records keep the stop's stage; an unknown
   execution with a saved record is forgotten only once its wrapper exited and no

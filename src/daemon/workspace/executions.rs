@@ -556,9 +556,7 @@ impl Manager {
                     "execution scope token does not match"
                 );
                 ensure!(
-                    execution.wrapper.as_ref() == Some(&verified.wrapper)
-                        && execution.child == verified.child
-                        && execution.group_id == Some(verified.group_id),
+                    reattaching_identity_matches(&execution, &verified),
                     "execution process identity does not match its record"
                 );
                 tx.execute(
@@ -571,8 +569,12 @@ impl Manager {
             .await?;
         let workspace = self.workspace(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
-        self.discard_undelivered_stop(&workspace, &request.execution);
-        let (sender, stop) = watch::channel(false);
+        // A wrapper awaiting a restore has received its stop.
+        if request.awaiting_restore.is_none() {
+            self.discard_undelivered_stop(&workspace, &request.execution);
+        }
+        // A stopped agent stays stopped until its restore.
+        let (sender, stop) = watch::channel(request.awaiting_restore.is_some());
         connections.insert(request.execution.clone(), sender);
         self.issue_scope(
             request.scope_token.clone(),
@@ -596,6 +598,10 @@ impl Manager {
                 Duration::from_millis(request.running_ms),
             )
             .await;
+            if let Some(protection) = &request.awaiting_restore {
+                self.await_agent_restore(&request.execution, protection.clone())
+                    .await;
+            }
         }
         self.touch(&workspace.id).await;
         Ok(ReattachedExecution { workspace, stop })
@@ -714,8 +720,8 @@ impl Manager {
     }
 
     /// Before the daemon exits, ask every connected execution to stop. Wrappers
-    /// that can reattach detach instead and keep their commands running; the
-    /// rest stop as `shoal stop` does, so a restart leaves resumable records
+    /// that can reattach detach instead and keep their commands running or
+    /// their wait for an agent's restore; the rest stop as `shoal stop` does, so a restart leaves resumable records
     /// instead of disconnected executions. Requests already accepted cannot
     /// register afterwards, and wrappers that miss the bound are left for the
     /// startup audit.
@@ -871,4 +877,15 @@ impl Manager {
             .get(id)
             .is_some_and(|sender| !sender.is_closed())
     }
+}
+
+/// Whether a reattaching wrapper is the one the record names. One awaiting a
+/// restore also matches once the daemon has forgotten its stopped child.
+fn reattaching_identity_matches(execution: &Execution, request: &Reattach) -> bool {
+    let child_matches =
+        execution.child == request.child && execution.group_id == Some(request.group_id);
+    let child_forgotten = request.awaiting_restore.is_some()
+        && execution.child.is_none()
+        && execution.group_id.is_none();
+    execution.wrapper.as_ref() == Some(&request.wrapper) && (child_matches || child_forgotten)
 }

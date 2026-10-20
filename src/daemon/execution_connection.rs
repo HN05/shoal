@@ -44,6 +44,8 @@ struct Connected {
     reattach: bool,
     /// The wrapper has reported its running child.
     started: bool,
+    /// The wrapper reattached while waiting to restore its stopped agent.
+    awaiting_restore: bool,
     stop: watch::Receiver<bool>,
 }
 
@@ -114,6 +116,7 @@ pub(super) async fn execute(
         recover,
         reattach,
         started: false,
+        awaiting_restore: false,
         stop,
     };
     let response = Response::new(request_id, Body::Execution(plan));
@@ -154,6 +157,7 @@ pub(super) async fn reattach(
         recover: request.recover,
         reattach: true,
         started: true,
+        awaiting_restore: request.awaiting_restore.is_some(),
         stop,
     };
     serve(
@@ -248,15 +252,20 @@ async fn relay(
         recover,
         reattach,
         started,
+        awaiting_restore,
         stop,
         ..
     } = execution;
     let (kind, recover, reattach) = (*kind, *recover, *reattach);
     let mut awaiting_started = !*started;
-    let mut sent_stop = false;
-    let mut recovering = false;
+    // A wrapper that reattached while waiting continues its pause here.
+    let mut resumed_pause = std::mem::take(awaiting_restore);
+    let mut sent_stop = resumed_pause;
+    let mut recovering = resumed_pause;
     loop {
-        let event = if awaiting_started {
+        let event = if std::mem::take(&mut resumed_pause) {
+            ExecutionEvent::Paused
+        } else if awaiting_started {
             incoming.recv().await.context("execution disconnected")??
         } else {
             let event = incoming.recv();
@@ -319,7 +328,8 @@ async fn relay(
                     continue;
                 }
                 use execution_recovery::Action;
-                // A restart would stop the paused agent instead of restoring it.
+                // An update waits for the restore; other shutdowns hand the
+                // wait to the next daemon.
                 if unattachable.is_none() {
                     *unattachable = manager.background_operations.clone().try_read_owned().ok();
                 }
@@ -338,6 +348,11 @@ async fn relay(
                         awaiting_started = true;
                         sent_stop = false;
                         protocol::write(writer, &Control::Resume { ports }).await?;
+                    }
+                    // The next daemon continues the wait once the wrapper reattaches.
+                    Action::Stop(_) if reattach && manager.shutting_down() => {
+                        protocol::write(writer, &Control::Detach).await?;
+                        return Ok(Ended::Detached);
                     }
                     Action::Stop(reason) => {
                         protocol::write(writer, &Control::Stop { reason }).await?
@@ -492,6 +507,7 @@ mod tests {
                 agent: None,
                 recover: false,
                 running_ms: 0,
+                awaiting_restore: None,
             },
             manager.background_operations.clone().read_owned().await,
         ));

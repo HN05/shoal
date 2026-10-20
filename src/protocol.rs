@@ -731,6 +731,28 @@ pub struct Reattach {
     /// How long the command has run, keeping the overload stop order.
     #[serde(default)]
     pub running_ms: u64,
+    /// Set while the wrapper waits to restore an agent that protection
+    /// stopped; `child` and `group_id` then name the stopped child.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub awaiting_restore: Option<Protection>,
+}
+
+/// Why protection stopped an agent, and what its automatic restore waits for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Protection {
+    pub reason: String,
+    /// Completes "once …"; recovery also waits for every other signal.
+    pub resumes_when: String,
+}
+
+impl Protection {
+    /// Memory or CPU pressure.
+    pub(crate) fn load(reason: &str) -> Self {
+        Self {
+            reason: reason.into(),
+            resumes_when: default_resumes_when(),
+        }
+    }
 }
 
 /// Wrapper → daemon messages after an [`Method::Execute`] response.
