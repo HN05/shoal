@@ -18310,11 +18310,16 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
+    // The agent's commands reach the daemon of an explicit state directory.
+    let state = home.join("state");
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
+            .env_remove("SHOAL_STATE_DIR")
+            .arg("--state-dir")
+            .arg(&state)
             .args(["chat", "--agent", "claude"]),
         "",
         true,

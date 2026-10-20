@@ -41,7 +41,7 @@ pub(super) async fn start(
     agents::trust_checkout(ctx, agent, &repo);
     let command = command(&settings, &repo, agent, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.as_str()).await?;
-    run_here(&repo, &chat, &command)
+    run_here(ctx, &repo, &chat, &command)
 }
 
 /// `shoal ls --chats`.
@@ -205,14 +205,14 @@ fn instructions(settings: &Effective, repo: &Repository) -> String {
 /// Replace this process with the agent, so the terminal's signals reach it
 /// alone and the process the daemon recorded for `chat` runs it. Workspaces
 /// the agent opens belong to the chat.
-fn run_here(repo: &Repository, chat: &Chat, command: &[OsString]) -> Result<i32> {
+fn run_here(ctx: &Context, repo: &Repository, chat: &Chat, command: &[OsString]) -> Result<i32> {
     let (program, args) = command
         .split_first()
         .context("the agent command is empty")?;
     let error = std::process::Command::new(program)
         .args(args)
         .current_dir(&repo.path)
-        .env(crate::env::CHAT, &chat.id)
+        .envs(crate::env::chat_environment(chat, &ctx.paths))
         .exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))
 }
