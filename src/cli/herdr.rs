@@ -103,8 +103,15 @@ pub(in crate::cli) async fn start_add(
         };
         plan.tab_name = Some(TabName::new(template, repo, issue.or(found.as_ref())));
     }
-    let created = create_tab(ctx, plan, placement == Placement::Focus).await?;
+    let directive = tempfile::Builder::new()
+        .prefix("shoal-cd.")
+        .tempfile()
+        .context("create the tab's shell directive")?
+        .into_temp_path();
+    let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
+    // The tab's shell, or its watcher once it closes the tab, removes it now.
+    directive.keep().context("keep the tab's shell directive")?;
     Ok(true)
 }
 
@@ -235,20 +242,18 @@ async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Worksp
 
 // The tab environment carries the plan, keeping the typed command short, and
 // the file in which the worker leaves the workspace for the tab's shell to enter.
-async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<CreatedResult> {
+async fn create_tab(
+    ctx: &Context,
+    plan: &AddPlan,
+    directive: &Path,
+    focus: bool,
+) -> Result<CreatedResult> {
     let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
     create.arg("--env").arg(format!(
         "{}={}",
         env::ADD_PLAN,
         serde_json::to_string(plan)?
     ));
-    let directive = tempfile::Builder::new()
-        .prefix("shoal-cd.")
-        .tempfile()
-        .context("create the tab's shell directive")?
-        .into_temp_path()
-        .keep()
-        .context("keep the tab's shell directive")?;
     create
         .arg("--env")
         .arg(format!("{}={}", env::SHELL_DIRECTIVE, directive.display()));
@@ -407,7 +412,9 @@ impl Tab {
         )
     }
 
-    /// Observe lifecycle separately so returning from an agent leaves the tab open.
+    /// Observe lifecycle separately so returning from an agent leaves the tab
+    /// open. The watcher inherits the tab's shell directive to remove it with
+    /// the tab, whose shell may close before a prompt consumes it.
     pub fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
         if !self.close_when_done {
             return Ok(());
@@ -424,7 +431,6 @@ impl Tab {
         watcher
             .args(&argv[1..])
             .current_dir(&ctx.paths.home)
-            .env_remove(env::SHELL_DIRECTIVE)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -475,6 +481,9 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
             Err(_) => {}
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    if let Some(directive) = std::env::var_os(env::SHELL_DIRECTIVE) {
+        let _ = std::fs::remove_file(directive);
     }
     Ok(0)
 }

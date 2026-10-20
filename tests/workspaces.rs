@@ -17162,6 +17162,15 @@ fn herdr_worker_command(fixture: &Fixture) -> Command {
     command
 }
 
+/// The file the tab's shell follows to enter the workspace its worker added.
+fn herdr_tab_directive(fixture: &Fixture) -> PathBuf {
+    herdr_calls(fixture)[0]
+        .iter()
+        .find_map(|arg| arg.strip_prefix("SHOAL_SHELL_DIRECTIVE="))
+        .map(PathBuf::from)
+        .unwrap()
+}
+
 fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
     fs::read_to_string(fixture.root.path().join("herdr-calls"))
         .unwrap()
@@ -17218,11 +17227,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     // The tab's shell, not the caller's, enters the workspace after the agent.
-    let tab_directive = herdr_calls(&fixture)[0]
-        .iter()
-        .find_map(|arg| arg.strip_prefix("SHOAL_SHELL_DIRECTIVE="))
-        .map(PathBuf::from)
-        .unwrap();
+    let tab_directive = herdr_tab_directive(&fixture);
     let workspace = fixture.ok(&["inspect", "herdr-agent"]);
     assert_eq!(
         fs::read_to_string(&tab_directive).unwrap(),
@@ -17783,6 +17788,9 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     wait_until("done cleanup", || {
         fixture.ok(&["ls"]).as_array().unwrap().is_empty()
     });
+    // The closed tab's shell never reaches a prompt to consume its directive.
+    let directive = herdr_tab_directive(&fixture);
+    wait_until("directive removal", || !directive.exists());
 }
 
 #[test]
