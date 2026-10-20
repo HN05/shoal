@@ -184,32 +184,63 @@ pub async fn run_tool(
     tool: &str,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    use std::os::unix::process::CommandExt;
-    let manifest = launchers.join(MANIFEST);
-    let secrets: Secrets = serde_json::from_slice(
-        &std::fs::read(&manifest).with_context(|| format!("read {}", manifest.display()))?,
-    )
-    .with_context(|| format!("parse {}", manifest.display()))?;
+    let secrets = read_manifest(launchers)?;
+    let served = served_to(&secrets, tool);
     let search = path_after(&std::env::var_os("PATH").unwrap_or_default(), launchers)?;
     let program = crate::fsutil::find_executable(OsStr::new(tool), &search)
         .with_context(|| format!("{tool} is not on PATH"))?;
-    let served: Vec<_> = secrets
+    authorize(paths, tool, &served).await?;
+    let values = fetch_served(served, &search).await?;
+    exec_with(&program, args, values)
+}
+
+fn read_manifest(launchers: &Path) -> Result<Secrets> {
+    let manifest = launchers.join(MANIFEST);
+    serde_json::from_slice(
+        &std::fs::read(&manifest).with_context(|| format!("read {}", manifest.display()))?,
+    )
+    .with_context(|| format!("parse {}", manifest.display()))
+}
+
+fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secret)> {
+    secrets
         .iter()
         .filter(|(_, secret)| secret.tools.iter().any(|candidate| candidate == tool))
-        .collect();
-    for (name, secret) in &served {
+        .collect()
+}
+
+/// Confirm a grant for every gated secret before any value is fetched.
+async fn authorize(paths: &Paths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
+    for (name, secret) in served {
         if secret.requires_approval {
             confirm_grant(paths, tool, name, secret).await?;
         }
     }
-    let mut command = std::process::Command::new(&program);
-    command.args(args);
-    let mut names = Vec::new();
+    Ok(())
+}
+
+/// Fetch each served value with PATH set to `search`.
+async fn fetch_served<'a>(
+    served: Vec<(&'a String, &'a Secret)>,
+    search: &OsStr,
+) -> Result<Vec<(&'a String, OsString)>> {
+    let mut values = Vec::new();
     for (name, secret) in served {
-        command.env(name, fetch(name, secret, Some(&search)).await?);
-        names.push(name);
+        values.push((name, fetch(name, secret, Some(search)).await?));
     }
-    command.env(env::SECRET_ENV, exported_names(names.into_iter()));
+    Ok(values)
+}
+
+/// Replace this process with `program`, adding the fetched values.
+fn exec_with(program: &Path, args: Vec<OsString>, values: Vec<(&String, OsString)>) -> Result<i32> {
+    use std::os::unix::process::CommandExt;
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    command.env(
+        env::SECRET_ENV,
+        exported_names(values.iter().map(|(name, _)| *name)),
+    );
+    command.envs(values);
     Err(command.exec()).with_context(|| format!("run {}", program.display()))
 }
 
@@ -221,9 +252,8 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
         daemon::{approvals::DecisionStatus, secrets::SecretRequest},
         protocol::{Body, Method},
     };
-    let workspace = std::env::var(env::WORKSPACE_ID).with_context(|| {
-        format!("secrets.{name} requires approval, and {tool} runs outside a Shoal workspace")
-    })?;
+    let workspace = std::env::var(env::WORKSPACE_ID)
+        .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
     let method = Method::SecretAcquire {
         workspace,
         name: name.to_owned(),
