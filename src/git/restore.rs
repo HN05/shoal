@@ -26,7 +26,8 @@ pub async fn workspace_ids(repo: &Path) -> Result<Vec<String>> {
 
 /// The size of the files a snapshot would add to HEAD: tracked changes and
 /// untracked files, excluding ignored ones. `None` when an untracked directory
-/// is a nested repository, whose files a snapshot cannot keep.
+/// is a nested repository or a submodule changed, since a snapshot records
+/// only the commit of either, not its files.
 pub async fn unsaved_bytes(worktree: &Path) -> Result<Option<u64>> {
     let changed = run_isolated(worktree, &["diff", "-z", "--name-only", "HEAD", "--"]).await?;
     let untracked = run_isolated(
@@ -35,7 +36,7 @@ pub async fn unsaved_bytes(worktree: &Path) -> Result<Option<u64>> {
     )
     .await?;
     // Git lists a nested repository as its directory, without descending.
-    if untracked.split('\0').any(|file| file.ends_with('/')) {
+    if untracked.split('\0').any(|file| file.ends_with('/')) || changed_submodule(worktree).await? {
         return Ok(None);
     }
     let mut bytes = 0;
@@ -50,6 +51,36 @@ pub async fn unsaved_bytes(worktree: &Path) -> Result<Option<u64>> {
         }
     }
     Ok(Some(bytes))
+}
+
+/// Whether a submodule has a new commit, tracked changes or untracked files.
+async fn changed_submodule(worktree: &Path) -> Result<bool> {
+    let status = run_isolated(
+        worktree,
+        &[
+            "status",
+            "--porcelain=v2",
+            "-z",
+            "--untracked-files=no",
+            "--ignore-submodules=none",
+        ],
+    )
+    .await?;
+    let mut entries = status.split('\0');
+    while let Some(entry) = entries.next() {
+        let mut fields = entry.split(' ');
+        let kind = fields.next();
+        // Changed entries name their submodule state third: `S` and flags.
+        if matches!(kind, Some("1" | "2")) && fields.nth(1).is_some_and(|sub| sub.starts_with('S'))
+        {
+            return Ok(true);
+        }
+        // A rename's original path follows as its own entry.
+        if kind == Some("2") {
+            entries.next();
+        }
+    }
+    Ok(false)
 }
 
 /// A commit of the worktree's files, ignored ones excepted, on top of HEAD;
@@ -157,5 +188,31 @@ mod tests {
         assert_eq!(workspace_ids(&repo).await.unwrap(), ["workspace"]);
         delete(&repo, &reference).await.unwrap();
         assert!(workspace_ids(&repo).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn changed_submodules_cannot_be_archived() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        let sub = repository(root.path(), "sub");
+        git(
+            &repo,
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "-q",
+                sub.to_str().unwrap(),
+                "sub",
+            ],
+        );
+        git(&repo, &["commit", "-q", "-m", "submodule"]);
+        assert_eq!(unsaved_bytes(&repo).await.unwrap(), Some(0));
+        fs::write(repo.join("sub/tracked"), "uncommitted\n").unwrap();
+        assert_eq!(unsaved_bytes(&repo).await.unwrap(), None);
+        git(&repo.join("sub"), &["checkout", "-q", "--", "tracked"]);
+        fs::write(repo.join("sub/untracked"), "new\n").unwrap();
+        assert_eq!(unsaved_bytes(&repo).await.unwrap(), None);
     }
 }

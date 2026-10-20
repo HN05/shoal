@@ -1364,8 +1364,8 @@ Every removal of an existing worktree, manual or automatic, keeps a restore
 point: a commit of HEAD plus its uncommitted and untracked files, without
 ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a
 record of the branch, HEAD, base and linked issue and PRs. When the unsaved files
-exceed `archive_max_mb` or include an untracked nested repository, the restore
-point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
+exceed `archive_max_mb`, include an untracked nested repository or a changed
+submodule, whose files it cannot hold, the restore point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
 
 ```toml
 [cleanup.restore]
