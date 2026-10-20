@@ -769,7 +769,7 @@ ordinary executions keep their settings. When the profile sets `user.name` or
 field are dropped. Push credentials follow profile settings such as
 `core.sshCommand`. An undefined profile fails before the agent starts.
 
-For `fj` 0.6, a separate home selects separate credentials on macOS; Linux also
+For `fj` 0.7, a separate home selects separate credentials on macOS; Linux also
 needs a separate XDG data directory. Save this as `~/bin/fj-agent`, substitute
 the installed `fj` path, and make it executable:
 
