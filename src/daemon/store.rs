@@ -1105,6 +1105,30 @@ mod tests {
             .collect::<rusqlite::Result<_>>()?)
     }
 
+    /// The operation snapshot of `seed_interrupted_operations` after quarantine.
+    fn quarantined_snapshot() -> Vec<String> {
+        let mut rows: Vec<String> = WorkspaceState::ALL
+            .iter()
+            .map(|&original| {
+                let (state, error) = match original {
+                    WorkspaceState::Preparing
+                    | WorkspaceState::Stopping
+                    | WorkspaceState::Removing
+                    | WorkspaceState::Reconciling => (
+                        WorkspaceState::Failed,
+                        "daemon stopped during workspace operation; inspect before cleanup",
+                    ),
+                    WorkspaceState::Ready | WorkspaceState::Failed => (original, "original error"),
+                };
+                serde_json::json!([original, state, error]).to_string()
+            })
+            .collect();
+        rows.push(serde_json::json!(["execution", ExecutionState::Unknown]).to_string());
+        rows.push(r#"{"status":"interrupted","reason":"keep audit"}"#.into());
+        rows.sort();
+        rows
+    }
+
     #[tokio::test]
     async fn current_schema_reopen_preserves_active_operations() {
         let root = tempfile::tempdir().unwrap();
@@ -1123,39 +1147,11 @@ mod tests {
         let root = tempfile::tempdir()?;
         let store = Store::open(root.path().join("state.db")).await?;
         store.run(seed_interrupted_operations).await?;
-        store.quarantine_interrupted_operations().await?;
-        store
-            .run(|db| {
-                for &original in WorkspaceState::ALL {
-                    let (state, error): (WorkspaceState, String) = db.query_row(
-                        "SELECT state,error FROM workspaces WHERE id=?1",
-                        [original],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )?;
-                    match original {
-                        WorkspaceState::Preparing
-                        | WorkspaceState::Stopping
-                        | WorkspaceState::Removing
-                        | WorkspaceState::Reconciling => {
-                            assert_eq!(state, WorkspaceState::Failed, "{original}");
-                            assert_eq!(
-                                error,
-                                "daemon stopped during workspace operation; inspect before cleanup",
-                                "{original}"
-                            );
-                        }
-                        WorkspaceState::Ready | WorkspaceState::Failed => {
-                            assert_eq!(state, original);
-                            assert_eq!(error, "original error", "{original}");
-                        }
-                    }
-                }
-                Ok(())
-            })
-            .await?;
-        let quarantined = store.run(operation_snapshot).await?;
-        store.quarantine_interrupted_operations().await?;
-        assert_eq!(store.run(operation_snapshot).await?, quarantined);
+        // A second quarantine finds nothing left to change.
+        for _ in 0..2 {
+            store.quarantine_interrupted_operations().await?;
+            assert_eq!(store.run(operation_snapshot).await?, quarantined_snapshot());
+        }
         Ok(())
     }
 
@@ -1194,16 +1190,7 @@ mod tests {
         }).await.unwrap();
         migrated.quarantine_interrupted_operations().await.unwrap();
         let recovered = migrated.run(operation_snapshot).await.unwrap();
-        assert_ne!(recovered, before);
-        for settled in [
-            r#"["failed","failed","original error"]"#,
-            r#"["ready","ready","original error"]"#,
-        ] {
-            assert!(
-                recovered.iter().any(|row| row == settled),
-                "{settled} changed"
-            );
-        }
+        assert_eq!(recovered, quarantined_snapshot());
         let reopened = Store::open(path).await.unwrap();
         reopened.quarantine_interrupted_operations().await.unwrap();
         assert_eq!(reopened.run(operation_snapshot).await.unwrap(), recovered);
