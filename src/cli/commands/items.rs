@@ -27,6 +27,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             body,
             base,
             draft,
+            no_draft,
             labels,
             reviewers,
         } => {
@@ -34,7 +35,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
                 title,
                 body: read_body(body)?,
                 base,
-                draft,
+                draft: (draft || no_draft).then_some(draft),
                 labels,
                 reviewers,
             };

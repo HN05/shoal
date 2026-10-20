@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 88;
+pub const VERSION: u32 = 89;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -241,9 +241,11 @@ pub enum Method {
         workspace: String,
         selection: crate::forge::link::Selection,
     },
+    /// `draft` overrides `[unready] draft` when set.
     ClearReady {
         workspace: String,
         selection: crate::forge::link::Selection,
+        draft: Option<bool>,
     },
     /// The caller's execution, when scoped, is recorded as the reporter.
     SetAgentState {

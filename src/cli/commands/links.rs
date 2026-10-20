@@ -183,7 +183,8 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn unready(ctx: &Context, items: ItemArgs) -> Result<i32> {
+/// `draft` overrides `[unready] draft` when given.
+pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
@@ -192,6 +193,7 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs) -> Result<i32> {
         Method::ClearReady {
             workspace,
             selection,
+            draft,
         },
     )
     .await?;

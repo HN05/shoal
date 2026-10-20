@@ -1420,9 +1420,15 @@ branch in the repository, or opens one and links it. A new PR's title is
 `--title`, else the linked issue's title, else the last commit's subject; its
 description is the supplied `--body` or `--body-file`, or `Closes #<number>`
 when no body is supplied for a linked issue; its base is `--base`, else the base
-workspace's branch, else the default branch. `--draft`, repeated `--label` and
-repeated `--reviewer` also apply only to a new PR. Its JSON adds `created`
-(false for a PR it found) and `linked`.
+workspace's branch, else the default branch. It is a draft with `--draft` or
+`[pr] draft = true`, which `--no-draft` overrides. Draft state, repeated
+`--label` and repeated `--reviewer` apply only to a new PR. Its JSON adds
+`created` (false for a PR it found) and `linked`.
+
+```toml
+[pr]
+draft = false # Default: false
+```
 
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
 number or URL given, otherwise the linked issue or the only linked PR. `edit`
@@ -1533,6 +1539,7 @@ remain available. Previous PR registration and wait command spellings remain acc
 shoal ready              # Mark every linked item, or the workspace when none are linked
 shoal ready pr 12        # Mark one linked PR; `ready issue` marks the linked issue
 shoal unready            # Withdraw all marks; select a kind or item like unlink
+shoal unready --draft    # Also return the PRs whose marks are withdrawn to draft
 ```
 
 A mark says the agent considers the work for a linked issue or PR, or for the
@@ -1554,9 +1561,22 @@ workspace; `--workspace` selects another one for unscoped callers.
 `post_ready_cmd` runs in the daemon after marks are recorded, under the same
 rules, precedence and limits as `post_done_cmd`, with `SHOAL_REVIEW_MARKS` holding
 the JSON array of marks just recorded. Failure records `hook_failed` and keeps
-the marks; every `shoal ready` runs it again. A mark does not change the issue or
-PR; forge changes belong in this hook, an event consumer, or an explicit
-[issue or PR action](#issue-and-pr-actions).
+the marks; every `shoal ready` runs it again.
+
+Before the hook, `shoal ready` takes each marked open PR that is a draft out of
+draft, as `shoal pr edit --no-draft` would; `[ready] undraft = false` keeps marks
+local. `shoal unready --draft`, or `[unready] draft = true`, returns the open PRs
+whose marks it withdraws to draft; `--no-draft` overrides that setting. A failed
+change keeps the recorded marks or withdrawals, and the command reports it and
+exits non-zero. Marks never change issues, and unlinking leaves the PR as it is.
+
+```toml
+[ready]
+undraft = true # Default: true
+
+[unready]
+draft = false  # Default: false
+```
 
 ### Agent state
 

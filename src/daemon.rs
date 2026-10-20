@@ -631,7 +631,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ClearReady {
             workspace,
             selection,
-        } => Body::ReviewMarks(manager.clear_ready(&workspace, selection).await?),
+            draft,
+        } => Body::ReviewMarks(manager.clear_ready(&workspace, selection, draft).await?),
         Method::SetAgentState { workspace, state } => {
             let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
             Body::AgentStatus(

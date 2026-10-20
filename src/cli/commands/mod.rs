@@ -300,7 +300,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => view::view(&ctx, items, no_comments, check).await,
         Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
-        Command::Unready { items } => links::unready(&ctx, items).await,
+        Command::Unready {
+            items,
+            draft,
+            no_draft,
+        } => links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await,
         Command::Adopt {
             path,
             repository,

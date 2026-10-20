@@ -46,6 +46,11 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .create_workspace(&repo.id, "ready".into(), None, None, None)
         .await
         .unwrap();
+    // Draft state is covered with a fake forge below.
+    manager
+        .set_repository_config(&repo.id, Some("[ready]\nundraft = false\n".into()))
+        .await
+        .unwrap();
     git(&workspace.path, &["remote", "add", "origin", REMOTE]);
     let forge = ForgeRepo::parse(REMOTE).unwrap();
     let (_, pr) = forge.pull("12").unwrap();
@@ -148,13 +153,13 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     // Unlinking withdraws a mark; explicit clearing needs an existing mark.
     manager.clear_issue(&workspace.id, None).await.unwrap();
     let cleared = manager
-        .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")))
+        .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")), None)
         .await
         .unwrap();
     assert_eq!(cleared.len(), 1);
     assert!(
         manager
-            .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")))
+            .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")), None)
             .await
             .is_err()
     );
@@ -245,6 +250,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
             Method::ClearReady {
                 workspace: target.clone(),
                 selection: Selection::default(),
+                draft: None,
             },
         ] {
             assert_eq!(
@@ -310,4 +316,166 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
                 .message
                 .contains("post_ready_cmd exited with 3")
     }));
+}
+
+/// A `gh` that serves PR 12 of [`REMOTE`] with the draft state in `state`,
+/// changes it through GraphQL, and fails while `fail` exists.
+fn fake_gh(dir: &std::path::Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let gh = dir.join("gh-agent");
+    let state = dir.join("state");
+    let fail = dir.join("fail");
+    let log = dir.join("log");
+    std::fs::write(
+        &gh,
+        format!(
+            r#"#!/bin/sh
+input=$(cat)
+echo "$*" >> '{log}'
+[ -e '{fail}' ] && {{ echo '{{"message":"forbidden"}}'; exit 1; }}
+case "$*" in
+  *graphql*)
+    case "$input" in
+      *markPullRequestReadyForReview*) echo false > '{state}' ;;
+      *convertPullRequestToDraft*) echo true > '{state}' ;;
+    esac
+    echo '{{"data":{{}}}}' ;;
+  *pulls/12*)
+    printf '{{"number":12,"title":"Fix","state":"open","draft":%s,"node_id":"PR_1","head":{{"ref":"ready"}},"base":{{"ref":"main"}},"labels":[]}}' "$(cat '{state}')" ;;
+esac
+"#,
+            log = log.display(),
+            fail = fail.display(),
+            state = state.display(),
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(&state, "true\n").unwrap();
+    gh
+}
+
+#[tokio::test]
+async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    git(&workspace.path, &["remote", "add", "origin", REMOTE]);
+    let forge_dir = temp.path().join("forge");
+    std::fs::create_dir(&forge_dir).unwrap();
+    let gh = fake_gh(&forge_dir);
+    let config = |extra: &str| format!("[agent_auth]\ngh = '{}'\n{extra}", gh.display());
+    manager
+        .set_repository_config(&repo.id, Some(config("")))
+        .await
+        .unwrap();
+    let (_, pr) = ForgeRepo::parse(REMOTE).unwrap().pull("12").unwrap();
+    let id = workspace.id.clone();
+    let registration = serde_json::json!({ "url": pr });
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                params![id, registration.to_string()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let draft = || std::fs::read_to_string(forge_dir.join("state")).unwrap() == "true\n";
+    let mutations = || {
+        std::fs::read_to_string(forge_dir.join("log"))
+            .unwrap_or_default()
+            .matches("graphql")
+            .count()
+    };
+
+    // Marking undrafts by default, and a PR already out of draft is left alone.
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    assert!(!draft());
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    assert_eq!(mutations(), 1);
+    let changes = manager
+        .workspace_events(None, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|item| {
+            matches!(item, EventItem::Event(event) if event.details.kind == EventKind::ItemChanged)
+        })
+        .count();
+    assert_eq!(changes, 1);
+
+    // Withdrawing leaves the PR ready unless asked to return it to draft.
+    manager
+        .clear_ready(&workspace.id, Selection::default(), None)
+        .await
+        .unwrap();
+    assert!(!draft());
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    manager
+        .clear_ready(&workspace.id, Selection::default(), Some(true))
+        .await
+        .unwrap();
+    assert!(draft());
+
+    // `[unready] draft` returns it without the flag; `[ready] undraft = false`
+    // keeps a mark local.
+    manager
+        .set_repository_config(
+            &repo.id,
+            Some(config(
+                "[ready]\nundraft = false\n[unready]\ndraft = true\n",
+            )),
+        )
+        .await
+        .unwrap();
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    assert!(draft());
+    manager
+        .set_repository_config(&repo.id, Some(config("[unready]\ndraft = true\n")))
+        .await
+        .unwrap();
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    assert!(!draft());
+    manager
+        .clear_ready(&workspace.id, Selection::default(), None)
+        .await
+        .unwrap();
+    assert!(draft());
+
+    // A forge failure reports the PR still in draft and keeps the mark.
+    std::fs::write(forge_dir.join("fail"), "").unwrap();
+    let error = manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("still a draft"), "{error:#}");
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().review.len(),
+        1
+    );
 }

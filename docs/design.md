@@ -673,7 +673,8 @@ tooling stay with clients.
 
 `shoal pr open` pushes, then finds or opens the branch's PR and links it in one
 daemon request, so a PR Shoal opens is never left unlinked. A new PR is ready
-unless `--draft` is given, because opening a ready PR is what requests review.
+unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
+what requests review.
 An explicitly supplied description is preserved verbatim; when no description
 is supplied, a linked issue is referenced with `Closes #<number>`.
 Its options are modeled rather than passed through to a CLI, so they mean the
@@ -687,8 +688,13 @@ again is an explicit statement about the new revision. Marking linked items
 replaces a workspace mark. Unlinking an item
 withdraws its mark and removal deletes all marks. Marks and withdrawals are
 journal events, and `post_ready_cmd` runs after each explicit mark under the
-completion hook rules; failure notifies and keeps the marks. Shoal does not act
-on the forge for a mark. Proposal: an opt-in that undrafts a linked PR (#454).
+completion hook rules; failure notifies and keeps the marks. Marking a linked
+draft PR also takes it out of draft unless `[ready] undraft = false`, since
+forges and review bots often skip drafts. Withdrawing a mark leaves the PR
+ready unless `--draft` or `[unready] draft` asks to return it to draft, because
+an agent usually withdraws to push more work that still needs CI and review.
+A failed forge change keeps the mark change and fails the command, so the
+agent can retry.
 
 Agent state is the turn state a workspace's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` after its turn. Like

@@ -5,9 +5,9 @@ use anyhow::{Context, Result, bail};
 use super::{
     ForgeRepo,
     account::Account,
-    action::Action,
+    action::{Action, Edit},
     create::{NewIssue, NewPull, PullOptions},
-    item::{Item, Opened},
+    item::{Item, ItemState, Opened},
     link::ItemKind,
     pr::wait::{OwnChange, record_own_change},
     repository,
@@ -47,13 +47,65 @@ impl Manager {
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
         let _gate = self.pr_gate.lock().await;
+        let target = Target { kind, number, url };
+        self.apply_own(&workspace.id, &forge, &account, target, &action)
+            .await
+    }
+
+    /// Move the workspace's open PRs at `urls` into or out of draft as its
+    /// agent account, leaving those already in that state unchanged. The
+    /// caller holds the PR gate.
+    pub(crate) async fn set_draft(
+        &self,
+        workspace: &Workspace,
+        urls: &[String],
+        draft: bool,
+    ) -> Result<()> {
+        if urls.is_empty() {
+            return Ok(());
+        }
+        let forge = workspace_forge(workspace).await?;
+        let account = self.agent_account(workspace).await?;
+        let action = Action::Edit(Edit {
+            draft: Some(draft),
+            ..Edit::default()
+        });
+        for url in urls {
+            let (number, url) = forge.pull(url)?;
+            let item = forge.read(&account, ItemKind::Pr, number).await?.item;
+            let pending = item.state == ItemState::Open
+                && item.pr.as_ref().is_some_and(|pr| pr.draft != draft);
+            if pending {
+                let target = Target {
+                    kind: ItemKind::Pr,
+                    number,
+                    url,
+                };
+                self.apply_own(&workspace.id, &forge, &account, target, &action)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply `action` and record it as the workspace's own change. The
+    /// caller holds the PR gate.
+    async fn apply_own(
+        &self,
+        id: &str,
+        forge: &ForgeRepo,
+        account: &Account,
+        target: Target,
+        action: &Action,
+    ) -> Result<Item> {
+        let Target { kind, number, url } = target;
         let acted = forge
-            .apply(&account, kind, number, &action)
+            .apply(account, kind, number, action)
             .await
             .with_context(|| format!("could not {} {url}", action.name()))?;
-        let id = workspace.id.clone();
+        let id = id.to_owned();
         let name = action.name();
-        let own = own_state(&action).then(|| acted.item.state.as_str());
+        let own = own_state(action).then(|| acted.item.state.as_str());
         let authored = acted.authored;
         self.store
             .run(move |db| {
@@ -71,6 +123,13 @@ impl Manager {
             .await?;
         Ok(acted.item)
     }
+}
+
+/// The item an action changes.
+struct Target {
+    kind: ItemKind,
+    number: u64,
+    url: String,
 }
 
 /// Whether the state an action leaves is the agent's own change. Merging is
@@ -158,7 +217,8 @@ impl Manager {
                 false,
             ),
             None => {
-                let pull = new_pull(&workspace, &forge, &account, options).await?;
+                let draft = self.workspace_settings(&workspace).await?.pr.draft;
+                let pull = new_pull(&workspace, &forge, &account, options, draft).await?;
                 (forge.create_pull(&account, &pull).await?, true)
             }
         };
@@ -194,12 +254,14 @@ impl Manager {
 
 /// Fill what the caller left unset: the title from the linked issue, then
 /// the last commit; a closing reference to the linked issue; the base
-/// workspace's branch, then the default branch.
+/// workspace's branch, then the default branch; draft state from
+/// `default_draft`.
 async fn new_pull(
     workspace: &Workspace,
     forge: &ForgeRepo,
     account: &Account,
     options: PullOptions,
+    default_draft: bool,
 ) -> Result<NewPull> {
     let issue = match &workspace.links.issue {
         Some(url) => Some(forge.issue(url)?.0),
@@ -236,7 +298,7 @@ async fn new_pull(
         body: description(options.body, issue),
         head: workspace.branch.clone(),
         base,
-        draft: options.draft,
+        draft: options.draft.unwrap_or(default_draft),
         labels: options.labels,
         reviewers: options.reviewers,
     })

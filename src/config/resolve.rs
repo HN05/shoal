@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::{
     config::{
-        self, AutoCleanup, Cleanup, Codex, Config, Done, Land, Ports, PrCleanup, Review,
-        Simulators, named_commands,
+        self, AutoCleanup, Cleanup, Codex, Config, Done, Land, Ports, Pr, PrCleanup, Ready, Review,
+        Simulators, Unready, named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
     hooks::HookKind,
@@ -50,6 +50,9 @@ pub struct Effective {
     pub cleanup: Cleanup,
     pub done: Done,
     pub review: Review,
+    pub ready: Ready,
+    pub unready: Unready,
+    pub pr: Pr,
     pub land: Land,
     pub seed: config::repo::Seed,
 }
@@ -224,6 +227,15 @@ impl Effective {
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
             },
+            ready: Ready {
+                undraft: built_in(merged.ready.undraft, "ready.undraft")?,
+            },
+            unready: Unready {
+                draft: built_in(merged.unready.draft, "unready.draft")?,
+            },
+            pr: Pr {
+                draft: built_in(merged.pr.draft, "pr.draft")?,
+            },
             land: Land {
                 push: built_in(merged.land.push, "land.push")?,
             },
@@ -277,6 +289,15 @@ fn built_in() -> RepoConfig {
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
+        },
+        ready: config::repo::Ready {
+            undraft: Some(Ready::default().undraft),
+        },
+        unready: config::repo::Unready {
+            draft: Some(Unready::default().draft),
+        },
+        pr: config::repo::Pr {
+            draft: Some(Pr::default().draft),
         },
         land: config::repo::Land {
             push: Some(Land::default().push),
@@ -564,6 +585,9 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(done.cleanup),
         scalar!(done.automatic),
         scalar!(review.post),
+        scalar!(ready.undraft),
+        scalar!(unready.draft),
+        scalar!(pr.draft),
         scalar!(land.push),
         scalar!(seed.cmd),
         list!(seed.paths),
@@ -590,7 +614,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n\
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\n\
 [seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
@@ -817,6 +841,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             pr_cleanup: _,
             done,
             review,
+            ready,
+            unready,
+            pr,
             land,
             seed,
         } = full.clone();
@@ -872,6 +899,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             done.cleanup.is_some(),
             done.automatic.is_some(),
             review.post.is_some(),
+            ready.undraft.is_some(),
+            unready.draft.is_some(),
+            pr.draft.is_some(),
             land.push.is_some(),
             seed.cmd.is_some(),
         ] {

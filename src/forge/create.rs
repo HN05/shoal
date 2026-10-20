@@ -29,7 +29,8 @@ pub struct PullOptions {
     pub title: Option<String>,
     pub body: Option<String>,
     pub base: Option<String>,
-    pub draft: bool,
+    /// Overrides `[pr] draft` when set.
+    pub draft: Option<bool>,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
 }

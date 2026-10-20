@@ -172,6 +172,12 @@ pub enum Command {
     Unready {
         #[command(flatten)]
         items: ItemArgs,
+        /// Return the PRs whose marks are withdrawn to draft, overriding [unready] draft.
+        #[arg(long, overrides_with = "no_draft")]
+        draft: bool,
+        /// Leave the PRs' draft state unchanged, overriding [unready] draft.
+        #[arg(long, overrides_with = "draft")]
+        no_draft: bool,
     },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
@@ -614,9 +620,12 @@ pub enum PrCommand {
         /// Base branch; defaults to the base workspace's branch, then the default branch.
         #[arg(long)]
         base: Option<String>,
-        /// Open the PR as a draft.
-        #[arg(long)]
+        /// Open the PR as a draft, overriding [pr] draft.
+        #[arg(long, overrides_with = "no_draft")]
         draft: bool,
+        /// Open the PR ready for review, overriding [pr] draft.
+        #[arg(long, overrides_with = "draft")]
+        no_draft: bool,
         /// Add a label; repeat for more.
         #[arg(long = "label", value_name = "LABEL")]
         labels: Vec<String>,

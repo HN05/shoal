@@ -114,6 +114,9 @@ pub struct Config {
     pub pr_cleanup: repo::PrCleanup,
     pub done: repo::Done,
     pub review: repo::Review,
+    pub ready: repo::Ready,
+    pub unready: repo::Unready,
+    pub pr: repo::Pr,
     pub land: repo::Land,
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
@@ -241,6 +244,27 @@ impl Default for Review {
     fn default() -> Self {
         Self { post: true }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct Ready {
+    pub undraft: bool,
+}
+
+impl Default for Ready {
+    fn default() -> Self {
+        Self { undraft: true }
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct Unready {
+    pub draft: bool,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct Pr {
+    pub draft: bool,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -479,6 +503,9 @@ impl Config {
             cleanup: self.cleanup,
             done: self.done,
             review: self.review,
+            ready: self.ready,
+            unready: self.unready,
+            pr: self.pr,
             land: self.land,
             ..Default::default()
         }

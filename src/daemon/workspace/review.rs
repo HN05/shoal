@@ -1,7 +1,9 @@
 //! Ready-for-review marks: an agent's statement that linked work is ready at a
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
-use anyhow::{Result, ensure};
+use std::path::Path;
+
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
@@ -47,7 +49,9 @@ pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 impl Manager {
     /// Mark the selected linked items ready at HEAD, or the workspace itself
     /// when nothing is linked and nothing was selected. Marking again moves
-    /// the mark to the current HEAD and reruns `post_ready_cmd`.
+    /// the mark to the current HEAD and reruns `post_ready_cmd`. With
+    /// `[ready] undraft`, marked draft PRs leave draft before the hook runs;
+    /// a failure there keeps the marks and runs the hook.
     pub async fn mark_ready(
         &self,
         selector: &str,
@@ -55,8 +59,9 @@ impl Manager {
     ) -> Result<Vec<ReviewMark>> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
+        let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
-            .command(&self.workspace_settings(&workspace).await?)
+            .command(&settings)
             .map(|path| workspace.path.join(path));
         // Like post_done_cmd, the hook excludes lifecycle and permit changes.
         let _resources = match command {
@@ -72,29 +77,39 @@ impl Manager {
         let marks = self
             .record_marks(&workspace.id, selection, explicit, head)
             .await?;
+        let undrafted = match settings.ready.undraft {
+            true => self.set_draft(&workspace, &pr_urls(&marks), false).await,
+            false => Ok(()),
+        };
         if let Some(command) = command {
-            let result = async {
-                let configured_env = self.configured_workspace_environment(&workspace).await?;
-                hooks::run_detached(
-                    Hook::PostReady(&marks),
-                    &workspace,
-                    &command,
-                    &self.paths,
-                    &configured_env,
-                )
-                .await
-            }
-            .await;
-            if let Err(error) = result {
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::HookFailed,
-                    format!("marked ready for review; {error:#}"),
-                )
-                .await;
-            }
+            self.run_post_ready(&workspace, &command, &marks).await;
         }
+        undrafted.context("marked ready for review, but a PR is still a draft")?;
         Ok(marks)
+    }
+
+    /// Run `post_ready_cmd`; a failure notifies and keeps the marks.
+    async fn run_post_ready(&self, workspace: &Workspace, command: &Path, marks: &[ReviewMark]) {
+        let result = async {
+            let configured_env = self.configured_workspace_environment(workspace).await?;
+            hooks::run_detached(
+                Hook::PostReady(marks),
+                workspace,
+                command,
+                &self.paths,
+                &configured_env,
+            )
+            .await
+        }
+        .await;
+        if let Err(error) = result {
+            self.notify(
+                Some(&workspace.name),
+                NotificationKind::HookFailed,
+                format!("marked ready for review; {error:#}"),
+            )
+            .await;
+        }
     }
 
     async fn record_marks(
@@ -162,15 +177,39 @@ impl Manager {
     }
 
     /// Withdraw the selected marks, or every mark without a selection.
+    /// `draft`, else `[unready] draft`, returns the PRs whose marks were
+    /// withdrawn to draft; a failure there keeps them withdrawn.
     pub async fn clear_ready(
         &self,
         selector: &str,
         selection: Selection,
+        draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         let explicit = self.explicit_item(&workspace, &selection).await?;
-        let id = workspace.id;
+        let cleared = self
+            .delete_marks(&workspace.id, selection, explicit)
+            .await?;
+        let draft = match draft {
+            Some(draft) => draft,
+            None => self.workspace_settings(&workspace).await?.unready.draft,
+        };
+        if draft {
+            self.set_draft(&workspace, &pr_urls(&cleared), true)
+                .await
+                .context("withdrew the marks, but a PR is still ready for review")?;
+        }
+        Ok(cleared)
+    }
+
+    async fn delete_marks(
+        &self,
+        id: &str,
+        selection: Selection,
+        explicit: Option<(String, ItemKind)>,
+    ) -> Result<Vec<ReviewMark>> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -206,6 +245,15 @@ impl Manager {
             mark.stale = head.as_ref().map(|head| head != &mark.head);
         }
     }
+}
+
+/// The PRs among `marks`.
+fn pr_urls(marks: &[ReviewMark]) -> Vec<String> {
+    marks
+        .iter()
+        .filter(|mark| mark.kind == Some(ItemKind::Pr))
+        .filter_map(|mark| mark.url.clone())
+        .collect()
 }
 
 #[cfg(test)]

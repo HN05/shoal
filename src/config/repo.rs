@@ -95,6 +95,9 @@ pub struct RepoConfig {
     pub pr_cleanup: PrCleanup,
     pub done: Done,
     pub review: Review,
+    pub ready: Ready,
+    pub unready: Unready,
+    pub pr: Pr,
     pub land: Land,
     pub seed: Seed,
 }
@@ -289,6 +292,27 @@ pub struct Done {
 #[serde(default, deny_unknown_fields)]
 pub struct Review {
     pub post: Option<bool>,
+}
+
+/// Whether `shoal ready` takes marked PRs out of draft.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Ready {
+    pub undraft: Option<bool>,
+}
+
+/// Whether `shoal unready` returns PRs whose marks it withdraws to draft.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Unready {
+    pub draft: Option<bool>,
+}
+
+/// Whether `shoal pr open` opens new PRs as drafts.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Pr {
+    pub draft: Option<bool>,
 }
 
 /// Whether `shoal land` pushes the default branch to its upstream afterwards.

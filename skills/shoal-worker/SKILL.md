@@ -87,8 +87,10 @@ default branch. Completion does not claim a merge occurred. Inspect
 When a linked PR is ready to merge (checks pass, review findings handled, no
 conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
-HEAD for the user's integrations; new commits make the mark outdated, so run it
-again after later fixes, and `shoal unready` withdraws it. To get the user's
+HEAD for the user's integrations and takes a linked draft PR out of draft
+unless `[ready] undraft = false`; new commits make the mark outdated, so run it
+again after later fixes, and `shoal unready` withdraws it (`--draft` also
+returns the PR to draft). To get the user's
 attention without finishing, such as when you need a decision, run
 `shoal notify "<one-line message>"`. Neither affects completion or cleanup.
 
