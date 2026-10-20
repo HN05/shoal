@@ -834,8 +834,9 @@ because it is fetched before the agent can ask. The agent requests access with
 approvals`. Each run of a listed tool asks the daemon first and fetches the
 value only once the workspace holds a grant for the secret's current `command`
 and `tools`; otherwise the run fails, naming the pending or denied request, or
-the `acquire` command when there is none. Whether a tool asks follows the
-config of its agent launch. `shoal release secret NAME` cancels the request or
+the `acquire` command when there is none. A launcher serves the config of
+its agent launch, so once a secret's `command` or `tools` change, its runs fail
+until the agent restarts. `shoal release secret NAME` cancels the request or
 ends a lease grant.
 
 ### Prompt templates

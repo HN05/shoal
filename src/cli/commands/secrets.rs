@@ -6,7 +6,7 @@ use serde_json::json;
 use super::acquisition::{Acquisition, obtain};
 use crate::{
     cli::{client, context::Context},
-    daemon::secrets::SecretGrant,
+    daemon::secrets::{SecretGrant, SecretRequest},
     protocol::Method,
 };
 
@@ -23,7 +23,10 @@ pub(super) async fn acquire(
         let method = Method::SecretAcquire {
             workspace: workspace.clone(),
             name: name.clone(),
-            reason: reason.clone(),
+            request: SecretRequest {
+                reason: reason.clone(),
+                source: None,
+            },
         };
         client::request::<Acquisition<SecretGrant>>(&ctx.paths, method).await
     })

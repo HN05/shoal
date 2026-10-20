@@ -6,13 +6,22 @@ use serde::{Deserialize, Serialize};
 use crate::{
     daemon::{
         allocation::Allocation,
-        approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        approvals::{ApprovalRequest, ReasonRequired, SecretSpecification, Specification, Target},
         scope::Caller,
         workspace::Manager,
     },
     model::Workspace,
     secrets::Secret,
 };
+
+/// A request to fetch a configured secret.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SecretRequest {
+    pub reason: Option<String>,
+    /// The source the caller will fetch from, when it was resolved earlier: a
+    /// tool launcher serves its agent launch's configuration.
+    pub source: Option<SecretSpecification>,
+}
 
 /// The caller may fetch the named secret.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,12 +39,14 @@ impl Manager {
         &self,
         selector: &str,
         name: String,
-        reason: Option<String>,
+        request: SecretRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<SecretGrant>> {
         let workspace = self.workspace(selector).await?;
-        let secret = self.configured_secret(&workspace, &name).await?;
-        crate::validate::reason("secret", reason.as_deref())?;
+        let secret = self
+            .configured_secret(&workspace, &name, request.source.as_ref())
+            .await?;
+        crate::validate::reason("secret", request.reason.as_deref())?;
         if caller.is_none() || !secret.requires_approval {
             return Ok(Allocation::Granted(SecretGrant {
                 name,
@@ -43,8 +54,18 @@ impl Manager {
             }));
         }
         self.touch(&workspace.id).await;
-        let approval = grant_request(&workspace, &name, secret, reason.as_deref());
-        let outcome = match self.request_approval(approval).await? {
+        let approval = grant_request(&workspace, &name, secret, request.reason.as_deref());
+        let pending = self.request_approval(approval).await.map_err(|error| {
+            if error.is::<ReasonRequired>() {
+                anyhow!(
+                    "secrets.{name} requires approval; request it with \
+                     shoal acquire secret {name} --reason <why>"
+                )
+            } else {
+                error
+            }
+        })?;
+        let outcome = match pending {
             Some(pending) => Allocation::Approval(Box::new(pending)),
             None => Allocation::Granted(SecretGrant {
                 name,
@@ -69,19 +90,31 @@ impl Manager {
         Ok(())
     }
 
-    /// The workspace's current definition of `name`.
-    async fn configured_secret(&self, workspace: &Workspace, name: &str) -> Result<Secret> {
-        self.workspace_settings(workspace)
+    /// The workspace's current definition of `name`, which must still be the
+    /// `source` a caller resolved earlier, so a grant covers what it fetches.
+    async fn configured_secret(
+        &self,
+        workspace: &Workspace,
+        name: &str,
+        source: Option<&SecretSpecification>,
+    ) -> Result<Secret> {
+        let secret = self
+            .workspace_settings(workspace)
             .await?
             .secrets
             .remove(name)
-            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))
+            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;
+        ensure!(
+            source.is_none_or(|source| *source == specification(&secret)),
+            "secrets.{name} changed since this agent started; restart it to use the new configuration"
+        );
+        Ok(secret)
     }
 }
 
 /// What a grant for `secret` binds: the command that fetches it and the tools
 /// it serves.
-fn specification(secret: &Secret) -> SecretSpecification {
+pub fn specification(secret: &Secret) -> SecretSpecification {
     SecretSpecification {
         command: secret.command.clone(),
         tools: secret.tools.clone(),
@@ -136,7 +169,15 @@ mod tests {
         reason: Option<&str>,
     ) -> Result<Allocation<SecretGrant>> {
         manager
-            .acquire_secret("worker", name.into(), reason.map(Into::into), caller)
+            .acquire_secret(
+                "worker",
+                name.into(),
+                SecretRequest {
+                    reason: reason.map(Into::into),
+                    source: None,
+                },
+                caller,
+            )
             .await
     }
 
@@ -189,7 +230,10 @@ mod tests {
         let Err(error) = acquire(&manager, scoped, "GATED", None).await else {
             panic!("a first request needs a reason");
         };
-        assert!(format!("{error:#}").contains("--reason"), "{error:#}");
+        assert!(
+            format!("{error:#}").contains("shoal acquire secret GATED --reason"),
+            "{error:#}"
+        );
 
         let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
         assert_eq!(request.target, Target::Secret("GATED".into()));
@@ -206,6 +250,21 @@ mod tests {
 
         configure(&manager, "other-token", Lifetime::Lease);
         assert!(acquire(&manager, scoped, "GATED", None).await.is_err());
+        // A launcher started before the change cannot use the new grant.
+        let stale = SecretRequest {
+            reason: None,
+            source: Some(SecretSpecification {
+                command: vec!["token".into()],
+                tools: vec!["agent-browser".into()],
+            }),
+        };
+        let Err(error) = manager
+            .acquire_secret("worker", "OPEN".into(), stale, scoped)
+            .await
+        else {
+            panic!("a stale source must be refused");
+        };
+        assert!(format!("{error:#}").contains("changed since"), "{error:#}");
         configure(&manager, "token", Lifetime::Lease);
         manager.release_secret("worker", "GATED".into()).await?;
         assert!(acquire(&manager, scoped, "GATED", None).await.is_err());

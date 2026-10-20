@@ -464,7 +464,7 @@ pub enum Method {
     SecretAcquire {
         workspace: String,
         name: String,
-        reason: Option<String>,
+        request: crate::daemon::secrets::SecretRequest,
     },
     SecretRelease {
         workspace: String,

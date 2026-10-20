@@ -224,6 +224,18 @@ pub fn current(
     lookup(db, CURRENT, params![owner, target, name])
 }
 
+/// A new request names no reason; callers may say how to give one.
+#[derive(Debug)]
+pub struct ReasonRequired;
+
+impl fmt::Display for ReasonRequired {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("approval requires --reason explaining the request")
+    }
+}
+
+impl std::error::Error for ReasonRequired {}
+
 /// The caller holds the allocation transaction (or simulator gate). The exact
 /// specification includes effective policy, so a changed policy cannot reuse a grant.
 pub fn check(
@@ -246,10 +258,7 @@ pub fn check(
     if reusable_grant(tx, &request)? {
         return Ok(None);
     }
-    ensure!(
-        !request.reason.trim().is_empty(),
-        "approval requires --reason explaining the request"
-    );
+    ensure!(!request.reason.trim().is_empty(), ReasonRequired);
     crate::validate::reason("approval", Some(&request.reason))?;
     request.workspace = tx.query_row(
         "SELECT name FROM workspaces WHERE id=?1",

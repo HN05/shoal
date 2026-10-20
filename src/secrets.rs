@@ -199,7 +199,7 @@ pub async fn run_tool(
         .collect();
     for (name, secret) in &served {
         if secret.requires_approval {
-            confirm_grant(paths, tool, name).await?;
+            confirm_grant(paths, tool, name, secret).await?;
         }
     }
     let mut command = std::process::Command::new(&program);
@@ -213,11 +213,12 @@ pub async fn run_tool(
     Err(command.exec()).with_context(|| format!("run {}", program.display()))
 }
 
-/// Fail unless the daemon confirms this workspace may fetch `name`; a
-/// pending or denied request is named so the agent can follow it.
-async fn confirm_grant(paths: &Paths, tool: &str, name: &str) -> Result<()> {
+/// Fail unless the daemon confirms this workspace may fetch `name` from the
+/// source this launch serves; a pending or denied request is named so the
+/// agent can follow it.
+async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -> Result<()> {
     use crate::{
-        daemon::approvals::DecisionStatus,
+        daemon::{approvals::DecisionStatus, secrets::SecretRequest},
         protocol::{Body, Method},
     };
     let workspace = std::env::var(env::WORKSPACE_ID).with_context(|| {
@@ -226,16 +227,14 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str) -> Result<()> {
     let method = Method::SecretAcquire {
         workspace,
         name: name.to_owned(),
-        reason: None,
+        request: SecretRequest {
+            reason: None,
+            source: Some(crate::daemon::secrets::specification(secret)),
+        },
     };
     let body = crate::cli::client::call(paths, method)
         .await
-        .with_context(|| {
-            format!(
-                "{tool} needs secrets.{name}, which requires approval; \
-                 request it with shoal acquire secret {name} --reason <why>"
-            )
-        })?;
+        .with_context(|| format!("{tool} needs secrets.{name}"))?;
     match body {
         Body::SecretGrant(_) => Ok(()),
         Body::ApprovalRequest(request) if request.status == DecisionStatus::Denied => bail!(

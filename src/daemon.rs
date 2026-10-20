@@ -773,9 +773,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::SecretAcquire {
             workspace,
             name,
-            reason,
+            request,
         } => manager
-            .acquire_secret(&workspace, name, reason, caller)
+            .acquire_secret(&workspace, name, request, caller)
             .await?
             .into_body(Body::SecretGrant),
         Method::SecretRelease { workspace, name } => {
