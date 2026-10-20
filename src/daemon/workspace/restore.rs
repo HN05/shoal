@@ -93,13 +93,14 @@ impl Manager {
             && self.archives_unsaved_files(workspace).await?)
     }
 
-    /// Restorable workspaces, newest first.
+    /// Restorable workspaces, newest first; expired ones are gone even before
+    /// the sweep deletes them.
     pub async fn removed_workspaces(&self) -> Result<Vec<RemovedWorkspace>> {
         self.store
             .run(|db| {
                 db.prepare(
-                    "SELECT record FROM removed_workspaces
-                     WHERE workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC",
+                    "SELECT record FROM removed_workspaces WHERE expires_at > unixepoch()
+                     AND workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC",
                 )?
                 .query_map([], |row| row.get::<_, String>(0))?
                 .map(|record| Ok(serde_json::from_str(&record?)?))
@@ -366,13 +367,14 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     Ok(())
 }
 
-/// The restore record of a removed workspace, by name or ID; the newest wins
-/// when one name was removed more than once.
+/// The unexpired restore record of a removed workspace, by name or ID; the
+/// newest wins when one name was removed more than once.
 fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM removed_workspaces WHERE (workspace_id=?1 OR name=?1)
-                AND workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC LIMIT 1",
+                AND expires_at > unixepoch() AND workspace_id NOT IN (SELECT id FROM workspaces)
+                ORDER BY rowid DESC LIMIT 1",
             [selector],
             |row| row.get(0),
         )

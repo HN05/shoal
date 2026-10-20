@@ -84,6 +84,36 @@ async fn removal_keeps_a_restore_point_until_it_expires() {
         "notes\n"
     );
 
+    // An expired record is not restorable even before the sweep deletes it.
+    let id = workspace.id.clone();
+    let expires_at = removed.expires_at as i64;
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE removed_workspaces SET expires_at=unixepoch() WHERE workspace_id=?1",
+                [&id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(manager.removed_workspaces().await.unwrap().is_empty());
+    let error = manager.restore_workspace("topic").await.unwrap_err();
+    assert!(format!("{error:#}").contains("no restorable workspace topic"));
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE removed_workspaces SET expires_at=?2 WHERE workspace_id=?1",
+                rusqlite::params![id, expires_at],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
     // Expiry deletes the record and its ref, and refs nothing owns.
     git(
         &checkout,
