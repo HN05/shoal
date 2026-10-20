@@ -152,13 +152,33 @@ pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
 pub const OWNER_MARKER: &str = "owner";
 
 /// Create `root` marked as `owner`'s when it is missing; an existing one is
-/// left for [`is_marked_dir`] to judge.
+/// left for [`is_marked_dir`] to judge. The directory appears with its marker
+/// in place, so a concurrent caller never finds it unmarked.
 pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
-    if root.symlink_metadata().is_err() {
-        fs::create_dir_all(root)?;
-        fs::write(root.join(OWNER_MARKER), format!("{owner}\n"))?;
+    if root.symlink_metadata().is_ok() {
+        return Ok(());
     }
-    Ok(())
+    let (Some(parent), Some(name)) = (root.parent(), root.file_name()) else {
+        return Err(io::Error::other(format!(
+            "{} has no parent",
+            root.display()
+        )));
+    };
+    fs::create_dir_all(parent)?;
+    let mut staging = name.to_owned();
+    staging.push(format!(".{}", uuid::Uuid::new_v4()));
+    let staging = parent.join(staging);
+    fs::create_dir(&staging)?;
+    let published = fs::write(staging.join(OWNER_MARKER), format!("{owner}\n"))
+        .and_then(|()| fs::rename(&staging, root));
+    if published.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+        // Another caller published it first.
+        if root.symlink_metadata().is_ok() {
+            return Ok(());
+        }
+    }
+    published
 }
 
 /// Whether `root` is a real directory marked as `owner`'s, so nothing Shoal
@@ -285,6 +305,27 @@ pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_callers_never_find_a_new_marked_directory_unmarked() {
+        let temp = tempfile::tempdir().unwrap();
+        for attempt in 0..20 {
+            let root = temp.path().join(format!("repo-{attempt}/.caches"));
+            let start = std::sync::Barrier::new(8);
+            std::thread::scope(|scope| {
+                for _ in 0..8 {
+                    scope.spawn(|| {
+                        start.wait();
+                        create_marked_dir(&root, "repo").unwrap();
+                        assert!(is_marked_dir(&root, "repo"));
+                    });
+                }
+            });
+            // Only the published directory is left.
+            let parent = root.parent().unwrap();
+            assert_eq!(fs::read_dir(parent).unwrap().count(), 1);
+        }
+    }
 
     #[test]
     fn invoked_path_keeps_an_installation_symlink_to_the_running_binary() {
