@@ -917,8 +917,8 @@ queue lives in memory, so a daemon restart loses the order; commands still polli
 join again.
 
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
-`shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: keeping a completed workspace (see
-completion), landing a branch (see scope) and resource access. Approving a land
+`shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: landing
+a branch (see scope) and resource access. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
@@ -951,10 +951,13 @@ automatic removal while the worktree exists; releasing the last hold restores
 normal cleanup eligibility. Explicit
 removal lists holders and releases holds with the workspace record; deleted-worktree
 cleanup still forgets missing worktrees. Release remains available through failed or
-active lifecycle operations and hooks. Scoped callers manage only their own workspace.
+active lifecycle operations and hooks. Holds belong to the user and to apps hosting
+external sessions; scoped callers list their own workspace's holds but cannot change
+them. Removal is reversible through restore points, so agents have no way to keep a
+workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
-normal configuration layers with explicit keep and cleanup overrides. Only an
+normal configuration layers, and an explicit cleanup override. Only an
 explicit done signal completes an assignment; issue closure and merges do not,
 and merged cleanup removes unused merged workspaces from their state instead.
 Agent instructions make `done` the last step of every assignment. Completion
@@ -970,11 +973,9 @@ a notification without undoing completion or blocking cleanup. Explicit signals
 rerun it; events are not queued or replayed on restart. Completion/PR serialization
 covers the hook, which must not call gated Shoal mutations. Completion without a
 hook takes no resource guard, so an agent-exit hook may signal it; configured
-completion hooks cannot nest inside another guarded hook. Keeping a completed workspace
-suppresses idle and PR cleanup until another completion requests cleanup or the
-user removes it. A scoped keep that overrides configured cleanup is an approval
-request bound to the completed HEAD: cleanup waits for the user, denial turns the
-completion into cleanup, and `post_done_cmd` runs with the decided choice. Completion
+completion hooks cannot nest inside another guarded hook. A completion without
+cleanup suppresses idle and PR cleanup until another completion requests cleanup or
+the user removes it; merged cleanup still applies. Completion
 cleanup without a PR registration requires clean files and every commit pushed or
 merged; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
@@ -1041,7 +1042,7 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 restore point keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running or saved for resume, no leases, permits, directory users,
-stacked workspaces, holds or keep choice, and no recorded activity, file change or per-worktree Git
+stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
 minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the

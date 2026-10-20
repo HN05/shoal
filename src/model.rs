@@ -231,13 +231,8 @@ pub struct Execution {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Completion {
     pub head: String,
-    /// False also while a keep request awaits the user's decision.
     pub cleanup: bool,
     pub error: Option<String>,
-    /// An agent's keep request awaiting the user's decision; denial turns
-    /// the completion into cleanup.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub keep_request: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -294,7 +289,6 @@ pub enum CleanupReason {
         state: WorkspaceState,
     },
     Held,
-    Kept,
     PrWatch,
     Completed,
     Issue,
@@ -326,7 +320,6 @@ impl std::fmt::Display for CleanupReason {
         match self {
             Self::NotReady { state } => write!(f, "Workspace state: {state}"),
             Self::Held => f.write_str("Kept by holds"),
-            Self::Kept => f.write_str("Kept by done --keep"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::Completed => f.write_str("Done; completion cleanup pending"),
             Self::Issue => f.write_str("Linked issue"),

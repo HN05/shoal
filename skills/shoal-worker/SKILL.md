@@ -83,11 +83,8 @@ current head, after you have read its log and fixed or reported the cause, and
 Forgejo cannot rerun through its API.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
-period (`[cleanup] grace_minutes`) has passed. Use
-`shoal done --keep --reason "<why>"` when the user wants to review in this
-workspace: it records completion and asks the user to approve keeping the
-workspace (`keep_request` names the request). Cleanup waits for the decision, and
-denial requests cleanup; do not retry a denied keep. `--cleanup` overrides a
+period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
+can reopen a removed workspace with `shoal restore`. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local
 default branch. Completion does not claim a merge occurred. Inspect

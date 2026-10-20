@@ -55,7 +55,7 @@ use tokio::{
 pub(crate) use log::log;
 use ports::Acquisition;
 use scope::Caller;
-use workspace::{ExecutionKind, Manager, Requester, StopRequest};
+use workspace::{ExecutionKind, Manager, StopRequest};
 
 use crate::{
     paths::Paths,
@@ -673,16 +673,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                     .await?,
             )
         }
-        Method::WorkspaceDone {
-            workspace,
-            cleanup,
-            reason,
-        } => {
-            let requester = match caller {
-                Some(_) => Requester::Agent { reason },
-                None => Requester::Unscoped,
-            };
-            Body::Completion(manager.mark_done(&workspace, cleanup, requester).await?)
+        Method::WorkspaceDone { workspace, cleanup } => {
+            Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }
         Method::SetIssue {
             workspace,

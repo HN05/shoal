@@ -96,7 +96,7 @@ instead of the PR delivery guidance below.
   failure keeps them. Only explicit
   done completes an assignment. PR cleanup
   defaults on and removes a completed workspace only after every watched PR merges
-  and the set contains HEAD or the default branch has its changes; disabling it pauses only that, never linking; completion honors the done default and explicit keep choices before
+  and the set contains HEAD or the default branch has its changes; disabling it pauses only that, never linking; completion honors the done default and `--cleanup` before
   stopping tracked agents with clean files and unchanged merged HEAD. PR
   numbers resolve against the workspace's origin and persist as repository-bound URLs.
   Own-workspace PR waits poll activity independently of cleanup and share persistent

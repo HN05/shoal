@@ -1404,18 +1404,13 @@ archive_max_mb = 50
 ### Assignment completion
 
 `shoal done [workspace]` records that the assignment is finished and notifies the
-user. `[done] cleanup` defaults to true; `--keep` and `--cleanup` override it in
-either direction and cannot be combined. The setting follows normal repository
-and worktree configuration precedence. Scoped agents may mark only their own
-workspace done; completion does not verify or assert a merge.
-
-A scoped `--keep` that overrides `[done] cleanup = true` asks the user: it needs
-`--reason`, records completion with `keep_request` naming the request, and cleanup
-waits for the decision in `shoal approvals` (see
-[resource approvals](#resource-approvals)). Approval keeps the workspace; denial
-turns the completion into cleanup. The decision covers the completed HEAD:
-repeating `done --keep` there reuses it, a new HEAD needs a new request, and
-`done` without `--keep` or `undone` cancels a pending one.
+user. `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
+false. The setting follows normal repository and worktree configuration
+precedence. Scoped agents may mark only their own workspace done; completion does
+not verify or assert a merge. Completion without cleanup keeps the workspace from
+idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
+reversible with [`shoal restore`](#restore-a-workspace); to review in a workspace,
+[hold](#workspace-holds) it.
 
 Only `done` completes an assignment; issue closure and merged PRs do not. A
 merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
@@ -1429,16 +1424,14 @@ cleanup = true    # Default: true
 `shoal undone [workspace]` withdraws a recorded completion; `--json` returns
 `{"withdrawn": <completion>}`, with null when none was recorded. Scoped agents may mark only their own workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
-cleanup proceeds as if `done` had not run. A [hold](#workspace-holds) keeps a
-workspace that has more work.
+cleanup proceeds as if `done` had not run.
 
 `post_done_cmd` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs even when cleanup retains the
-workspace; for a keep request it runs
-when the user decides, with the decided choice. Failure records
+workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
 Lifecycle and permit changes are rejected while it runs. The hook holds the
 completion/PR gate, so it must not call Shoal commands that change completion or
@@ -1691,8 +1684,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 `shoal unlink <relation>` removes the relation's items; `unlink pr <relation>` or
 `unlink issue <relation>` removes one kind, and an explicit number or URL removes
 just that item. Removing the last
-link does not mark done or undo recorded completion; `done --keep` cancels its
-cleanup. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
+link does not mark done or undo recorded completion. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking
 remain available. Previous PR registration and wait command spellings remain accepted.
 
@@ -1806,7 +1798,7 @@ every ten minutes; until a fetch succeeds, the repository's workspaces are kept.
 [restore point](#restore-a-workspace); they keep the workspace when the restore point cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), commands, agents saved for
-`shoal resume`, directory users, leases, permits, holds, `done --keep` and
+`shoal resume`, directory users, leases, permits, holds and
 workspaces stacked on it keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
@@ -2319,7 +2311,7 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
-these requests, keep requests from `shoal done --keep`, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals <workspace>` filters
+these requests, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown

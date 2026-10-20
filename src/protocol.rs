@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 101;
+pub const VERSION: u32 = 102;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -253,11 +253,10 @@ pub enum Method {
     WorkspaceUndone {
         workspace: String,
     },
+    /// `cleanup` requests cleanup even when `[done] cleanup` is false.
     WorkspaceDone {
         workspace: String,
-        cleanup: Option<bool>,
-        /// Why a workspace process wants to keep the workspace.
-        reason: Option<String>,
+        cleanup: bool,
     },
     MarkReady {
         workspace: String,

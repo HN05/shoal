@@ -1518,10 +1518,10 @@ fn render_status(view: &StatusView, json: bool) {
         }
     }
     if let Some(completion) = &inspection.completion {
-        let choice = match &completion.keep_request {
-            Some(id) => format!("keep requested, approval {id}"),
-            None if completion.cleanup => "cleanup requested".into(),
-            None => "kept for review".into(),
+        let choice = if completion.cleanup {
+            "cleanup requested"
+        } else {
+            "no cleanup requested"
         };
         println!("Completion:    done ({choice})");
         if let Some(error) = &completion.error {
@@ -1817,30 +1817,16 @@ pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i
     Ok(0)
 }
 
-pub(super) async fn done(
-    ctx: &Context,
-    workspace: Option<String>,
-    cleanup: Option<bool>,
-    reason: Option<String>,
-) -> Result<i32> {
+pub(super) async fn done(ctx: &Context, workspace: Option<String>, cleanup: bool) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let completion: Completion = request(
-        &ctx.paths,
-        Method::WorkspaceDone {
-            workspace,
-            cleanup,
-            reason,
-        },
-    )
-    .await?;
-    let message = match &completion.keep_request {
-        Some(id) => format!(
-            "Assignment marked done; keep request {id} is waiting for the user's approval. Denial requests cleanup."
-        ),
-        None if completion.cleanup => "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed.".into(),
-        None => "Assignment marked done; workspace kept for review.".into(),
+    let completion: Completion =
+        request(&ctx.paths, Method::WorkspaceDone { workspace, cleanup }).await?;
+    let message = if completion.cleanup {
+        "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed."
+    } else {
+        "Assignment marked done; no cleanup requested."
     };
-    ctx.emit(&message, &completion)?;
+    ctx.emit(message, &completion)?;
     Ok(0)
 }
 

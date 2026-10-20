@@ -274,14 +274,7 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     manager.dispatch_queue().await.unwrap();
     assert!(!started(&second.id));
 
-    manager
-        .mark_done(
-            &workspace.id,
-            Some(false),
-            crate::daemon::workspace::Requester::Unscoped,
-        )
-        .await
-        .unwrap();
+    manager.mark_done(&workspace.id, false).await.unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&second.id));
 

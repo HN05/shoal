@@ -405,15 +405,9 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds and a keep choice, which keep a workspace from every unattended removal.
+    /// Holds, which keep a workspace from every unattended removal.
     async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        if self.has_holds(id).await? {
-            return Ok(Some(CleanupReason::Held));
-        }
-        let completion = self.completion(id).await?;
-        Ok(completion
-            .is_some_and(|completion| !completion.cleanup)
-            .then_some(CleanupReason::Kept))
+        Ok(self.has_holds(id).await?.then_some(CleanupReason::Held))
     }
 
     /// Assignment state whose own cleanup path decides removal.

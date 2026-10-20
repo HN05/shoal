@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 49;
+const SCHEMA_VERSION: i64 = 50;
 
 #[cfg(test)]
 mod benchmark;
@@ -378,6 +378,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (47, include_str!("store/workspace_items.sql"), None),
     (48, include_str!("store/agent_queue_restores.sql"), None),
     (49, CLEANUP_GRACE, None),
+    (50, RETIRED_KEEP_REQUESTS, None),
 ];
 
 /// When the grace period of an unattended removal ends, and whether the
@@ -387,6 +388,15 @@ const CLEANUP_GRACE: &str = "CREATE TABLE IF NOT EXISTS cleanup_grace (
     cleanup_at INTEGER NOT NULL,
     claimed INTEGER NOT NULL CHECK(claimed IN (0, 1))
 );";
+
+/// Keep requests were retired: a completion still awaiting one requests the
+/// cleanup the agent asked to skip, and every keep request goes.
+const RETIRED_KEEP_REQUESTS: &str = "UPDATE workspace_completion
+        SET record=json_set(record, '$.cleanup', json('true'))
+        WHERE json_valid(record) AND json_extract(record, '$.keep_request') IS NOT NULL;
+    UPDATE workspace_completion SET record=json_remove(record, '$.keep_request')
+        WHERE json_valid(record);
+    DELETE FROM access_requests WHERE target_key='keep';";
 
 /// Restore records outlive their workspace, not their repository.
 const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
@@ -1062,9 +1072,7 @@ mod tests {
                 (13,'workspace',1,'Which queue?','SQS','[]',NULL,NULL,NULL);
             INSERT INTO access_requests(id,workspace_id,target_key,name,record,active) VALUES
                 ('grant','workspace','port/web','web','{"id":"grant"}',0),
-                ('keep','workspace','keep','keep','{"id":"keep"}',1);
-            INSERT INTO workspace_completion(workspace_id,record)
-                VALUES ('workspace','{"head":"abc","cleanup":false,"error":null,"keep_request":"keep"}');"#,
+                ('land','workspace','land','branch','{"id":"land"}',1);"#,
         )?;
         migrate(&mut db)?;
         let questions = db
@@ -1084,13 +1092,7 @@ mod tests {
                 ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        assert_eq!(requests, [("grant".into(), 1, 1), ("keep".into(), 2, 2)]);
-        let keep: i64 = db.query_row(
-            "SELECT json_extract(record,'$.keep_request') FROM workspace_completion",
-            [],
-            |r| r.get(0),
-        )?;
-        assert_eq!(keep, 2);
+        assert_eq!(requests, [("grant".into(), 1, 1), ("land".into(), 2, 2)]);
         assert_eq!(free_number(&db, "questions")?, 1);
         assert_eq!(free_number(&db, "access_requests")?, 3);
         db.execute(
@@ -1099,6 +1101,45 @@ mod tests {
             [],
         )?;
         assert_eq!(free_number(&db, "questions")?, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn migration_retires_keep_requests_and_requests_the_cleanup_they_awaited() -> Result<()> {
+        let mut db = historical_database(49)?;
+        db.execute_batch(
+            r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                VALUES ('kept','repo','kept','/kept','kept','ready');
+            INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES
+                ('keep','workspace','keep','done','{"id":1}',1,1),
+                ('land','workspace','land','branch','{"id":2}',1,2);
+            INSERT INTO workspace_completion(workspace_id,record) VALUES
+                ('workspace','{"head":"abc","cleanup":false,"error":null,"keep_request":1}'),
+                ('kept','{"head":"def","cleanup":false,"error":null}');"#,
+        )?;
+        migrate(&mut db)?;
+        let requests = db
+            .prepare("SELECT id FROM access_requests")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(requests, ["land"]);
+        let completions = db
+            .prepare("SELECT workspace_id,record FROM workspace_completion ORDER BY workspace_id")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(
+            completions,
+            [
+                (
+                    "kept".into(),
+                    r#"{"head":"def","cleanup":false,"error":null}"#.into()
+                ),
+                (
+                    "workspace".into(),
+                    r#"{"head":"abc","cleanup":true,"error":null}"#.into()
+                ),
+            ]
+        );
         Ok(())
     }
 

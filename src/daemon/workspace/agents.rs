@@ -726,14 +726,7 @@ mod tests {
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
             .await
             .unwrap();
-        manager
-            .mark_done(
-                &workspace.id,
-                Some(true),
-                crate::daemon::workspace::Requester::Unscoped,
-            )
-            .await
-            .unwrap();
+        manager.mark_done(&workspace.id, true).await.unwrap();
         assert!(manager.cleanup_notify.notified().now_or_never().is_some());
         let complete = manager
             .finish_execution(execution.plan.id, ExecutionKind::Command, Some(0))

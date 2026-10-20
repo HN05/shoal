@@ -405,21 +405,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 messages::show(&ctx, workspace).await
             }
         }
-        Command::Done {
-            workspace,
-            keep,
-            cleanup,
-            reason,
-        } => {
-            let cleanup = if keep {
-                Some(false)
-            } else if cleanup {
-                Some(true)
-            } else {
-                None
-            };
-            workspaces::done(&ctx, workspace, cleanup, reason).await
-        }
+        Command::Done { workspace, cleanup } => workspaces::done(&ctx, workspace, cleanup).await,
         Command::Env { workspace, revoke } => {
             workspaces::environment(&ctx, workspace, revoke).await
         }

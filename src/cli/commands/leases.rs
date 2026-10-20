@@ -266,7 +266,7 @@ fn requested(request: ApprovalRequest) -> Option<Held> {
         }
         (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
         (Target::Secret(_), _) => Held::Secret { name },
-        (Target::Keep | Target::Land, _) => return None,
+        (Target::Land, _) => return None,
     })
 }
 

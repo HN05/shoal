@@ -34,7 +34,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `keep` or `land`.
+/// `secret/<name>` or `land`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -45,14 +45,10 @@ pub enum Target {
     Simulator,
     /// Fetching a configured secret; the daemon records the grant, never the value.
     Secret(String),
-    /// Keeping a workspace after an agent marks its assignment done.
-    Keep,
     /// Landing a workspace branch into the default branch.
     Land,
 }
 
-/// The name of a workspace's single keep request.
-pub const KEEP: &str = "done";
 /// The name of a workspace's single land request.
 pub const LAND: &str = "branch";
 
@@ -63,7 +59,6 @@ impl fmt::Display for Target {
             Self::Port(name) => write!(f, "port/{name}"),
             Self::Simulator => f.write_str("simulator"),
             Self::Secret(name) => write!(f, "secret/{name}"),
-            Self::Keep => f.write_str("keep"),
             Self::Land => f.write_str("land"),
         }
     }
@@ -75,7 +70,6 @@ impl FromStr for Target {
     fn from_str(text: &str) -> Result<Self> {
         match text {
             "simulator" => return Ok(Self::Simulator),
-            "keep" => return Ok(Self::Keep),
             "land" => return Ok(Self::Land),
             _ => {}
         }
@@ -114,7 +108,6 @@ pub enum Specification {
     Resource(ResourceSpecification),
     Port(PortSpecification),
     Simulator(SimulatorSpecification),
-    Keep(KeepSpecification),
     Secret(SecretSpecification),
     Land(LandSpecification),
 }
@@ -145,13 +138,6 @@ pub struct PortSpecification {
 pub struct SimulatorSpecification {
     pub clean: bool,
     pub profile: Profile,
-}
-
-/// A keep decision covers the completed HEAD; later commits need a new one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct KeepSpecification {
-    pub head: String,
 }
 
 /// A land decision covers the branch at one commit; later commits need a new one.
@@ -361,11 +347,10 @@ impl ApprovalRequest {
             && self.created_at == other.created_at
     }
 
-    /// What the user is asked to decide: the target and lease name, `keep`,
-    /// or the branch and commit to land.
+    /// What the user is asked to decide: the target and lease name, or the
+    /// branch and commit to land.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
-            (Target::Keep, _) => self.target.to_string(),
             (Target::Land, Specification::Land(land)) => {
                 format!("land {} at {}", land.branch, land.head)
             }
@@ -375,10 +360,8 @@ impl ApprovalRequest {
 
     /// The agent message naming a decision and what the requesting agent does next.
     fn decision_message(&self) -> String {
-        let next = match (&self.target, &self.status) {
-            (Target::Keep, DecisionStatus::Approved) => "Shoal keeps this workspace",
-            (Target::Keep, _) => "Shoal will clean up this workspace",
-            (_, DecisionStatus::Approved) => "retry the command that requested it",
+        let next = match self.status {
+            DecisionStatus::Approved => "retry the command that requested it",
             _ => "do not retry it",
         };
         format!(
@@ -418,39 +401,6 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
         tx.execute("DELETE FROM access_requests WHERE id=?1", [&request.key])?;
     }
     Ok(true)
-}
-
-/// Replace the workspace's keep request with `request`, or retire it when the
-/// completion needs none. Returns the request still awaiting a decision; an
-/// approval for the same HEAD is reused and a denial refused.
-pub fn request_keep(
-    tx: &Transaction<'_>,
-    owner: &str,
-    request: Option<ApprovalRequest>,
-) -> Result<Option<ApprovalRequest>> {
-    let existing = current(tx, owner, &Target::Keep, KEEP)?;
-    let Some(mut request) = request else {
-        if let Some(existing) = existing {
-            retire(tx, &existing)?;
-        }
-        return Ok(None);
-    };
-    match existing {
-        // A repeated request keeps the reason the user is deciding on.
-        Some(existing) if existing.specification == request.specification => {
-            request.reason = existing.reason;
-        }
-        Some(existing) => retire(tx, &existing)?,
-        None => {}
-    }
-    let pending = check(tx, request)?;
-    ensure!(
-        pending
-            .as_ref()
-            .is_none_or(|request| request.status != DecisionStatus::Denied),
-        "the user denied keeping this workspace; run shoal done without --keep"
-    );
-    Ok(pending)
 }
 
 /// Replace a land request for an earlier commit with `request`. Returns the
@@ -617,9 +567,6 @@ impl Manager {
     /// Decide the stored `request` the user chose; later requests reusing its
     /// number are not affected.
     async fn record_decision(&self, request: ApprovalRequest, approve: bool) -> Result<Decision> {
-        if request.target == Target::Keep {
-            return self.decide_keep(request, approve).await;
-        }
         if request.target == Target::Land && approve && request.status == DecisionStatus::Pending {
             self.ensure_land_current(&request).await?;
         }
@@ -922,11 +869,6 @@ mod tests {
             request.decision_message(),
             "Approval 7 for land feature at abc was denied: do not retry it."
         );
-        request.target = Target::Keep;
-        assert_eq!(
-            request.decision_message(),
-            "Approval 7 for keep was denied: Shoal will clean up this workspace."
-        );
         crate::validate::message(&request.decision_message()).unwrap();
     }
 
@@ -1162,7 +1104,6 @@ mod tests {
             (Target::Port("web".into()), "port/web"),
             (Target::Simulator, "simulator"),
             (Target::Secret("TOKEN".into()), "secret/TOKEN"),
-            (Target::Keep, "keep"),
             (Target::Land, "land"),
         ] {
             assert_eq!(target.to_string(), text);
@@ -1181,6 +1122,7 @@ mod tests {
             "resource//lock",
             "simulators",
             "secret/",
+            "keep",
         ] {
             assert!(text.parse::<Target>().is_err(), "{text}");
         }
@@ -1199,17 +1141,12 @@ mod tests {
             serde_json::json!({"profile": {"requires_approval": true, "approval_lifetime": "workspace",
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
             serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
-            serde_json::json!({"head": "abc"}),
             serde_json::json!({"branch": "feature", "head": "abc"}),
         ];
         for json in recorded {
             let specification: Specification = serde_json::from_value(json.clone())?;
             assert_eq!(serde_json::to_value(&specification)?, json);
         }
-        assert!(matches!(
-            serde_json::from_value(serde_json::json!({"head": "abc"}))?,
-            Specification::Keep(_)
-        ));
         assert!(matches!(
             serde_json::from_value(serde_json::json!({"branch": "feature", "head": "abc"}))?,
             Specification::Land(_)

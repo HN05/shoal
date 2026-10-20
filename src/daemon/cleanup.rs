@@ -942,14 +942,7 @@ mod tests {
             .unwrap();
         // Completion cleanup retains the dirty workspace and cannot record why.
         fs::write(done.path.join("work"), "retain").unwrap();
-        manager
-            .mark_done(
-                &done.id,
-                Some(true),
-                crate::daemon::workspace::Requester::Unscoped,
-            )
-            .await
-            .unwrap();
+        manager.mark_done(&done.id, true).await.unwrap();
         manager
             .store
             .run(|db| {
@@ -1092,20 +1085,13 @@ mod tests {
             .acquire_hold(&workspace.id, "review".into(), None)
             .await
             .unwrap();
-        manager
-            .mark_done(
-                &workspace.id,
-                Some(false),
-                crate::daemon::workspace::Requester::Unscoped,
-            )
-            .await
-            .unwrap();
+        manager.mark_done(&workspace.id, false).await.unwrap();
         assert_eq!(reason().await, CleanupReason::Held);
         manager
             .release_hold(&workspace.id, "review".into())
             .await
             .unwrap();
-        assert_eq!(reason().await, CleanupReason::Kept);
+        assert_eq!(reason().await, CleanupReason::Completed);
         manager.undo_done(&workspace.id).await.unwrap();
 
         manager

@@ -156,8 +156,7 @@ shoal stop fix-login          # Stop agents and commands; save them for shoal re
 shoal stop --all              # Stop every workspace, for example before a reboot
 shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup
-shoal done --keep fix-login   # Mark finished; keep for review
-shoal done --cleanup fix-login # Override a configured keep default
+shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal restore fix-login       # Open a removed workspace again with its unsaved files

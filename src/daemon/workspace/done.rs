@@ -1,56 +1,16 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
 use anyhow::{Result, ensure};
-use rusqlite::{OptionalExtension, Transaction};
+use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
 
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     config::Effective,
-    daemon::{
-        approvals::{
-            self, ApprovalRequest, DecisionStatus, KEEP, KeepSpecification, Lifetime,
-            Specification, Target,
-        },
-        events::EventCause,
-        notifications::NotificationKind,
-        store,
-    },
+    daemon::{events::EventCause, notifications::NotificationKind, store},
     hooks::{self, Hook, HookKind},
     model::{Completion, Workspace},
     state::WorkspaceState,
 };
-
-/// Who marks an assignment done. A workspace process keeping its workspace
-/// against the configured cleanup asks the user instead.
-#[derive(Debug, Clone)]
-pub enum Requester {
-    Unscoped,
-    Agent { reason: Option<String> },
-}
-
-impl Requester {
-    fn keep_request(
-        &self,
-        workspace: &Workspace,
-        head: &str,
-        cleanup: bool,
-        configured: bool,
-    ) -> Option<ApprovalRequest> {
-        let Self::Agent { reason } = self else {
-            return None;
-        };
-        (configured && !cleanup).then(|| {
-            ApprovalRequest::new(
-                &workspace.id,
-                Target::Keep,
-                KEEP,
-                Specification::Keep(KeepSpecification { head: head.into() }),
-                Lifetime::Lease,
-                reason.as_deref(),
-            )
-        })
-    }
-}
 
 impl Manager {
     pub async fn completion(&self, id: &str) -> Result<Option<Completion>> {
@@ -92,7 +52,6 @@ impl Manager {
                 let completion = record
                     .map(|record| serde_json::from_str(&record))
                     .transpose()?;
-                approvals::request_keep(&tx, &workspace.id, None)?;
                 tx.commit()?;
                 Ok(completion)
             })
@@ -101,52 +60,41 @@ impl Manager {
         Ok(completion)
     }
 
-    pub async fn mark_done(
-        &self,
-        selector: &str,
-        cleanup: Option<bool>,
-        requester: Requester,
-    ) -> Result<Completion> {
-        // Serialize keep/cleanup choices with the PR and completion sweeps.
+    /// `cleanup` requests cleanup even when `[done] cleanup` is false.
+    pub async fn mark_done(&self, selector: &str, cleanup: bool) -> Result<Completion> {
+        // Serialize cleanup choices with the PR and completion sweeps.
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::forge::pr::current_head(&workspace).await?;
-        self.record_done(&workspace, head, cleanup, requester).await
+        self.record_done(&workspace, head, cleanup).await
     }
 
     /// Caller holds the PR gate and has verified ownership and this HEAD.
-    /// `post_done_cmd` waits for the user's decision on a keep request.
     pub(crate) async fn record_done(
         &self,
         workspace: &Workspace,
         head: String,
-        cleanup: Option<bool>,
-        requester: Requester,
+        cleanup: bool,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
         self.verify_worktree(workspace).await?;
-        let cleanup = cleanup.unwrap_or(settings.done.cleanup);
-        let keep = requester.keep_request(workspace, &head, cleanup, settings.done.cleanup);
-        let mut completion = Completion {
+        let completion = Completion {
             head,
-            cleanup,
+            cleanup: cleanup || settings.done.cleanup,
             error: None,
-            keep_request: None,
         };
         let id = workspace.id.clone();
-        let (completion, pending) = self
-            .store
+        let record = completion.clone();
+        self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
-                let pending = approvals::request_keep(&tx, &id, keep)?;
-                completion.keep_request = pending.as_ref().map(|request| request.id);
                 tx.execute(
                     "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
-                    rusqlite::params![id, serde_json::to_string(&completion)?, EventCause::Manual],
+                    rusqlite::params![id, serde_json::to_string(&record)?, EventCause::Manual],
                 )?;
                 // Like the continuation it replaced, a hold made from one by
                 // migration 31 ends at the next explicit done.
@@ -155,60 +103,24 @@ impl Manager {
                     [&id],
                 )?;
                 tx.commit()?;
-                Ok((completion, pending))
+                Ok(())
             })
             .await?;
         self.notify(
             Some(&workspace.name),
             NotificationKind::WorkspaceDone,
-            if pending.is_some() {
-                "assignment finished; keep requested"
-            } else if cleanup {
+            if completion.cleanup {
                 "assignment finished; cleanup requested"
             } else {
-                "assignment finished; workspace kept for review"
+                "assignment finished; no cleanup requested"
             },
         )
         .await;
-        match (&pending, hook) {
-            (Some(request), _) => self.notify_approval(&workspace.name, request).await,
-            (None, Some((command, _resources))) => {
-                self.run_done_hook(workspace, &command, &completion).await
-            }
-            (None, None) => {}
+        if let Some((command, _resources)) = hook {
+            self.run_done_hook(workspace, &command, &completion).await;
         }
         self.cleanup_notify.notify_one();
         Ok(completion)
-    }
-
-    /// Apply the user's decision on a keep request: denial turns the completion
-    /// into cleanup. Either way the choice is final, so `post_done_cmd` runs.
-    pub(crate) async fn decide_keep(
-        &self,
-        request: ApprovalRequest,
-        approve: bool,
-    ) -> Result<approvals::Decision> {
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(&request.workspace_id).await?;
-        let settings = self.workspace_settings(&workspace).await?;
-        let hook = self.done_hook(&workspace, &settings).await?;
-        let (decision, completion) = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let decision = approvals::decide(&tx, &request.key, approve)?;
-                let completion = settle_keep(&tx, &decision.request)?;
-                tx.commit()?;
-                Ok((decision, completion))
-            })
-            .await?;
-        if let Some(completion) = completion {
-            if let Some((command, _resources)) = hook {
-                self.run_done_hook(&workspace, &command, &completion).await;
-            }
-            self.cleanup_notify.notify_one();
-        }
-        Ok(decision)
     }
 
     /// The configured `post_done_cmd`, holding off permit and lifecycle changes
@@ -251,8 +163,8 @@ impl Manager {
         }
     }
 
-    /// A keep choice also blocks older PR watches. A completion must never
-    /// authorize removal of a later revision of the assignment.
+    /// A completion without cleanup also blocks older PR watches. A completion
+    /// must never authorize removal of a later revision of the assignment.
     pub(crate) async fn completion_allows_cleanup(&self, workspace: &Workspace) -> Result<bool> {
         let Some(completion) = self.completion(&workspace.id).await? else {
             return Ok(true);
@@ -350,32 +262,6 @@ impl Manager {
             })
             .await
     }
-}
-
-/// Settle the completion waiting on `request`. Returns it when the decision
-/// changed it; a completion recorded since then no longer waits on the request.
-fn settle_keep(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<Option<Completion>> {
-    let record: Option<String> = tx
-        .query_row(
-            "SELECT record FROM workspace_completion WHERE workspace_id=?1",
-            [&request.workspace_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let Some(mut completion) = record
-        .map(|record| serde_json::from_str::<Completion>(&record))
-        .transpose()?
-        .filter(|completion| completion.keep_request == Some(request.id))
-    else {
-        return Ok(None);
-    };
-    completion.keep_request = None;
-    completion.cleanup = request.status == DecisionStatus::Denied;
-    tx.execute(
-        "UPDATE workspace_completion SET record=?2 WHERE workspace_id=?1",
-        rusqlite::params![request.workspace_id, serde_json::to_string(&completion)?],
-    )?;
-    Ok(Some(completion))
 }
 
 #[cfg(test)]

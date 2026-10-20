@@ -70,8 +70,7 @@ shoal deny <number>
 
 Report pending requests to the user with their recorded settings and reason,
 then approve or deny as the user decides. Resource approval reserves no
-capacity; the agent retries its acquisition. A `keep` request comes from an
-agent's `shoal done --keep`: approval keeps the workspace, denial cleans it up.
+capacity; the agent retries its acquisition.
 
 ## Questions
 
@@ -87,10 +86,11 @@ decides; the answer reaches the agent as a message.
 ## Finish and clean up
 
 Agents run `shoal done` themselves when their assignment is finished. For a
-workspace the user wants ended, use `shoal --json done <workspace>` (with
-`--keep` to retain it for review), `shoal stop <workspace>` to stop its
-commands, or `shoal rm <workspace>` to remove it, which asks what to do with
-unmerged work. `shoal --json cleanup` removes every workspace automatic
+workspace the user wants ended, use `shoal --json done <workspace>`,
+`shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
+remove it, which asks what to do with unmerged work. To keep one for review,
+hold it with `shoal hold acquire <workspace> --name review` and release the hold
+afterwards; `shoal restore <workspace>` reopens a removed one. `shoal --json cleanup` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `--dry-run` lists
 them and why it keeps each other workspace, as `status` gives in `cleanup_reason`;
 `--caches` also empties shared tool caches nothing is using. When the repository has no remote, `shoal land <workspace>`

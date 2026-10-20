@@ -340,7 +340,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
 
 #[test]
 fn workspace_rename_preserves_work_ownership_and_diff_bases() {
-    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n[done]\ncleanup = false\n"));
     let workspace = fixture.add("original");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let id = workspace["id"].as_str().unwrap();
@@ -369,7 +369,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
             .contains("PR watch or acknowledgement")
     );
     fixture.request(serde_json::json!({"set_pr":{"workspace":"original","clear":true}}));
-    fixture.ok(&["done", "original", "--keep"]);
+    fixture.ok(&["done", "original"]);
     let before = fixture.ok(&["inspect", "original"]);
     let response = fixture.rename("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
@@ -385,7 +385,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     let diff = fixture.run(&["diff", "feature-topic"]);
     assert!(diff.status.success());
     assert!(String::from_utf8_lossy(&diff.stdout).contains("changed after rename"));
-    fixture.ok(&["done", "feature-topic", "--keep"]);
+    fixture.ok(&["done", "feature-topic"]);
     for field in [
         "id",
         "path",
@@ -4405,7 +4405,7 @@ test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
 shoal done
 test "${PWD##*/}" = acknowledged
-shoal done --keep
+shoal undone
 rm untracked
 shoal done
 until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
@@ -4420,12 +4420,10 @@ until ! shoal inspect held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" completed
-shoal done --keep
-test "${PWD##*/}" = completed
 printf 'keep me' > untracked
 shoal done --cleanup
 test "${PWD##*/}" = completed
-shoal done --keep
+shoal undone
 rm untracked
 shoal done --cleanup
 until ! shoal inspect completed >/dev/null 2>&1; do sleep 0.1; done
@@ -4774,7 +4772,6 @@ fn execution_scope_limits_management_and_expires() {
         vec!["link", "pr", "42", "assigned", "--workspace", "other"],
         vec!["unlink", "pr", "assigned", "--workspace", "other"],
         vec!["undone", "other"],
-        vec!["done", "other", "--keep"],
         vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
         vec![
@@ -16279,14 +16276,14 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     install_test_script(
         &hook,
         format!(
-            "#!/bin/sh\nexec '{}' --json done --keep \"$SHOAL_WORKSPACE\"\n",
+            "#!/bin/sh\nexec '{}' --json done \"$SHOAL_WORKSPACE\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
     set_repository_toml(
         &fixture,
         &format!(
-            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n[done]\ncleanup = false\n",
             hook.display()
         ),
     );
@@ -16356,14 +16353,18 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
 }
 
 #[test]
-fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers() {
+fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers() {
     let mut fixture = Fixture::with_config(Some("post_done_cmd = '/usr/bin/false'\n"));
     let workspace = fixture.add("hooked");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let hook = install_done_hook(&fixture);
     let config = format!("post_done_cmd = '{}'\n", hook.display());
     // The worktree file overrides the global failure hook.
-    fs::write(path.join(".shoal.toml"), &config).unwrap();
+    fs::write(
+        path.join(".shoal.toml"),
+        format!("{config}[done]\ncleanup = false\n"),
+    )
+    .unwrap();
     let completion = fixture.ok(&[
         "exec",
         "hooked",
@@ -16371,15 +16372,10 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
         env!("CARGO_BIN_EXE_shoal"),
         "--json",
         "done",
-        "--keep",
-        "--reason",
-        "review",
     ]);
     assert_eq!(completion["cleanup"], false);
     let events = fixture.root.path().join("done-events");
-    // The hook runs once the user decides the keep request.
-    assert!(!events.exists());
-    fixture.ok(&["approve", &completion["keep_request"].to_string()]);
+    wait_until("keep hook", || events.exists());
     let identity = format!(
         "post_done|hooked|{}|{}|{}|{}|",
         workspace["id"].as_str().unwrap(),
@@ -16399,7 +16395,7 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
     .unwrap();
     set_repository_toml(&fixture, &format!("{config}[done]\ncleanup=true\n"));
     // Retention must survive removal of the configuration file later in this
-    // test; otherwise the cleanup sweep can win the race against done --keep.
+    // test; otherwise the cleanup sweep can win the race against the last done.
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
     fixture.ok(&["done", "hooked"]);
     wait_until("completion cleanup error", || {
@@ -16411,10 +16407,10 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
     );
     fixture.restart();
     assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 2);
-    // Failure is best effort and cannot cancel a recorded keep choice.
+    // Failure is best effort and cannot cancel a recorded choice.
     fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap(), "--clear"]);
-    fs::remove_file(path.join(".shoal.toml")).unwrap();
-    assert_eq!(fixture.ok(&["done", "hooked", "--keep"])["cleanup"], false);
+    fs::write(path.join(".shoal.toml"), "[done]\ncleanup = false\n").unwrap();
+    assert_eq!(fixture.ok(&["done", "hooked"])["cleanup"], false);
     assert!(
         fixture
             .ok(&["notifications", "--all"])
@@ -16450,13 +16446,13 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
     set_repository_toml(
         &fixture,
         &format!(
-            "post_done_cmd = '{}'\nsetup_cmd = '/usr/bin/true'\n",
+            "post_done_cmd = '{}'\nsetup_cmd = '/usr/bin/true'\n[done]\ncleanup = false\n",
             hook.display()
         ),
     );
     let mut done = fixture
         .command()
-        .args(["done", "hooked", "--keep"])
+        .args(["done", "hooked"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -16528,57 +16524,7 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
 }
 
 #[test]
-fn agent_keep_waits_for_approval_and_denial_requests_cleanup() {
-    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
-    let hook = install_done_hook(&fixture);
-    let workspace = fixture.add("review");
-    fixture.add("denied");
-    set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
-    let events = fixture.root.path().join("done-events");
-    let unexplained = scoped_command(&fixture, "review", &["done", "--keep"]);
-    assert!(!unexplained.status.success());
-    assert!(String::from_utf8_lossy(&unexplained.stderr).contains("--reason"));
-    let output = scoped_command(
-        &fixture,
-        "review",
-        &["done", "--keep", "--reason", "review the UI"],
-    );
-    let output: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(output["cleanup"], false);
-    let id = output["keep_request"].to_string();
-    assert!(!events.exists());
-    let path = Path::new(workspace["path"].as_str().unwrap());
-    fixture.restart();
-    let status = fixture.run(&["status", "review"]);
-    assert!(
-        String::from_utf8_lossy(&status.stdout)
-            .contains(&format!("done (keep requested, approval {id})"))
-    );
-    let request = fixture.ok(&["approvals"])[0].clone();
-    assert_eq!(request["target"], "keep");
-    assert_eq!(request["reason"], "review the UI");
-    fixture.ok(&["approve", &id]);
-    let status = fixture.run(&["status", "review"]);
-    assert!(String::from_utf8_lossy(&status.stdout).contains("done (kept for review)"));
-    wait_until("keep hook", || {
-        fs::read_to_string(&events).is_ok_and(|events| events.contains("|review|"))
-    });
-    assert!(fs::read_to_string(&events).unwrap().contains("|keep|"));
-    assert!(path.exists());
-    fixture.ok(&["done", "review", "--cleanup"]);
-    wait_removed(&fixture, "review");
-
-    let output = scoped_command(&fixture, "denied", &["done", "--keep", "--reason", "demo"]);
-    let output: Value = serde_json::from_slice(&output.stdout).unwrap();
-    fixture.ok(&["deny", &output["keep_request"].to_string()]);
-    wait_removed(&fixture, "denied");
-    assert!(
-        fs::read_to_string(&events)
-            .unwrap()
-            .lines()
-            .any(|line| line.contains("|denied|") && line.contains("|cleanup|"))
-    );
-
+fn agents_follow_a_keep_default_and_can_request_cleanup() {
     let fixture = Fixture::with_config(Some("[done]\ncleanup=false\n"));
     fixture.add("keep-default");
     assert_eq!(fixture.ok(&["done", "keep-default"])["cleanup"], false);
@@ -16610,7 +16556,7 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 
 #[test]
 fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
-    for (cleanup, manual_keep) in [(false, false), (true, false), (true, true)] {
+    for cleanup in [false, true] {
         let mut fixture = Fixture::with_config(Some(&format!(
             "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\n"
         )));
@@ -16670,11 +16616,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "2",
             "assigned",
         ]);
-        if manual_keep {
-            fixture.ok(&["done", "multi", "--keep"]);
-        } else {
-            fixture.ok(&["done", "multi"]);
-        }
+        fixture.ok(&["done", "multi"]);
         write_pr(1, "MERGED", "earlier");
         write_pr(2, "CLOSED", head.trim());
         let root = fixture.root.path().to_owned();
@@ -16690,7 +16632,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
         assert!(fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"].is_null());
         fs::write(root.join("pr-2.json"), serde_json::json!({"number":2,"state":"MERGED","headRefName":"multi","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
         fixture.restart();
-        if cleanup && !manual_keep {
+        if cleanup {
             wait_removed(&fixture, "multi");
         } else {
             wait_until("confirmed merges", || {
@@ -17703,7 +17645,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
 #[test]
 fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let fixture = Fixture::with_config(Some(
-        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n[done]\ncleanup = false\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -17726,7 +17668,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?}");
     assert_eq!(herdr_calls(&fixture).len(), 3);
-    fixture.ok(&["done", "retain", "--keep"]);
+    fixture.ok(&["done", "retain"]);
     assert_eq!(herdr_calls(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
     fs::write(
@@ -17803,7 +17745,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
 
 #[test]
 fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
-    let mut fixture = Fixture::new();
+    let mut fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
     install_fake_herdr(&fixture);
     install_fake_agents(&fixture, &["claude"]);
     install_test_script(
@@ -17835,7 +17777,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     });
     assert_eq!(herdr_calls(&fixture).len(), 3);
     fixture.restart();
-    fixture.ok(&["done", "happy-tab", "--keep"]);
+    fixture.ok(&["done", "happy-tab"]);
     wait_for_herdr_close(&fixture);
     assert!(fixture.ok(&["inspect", "happy-tab"])["completion"].is_object());
 }
@@ -17915,11 +17857,13 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         command.extend_from_slice(args);
         fixture.ok(&command)
     };
-    scoped(&fixture, &["done", "--keep", "--reason", "review"]);
+    fixture.ok(&["hold", "acquire", "issue-work", "--name", "review"]);
+    scoped(&fixture, &["done"]);
     let undone = scoped(&fixture, &["undone"]);
-    assert_eq!(undone["withdrawn"]["cleanup"], false);
+    assert_eq!(undone["withdrawn"]["cleanup"], true);
     assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
     assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
+    fixture.ok(&["hold", "release", "issue-work", "--name", "review"]);
     // Only holds keep a workspace; cleanup removes the merged one on request,
     // which needs a default branch it can fetch.
     git(&fixture.repo, &["remote", "remove", "origin"]);

@@ -1,10 +1,7 @@
 use std::{fs, path::Path, sync::Arc};
 
 use super::*;
-use crate::{
-    daemon::workspace::Requester,
-    test_support::{commit, git, manager, repository},
-};
+use crate::test_support::{commit, git, manager, repository};
 
 const HOUR: u64 = 3600;
 
@@ -145,7 +142,7 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_restore_point() {
 }
 
 #[tokio::test]
-async fn keep_choices_running_work_and_unsaved_state_retain_a_merged_workspace() {
+async fn holds_running_work_and_unsaved_state_retain_a_merged_workspace() {
     let f = Fixture::new().await;
     f.squash_merge();
     let id = &f.workspace.id;
@@ -157,13 +154,6 @@ async fn keep_choices_running_work_and_unsaved_state_retain_a_merged_workspace()
         .unwrap();
     assert!(f.kept_after(5).await);
     manager.release_hold(id, "review".into()).await.unwrap();
-
-    manager
-        .mark_done(id, Some(false), Requester::Unscoped)
-        .await
-        .unwrap();
-    assert!(f.kept_after(5).await);
-    manager.undo_done(id).await.unwrap();
 
     let repo_path = f.checkout.to_str().unwrap().to_owned();
     let stacked = manager
