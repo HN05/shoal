@@ -724,9 +724,13 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     );
 
     fixture.ok(&["rm", "removed", "--yes", "--keep-branch"]);
-    for child in [agent, command] {
-        child.wait_with_output().unwrap();
-    }
+    let stopped = String::from_utf8(agent.wait_with_output().unwrap().stderr).unwrap();
+    assert!(
+        stopped.contains("restore with shoal restore removed, then shoal resume removed"),
+        "{stopped}"
+    );
+    let stopped = String::from_utf8(command.wait_with_output().unwrap().stderr).unwrap();
+    assert!(!stopped.contains("shoal resume"), "{stopped}");
     assert!(!path.exists());
     let removed = fixture.ok(&["restore"]);
     let agents = removed[0]["agents"].as_array().unwrap();

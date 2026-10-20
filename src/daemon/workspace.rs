@@ -28,7 +28,7 @@ mod status;
 
 pub(crate) use agents::{Pause, Protection};
 pub use done::Requester;
-pub use executions::{ExecutionKind, StopRequest};
+pub use executions::{ExecutionKind, Save, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;

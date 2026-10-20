@@ -886,6 +886,9 @@ pub enum Control {
     Pause {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+        /// The workspace is being removed; its restore point keeps the session.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        removed: bool,
     },
     OverloadStop {
         recover: bool,
@@ -1114,11 +1117,18 @@ mod tests {
     #[test]
     fn pause_reasons_are_optional_on_the_wire() {
         let control: Control = serde_json::from_value(json!({"type": "pause"})).unwrap();
-        assert!(matches!(control, Control::Pause { reason: None }));
+        assert!(matches!(
+            control,
+            Control::Pause {
+                reason: None,
+                removed: false
+            }
+        ));
         let control: Control = serde_json::from_value(json!({"type": "stop"})).unwrap();
         assert!(matches!(control, Control::Stop { reason: None }));
         let wire = serde_json::to_value(Control::Pause {
             reason: Some("shoal stop".into()),
+            removed: false,
         })
         .unwrap();
         assert_eq!(wire, json!({"type": "pause", "reason": "shoal stop"}));

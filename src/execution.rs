@@ -410,10 +410,7 @@ async fn run_tracked(
             Ok(Outcome::Paused { code, stop }) => {
                 if let Some(recovery) = &recovery {
                     let automatic = recovery.automatic && stop.recovers();
-                    let restore = format!(
-                        "restore with shoal resume {} --execution {}",
-                        plan.workspace.name, plan.id
-                    );
+                    let restore = stop.restore(&plan.workspace.name, &plan.id);
                     // A detached agent never ran in the launching terminal.
                     let place = (!matches!(mode, Mode::Detached { .. }))
                         .then(crate::cli::terminal::current_place)
@@ -664,8 +661,13 @@ enum Halt {
         reason: String,
         resumes_when: String,
     },
-    /// `shoal stop`, a daemon shutdown or a refused reattachment.
-    Pause { reason: Option<String> },
+    /// `shoal stop`, workspace removal, a daemon shutdown or a refused
+    /// reattachment.
+    Pause {
+        reason: Option<String>,
+        /// The restore point of the removed workspace keeps the session.
+        removed: bool,
+    },
 }
 
 impl Halt {
@@ -686,8 +688,21 @@ impl Halt {
             Self::Protection { reason, .. }
             | Self::Pause {
                 reason: Some(reason),
+                ..
             } => format!(": {reason}"),
-            Self::Pause { reason: None } => String::new(),
+            Self::Pause { reason: None, .. } => String::new(),
+        }
+    }
+
+    /// How to restore the agent by hand: resume it, once its workspace is
+    /// restored when removal stopped it.
+    fn restore(&self, workspace: &str, execution: &str) -> String {
+        let resume = format!("shoal resume {workspace} --execution {execution}");
+        match self {
+            Self::Pause { removed: true, .. } => {
+                format!("restore with shoal restore {workspace}, then {resume}")
+            }
+            _ => format!("restore with {resume}"),
         }
     }
 
@@ -861,11 +876,14 @@ async fn wait_for_child(
                         }),
                         None,
                     ),
-                    Ok(Control::Pause { reason }) => (Some(Halt::Pause { reason }), None),
+                    Ok(Control::Pause { reason, removed }) => {
+                        (Some(Halt::Pause { reason, removed }), None)
+                    }
                     // A refused reattachment saves the session as a stop does.
                     Err(error) if error.is::<Refused>() => (
                         Some(Halt::Pause {
                             reason: Some(error.to_string()),
+                            removed: false,
                         }),
                         None,
                     ),

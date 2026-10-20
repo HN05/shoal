@@ -348,7 +348,7 @@ async fn reattachment_child() {
             outcome,
             Outcome::Paused {
                 code: 143,
-                stop: Halt::Pause { reason: Some(reason) },
+                stop: Halt::Pause { reason: Some(reason), removed: false },
             } if reason.contains("execution record is missing")
         ));
         let refusal = link.refusal().unwrap().to_string();
@@ -359,7 +359,6 @@ async fn reattachment_child() {
 
 #[test]
 fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
-    let restore = "restore with shoal resume worker --execution id";
     let protection = Halt::Protection {
         recover: false,
         reason: "free disk space is below 2 GiB".into(),
@@ -370,17 +369,30 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
         Some("free disk space is below 2 GiB")
     );
     assert_eq!(
-        protection.manual_restore(restore),
+        protection.manual_restore(&protection.restore("worker", "id")),
         "shoal: agent stopped: free disk space is below 2 GiB; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
     );
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
+        removed: false,
     };
     assert_eq!(stop.saved_reason(), None);
     assert_eq!(stop.stated_reason(), ": stopped by shoal stop");
     assert_eq!(
-        stop.manual_restore(restore),
+        stop.manual_restore(&stop.restore("worker", "id")),
         "shoal: agent stopped: stopped by shoal stop; restore with shoal resume worker --execution id"
     );
-    assert_eq!(Halt::Pause { reason: None }.stated_reason(), "");
+    let removal = Halt::Pause {
+        reason: Some("the workspace is being removed".into()),
+        removed: true,
+    };
+    assert_eq!(
+        removal.manual_restore(&removal.restore("worker", "id")),
+        "shoal: agent stopped: the workspace is being removed; restore with shoal restore worker, then shoal resume worker --execution id"
+    );
+    let pause = Halt::Pause {
+        reason: None,
+        removed: false,
+    };
+    assert_eq!(pause.stated_reason(), "");
 }

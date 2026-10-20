@@ -14,7 +14,7 @@ use super::{
     approvals::Undecided,
     execution_recovery,
     scope::Caller,
-    workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution},
+    workspace::{ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution},
 };
 use crate::daemon::log;
 use crate::{
@@ -304,7 +304,10 @@ async fn relay(
                             } else {
                                 match manager.stop_request(execution_id).await {
                                     Some(request) if kind == ExecutionKind::Command && request.saves(agent.is_some()) => {
-                                        Control::Pause { reason: Some(request.reason) }
+                                        Control::Pause {
+                                            removed: request.save == Save::RemovedAgents,
+                                            reason: Some(request.reason),
+                                        }
                                     }
                                     request => Control::Stop { reason: request.map(|request| request.reason) },
                                 }
@@ -620,7 +623,7 @@ mod tests {
         assert!(!manager.execution_connected(&detaching).await);
         assert!(matches!(
             read(&mut legacy).await,
-            Control::Pause { reason: Some(reason) } if reason == "the Shoal daemon shut down"
+            Control::Pause { reason: Some(reason), removed: false } if reason == "the Shoal daemon shut down"
         ));
         protocol::write(legacy.get_mut(), &ExecutionEvent::Finished { exit_code: 0 })
             .await
