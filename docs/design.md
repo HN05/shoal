@@ -853,7 +853,8 @@ join again.
 
 Approvals are the one daemon-owned way a scoped caller asks the user to decide;
 `shoal approvals` lists and decides every kind: keeping a completed workspace (see
-completion), landing a branch (see scope) and resource access.
+completion), landing a branch (see scope) and resource access. Approving a land
+request whose branch moved since it was requested is refused as stale and drops it.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it, and the decision is sent to the requesting

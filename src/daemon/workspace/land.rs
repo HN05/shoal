@@ -4,8 +4,12 @@ use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, branches::UpstreamPolicy};
 use crate::{
-    daemon::approvals::{
-        self, ApprovalRequest, LAND, LandSpecification, Lifetime, Specification, Target, Undecided,
+    daemon::{
+        approvals::{
+            self, ApprovalRequest, LAND, LandSpecification, Lifetime, Specification, Target,
+            Undecided,
+        },
+        log,
     },
     git::{
         self,
@@ -135,6 +139,36 @@ impl Manager {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),
         }
+    }
+
+    /// Refuse to approve a land request whose branch has moved since the
+    /// request: drop it and tell the agent to request again. The landing
+    /// itself still lands only the approved commit.
+    pub(crate) async fn ensure_land_current(&self, request: &ApprovalRequest) -> Result<()> {
+        let Specification::Land(land) = &request.specification else {
+            bail!("approval request {} has no land specification", request.id);
+        };
+        let workspace = self.workspace(&request.workspace_id).await?;
+        let head = git::resolve_commit(&workspace.path, &git::local_ref(&land.branch), git_run)
+            .await
+            .ok();
+        if workspace.branch == land.branch && head.as_deref() == Some(land.head.as_str()) {
+            return Ok(());
+        }
+        self.discard_approval(request.id.clone()).await?;
+        let stale = format!(
+            "Approval {} for {} is stale: the branch moved; run shoal land again to request landing it.",
+            request.id,
+            request.subject()
+        );
+        if let Err(error) = self.queue_agent_message(&request.workspace_id, stale).await {
+            log!("stale land request message not queued: {error:#}");
+        }
+        bail!(
+            "approval request {} is stale: {} moved since it was requested",
+            request.id,
+            land.branch
+        )
     }
 
     /// The managed workspace that has `branch` checked out, if any.

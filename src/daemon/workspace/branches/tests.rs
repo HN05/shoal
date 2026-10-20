@@ -1231,6 +1231,30 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         1
     );
 
+    // Approving after the branch moved drops the stale request and tells the agent.
+    fs::write(workspace.path.join("feature"), "even more\n").unwrap();
+    commit(&workspace.path, "feature");
+    let error = f
+        .manager
+        .decide_approval(next.id.clone(), true)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("is stale"), "{error:#}");
+    assert!(
+        f.manager
+            .approval_requests(Some("worker"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let messages = f.manager.agent_messages("worker").await.unwrap();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.message.contains(&next.id) && m.message.contains("stale")),
+        "{messages:?}"
+    );
+
     // Denial leaves the branch unlanded and refuses the same commit again.
     let main = git(&f.repo, &["rev-parse", "main"]);
     let denied = undecided_land(&f, &workspace).await;

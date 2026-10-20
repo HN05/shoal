@@ -1137,8 +1137,9 @@ An agent's scoped `shoal land` needs the user's approval for the branch at its
 current commit unless `[land] requires_approval = false`. The first run records a
 `land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 after approval, running it again lands that commit with every check above. A new
-commit replaces the request with one for the new commit, and a denied commit
-stays refused with `"approval_denied"`.
+commit replaces the request with one for the new commit, approving a request
+after its branch moved is refused as stale, and a denied commit stays refused
+with `"approval_denied"`.
 
 With `[land] push`, or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one landing local. A default branch without an

@@ -505,6 +505,16 @@ impl Manager {
             .await
     }
 
+    /// Delete one request, such as a stale one.
+    pub async fn discard_approval(&self, id: String) -> Result<()> {
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM access_requests WHERE id=?1", [&id])?;
+                Ok(())
+            })
+            .await
+    }
+
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await
@@ -520,10 +530,18 @@ impl Manager {
     }
 
     async fn record_decision(&self, id: String, approve: bool) -> Result<Decision> {
-        if let Some(request) = self.approval_request(&id).await?
-            && request.target == Target::Keep
-        {
-            return self.decide_keep(request, approve).await;
+        match self.approval_request(&id).await? {
+            Some(request) if request.target == Target::Keep => {
+                return self.decide_keep(request, approve).await;
+            }
+            Some(request)
+                if request.target == Target::Land
+                    && approve
+                    && request.status == DecisionStatus::Pending =>
+            {
+                self.ensure_land_current(&request).await?;
+            }
+            _ => {}
         }
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
