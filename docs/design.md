@@ -828,7 +828,8 @@ Approvals are the one daemon-owned way a scoped caller asks the user to decide;
 one kind (see completion); resource access is the other.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
-only an unscoped caller decides it. Pending requests consume no capacity. Approval
+only an unscoped caller decides it, and the decision is sent to the requesting
+workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval
 never overrides capacity, scope, or simulator cleanup rules. Requests and grants

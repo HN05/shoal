@@ -191,19 +191,19 @@ impl Manager {
         &self,
         request: ApprovalRequest,
         approve: bool,
-    ) -> Result<ApprovalRequest> {
+    ) -> Result<approvals::Decision> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(&request.workspace_id).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let hook = self.done_hook(&workspace, &settings).await?;
-        let (request, completion) = self
+        let (decision, completion) = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let request = approvals::decide(&tx, &request.id, approve)?;
-                let completion = settle_keep(&tx, &request)?;
+                let decision = approvals::decide(&tx, &request.id, approve)?;
+                let completion = settle_keep(&tx, &decision.request)?;
                 tx.commit()?;
-                Ok((request, completion))
+                Ok((decision, completion))
             })
             .await?;
         if let Some(completion) = completion {
@@ -212,7 +212,7 @@ impl Manager {
             }
             self.cleanup_notify.notify_one();
         }
-        Ok(request)
+        Ok(decision)
     }
 
     /// The configured `post_done_cmd`, holding off permit and lifecycle changes

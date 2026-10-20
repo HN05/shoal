@@ -2057,7 +2057,9 @@ these requests, keep requests from `shoal done --keep`, and retained workspace g
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approvals approve [id]` or
 `shoal approvals deny [id]`. Approval reserves no capacity: retry acquisition after
-the decision. Pending requests produce a daemon notification, collapsed until read.
+the decision. Pending requests produce a daemon notification, collapsed until read;
+a decision queues an [agent message](#agent-messages) for the requesting workspace
+naming the request, its target and the decision.
 
 An acquisition waiting for a decision returns exit 2 and JSON
 `code: "approval_pending"` with the request; denial returns `"approval_denied"`.

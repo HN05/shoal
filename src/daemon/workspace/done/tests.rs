@@ -469,6 +469,11 @@ async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
         .keep_request
         .unwrap();
     manager.decide_approval(id.clone(), true).await.unwrap();
+    let messages = manager.agent_messages(&workspace.id).await.unwrap();
+    assert_eq!(
+        messages[0].message,
+        format!("Approval {id} for keep was approved: Shoal keeps this workspace.")
+    );
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
     assert!(!completion.cleanup);
     assert!(completion.keep_request.is_none());

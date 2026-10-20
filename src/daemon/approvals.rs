@@ -7,6 +7,7 @@ use std::{fmt, str::FromStr};
 use crate::{
     config::repo::ConflictPolicy,
     daemon::{
+        log,
         resources::{Definition, LockMode, Scope},
         store,
         workspace::Manager,
@@ -292,6 +293,22 @@ impl ApprovalRequest {
             _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
         }
     }
+
+    /// The agent message naming a decision and what the requesting agent does next.
+    fn decision_message(&self) -> String {
+        let next = match (&self.target, &self.status) {
+            (Target::Keep, DecisionStatus::Approved) => "Shoal keeps this workspace",
+            (Target::Keep, _) => "Shoal will clean up this workspace",
+            (_, DecisionStatus::Approved) => "retry the command that requested it",
+            _ => "do not retry it",
+        };
+        format!(
+            "Approval {} for {} was {}: {next}.",
+            self.id,
+            self.subject(),
+            self.status
+        )
+    }
 }
 
 /// Cancel requests or end lease grants; retain approved workspace grants.
@@ -343,8 +360,14 @@ pub fn request_keep(
     Ok(pending)
 }
 
+/// A decided request; `new` is false when the decision repeats the recorded one.
+pub struct Decision {
+    pub request: ApprovalRequest,
+    pub new: bool,
+}
+
 /// Record a decision on a pending request; repeating the same decision is a no-op.
-pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<ApprovalRequest> {
+pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<Decision> {
     let mut request = by_id(tx, id)?.ok_or_else(|| anyhow::anyhow!("unknown approval request"))?;
     store::require_ready(tx, &request.workspace_id)?;
     let status = if approve {
@@ -356,7 +379,8 @@ pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<ApprovalR
         request.status == DecisionStatus::Pending || request.status == status,
         "approval request already decided"
     );
-    if request.status == DecisionStatus::Pending {
+    let new = request.status == DecisionStatus::Pending;
+    if new {
         request.status = status;
         request.decided_at = Some(crate::time::unix_seconds());
         tx.execute(
@@ -364,7 +388,7 @@ pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<ApprovalR
             params![id, serde_json::to_string(&request)?],
         )?;
     }
-    Ok(request)
+    Ok(Decision { request, new })
 }
 
 impl Manager {
@@ -373,7 +397,16 @@ impl Manager {
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
+    /// Record the decision and tell the requesting workspace's agents about a new one.
     pub async fn decide_approval(&self, id: String, approve: bool) -> Result<ApprovalRequest> {
+        let decision = self.record_decision(id, approve).await?;
+        if decision.new {
+            self.tell_requester(&decision.request).await;
+        }
+        Ok(decision.request)
+    }
+
+    async fn record_decision(&self, id: String, approve: bool) -> Result<Decision> {
         if let Some(request) = self.approval_request(&id).await?
             && request.target == Target::Keep
         {
@@ -385,11 +418,21 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let request = decide(&tx, &id, approve)?;
+                let decision = decide(&tx, &id, approve)?;
                 tx.commit()?;
-                Ok(request)
+                Ok(decision)
             })
             .await
+    }
+
+    /// Failure only logs; the decision stands.
+    async fn tell_requester(&self, request: &ApprovalRequest) {
+        if let Err(error) = self
+            .queue_agent_message(&request.workspace_id, request.decision_message())
+            .await
+        {
+            log!("approval decision message not queued: {error:#}");
+        }
     }
 
     /// A request's target never changes, so it can be read before taking the
@@ -530,11 +573,20 @@ mod tests {
         ] {
             let decision = manager.decide_approval(id.into(), approve).await?;
             assert_eq!(decision.status, status);
+            let messages = manager.agent_messages("worker").await?;
+            let ids: Vec<_> = messages.iter().map(|m| m.id).collect();
+            assert_eq!(
+                messages.into_iter().map(|m| m.message).collect::<Vec<_>>(),
+                [decision.decision_message()]
+            );
+            manager.mark_agent_messages_delivered("worker", ids).await?;
             let retry = manager.decide_approval(id.into(), approve).await?;
             assert_eq!(
                 serde_json::to_value(retry)?,
-                serde_json::to_value(decision)?
+                serde_json::to_value(&decision)?
             );
+            // Repeating a decision does not tell the agent again.
+            assert!(manager.agent_messages("worker").await?.is_empty());
             assert!(manager.decide_approval(id.into(), !approve).await.is_err());
         }
         for (id, message) in [
@@ -564,6 +616,28 @@ mod tests {
                 .is_err()
         );
         Ok(())
+    }
+
+    #[test]
+    fn decision_messages_name_the_request_target_and_next_step() {
+        let mut request = sample("owner", Target::Port("web".into()));
+        request.id = "id".into();
+        request.status = DecisionStatus::Approved;
+        assert_eq!(
+            request.decision_message(),
+            "Approval id for port/web / default (workspace) was approved: retry the command that requested it."
+        );
+        request.status = DecisionStatus::Denied;
+        assert_eq!(
+            request.decision_message(),
+            "Approval id for port/web / default (workspace) was denied: do not retry it."
+        );
+        request.target = Target::Keep;
+        assert_eq!(
+            request.decision_message(),
+            "Approval id for keep was denied: Shoal will clean up this workspace."
+        );
+        crate::validate::message(&request.decision_message()).unwrap();
     }
 
     #[tokio::test]
