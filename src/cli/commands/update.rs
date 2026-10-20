@@ -182,6 +182,7 @@ impl Release {
         command.arg("--version");
         let output = Run::new(command)
             .timeout(Duration::from_secs(30))
+            .output_limit(4096)
             .output()
             .await
             .context("run the downloaded shoal")?;
