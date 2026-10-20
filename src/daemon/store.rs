@@ -56,13 +56,10 @@ impl Store {
             )?;
             tx.execute(
                 "UPDATE workspaces SET state=?1, error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN (?2, ?3, ?4, ?5)",
-                [
+                    WHERE state IN (SELECT value FROM json_each(?2))",
+                rusqlite::params![
                     WorkspaceState::Failed,
-                    WorkspaceState::Preparing,
-                    WorkspaceState::Removing,
-                    WorkspaceState::Stopping,
-                    WorkspaceState::Reconciling,
+                    serde_json::to_string(&WorkspaceState::transient().collect::<Vec<_>>())?,
                 ],
             )?;
             tx.commit()?;
@@ -1088,14 +1085,7 @@ mod tests {
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);",
         )?;
-        for state in [
-            "preparing",
-            "removing",
-            "stopping",
-            "reconciling",
-            "ready",
-            "failed",
-        ] {
+        for state in WorkspaceState::ALL {
             db.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES (?1,'repo',?1,?1,?1,?1,'original error')", [state])?;
         }
         db.execute_batch("INSERT INTO executions(id,workspace_id,state) VALUES ('execution','preparing','running');
@@ -1126,6 +1116,47 @@ mod tests {
             let reopened = Store::open(path.clone()).await.unwrap();
             assert_eq!(reopened.run(operation_snapshot).await.unwrap(), before);
         }
+    }
+
+    #[tokio::test]
+    async fn startup_quarantines_transient_workspaces_and_preserves_settled_states() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let store = Store::open(root.path().join("state.db")).await?;
+        store.run(seed_interrupted_operations).await?;
+        store.quarantine_interrupted_operations().await?;
+        store
+            .run(|db| {
+                for &original in WorkspaceState::ALL {
+                    let (state, error): (WorkspaceState, String) = db.query_row(
+                        "SELECT state,error FROM workspaces WHERE id=?1",
+                        [original],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )?;
+                    match original {
+                        WorkspaceState::Preparing
+                        | WorkspaceState::Stopping
+                        | WorkspaceState::Removing
+                        | WorkspaceState::Reconciling => {
+                            assert_eq!(state, WorkspaceState::Failed, "{original}");
+                            assert_eq!(
+                                error,
+                                "daemon stopped during workspace operation; inspect before cleanup",
+                                "{original}"
+                            );
+                        }
+                        WorkspaceState::Ready | WorkspaceState::Failed => {
+                            assert_eq!(state, original);
+                            assert_eq!(error, "original error", "{original}");
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .await?;
+        let quarantined = store.run(operation_snapshot).await?;
+        store.quarantine_interrupted_operations().await?;
+        assert_eq!(store.run(operation_snapshot).await?, quarantined);
+        Ok(())
     }
 
     #[tokio::test]

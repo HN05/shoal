@@ -139,7 +139,7 @@ macro_rules! text_key {
 }
 pub(crate) use text_key;
 
-states!(WorkspaceState {
+states!(WorkspaceState: Variants {
     Preparing => "preparing",
     Ready => "ready",
     Stopping => "stopping",
@@ -149,6 +149,14 @@ states!(WorkspaceState {
 });
 
 impl WorkspaceState {
+    /// Lifecycle operations interrupted when the daemon stops.
+    pub fn transient() -> impl Iterator<Item = Self> {
+        Self::ALL.iter().copied().filter(|state| match state {
+            Self::Preparing | Self::Stopping | Self::Removing | Self::Reconciling => true,
+            Self::Ready | Self::Failed => false,
+        })
+    }
+
     /// A workspace being stopped, removed or reconciled takes no new issue link.
     pub fn accepts_issue(self) -> bool {
         matches!(self, Self::Ready | Self::Preparing | Self::Failed)
