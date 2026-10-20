@@ -482,9 +482,13 @@ pub enum Method {
         id: i64,
     },
     /// The user's answer, queued for the asking workspace's agents.
+    /// `shown` is the question the user was shown, which a later question
+    /// reusing its number does not match.
     AnswerQuestion {
         id: i64,
         answer: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shown: Option<crate::daemon::questions::Question>,
     },
     /// Long-lived: the question once it is answered. Its text tells it
     /// from a later question reusing its number.
@@ -533,9 +537,13 @@ pub enum Method {
         workspace: String,
         name: String,
     },
+    /// `shown` is the request the user was shown, which a later request
+    /// reusing its number does not match.
     DecideApproval {
         id: i64,
         approve: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
     },
     // Cooperative resources.
     ResourceAcquire {

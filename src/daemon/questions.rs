@@ -111,6 +111,14 @@ impl Question {
         self.answer.is_none()
     }
 
+    /// Whether `other` is this question as asked, though it may since be
+    /// answered: the same workspace, ask and time.
+    fn is_same(&self, other: &Question) -> bool {
+        self.workspace_id == other.workspace_id
+            && self.ask == other.ask
+            && self.created_at == other.created_at
+    }
+
     /// What the user is told about a new question, including how to answer it.
     /// It is cut to the length of other messages, so a batch of notifications
     /// still fits one response.
@@ -258,9 +266,20 @@ fn store_answer(
     Ok(())
 }
 
-/// Record `answer` and queue the message that carries it, together.
-fn record_answer(tx: &Transaction<'_>, id: i64, answer: &str) -> Result<Question> {
+/// Record `answer` and queue the message that carries it, together. With
+/// `shown`, the question the user was shown, a later question reusing its
+/// number is refused.
+fn record_answer(
+    tx: &Transaction<'_>,
+    id: i64,
+    answer: &str,
+    shown: Option<&Question>,
+) -> Result<Question> {
     let mut question = open_question(tx, id)?;
+    ensure!(
+        shown.is_none_or(|shown| question.is_same(shown)),
+        "question {id} changed since it was shown; choose again"
+    );
     let answer = question.ask.resolve(answer)?;
     let message = question.answer_message(&answer);
     let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
@@ -369,13 +388,19 @@ impl Manager {
             .await
     }
 
-    /// Record the user's answer and queue it for the workspace's agents.
-    pub async fn answer_question(&self, id: i64, answer: String) -> Result<Question> {
+    /// Record the user's answer to question `id`, or to `shown` when the user
+    /// chose it from a listing, and queue it for the workspace's agents.
+    pub async fn answer_question(
+        &self,
+        id: i64,
+        answer: String,
+        shown: Option<Question>,
+    ) -> Result<Question> {
         let question = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = record_answer(&tx, id, &answer)?;
+                let question = record_answer(&tx, id, &answer, shown.as_ref())?;
                 tx.commit()?;
                 Ok(question)
             })

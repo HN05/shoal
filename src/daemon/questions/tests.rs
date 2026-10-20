@@ -86,14 +86,14 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
     for invalid in ["3", "0", " "] {
         assert!(
             manager
-                .answer_question(question.id, invalid.into())
+                .answer_question(question.id, invalid.into(), None)
                 .await
                 .is_err(),
             "{invalid:?}"
         );
     }
     let answered = manager
-        .answer_question(question.id, "2".into())
+        .answer_question(question.id, "2".into(), None)
         .await
         .unwrap();
     assert_eq!(answered.answer.as_deref(), Some("Postgres"));
@@ -108,7 +108,7 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         )
     );
     let error = manager
-        .answer_question(question.id, "1".into())
+        .answer_question(question.id, "1".into(), None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("already answered"));
@@ -126,7 +126,7 @@ async fn free_text_answers_may_span_lines() {
         .await
         .unwrap();
     let answered = manager
-        .answer_question(question.id, "Postgres,\nsince staging has it".into())
+        .answer_question(question.id, "Postgres,\nsince staging has it".into(), None)
         .await
         .unwrap();
     assert_eq!(
@@ -143,7 +143,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .await
         .unwrap();
     let answered = manager
-        .answer_question(question.id, "Postgres".into())
+        .answer_question(question.id, "Postgres".into(), None)
         .await
         .unwrap();
     let again = manager
@@ -189,7 +189,10 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
     assert_eq!(numbers, [1, 2, 3]);
 
     // An answer keeps its number until the agent receives it.
-    let answered = manager.answer_question(2, "Redis".into()).await.unwrap();
+    let answered = manager
+        .answer_question(2, "Redis".into(), None)
+        .await
+        .unwrap();
     let next = manager
         .ask_question(&workspace.name, ask("Which logger?", &[]))
         .await
@@ -204,6 +207,23 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
         .await
         .unwrap();
     assert_eq!(reused.id, 2);
+
+    // An answer chosen from the question the user was shown does not reach
+    // the later question reusing its number.
+    let error = manager
+        .answer_question(2, "cron".into(), Some(answered))
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("changed since it was shown"),
+        "{error:#}"
+    );
+    let shown = reused.clone();
+    let answered = manager
+        .answer_question(2, "cron".into(), Some(shown))
+        .await
+        .unwrap();
+    assert_eq!(answered.ask, reused.ask);
 }
 
 #[tokio::test]
@@ -223,7 +243,7 @@ async fn a_wait_returns_the_answer() {
         }
     });
     manager
-        .answer_question(question.id, "Postgres".into())
+        .answer_question(question.id, "Postgres".into(), None)
         .await
         .unwrap();
     let answered = waiter.await.unwrap().unwrap();
@@ -269,7 +289,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         CleanupReason::Question
     );
     manager
-        .answer_question(question.id, "Postgres".into())
+        .answer_question(question.id, "Postgres".into(), None)
         .await
         .unwrap();
     assert_eq!(
@@ -343,6 +363,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         Method::AnswerQuestion {
             id: 1,
             answer: "yes".into(),
+            shown: None,
         },
         Method::ShowQuestion { id: 1 },
     ] {
@@ -377,7 +398,10 @@ async fn listings_and_unread_answers_fit_one_response() {
             .ask_question(&workspace.name, maximal(unread))
             .await
             .unwrap();
-        match manager.answer_question(question.id, answer.clone()).await {
+        match manager
+            .answer_question(question.id, answer.clone(), None)
+            .await
+        {
             Ok(_) => unread += 1,
             Err(error) => break error,
         }

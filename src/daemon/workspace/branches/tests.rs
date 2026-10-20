@@ -1256,7 +1256,10 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 
     // Approval lets the agent's retry land the approved commit.
-    f.manager.decide_approval(pending.id, true).await.unwrap();
+    f.manager
+        .decide_approval(pending.id, true, None)
+        .await
+        .unwrap();
     let started = land_as_agent(&f, &workspace).await.unwrap();
     assert_eq!(started.plan.land.as_ref().unwrap().source, head);
     f.manager
@@ -1289,7 +1292,11 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     // Approving after the branch moved retires the stale request and tells the agent.
     fs::write(workspace.path.join("feature"), "even more\n").unwrap();
     commit(&workspace.path, "feature");
-    let error = f.manager.decide_approval(next.id, true).await.unwrap_err();
+    let error = f
+        .manager
+        .decide_approval(next.id, true, None)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("is stale"), "{error:#}");
     assert_eq!(
         statuses(f.manager.approval_requests(Some("worker")).await.unwrap()),
@@ -1317,7 +1324,10 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         land.head,
         git(&workspace.path, &["rev-parse", "HEAD"]).trim()
     );
-    f.manager.decide_approval(denied.id, false).await.unwrap();
+    f.manager
+        .decide_approval(denied.id, false, None)
+        .await
+        .unwrap();
     let refused = undecided_land(&f, &workspace).await;
     assert_eq!(
         (refused.id, refused.status),
@@ -1336,7 +1346,7 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
     fs::write(&reference, "not a commit\n").unwrap();
     let error = f
         .manager
-        .decide_approval(pending.id, true)
+        .decide_approval(pending.id, true, None)
         .await
         .unwrap_err();
     fs::write(&reference, saved).unwrap();
@@ -1348,7 +1358,10 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
         crate::daemon::approvals::DecisionStatus::Pending
     );
     assert!(f.manager.agent_messages("worker").await.unwrap().is_empty());
-    f.manager.decide_approval(pending.id, true).await.unwrap();
+    f.manager
+        .decide_approval(pending.id, true, None)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

@@ -4,7 +4,9 @@
 DELETE FROM questions WHERE answer IS NOT NULL
     AND (message_id IS NULL OR message_id NOT IN (SELECT id FROM agent_messages));
 ALTER TABLE questions ADD COLUMN number INTEGER NOT NULL DEFAULT 0;
-UPDATE questions SET number=(SELECT COUNT(*) FROM questions q WHERE q.id<=questions.id);
+-- Existing questions keep their IDs as numbers, so waits running across the
+-- upgrade resume them.
+UPDATE questions SET number=id;
 CREATE UNIQUE INDEX IF NOT EXISTS questions_number ON questions(number);
 ALTER TABLE access_requests ADD COLUMN number INTEGER NOT NULL DEFAULT 0;
 UPDATE access_requests SET number=(SELECT COUNT(*) FROM access_requests a WHERE a.rowid<=access_requests.rowid);

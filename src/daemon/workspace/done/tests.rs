@@ -433,7 +433,7 @@ async fn agent_keep_waits_for_the_user_and_denial_requests_cleanup() {
     manager.sweep_completed().await.unwrap();
     assert!(workspace.path.exists());
 
-    manager.decide_approval(id, false).await.unwrap();
+    manager.decide_approval(id, false, None).await.unwrap();
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
     assert!(completion.cleanup);
     assert!(completion.keep_request.is_none());
@@ -455,7 +455,7 @@ async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
         .unwrap()
         .keep_request
         .unwrap();
-    manager.decide_approval(id, true).await.unwrap();
+    manager.decide_approval(id, true, None).await.unwrap();
     let messages = manager.agent_messages(&workspace.id).await.unwrap();
     assert_eq!(
         messages[0].message,
@@ -491,8 +491,8 @@ async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
         (requests[0].id, requests[0].status),
         (id, DecisionStatus::Outdated)
     );
-    assert!(manager.decide_approval(id, true).await.is_err());
-    assert!(manager.decide_approval(next, true).await.is_err());
+    assert!(manager.decide_approval(id, true, None).await.is_err());
+    assert!(manager.decide_approval(next, true, None).await.is_err());
 }
 
 #[tokio::test]

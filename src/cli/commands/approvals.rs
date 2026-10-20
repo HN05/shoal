@@ -1,5 +1,5 @@
 //! Review daemon-owned approval requests and render allocation decisions.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use super::EXIT_BUSY;
@@ -15,12 +15,16 @@ pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Res
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot decide approval requests; ask the user to run this command"
     );
-    let id = match id {
-        Some(id) => id,
-        None => pick_pending(ctx).await?,
+    let (id, shown) = match id {
+        Some(id) => (id, None),
+        None => {
+            let picked = pick_pending(ctx).await?;
+            (picked.id, Some(Box::new(picked)))
+        }
     };
     let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve }).await?;
+        request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve, shown })
+            .await?;
     ctx.emit(&describe(&request), &request)?;
     Ok(0)
 }
@@ -40,7 +44,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     Ok(0)
 }
 
-async fn pick_pending(ctx: &Context) -> Result<i64> {
+async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
             .await?;
@@ -50,7 +54,11 @@ async fn pick_pending(ctx: &Context) -> Result<i64> {
         .map(|request| (request.id.to_string(), summary(request)))
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
-    Ok(ui::pick(ctx, "Approval request> ", pending)?.parse()?)
+    let id: i64 = ui::pick(ctx, "Approval request> ", pending)?.parse()?;
+    requests
+        .into_iter()
+        .find(|request| request.id == id)
+        .context("picker returned an unknown approval request")
 }
 
 /// One line with what the user needs to decide a request: the description

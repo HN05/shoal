@@ -349,6 +349,18 @@ impl ApprovalRequest {
         }
     }
 
+    /// Whether `other` is this request as recorded, though its decision may
+    /// differ: the same workspace, target, settings, reason and time.
+    fn is_same(&self, other: &ApprovalRequest) -> bool {
+        self.workspace_id == other.workspace_id
+            && self.target == other.target
+            && self.name == other.name
+            && self.specification == other.specification
+            && self.lifetime == other.lifetime
+            && self.reason == other.reason
+            && self.created_at == other.created_at
+    }
+
     /// What the user is asked to decide: the target and lease name, `keep`,
     /// or the branch and commit to land.
     pub fn subject(&self) -> String {
@@ -575,12 +587,23 @@ impl Manager {
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
-    /// Record the decision and tell the requesting workspace's agents about a new one.
-    pub async fn decide_approval(&self, id: i64, approve: bool) -> Result<ApprovalRequest> {
+    /// Record the decision and tell the requesting workspace's agents about a
+    /// new one. With `shown`, the request the user was shown, a later request
+    /// reusing its number is refused.
+    pub async fn decide_approval(
+        &self,
+        id: i64,
+        approve: bool,
+        shown: Option<ApprovalRequest>,
+    ) -> Result<ApprovalRequest> {
         let request = self
             .approval_request(id)
             .await?
             .with_context(|| format!("unknown approval request {id}"))?;
+        ensure!(
+            shown.is_none_or(|shown| request.is_same(&shown)),
+            "approval request {id} changed since it was shown; choose again"
+        );
         let decision = self.record_decision(request, approve).await?;
         if decision.new {
             self.tell_requester(&decision.request).await;
@@ -779,7 +802,7 @@ mod tests {
             (1, true, DecisionStatus::Approved),
             (2, false, DecisionStatus::Denied),
         ] {
-            let decision = manager.decide_approval(id, approve).await?;
+            let decision = manager.decide_approval(id, approve, None).await?;
             assert_eq!(decision.status, status);
             let messages = manager.agent_messages("worker").await?;
             let ids: Vec<_> = messages.iter().map(|m| m.id).collect();
@@ -788,22 +811,36 @@ mod tests {
                 [decision.decision_message()]
             );
             manager.mark_agent_messages_delivered("worker", ids).await?;
-            let retry = manager.decide_approval(id, approve).await?;
+            let retry = manager.decide_approval(id, approve, None).await?;
             assert_eq!(
                 serde_json::to_value(retry)?,
                 serde_json::to_value(&decision)?
             );
             // Repeating a decision does not tell the agent again.
             assert!(manager.agent_messages("worker").await?.is_empty());
-            assert!(manager.decide_approval(id, !approve).await.is_err());
+            assert!(manager.decide_approval(id, !approve, None).await.is_err());
         }
+        // A decision chosen from a shown request does not reach another
+        // request holding its number.
+        let shown = manager.approval_requests(Some("worker")).await?;
+        let error = manager
+            .decide_approval(1, true, Some(shown[1].clone()))
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("changed since it was shown"),
+            "{error:#}"
+        );
+        manager
+            .decide_approval(1, true, Some(shown[0].clone()))
+            .await?;
         for (id, message) in [
             (4, "unknown approval request 4"),
             (3, "approval request 3 has an invalid record"),
         ] {
             assert!(
                 manager
-                    .decide_approval(id, true)
+                    .decide_approval(id, true, None)
                     .await
                     .unwrap_err()
                     .to_string()
@@ -817,7 +854,7 @@ mod tests {
                 Ok(())
             })
             .await?;
-        assert!(manager.decide_approval(1, true).await.is_err());
+        assert!(manager.decide_approval(1, true, None).await.is_err());
         Ok(())
     }
 

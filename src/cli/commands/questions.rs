@@ -2,7 +2,7 @@
 //! and `shoal answer` sends the user's answer to the asking agents.
 use std::ffi::OsString;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -141,11 +141,15 @@ pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions; ask the user with shoal ask"
     );
-    let (id, answer) = match (id, answer) {
-        (Some(id), Some(answer)) => (id, answer),
-        (id, _) => prompt_answer(ctx, id).await?,
+    let (id, answer, shown) = match (id, answer) {
+        (Some(id), Some(answer)) => (id, answer, None),
+        (id, _) => {
+            let (question, answer) = prompt_answer(ctx, id).await?;
+            (question.id, answer, Some(question))
+        }
     };
-    let question = request::<Question>(&ctx.paths, Method::AnswerQuestion { id, answer }).await?;
+    let question =
+        request::<Question>(&ctx.paths, Method::AnswerQuestion { id, answer, shown }).await?;
     ctx.emit(&answered(&question), &question)?;
     Ok(0)
 }
@@ -163,17 +167,17 @@ fn answered(question: &Question) -> String {
 }
 
 /// Show the open question `id`, or one the user picks, and read the answer.
-async fn prompt_answer(ctx: &Context, id: Option<i64>) -> Result<(i64, String)> {
+async fn prompt_answer(ctx: &Context, id: Option<i64>) -> Result<(Question, String)> {
     let question = select_open(ctx, id).await?;
     eprintln!("{}", render(&question, Palette::stderr(ctx.json)));
-    Ok((question.id, ui::input(ctx, "Answer")?))
+    let answer = ui::input(ctx, "Answer")?;
+    Ok((question, answer))
 }
 
 /// The open question `id`, or one the user picks.
 async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
-    let id = match id {
-        Some(id) => id,
-        None => pick_open(ctx).await?,
+    let Some(id) = id else {
+        return pick_open(ctx).await;
     };
     let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
     ensure!(question.is_open(), "question {id} is already answered");
@@ -181,7 +185,7 @@ async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
 }
 
 /// Choose among the newest open questions.
-async fn pick_open(ctx: &Context) -> Result<i64> {
+async fn pick_open(ctx: &Context) -> Result<Question> {
     let questions = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace: None })
         .await?
         .questions;
@@ -190,7 +194,11 @@ async fn pick_open(ctx: &Context) -> Result<i64> {
         .iter()
         .map(|question| (question.id.to_string(), summary(question)))
         .collect();
-    Ok(ui::pick(ctx, "Question> ", entries)?.parse()?)
+    let id: i64 = ui::pick(ctx, "Question> ", entries)?.parse()?;
+    questions
+        .into_iter()
+        .find(|question| question.id == id)
+        .context("picker returned an unknown question")
 }
 
 /// One line with what the user needs to choose a question: its workspace,

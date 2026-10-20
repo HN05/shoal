@@ -242,7 +242,7 @@ mod tests {
             pending(acquire(&manager, scoped, "GATED", None).await?).id,
             request.id
         );
-        manager.decide_approval(request.id, true).await?;
+        manager.decide_approval(request.id, true, None).await?;
         assert_eq!(
             granted(acquire(&manager, scoped, "GATED", None).await?),
             Some(true)
@@ -276,7 +276,7 @@ mod tests {
         );
 
         let denied = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
-        manager.decide_approval(denied.id, false).await?;
+        manager.decide_approval(denied.id, false, None).await?;
         let retry = pending(acquire(&manager, scoped, "GATED", None).await?);
         assert_eq!(
             (retry.id, retry.status),
@@ -291,7 +291,7 @@ mod tests {
         configure(&manager, "token", Lifetime::Workspace);
         let scoped = Some(&caller);
         let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
-        manager.decide_approval(request.id, true).await?;
+        manager.decide_approval(request.id, true, None).await?;
         manager.release_secret("worker", "GATED".into()).await?;
         assert_eq!(
             granted(acquire(&manager, scoped, "GATED", None).await?),

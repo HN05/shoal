@@ -1903,7 +1903,7 @@ stale notification may name a reused number. An answer may span lines, up to 409
 Delivering the answer deletes the question. A new question takes the smallest
 number no stored question holds, across workspaces; without a number,
 `answer` picks among open questions, showing each one's workspace, recommendation
-and choices.
+and choices, and refuses the answer if another question took the number meanwhile.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
 also delivers its message; it survives daemon restarts, waiting up to 10 seconds
 for a stopped daemon to return. Asking an identical
@@ -2264,7 +2264,8 @@ these requests, keep requests from `shoal done --keep`, land requests from a sco
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown
-with their workspace, reason and settings. A request takes the smallest number no
+with their workspace, reason and settings, and a request that took the chosen
+number meanwhile is refused. A request takes the smallest number no
 stored request holds. A keep or land request replaced by one for a newer commit, or
 a land request found stale, stays listed as `outdated` until the workspace is
 removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after

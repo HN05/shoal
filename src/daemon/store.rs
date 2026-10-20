@@ -984,7 +984,8 @@ mod tests {
     }
 
     #[test]
-    fn migration_numbers_questions_and_approvals_and_drops_delivered_questions() -> Result<()> {
+    fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questions()
+    -> Result<()> {
         let mut db = historical_database(45)?;
         db.execute_batch(
             r#"INSERT INTO agent_messages(id,workspace_id,created_at,message)
@@ -1004,7 +1005,7 @@ mod tests {
             .prepare("SELECT id,number FROM questions ORDER BY id")?
             .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        assert_eq!(questions, [(12, 1), (13, 2)]);
+        assert_eq!(questions, [(12, 12), (13, 13)]);
         let requests = db
             .prepare(
                 "SELECT id,number,json_extract(record,'$.id') FROM access_requests ORDER BY rowid",
@@ -1024,10 +1025,14 @@ mod tests {
             |r| r.get(0),
         )?;
         assert_eq!(keep, 2);
-        assert_eq!(free_number(&db, "questions")?, 3);
-        assert_eq!(free_number(&db, "access_requests")?, 3);
-        db.execute("DELETE FROM questions WHERE number=1", [])?;
         assert_eq!(free_number(&db, "questions")?, 1);
+        assert_eq!(free_number(&db, "access_requests")?, 3);
+        db.execute(
+            "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,choices)
+            VALUES (1,'workspace',3,'Which logger?','tracing','[]')",
+            [],
+        )?;
+        assert_eq!(free_number(&db, "questions")?, 2);
         Ok(())
     }
 

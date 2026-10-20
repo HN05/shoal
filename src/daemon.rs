@@ -793,8 +793,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Questions(manager.questions(workspace.as_deref()).await?)
         }
         Method::ShowQuestion { id } => Body::Question(manager.question(id).await?),
-        Method::AnswerQuestion { id, answer } => {
-            Body::Question(manager.answer_question(id, answer).await?)
+        Method::AnswerQuestion { id, answer, shown } => {
+            Body::Question(manager.answer_question(id, answer, shown).await?)
         }
         Method::MarkNotificationsRead { ids } => {
             manager.mark_notifications_read(ids).await?;
@@ -833,9 +833,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.release_secret(&workspace, name).await?;
             Body::Ok
         }
-        Method::DecideApproval { id, approve } => {
-            Body::ApprovalRequest(Box::new(manager.decide_approval(id, approve).await?))
-        }
+        Method::DecideApproval { id, approve, shown } => Body::ApprovalRequest(Box::new(
+            manager
+                .decide_approval(id, approve, shown.map(|shown| *shown))
+                .await?,
+        )),
         Method::ResourceAcquire { workspace, request } => manager
             .acquire_resource(&workspace, request, caller)
             .await?
