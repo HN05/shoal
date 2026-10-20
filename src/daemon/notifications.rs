@@ -44,6 +44,8 @@ states!(NotificationKind {
     QueueFailed => "queue_failed",
     /// A seed build failed, or a new workspace could not start from it.
     SeedFailed => "seed_failed",
+    /// Disk space cleanup emptied a repository's shared caches.
+    CachesEmptied => "caches_emptied",
 });
 
 impl NotificationKind {
@@ -57,6 +59,7 @@ impl NotificationKind {
                 | Self::AgentStopped
                 | Self::AgentResumed
                 | Self::WorkspaceRemoved
+                | Self::CachesEmptied
                 | Self::HookFailed
                 | Self::QueueStarted
                 | Self::QueueFailed

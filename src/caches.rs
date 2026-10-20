@@ -55,6 +55,10 @@ impl Layout {
             .map(|directory| Self::new(directory, &repo.id))
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Each configured cache's directory, created when missing.
     pub fn prepare(&self, caches: &BTreeMap<String, Cache>) -> Result<BTreeMap<String, PathBuf>> {
         if caches.is_empty() {

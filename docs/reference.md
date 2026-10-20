@@ -128,7 +128,8 @@ Monitoring does not guarantee that the OS will never reach its OOM limit.
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
 removes the workspaces there that idle cleanup would remove, without waiting for
-their idle delay, until enough space is available. A repository with idle
+their idle delay, then empties [shared caches](#shared-caches) there nothing is
+using, until enough space is available. A repository with idle
 cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 notifications and the `disk_space` event cause; a pass that cannot free enough
 space repeats at most every 30 seconds. While space stays below
@@ -1306,8 +1307,10 @@ is in the way; registrations without a repository directory leave the field
 literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
-`shoal cleanup --caches` empties a repository's caches, configured or not, while
-none of its tracked executions and no seed build of it is running. Processes started with an exported environment are not tracked.
+`shoal cleanup --caches` and [disk space](#overload-protection) cleanup empty a
+repository's caches, configured or not, while none of its tracked executions and
+no seed build of it is running; disk space cleanup records a `caches_emptied`
+notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.
 
 ### Remove a workspace
@@ -1746,7 +1749,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
-behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, and workspaces it removed or retained on its own through PR, merge, or
+behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. Each line shows the local time, the workspace, and the message;

@@ -1,6 +1,7 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
 //! removing workspaces idle cleanup would remove, without their idle delay,
-//! then stopping tracked executions when that cannot free enough space.
+//! then emptying shared caches nothing is using, then stopping tracked
+//! executions when that cannot free enough space.
 use anyhow::Result;
 use std::{
     io,
@@ -12,13 +13,14 @@ use std::{
 use tokio::time::Instant;
 
 use super::{
+    caches::Emptying,
     events::EventCause,
     notifications::NotificationKind,
     warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection},
 };
 use crate::daemon::log;
-use crate::{config::overload::Disk, model::Workspace};
+use crate::{caches::Layout, config::overload::Disk, model::Workspace};
 
 /// Each pass inspects every workspace, so a pass that could not free enough
 /// space repeats at the idle sweep's pace.
@@ -105,6 +107,7 @@ impl Monitor {
         {
             for filesystem in &mut low {
                 free_space(manager, settings, &workspaces, filesystem, &available).await?;
+                empty_caches(manager, settings, filesystem, &available).await?;
             }
             let exhausted = low
                 .iter()
@@ -222,6 +225,52 @@ async fn free_space(
             }
         };
         manager.notify(Some(&workspace.name), kind, message).await;
+        filesystem.free = available(&filesystem.path)?;
+    }
+    Ok(())
+}
+
+/// Empty shared caches on the filesystem that nothing is using until it has
+/// enough space.
+async fn empty_caches(
+    manager: &Manager,
+    settings: &Disk,
+    filesystem: &mut Filesystem,
+    available: impl Fn(&Path) -> io::Result<u64>,
+) -> Result<()> {
+    for repo in manager.repositories().await? {
+        if filesystem.free >= settings.cleanup_free_bytes() {
+            break;
+        }
+        let on_filesystem = Layout::of(&repo).is_some_and(|layout| {
+            layout.root().metadata().map(|metadata| metadata.dev()).ok() == Some(filesystem.device)
+        });
+        if !on_filesystem {
+            continue;
+        }
+        let name = crate::forge::repository::name(&repo);
+        let (kind, message) = match manager.empty_caches(&repo, false).await {
+            Ok(Some(Emptying::Emptied { caches })) => {
+                log!("disk space cleanup emptied caches of {name}");
+                (
+                    NotificationKind::CachesEmptied,
+                    format!(
+                        "Emptied caches of {name} for disk space: {}; {}",
+                        caches.join(", "),
+                        filesystem.describe()
+                    ),
+                )
+            }
+            Ok(_) => continue,
+            Err(error) => {
+                log!("disk space cleanup kept caches of {name}: {error:#}");
+                (
+                    NotificationKind::CleanupFailed,
+                    format!("Disk space cleanup could not empty caches of {name}: {error:#}"),
+                )
+            }
+        };
+        manager.notify(None, kind, message).await;
         filesystem.free = available(&filesystem.path)?;
     }
     Ok(())
@@ -429,6 +478,53 @@ mod tests {
             .await
             .unwrap();
         assert!(!recovered(&manager));
+    }
+
+    #[tokio::test]
+    async fn cleanup_empties_unused_caches_after_removing_workspaces() {
+        let (root, manager) = manager().await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let held = manager
+            .create_workspace(&repo.id, "held".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .acquire_hold(&held.id, "keep".into(), None)
+            .await
+            .unwrap();
+        let repo = manager.repository(&repo.id).await.unwrap();
+        let caches = std::collections::BTreeMap::from([(
+            "go".to_owned(),
+            crate::config::repo::Cache {
+                scope: crate::config::repo::CacheScope::Shared,
+            },
+        )]);
+        let go = crate::caches::directories(&repo, &caches).unwrap()["go"].clone();
+        std::fs::write(go.join("entry"), "cached").unwrap();
+        // Above the stop threshold, so only cleanup runs.
+        let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+        Monitor::default()
+            .check(&manager, Instant::now(), |_: &Path| Ok(low))
+            .await
+            .unwrap();
+        assert!(!go.exists());
+        assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+        let notifications = manager.notifications(true, 10).await.unwrap();
+        let emptied = notifications
+            .iter()
+            .find(|notification| notification.kind == NotificationKind::CachesEmptied)
+            .expect("caches emptied notification");
+        assert!(
+            emptied
+                .message
+                .starts_with("Emptied caches of repo for disk space: go; "),
+            "{}",
+            emptied.message
+        );
     }
 
     #[tokio::test]
