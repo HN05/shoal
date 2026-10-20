@@ -29,6 +29,7 @@ pub(crate) use agents::{Pause, Protection};
 pub use done::Requester;
 pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
+pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
 
 use crate::{

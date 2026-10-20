@@ -48,6 +48,13 @@ pub(super) fn owns_git_dir(
     Ok(same_identity)
 }
 
+/// A worktree whose ownership verified.
+pub(crate) struct VerifiedWorktree {
+    /// Whether recording the identity changed it. A failure leaves the existing
+    /// record, which verification just accepted, protecting the worktree.
+    pub identity: Result<bool>,
+}
+
 impl Manager {
     /// Validate and reactivate an owned workspace being reopened by branch or path.
     pub(crate) async fn reopen_owned_workspace(
@@ -86,6 +93,23 @@ impl Manager {
             );
         }
         Ok(())
+    }
+
+    /// Verify ownership, then record the worktree's identity when `record` is
+    /// set. Recording runs only after verification passes; an error from
+    /// verification means the worktree is not proven to be this workspace's.
+    pub(crate) async fn verify_and_record_worktree(
+        &self,
+        workspace: &Workspace,
+        record: bool,
+    ) -> Result<VerifiedWorktree> {
+        self.verify_worktree(workspace).await?;
+        let identity = if record {
+            self.record_worktree_identity(workspace).await
+        } else {
+            Ok(false)
+        };
+        Ok(VerifiedWorktree { identity })
     }
 
     /// Re-establish ownership of the worktree at the recorded path after a human

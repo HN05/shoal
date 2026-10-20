@@ -5,7 +5,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use crate::daemon::log;
 use crate::{
-    daemon::workspace::{Manager, StopRequest},
+    daemon::workspace::{Manager, StopRequest, VerifiedWorktree},
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
@@ -87,21 +87,24 @@ impl Manager {
             if workspace.state != WorkspaceState::Ready {
                 continue;
             }
-            if let Err(error) = self.verify_worktree(&workspace).await {
-                self.set_state(
-                    &workspace.id,
-                    WorkspaceState::Failed,
-                    Some(format!(
-                        "startup ownership check failed: {error:#}; run shoal doctor"
-                    )),
-                )
-                .await?;
-            } else if let Err(error) = self.record_worktree_identity(&workspace).await {
-                // Verification passed, so the existing record still protects it.
-                log!(
+            match self.verify_and_record_worktree(&workspace, true).await {
+                Err(error) => {
+                    self.set_state(
+                        &workspace.id,
+                        WorkspaceState::Failed,
+                        Some(format!(
+                            "startup ownership check failed: {error:#}; run shoal doctor"
+                        )),
+                    )
+                    .await?;
+                }
+                Ok(VerifiedWorktree {
+                    identity: Err(error),
+                }) => log!(
                     "worktree identity not recorded for {}: {error:#}",
                     workspace.name
-                );
+                ),
+                Ok(_) => {}
             }
         }
         Ok(())
@@ -284,10 +287,13 @@ impl Manager {
         report: &mut Report,
     ) -> Result<()> {
         if workspace.path.try_exists()? {
-            match self.verify_worktree(workspace).await {
-                Ok(()) => {
+            match self
+                .verify_and_record_worktree(workspace, options.repair)
+                .await
+            {
+                Ok(verified) => {
                     report.directory = DirectoryState::Valid;
-                    if options.repair && self.record_worktree_identity(workspace).await? {
+                    if verified.identity? {
                         report.changes.push("Recorded Git worktree identity".into());
                     }
                 }
