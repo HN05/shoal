@@ -145,15 +145,26 @@ test ! -e "$HOME/injected"
 cd "$HOME/elsewhere"
 _shoal_recover_directory
 test "$PWD" = "$HOME/elsewhere"
-# A workspace removed before the prompt is not entered.
+# A workspace removed before the prompt leaves for its surviving parent.
 export SHOAL_SHELL_DIRECTIVE="$HOME/directive"
-printf '%s\n' "$HOME/removed" > "$SHOAL_SHELL_DIRECTIVE"
+printf '%s\n' "$HOME/repo/removed" > "$SHOAL_SHELL_DIRECTIVE"
+mkdir -p "$HOME/repo"
 _shoal_recover_directory
-test "$PWD" = "$HOME/elsewhere"
+test "$PWD" = "$HOME/repo"
 printf 'tab-ok\n'
 "#,
             ])
             .env("INTEGRATION", &integration)
+            .env(
+                "PATH",
+                format!(
+                    "{}:/usr/bin:/bin",
+                    std::path::Path::new(env!("CARGO_BIN_EXE_shoal"))
+                        .parent()
+                        .unwrap()
+                        .display()
+                ),
+            )
             .output()
             .unwrap();
         assert!(

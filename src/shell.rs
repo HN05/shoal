@@ -67,9 +67,10 @@ pub const INIT: &str = r#"_shoal_enter_tab_workspace() {
   IFS= read -r shoal_destination < "$SHOAL_SHELL_DIRECTIVE" || :
   command rm -f -- "$SHOAL_SHELL_DIRECTIVE"
   unset SHOAL_SHELL_DIRECTIVE
-  if [ -d "$shoal_destination" ]; then
-    builtin cd -- "$shoal_destination"
+  if [ -n "$shoal_destination" ] && [ ! -d "$shoal_destination" ]; then
+    shoal_destination="$(command shoal shell recover -- "$shoal_destination" 2>/dev/null)" || return 0
   fi
+  [ -z "$shoal_destination" ] || builtin cd -- "$shoal_destination"
 }
 
 _shoal_recover_directory() {
