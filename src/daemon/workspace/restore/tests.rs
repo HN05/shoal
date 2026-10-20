@@ -275,3 +275,48 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "work\n");
 }
+
+#[tokio::test]
+async fn a_failed_removal_keeps_its_restore_point() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    // A directory whose entries cannot change fails Worktrunk's removal after
+    // the restore point is saved.
+    let parent = workspace.path.parent().unwrap().to_owned();
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o555)).unwrap();
+    let removed = manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::DeleteBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await;
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(removed.is_err());
+    let record = record(&manager, &workspace.id).await.unwrap();
+    assert_eq!(
+        git(
+            &checkout,
+            &["show", &format!("{}:scratch", record.snapshot)]
+        ),
+        "notes\n"
+    );
+    assert_eq!(
+        git::restore::workspace_ids(&checkout).await.unwrap(),
+        std::slice::from_ref(&workspace.id)
+    );
+    assert!(
+        manager.removed_workspaces().await.unwrap().is_empty(),
+        "the workspace still exists"
+    );
+}

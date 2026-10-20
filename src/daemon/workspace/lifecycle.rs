@@ -680,10 +680,8 @@ impl Manager {
                 .await
         }
         .await;
-        // Files a failed removal deleted stay recoverable from the restore point.
-        if removed.is_err() && workspace.path.is_dir() {
-            self.discard_restore_point(&repo, &workspace.id).await;
-        }
+        // A failed removal may have deleted some files, so its restore point
+        // stays; the next attempt replaces it, and it expires like any other.
         removed
     }
 

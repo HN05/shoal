@@ -15,8 +15,9 @@ use crate::{
 
 impl Manager {
     /// Keep HEAD and, within the archive limit, the unsaved files reachable,
-    /// and record them before any file is deleted, so an interrupted removal
-    /// stays restorable. Records of workspaces that still exist are not listed.
+    /// and record them before any file is deleted, so an interrupted or failed
+    /// removal stays restorable. Records of workspaces that still exist are
+    /// not listed.
     pub(super) async fn save_restore_point(
         &self,
         repo: &Repository,
@@ -211,7 +212,7 @@ impl Manager {
             .await
     }
 
-    /// Drop the restore point and record of a removal that did not happen.
+    /// Drop a restore point and its record.
     pub(super) async fn discard_restore_point(&self, repo: &Repository, workspace_id: &str) {
         let reference = git::restore::reference(workspace_id);
         if let Err(error) = git::restore::delete(&repo.path, &reference).await {
