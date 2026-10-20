@@ -1410,7 +1410,8 @@ precedence. Scoped agents may mark only their own workspace done; completion doe
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
 reversible with [`shoal restore`](#restore-a-workspace); to review in a workspace,
-[hold](#workspace-holds) it.
+[hold](#workspace-holds) it. Completion and PR cleanup wait while a hold or an open
+[question](#questions) remains.
 
 Only `done` completes an assignment; issue closure and merged PRs do not. A
 merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)

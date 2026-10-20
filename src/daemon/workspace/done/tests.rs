@@ -373,3 +373,32 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
 }
+
+#[tokio::test]
+async fn open_questions_retain_completion_and_pr_cleanup() {
+    let (_root, manager, workspace) = fixture().await;
+    let ask = crate::daemon::questions::Ask {
+        question: "Anything else?".into(),
+        recommendation: "No".into(),
+        reason: None,
+        choices: vec![],
+    };
+    let question = manager.ask_question(&workspace.name, ask).await.unwrap();
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(workspace.path.exists());
+    manager
+        .set_pr(&workspace.id, Action::Acknowledge)
+        .await
+        .unwrap();
+    manager.sweep_prs().await.unwrap();
+    assert!(workspace.path.exists());
+    let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
+    assert!(completion.error.is_none());
+    manager
+        .answer_question(question.id, "No".into(), None)
+        .await
+        .unwrap();
+    manager.sweep_prs().await.unwrap();
+    assert!(!workspace.path.exists());
+}

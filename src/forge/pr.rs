@@ -400,7 +400,7 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                if self.has_holds(&workspace.id).await?
+                if self.keep_reason(&workspace.id).await?.is_some()
                     || !self.completion_allows_cleanup(&workspace).await?
                 {
                     return Ok(false);

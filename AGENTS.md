@@ -62,7 +62,7 @@ when behavior changes, distinguishing decisions from proposals.
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds keep them. Automatic removal is only for idle,
+  with commits; only holds and open questions keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed or merged into the default branch (including
   squash and rebase merges), or deleted worktrees. Unattended removals except for disk
   space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
@@ -77,8 +77,9 @@ when behavior changes, distinguishing decisions from proposals.
   Completion cleanup without a PR registration requires every commit pushed or
   merged, retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
-  Associated issues suppress idle cleanup, not merged cleanup; open questions
-  suppress both.
+  Associated issues suppress idle cleanup, not merged cleanup; holds and open
+  questions suppress every unattended removal. Holds belong to the user and
+  host apps; scoped callers only list them.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

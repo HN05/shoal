@@ -954,7 +954,8 @@ cleanup still forgets missing worktrees. Release remains available through faile
 active lifecycle operations and hooks. Holds belong to the user and to apps hosting
 external sessions; scoped callers list their own workspace's holds but cannot change
 them. Removal is reversible through restore points, so agents have no way to keep a
-workspace.
+workspace: one that needs the user asks, and an open question, like a hold, keeps the
+workspace from every unattended removal, completion and PR cleanup included.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an

@@ -142,7 +142,7 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_restore_point() {
 }
 
 #[tokio::test]
-async fn holds_running_work_and_unsaved_state_retain_a_merged_workspace() {
+async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspace() {
     let f = Fixture::new().await;
     f.squash_merge();
     let id = &f.workspace.id;
@@ -154,6 +154,19 @@ async fn holds_running_work_and_unsaved_state_retain_a_merged_workspace() {
         .unwrap();
     assert!(f.kept_after(5).await);
     manager.release_hold(id, "review".into()).await.unwrap();
+
+    let ask = crate::daemon::questions::Ask {
+        question: "Anything else?".into(),
+        recommendation: "No".into(),
+        reason: None,
+        choices: vec![],
+    };
+    let question = manager.ask_question(id, ask).await.unwrap();
+    assert!(f.kept_after(5).await, "an open question");
+    manager
+        .answer_question(question.id, "No".into(), None)
+        .await
+        .unwrap();
 
     let repo_path = f.checkout.to_str().unwrap().to_owned();
     let stacked = manager

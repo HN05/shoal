@@ -84,7 +84,10 @@ Forgejo cannot rerun through its API.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
-can reopen a removed workspace with `shoal restore`. `--cleanup` overrides a
+can reopen a removed workspace with `shoal restore`. Cleanup waits while one of
+your questions is open, so ask with `shoal ask` when you need the user before the
+workspace goes. Holds belong to the user and host apps; you can list them with
+`shoal hold` but not acquire or release them. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local
 default branch. Completion does not claim a merge occurred. Inspect

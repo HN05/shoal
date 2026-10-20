@@ -1085,10 +1085,22 @@ mod tests {
             .acquire_hold(&workspace.id, "review".into(), None)
             .await
             .unwrap();
+        let ask = crate::daemon::questions::Ask {
+            question: "Anything else?".into(),
+            recommendation: "No".into(),
+            reason: None,
+            choices: vec![],
+        };
+        let question = manager.ask_question(&workspace.name, ask).await.unwrap();
         manager.mark_done(&workspace.id, false).await.unwrap();
         assert_eq!(reason().await, CleanupReason::Held);
         manager
             .release_hold(&workspace.id, "review".into())
+            .await
+            .unwrap();
+        assert_eq!(reason().await, CleanupReason::Question);
+        manager
+            .answer_question(question.id, "No".into(), None)
             .await
             .unwrap();
         assert_eq!(reason().await, CleanupReason::Completed);

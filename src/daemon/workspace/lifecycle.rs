@@ -392,9 +392,9 @@ impl Manager {
         }
     }
 
-    /// What daemon records keep the workspace: holds and assignment state
-    /// first, since their own cleanup paths decide removal, then commands and
-    /// leases.
+    /// What daemon records keep the workspace: holds, open questions and
+    /// assignment state first, since their own cleanup paths decide removal,
+    /// then commands and leases.
     async fn recorded_cleanup_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if let Some(reason) = self.keep_reason(id).await? {
             return Ok(Some(reason));
@@ -405,9 +405,16 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds, which keep a workspace from every unattended removal.
-    async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        Ok(self.has_holds(id).await?.then_some(CleanupReason::Held))
+    /// Holds and open questions, which keep a workspace from every unattended
+    /// removal, completion and PR cleanup included.
+    pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+        if self.has_holds(id).await? {
+            return Ok(Some(CleanupReason::Held));
+        }
+        Ok(self
+            .has_open_questions(id)
+            .await?
+            .then_some(CleanupReason::Question))
     }
 
     /// Assignment state whose own cleanup path decides removal.
@@ -424,11 +431,8 @@ impl Manager {
         Ok(None)
     }
 
-    /// Open questions, commands, saved stopped work and leases.
+    /// Commands, saved stopped work and leases.
     async fn usage_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        if self.has_open_questions(id).await? {
-            return Ok(Some(CleanupReason::Question));
-        }
         if crate::execution::recovery::pending(&self.paths, id)? {
             return Ok(Some(CleanupReason::Recovering));
         }

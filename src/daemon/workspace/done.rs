@@ -219,7 +219,7 @@ impl Manager {
         let Some(completion) = self.completion(&workspace.id).await? else {
             return Ok(false);
         };
-        if !completion.cleanup || self.has_holds(&workspace.id).await? {
+        if !completion.cleanup || self.keep_reason(&workspace.id).await?.is_some() {
             return Ok(false);
         }
         // A pre-existing PR registration keeps its own merge requirements.
