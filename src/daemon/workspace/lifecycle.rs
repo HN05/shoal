@@ -11,7 +11,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{CleanupReason, RemovedWorkspace, Workspace},
+    model::{CleanupReason, Workspace},
     removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
@@ -516,13 +516,10 @@ impl Manager {
             } else {
                 None
             };
-            let (outcome, restore) = match removal {
+            let outcome = match removal {
                 Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
-                _ => (
-                    self.remove_missing_worktree(&workspace, removal).await?,
-                    None,
-                ),
+                _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
             self.commit_workspace_removal(
                 &workspace.id,
@@ -531,7 +528,6 @@ impl Manager {
                 } else {
                     EventCause::MissingDirectory
                 },
-                restore,
             )
             .await?;
             Ok((outcome, post_remove))
@@ -568,21 +564,12 @@ impl Manager {
         }
     }
 
-    /// Release ownership and cascading resource leases in one transaction,
-    /// with the restore record when the worktree existed.
-    async fn commit_workspace_removal(
-        &self,
-        id: &str,
-        cause: EventCause,
-        restore: Option<RemovedWorkspace>,
-    ) -> Result<()> {
+    /// Release ownership and cascading resource leases in one transaction.
+    async fn commit_workspace_removal(&self, id: &str, cause: EventCause) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                if let Some(restore) = &restore {
-                    super::restore::record(&tx, restore)?;
-                }
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
@@ -630,7 +617,7 @@ impl Manager {
         &self,
         workspace: &crate::model::Workspace,
         removal: Removal<'_>,
-    ) -> Result<(RemovalResult, Option<RemovedWorkspace>)> {
+    ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
         self.recheck_removal(workspace, removal, Stage::Initial)
             .await?;
@@ -693,13 +680,11 @@ impl Manager {
                 .await
         }
         .await;
-        match removed {
-            Ok(result) => Ok((result, Some(restore))),
-            Err(error) => {
-                self.discard_restore_point(&repo, &workspace.id).await;
-                Err(error)
-            }
+        // Files a failed removal deleted stay recoverable from the restore point.
+        if removed.is_err() && workspace.path.is_dir() {
+            self.discard_restore_point(&repo, &workspace.id).await;
         }
+        removed
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at

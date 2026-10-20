@@ -14,8 +14,9 @@ use crate::{
 };
 
 impl Manager {
-    /// Keep HEAD and, within the archive limit, the unsaved files reachable
-    /// before the worktree is removed. The record commits with the removal.
+    /// Keep HEAD and, within the archive limit, the unsaved files reachable,
+    /// and record them before any file is deleted, so an interrupted removal
+    /// stays restorable. Records of workspaces that still exist are not listed.
     pub(super) async fn save_restore_point(
         &self,
         repo: &Repository,
@@ -44,7 +45,7 @@ impl Manager {
         let reference = git::restore::reference(&workspace.id);
         git::restore::save(&repo.path, &reference, &snapshot).await?;
         let removed_at = unix_seconds();
-        Ok(RemovedWorkspace {
+        let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),
             name: workspace.name.clone(),
@@ -58,7 +59,10 @@ impl Manager {
             cause,
             removed_at,
             expires_at: removed_at + retention.as_secs(),
-        })
+        };
+        let record = removed.clone();
+        self.store.run(move |db| self::record(db, &record)).await?;
+        Ok(removed)
     }
 
     /// Whether a restore point would keep all of the workspace's unsaved files.
@@ -84,10 +88,13 @@ impl Manager {
     pub async fn removed_workspaces(&self) -> Result<Vec<RemovedWorkspace>> {
         self.store
             .run(|db| {
-                db.prepare("SELECT record FROM removed_workspaces ORDER BY rowid DESC")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .map(|record| Ok(serde_json::from_str(&record?)?))
-                    .collect()
+                db.prepare(
+                    "SELECT record FROM removed_workspaces
+                     WHERE workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC",
+                )?
+                .query_map([], |row| row.get::<_, String>(0))?
+                .map(|record| Ok(serde_json::from_str(&record?)?))
+                .collect()
             })
             .await
     }
@@ -185,11 +192,22 @@ impl Manager {
             .await
     }
 
-    /// Drop the restore point of a removal that did not happen.
+    /// Drop the restore point and record of a removal that did not happen.
     pub(super) async fn discard_restore_point(&self, repo: &Repository, workspace_id: &str) {
         let reference = git::restore::reference(workspace_id);
         if let Err(error) = git::restore::delete(&repo.path, &reference).await {
             log!("restore point {reference} not deleted: {error:#}");
+        }
+        let id = workspace_id.to_owned();
+        let deleted = self
+            .store
+            .run(move |db| {
+                db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = deleted {
+            log!("restore record of {workspace_id} not deleted: {error:#}");
         }
     }
 
@@ -267,8 +285,8 @@ pub(crate) fn removal_notice(workspace: &str, removal: &str) -> String {
     format!("{removal}; restore it with shoal restore {workspace}")
 }
 
-/// Persist a restore record in the removal's transaction.
-pub(super) fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
+/// Persist a restore record, replacing one an earlier attempt left.
+fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     db.execute(
         "INSERT OR REPLACE INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
             VALUES (?1,?2,?3,?4,?5)",
@@ -288,8 +306,8 @@ pub(super) fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> 
 fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM removed_workspaces WHERE workspace_id=?1 OR name=?1
-                ORDER BY rowid DESC LIMIT 1",
+            "SELECT record FROM removed_workspaces WHERE (workspace_id=?1 OR name=?1)
+                AND workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC LIMIT 1",
             [selector],
             |row| row.get(0),
         )

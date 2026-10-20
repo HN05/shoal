@@ -232,3 +232,46 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
     );
     assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    let check = manager
+        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    manager
+        .save_restore_point(&repo, &workspace, &check, EventCause::Idle)
+        .await
+        .unwrap();
+    assert!(
+        manager.removed_workspaces().await.unwrap().is_empty(),
+        "the workspace still exists"
+    );
+    // The files go, then the daemon stops before the removal commits; the
+    // next sweeps forget the deleted worktree and keep its restore point.
+    fs::remove_dir_all(&workspace.path).unwrap();
+    crate::daemon::cleanup::sweep(&manager, &mut Default::default())
+        .await
+        .unwrap();
+    assert!(manager.workspace(&workspace.id).await.is_err());
+    manager.expire_restore_points().await.unwrap();
+    assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
+
+    let restored = manager.restore_workspace("topic").await.unwrap();
+    let path = &restored.opened.workspace.path;
+    assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
+    assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "work\n");
+}
