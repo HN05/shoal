@@ -1,6 +1,6 @@
 //! Secrets that user-configured commands fetch for tracked agents. Shoal keeps
 //! the commands, never the values.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -176,8 +176,14 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
 
 /// Run `tool` with the secrets configured for it in place of the launcher
 /// in `launchers`: the next `tool` on PATH, which may be an enclosing
-/// launch's launcher.
-pub async fn run_tool(launchers: &Path, tool: &str, args: Vec<OsString>) -> Result<i32> {
+/// launch's launcher. Gated secrets are fetched only after the daemon
+/// confirms every grant.
+pub async fn run_tool(
+    paths: &Paths,
+    launchers: &Path,
+    tool: &str,
+    args: Vec<OsString>,
+) -> Result<i32> {
     use std::os::unix::process::CommandExt;
     let manifest = launchers.join(MANIFEST);
     let secrets: Secrets = serde_json::from_slice(
@@ -187,17 +193,61 @@ pub async fn run_tool(launchers: &Path, tool: &str, args: Vec<OsString>) -> Resu
     let search = path_after(&std::env::var_os("PATH").unwrap_or_default(), launchers)?;
     let program = crate::fsutil::find_executable(OsStr::new(tool), &search)
         .with_context(|| format!("{tool} is not on PATH"))?;
+    let served: Vec<_> = secrets
+        .iter()
+        .filter(|(_, secret)| secret.tools.iter().any(|candidate| candidate == tool))
+        .collect();
+    for (name, secret) in &served {
+        if secret.requires_approval {
+            confirm_grant(paths, tool, name).await?;
+        }
+    }
     let mut command = std::process::Command::new(&program);
     command.args(args);
     let mut names = Vec::new();
-    for (name, secret) in &secrets {
-        if secret.tools.iter().any(|candidate| candidate == tool) {
-            command.env(name, fetch(name, secret, Some(&search)).await?);
-            names.push(name);
-        }
+    for (name, secret) in served {
+        command.env(name, fetch(name, secret, Some(&search)).await?);
+        names.push(name);
     }
     command.env(env::SECRET_ENV, exported_names(names.into_iter()));
     Err(command.exec()).with_context(|| format!("run {}", program.display()))
+}
+
+/// Fail unless the daemon confirms this workspace may fetch `name`; a
+/// pending or denied request is named so the agent can follow it.
+async fn confirm_grant(paths: &Paths, tool: &str, name: &str) -> Result<()> {
+    use crate::{
+        daemon::approvals::DecisionStatus,
+        protocol::{Body, Method},
+    };
+    let workspace = std::env::var(env::WORKSPACE_ID).with_context(|| {
+        format!("secrets.{name} requires approval, and {tool} runs outside a Shoal workspace")
+    })?;
+    let method = Method::SecretAcquire {
+        workspace,
+        name: name.to_owned(),
+        reason: None,
+    };
+    let body = crate::cli::client::call(paths, method)
+        .await
+        .with_context(|| {
+            format!(
+                "{tool} needs secrets.{name}, which requires approval; \
+                 request it with shoal acquire secret {name} --reason <why>"
+            )
+        })?;
+    match body {
+        Body::SecretGrant(_) => Ok(()),
+        Body::ApprovalRequest(request) if request.status == DecisionStatus::Denied => bail!(
+            "{tool} needs secrets.{name}: the user denied approval {}",
+            request.id
+        ),
+        Body::ApprovalRequest(request) => bail!(
+            "{tool} needs secrets.{name}: approval {} is pending; retry after the user decides",
+            request.id
+        ),
+        body => Err(body.unexpected("SecretGrant or ApprovalRequest")),
+    }
 }
 
 /// The PATH entries after `launchers`, or every other entry when PATH does

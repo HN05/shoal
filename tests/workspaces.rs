@@ -13336,6 +13336,63 @@ fn tool_secrets_reach_only_their_tools() {
     assert_eq!(output.stdout, b"INNER|OUTER|INNER_TOKEN:OUTER_TOKEN\n");
 }
 
+#[test]
+fn gated_tool_secrets_wait_for_the_users_approval() {
+    let fixture = Fixture::with_config(Some(
+        "[secrets.TOOL_TOKEN]\ncommand = ['sh', '-c', 'echo fetched >> \"$0\"; printf secret', 'fetches']\ntools = ['show-token']\nrequires_approval = true\n",
+    ));
+    let workspace = fixture.add("gated");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    install_test_script(
+        fixture.root.path().join("bin").join("show-token"),
+        "#!/bin/sh\nprintf '%s\\n' \"$TOOL_TOKEN\"\n",
+    );
+    fs::write(
+        worktree.join(".shoal.toml"),
+        "[commands]\nclaude = ['show-token']\n",
+    )
+    .unwrap();
+    let launch = || {
+        let output = fixture.run(&["claude", "gated"]);
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+            output.stdout,
+        )
+    };
+    let (success, stderr, _) = launch();
+    assert!(!success);
+    assert!(
+        stderr.contains("shoal acquire secret TOOL_TOKEN --reason"),
+        "{stderr}"
+    );
+
+    let request = pending_approval(scoped_command(
+        &fixture,
+        "gated",
+        &["acquire", "secret", "TOOL_TOKEN", "--reason", "sign in"],
+    ));
+    assert_eq!(request["target"], "secret/TOOL_TOKEN");
+    let id = request["id"].as_str().unwrap();
+    let (success, stderr, _) = launch();
+    assert!(!success);
+    assert!(
+        stderr.contains(&format!("approval {id} is pending")),
+        "{stderr}"
+    );
+    // The value is fetched only once the daemon confirms the grant.
+    assert!(!worktree.join("fetches").exists());
+
+    fixture.ok(&["approvals", "approve", id]);
+    let (success, stderr, stdout) = launch();
+    assert!(success, "{stderr}");
+    assert_eq!(stdout, b"secret\n");
+    assert!(worktree.join("fetches").exists());
+
+    fixture.ok(&["release", "--workspace", "gated", "secret", "TOOL_TOKEN"]);
+    let (success, _, _) = launch();
+    assert!(!success);
+}
 
 #[test]
 fn agent_git_profile_applies_only_to_agent_processes() {

@@ -827,6 +827,17 @@ wrappers, launchers are cooperative: an absolute program path or a reset PATH
 bypasses them. Other executions fetch no secrets of their own, and hooks started
 beneath an agent drop the inherited values and launchers.
 
+A tool-scoped secret can set `requires_approval = true` and `approval_lifetime`
+like a [protected resource](#resource-approvals); an environment secret cannot,
+because it is fetched before the agent can ask. The agent requests access with
+`shoal acquire secret NAME --reason ...`, and the user decides with `shoal
+approvals`. Each run of a listed tool asks the daemon first and fetches the
+value only once the workspace holds a grant for the secret's current `command`
+and `tools`; otherwise the run fails, naming the pending or denied request, or
+the `acquire` command when there is none. Whether a tool asks follows the
+config of its agent launch. `shoal release secret NAME` cancels the request or
+ends a lease grant.
+
 ### Prompt templates
 
 `issue_template`, `agent_template` and `chat_template` in the saved repository
@@ -2069,8 +2080,8 @@ lifecycle changes in the same workspace fail while a resource hook is running.
 
 ### Resource approvals
 
-Set `requires_approval = true` on a resource, named port, or simulator profile to
-gate scoped acquisition. `[simulators]` also accepts approval defaults with normal
+Set `requires_approval = true` on a resource, named port, simulator profile, or
+tool-scoped secret to gate scoped acquisition. `[simulators]` also accepts approval defaults with normal
 repository/global precedence. A protected machine profile cannot be relaxed by
 repository defaults or by selecting its device/runtime directly; where policies
 overlap, lease lifetime is stricter than workspace lifetime.

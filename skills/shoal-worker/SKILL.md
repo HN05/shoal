@@ -222,3 +222,10 @@ the device to minimize reinstalls. Only installed runtimes are supported.
 
 Stop servers, app automation, and debuggers before releasing their resources.
 Release when finished; reservations and leases outlive the requesting command.
+
+## Secrets
+
+A tool whose secret requires approval fails with the request to make. Run
+`shoal --json acquire secret NAME --reason "purpose"`, give the user the request
+ID, and rerun the tool once it is approved. The value never reaches your
+environment; `shoal release secret NAME` gives up the grant.

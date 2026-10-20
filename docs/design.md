@@ -26,7 +26,10 @@ tokens and does not switch the user's or daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
 or, for listed tools, through private PATH launchers each time the tool runs;
 the daemon and state never hold the values, hooks drop them, and tracked
-worktree files cannot name them. Forge changes Shoal
+worktree files cannot name them. A tool secret may require approval: the
+launcher fetches it only after the daemon confirms a workspace grant bound to
+its command and tools, and fails instead of waiting. Environment secrets cannot
+require approval, since they are fetched before the agent can ask. Forge changes Shoal
 makes for a workspace act as the agent too: through the `gh` wrapper, and on
 Forgejo with the token the agent's fj saved under the configured `fj_home`,
 because fj has no API passthrough, or else through the agent's `tea` wrapper. An agent Git profile

@@ -160,7 +160,8 @@ instead of the PR delivery guidance below.
   input, at agent launch or, for tool-scoped secrets, by the tool's launcher on
   each run; the daemon, state and logs never hold them, hooks drop them and
   their launchers, executions other than agent launches fetch none of their
-  own, and worktree files cannot set them.
+  own, and worktree files cannot set them. A gated tool secret is fetched only
+  after the daemon confirms the workspace's grant; only tool secrets can be gated.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Production Git command arguments live in `git`; callers use named operations

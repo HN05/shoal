@@ -521,7 +521,7 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             launchers,
             tool,
             args,
-        } => crate::secrets::run_tool(&launchers, &tool, args).await,
+        } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Add { plan } => super::zmx::worker(ctx, &plan).await,
         InternalCommand::Session {
