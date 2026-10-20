@@ -1485,8 +1485,8 @@ number may be written `#42`.
 A Forgejo or Gitea host and Bitbucket each take a `token_command`, an argument
 array whose output is the token, so no token sits in a config file. Shoal runs
 it once for each lookup or change, passes the token to curl on stdin, and keeps
-nothing. A `[forgejo."<host>"]` table is keyed by the host as the remote names
-it, with its port if any. The Bitbucket token is an access token, or an
+nothing. A `[forgejo."<host>"]` table is keyed by the remote's host in lowercase,
+with its port if any. The Bitbucket token is an access token, or an
 Atlassian API token when `email` names its account:
 
 ```toml

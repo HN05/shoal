@@ -13,7 +13,7 @@ pub struct ForgejoHost {
     pub token_command: Vec<String>,
 }
 
-/// Forgejo and Gitea hosts keyed by the host, with a port when the
+/// Forgejo and Gitea hosts keyed by the lowercase host, with a port when the
 /// repository's remote names one.
 pub type ForgejoHosts = BTreeMap<String, ForgejoHost>;
 
@@ -21,10 +21,11 @@ pub fn validate_forgejo(table: &str, hosts: &ForgejoHosts) -> Result<()> {
     for (host, login) in hosts {
         ensure!(
             !host.is_empty()
-                && host
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
-            "{table}: {host:?} is not a host name"
+                && host.chars().all(|c| c.is_ascii_lowercase()
+                    || c.is_ascii_digit()
+                    || matches!(c, '.' | '-' | ':')),
+            // Remote hosts are compared in lowercase.
+            "{table}: {host:?} is not a lowercase host name"
         );
         let key = format!("{table}.\"{host}\".token_command");
         ensure!(!login.token_command.is_empty(), "{key} is required");
@@ -85,6 +86,7 @@ mod tests {
             "[\"forge.example\"]\n",
             "[\"forge.example\"]\ntoken_command = ['']\n",
             "[\"https://forge.example\"]\ntoken_command = ['token']\n",
+            "[\"Forge.example\"]\ntoken_command = ['token']\n",
         ] {
             assert!(
                 validate_forgejo("forgejo", &hosts(invalid)).is_err(),
