@@ -1529,11 +1529,14 @@ shoal ci cancel 12 --check rust     # cancel one running check of PR 12
 ```
 
 `shoal ci rerun` reruns failed jobs on the current head of the linked PR or the
-one named, and `shoal ci cancel` cancels running ones: every such check, or each
-repeated `--check` by the name `shoal view` shows, which must be in that state.
-The daemon uses the forge's job API as the agent account and records an
-`item_changed` event. GitHub reruns each Actions job and cancels its run, and
-GitLab retries or cancels each job. Forgejo's API cannot rerun jobs, so `rerun`
+one named, and `shoal ci cancel` cancels running ones: every such CI job, leaving
+other providers' checks alone, or each repeated `--check` by the name `shoal view`
+shows, which must be a CI job in that state. The daemon uses the forge's job API
+as the agent account and records an `item_changed` event once a request succeeds;
+a failed request stops the rest. GitHub reruns a failed Actions job, or every
+failed job of a run when several of its jobs are selected, because a rerun starts
+a new attempt of the run, and cancels the job's run; GitLab retries or cancels
+each job. Forgejo's API cannot rerun jobs, so `rerun`
 fails there without sending anything, and `cancel` cancels each check's run.
 Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
 `checks` acted on.

@@ -1229,14 +1229,15 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     fixture.respond(json!({
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/commits/head/check-runs?per_page=100": {"body": {
-            "total_count": 4, "check_runs": [
+            "total_count": 5, "check_runs": [
                 {"name": "rust", "status": "completed", "conclusion": "failure", "details_url": job(1, 11)},
+                {"name": "coverage", "status": "completed", "conclusion": "failure", "details_url": "https://coverage.example/7"},
                 {"name": "docs", "status": "completed", "conclusion": "cancelled", "details_url": job(1, 12)},
                 {"name": "lint", "status": "in_progress", "conclusion": null, "details_url": job(2, 21)},
                 {"name": "fmt", "status": "queued", "conclusion": null, "details_url": job(2, 22)}
             ]}},
+        "POST repos/team/project/actions/runs/1/rerun-failed-jobs": {"status": 201},
         "POST repos/team/project/actions/jobs/11/rerun": {"status": 201},
-        "POST repos/team/project/actions/jobs/12/rerun": {"status": 201},
         "POST repos/team/project/actions/runs/2/cancel": {"status": 202},
     }));
     let ci = |action: &str, checks: Value| {
@@ -1259,12 +1260,11 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
         rerun["data"],
         json!({"url": url, "action": "rerun", "checks": ["rust", "docs"]})
     );
+    // Other providers' checks are left alone, and failed jobs of one run
+    // rerun together, since rerunning one starts a new attempt of the run.
     assert_eq!(
         posts(),
-        [
-            "POST repos/team/project/actions/jobs/11/rerun",
-            "POST repos/team/project/actions/jobs/12/rerun"
-        ]
+        ["POST repos/team/project/actions/runs/1/rerun-failed-jobs"]
     );
 
     // Jobs of one run share its cancellation.
