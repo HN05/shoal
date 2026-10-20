@@ -481,18 +481,37 @@ async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
         .unwrap();
     assert_ne!(next, id);
     manager.undo_done(&workspace.id).await.unwrap();
-    // The request for the earlier HEAD stays outdated, keeping its number.
+    // Replaced and cancelled requests stay outdated, keeping their numbers.
+    let outdated = |requests: Vec<ApprovalRequest>| -> Vec<_> {
+        requests
+            .into_iter()
+            .map(|request| (request.id, request.status))
+            .collect()
+    };
     let requests = manager
         .approval_requests(Some(&workspace.id))
         .await
         .unwrap();
-    assert_eq!(requests.len(), 1);
     assert_eq!(
-        (requests[0].id, requests[0].status),
-        (id, DecisionStatus::Outdated)
+        outdated(requests),
+        [
+            (id, DecisionStatus::Outdated),
+            (next, DecisionStatus::Outdated)
+        ]
     );
     assert!(manager.decide_approval(id, true, None).await.is_err());
     assert!(manager.decide_approval(next, true, None).await.is_err());
+
+    // A keep request after the cancellation takes a new number.
+    fs::write(workspace.path.join("new-work"), "even more").unwrap();
+    commit(&workspace.path, "new-work");
+    let later = manager
+        .mark_done(&workspace.id, Some(false), agent("review once more"))
+        .await
+        .unwrap()
+        .keep_request
+        .unwrap();
+    assert!(![id, next].contains(&later));
 }
 
 #[tokio::test]

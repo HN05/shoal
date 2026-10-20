@@ -52,9 +52,10 @@ pub(super) async fn ask(
     Ok(0)
 }
 
-/// Continue an earlier `ask --wait` for the `asked` question of `workspace`.
-pub(super) async fn resume(ctx: &Context, workspace: String, asked: Asked) -> Result<i32> {
-    let question = await_answer(ctx, &workspace, asked, true).await?;
+/// Continue an earlier `ask --wait` for question `id` of `workspace`, which
+/// asks `ask`.
+pub(super) async fn resume(ctx: &Context, workspace: String, id: i64, ask: Ask) -> Result<i32> {
+    let question = await_answer(ctx, &workspace, Asked { id, ask }, true).await?;
     print_answer(ctx, workspace, &question).await?;
     Ok(0)
 }
@@ -76,18 +77,18 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     .await
 }
 
-/// The question a wait follows: its number and text, since a later question
-/// may reuse the number.
-pub(super) struct Asked {
-    pub(super) id: i64,
-    pub(super) question: String,
+/// The question a wait follows: its number and what it asks, since a later
+/// question may reuse the number.
+struct Asked {
+    id: i64,
+    ask: Ask,
 }
 
 impl From<&Question> for Asked {
     fn from(question: &Question) -> Self {
         Self {
             id: question.id,
-            question: question.ask.question.clone(),
+            ask: question.ask.clone(),
         }
     }
 }
@@ -105,7 +106,7 @@ async fn await_answer(
     let method = || Method::AwaitAnswer {
         workspace: workspace.to_owned(),
         id: asked.id,
-        question: asked.question.clone(),
+        ask: asked.ask.clone(),
     };
     match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
@@ -113,8 +114,8 @@ async fn await_answer(
     }
 }
 
-/// This command's arguments, which name the question's text, resuming the
-/// wait for its number `id` in `workspace` without asking again.
+/// This command's arguments, which state the question, resuming the wait for
+/// its number `id` in `workspace` without asking again.
 fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
     let arguments = replace_option(arguments(), "--workspace", workspace);
     replace_option(arguments, "--resume", &id.to_string())

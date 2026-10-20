@@ -490,12 +490,12 @@ pub enum Method {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<crate::daemon::questions::Question>,
     },
-    /// Long-lived: the question once it is answered. Its text tells it
+    /// Long-lived: the question once it is answered. What it asks tells it
     /// from a later question reusing its number.
     AwaitAnswer {
         workspace: String,
         id: i64,
-        question: String,
+        ask: crate::daemon::questions::Ask,
     },
     /// The workspace's undelivered agent messages and queued item updates,
     /// without waiting or polling the forge; acknowledge them with

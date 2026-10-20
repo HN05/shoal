@@ -390,9 +390,10 @@ impl ApprovalRequest {
     }
 }
 
-/// Keep a request for an earlier commit as outdated until its workspace is
-/// removed: its number is never reused for a newer commit's request, and
-/// deciding it is refused.
+/// Keep a request bound to a commit that no longer applies, because it was
+/// replaced, cancelled or found stale, as outdated until its workspace is
+/// removed: its number is never reused for a newer request, and deciding it
+/// is refused.
 pub fn retire(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
     let mut request = request.clone();
     request.status = DecisionStatus::Outdated;
@@ -419,7 +420,7 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
-/// Replace the workspace's keep request with `request`, or cancel it when the
+/// Replace the workspace's keep request with `request`, or retire it when the
 /// completion needs none. Returns the request still awaiting a decision; an
 /// approval for the same HEAD is reused and a denial refused.
 pub fn request_keep(
@@ -429,7 +430,9 @@ pub fn request_keep(
 ) -> Result<Option<ApprovalRequest>> {
     let existing = current(tx, owner, &Target::Keep, KEEP)?;
     let Some(mut request) = request else {
-        release(tx, owner, &Target::Keep, KEEP)?;
+        if let Some(existing) = existing {
+            retire(tx, &existing)?;
+        }
         return Ok(None);
     };
     match existing {
@@ -497,7 +500,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     store::require_ready(tx, &request.workspace_id)?;
     ensure!(
         request.status != DecisionStatus::Outdated,
-        "approval request {} is outdated: its commit is no longer current",
+        "approval request {} is outdated: it no longer applies",
         request.id
     );
     let status = if approve {

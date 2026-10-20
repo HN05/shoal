@@ -2266,9 +2266,9 @@ reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown
 with their workspace, reason and settings, and a request that took the chosen
 number meanwhile is refused. A request takes the smallest number no
-stored request holds. A keep or land request replaced by one for a newer commit, or
-a land request found stale, stays listed as `outdated` until the workspace is
-removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
+stored request holds. A keep or land request that no longer applies, because a request
+for a newer commit replaced it, its completion was withdrawn or it was found stale,
+stays listed as `outdated` until the workspace is removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.

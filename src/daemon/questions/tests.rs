@@ -236,11 +236,8 @@ async fn a_wait_returns_the_answer() {
     let waiter = tokio::spawn({
         let manager = manager.clone();
         let name = workspace.name.clone();
-        async move {
-            manager
-                .await_answer(&name, question.id, "Which database?")
-                .await
-        }
+        let ask = question.ask.clone();
+        async move { manager.await_answer(&name, question.id, &ask).await }
     });
     manager
         .answer_question(question.id, "Postgres".into(), None)
@@ -254,24 +251,25 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let error = manager
-        .await_answer(&other.name, question.id, "Which database?")
+        .await_answer(&other.name, question.id, &question.ask)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
 
-    // A later question reusing the number, even within the same second, is
-    // not the one the wait follows.
+    // A later question reusing the number, even within the same second and
+    // with the same text, is not the one the wait follows when it asks
+    // anything differently.
     manager
         .mark_agent_messages_delivered(&workspace.name, vec![answered.message_id.unwrap()])
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .ask_question(&workspace.name, ask("Which database?", &["SQLite"]))
         .await
         .unwrap();
     assert_eq!(reused.id, question.id);
     let error = manager
-        .await_answer(&workspace.name, question.id, "Which database?")
+        .await_answer(&workspace.name, question.id, &question.ask)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
@@ -337,7 +335,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Method::AwaitAnswer {
                 workspace: target.clone(),
                 id: 1,
-                question: "Which database?".into(),
+                ask: ask("Which database?", &[]),
             },
             Method::ListQuestions {
                 workspace: Some(target.clone()),

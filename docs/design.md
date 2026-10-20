@@ -695,8 +695,8 @@ workspace and go with it.
 Questions and approval requests are named by the smallest number no stored one
 holds, because the user types them; their records keep a separate internal key
 that is never shown. A wait follows its question's number and text, so a later
-question reusing the number cannot answer it, and a keep or land request for an
-earlier commit stays as outdated until the workspace goes, so its number is never
+question reusing the number cannot answer it, and a keep or land request that no
+longer applies stays as outdated until the workspace goes, so its number is never
 reused and a decision meant for it cannot approve a newer commit.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent

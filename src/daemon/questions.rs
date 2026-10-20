@@ -410,10 +410,11 @@ impl Manager {
         Ok(question)
     }
 
-    /// Return the workspace's question `id` asking `text` once it is answered.
-    /// The text tells it from a later question reusing the number; a later
-    /// identical question asks the same, so its answer serves the wait too.
-    pub async fn await_answer(&self, selector: &str, id: i64, text: &str) -> Result<Question> {
+    /// Return the workspace's question `id` asking `ask` once it is answered.
+    /// What it asks tells it from a later question reusing the number; a
+    /// later identical question asks the same, so its answer serves the wait
+    /// too.
+    pub async fn await_answer(&self, selector: &str, id: i64, ask: &Ask) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.questions_changed.subscribe();
@@ -423,7 +424,7 @@ impl Manager {
                 .run(move |db| by_id(db, id))
                 .await?
                 .filter(|question| {
-                    question.workspace_id == workspace.id && question.ask.question == text
+                    question.workspace_id == workspace.id && question.ask == *ask
                 })
                 .with_context(|| {
                     format!(
