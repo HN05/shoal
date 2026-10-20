@@ -10,7 +10,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::questions::{Ask, Question},
+    daemon::questions::{Ask, Listing, Question},
     protocol::Method,
 };
 
@@ -69,30 +69,26 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
 /// the same question again and waits for it.
 async fn await_answer(ctx: &Context, workspace: &str, id: i64) -> Result<Question> {
     let executable = Executable::current();
-    loop {
-        let method = Method::AwaitAnswer {
-            workspace: workspace.to_owned(),
-            id,
-        };
-        match client::open(&ctx.paths, method).await {
-            Ok((_stream, body)) => return Question::try_from(body),
-            Err(error) if client::stream_closed(&error) => {
-                tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
-            }
-            Err(error) => return Err(executable.resume_or(error, arguments)),
-        }
+    let method = || Method::AwaitAnswer {
+        workspace: workspace.to_owned(),
+        id,
+    };
+    match client::await_reply(&ctx.paths, method).await {
+        Ok(body) => Question::try_from(body),
+        Err(error) => Err(executable.resume_or(error, arguments)),
     }
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
-    let questions =
-        request::<Vec<Question>>(&ctx.paths, Method::ListQuestions { workspace, all }).await?;
-    ctx.show(&questions, |questions| {
+    let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace, all }).await?;
+    ctx.show(&listing, |listing| {
         let palette = Palette::stdout(ctx.json);
-        for question in questions {
+        for question in &listing.questions {
             println!("{}", render(question, palette));
         }
-        if questions.is_empty() {
+        if listing.omitted > 0 {
+            println!("{} older questions not shown", listing.omitted);
+        } else if listing.questions.is_empty() {
             println!("No {}questions", if all { "" } else { "open " });
         }
     })?;
@@ -128,14 +124,15 @@ async fn prompt_answer(ctx: &Context, id: Option<i64>) -> Result<(i64, String)> 
 
 /// The open question `id`, or one the user picks.
 async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
-    let questions = request::<Vec<Question>>(
+    let questions = request::<Listing>(
         &ctx.paths,
         Method::ListQuestions {
             workspace: None,
             all: false,
         },
     )
-    .await?;
+    .await?
+    .questions;
     let id = match id {
         Some(id) => id,
         None => {

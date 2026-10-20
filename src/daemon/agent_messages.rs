@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::daemon::workspace::Manager;
 
-/// Unread messages one workspace may hold; together they fit one response.
+/// Unread messages one workspace may hold, and their total size; together
+/// they fit one response.
 const MAX_UNREAD: i64 = 50;
+const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentMessage {
@@ -37,14 +39,19 @@ pub(crate) fn insert(
     if pending.is_some() {
         return Ok(None);
     }
-    let unread: i64 = tx.query_row(
-        "SELECT COUNT(*) FROM agent_messages WHERE workspace_id=?1",
+    let (unread, bytes): (i64, i64) = tx.query_row(
+        "SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(message AS BLOB))),0)
+            FROM agent_messages WHERE workspace_id=?1",
         [workspace_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     ensure!(
         unread < MAX_UNREAD,
         "the workspace already has {MAX_UNREAD} unread agent messages"
+    );
+    ensure!(
+        usize::try_from(bytes)? + message.len() <= MAX_UNREAD_BYTES,
+        "the workspace's unread agent messages would exceed {MAX_UNREAD_BYTES} bytes"
     );
     tx.execute(
         "INSERT INTO agent_messages(workspace_id,created_at,message) VALUES (?1,?2,?3)",

@@ -15051,8 +15051,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         .spawn()
         .unwrap();
     let question = wait_for("the question", || {
-        fixture
-            .ok(&["questions"])
+        fixture.ok(&["questions"])["questions"]
             .as_array()
             .unwrap()
             .first()
@@ -15071,7 +15070,10 @@ fn agents_wait_for_the_answer_to_their_question() {
     assert_eq!(answered["answer"], "Postgres");
     // The wait printed the answer, so its message is not delivered again.
     assert_eq!(fixture.ok(&["messages", "asker"]), serde_json::json!([]));
-    assert_eq!(fixture.ok(&["questions"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["questions"]),
+        serde_json::json!({"questions": [], "omitted": 0})
+    );
 
     let output = scoped_command(
         &fixture,
@@ -15082,8 +15084,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(open["answer"], Value::Null);
     assert_eq!(
-        fixture
-            .ok(&["questions", "--all"])
+        fixture.ok(&["questions", "--all"])["questions"]
             .as_array()
             .unwrap()
             .len(),

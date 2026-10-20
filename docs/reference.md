@@ -1816,7 +1816,7 @@ whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output c
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
 An identical message that is still unread is not queued again, and a workspace
-holds at most 50 unread messages. Scoped commands may read their own workspace's
+holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages but cannot send any. Removing the workspace deletes its messages.
 
 ### Questions
@@ -1835,11 +1835,13 @@ resolving a choice number to that choice, and queues it for the workspace's agen
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent. An answer may span lines, up to 4096 bytes.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
-also delivers its message; it survives daemon restarts. Asking an identical
+also delivers its message; it survives daemon restarts, waiting up to 10 seconds
+for a stopped daemon to return. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
 interrupted `--wait` can be rerun; the same question with other details is refused.
-Only unscoped callers answer. Scoped callers ask and list only their own
-workspace's questions. An open question keeps the workspace from automatic
+A listing returns the newest questions that fit one response and counts the older
+ones it leaves out. Only unscoped callers answer. Scoped callers ask and list only
+their own workspace's questions. An open question keeps the workspace from automatic
 cleanup; removing the workspace deletes its questions.
 
 ### Leases

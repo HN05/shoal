@@ -12,6 +12,9 @@ use crate::daemon::{agent_messages, notifications::NotificationKind, workspace::
 pub const MAX_ANSWER_LEN: usize = 4096;
 /// Most choices a question may offer.
 pub const MAX_CHOICES: usize = 20;
+/// Bytes of questions one listing returns, leaving room for the response
+/// around them.
+const LISTING_BUDGET: usize = crate::protocol::MAX_FRAME - 1024;
 /// Rechecks a waited-for question when no answer wakes the wait, so removal
 /// of its workspace ends it.
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -43,6 +46,13 @@ pub struct Question {
     /// The agent message carrying the answer, until it is delivered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<i64>,
+}
+
+/// Questions that fit one response, and how many older ones were left out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Listing {
+    pub questions: Vec<Question>,
+    pub omitted: usize,
 }
 
 impl Ask {
@@ -197,24 +207,58 @@ fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
     Ok(tx.last_insert_rowid())
 }
 
-/// Record `answer` and queue the message that carries it, together.
-fn record_answer(tx: &Transaction<'_>, id: i64, answer: &str) -> Result<Question> {
-    let mut question = by_id(tx, id)?.with_context(|| format!("unknown question {id}"))?;
+fn open_question(tx: &Transaction<'_>, id: i64) -> Result<Question> {
+    let question = by_id(tx, id)?.with_context(|| format!("unknown question {id}"))?;
     if !question.is_open() {
         bail!("question {id} is already answered");
     }
-    let answer = question.ask.resolve(answer)?;
-    let message = question.answer_message(&answer);
-    let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
+    Ok(question)
+}
+
+/// Persist `answer` and the message carrying it on `question`.
+fn store_answer(
+    tx: &Transaction<'_>,
+    question: &mut Question,
+    answer: String,
+    message_id: Option<i64>,
+) -> Result<()> {
     let answered_at = i64::try_from(crate::time::unix_seconds())?;
     tx.execute(
         "UPDATE questions SET answer=?2,answered_at=?3,message_id=?4 WHERE id=?1",
-        params![id, answer, answered_at, message_id],
+        params![question.id, answer, answered_at, message_id],
     )?;
     question.answer = Some(answer);
     question.answered_at = Some(answered_at);
     question.message_id = message_id;
+    Ok(())
+}
+
+/// Record `answer` and queue the message that carries it, together.
+fn record_answer(tx: &Transaction<'_>, id: i64, answer: &str) -> Result<Question> {
+    let mut question = open_question(tx, id)?;
+    let answer = question.ask.resolve(answer)?;
+    let message = question.answer_message(&answer);
+    let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
+    store_answer(tx, &mut question, answer, message_id)?;
     Ok(question)
+}
+
+/// The newest of `questions` that fit one protocol response, oldest first.
+fn newest_that_fit(mut questions: Vec<Question>) -> Result<Listing> {
+    let mut used = 0;
+    let mut start = questions.len();
+    for (index, question) in questions.iter().enumerate().rev() {
+        used += serde_json::to_vec(question)?.len() + 1;
+        if used > LISTING_BUDGET {
+            break;
+        }
+        start = index;
+    }
+    let questions = questions.split_off(start);
+    Ok(Listing {
+        questions,
+        omitted: start,
+    })
 }
 
 impl Manager {
@@ -247,14 +291,12 @@ impl Manager {
         Ok(question)
     }
 
-    /// Questions, oldest first; `open_only` leaves out answered ones.
-    pub async fn questions(
-        &self,
-        selector: Option<&str>,
-        open_only: bool,
-    ) -> Result<Vec<Question>> {
+    /// The newest questions that fit one response, oldest first;
+    /// `open_only` leaves out answered ones.
+    pub async fn questions(&self, selector: Option<&str>, open_only: bool) -> Result<Listing> {
         let owner = self.workspace_filter(selector).await?;
-        self.store
+        let questions = self
+            .store
             .run(move |db| {
                 query(
                     db,
@@ -262,7 +304,8 @@ impl Manager {
                     params![owner, open_only],
                 )
             })
-            .await
+            .await?;
+        newest_that_fit(questions)
     }
 
     pub async fn has_open_questions(&self, workspace_id: &str) -> Result<bool> {

@@ -23,7 +23,7 @@ use crate::{
         repo::ConfigLayers,
         resolve::Stack,
     },
-    daemon::{approvals::ApprovalRequest, questions::Question, resources::Overview},
+    daemon::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
     env,
     model::{PortOverview, Workspace},
     paths::Paths,
@@ -415,7 +415,7 @@ impl Typed {
                 workspace: None,
                 all: false,
             };
-            let questions = client::request::<Vec<Question>>(&paths, method).await?;
+            let questions = client::request::<Listing>(&paths, method).await?.questions;
             return Ok(questions
                 .into_iter()
                 .map(|q| {

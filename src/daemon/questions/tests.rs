@@ -114,12 +114,12 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
     assert!(error.to_string().contains("already answered"));
 
     let open = manager.questions(None, true).await.unwrap();
-    assert!(open.is_empty());
+    assert!(open.questions.is_empty());
     let all = manager
         .questions(Some(&workspace.name), false)
         .await
         .unwrap();
-    assert_eq!(all, [answered]);
+    assert_eq!(all.questions, [answered]);
 }
 
 #[tokio::test]
@@ -162,7 +162,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .await
         .unwrap();
     let delivered = manager.questions(None, false).await.unwrap();
-    assert_eq!(delivered[0].message_id, None);
+    assert_eq!(delivered.questions[0].message_id, None);
     let new = manager
         .ask_question(&workspace.name, ask("Which database?", &[]))
         .await
@@ -233,7 +233,14 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         )
         .await
         .unwrap();
-    assert!(manager.questions(None, false).await.unwrap().is_empty());
+    assert!(
+        manager
+            .questions(None, false)
+            .await
+            .unwrap()
+            .questions
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -295,4 +302,47 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             .await
             .is_err()
     );
+}
+
+/// The largest question `ask` accepts, with the largest answer.
+fn maximal(n: usize) -> Ask {
+    let line = |label: &str| format!("{label} {n} {}", "\"".repeat(400));
+    Ask {
+        question: line("question"),
+        recommendation: line("recommendation"),
+        reason: Some(line("reason")),
+        choices: (0..MAX_CHOICES)
+            .map(|i| line(&format!("choice {i}")))
+            .collect(),
+    }
+}
+
+#[tokio::test]
+async fn listings_and_unread_answers_fit_one_response() {
+    let (_root, manager, workspace) = fixture().await;
+    let answer = "\"\n".repeat(MAX_ANSWER_LEN / 2);
+    let mut unread = 0;
+    let full = loop {
+        let question = manager
+            .ask_question(&workspace.name, maximal(unread))
+            .await
+            .unwrap();
+        match manager.answer_question(question.id, answer.clone()).await {
+            Ok(_) => unread += 1,
+            Err(error) => break error,
+        }
+    };
+    assert!(full.to_string().contains("would exceed"), "{full:#}");
+    let messages = manager.agent_messages(&workspace.name).await.unwrap();
+    assert_eq!(messages.len(), unread);
+    let body = crate::protocol::Body::AgentMessages(messages);
+    assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
+
+    let listing = manager.questions(None, false).await.unwrap();
+    assert!(listing.omitted > 0);
+    assert_eq!(listing.omitted + listing.questions.len(), unread + 1);
+    let newest = listing.questions.last().unwrap();
+    assert!(newest.is_open());
+    let body = crate::protocol::Body::Questions(listing);
+    assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 }

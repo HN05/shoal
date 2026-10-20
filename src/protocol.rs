@@ -676,7 +676,7 @@ response_bodies! {
     Notifications(Vec<Notification>),
     AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
     Question(crate::daemon::questions::Question),
-    Questions(Vec<crate::daemon::questions::Question>),
+    Questions(crate::daemon::questions::Listing),
     Notification(Notification),
     EventItem(EventItem),
     PrUpdates(crate::forge::pr::wait::Updates),

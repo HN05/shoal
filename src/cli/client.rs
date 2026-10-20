@@ -264,6 +264,28 @@ pub(crate) async fn reconnect(
     .context("daemon did not restart for the followed stream")?
 }
 
+/// The reply to a long-lived request that waits for an event, across daemon
+/// restarts: a closed connection asks again at once, and an unreachable socket
+/// is retried for the normal daemon wait budget. Only for requests that are
+/// safe to repeat.
+pub(crate) async fn await_reply(paths: &Paths, method: impl Fn() -> Method) -> Result<Body> {
+    let mut unreachable_since = None;
+    loop {
+        match open(paths, method()).await {
+            Ok((_stream, body)) => return Ok(body),
+            Err(error) if stream_closed(&error) => unreachable_since = None,
+            Err(error) if is_unreachable(&error) => {
+                let since = *unreachable_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= timing::DAEMON_WAIT_TIMEOUT {
+                    return Err(error.context("daemon did not restart"));
+                }
+            }
+            Err(error) => return Err(error),
+        }
+        sleep(timing::DAEMON_POLL_INTERVAL).await;
+    }
+}
+
 /// Wait for the daemon to be running (or stopped).
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
     // A stopping daemon first stops its connected executions.
@@ -320,6 +342,39 @@ mod tests {
         let result = client(&paths).await;
         daemon.await?;
         result
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
+        let temp = tempfile::tempdir_in("/tmp")?;
+        let paths = Paths::for_test(temp.path());
+        paths.prepare()?;
+        let listener = UnixListener::bind(&paths.socket)?;
+        let waiter = tokio::spawn({
+            let paths = paths.clone();
+            async move { await_reply(&paths, || Method::Status).await }
+        });
+        // The daemon goes away mid-wait and leaves no socket behind.
+        let (stream, _) = listener.accept().await?;
+        drop(stream);
+        drop(listener);
+        std::fs::remove_file(&paths.socket)?;
+        // The paused clock lets the waiter retry the missing socket meanwhile.
+        sleep(timing::DAEMON_WAIT_TIMEOUT / 2).await;
+        assert!(!waiter.is_finished());
+
+        let listener = UnixListener::bind(&paths.socket)?;
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        protocol::write(&mut stream, &Response::new(request.id, Body::Ok)).await?;
+        assert!(matches!(waiter.await??, Body::Ok));
+
+        // A daemon that does not return ends the wait.
+        drop(listener);
+        std::fs::remove_file(&paths.socket)?;
+        let error = await_reply(&paths, || Method::Status).await.unwrap_err();
+        assert!(is_unreachable(&error), "{error:#}");
+        Ok(())
     }
 
     #[tokio::test]
