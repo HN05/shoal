@@ -640,7 +640,7 @@ impl Manager {
         self.stop_executions(
             &workspace.id,
             removal.stop_policy(),
-            &super::StopRequest::removal(),
+            &super::StopRequest::restorable_removal(),
         )
         .await?;
         let check = self

@@ -57,12 +57,22 @@ pub(super) enum StopPolicy {
     ForRemoval,
 }
 
-/// Why the daemon stops executions, which their wrappers show, and whether
-/// the stop saves agent sessions and interrupted commands for `shoal resume`.
+/// Why the daemon stops executions, which their wrappers show, and what the
+/// stop saves for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StopRequest {
     pub reason: String,
-    pub save: bool,
+    pub save: Save,
+}
+
+/// What a stop saves for `shoal resume`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Save {
+    Nothing,
+    /// Agent sessions and interrupted commands.
+    Everything,
+    /// Agent sessions, which the removed workspace's restore point keeps.
+    RemovedAgents,
 }
 
 impl StopRequest {
@@ -70,21 +80,40 @@ impl StopRequest {
     pub fn manual() -> Self {
         Self {
             reason: "stopped by shoal stop".into(),
-            save: true,
+            save: Save::Everything,
         }
     }
 
     pub fn doctor() -> Self {
         Self {
             reason: "stopped by shoal doctor".into(),
-            save: false,
+            save: Save::Nothing,
         }
     }
 
+    /// Removal of a missing worktree, which keeps no restore point.
     pub(super) fn removal() -> Self {
         Self {
             reason: "the workspace is being removed".into(),
-            save: false,
+            save: Save::Nothing,
+        }
+    }
+
+    /// Removal of an existing worktree, whose restore point keeps its agents.
+    pub(super) fn restorable_removal() -> Self {
+        Self {
+            save: Save::RemovedAgents,
+            ..Self::removal()
+        }
+    }
+
+    /// Whether the wrapper saves its agent's session, or its interrupted
+    /// command when it runs no agent.
+    pub(crate) fn saves(&self, agent: bool) -> bool {
+        match self.save {
+            Save::Nothing => false,
+            Save::Everything => true,
+            Save::RemovedAgents => agent,
         }
     }
 }
@@ -700,7 +729,10 @@ impl Manager {
     /// Stop executions other than agents that protection already stopped,
     /// saving records as `shoal stop` does.
     pub async fn stop_unprotected(&self, selector: &str, reason: String) -> Result<()> {
-        let request = StopRequest { reason, save: true };
+        let request = StopRequest {
+            reason,
+            save: Save::Everything,
+        };
         self.stop_workspace_executions(selector, request, Protected::Keep)
             .await
     }
@@ -757,7 +789,7 @@ impl Manager {
                     id.clone(),
                     StopRequest {
                         reason: "the Shoal daemon shut down".into(),
-                        save: true,
+                        save: Save::Everything,
                     },
                 );
                 let _ = sender.send(true);

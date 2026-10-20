@@ -123,6 +123,10 @@ pub struct RemovedWorkspace {
     pub base_ref: Option<String>,
     pub base_commit: Option<String>,
     pub links: WorkspaceLinks,
+    /// Agents stopped by the removal or before it, which `shoal resume`
+    /// continues once the workspace is restored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<crate::execution::recovery::StoppedAgent>,
     pub cause: crate::daemon::events::EventCause,
     pub removed_at: u64,
     pub expires_at: u64,

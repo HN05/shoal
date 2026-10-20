@@ -438,7 +438,7 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
         manager
             .stop_request(&id)
             .await
-            .is_some_and(|request| request.save)
+            .is_some_and(|request| request.save == Save::Everything)
     );
     let error = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)

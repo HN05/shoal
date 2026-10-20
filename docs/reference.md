@@ -285,7 +285,7 @@ the current resume configuration; without one, built-in terminal agents continue
 the latest session in the workspace. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
-is registered or the workspace is removed. A failed launch retains its records;
+is registered; removal keeps them with the [restore point](#restore-a-workspace). A failed launch retains its records;
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
@@ -1362,8 +1362,9 @@ shoal restore topic    # open topic again with its unsaved files and links
 ID on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
-opened and related items, runs setup, and links its PRs; a link that fails is a
-warning. It refuses when another
+opened and related items, saves the agents stopped by the removal or before it
+for `shoal resume`, runs setup, and links its PRs; a link or save that fails is
+a warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Workspace processes cannot run it.
@@ -1371,8 +1372,10 @@ the error names the commit to recover by hand. Workspace processes cannot run it
 Every removal of an existing worktree, manual or automatic, keeps a restore
 point: a commit of HEAD plus its uncommitted and untracked files, without
 ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a
-record of the branch, HEAD, base and links. Links cannot change once removal
-starts, so the record holds the final ones. When the unsaved files
+record of the branch, HEAD, base, links and stopped agents. Links cannot change once removal
+starts, so the record holds the final ones. Removal stops agents as `shoal stop`
+does, keeping their recovery records in the restore point; interrupted commands
+are not saved. When the unsaved files
 exceed `archive_max_mb`, include an untracked nested repository or a changed
 submodule, whose files it cannot hold, the restore point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
 

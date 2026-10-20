@@ -50,6 +50,9 @@ impl Manager {
         // Removal refuses link changes, so links read now are final, unlike
         // those of the snapshot taken before it started.
         let links = self.workspace(&workspace.id).await?.links;
+        // Removal has stopped every agent, and deletes the state their
+        // records are in.
+        let agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
         let removed_at = unix_seconds();
         let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
@@ -62,6 +65,7 @@ impl Manager {
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
             links,
+            agents,
             cause,
             removed_at,
             expires_at: removed_at + retention.as_secs(),
@@ -114,8 +118,9 @@ impl Manager {
     }
 
     /// Open a removed workspace again on its branch at the removed HEAD, with
-    /// its unsaved files, linked issue, and opened and related items; the caller sets it up and links
-    /// its PRs. The record goes once the files are back.
+    /// its unsaved files, linked issue, opened and related items, and stopped
+    /// agents; the caller sets it up and links its PRs. The record goes once
+    /// the files are back.
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
         let removed = self.removed_workspace(selector).await?;
         let branch = self.restore_branch(&removed).await?;
@@ -141,7 +146,16 @@ impl Manager {
             "workspace {} opened branch {branch} during the restore",
             opened.workspace.name
         );
-        let warnings = self.relink(&opened.workspace.id, &removed.links).await;
+        let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
+        if let Err(error) = crate::execution::recovery::save_stopped_agents(
+            &self.paths,
+            &opened.workspace.id,
+            &removed.agents,
+        ) {
+            warnings.push(format!(
+                "cannot save stopped agents for shoal resume: {error:#}"
+            ));
+        }
         self.forget_restore_point(&removed).await?;
         Ok(RestoredWorkspace {
             opened,

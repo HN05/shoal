@@ -39,8 +39,8 @@ states!(
     }
 );
 
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Record {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Record {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
@@ -222,6 +222,52 @@ fn write_record(
         },
     )?;
     Ok(path)
+}
+
+/// An agent stopped in a removed workspace, which `shoal restore` saves
+/// again for `shoal resume`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoppedAgent {
+    pub execution: String,
+    pub record: Record,
+    /// When its record was saved, in Unix seconds, which `shoal resume`
+    /// shows as its stop time.
+    pub stopped_at: u64,
+}
+
+/// The workspace's stopped agents, for its restore point. Their wrappers have
+/// exited, so none waits to restore them.
+pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<StoppedAgent>> {
+    let mut agents = Vec::new();
+    for (execution, path) in Saved::load(paths, workspace_id)?.agents {
+        if let Some(mut record) = Record::load(&path)? {
+            record.waiting = None;
+            let stopped_at = std::fs::metadata(&path)?
+                .modified()?
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs();
+            agents.push(StoppedAgent {
+                execution,
+                record,
+                stopped_at,
+            });
+        }
+    }
+    Ok(agents)
+}
+
+/// Save a removed workspace's stopped agents for the workspace restoring it.
+pub(crate) fn save_stopped_agents(
+    paths: &Paths,
+    workspace_id: &str,
+    agents: &[StoppedAgent],
+) -> Result<()> {
+    for agent in agents {
+        let path = write_record(paths, workspace_id, &agent.execution, agent.record.clone())?;
+        let stopped = std::time::UNIX_EPOCH + std::time::Duration::from_secs(agent.stopped_at);
+        std::fs::File::open(path)?.set_modified(stopped)?;
+    }
+    Ok(())
 }
 
 /// Remove a record whose stop never reached the agent, returning whether it
@@ -533,6 +579,41 @@ mod tests {
         assert!(discard_undelivered(&paths, "workspace", "execution").unwrap());
         assert!(!path.exists());
         assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
+    }
+
+    #[test]
+    fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path());
+        let recovery = Recovery {
+            agent: "claude".into(),
+            command: vec![],
+            automatic: true,
+            handoff_delivered: false,
+        };
+        let wrapper = identity::capture(std::process::id()).unwrap();
+        assert!(wrapper.is_some());
+        recovery
+            .save(&paths, "removed", "execution", None, None, wrapper)
+            .unwrap();
+        save_command(&paths, "removed", "command", &[OsString::from("true")]).unwrap();
+
+        let agents = stopped_agents(&paths, "removed").unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].execution, "execution");
+        // The wrapper has exited, so the restored workspace waits for `shoal resume`.
+        assert_eq!(agents[0].record.waiting, None);
+        save_stopped_agents(&paths, "restored", &agents).unwrap();
+        let mut saved = Saved::load(&paths, "restored").unwrap();
+        saved.retain_unattended();
+        assert!(saved.commands.is_empty());
+        assert_eq!(saved.agents.len(), 1);
+        let path = &saved.agents[0].1;
+        assert_eq!(Record::load(path).unwrap().unwrap(), agents[0].record);
+        assert_eq!(
+            std::fs::metadata(path).unwrap().modified().unwrap(),
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(agents[0].stopped_at)
+        );
     }
 
     #[test]

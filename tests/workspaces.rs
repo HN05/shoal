@@ -684,6 +684,78 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 }
 
 #[test]
+fn resume_continues_the_agent_a_removal_stopped_once_restored() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+    ));
+    let workspace = fixture.add("removed");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(
+        path.join("agent.sh"),
+        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
+    let spawn = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let agent = spawn(&["claude", "removed"]);
+    let command = spawn(&[
+        "exec",
+        "removed",
+        "--",
+        "sh",
+        "-c",
+        "touch command-started; while :; do sleep 1; done",
+    ]);
+    assert!(
+        try_wait_for(|| (path.join("agent-started").exists()
+            && path.join("command-started").exists())
+        .then_some(()))
+        .is_some(),
+        "executions did not start"
+    );
+
+    fixture.ok(&["rm", "removed", "--yes", "--keep-branch"]);
+    for child in [agent, command] {
+        child.wait_with_output().unwrap();
+    }
+    assert!(!path.exists());
+    let removed = fixture.ok(&["restore"]);
+    let agents = removed[0]["agents"].as_array().unwrap();
+    assert_eq!(agents.len(), 1, "{removed}");
+    assert_eq!(agents[0]["record"]["agent"], "claude");
+
+    let restored = fixture.ok(&["restore", "removed"]);
+    assert_eq!(restored["warnings"], serde_json::json!([]));
+    assert_eq!(restored["workspace"]["path"], workspace["path"]);
+    let execution = agents[0]["execution"].as_str().unwrap();
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(restored["workspace"]["id"].as_str().unwrap());
+    // The interrupted command is not saved, so only the agent resumes.
+    let saved = fs::read_dir(&state)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
+        .collect::<Vec<_>>();
+    assert_eq!(saved, [format!("{execution}.recovery.json")]);
+    let resumed = fixture.run(&["resume", "removed"]);
+    assert!(resumed.status.success(), "{resumed:?}");
+    assert!(path.join("resumed").exists());
+    assert!(!state.join(format!("{execution}.recovery.json")).exists());
+}
+
+#[test]
 fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
     let first = fixture.ok(&["repo", "list"]);

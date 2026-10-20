@@ -59,9 +59,20 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>) -> Result<i32>
     } else {
         ""
     };
+    let agents = match removed.agents.len() {
+        0 => String::new(),
+        1 => format!(
+            "; shoal resume {} continues its stopped agent",
+            workspace.name
+        ),
+        _ => format!(
+            "; shoal resume {} continues its stopped agents",
+            workspace.name
+        ),
+    };
     ctx.emit(
         &format!(
-            "Restored {} on branch {} at {}{files}",
+            "Restored {} on branch {} at {}{files}{agents}",
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.branch,
             workspace.path.display()

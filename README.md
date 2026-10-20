@@ -331,7 +331,8 @@ and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and why
 it keeps the others, `--caches` also empties shared caches nothing is using, and `shoal status` shows why it keeps one workspace.
 Every removal can be undone for 30 days: `shoal restore` lists removed workspaces,
-and `shoal restore <workspace>` opens one again with its uncommitted files and links.
+and `shoal restore <workspace>` opens one again with its uncommitted files and links;
+`shoal resume` then continues the agents the removal stopped.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

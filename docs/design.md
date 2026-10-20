@@ -984,12 +984,12 @@ out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, s
 Forgejo only cancels, and Bitbucket Pipelines are not supported.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
-executions, run removal hooks, remove owned simulators, keep a restore point,
-remove the worktree, and release leases with the record. Failures retain what is
+executions, saving an existing worktree's agent sessions but no commands, run
+removal hooks, remove owned simulators, keep a restore point, remove the worktree, and release leases with the record. Failures retain what is
 needed to retry. Workspaces are cheap to remove because removal is reversible: the
 restore point is a commit of HEAD plus the unsaved files Git does not ignore, built
 with a temporary index under `refs/shoal/removed/<workspace id>`, and its record
-(branch, HEAD, base and links) persists before any file is deleted, so an
+(branch, HEAD, base, links and stopped agents' recovery records) persists before any file is deleted, so an
 interrupted or failed removal stays restorable; records of workspaces that still
 exist are not offered, and the next removal replaces them, keeping the earlier
 snapshot as its second parent. Unsaved files beyond
@@ -998,7 +998,8 @@ workspace, and every other removal keeps only HEAD. Records and refs expire afte
 `retention_days`; a ref no record or workspace owns is deleted. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
-snapshot's files without staging them and links what the record names; the record
+snapshot's files without staging them, links what the record names and saves its
+agents' recovery records under the new workspace ID for `shoal resume`; the record
 and ref go once the files are back. Restoring is allocation, so scoped callers
 cannot.
 A branch is merged when the local default branch or its remote-tracking branch

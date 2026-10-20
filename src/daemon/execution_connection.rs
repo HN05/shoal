@@ -14,7 +14,7 @@ use super::{
     approvals::Undecided,
     execution_recovery,
     scope::Caller,
-    workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest},
+    workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution},
 };
 use crate::daemon::log;
 use crate::{
@@ -259,6 +259,7 @@ async fn relay(
         id: execution_id,
         kind,
         workspace,
+        agent,
         recover,
         reattach,
         started,
@@ -302,8 +303,8 @@ async fn relay(
                                 Control::Detach
                             } else {
                                 match manager.stop_request(execution_id).await {
-                                    Some(StopRequest { reason, save: true }) if kind == ExecutionKind::Command => {
-                                        Control::Pause { reason: Some(reason) }
+                                    Some(request) if kind == ExecutionKind::Command && request.saves(agent.is_some()) => {
+                                        Control::Pause { reason: Some(request.reason) }
                                     }
                                     request => Control::Stop { reason: request.map(|request| request.reason) },
                                 }
