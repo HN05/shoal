@@ -108,8 +108,15 @@ impl Manager {
         let opened = self
             .open_branch(removed.repository_id.as_str(), &branch, None, None, None)
             .await?;
+        // The branch check released the repository gate, so another request
+        // may have opened the branch meanwhile; its files stay untouched.
+        ensure!(
+            !opened.reused,
+            "workspace {} opened branch {branch} during the restore",
+            opened.workspace.name
+        );
         if removed.snapshot != removed.head {
-            git::restore::apply(&opened.workspace.path, &removed.snapshot).await?;
+            self.restore_files(&opened.workspace, &removed).await?;
         }
         let mut warnings = Vec::new();
         if let Some(url) = &removed.links.issue
@@ -177,6 +184,18 @@ impl Manager {
             removed.snapshot
         );
         Ok(branch)
+    }
+
+    /// Apply the snapshot's files to a new worktree still at the removed HEAD.
+    async fn restore_files(&self, workspace: &Workspace, removed: &RemovedWorkspace) -> Result<()> {
+        let head = git::revision(&workspace.path, "HEAD", git::run).await?;
+        ensure!(
+            head.trim() == removed.head,
+            "branch {} moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
+            workspace.branch,
+            removed.snapshot
+        );
+        git::restore::apply(&workspace.path, &removed.snapshot).await
     }
 
     /// Delete a restored workspace's record and the ref that kept its commits.
