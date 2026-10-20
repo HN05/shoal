@@ -142,13 +142,7 @@ impl ForgeRepo {
             .as_str()
             .context("check has no Actions job URL")?;
         let (run_number, job_index) = self.job_location(target)?;
-        let runs = self
-            .send(
-                account,
-                &Request::get(self.repo_endpoint(&format!("actions/runs?run_number={run_number}"))),
-            )
-            .await?;
-        let run_id = run_id(&runs, run_number, head)?;
+        let run_id = self.forgejo_run_id(account, run_number, head).await?;
         let jobs = self
             .send(
                 account,
@@ -165,8 +159,25 @@ impl ForgeRepo {
         Ok(CheckLog::from_text(url, name, &log))
     }
 
+    /// The API ID of the run numbered `number` in the repository, which must
+    /// have run on `head`.
+    pub(super) async fn forgejo_run_id(
+        &self,
+        account: &Account,
+        number: u64,
+        head: &str,
+    ) -> Result<u64> {
+        let runs = self
+            .send(
+                account,
+                &Request::get(self.repo_endpoint(&format!("actions/runs?run_number={number}"))),
+            )
+            .await?;
+        run_id(&runs, number, head)
+    }
+
     /// Web URLs use a repository run number and zero-based job index, neither API ID.
-    fn job_location(&self, target: &str) -> Result<(u64, usize)> {
+    pub(super) fn job_location(&self, target: &str) -> Result<(u64, usize)> {
         let root = format!("{}://{}", self.web_scheme, self.host);
         let relative = target.strip_prefix(&root).unwrap_or(target);
         let prefix = format!("/{}/actions/runs/", self.path);
