@@ -845,6 +845,9 @@ async fn dynamic_admission_restores_once_measured_load_has_room() {
     record(125, 94, 200);
     tokio::time::advance(Duration::from_secs(120)).await;
     manager.dispatch_queue().await.unwrap();
-    bounded(restoring).await.unwrap().unwrap();
     assert_eq!(queue(&manager).await[0].2, Starting);
+    // The paused clock would jump to the hang guard's deadline while the
+    // waiter's query runs on the store's thread.
+    tokio::time::resume();
+    bounded(restoring).await.unwrap().unwrap();
 }
