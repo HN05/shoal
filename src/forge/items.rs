@@ -103,10 +103,25 @@ impl Manager {
             .apply(account, kind, number, action)
             .await
             .with_context(|| format!("could not {} {url}", action.name()))?;
-        let id = id.to_owned();
-        let name = action.name();
         let own = own_state(action).then(|| acted.item.state.as_str());
-        let authored = acted.authored;
+        let target = Target { kind, number, url };
+        self.record_own_action(id, target, action.name(), own, acted.authored)
+            .await?;
+        Ok(acted.item)
+    }
+
+    /// Journal an applied action and advance the workspace's cursor past it,
+    /// so polling does not report the change back as someone else's.
+    async fn record_own_action(
+        &self,
+        id: &str,
+        target: Target,
+        name: &'static str,
+        state: Option<&'static str>,
+        authored: Option<String>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        let Target { kind, url, .. } = target;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -114,14 +129,13 @@ impl Manager {
                 let change = OwnChange {
                     url: &url,
                     authored,
-                    state: own,
+                    state,
                 };
                 record_own_change(&tx, &id, change)?;
                 tx.commit()?;
                 Ok(())
             })
-            .await?;
-        Ok(acted.item)
+            .await
     }
 }
 

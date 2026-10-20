@@ -1566,9 +1566,10 @@ the marks; every `shoal ready` runs it again.
 Before the hook, `shoal ready` takes each marked open PR that is a draft out of
 draft, as `shoal pr edit --no-draft` would; `[ready] undraft = false` keeps marks
 local. `shoal unready --draft`, or `[unready] draft = true`, returns the open PRs
-whose marks it withdraws to draft; `--no-draft` overrides that setting. A failed
-change keeps the recorded marks or withdrawals, and the command reports it and
-exits non-zero. Marks never change issues, and unlinking leaves the PR as it is.
+whose marks it withdraws to draft first; `--no-draft` overrides that setting.
+A failed change reports the forge's error and exits non-zero, keeping the marks
+in both commands so either can be retried. Marks never change issues, and
+unlinking leaves the PR as it is.
 
 ```toml
 [ready]

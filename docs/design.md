@@ -693,8 +693,8 @@ draft PR also takes it out of draft unless `[ready] undraft = false`, since
 forges and review bots often skip drafts. Withdrawing a mark leaves the PR
 ready unless `--draft` or `[unready] draft` asks to return it to draft, because
 an agent usually withdraws to push more work that still needs CI and review.
-A failed forge change keeps the mark change and fails the command, so the
-agent can retry.
+A failed forge change fails the command with the marks kept, so the agent can
+retry it.
 
 Agent state is the turn state a workspace's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` after its turn. Like

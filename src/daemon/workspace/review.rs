@@ -177,8 +177,8 @@ impl Manager {
     }
 
     /// Withdraw the selected marks, or every mark without a selection.
-    /// `draft`, else `[unready] draft`, returns the PRs whose marks were
-    /// withdrawn to draft; a failure there keeps them withdrawn.
+    /// `draft`, else `[unready] draft`, first returns their PRs to draft; a
+    /// failure there keeps the marks, so the withdrawal can be retried.
     pub async fn clear_ready(
         &self,
         selector: &str,
@@ -188,22 +188,26 @@ impl Manager {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         let explicit = self.explicit_item(&workspace, &selection).await?;
-        let cleared = self
-            .delete_marks(&workspace.id, selection, explicit)
+        let selected = self
+            .selected_marks(&workspace.id, selection, explicit)
             .await?;
         let draft = match draft {
             Some(draft) => draft,
             None => self.workspace_settings(&workspace).await?.unready.draft,
         };
         if draft {
-            self.set_draft(&workspace, &pr_urls(&cleared), true)
+            self.set_draft(&workspace, &pr_urls(&selected), true)
                 .await
-                .context("withdrew the marks, but a PR is still ready for review")?;
+                .context(
+                    "kept the marks: a PR could not return to draft; retry, or pass --no-draft",
+                )?;
         }
-        Ok(cleared)
+        self.delete_marks(&workspace.id, &selected).await?;
+        Ok(selected)
     }
 
-    async fn delete_marks(
+    /// The marks a withdrawal selects; an explicit item must be marked.
+    async fn selected_marks(
         &self,
         id: &str,
         selection: Selection,
@@ -212,24 +216,37 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                let tx = db.transaction()?;
-                let mut cleared = list(&tx, &id)?;
-                cleared.retain(|mark| match (&explicit, selection.kind) {
+                let mut selected = list(db, &id)?;
+                selected.retain(|mark| match (&explicit, selection.kind) {
                     (Some((url, _)), _) => mark.url.as_ref() == Some(url),
                     (None, Some(kind)) => mark.kind == Some(kind),
                     (None, None) => true,
                 });
                 if let Some((url, kind)) = &explicit {
-                    ensure!(!cleared.is_empty(), "{kind} is not marked ready: {url}");
+                    ensure!(!selected.is_empty(), "{kind} is not marked ready: {url}");
                 }
-                for mark in &cleared {
+                Ok(selected)
+            })
+            .await
+    }
+
+    async fn delete_marks(&self, id: &str, marks: &[ReviewMark]) -> Result<()> {
+        let id = id.to_owned();
+        let urls: Vec<String> = marks
+            .iter()
+            .map(|mark| mark.url.clone().unwrap_or_default())
+            .collect();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                for url in &urls {
                     tx.execute(
                         "DELETE FROM workspace_review WHERE workspace_id=?1 AND url=?2",
-                        params![id, mark.url.as_deref().unwrap_or("")],
+                        params![id, url],
                     )?;
                 }
                 tx.commit()?;
-                Ok(cleared)
+                Ok(())
             })
             .await
     }

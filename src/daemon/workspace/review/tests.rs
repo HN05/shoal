@@ -467,15 +467,34 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
 
-    // A forge failure reports the PR still in draft and keeps the mark.
+    // A forge failure keeps the mark either way, so the command can be retried.
     std::fs::write(forge_dir.join("fail"), "").unwrap();
     let error = manager
         .mark_ready(&workspace.id, Selection::default())
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("still a draft"), "{error:#}");
-    assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().review.len(),
-        1
-    );
+    let marks = || async { manager.workspace(&workspace.id).await.unwrap().review.len() };
+    assert_eq!(marks().await, 1);
+    std::fs::remove_file(forge_dir.join("fail")).unwrap();
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    assert!(!draft());
+    std::fs::write(forge_dir.join("fail"), "").unwrap();
+    let pr_only = || select(Some(ItemKind::Pr), Some("12"));
+    let error = manager
+        .clear_ready(&workspace.id, pr_only(), Some(true))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("kept the marks"), "{error:#}");
+    assert_eq!(marks().await, 1);
+    std::fs::remove_file(forge_dir.join("fail")).unwrap();
+    manager
+        .clear_ready(&workspace.id, pr_only(), Some(true))
+        .await
+        .unwrap();
+    assert!(draft());
+    assert_eq!(marks().await, 0);
 }
