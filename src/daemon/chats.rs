@@ -37,93 +37,26 @@ impl Manager {
     ) -> Result<Chat> {
         let repository = self.repository(repository).await?.id;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
+        let started_at = i64::try_from(crate::time::unix_seconds())?;
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let number: u32 = tx.query_row(
-                    "SELECT COALESCE(MIN(number + 1), 1) FROM (SELECT 0 AS number UNION ALL
-                         SELECT number FROM chats WHERE repository_id=?1) AS used
-                     WHERE number + 1 NOT IN (SELECT number FROM chats WHERE repository_id=?1)",
-                    [&repository],
-                    |row| row.get(0),
-                )?;
-                let chat = Chat {
-                    id: Uuid::new_v4().to_string(),
-                    repository_id: repository,
-                    number,
-                    agent,
-                    pid: process.pid,
-                    started_at: i64::try_from(crate::time::unix_seconds())?,
-                };
-                tx.execute(
-                    "INSERT INTO chats(id,repository_id,number,agent,pid,birth,started_at)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                    params![
-                        chat.id,
-                        chat.repository_id,
-                        chat.number,
-                        chat.agent,
-                        chat.pid,
-                        process.birth,
-                        chat.started_at
-                    ],
-                )?;
-                tx.commit()?;
-                Ok(chat)
-            })
+            .run(move |db| insert(db, repository, agent, &process, started_at))
             .await
     }
 
     /// Running chats in start order, after ending those whose process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.end_finished_chats().await?;
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,repository_id,number,agent,pid,started_at FROM chats
-                         ORDER BY started_at, rowid",
-                    )?
-                    .query_map([], |row| {
-                        Ok(Chat {
-                            id: row.get(0)?,
-                            repository_id: row.get(1)?,
-                            number: row.get(2)?,
-                            agent: row.get(3)?,
-                            pid: row.get(4)?,
-                            started_at: row.get(5)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
+        self.store.run(running).await
     }
 
     /// Delete chats whose process has exited, which returns their workspaces
-    /// to the user. A process that cannot be read keeps its chat.
+    /// to the user.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
-        let recorded = self.store.run(recorded_processes).await?;
-        let mut ended = Vec::new();
-        for (id, process) in recorded {
-            match identity::capture(process.pid) {
-                Ok(current) if current.as_ref() != Some(&process) => ended.push(id),
-                Ok(_) => {}
-                Err(error) => log!("chat {id}: {error:#}"),
-            }
-        }
+        let ended = finished(self.store.run(recorded_processes).await?);
         if ended.is_empty() {
             return Ok(());
         }
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                for id in &ended {
-                    tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await
+        self.store.run(move |db| delete(db, &ended)).await
     }
 
     /// Give `workspace` to the running chat that opened it, or to the user
@@ -131,15 +64,73 @@ impl Manager {
     pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
         let workspace = workspace.to_owned();
         self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE workspaces SET chat_id=(SELECT id FROM chats WHERE id=?2) WHERE id=?1",
-                    params![workspace, chat],
-                )?;
-                Ok(())
-            })
+            .run(move |db| assign(db, &workspace, chat.as_deref()))
             .await
     }
+}
+
+/// Insert a chat under the lowest number its repository's running chats leave free.
+fn insert(
+    db: &mut Connection,
+    repository: String,
+    agent: String,
+    process: &Identity,
+    started_at: i64,
+) -> Result<Chat> {
+    let tx = db.transaction()?;
+    let number = free_number(&tx, &repository)?;
+    let chat = Chat {
+        id: Uuid::new_v4().to_string(),
+        repository_id: repository,
+        number,
+        agent,
+        pid: process.pid,
+        started_at,
+    };
+    tx.execute(
+        "INSERT INTO chats(id,repository_id,number,agent,pid,birth,started_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        params![
+            chat.id,
+            chat.repository_id,
+            chat.number,
+            chat.agent,
+            chat.pid,
+            process.birth,
+            chat.started_at
+        ],
+    )?;
+    tx.commit()?;
+    Ok(chat)
+}
+
+fn free_number(db: &Connection, repository: &str) -> Result<u32> {
+    Ok(db.query_row(
+        "SELECT COALESCE(MIN(number + 1), 1) FROM (SELECT 0 AS number UNION ALL
+             SELECT number FROM chats WHERE repository_id=?1) AS used
+         WHERE number + 1 NOT IN (SELECT number FROM chats WHERE repository_id=?1)",
+        [repository],
+        |row| row.get(0),
+    )?)
+}
+
+fn running(db: &mut Connection) -> Result<Vec<Chat>> {
+    Ok(db
+        .prepare(
+            "SELECT id,repository_id,number,agent,pid,started_at FROM chats
+             ORDER BY started_at, rowid",
+        )?
+        .query_map([], |row| {
+            Ok(Chat {
+                id: row.get(0)?,
+                repository_id: row.get(1)?,
+                number: row.get(2)?,
+                agent: row.get(3)?,
+                pid: row.get(4)?,
+                started_at: row.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {
@@ -155,6 +146,40 @@ fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {
             ))
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The chats whose process no longer has its recorded identity. A process
+/// that cannot be read keeps its chat.
+fn finished(recorded: Vec<(String, Identity)>) -> Vec<String> {
+    recorded
+        .into_iter()
+        .filter(|(id, process)| match identity::capture(process.pid) {
+            Ok(current) => current.as_ref() != Some(process),
+            Err(error) => {
+                log!("chat {id}: {error:#}");
+                false
+            }
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
+fn delete(db: &mut Connection, ids: &[String]) -> Result<()> {
+    let tx = db.transaction()?;
+    for id in ids {
+        tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// An unknown chat leaves the workspace to the user.
+fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()> {
+    db.execute(
+        "UPDATE workspaces SET chat_id=(SELECT id FROM chats WHERE id=?2) WHERE id=?1",
+        params![workspace, chat],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
