@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 42;
+const SCHEMA_VERSION: i64 = 43;
 
 #[cfg(test)]
 mod benchmark;
@@ -362,6 +362,14 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     ),
     (41, include_str!("store/questions.sql"), None),
     (42, include_str!("store/chats.sql"), None),
+    // `shoal approvals approve` became `shoal approve`.
+    (
+        43,
+        "UPDATE notifications
+            SET message=replace(message, 'shoal approvals approve', 'shoal approve')
+            WHERE kind='approval_requested';",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -932,8 +940,7 @@ mod tests {
             [
                 (
                     "approval_requested".into(),
-                    "access 7: port/web / web: serve; approve with shoal approvals approve 7"
-                        .into()
+                    "access 7: port/web / web: serve; approve with shoal approve 7".into()
                 ),
                 ("agent_message".into(), "run shoal access approve 7".into()),
             ]

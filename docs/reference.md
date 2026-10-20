@@ -2204,10 +2204,10 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
-these requests, keep requests from `shoal done --keep`, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals list <workspace>` filters
+these requests, keep requests from `shoal done --keep`, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
-reviews the recorded settings and uses `shoal approvals approve [id]` or
-`shoal approvals deny [id]`. Approval reserves no capacity: retry acquisition after
+reviews the recorded settings and uses `shoal approve [id]` or
+`shoal deny [id]`. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.

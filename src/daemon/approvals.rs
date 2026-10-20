@@ -594,7 +594,7 @@ impl Manager {
                 Some(workspace),
                 crate::daemon::notifications::NotificationKind::ApprovalRequested,
                 format!(
-                    "approval {}: {}: {}; approve with shoal approvals approve {}",
+                    "approval {}: {}: {}; approve with shoal approve {}",
                     request.id,
                     request.subject(),
                     request.reason,

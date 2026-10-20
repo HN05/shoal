@@ -4,38 +4,28 @@ use serde_json::json;
 
 use super::EXIT_BUSY;
 use crate::{
-    cli::{ApprovalsCommand, client::request, context::Context, output::Style, ui},
+    cli::{client::request, context::Context, output::Style, ui},
     daemon::approvals::{ApprovalRequest, DecisionStatus},
     protocol::Method,
 };
 
-pub(super) async fn run(ctx: &Context, command: Option<ApprovalsCommand>) -> Result<i32> {
-    match command {
-        Some(command @ (ApprovalsCommand::Approve { .. } | ApprovalsCommand::Deny { .. })) => {
-            ensure!(
-                !crate::env::inherits_scope(&ctx.paths.state),
-                "workspace processes cannot decide approval requests; ask the user to run this command"
-            );
-            let approve = matches!(command, ApprovalsCommand::Approve { .. });
-            let (ApprovalsCommand::Approve { id } | ApprovalsCommand::Deny { id }) = command else {
-                unreachable!()
-            };
-            let id = match id {
-                Some(id) => id,
-                None => pick_pending(ctx).await?,
-            };
-            let request =
-                request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve })
-                    .await?;
-            ctx.emit(&describe(&request), &request)?;
-            Ok(0)
-        }
-        Some(ApprovalsCommand::List { workspace }) => list(ctx, workspace).await,
-        None => list(ctx, None).await,
-    }
+/// Approve or deny a request, choosing among pending ones when no ID is given.
+pub(super) async fn decide(ctx: &Context, id: Option<String>, approve: bool) -> Result<i32> {
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot decide approval requests; ask the user to run this command"
+    );
+    let id = match id {
+        Some(id) => id,
+        None => pick_pending(ctx).await?,
+    };
+    let request =
+        request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve }).await?;
+    ctx.emit(&describe(&request), &request)?;
+    Ok(0)
 }
 
-async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
     ctx.show(&requests, |requests| {

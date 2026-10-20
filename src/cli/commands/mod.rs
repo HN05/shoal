@@ -484,7 +484,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
-        Command::Approvals { command } => approvals::run(&ctx, command).await,
+        Command::Approvals { workspace } => approvals::list(&ctx, workspace).await,
+        Command::Approve { id } => approvals::decide(&ctx, id, true).await,
+        Command::Deny { id } => approvals::decide(&ctx, id, false).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
         Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,
         Command::Doctor {

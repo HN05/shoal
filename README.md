@@ -285,8 +285,8 @@ shoal release repo server
 ```
 
 Agents request protected resources with `acquire --reason "purpose"`. Review
-requests with `shoal approvals`, then use `shoal approvals approve <id>` or
-`shoal approvals deny <id>` from an unscoped terminal.
+requests with `shoal approvals`, then use `shoal approve <id>` or
+`shoal deny <id>` from an unscoped terminal.
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
 `shoal add my-project feature --git-profile work`. Define the profile

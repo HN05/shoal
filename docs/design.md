@@ -882,7 +882,7 @@ queue lives in memory, so a daemon restart loses the order; commands still polli
 join again.
 
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
-`shoal approvals` lists and decides every kind: keeping a completed workspace (see
+`shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: keeping a completed workspace (see
 completion), landing a branch (see scope) and resource access. Approving a land
 request whose branch moved since it was requested is refused as stale and drops it.
 Configured resources may require human approval for scoped acquisition. The daemon

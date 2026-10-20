@@ -485,10 +485,17 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// List, approve, or deny approval requests from workspace processes.
-    Approvals {
-        #[command(subcommand)]
-        command: Option<ApprovalsCommand>,
+    /// List approval requests and retained grants (scoped callers see their own workspace).
+    Approvals { workspace: Option<String> },
+    /// Approve the exact settings recorded in a request; does not allocate capacity.
+    Approve {
+        /// Request ID; omit to choose a pending request.
+        id: Option<String>,
+    },
+    /// Deny a pending approval request.
+    Deny {
+        /// Request ID; omit to choose a pending request.
+        id: Option<String>,
     },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(
@@ -1434,22 +1441,6 @@ pub enum ReleaseKind {
     },
     /// End a secret grant or cancel its request, or every one.
     Secret { name: Option<String> },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ApprovalsCommand {
-    /// List requests and retained grants (scoped callers see their own workspace).
-    List { workspace: Option<String> },
-    /// Approve the exact settings recorded in a request; does not allocate capacity.
-    Approve {
-        /// Request ID; omit to choose a pending request.
-        id: Option<String>,
-    },
-    /// Deny a pending request.
-    Deny {
-        /// Request ID; omit to choose a pending request.
-        id: Option<String>,
-    },
 }
 
 #[derive(Debug, Subcommand)]
