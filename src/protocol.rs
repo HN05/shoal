@@ -58,7 +58,7 @@ pub mod timing {
     pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
     /// Cover stopping an exited agent's survivors and the completion scan,
     /// with room for ownership checks and persistence.
-    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(40);
+    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(60);
     /// Bound the ps inventory subprocess used by the daemon's completion scan.
     pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
     /// Give an identity-verified survivor time to handle SIGTERM before SIGKILL.
@@ -88,9 +88,12 @@ pub mod timing {
     pub const REATTACH_EXIT_TIMEOUT: Duration = Duration::from_secs(60);
 
     const _: () = {
+        // Each pass scans markers, then inspects related processes with a
+        // second inventory; an exited agent gets a stop pass before completion.
         assert!(
             COMPLETION_ACK_TIMEOUT.as_millis()
-                > 2 * (PROCESS_INVENTORY_TIMEOUT.as_millis() + PROCESS_SETTLE_TIMEOUT.as_millis())
+                > 2 * (2 * PROCESS_INVENTORY_TIMEOUT.as_millis()
+                    + PROCESS_SETTLE_TIMEOUT.as_millis())
                     + PROCESS_TERM_GRACE.as_millis()
                     + PROCESS_KILL_WAIT.as_millis()
         );
