@@ -680,9 +680,11 @@ labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
 session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
 inside a zmx session or a Herdr pane it runs in place. Chats run with your
-authority, not a workspace scope, and workspace processes cannot start one. The
-daemon does not track them: they are not listed, queued, stopped under pressure
-or resumed.
+authority, not a workspace scope, and workspace processes cannot start one.
+Chats are not tracked executions, so they are never queued, stopped under
+pressure or resumed. The daemon records each chat while its agent process runs,
+numbering a repository's running chats from 1, and
+[workspace events](#workspace-events) report its start and end.
 
 ### Agent queue
 

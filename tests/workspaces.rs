@@ -18191,8 +18191,23 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 fn install_recording_agent(fixture: &Fixture, agent: &str) {
     install_test_script(
         fixture.root.path().join("bin").join(agent),
-        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\n",
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n",
     );
+}
+
+/// Every retained journal event.
+fn journal(fixture: &Fixture) -> Vec<Value> {
+    let output = fixture
+        .command()
+        .args(["--json", "internal", "events"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
 }
 
 fn chat_args(fixture: &Fixture) -> Vec<String> {
@@ -18227,7 +18242,26 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(calls[0], ["list"]);
     let labels = format!("shoal.chat={id} shoal.agent=claude");
     assert_eq!(calls[1][..3], ["attach", "--labels", &labels]);
-    assert_eq!(calls[1][4], "claude");
+    // The session's Shoal records the chat and becomes its agent.
+    let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
+    assert_eq!(
+        calls[1][chat..],
+        [
+            "chat", "--here", id, "--agent", "claude", "--", "--model", "fast"
+        ]
+    );
+    let started = journal(&fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "chat_started")
+        .unwrap();
+    assert_eq!(started["type"], "chat");
+    assert_eq!(started["chat"]["repository_id"], id);
+    assert_eq!(started["chat"]["agent"], "claude");
+    assert_eq!(started["chat"]["number"], 1);
+    assert_eq!(
+        fs::read_to_string(home.join("chat-id")).unwrap().trim(),
+        started["chat"]["id"].as_str().unwrap()
+    );
     assert_eq!(
         fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
         checkout.to_str().unwrap()

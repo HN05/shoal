@@ -22,6 +22,9 @@ pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
+/// The chat whose agent this process runs under; workspaces opened here belong
+/// to that chat.
+pub const CHAT: &str = "SHOAL_CHAT";
 /// Cooperative workspace scope for tracked or externally launched processes.
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.

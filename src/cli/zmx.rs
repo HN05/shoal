@@ -101,22 +101,25 @@ pub(in crate::cli) async fn run(
     finish(workspace, &name, status).await
 }
 
-/// Start a chat's `command` in a new session at the repository's checkout and
-/// attach this terminal to it. Chats are not tracked executions, so the
-/// session runs the agent directly.
+/// Run Shoal with `args` for a chat in a new session at the repository's
+/// checkout and attach this terminal to it. The session's Shoal records the
+/// chat and becomes its agent, as it would in place.
 pub(in crate::cli) async fn run_chat(
+    ctx: &Context,
     repository: &Repository,
     agent: &str,
-    command: &[OsString],
+    args: &[OsString],
 ) -> Result<i32> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let name = free_name(&format!("{}-chat", repository::name(repository)), &taken);
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
+    argv.extend_from_slice(args);
     let status = Command::new(Tool::Zmx.program())
         .arg("attach")
         .arg("--labels")
         .arg(labels(CHAT_LABEL, &repository.id, agent))
         .arg(&name)
-        .args(command)
+        .args(&argv)
         .current_dir(&repository.path)
         .env_remove(env::SHELL_DIRECTIVE)
         .status()

@@ -1,6 +1,7 @@
 //! `shoal chat`: talk with an agent about a repository in its registered
-//! checkout. A chat belongs to no workspace, so the daemon does not track it;
-//! every call starts a new chat and gives it focus.
+//! checkout. A chat belongs to no workspace, so it is not a tracked execution;
+//! the daemon records it while its agent runs. Every call starts a new chat
+//! and gives it focus.
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
@@ -13,7 +14,7 @@ use crate::{
     cli::{agents, client, context::Context, terminal, ui},
     config::{Effective, named_commands, templates},
     forge::repository,
-    model::Repository,
+    model::{Chat, Repository},
     protocol::ConfigTarget,
 };
 
@@ -33,15 +34,13 @@ pub(super) async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
     let agent = chat_agent(ctx, &settings, agent)?;
-    if !here && start_in_tab(ctx, &settings, &repo, agent, &args).await? {
+    if !here && start_beside(ctx, &settings, &repo, agent, &args).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent, &repo);
     let command = command(&settings, &repo, agent, args)?;
-    match terminal::run_chat(&settings, &repo, agent.as_str(), &command).await? {
-        Some(code) => Ok(code),
-        None => run_here(&repo, &command),
-    }
+    let chat = client::start_chat(&ctx.paths, &repo, agent.as_str()).await?;
+    run_here(&repo, &chat, &command)
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
@@ -110,9 +109,10 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<BuiltinAgent> {
     ui::pick_choice(ctx, "Agent> ", &choices)
 }
 
-/// Hand this chat to a new focused tab at the checkout, returning whether it
-/// left this process; otherwise it runs here.
-async fn start_in_tab(
+/// Run this chat in a new focused tab or session at the checkout, where
+/// Shoal starts it in place, returning whether it ran there; otherwise it
+/// runs here.
+async fn start_beside(
     ctx: &Context,
     settings: &Effective,
     repo: &Repository,
@@ -131,7 +131,7 @@ async fn start_in_tab(
         chat.extend_from_slice(args);
     }
     let label = format!("{} chat", repository::name(repo));
-    terminal::start_chat(ctx, settings, &repo.path, &label, &chat).await
+    terminal::start_chat(ctx, settings, repo, agent.as_str(), &label, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, run at the checkout.
@@ -167,14 +167,17 @@ fn instructions(settings: &Effective, repo: &Repository) -> String {
     )
 }
 
-/// Replace this process with the agent, so the terminal's signals reach it alone.
-fn run_here(repo: &Repository, command: &[OsString]) -> Result<i32> {
+/// Replace this process with the agent, so the terminal's signals reach it
+/// alone and the process the daemon recorded for `chat` runs it. Workspaces
+/// the agent opens belong to the chat.
+fn run_here(repo: &Repository, chat: &Chat, command: &[OsString]) -> Result<i32> {
     let (program, args) = command
         .split_first()
         .context("the agent command is empty")?;
     let error = std::process::Command::new(program)
         .args(args)
         .current_dir(&repo.path)
+        .env(crate::env::CHAT, &chat.id)
         .exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))
 }

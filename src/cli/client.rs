@@ -14,7 +14,7 @@ use tokio::{
 
 use crate::{
     config::repo::ConfigLayers,
-    model::{Inspection, Repository, Workspace},
+    model::{Chat, Inspection, Repository, Workspace},
     paths::Paths,
     protocol::{self, Body, DaemonStatus, Method, Request, Response, timing},
 };
@@ -191,6 +191,19 @@ pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {
 /// Workspaces visible to this caller; the daemon filters scoped requests.
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
     request(paths, Method::ListWorkspaces).await
+}
+
+/// Record a chat whose agent replaces this process.
+pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> Result<Chat> {
+    request(
+        paths,
+        Method::StartChat {
+            repository: repository.id.clone().into(),
+            agent: agent.to_owned(),
+            pid: std::process::id(),
+        },
+    )
+    .await
 }
 
 pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {

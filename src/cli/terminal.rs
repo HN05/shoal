@@ -133,36 +133,29 @@ pub(in crate::cli) async fn run_agent(
         .map(Some)
 }
 
-/// Hand a chat to a new focused tab at `cwd`, where Shoal runs it with
-/// `args`. Returns whether it left this process.
+/// Run Shoal with `args` for a chat of `agent` at the repository's checkout:
+/// in a new focused tab, or in a new session this terminal attaches to, as
+/// `run_agent` does for tracked agents. Returns whether it ran there; `false`
+/// means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
-    cwd: &Path,
+    repository: &Repository,
+    agent: &str,
     label: &str,
     args: &[OsString],
 ) -> Result<bool> {
     match Backend::current(ctx, settings) {
         Some(Backend::Herdr) if settings.herdr.new_tab => {
-            herdr::run_in_tab(ctx, cwd, label, args, true).await?;
+            herdr::run_in_tab(ctx, &repository.path, label, args, true).await?;
+            Ok(true)
+        }
+        _ if keeps_agents_in_sessions(settings) => {
+            zmx::run_chat(ctx, repository, agent, args).await?;
             Ok(true)
         }
         _ => Ok(false),
     }
-}
-
-/// Run a chat's `command` in a new session and attach this terminal to it,
-/// as `run_agent` does for tracked agents. `None` means it runs in place.
-pub(in crate::cli) async fn run_chat(
-    settings: &Effective,
-    repository: &Repository,
-    agent: &str,
-    command: &[OsString],
-) -> Result<Option<i32>> {
-    if !keeps_agents_in_sessions(settings) {
-        return Ok(None);
-    }
-    zmx::run_chat(repository, agent, command).await.map(Some)
 }
 
 /// The place a backend opened for this process to add a workspace in,
