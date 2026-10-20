@@ -91,6 +91,7 @@ async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
         Vec::new(),
         super::workspaces::AddOptions {
             here: true,
+            focus: false,
             now: false,
         },
     )

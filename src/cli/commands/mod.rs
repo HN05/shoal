@@ -257,6 +257,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Repo { command: None } => unreachable!("the repository menu returns a command"),
         Command::Add {
             here,
+            focus,
             path,
             repository,
             repository_override,
@@ -286,7 +287,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 },
                 agent,
                 args,
-                workspaces::AddOptions { here, now },
+                workspaces::AddOptions { here, focus, now },
             )
             .await
         }

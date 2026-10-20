@@ -17460,12 +17460,13 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
 
 #[test]
 fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
-    for (focus, agent, expected) in [
-        (None, None, "--focus"),
-        (Some(false), None, "--no-focus"),
-        (None, Some("pi"), "--focus"),
-        (Some(true), Some("pi"), "--focus"),
-        (Some(false), Some("pi"), "--no-focus"),
+    for (focus, agent, flag, expected) in [
+        (None, None, false, "--focus"),
+        (Some(false), None, false, "--no-focus"),
+        (None, Some("pi"), false, "--focus"),
+        (Some(true), Some("pi"), false, "--focus"),
+        (Some(false), Some("pi"), false, "--no-focus"),
+        (Some(false), Some("pi"), true, "--focus"),
     ] {
         let mut config = focus.map_or_else(String::new, |focus| format!("focus = {focus}\n"));
         config.push_str("[commands]\npi = ['sh', '-c', 'exit 0']\n");
@@ -17474,6 +17475,9 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
+        }
+        if flag {
+            args.push("--focus");
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
         assert!(caller.status.success(), "{caller:?} {transcript}");

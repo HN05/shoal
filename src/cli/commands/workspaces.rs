@@ -216,6 +216,8 @@ pub(in crate::cli) struct Creation {
 pub(super) struct AddOptions {
     /// Run in the current pane instead of opening a Herdr tab.
     pub here: bool,
+    /// Focus the new tab or session whatever the `focus` setting says.
+    pub focus: bool,
     /// Start the agent even when `max_agents` is reached.
     pub now: bool,
 }
@@ -293,7 +295,7 @@ pub(super) async fn add(
             }
         }
     }
-    let handoff = start_beside(ctx, &target, &mut plan, issue.as_ref(), options.here).await;
+    let handoff = start_beside(ctx, &target, &mut plan, issue.as_ref(), options).await;
     if let Some(entry) = &plan.queue_entry
         && let Err(error) = &handoff
     {
@@ -306,22 +308,25 @@ pub(super) async fn add(
 }
 
 /// Start `plan` beside this terminal, focused or in the background, unless
-/// `here` keeps it in place. Returns whether it left this process.
+/// `options.here` keeps it in place. Returns whether it left this process.
 async fn start_beside(
     ctx: &Context,
     target: &AddTarget,
     plan: &mut AddPlan,
     issue: Option<&super::issues::Issue>,
-    here: bool,
+    options: AddOptions,
 ) -> Result<bool> {
-    if here || !ctx.interactive() {
+    if options.here || !ctx.interactive() {
         return Ok(false);
     }
-    let settings = client::settings(
+    let mut settings = client::settings(
         &ctx.paths,
         ConfigTarget::Repository(plan.repository.clone()),
     )
     .await?;
+    if options.focus {
+        settings.focus = Some(true);
+    }
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;
     terminal::start_add(ctx, &settings, plan, issue, &name).await
 }

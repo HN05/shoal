@@ -103,6 +103,9 @@ pub enum Command {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]
         here: bool,
+        /// Give the new tab or session the terminal, overriding the `focus` setting.
+        #[arg(long, conflicts_with = "here")]
+        focus: bool,
         /// Registered repository, or an issue, PR or branch URL.
         #[arg(value_parser = item_reference)]
         repository: Option<String>,

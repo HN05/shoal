@@ -223,6 +223,7 @@ async fn pull_request(
                 Vec::new(),
                 super::workspaces::AddOptions {
                     here: true,
+                    focus: false,
                     now: false,
                 },
             )
@@ -279,6 +280,7 @@ async fn issue(
                 Vec::new(),
                 super::workspaces::AddOptions {
                     here: true,
+                    focus: false,
                     now: false,
                 },
             )

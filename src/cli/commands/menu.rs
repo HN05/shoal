@@ -81,6 +81,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     Ok(match action {
         MenuAction::Add => Command::Add {
             here: false,
+            focus: false,
             path: None,
             repository: None,
             repository_override: None,

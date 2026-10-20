@@ -42,6 +42,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         }),
         RepoMenuAction::AddWorkspace => Command::Add {
             here: false,
+            focus: false,
             path: None,
             repository: Some(picked.id),
             repository_override: None,

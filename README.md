@@ -86,8 +86,8 @@ shoal watch pr 505                         # Watch an explicit PR
 ```
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
-to run in the current pane, or `herdr.enabled = false` to treat Herdr as a plain
-terminal. Elsewhere, an agent that starts with an issue or arguments runs in a
+to run in the current pane, `--focus` to switch to the new tab, or
+`herdr.enabled = false` to treat Herdr as a plain terminal. Elsewhere, an agent that starts with an issue or arguments runs in a
 detached zmx session that `shoal attach` reaches. See
 [Herdr settings](docs/reference.md#agents).
 

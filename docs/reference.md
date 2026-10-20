@@ -566,7 +566,8 @@ The `[herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into; the
-top-level `focus` option overrides this for tabs and zmx sessions alike.
+top-level `focus` option overrides this for tabs and zmx sessions alike, and
+`shoal add --focus` focuses one launch.
 `enabled`, `new_tab` and `close_when_done` default to true; with `enabled = false`
 Shoal treats a Herdr pane as a plain terminal:
 
