@@ -71,7 +71,7 @@ impl ForgeKind {
         match self {
             Self::GitHub => "check `gh auth login` and repository access",
             Self::Forgejo => {
-                "Forgejo API request failed; private repositories need an fj or tea login"
+                "Forgejo API request failed; private repositories need [forgejo.\"<host>\"] token_command"
             }
             Self::GitLab => "GitLab API request failed; check `glab auth login` for the host",
             Self::Bitbucket => {

@@ -1,4 +1,4 @@
-//! Forge identity and issue/PR queries using the user's gh/fj login; the one
+//! Forge identity and issue/PR queries using the user's forge login; the one
 //! write retargets stacked PRs, through the REST transport in `api`.
 pub(crate) mod account;
 pub mod action;
