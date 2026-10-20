@@ -971,8 +971,15 @@ out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, s
 Forgejo only cancels, and Bitbucket Pipelines are not supported.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
-executions, run removal hooks, remove owned simulators, remove the worktree,
-and release leases with the record. Failures retain what is needed to retry.
+executions, run removal hooks, remove owned simulators, keep a restore point,
+remove the worktree, and release leases with the record. Failures retain what is
+needed to retry. Workspaces are cheap to remove because removal is reversible: the
+restore point is a commit of HEAD plus the unsaved files Git does not ignore, built
+with a temporary index under `refs/shoal/removed/<workspace id>`, and its record
+(branch, HEAD, base and links) commits with the removal. Unsaved files beyond
+`[cleanup.restore] archive_max_mb` are not kept; merged cleanup then retains the
+workspace, and every other removal keeps only HEAD. Records and refs expire after
+`retention_days`; a ref no record or workspace owns is deleted.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point
@@ -984,7 +991,8 @@ Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Merged cleanup
 (`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
-instead of its assignment: a merged branch, clean files, no Git operation under
+instead of its assignment: a merged branch, unsaved files only as leftovers the
+restore point keeps (the branch has commits of its own), no Git operation under
 way, nothing running or saved for resume, no leases, permits, directory users,
 holds or keep choice, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;

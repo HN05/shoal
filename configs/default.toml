@@ -165,6 +165,12 @@ enabled = true
 enabled = true
 idle_minutes = 240
 
+[cleanup.restore]
+# Keep removed workspaces restorable with shoal restore for this long, with up
+# to this much of their uncommitted and untracked files.
+retention_days = 30
+archive_max_mb = 50
+
 [ports]
 # Range for automatic TCP port reservations.
 start = 49152

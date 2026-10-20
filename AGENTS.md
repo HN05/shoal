@@ -60,11 +60,13 @@ when behavior changes, distinguishing decisions from proposals.
   workspace branches; agents update their branch from it with plain Git.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
-  240 idle minutes, persisted across restarts) removes merged, clean, unused
-  workspaces whatever their assignment state; only holds and keep choices keep them. Automatic removal is only for idle,
+  240 idle minutes, persisted across restarts) removes merged, unused workspaces
+  whatever their assignment state, archiving unsaved files left over on a branch
+  with commits; only holds and keep choices keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed or merged into the default branch (including
   squash and rebase merges), or deleted worktrees. Keep one removal path for manual and automatic
-  cleanup, retaining the default branch unless explicitly deleted. Only explicit
+  cleanup, retaining the default branch unless explicitly deleted; every removal of
+  an existing worktree keeps an expiring restore point of HEAD and unsaved files. Only explicit
   `done` records completion unless `[done] automatic` (default false) lets issue
   closure and merged PR watches record it with the configured cleanup default or
   existing choice. PR cleanup is on by default: all watched PRs must merge and

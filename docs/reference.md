@@ -1332,7 +1332,9 @@ rebase merges its remote-tracking branch knows about, are deleted. Otherwise fzf
 offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
 changes and untracked files with Git status codes before `Are you sure? [y/N]`.
 Large previews show an omitted-entry count; use `git status` for the full list.
-Both choices discard uncommitted and untracked files. `--keep-branch`/`--delete-branch`
+Both choices discard uncommitted and untracked files from the worktree; every
+removal of an existing worktree first keeps them, with HEAD, in a
+[restore point](#restore-a-workspace). `--keep-branch`/`--delete-branch`
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
 Manual removal stops tracked commands and verified survivors, leaving unrelated
@@ -1342,6 +1344,21 @@ stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
+
+### Restore a workspace
+
+Every removal of an existing worktree, manual or automatic, keeps a restore
+point: a commit of HEAD plus its uncommitted and untracked files, without
+ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a
+record of the branch, HEAD, base and linked issue and PRs. When the unsaved files
+exceed `archive_max_mb` or include an untracked nested repository, the restore
+point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
+
+```toml
+[cleanup.restore]
+retention_days = 30
+archive_max_mb = 50
+```
 
 ### Assignment completion
 
@@ -1719,9 +1736,11 @@ A workspace whose branch merged into the default branch is removed once nothing
 has used it for `idle_minutes`, whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
 gives it, against the default branch's remote-tracking branch, fetched at most
-every ten minutes. Uncommitted or untracked files, a merge, rebase or other Git
-operation under way, commands, agents saved for `shoal resume`, directory users,
-leases, permits, holds and `done --keep` keep the workspace. Shoal records the
+every ten minutes. Uncommitted and untracked files go into the
+[restore point](#restore-a-workspace); they keep the workspace when the restore point cannot keep
+them all or the branch has no commits of its own. A merge, rebase or other
+Git operation under way, commands, agents saved for `shoal resume`, directory
+users, leases, permits, holds and `done --keep` keep it too. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
 index and reflog; the period runs from the latest of those and survives restarts.

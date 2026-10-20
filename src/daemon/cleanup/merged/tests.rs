@@ -104,6 +104,47 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
 }
 
 #[tokio::test]
+async fn files_never_committed_keep_a_workspace_without_commits() {
+    let f = Fixture::new().await;
+    git(&f.workspace.path, &["reset", "-q", "--hard", "main"]);
+    fs::write(f.workspace.path.join("draft"), "draft\n").unwrap();
+    assert!(f.kept_after(5).await);
+    fs::remove_file(f.workspace.path.join("draft")).unwrap();
+    assert!(!f.kept_after(5).await, "nothing to lose");
+}
+
+#[tokio::test]
+async fn unsaved_files_of_a_merged_workspace_go_into_its_restore_point() {
+    let f = Fixture::new().await;
+    f.squash_merge();
+    let head = git(&f.workspace.path, &["rev-parse", "HEAD"]);
+    fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
+    fs::write(f.workspace.path.join("scratch"), "notes\n").unwrap();
+    assert!(!f.kept_after(5).await);
+
+    let reference = format!("refs/shoal/removed/{}", f.workspace.id);
+    let snapshot = git(&f.checkout, &["rev-parse", &reference]);
+    let snapshot = snapshot.trim();
+    assert_eq!(
+        git(&f.checkout, &["rev-parse", &format!("{snapshot}^")]),
+        head
+    );
+    assert_eq!(
+        git(&f.checkout, &["show", &format!("{snapshot}:two")]),
+        "edited\n"
+    );
+    assert_eq!(
+        git(&f.checkout, &["show", &format!("{snapshot}:scratch")]),
+        "notes\n"
+    );
+    assert_eq!(
+        git(&f.checkout, &["branch", "--list", "topic"]),
+        "  topic\n",
+        "a branch with unsaved work is kept"
+    );
+}
+
+#[tokio::test]
 async fn keep_choices_running_work_and_unsaved_state_retain_a_merged_workspace() {
     let f = Fixture::new().await;
     f.squash_merge();
@@ -124,11 +165,26 @@ async fn keep_choices_running_work_and_unsaved_state_retain_a_merged_workspace()
     assert!(f.kept_after(5).await);
     manager.undo_done(id).await.unwrap();
 
-    fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
-    assert!(f.kept_after(5).await);
-    git(&f.workspace.path, &["checkout", "--", "two"]);
+    let git_dir = f.workspace.git_dir.clone().unwrap();
+    fs::write(git_dir.join("MERGE_HEAD"), "").unwrap();
+    assert!(f.kept_after(5).await, "a merge under way");
+    fs::remove_file(git_dir.join("MERGE_HEAD")).unwrap();
 
     let repo = f.workspace.repository_id.clone();
+    fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
+    manager
+        .set_repository_config(
+            &repo,
+            Some("[cleanup.restore]\narchive_max_mb = 0\n".into()),
+        )
+        .await
+        .unwrap();
+    assert!(
+        f.kept_after(5).await,
+        "unsaved files beyond the archive limit"
+    );
+    git(&f.workspace.path, &["checkout", "--", "two"]);
+
     manager
         .set_repository_config(&repo, Some("[cleanup.merged]\nenabled = false\n".into()))
         .await

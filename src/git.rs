@@ -14,6 +14,7 @@ pub use queries::{
     symbolic_revision, verify_revision, worktree_root,
 };
 pub mod repo;
+pub mod restore;
 pub mod seed;
 pub mod status;
 pub mod worktrunk;

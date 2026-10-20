@@ -202,8 +202,26 @@ impl Manager {
 pub enum Rule {
     /// Clean, unused, every commit pushed or merged, and no assignment state.
     Idle,
-    /// Merged into the default branch, clean and unused, whatever its assignment.
+    /// Merged into the default branch and unused, whatever its assignment.
     Merged,
+}
+
+impl Rule {
+    /// Whether the worktree's state still satisfies the rule.
+    pub fn allows(self, check: &crate::removal::RemovalCheck) -> bool {
+        match self {
+            Rule::Idle => check.safe(),
+            // Unsaved files go into the restore point.
+            Rule::Merged => check.unused() && check.matches_default_branch,
+        }
+    }
+
+    pub fn describe(self) -> &'static str {
+        match self {
+            Rule::Idle => "idle, clean and fully pushed",
+            Rule::Merged => "unused and merged",
+        }
+    }
 }
 
 /// What automatic cleanup must see unchanged before removing a workspace.
@@ -313,6 +331,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         "merged cleanup",
         merged::sweep(manager, &mut timers.merged).await,
     );
+    step("restore expiry", manager.expire_restore_points().await);
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())
 }

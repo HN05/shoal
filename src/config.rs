@@ -195,6 +195,7 @@ pub struct Cleanup {
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
     pub merged: MergedCleanup,
+    pub restore: Restore,
 }
 
 #[derive(Debug, Serialize)]
@@ -241,6 +242,33 @@ impl Default for MergedCleanup {
             enabled: true,
             idle_minutes: 240,
         }
+    }
+}
+
+/// How long removed workspaces stay restorable, and how much of their
+/// unsaved files a restore point keeps.
+#[derive(Debug, Serialize)]
+pub struct Restore {
+    pub retention_days: u64,
+    pub archive_max_mb: u64,
+}
+
+impl Default for Restore {
+    fn default() -> Self {
+        Self {
+            retention_days: 30,
+            archive_max_mb: 50,
+        }
+    }
+}
+
+impl Restore {
+    pub fn retention(&self) -> Duration {
+        Duration::from_secs(self.retention_days * 24 * 3600)
+    }
+
+    pub fn archive_max_bytes(&self) -> u64 {
+        self.archive_max_mb * 1024 * 1024
     }
 }
 

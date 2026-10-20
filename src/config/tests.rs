@@ -107,6 +107,14 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         Some(default_effective.cleanup.merged.idle_minutes)
     );
     assert_eq!(
+        written.cleanup.restore.retention_days,
+        Some(default_effective.cleanup.restore.retention_days)
+    );
+    assert_eq!(
+        written.cleanup.restore.archive_max_mb,
+        Some(default_effective.cleanup.restore.archive_max_mb)
+    );
+    assert_eq!(
         (written.ports.start, written.ports.end),
         (
             Some(default_effective.ports.start),

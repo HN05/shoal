@@ -21,6 +21,7 @@ mod registry;
 mod rename;
 mod repo_configuration;
 mod repo_removal;
+mod restore;
 pub(crate) mod review;
 mod stack;
 mod status;

@@ -89,6 +89,27 @@ pub struct WorkspaceLinks {
     pub prs: Vec<String>,
 }
 
+/// What `shoal restore` recreates of a removed workspace until `expires_at`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemovedWorkspace {
+    pub workspace_id: String,
+    pub repository_id: String,
+    pub name: String,
+    /// The branch checked out at removal; `None` for a detached HEAD.
+    pub branch: Option<String>,
+    pub head: String,
+    /// HEAD, or a commit on top of it with the unsaved files.
+    pub snapshot: String,
+    /// Unsaved files exceeded the archive limit and were not kept.
+    pub files_omitted: bool,
+    pub base_ref: Option<String>,
+    pub base_commit: Option<String>,
+    pub links: WorkspaceLinks,
+    pub cause: crate::daemon::events::EventCause,
+    pub removed_at: u64,
+    pub expires_at: u64,
+}
+
 /// An agent's statement that linked work is ready for review at a commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewMark {

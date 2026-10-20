@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{
     config::{
         self, AutoCleanup, Cleanup, Codex, Config, Done, Land, MergedCleanup, Ports, Pr, PrCleanup,
-        Ready, Review, Simulators, Unready, named_commands,
+        Ready, Restore, Review, Simulators, Unready, named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
     hooks::HookKind,
@@ -230,6 +230,16 @@ impl Effective {
                         "cleanup.merged.idle_minutes",
                     )?,
                 },
+                restore: Restore {
+                    retention_days: built_in(
+                        merged.cleanup.restore.retention_days,
+                        "cleanup.restore.retention_days",
+                    )?,
+                    archive_max_mb: built_in(
+                        merged.cleanup.restore.archive_max_mb,
+                        "cleanup.restore.archive_max_mb",
+                    )?,
+                },
             },
             done: Done {
                 cleanup: built_in(merged.done.cleanup, "done.cleanup")?,
@@ -266,6 +276,7 @@ fn built_in() -> RepoConfig {
     let simulators = Simulators::default();
     let auto_cleanup = AutoCleanup::default();
     let merged_cleanup = MergedCleanup::default();
+    let restore = Restore::default();
     RepoConfig {
         max_agents: Some(config::AgentLimit::Dynamic),
         issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
@@ -302,6 +313,10 @@ fn built_in() -> RepoConfig {
             merged: config::repo::MergedCleanup {
                 enabled: Some(merged_cleanup.enabled),
                 idle_minutes: Some(merged_cleanup.idle_minutes),
+            },
+            restore: config::repo::Restore {
+                retention_days: Some(restore.retention_days),
+                archive_max_mb: Some(restore.archive_max_mb),
             },
         },
         done: config::repo::Done {
@@ -612,6 +627,8 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(cleanup.pr.enabled),
         scalar!(cleanup.merged.enabled),
         scalar!(cleanup.merged.idle_minutes),
+        scalar!(cleanup.restore.retention_days),
+        scalar!(cleanup.restore.archive_max_mb),
         scalar!(done.cleanup),
         scalar!(done.automatic),
         scalar!(review.post),
@@ -645,7 +662,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
 [seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
@@ -937,6 +954,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             cleanup.pr.enabled.is_some(),
             cleanup.merged.enabled.is_some(),
             cleanup.merged.idle_minutes.is_some(),
+            cleanup.restore.retention_days.is_some(),
+            cleanup.restore.archive_max_mb.is_some(),
             done.cleanup.is_some(),
             done.automatic.is_some(),
             review.post.is_some(),

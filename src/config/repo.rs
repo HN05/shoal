@@ -279,6 +279,7 @@ pub struct Cleanup {
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
     pub merged: MergedCleanup,
+    pub restore: Restore,
 }
 
 impl Cleanup {
@@ -290,6 +291,18 @@ impl Cleanup {
             if let Some(minutes) = minutes {
                 crate::config::validate_idle_minutes(key, minutes)?;
             }
+        }
+        if let Some(days) = self.restore.retention_days {
+            anyhow::ensure!(
+                (1..=3650).contains(&days),
+                "cleanup.restore.retention_days must be between 1 and 3650"
+            );
+        }
+        if let Some(megabytes) = self.restore.archive_max_mb {
+            anyhow::ensure!(
+                megabytes <= 10240,
+                "cleanup.restore.archive_max_mb must be at most 10240"
+            );
         }
         Ok(())
     }
@@ -318,6 +331,14 @@ pub struct AutoCleanup {
 pub struct MergedCleanup {
     pub enabled: Option<bool>,
     pub idle_minutes: Option<u64>,
+}
+
+/// Repository values for the global `[cleanup.restore]`.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Restore {
+    pub retention_days: Option<u64>,
+    pub archive_max_mb: Option<u64>,
 }
 
 /// Default cleanup choice when an agent marks its workspace done.

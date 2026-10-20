@@ -135,12 +135,14 @@ impl RemovalCheck {
         self.workspace.path.exists() && !self.can_delete_branch()
     }
 
+    /// No command or process uses the worktree.
+    pub fn unused(&self) -> bool {
+        self.running_commands == 0 && self.processes.is_empty()
+    }
+
     /// Nothing would be lost: idle, clean, and every commit pushed or landed.
     pub fn safe(&self) -> bool {
-        self.running_commands == 0
-            && self.processes.is_empty()
-            && !self.dirty
-            && self.unpushed_commits == 0
+        self.unused() && !self.dirty && self.unpushed_commits == 0
     }
 }
 

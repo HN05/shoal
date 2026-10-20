@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 44;
+const SCHEMA_VERSION: i64 = 45;
 
 #[cfg(test)]
 mod benchmark;
@@ -372,7 +372,17 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     ),
     // Unix time of the last recorded activity, so idle periods survive restarts.
     (44, "ALTER TABLE workspaces ADD COLUMN active_at INTEGER;", None),
+    (45, REMOVED_WORKSPACES, None),
 ];
+
+/// Restore records outlive their workspace, not their repository.
+const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
+    workspace_id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    record TEXT NOT NULL
+);";
 
 fn migrate(db: &mut Connection) -> Result<()> {
     let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -829,6 +839,9 @@ mod tests {
         }
         if version >= 44 {
             db.execute_batch("ALTER TABLE workspaces ADD COLUMN active_at INTEGER;")?;
+        }
+        if version >= 45 {
+            db.execute_batch(REMOVED_WORKSPACES)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

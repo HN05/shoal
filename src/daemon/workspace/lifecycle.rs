@@ -11,7 +11,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{CleanupReason, Workspace},
+    model::{CleanupReason, RemovedWorkspace, Workspace},
     removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
@@ -83,6 +83,20 @@ impl Removal<'_> {
         }
     }
 
+    /// Merged cleanup removes unsaved files once a restore point keeps them.
+    fn discards_archived_files(self) -> bool {
+        matches!(
+            self,
+            Removal::Automatic {
+                snapshot: Snapshot {
+                    rule: Rule::Merged,
+                    ..
+                },
+                ..
+            }
+        )
+    }
+
     /// Unattended removals retain a held workspace, whenever the hold was
     /// taken; a user's request overrides holds.
     fn respects_holds(self) -> bool {
@@ -110,13 +124,16 @@ impl Removal<'_> {
                 !check.dirty,
                 "workspace has uncommitted or untracked work; retaining it"
             ),
-            (Removal::Automatic { .. }, Stage::Initial) => ensure!(
-                check.safe(),
-                "workspace is no longer idle, clean and fully pushed"
+            (Removal::Automatic { snapshot, .. }, Stage::Initial) => ensure!(
+                snapshot.rule.allows(check),
+                "workspace is no longer {}",
+                snapshot.rule.describe()
             ),
-            (Removal::Automatic { .. }, _) => {
-                ensure!(check.safe(), "workspace changed {}", stage.change())
-            }
+            (Removal::Automatic { snapshot, .. }, _) => ensure!(
+                snapshot.rule.allows(check),
+                "workspace changed {}",
+                stage.change()
+            ),
             (
                 Removal::Manual {
                     choice: BranchChoice::Auto,
@@ -305,22 +322,23 @@ impl Manager {
     }
 
     /// The path and signals of a merged cleanup candidate, or `None` when
-    /// it is not one: merged into the default branch, clean and unused, with
-    /// no hold or keep choice. Assignment state does not keep it.
+    /// it is not one: merged into the default branch and unused, with no Git
+    /// operation under way, no hold or keep choice, and any unsaved files
+    /// left over from merged work. Assignment state does not keep it.
     pub async fn merged_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
         if self.keep_reason(id).await?.is_some() || self.usage_reason(id).await?.is_some() {
             return Ok(None);
         }
         let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
         if !check.workspace.path.is_dir()
-            || !check.matches_default_branch
+            || !Rule::Merged.allows(&check)
             || git::status::operation_in_progress(&check.workspace.path).await?
-            || worktree_cleanup_reason(&check).is_some()
+            || (check.dirty && !self.unsaved_files_are_leftovers(&check.workspace).await?)
         {
             return Ok(None);
         }
         check.load_directory_processes().await?;
-        if worktree_cleanup_reason(&check).is_some() {
+        if !Rule::Merged.allows(&check) {
             return Ok(None);
         }
         let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
@@ -497,10 +515,13 @@ impl Manager {
             } else {
                 None
             };
-            let outcome = match removal {
+            let (outcome, restore) = match removal {
                 Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
-                _ => self.remove_missing_worktree(&workspace, removal).await?,
+                _ => (
+                    self.remove_missing_worktree(&workspace, removal).await?,
+                    None,
+                ),
             };
             self.commit_workspace_removal(
                 &workspace.id,
@@ -509,6 +530,7 @@ impl Manager {
                 } else {
                     EventCause::MissingDirectory
                 },
+                restore,
             )
             .await?;
             Ok((outcome, post_remove))
@@ -545,12 +567,21 @@ impl Manager {
         }
     }
 
-    /// Release ownership and cascading resource leases in one transaction.
-    async fn commit_workspace_removal(&self, id: &str, cause: EventCause) -> Result<()> {
+    /// Release ownership and cascading resource leases in one transaction,
+    /// with the restore record when the worktree existed.
+    async fn commit_workspace_removal(
+        &self,
+        id: &str,
+        cause: EventCause,
+        restore: Option<RemovedWorkspace>,
+    ) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                if let Some(restore) = &restore {
+                    super::restore::record(&tx, restore)?;
+                }
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
@@ -592,11 +623,13 @@ impl Manager {
         outcome
     }
 
+    /// Remove an existing worktree after a restore point keeps its HEAD and
+    /// unsaved files.
     async fn remove_present_worktree(
         &self,
         workspace: &crate::model::Workspace,
         removal: Removal<'_>,
-    ) -> Result<RemovalResult> {
+    ) -> Result<(RemovalResult, Option<RemovedWorkspace>)> {
         let repo = self.repository(&workspace.repository_id).await?;
         self.recheck_removal(workspace, removal, Stage::Initial)
             .await?;
@@ -642,8 +675,30 @@ impl Manager {
             )
             .await?;
         let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
-        self.remove_worktree(&repo.path, workspace, files, branch, true)
-            .await
+        let restore = self
+            .save_restore_point(&repo, workspace, &check, removal.cause())
+            .await?;
+        let removed = async {
+            let files = if removal.discards_archived_files() && check.dirty {
+                ensure!(
+                    !restore.files_omitted,
+                    "unsaved files exceed the restore archive limit; retaining the workspace"
+                );
+                FileRemoval::Force
+            } else {
+                files
+            };
+            self.remove_worktree(&repo.path, workspace, files, branch, true)
+                .await
+        }
+        .await;
+        match removed {
+            Ok(result) => Ok((result, Some(restore))),
+            Err(error) => {
+                self.discard_restore_point(&repo, &workspace.id).await;
+                Err(error)
+            }
+        }
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at

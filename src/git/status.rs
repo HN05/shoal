@@ -28,6 +28,16 @@ pub async fn changed_files(repo: &Path) -> Result<String> {
     .await
 }
 
+/// Commits on HEAD that `base` does not contain.
+pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
+    Ok(
+        run(repo, &["rev-list", "--count", &format!("{base}..HEAD")])
+            .await?
+            .trim()
+            .parse()?,
+    )
+}
+
 /// Commits on HEAD that are reachable from neither a remote nor the given ref.
 pub async fn unretained_commits(repo: &Path, retained_ref: Option<&str>) -> Result<u64> {
     let mut args = vec!["rev-list", "--count", "HEAD", "--not", "--remotes"];
