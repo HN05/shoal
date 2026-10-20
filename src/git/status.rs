@@ -119,7 +119,8 @@ pub async fn retains_head(repo: &Path, references: &[String], head_tree: &str) -
 
 /// Whether `target` already has HEAD's changes: HEAD is its ancestor, a
 /// trial merge of HEAD leaves its tree unchanged (squash merges), or every
-/// commit since the fork point has an equivalent patch on it (rebase merges).
+/// commit since the fork point, none of them a merge, has an equivalent patch
+/// on it (rebase merges).
 ///
 /// The answer depends only on the two commits, so it is remembered by their
 /// IDs: cleanup asks again on every pass, and `git cherry` reads every commit
@@ -161,6 +162,13 @@ async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<boo
     let target_tree = super::revision(repo, &format!("{target}^{{tree}}"), run).await?;
     if trial_merge_tree(repo, head, target).await?.as_deref() == Some(target_tree.trim()) {
         return Ok(true);
+    }
+    // `git cherry` skips merge commits, whose conflict resolutions can carry
+    // changes of their own; only a history without them can prove equivalence.
+    let range = format!("{target}..{head}");
+    let merges = run(repo, &["rev-list", "--count", "--merges", &range]).await?;
+    if merges.trim() != "0" {
+        return Ok(false);
     }
     let cherry = run(repo, &["cherry", target, head]).await?;
     Ok(cherry.lines().all(|line| line.starts_with('-')))
@@ -246,6 +254,22 @@ mod tests {
         assert!(merged("squashed").await);
         assert!(merged("rebased").await);
         assert!(merged("topic").await);
+
+        // A merge whose resolution adds its own change is not proven by the
+        // patches of its parents, which a rebase onto the target carries.
+        git(&repo, &["checkout", "-q", "-b", "side", "main"]);
+        fs::write(repo.join("side"), "side\n").unwrap();
+        commit(&repo, "side");
+        git(&repo, &["checkout", "-q", "-b", "merging", "topic"]);
+        git(&repo, &["merge", "-q", "--no-ff", "--no-commit", "side"]);
+        fs::write(repo.join("resolution"), "only in the merge\n").unwrap();
+        git(&repo, &["add", "resolution"]);
+        git(&repo, &["commit", "-q", "-m", "merge side"]);
+        git(&repo, &["checkout", "-q", "-b", "picked", "main"]);
+        git(&repo, &["cherry-pick", "main..topic", "side"]);
+        git(&repo, &["checkout", "-q", "merging"]);
+        assert!(!merged("picked").await);
+        git(&repo, &["checkout", "-q", "topic"]);
 
         // A later commit is not on any of them.
         fs::write(repo.join("three"), "three\n").unwrap();
