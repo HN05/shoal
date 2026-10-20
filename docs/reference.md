@@ -1301,9 +1301,9 @@ SCCACHE_DIR = "{cache.sccache}"  # Needs its own [caches.sccache]
 Each `[caches.NAME]` is a directory in the repository directory's
 `.caches/shared`, which `{cache.NAME}` names in `[env]`, so every process Shoal
 starts in a workspace, and the seed build, uses it. Names are lowercase like port
-names. Shoal creates the directory before starting such a process and marks
-`.caches` with the repository, refusing to start one while an unmarked `.caches`
-is in the way; registrations without a repository directory leave the field
+names. The daemon creates the directory when it starts a process or exports the
+environment, and marks `.caches` with the repository, refusing to start one while
+an unmarked `.caches` is in the way; registrations without a repository directory leave the field
 literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 

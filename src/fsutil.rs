@@ -151,34 +151,25 @@ pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
 /// The file naming the owner of a directory Shoal created beside workspaces.
 pub const OWNER_MARKER: &str = "owner";
 
-/// Create `root` marked as `owner`'s when it is missing; an existing one is
-/// left for [`is_marked_dir`] to judge. The directory appears with its marker
-/// in place, so a concurrent caller never finds it unmarked.
+/// Serializes creating marked directories, so no caller in this process finds
+/// one another has created but not yet marked. Only the daemon creates them.
+static CREATING_MARKED: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Create `root` marked as `owner`'s when it is missing; an existing one,
+/// even one appearing meanwhile, is never claimed and is left for
+/// [`is_marked_dir`] to judge.
 pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
-    if root.symlink_metadata().is_ok() {
-        return Ok(());
+    let _creating = CREATING_MARKED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(parent) = root.parent() {
+        fs::create_dir_all(parent)?;
     }
-    let (Some(parent), Some(name)) = (root.parent(), root.file_name()) else {
-        return Err(io::Error::other(format!(
-            "{} has no parent",
-            root.display()
-        )));
-    };
-    fs::create_dir_all(parent)?;
-    let mut staging = name.to_owned();
-    staging.push(format!(".{}", uuid::Uuid::new_v4()));
-    let staging = parent.join(staging);
-    fs::create_dir(&staging)?;
-    let published = fs::write(staging.join(OWNER_MARKER), format!("{owner}\n"))
-        .and_then(|()| fs::rename(&staging, root));
-    if published.is_err() {
-        let _ = fs::remove_dir_all(&staging);
-        // Another caller published it first.
-        if root.symlink_metadata().is_ok() {
-            return Ok(());
-        }
+    match fs::create_dir(root) {
+        Ok(()) => fs::write(root.join(OWNER_MARKER), format!("{owner}\n")),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
     }
-    published
 }
 
 /// Whether `root` is a real directory marked as `owner`'s, so nothing Shoal
@@ -307,7 +298,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn concurrent_callers_never_find_a_new_marked_directory_unmarked() {
+    fn marked_directories_are_never_found_unmarked_or_claimed() {
         let temp = tempfile::tempdir().unwrap();
         for attempt in 0..20 {
             let root = temp.path().join(format!("repo-{attempt}/.caches"));
@@ -321,10 +312,13 @@ mod tests {
                     });
                 }
             });
-            // Only the published directory is left.
-            let parent = root.parent().unwrap();
-            assert_eq!(fs::read_dir(parent).unwrap().count(), 1);
         }
+        // A directory someone else created is never claimed.
+        let theirs = temp.path().join("theirs");
+        fs::create_dir(&theirs).unwrap();
+        create_marked_dir(&theirs, "repo").unwrap();
+        assert!(!is_marked_dir(&theirs, "repo"));
+        assert_eq!(fs::read_dir(&theirs).unwrap().count(), 0);
     }
 
     #[test]
