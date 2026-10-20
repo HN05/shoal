@@ -23,8 +23,9 @@ instead of the PR delivery guidance below.
   levels before weighing style or test coverage, even when behavior is correct;
   judge responsibility boundaries rather than function length or helper count.
 - Safety of user work: removal goes through the one shared path, preserves
-  work and leases on failure, never adopts moved or replaced worktrees, and
-  never signals a process whose recorded identity was not verified. Herdr
+  work and leases on failure, never adopts moved or replaced worktrees, stops
+  every verified process carrying the workspace identity, and never signals a
+  process whose recorded identity was not verified. Herdr
   completion waits for tracked executions to resolve or for Herdr to report the
   agent's turn finished, and for stopped work to be resumed, before closing the
   tab; removal closes it immediately. Unreadable

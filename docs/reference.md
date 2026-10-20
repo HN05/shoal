@@ -1337,8 +1337,9 @@ removal of an existing worktree first keeps them, with HEAD, in a
 [restore point](#restore-a-workspace). `--keep-branch`/`--delete-branch`
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
-Manual removal stops tracked commands and verified survivors, leaving unrelated
-processes alone. Ownership and removal policy are checked again after removal hooks;
+Removal stops tracked commands and every verified process that carries the
+workspace's identity, including those hooks and `shoal env` exports started,
+leaving unrelated processes alone. Ownership and removal policy are checked again after removal hooks;
 changed HEAD requires an explicit branch choice. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
@@ -2087,8 +2088,8 @@ Only unscoped callers can export or revoke tokens, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
 Each exported token survives daemon restarts until `shoal env [workspace] --revoke
 <token>` or successful workspace removal; revoking one leaves other tokens valid.
-Running processes retain their port snapshot. These processes are untracked and
-the token provides no cleanup protection.
+Running processes retain their port snapshot. These processes are untracked, the
+token provides no cleanup protection, and removing the workspace stops them.
 
 ## Simulators (macOS)
 

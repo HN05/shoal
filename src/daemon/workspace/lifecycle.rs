@@ -794,6 +794,7 @@ impl Manager {
         branch: BranchRemoval,
         registered: bool,
     ) -> Result<RemovalResult> {
+        self.stop_workspace_processes(&workspace.id).await?;
         self.remove_simulators(&workspace.id).await?;
         if registered {
             worktrunk::remove(

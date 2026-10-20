@@ -811,6 +811,21 @@ impl Manager {
         Ok(())
     }
 
+    /// Stop every verified process that still carries the workspace's identity,
+    /// such as servers its hooks or apps started, since none outlives removal.
+    pub(super) async fn stop_workspace_processes(&self, id: &str) -> Result<()> {
+        let survivors = process::scan_workspace(id).await?;
+        if survivors.is_empty() {
+            return Ok(());
+        }
+        process::stop_verified(&survivors).await?;
+        ensure!(
+            process::scan_workspace(id).await?.is_empty(),
+            "workspace processes survived stopping; retry after shoal doctor"
+        );
+        Ok(())
+    }
+
     /// Ask connected wrappers to stop and signal disconnected survivors.
     pub(super) async fn stop_executions(
         &self,

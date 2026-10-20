@@ -560,6 +560,44 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
     }
 }
 
+/// Start a process outside any execution that carries `workspace` as its
+/// identity, as hooks and processes started with `shoal env` do.
+fn workspace_process(root: &std::path::Path, workspace: &str) -> tokio::process::Child {
+    tokio::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "process::identity::tests::marked_child",
+            "--ignored",
+        ])
+        .stdout(std::process::Stdio::null())
+        .env_clear()
+        .env(crate::env::WORKSPACE_ID, workspace)
+        .current_dir(root)
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn removal_stops_processes_carrying_the_workspace_identity() {
+    let (root, manager, workspace) = fixture().await;
+    let mut owned = workspace_process(root.path(), &workspace.id);
+    let mut unrelated = workspace_process(root.path(), "another-workspace");
+    let owned_identity = identity::capture(owned.id().unwrap()).unwrap().unwrap();
+    let unrelated_identity = identity::capture(unrelated.id().unwrap()).unwrap().unwrap();
+
+    manager
+        .remove_workspace(&workspace.id, BranchChoice::Auto, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+
+    assert!(!identity::alive(&owned_identity).unwrap());
+    assert!(identity::alive(&unrelated_identity).unwrap());
+    owned.wait().await.unwrap();
+    unrelated.kill().await.unwrap();
+}
+
 #[tokio::test]
 async fn branch_removal_uses_the_inspected_default_branch() {
     let (_root, manager, workspace) = fixture().await;

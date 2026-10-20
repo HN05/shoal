@@ -87,7 +87,22 @@ pub struct Scan {
     pub unreadable: Vec<Identity>,
 }
 
+/// Live same-user processes carrying one of the execution markers `ids`.
 pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
+    scan_marked(crate::env::EXECUTION_ID, ids).await
+}
+
+/// Live same-user processes carrying the workspace's identity: its tracked
+/// executions, hooks and processes started with its exported environment.
+/// Unreadable environments cannot be attributed and are left out.
+pub async fn scan_workspace(id: &str) -> Result<Vec<Identity>> {
+    let scan = scan_marked(crate::env::WORKSPACE_ID, HashSet::from([id.to_owned()])).await?;
+    Ok(scan.processes.into_iter().map(|p| p.identity).collect())
+}
+
+/// Inventory processes whose environment sets `marker` to one of `ids`; each
+/// match records the value it carries.
+async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
@@ -98,7 +113,7 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
         .output()
         .await
         .context("process inventory failed")?;
-    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
+    let marker = format!("{marker}=").into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut scan = Scan::default();
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
