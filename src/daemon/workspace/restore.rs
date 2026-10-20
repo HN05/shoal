@@ -112,13 +112,14 @@ impl Manager {
             head: removed.head.clone(),
             snapshot: removed.snapshot.clone(),
         });
+        let base = self.restore_base(&removed).await?;
         let opened = self
             .open_branch_with(
                 removed.repository_id.as_str(),
                 &branch,
                 None,
                 None,
-                None,
+                base,
                 files,
             )
             .await?;
@@ -195,6 +196,28 @@ impl Manager {
             removed.snapshot
         );
         Ok(branch)
+    }
+
+    /// The recorded base, so diffs and the stack link come back: its ref
+    /// while it exists, otherwise its commit; `None` when neither remains.
+    async fn restore_base(&self, removed: &RemovedWorkspace) -> Result<Option<String>> {
+        let repo = self.repository(&removed.repository_id).await?;
+        if let Some(reference) = &removed.base_ref
+            && git::ref_exists(&repo.path, reference, git::isolated_command).await?
+        {
+            return Ok(Some(reference.clone()));
+        }
+        let Some(commit) = &removed.base_commit else {
+            return Ok(None);
+        };
+        let exists = git::verify_revision(
+            &repo.path,
+            &format!("{commit}^{{commit}}"),
+            git::run_isolated,
+        )
+        .await
+        .is_ok();
+        Ok(exists.then(|| commit.clone()))
     }
 
     /// Delete a restored workspace's record and the ref that kept its commits.

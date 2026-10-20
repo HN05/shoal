@@ -320,3 +320,37 @@ async fn a_failed_removal_keeps_its_restore_point() {
         "the workspace still exists"
     );
 }
+
+#[tokio::test]
+async fn restore_keeps_the_recorded_base_and_its_stack() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "lower".into(), None, None, None)
+        .await
+        .unwrap();
+    let upper = manager
+        .create_workspace(&repo.id, "upper".into(), Some("lower".into()), None, None)
+        .await
+        .unwrap();
+    assert_eq!(upper.base_ref.as_deref(), Some("refs/heads/lower"));
+    manager
+        .remove_workspace(
+            &upper.id,
+            BranchChoice::KeepBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    manager.restore_workspace("upper").await.unwrap();
+    let restored = manager.workspace("upper").await.unwrap();
+    assert_eq!(restored.base_ref.as_deref(), Some("refs/heads/lower"));
+    assert_eq!(
+        restored.base_workspace.map(|base| base.name).as_deref(),
+        Some("lower")
+    );
+}

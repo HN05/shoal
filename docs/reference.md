@@ -1353,7 +1353,8 @@ shoal restore topic    # open topic again with its unsaved files and links
 ```
 
 `shoal restore <workspace>` opens the newest removed workspace with that name or
-ID on its branch, recreating the branch at the removed HEAD when it was deleted,
+ID on its branch and recorded base, which restores its stack link while the base
+workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue, runs setup,
 and links its PRs; a link that fails is a warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
