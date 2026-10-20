@@ -518,16 +518,14 @@ impl Manager {
 
     /// The first attempt that passes removal's initial checks starts the
     /// grace period, so it never runs while the workspace could not go. A
-    /// failing check is left to removal, which reports it.
+    /// failing check fails the attempt: removal would check again, and pass
+    /// without any grace period once the work had changed in between.
     async fn grace_running(&self, workspace: &Workspace, removal: Removal<'_>) -> Result<bool> {
-        if !removal.waits_for_grace()
-            || self
-                .recheck_removal(workspace, removal, Stage::Initial)
-                .await
-                .is_err()
-        {
+        if !removal.waits_for_grace() {
             return Ok(false);
         }
+        self.recheck_removal(workspace, removal, Stage::Initial)
+            .await?;
         let grace = self.workspace_settings(workspace).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
         Ok(crate::time::unix_seconds() < cleanup_at)
