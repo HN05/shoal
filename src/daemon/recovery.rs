@@ -126,63 +126,100 @@ impl Manager {
     }
 
     pub async fn reconcile(&self, selector: &str, options: ReconcileOptions) -> Result<Report> {
-        ensure!(
-            options.repair || !(options.stop || options.acknowledge_stopped || options.reclaim),
-            "stop/acknowledge-stopped/reclaim require --repair"
-        );
+        Self::validate_reconcile_options(options)?;
         let workspace = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
         let _guard = self.lock_repository_git(&workspace.repository_id).await;
         let mut report = Report::new(workspace.clone());
-        if options.stop {
-            // Connected wrappers handle their own foreground process groups.
-            let running = self
-                .inspect_workspace(&workspace.id)
-                .await?
-                .executions
-                .iter()
-                .any(|e| e.state == ExecutionState::Running);
-            let quiescent = matches!(
-                workspace.state,
-                WorkspaceState::Ready | WorkspaceState::Failed
-            );
-            if running
-                && quiescent
-                && let Err(error) = self
-                    .stop_workspace(&workspace.id, StopRequest::doctor())
-                    .await
-            {
-                report.issues.push(format!("connected stop: {error:#}"));
-            }
-        }
-        if options.repair {
-            self.reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
-                .await?;
-        }
+        self.prepare_reconcile(&workspace, options, &mut report)
+            .await?;
         let result = self
             .reconcile_reserved(&workspace, options, &mut report)
             .await;
         if options.repair {
-            let state = if result.is_err() {
-                workspace.state
-            } else if matches!(report.directory, DirectoryState::Valid) && report.issues.is_empty()
-            {
-                WorkspaceState::Ready
-            } else {
-                WorkspaceState::Failed
-            };
-            let error = result
-                .as_ref()
-                .err()
-                .map(|e| format!("reconciliation failed: {e:#}"))
-                .or_else(|| (!report.issues.is_empty()).then(|| report.issues.join("; ")));
-            self.set_state(&workspace.id, state, error).await?;
-            self.touch(&workspace.id).await;
-            report.workspace = self.workspace(&workspace.id).await?;
+            self.finalize_repair(&workspace, &result, &mut report)
+                .await?;
         }
         result?;
         Ok(report)
+    }
+
+    fn validate_reconcile_options(options: ReconcileOptions) -> Result<()> {
+        ensure!(
+            options.repair || !(options.stop || options.acknowledge_stopped || options.reclaim),
+            "stop/acknowledge-stopped/reclaim require --repair"
+        );
+        Ok(())
+    }
+
+    async fn prepare_reconcile(
+        &self,
+        workspace: &Workspace,
+        options: ReconcileOptions,
+        report: &mut Report,
+    ) -> Result<()> {
+        self.stop_for_reconcile(workspace, options, report).await?;
+        if options.repair {
+            self.reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn stop_for_reconcile(
+        &self,
+        workspace: &Workspace,
+        options: ReconcileOptions,
+        report: &mut Report,
+    ) -> Result<()> {
+        if !options.stop {
+            return Ok(());
+        }
+        // Connected wrappers handle their own foreground process groups.
+        let running = self
+            .inspect_workspace(&workspace.id)
+            .await?
+            .executions
+            .iter()
+            .any(|e| e.state == ExecutionState::Running);
+        let quiescent = matches!(
+            workspace.state,
+            WorkspaceState::Ready | WorkspaceState::Failed
+        );
+        if running
+            && quiescent
+            && let Err(error) = self
+                .stop_workspace(&workspace.id, StopRequest::doctor())
+                .await
+        {
+            report.issues.push(format!("connected stop: {error:#}"));
+        }
+        Ok(())
+    }
+
+    async fn finalize_repair(
+        &self,
+        workspace: &Workspace,
+        result: &Result<()>,
+        report: &mut Report,
+    ) -> Result<()> {
+        let state = if result.is_err() {
+            workspace.state
+        } else if matches!(report.directory, DirectoryState::Valid) && report.issues.is_empty() {
+            WorkspaceState::Ready
+        } else {
+            WorkspaceState::Failed
+        };
+        let error = result
+            .as_ref()
+            .err()
+            .map(|e| format!("reconciliation failed: {e:#}"))
+            .or_else(|| (!report.issues.is_empty()).then(|| report.issues.join("; ")));
+        self.set_state(&workspace.id, state, error).await?;
+        self.touch(&workspace.id).await;
+        report.workspace = self.workspace(&workspace.id).await?;
+        Ok(())
     }
 
     async fn reconcile_reserved(
