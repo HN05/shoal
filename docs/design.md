@@ -997,7 +997,7 @@ permits, rechecked immediately before deletion, without fetching. Merged cleanup
 (`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 restore point keeps (the branch has commits of its own), no Git operation under
-way, nothing running or saved for resume, no leases, permits, directory users,
+way, no open question, nothing running or saved for resume, no leases, permits, directory users,
 stacked workspaces, holds or keep choice, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
