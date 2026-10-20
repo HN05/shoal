@@ -215,7 +215,7 @@ pub struct Completion {
     /// An agent's keep request awaiting the user's decision; denial turns
     /// the completion into cleanup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub keep_request: Option<String>,
+    pub keep_request: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

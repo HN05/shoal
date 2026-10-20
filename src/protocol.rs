@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 96;
+pub const VERSION: u32 = 97;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -473,11 +473,9 @@ pub enum Method {
         workspace: String,
         ask: crate::daemon::questions::Ask,
     },
-    /// Questions, in every workspace unless one is named.
+    /// Open questions, in every workspace unless one is named.
     ListQuestions {
         workspace: Option<String>,
-        /// Include answered questions.
-        all: bool,
     },
     /// One question by ID, for the user.
     ShowQuestion {
@@ -488,10 +486,12 @@ pub enum Method {
         id: i64,
         answer: String,
     },
-    /// Long-lived: the question once it is answered.
+    /// Long-lived: the question once it is answered. `asked_at` tells it
+    /// from a later question reusing its number.
     AwaitAnswer {
         workspace: String,
         id: i64,
+        asked_at: i64,
     },
     /// The workspace's undelivered agent messages and queued item updates,
     /// without waiting or polling the forge; acknowledge them with
@@ -534,7 +534,7 @@ pub enum Method {
         name: String,
     },
     DecideApproval {
-        id: String,
+        id: i64,
         approve: bool,
     },
     // Cooperative resources.

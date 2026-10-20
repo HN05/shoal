@@ -64,8 +64,8 @@ last `id` you handled and resync with `shoal --json ls` after a `gap`.
 
 ```sh
 shoal --json approvals
-shoal approve <id>
-shoal deny <id>
+shoal approve <number>
+shoal deny <number>
 ```
 
 Report pending requests to the user with their recorded settings and reason,
@@ -77,7 +77,7 @@ agent's `shoal done --keep`: approval keeps the workspace, denial cleans it up.
 
 ```sh
 shoal --json questions
-shoal answer <id> "<answer or choice number>"
+shoal answer <number> "<answer or choice number>"
 ```
 
 Agents ask with `shoal ask`; each question names the decision, the agent's

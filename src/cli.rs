@@ -272,19 +272,18 @@ pub enum Command {
         workspace: Option<String>,
         /// Continue waiting for this question, as the installed release does
         /// after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires = "workspace")]
+        #[arg(long, hide = true, requires_all = ["workspace", "asked_at"])]
         resume: Option<i64>,
+        /// When the resumed question was asked, in Unix seconds, telling it
+        /// from a later question with the same number.
+        #[arg(long, hide = true, requires = "resume")]
+        asked_at: Option<i64>,
     },
     /// List open questions from workspace agents.
-    Questions {
-        workspace: Option<String>,
-        /// Include answered questions.
-        #[arg(long)]
-        all: bool,
-    },
+    Questions { workspace: Option<String> },
     /// Answer a question from a workspace's agents.
     Answer {
-        /// Question ID; omit to choose an open question.
+        /// Question number; omit to choose an open question.
         id: Option<i64>,
         /// The answer, or a choice number; omit to be prompted.
         answer: Option<String>,
@@ -489,13 +488,13 @@ pub enum Command {
     Approvals { workspace: Option<String> },
     /// Approve the exact settings recorded in a request; does not allocate capacity.
     Approve {
-        /// Request ID; omit to choose a pending request.
-        id: Option<String>,
+        /// Request number; omit to choose a pending request.
+        id: Option<i64>,
     },
     /// Deny a pending approval request.
     Deny {
-        /// Request ID; omit to choose a pending request.
-        id: Option<String>,
+        /// Request number; omit to choose a pending request.
+        id: Option<i64>,
     },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(

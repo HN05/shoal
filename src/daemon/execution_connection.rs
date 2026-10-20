@@ -519,7 +519,7 @@ mod tests {
         assert!(
             notifications
                 .iter()
-                .any(|n| n.message.contains(&request.id)),
+                .any(|n| n.message.contains(&format!("approval {}:", request.id))),
             "{notifications:?}"
         );
     }

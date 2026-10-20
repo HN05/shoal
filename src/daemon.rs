@@ -380,9 +380,13 @@ async fn serve(
             return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
                 .await;
         }
-        Method::AwaitAnswer { workspace, id } => {
+        Method::AwaitAnswer {
+            workspace,
+            id,
+            asked_at,
+        } => {
             drop(operation_guard);
-            return await_answer(stream, request.id, server.manager, workspace, id).await;
+            return await_answer(stream, request.id, server.manager, workspace, id, asked_at).await;
         }
         Method::AwaitAgentWake { workspace, due } => {
             drop(operation_guard);
@@ -785,8 +789,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::AskQuestion { workspace, ask } => {
             Body::Question(manager.ask_question(&workspace, ask).await?)
         }
-        Method::ListQuestions { workspace, all } => {
-            Body::Questions(manager.questions(workspace.as_deref(), !all).await?)
+        Method::ListQuestions { workspace } => {
+            Body::Questions(manager.questions(workspace.as_deref()).await?)
         }
         Method::ShowQuestion { id } => Body::Question(manager.question(id).await?),
         Method::AnswerQuestion { id, answer } => {
@@ -1056,10 +1060,11 @@ async fn await_answer(
     manager: Arc<Manager>,
     workspace: String,
     id: i64,
+    asked_at: i64,
 ) -> Result<()> {
     let mut closed = [0u8; 1];
     let result = tokio::select! {
-        result = manager.await_answer(&workspace, id) => result,
+        result = manager.await_answer(&workspace, id, asked_at) => result,
         _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
     };
     let body = match result {

@@ -687,8 +687,17 @@ cannot continue without it waits on the question instead. The answer and its
 message are recorded together, and a wait that prints the answer delivers the
 message, so the agent sees it once. Re-asking an identical question returns it
 until its answer is delivered, which makes an interrupted wait safe to rerun.
-An open question means an agent is waiting on the user, so it keeps the workspace
-from idle cleanup; questions belong to the workspace and go with it.
+Delivery deletes the question: the agent's transcript keeps the exchange, and
+nothing in Shoal reads it again. An open question means an agent is waiting on the
+user, so it keeps the workspace from idle cleanup; questions belong to the
+workspace and go with it.
+
+Questions and approval requests are named by the smallest number no stored one
+holds, because the user types them; their records keep a separate internal key
+that is never shown. A wait follows its question's number and creation time, so a
+later question reusing the number cannot answer it, and a replaced keep or land
+request takes a new number, so a decision meant for the old one cannot approve a
+newer commit.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule

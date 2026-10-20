@@ -419,21 +419,22 @@ impl Typed {
             )
             .await?;
             return Ok(requests
-                .into_iter()
+                .iter()
                 .filter(|r| r.status == crate::daemon::approvals::DecisionStatus::Pending)
-                .map(|r| CompletionCandidate::new(r.id))
+                .map(|r| {
+                    CompletionCandidate::new(r.id.to_string())
+                        .help(Some(super::commands::approval_summary(r).into()))
+                })
                 .collect());
         }
         if matches!(target, Target::Questions) {
-            let method = Method::ListQuestions {
-                workspace: None,
-                all: false,
-            };
+            let method = Method::ListQuestions { workspace: None };
             let questions = client::request::<Listing>(&paths, method).await?.questions;
             return Ok(questions
-                .into_iter()
+                .iter()
                 .map(|q| {
-                    CompletionCandidate::new(q.id.to_string()).help(Some(q.ask.question.into()))
+                    CompletionCandidate::new(q.id.to_string())
+                        .help(Some(super::commands::question_summary(q).into()))
                 })
                 .collect());
         }

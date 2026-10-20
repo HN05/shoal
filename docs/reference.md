@@ -1888,23 +1888,28 @@ messages but cannot send any. Removing the workspace deletes its messages.
 
 ```sh
 shoal ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
-shoal questions [workspace] [--all]  # Open questions; --all includes answered ones
-shoal answer [id] [answer]           # Answer text or a choice number; omitted, pick and type
+shoal questions [workspace]          # Open questions
+shoal answer [number] [answer]       # Answer text or a choice number; omitted, pick and type
 ```
 
 `shoal ask` records a question for the user from a workspace's agents: the
 decision, the recommended answer, an optional reason and optional choices, each
 one line with the same limits as `notify`. It raises a `question_asked`
-notification and prints the question ID. `shoal answer` records the answer,
+notification and prints the question number. `shoal answer` records the answer,
 resolving a choice number to that choice, and queues it for the workspace's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
-deliver it and wake an idle agent. An answer may span lines, up to 4096 bytes.
+deliver it and wake an idle agent; it confirms with the question text, since a
+stale notification may name a reused number. An answer may span lines, up to 4096 bytes.
+Delivering the answer deletes the question. A new question takes the smallest
+number no stored question holds, across workspaces; without a number,
+`answer` picks among open questions, showing each one's workspace, recommendation
+and choices.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
 also delivers its message; it survives daemon restarts, waiting up to 10 seconds
 for a stopped daemon to return. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
 interrupted `--wait` can be rerun; the same question with other details is refused.
-A listing returns the newest questions that fit one response and counts the older
+A listing returns the newest open questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer. Scoped callers ask and list only
 their own workspace's questions. An open question keeps the workspace from idle
 cleanup; removing the workspace deletes its questions.
@@ -2257,8 +2262,11 @@ still need a reason and the usual audit before mutations.
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
 these requests, keep requests from `shoal done --keep`, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
-reviews the recorded settings and uses `shoal approve [id]` or
-`shoal deny [id]`. Approval reserves no capacity: retry acquisition after
+reviews the recorded settings and uses `shoal approve [number]` or
+`shoal deny [number]`; without a number, they pick among pending requests, shown
+with their workspace, reason and settings. A request takes the smallest number no
+stored request holds, except a keep or land request replacing an earlier one never
+takes that one's number. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.

@@ -1256,10 +1256,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 
     // Approval lets the agent's retry land the approved commit.
-    f.manager
-        .decide_approval(pending.id.clone(), true)
-        .await
-        .unwrap();
+    f.manager.decide_approval(pending.id, true).await.unwrap();
     let started = land_as_agent(&f, &workspace).await.unwrap();
     assert_eq!(started.plan.land.as_ref().unwrap().source, head);
     f.manager
@@ -1286,11 +1283,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     // Approving after the branch moved drops the stale request and tells the agent.
     fs::write(workspace.path.join("feature"), "even more\n").unwrap();
     commit(&workspace.path, "feature");
-    let error = f
-        .manager
-        .decide_approval(next.id.clone(), true)
-        .await
-        .unwrap_err();
+    let error = f.manager.decide_approval(next.id, true).await.unwrap_err();
     assert!(error.to_string().contains("is stale"), "{error:#}");
     assert!(
         f.manager
@@ -1303,7 +1296,8 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     assert!(
         messages
             .iter()
-            .any(|m| m.message.contains(&next.id) && m.message.contains("stale")),
+            .any(|m| m.message.contains(&format!("Approval {} ", next.id))
+                && m.message.contains("stale")),
         "{messages:?}"
     );
 
@@ -1317,10 +1311,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         land.head,
         git(&workspace.path, &["rev-parse", "HEAD"]).trim()
     );
-    f.manager
-        .decide_approval(denied.id.clone(), false)
-        .await
-        .unwrap();
+    f.manager.decide_approval(denied.id, false).await.unwrap();
     let refused = undecided_land(&f, &workspace).await;
     assert_eq!(
         (refused.id, refused.status),
@@ -1339,7 +1330,7 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
     fs::write(&reference, "not a commit\n").unwrap();
     let error = f
         .manager
-        .decide_approval(pending.id.clone(), true)
+        .decide_approval(pending.id, true)
         .await
         .unwrap_err();
     fs::write(&reference, saved).unwrap();

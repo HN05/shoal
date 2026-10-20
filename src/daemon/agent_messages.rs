@@ -115,7 +115,8 @@ impl Manager {
             .await
     }
 
-    /// Delete exactly these messages once an agent has received them.
+    /// Delete exactly these messages once an agent has received them, with
+    /// the questions whose answers they carried.
     pub async fn mark_agent_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.store
@@ -126,6 +127,7 @@ impl Manager {
                         "DELETE FROM agent_messages WHERE id=?1 AND workspace_id=?2",
                         params![id, workspace.id],
                     )?;
+                    crate::daemon::questions::delete_delivered(&tx, &workspace.id, id)?;
                 }
                 tx.commit()?;
                 Ok(())

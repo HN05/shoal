@@ -40,6 +40,9 @@ pub(in crate::cli) mod workspaces;
 #[cfg(test)]
 mod tests;
 
+pub(in crate::cli) use approvals::summary as approval_summary;
+pub(in crate::cli) use questions::summary as question_summary;
+
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use futures_util::{StreamExt, stream};
@@ -375,8 +378,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Ask {
             workspace: Some(workspace),
             resume: Some(id),
+            asked_at: Some(asked_at),
             ..
-        } => questions::resume(&ctx, workspace, id).await,
+        } => questions::resume(&ctx, workspace, id, asked_at).await,
         Command::Ask {
             question,
             recommend,
@@ -394,7 +398,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             };
             questions::ask(&ctx, workspace, ask, wait).await
         }
-        Command::Questions { workspace, all } => questions::list(&ctx, workspace, all).await,
+        Command::Questions { workspace } => questions::list(&ctx, workspace).await,
         Command::Answer { id, answer } => questions::answer(&ctx, id, answer).await,
         Command::Messages { workspace, hook } => {
             if hook {

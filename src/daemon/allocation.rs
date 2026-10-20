@@ -58,7 +58,7 @@ mod tests {
             Lifetime::Lease,
             Some("serve the app"),
         );
-        request.id = "request-id".into();
+        request.id = 7;
         for status in [DecisionStatus::Approved, DecisionStatus::Denied] {
             request.status = status;
             manager

@@ -105,7 +105,7 @@ mod tests {
 
     fn approval(status: DecisionStatus) -> Box<ApprovalRequest> {
         serde_json::from_value(json!({
-            "id": "approval-id", "workspace_id": "workspace-id", "workspace": "worker",
+            "id": 1, "workspace_id": "workspace-id", "workspace": "worker",
             "target": "port/web", "name": "web", "reason": "serve preview",
             "specification": {"env": "PORT_WEB", "on_conflict": "suggest",
                 "preferred": null, "range": [3000, 3100]},

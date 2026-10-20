@@ -44,7 +44,7 @@ pub(super) async fn ask(
     // The workspace ID stays valid if the workspace is renamed meanwhile.
     let workspace = question.workspace_id.clone();
     let question = if question.is_open() {
-        await_answer(ctx, &workspace, question.id, false).await?
+        await_answer(ctx, &workspace, &question, false).await?
     } else {
         question
     };
@@ -52,9 +52,15 @@ pub(super) async fn ask(
     Ok(0)
 }
 
-/// Continue an earlier `ask --wait` for question `id` of `workspace`.
-pub(super) async fn resume(ctx: &Context, workspace: String, id: i64) -> Result<i32> {
-    let question = await_answer(ctx, &workspace, id, true).await?;
+/// Continue an earlier `ask --wait` for question `id` of `workspace`, asked
+/// at `asked_at`.
+pub(super) async fn resume(
+    ctx: &Context,
+    workspace: String,
+    id: i64,
+    asked_at: i64,
+) -> Result<i32> {
+    let question = await_answer(ctx, &workspace, Asked { id, asked_at }, true).await?;
     print_answer(ctx, workspace, &question).await?;
     Ok(0)
 }
@@ -76,34 +82,54 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     .await
 }
 
+/// The question a wait follows: its number and when it was asked, since a
+/// later question may reuse the number.
+#[derive(Clone, Copy)]
+struct Asked {
+    id: i64,
+    asked_at: i64,
+}
+
+impl From<&Question> for Asked {
+    fn from(question: &Question) -> Self {
+        Self {
+            id: question.id,
+            asked_at: question.created_at,
+        }
+    }
+}
+
 /// Wait across daemon restarts; after an upgrade, the installed release
 /// resumes the wait for the same question.
 async fn await_answer(
     ctx: &Context,
     workspace: &str,
-    id: i64,
+    asked: impl Into<Asked>,
     restarted: bool,
 ) -> Result<Question> {
+    let asked = asked.into();
     let executable = Executable::current();
     let method = || Method::AwaitAnswer {
         workspace: workspace.to_owned(),
-        id,
+        id: asked.id,
+        asked_at: asked.asked_at,
     };
     match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, id))),
+        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, asked))),
     }
 }
 
-/// This command's arguments, resuming the wait for question `id` of `workspace`
-/// without asking again.
-fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
+/// This command's arguments, resuming the wait for the `asked` question of
+/// `workspace` without asking again.
+fn resume_arguments(workspace: &str, asked: Asked) -> Vec<OsString> {
     let arguments = replace_option(arguments(), "--workspace", workspace);
-    replace_option(arguments, "--resume", &id.to_string())
+    let arguments = replace_option(arguments, "--resume", &asked.id.to_string());
+    replace_option(arguments, "--asked-at", &asked.asked_at.to_string())
 }
 
-pub(super) async fn list(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
-    let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace, all }).await?;
+pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace }).await?;
     ctx.show(&listing, |listing| {
         let palette = Palette::stdout(ctx.json);
         for question in &listing.questions {
@@ -112,7 +138,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>, all: bool) ->
         if listing.omitted > 0 {
             println!("{} older questions not shown", listing.omitted);
         } else if listing.questions.is_empty() {
-            println!("No {}questions", if all { "" } else { "open " });
+            println!("No open questions");
         }
     })?;
     Ok(0)
@@ -128,14 +154,20 @@ pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String
         (id, _) => prompt_answer(ctx, id).await?,
     };
     let question = request::<Question>(&ctx.paths, Method::AnswerQuestion { id, answer }).await?;
-    ctx.emit(
-        &format!(
-            "Answer sent to workspace {} for question {}.",
-            question.workspace, question.id
-        ),
-        &question,
-    )?;
+    ctx.emit(&answered(&question), &question)?;
     Ok(0)
+}
+
+/// Names the question by its text too: a stale notification may name a
+/// number that a later question reuses.
+fn answered(question: &Question) -> String {
+    format!(
+        "Answered question {} from {} ({}): {}",
+        question.id,
+        question.workspace,
+        question.ask.question,
+        question.answer.as_deref().unwrap_or_default()
+    )
 }
 
 /// Show the open question `id`, or one the user picks, and read the answer.
@@ -158,29 +190,32 @@ async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
 
 /// Choose among the newest open questions.
 async fn pick_open(ctx: &Context) -> Result<i64> {
-    let questions = request::<Listing>(
-        &ctx.paths,
-        Method::ListQuestions {
-            workspace: None,
-            all: false,
-        },
-    )
-    .await?
-    .questions;
+    let questions = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace: None })
+        .await?
+        .questions;
     ensure!(!questions.is_empty(), "no open questions");
     let entries = questions
         .iter()
-        .map(|question| {
-            (
-                question.id.to_string(),
-                format!(
-                    "{}  {}: {}",
-                    question.id, question.workspace, question.ask.question
-                ),
-            )
-        })
+        .map(|question| (question.id.to_string(), summary(question)))
         .collect();
     Ok(ui::pick(ctx, "Question> ", entries)?.parse()?)
+}
+
+/// One line with what the user needs to choose a question: its workspace,
+/// the decision, the recommendation and the choices.
+pub(in crate::cli) fn summary(question: &Question) -> String {
+    let mut line = format!(
+        "{}  {}: {}  Recommended: {}",
+        question.id, question.workspace, question.ask.question, question.ask.recommendation
+    );
+    if !question.ask.choices.is_empty() {
+        let choices: Vec<_> = (1..)
+            .zip(&question.ask.choices)
+            .map(|(number, choice)| format!("{number}. {choice}"))
+            .collect();
+        line.push_str(&format!("  Choices: {}", choices.join(", ")));
+    }
+    line
 }
 
 fn render(question: &Question, palette: Palette) -> String {

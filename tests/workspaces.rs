@@ -11656,7 +11656,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
-    fixture.ok(&["approve", pending["request"]["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["request"]["id"].to_string()]);
     let landed = fixture.run(&[
         "exec",
         "worker",
@@ -13507,7 +13507,8 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         &["acquire", "secret", "TOOL_TOKEN", "--reason", "sign in"],
     ));
     assert_eq!(request["target"], "secret/TOOL_TOKEN");
-    let id = request["id"].as_str().unwrap();
+    let id = request["id"].to_string();
+    let id = id.as_str();
     let (success, stderr, _) = launch();
     assert!(!success);
     assert!(
@@ -15109,17 +15110,21 @@ fn agents_wait_for_the_answer_to_their_question() {
     assert!(output.status.success(), "{output:?}");
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(open["answer"], Value::Null);
+    // The delivered answer freed the first question's number.
+    assert_eq!(open["id"], question["id"]);
     assert_eq!(
-        fixture.ok(&["questions", "--all"])["questions"]
+        fixture.ok(&["questions"])["questions"]
             .as_array()
             .unwrap()
             .len(),
-        2
+        1
     );
 
-    // An upgraded release resumes a wait by the recorded IDs without asking again.
+    // An upgraded release resumes a wait by the recorded number and time
+    // without asking again.
     let workspace = open["workspace_id"].as_str().unwrap();
     let id = open["id"].to_string();
+    let asked_at = open["created_at"].to_string();
     let resumed = fixture
         .command()
         .args([
@@ -15130,7 +15135,14 @@ fn agents_wait_for_the_answer_to_their_question() {
             "None",
             "--wait",
         ])
-        .args(["--workspace", workspace, "--resume", &id])
+        .args([
+            "--workspace",
+            workspace,
+            "--resume",
+            &id,
+            "--asked-at",
+            &asked_at,
+        ])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -15140,11 +15152,8 @@ fn agents_wait_for_the_answer_to_their_question() {
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(answered["answer"], "Redis");
     assert_eq!(
-        fixture.ok(&["questions", "--all"])["questions"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
+        fixture.ok(&["questions"]),
+        serde_json::json!({"questions": [], "omitted": 0})
     );
 }
 
@@ -15382,7 +15391,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         pending["specification"]["repository"]["path"],
         related.to_str().unwrap()
     );
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     // Reusing the configured name for another registration cannot reuse approval.
     fixture.ok(&["repo", "rm", "server", "--yes"]);
     let replacement = init_repo(
@@ -15412,7 +15421,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
             "Read replacement contract",
         ],
     ));
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     let granted = scoped_command(&fixture, "consumer", &["resource", "acquire", "server"]);
     assert!(
         granted.status.success(),
@@ -15440,11 +15449,11 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let (signing, web) = (signing["id"].as_str().unwrap(), web["id"].as_str().unwrap());
-    let (output, rows) = fixture.pick(&["approve"], web, "");
+    let (signing, web) = (signing["id"].to_string(), web["id"].to_string());
+    let (output, rows) = fixture.pick(&["approve"], &web, "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains(&format!("{signing}\t")) && rows.contains(&format!("{web}\t")));
-    let (output, rows) = fixture.pick(&["deny"], signing, "");
+    let (output, rows) = fixture.pick(&["deny"], &signing, "");
     assert!(output.status.success(), "{output:?}");
     assert!(!rows.contains(&format!("{web}\t")), "{rows:?}");
     let statuses: Vec<_> = fixture
@@ -15452,10 +15461,10 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|request| (request["id"].clone(), request["status"].clone()))
+        .map(|request| (request["id"].to_string(), request["status"].clone()))
         .collect();
-    assert!(statuses.contains(&(web.into(), "approved".into())));
-    assert!(statuses.contains(&(signing.into(), "denied".into())));
+    assert!(statuses.contains(&(web, "approved".into())));
+    assert!(statuses.contains(&(signing, "denied".into())));
 }
 
 fn pending_approval(output: Output) -> Value {
@@ -15520,7 +15529,8 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     fixture.add("human");
     let args = ["resource", "acquire", "signing", "--reason", "sign build"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    let id = pending["id"].as_str().unwrap();
+    let id = pending["id"].to_string();
+    let id = id.as_str();
     assert_eq!(pending["workspace"], "agent");
     assert_eq!(
         fixture.ok(&["resource", "agent"])["pools"][0]["resources"][0]["requires_approval"],
@@ -15528,9 +15538,9 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     );
     assert_eq!(
         pending_approval(scoped_command(&fixture, "agent", &args))["id"],
-        id
+        pending["id"]
     );
-    assert_eq!(fixture.ok(&["approvals"])[0]["id"], id);
+    assert_eq!(fixture.ok(&["approvals"])[0]["id"], pending["id"]);
     assert!(
         fixture.ok(&["resource", "agent"])["leases"]
             .as_array()
@@ -15568,9 +15578,11 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
             .status
             .success()
     );
+    // Release deleted the decided request, so the new one reuses its number.
     let next = pending_approval(scoped_command(&fixture, "agent", &args));
-    assert_ne!(next["id"], id);
-    fixture.ok(&["deny", next["id"].as_str().unwrap()]);
+    assert_eq!(next["status"], "pending");
+    assert_eq!(next["id"], pending["id"]);
+    fixture.ok(&["deny", &next["id"].to_string()]);
     let denied: Value =
         serde_json::from_slice(&scoped_command(&fixture, "agent", &args).stdout).unwrap();
     assert_eq!(denied["code"], "approval_denied");
@@ -15597,7 +15609,8 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
     ]);
     let args = ["resource", "acquire", "devices", "--reason", "test device"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    let id = pending["id"].as_str().unwrap();
+    let id = pending["id"].to_string();
+    let id = id.as_str();
     assert_eq!(pending["specification"]["member"], "alpha");
     assert_eq!(pending["specification"]["mode"], "permit");
     assert_eq!(fixture.ok(&["approvals"])[0], pending);
@@ -15644,7 +15657,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         "inspect cache",
     ];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&["resource", "release", "cache", "agent"]);
     fixture.restart();
@@ -15685,7 +15698,8 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
                 .unwrap()
                 .is_empty()
         );
-        let id = pending["id"].as_str().unwrap();
+        let id = pending["id"].to_string();
+        let id = id.as_str();
         fixture.ok(&["approve", id]);
         assert!(
             !scoped_command(
@@ -15754,7 +15768,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             .all(|line| serde_json::from_str::<Value>(line).unwrap()[0] == "list")
     );
     assert!(!fixture.root.path().join("sim-devices.json").exists());
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&["sim", "release", "default", "agent"]);
     fixture.restart();
@@ -15770,7 +15784,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         &["sim", "acquire", "--clean", "--reason", "isolate app state"],
     ));
     assert_ne!(clean["id"], pending["id"]);
-    fixture.ok(&["deny", clean["id"].as_str().unwrap()]);
+    fixture.ok(&["deny", &clean["id"].to_string()]);
     let denied: Value = serde_json::from_slice(
         &scoped_command(
             &fixture,
@@ -15810,7 +15824,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             .unwrap()
             .iter()
             .find(|r| r["status"] == "pending")
-            .map(|request| request["id"].as_str().unwrap().to_owned())
+            .map(|request| request["id"].to_string())
     });
     fixture.ok(&["approve", &id]);
     let output = child.wait_with_output().unwrap();
@@ -15848,12 +15862,12 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
     let args = ["sim", "acquire", "--reason", "test app"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
     assert_eq!(pending["lifetime"], "lease");
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&["sim", "release", "default", "agent"]);
-    assert_ne!(
-        pending_approval(scoped_command(&fixture, "agent", &args))["id"],
-        pending["id"]
+    assert_eq!(
+        pending_approval(scoped_command(&fixture, "agent", &args))["status"],
+        "pending"
     );
     fixture.ok(&["sim", "release", "default", "agent"]);
 }
@@ -15864,7 +15878,7 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     fixture.add("agent");
     let args = ["resource", "acquire", "signing", "--reason", "sign build"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    fixture.ok(&["approve", pending["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &pending["id"].to_string()]);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let mut record = pending.clone();
     record["status"] = "approved".into();
@@ -15873,8 +15887,8 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     });
     let tamper = |record: &Value| {
         db.execute(
-            "UPDATE access_requests SET record=?2 WHERE id=?1",
-            rusqlite::params![pending["id"].as_str().unwrap(), record.to_string()],
+            "UPDATE access_requests SET record=?2 WHERE number=?1",
+            rusqlite::params![pending["id"].as_i64().unwrap(), record.to_string()],
         )
         .unwrap();
     };
@@ -15918,7 +15932,7 @@ fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
     fixture.restart();
     let current = pending_approval(scoped_command(&fixture, "agent", &args));
     assert_ne!(previous["target"], current["target"]);
-    fixture.ok(&["approve", current["id"].as_str().unwrap()]);
+    fixture.ok(&["approve", &current["id"].to_string()]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&["resource", "release", "signing", "agent"]);
     assert!(fixture.ok(&["approvals"]).as_array().unwrap().is_empty());
@@ -16265,7 +16279,7 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
     let events = fixture.root.path().join("done-events");
     // The hook runs once the user decides the keep request.
     assert!(!events.exists());
-    fixture.ok(&["approve", completion["keep_request"].as_str().unwrap()]);
+    fixture.ok(&["approve", &completion["keep_request"].to_string()]);
     let identity = format!(
         "post_done|hooked|{}|{}|{}|{}|",
         workspace["id"].as_str().unwrap(),
@@ -16431,7 +16445,7 @@ fn agent_keep_waits_for_approval_and_denial_requests_cleanup() {
     );
     let output: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(output["cleanup"], false);
-    let id = output["keep_request"].as_str().unwrap().to_owned();
+    let id = output["keep_request"].to_string();
     assert!(!events.exists());
     let path = Path::new(workspace["path"].as_str().unwrap());
     fixture.restart();
@@ -16456,7 +16470,7 @@ fn agent_keep_waits_for_approval_and_denial_requests_cleanup() {
 
     let output = scoped_command(&fixture, "denied", &["done", "--keep", "--reason", "demo"]);
     let output: Value = serde_json::from_slice(&output.stdout).unwrap();
-    fixture.ok(&["deny", output["keep_request"].as_str().unwrap()]);
+    fixture.ok(&["deny", &output["keep_request"].to_string()]);
     wait_removed(&fixture, "denied");
     assert!(
         fs::read_to_string(&events)

@@ -1,6 +1,7 @@
 //! Questions a workspace's agents ask the user. A question names the decision
 //! and the agent's recommendation; only the user answers, and the answer
-//! reaches the agents as a message. Removing the workspace deletes them.
+//! reaches the agents as a message. Delivering the answer, or removing the
+//! workspace, deletes the question, which frees its number for the next one.
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,7 @@ pub struct Ask {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Question {
+    /// The number the user answers it by; reused once the question is deleted.
     pub id: i64,
     pub workspace_id: String,
     /// The workspace's current name.
@@ -43,7 +45,7 @@ pub struct Question {
     /// `None` while the question is open.
     pub answer: Option<String>,
     pub answered_at: Option<i64>,
-    /// The agent message carrying the answer, until it is delivered.
+    /// The agent message carrying the answer; delivering it deletes the question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<i64>,
 }
@@ -145,7 +147,8 @@ fn shorten(mut text: String, max: usize) -> String {
     text
 }
 
-const SELECT: &str = "SELECT q.id,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
+const SELECT: &str =
+    "SELECT q.number,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
     q.reason,q.choices,q.answer,q.answered_at,
     (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
     FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
@@ -184,7 +187,7 @@ fn query(db: &Connection, filter: &str, params: impl rusqlite::Params) -> Result
 }
 
 fn by_id(db: &Connection, id: i64) -> Result<Option<Question>> {
-    Ok(query(db, "WHERE q.id=?1", [id])?.pop())
+    Ok(query(db, "WHERE q.number=?1", [id])?.pop())
 }
 
 /// An identical question the agents have not received the answer to, so
@@ -210,11 +213,14 @@ fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Optio
     Ok(Some(question))
 }
 
+/// Record `ask` under the smallest free number and return that number.
 fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
+    let number = crate::daemon::store::free_number(tx, "questions", None)?;
     tx.execute(
-        "INSERT INTO questions(workspace_id,created_at,question,recommendation,reason,choices)
-            VALUES (?1,?2,?3,?4,?5,?6)",
+        "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,reason,choices)
+            VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
+            number,
             workspace_id,
             i64::try_from(crate::time::unix_seconds())?,
             ask.question,
@@ -223,7 +229,7 @@ fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
             serde_json::to_string(&ask.choices)?
         ],
     )?;
-    Ok(tx.last_insert_rowid())
+    Ok(number)
 }
 
 fn open_question(tx: &Transaction<'_>, id: i64) -> Result<Question> {
@@ -243,7 +249,7 @@ fn store_answer(
 ) -> Result<()> {
     let answered_at = i64::try_from(crate::time::unix_seconds())?;
     tx.execute(
-        "UPDATE questions SET answer=?2,answered_at=?3,message_id=?4 WHERE id=?1",
+        "UPDATE questions SET answer=?2,answered_at=?3,message_id=?4 WHERE number=?1",
         params![question.id, answer, answered_at, message_id],
     )?;
     question.answer = Some(answer);
@@ -260,6 +266,20 @@ fn record_answer(tx: &Transaction<'_>, id: i64, answer: &str) -> Result<Question
     let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
     store_answer(tx, &mut question, answer, message_id)?;
     Ok(question)
+}
+
+/// Delete the question whose answer `message_id` carried, once the message
+/// is delivered.
+pub(crate) fn delete_delivered(
+    tx: &Transaction<'_>,
+    workspace_id: &str,
+    message_id: i64,
+) -> Result<()> {
+    tx.execute(
+        "DELETE FROM questions WHERE workspace_id=?1 AND message_id=?2",
+        params![workspace_id, message_id],
+    )?;
+    Ok(())
 }
 
 /// The newest of `questions` that fit one protocol response, oldest first.
@@ -313,17 +333,16 @@ impl Manager {
         Ok(question)
     }
 
-    /// The newest questions that fit one response, oldest first;
-    /// `open_only` leaves out answered ones.
-    pub async fn questions(&self, selector: Option<&str>, open_only: bool) -> Result<Listing> {
+    /// The newest open questions that fit one response, oldest first.
+    pub async fn questions(&self, selector: Option<&str>) -> Result<Listing> {
         let owner = self.workspace_filter(selector).await?;
         let questions = self
             .store
             .run(move |db| {
                 query(
                     db,
-                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND (NOT ?2 OR q.answer IS NULL)",
-                    params![owner, open_only],
+                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND q.answer IS NULL",
+                    [owner],
                 )
             })
             .await?;
@@ -366,8 +385,9 @@ impl Manager {
         Ok(question)
     }
 
-    /// Return the workspace's question `id` once it is answered.
-    pub async fn await_answer(&self, selector: &str, id: i64) -> Result<Question> {
+    /// Return the workspace's question `id`, asked at `asked_at`, once it is
+    /// answered. The time tells it from a later question reusing the number.
+    pub async fn await_answer(&self, selector: &str, id: i64, asked_at: i64) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.questions_changed.subscribe();
@@ -376,8 +396,15 @@ impl Manager {
                 .store
                 .run(move |db| by_id(db, id))
                 .await?
-                .filter(|question| question.workspace_id == workspace.id)
-                .with_context(|| format!("workspace {} has no question {id}", workspace.name))?;
+                .filter(|question| {
+                    question.workspace_id == workspace.id && question.created_at == asked_at
+                })
+                .with_context(|| {
+                    format!(
+                        "workspace {} has no question {id} awaiting delivery; a delivered answer removes its question",
+                        workspace.name
+                    )
+                })?;
             if !question.is_open() {
                 return Ok(question);
             }

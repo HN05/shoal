@@ -141,7 +141,7 @@ impl Manager {
     /// Delete a stale land request and tell the requesting agent; failing to
     /// queue the message only logs.
     async fn drop_stale_land_request(&self, request: &ApprovalRequest) -> Result<()> {
-        self.discard_approval(request.id.clone()).await?;
+        self.discard_approval(request.key.clone()).await?;
         let message = format!(
             "Approval {} for {} is stale: the branch moved; run shoal land again to request landing it.",
             request.id,

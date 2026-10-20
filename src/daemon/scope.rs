@@ -123,7 +123,7 @@ pub async fn authorize(
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
         Method::ListApprovals { workspace }
-        | Method::ListQuestions { workspace, .. }
+        | Method::ListQuestions { workspace }
         | Method::SimOverview { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {

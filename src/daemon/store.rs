@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 45;
+const SCHEMA_VERSION: i64 = 46;
 
 #[cfg(test)]
 mod benchmark;
@@ -373,6 +373,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     // Unix time of the last recorded activity, so idle periods survive restarts.
     (44, "ALTER TABLE workspaces ADD COLUMN active_at INTEGER;", None),
     (45, REMOVED_WORKSPACES, None),
+    (46, include_str!("store/display_numbers.sql"), None),
 ];
 
 /// Restore records outlive their workspace, not their repository.
@@ -412,6 +413,20 @@ fn validate_simulator_records(db: &Connection) -> Result<()> {
     crate::sim::records::list(db, None)
         .context("validate simulator records before indexing ownership")?;
     Ok(())
+}
+
+/// The smallest positive number no row of `table` holds in its `number`
+/// column, so the numbers users type stay short.
+/// `avoid` is never taken, such as the number of a request being replaced.
+pub fn free_number(db: &Connection, table: &str, avoid: Option<i64>) -> Result<i64> {
+    Ok(db.query_row(
+        &format!(
+            "SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT ?1+1 UNION ALL SELECT number+1 FROM {table})
+                WHERE n IS NOT ?1 AND n NOT IN (SELECT number FROM {table})"
+        ),
+        [avoid],
+        |row| row.get(0),
+    )?)
 }
 
 /// Whether the supplied SELECT query returns any rows.
@@ -843,6 +858,9 @@ mod tests {
         if version >= 45 {
             db.execute_batch(REMOVED_WORKSPACES)?;
         }
+        if version >= 46 {
+            db.execute_batch(include_str!("store/display_numbers.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -963,6 +981,55 @@ mod tests {
                 ("agent_message".into(), "run shoal access approve 7".into()),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn migration_numbers_questions_and_approvals_and_drops_delivered_questions() -> Result<()> {
+        let mut db = historical_database(45)?;
+        db.execute_batch(
+            r#"INSERT INTO agent_messages(id,workspace_id,created_at,message)
+                VALUES (9,'workspace',1,'Answer to question 12 (Which cache?): Redis');
+            INSERT INTO questions(id,workspace_id,created_at,question,recommendation,choices,answer,answered_at,message_id) VALUES
+                (11,'workspace',1,'Which database?','SQLite','[]','SQLite',2,NULL),
+                (12,'workspace',1,'Which cache?','Redis','[]','Redis',2,9),
+                (13,'workspace',1,'Which queue?','SQS','[]',NULL,NULL,NULL);
+            INSERT INTO access_requests(id,workspace_id,target_key,name,record,active) VALUES
+                ('grant','workspace','port/web','web','{"id":"grant"}',0),
+                ('keep','workspace','keep','keep','{"id":"keep"}',1);
+            INSERT INTO workspace_completion(workspace_id,record)
+                VALUES ('workspace','{"head":"abc","cleanup":false,"error":null,"keep_request":"keep"}');"#,
+        )?;
+        migrate(&mut db)?;
+        let questions = db
+            .prepare("SELECT id,number FROM questions ORDER BY id")?
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(questions, [(12, 1), (13, 2)]);
+        let requests = db
+            .prepare(
+                "SELECT id,number,json_extract(record,'$.id') FROM access_requests ORDER BY rowid",
+            )?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(requests, [("grant".into(), 1, 1), ("keep".into(), 2, 2)]);
+        let keep: i64 = db.query_row(
+            "SELECT json_extract(record,'$.keep_request') FROM workspace_completion",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(keep, 2);
+        assert_eq!(free_number(&db, "questions", None)?, 3);
+        assert_eq!(free_number(&db, "access_requests", Some(3))?, 4);
+        db.execute("DELETE FROM questions WHERE number=1", [])?;
+        assert_eq!(free_number(&db, "questions", None)?, 1);
+        assert_eq!(free_number(&db, "questions", Some(1))?, 3);
         Ok(())
     }
 
@@ -1228,7 +1295,7 @@ mod tests {
         assert_eq!(migrated.run(operation_snapshot).await.unwrap(), before);
         migrated.run(|db| {
             assert_eq!(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?, SCHEMA_VERSION);
-            db.execute("INSERT INTO access_requests VALUES ('request','preparing','pool','default','{}',1)", [])?;
+            db.execute("INSERT INTO access_requests VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
             db.execute_batch("DROP TRIGGER fail_quarantine;")?;
             Ok(())
         }).await.unwrap();
@@ -1255,9 +1322,10 @@ mod tests {
         }).await.unwrap();
         let migrated = Store::open(path.clone()).await.unwrap();
         migrated.run(|db| {
-            db.execute("INSERT INTO access_requests VALUES ('request','workspace','pool','default','{}',1)", [])?;
-            assert!(db.execute("INSERT INTO access_requests VALUES ('duplicate','workspace','pool','default','{}',1)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests VALUES ('orphan','missing','pool','default','{}',1)", []).is_err());
+            db.execute("INSERT INTO access_requests VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
+            assert!(db.execute("INSERT INTO access_requests VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
             Ok(())
         }).await.unwrap();
         Store::open(path)

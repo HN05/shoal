@@ -9,8 +9,8 @@ use crate::{
     protocol::Method,
 };
 
-/// Approve or deny a request, choosing among pending ones when no ID is given.
-pub(super) async fn decide(ctx: &Context, id: Option<String>, approve: bool) -> Result<i32> {
+/// Approve or deny a request, choosing among pending ones when no number is given.
+pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot decide approval requests; ask the user to run this command"
@@ -40,17 +40,23 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     Ok(0)
 }
 
-async fn pick_pending(ctx: &Context) -> Result<String> {
+async fn pick_pending(ctx: &Context) -> Result<i64> {
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
             .await?;
     let pending: Vec<_> = requests
         .iter()
         .filter(|request| request.status == DecisionStatus::Pending)
-        .map(|request| (request.id.clone(), describe(request)))
+        .map(|request| (request.id.to_string(), summary(request)))
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
-    ui::pick(ctx, "Approval request> ", pending)
+    Ok(ui::pick(ctx, "Approval request> ", pending)?.parse()?)
+}
+
+/// One line with what the user needs to decide a request: the description
+/// and the exact settings an approval grants.
+pub(in crate::cli) fn summary(request: &ApprovalRequest) -> String {
+    format!("{}  {}", describe(request), request.specification)
 }
 
 fn describe(request: &ApprovalRequest) -> String {

@@ -113,13 +113,9 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         .unwrap_err();
     assert!(error.to_string().contains("already answered"));
 
-    let open = manager.questions(None, true).await.unwrap();
+    let open = manager.questions(Some(&workspace.name)).await.unwrap();
     assert!(open.questions.is_empty());
-    let all = manager
-        .questions(Some(&workspace.name), false)
-        .await
-        .unwrap();
-    assert_eq!(all.questions, [answered]);
+    assert_eq!(manager.question(question.id).await.unwrap(), answered);
 }
 
 #[tokio::test]
@@ -161,14 +157,53 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .mark_agent_messages_delivered(&workspace.name, vec![message])
         .await
         .unwrap();
-    let delivered = manager.questions(None, false).await.unwrap();
-    assert_eq!(delivered.questions[0].message_id, None);
+    // Delivery deletes the question and frees its number.
+    assert!(manager.question(question.id).await.is_err());
     let new = manager
         .ask_question(&workspace.name, ask("Which database?", &[]))
         .await
         .unwrap();
-    assert_ne!(new.id, question.id);
+    assert_eq!(new.id, question.id);
     assert!(new.is_open());
+}
+
+#[tokio::test]
+async fn questions_take_the_smallest_free_number_across_workspaces() {
+    let (_root, manager, workspace) = fixture().await;
+    let other = manager
+        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut numbers = Vec::new();
+    for (asker, text) in [
+        (&workspace, "Which database?"),
+        (&other, "Which cache?"),
+        (&workspace, "Which queue?"),
+    ] {
+        let question = manager
+            .ask_question(&asker.name, ask(text, &[]))
+            .await
+            .unwrap();
+        numbers.push(question.id);
+    }
+    assert_eq!(numbers, [1, 2, 3]);
+
+    // An answer keeps its number until the agent receives it.
+    let answered = manager.answer_question(2, "Redis".into()).await.unwrap();
+    let next = manager
+        .ask_question(&workspace.name, ask("Which logger?", &[]))
+        .await
+        .unwrap();
+    assert_eq!(next.id, 4);
+    manager
+        .mark_agent_messages_delivered(&other.name, vec![answered.message_id.unwrap()])
+        .await
+        .unwrap();
+    let reused = manager
+        .ask_question(&workspace.name, ask("Which scheduler?", &[]))
+        .await
+        .unwrap();
+    assert_eq!(reused.id, 2);
 }
 
 #[tokio::test]
@@ -181,7 +216,11 @@ async fn a_wait_returns_the_answer() {
     let waiter = tokio::spawn({
         let manager = manager.clone();
         let name = workspace.name.clone();
-        async move { manager.await_answer(&name, question.id).await }
+        async move {
+            manager
+                .await_answer(&name, question.id, question.created_at)
+                .await
+        }
     });
     manager
         .answer_question(question.id, "Postgres".into())
@@ -195,7 +234,13 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let error = manager
-        .await_answer(&other.name, question.id)
+        .await_answer(&other.name, question.id, question.created_at)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("has no question"));
+    // A later question reusing the number is not the one the wait follows.
+    let error = manager
+        .await_answer(&workspace.name, question.id, question.created_at - 1)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
@@ -233,14 +278,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         )
         .await
         .unwrap();
-    assert!(
-        manager
-            .questions(None, false)
-            .await
-            .unwrap()
-            .questions
-            .is_empty()
-    );
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }
 
 #[tokio::test]
@@ -268,10 +306,10 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Method::AwaitAnswer {
                 workspace: target.clone(),
                 id: 1,
+                asked_at: 0,
             },
             Method::ListQuestions {
                 workspace: Some(target.clone()),
-                all: false,
             },
         ] {
             assert_eq!(
@@ -282,16 +320,13 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             );
         }
     }
-    let mut listing = Method::ListQuestions {
-        workspace: None,
-        all: true,
-    };
+    let mut listing = Method::ListQuestions { workspace: None };
     scope::authorize(&manager, Some("scope"), &mut listing)
         .await
         .unwrap();
     assert!(matches!(
         listing,
-        Method::ListQuestions { workspace: Some(owner), .. } if owner == workspace.id
+        Method::ListQuestions { workspace: Some(owner) } if owner == workspace.id
     ));
     for mut method in [
         Method::AnswerQuestion {
@@ -342,11 +377,22 @@ async fn listings_and_unread_answers_fit_one_response() {
     let body = crate::protocol::Body::AgentMessages(messages);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 
-    let listing = manager.questions(None, false).await.unwrap();
-    assert!(listing.omitted > 0);
-    assert_eq!(listing.omitted + listing.questions.len(), unread + 1);
-    let newest = listing.questions.last().unwrap();
-    assert!(newest.is_open());
+    // The question whose answer did not fit stays open; more open questions
+    // than one response holds leave the oldest out.
+    let mut open = 1;
+    let listing = loop {
+        manager
+            .ask_question(&workspace.name, maximal(unread + open))
+            .await
+            .unwrap();
+        open += 1;
+        let listing = manager.questions(None).await.unwrap();
+        if listing.omitted > 0 {
+            break listing;
+        }
+    };
+    assert_eq!(listing.omitted + listing.questions.len(), open);
+    assert!(listing.questions.iter().all(Question::is_open));
     let body = crate::protocol::Body::Questions(listing);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 }
@@ -399,12 +445,5 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("not ready"), "{error:#}");
-    assert!(
-        manager
-            .questions(None, false)
-            .await
-            .unwrap()
-            .questions
-            .is_empty()
-    );
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }

@@ -242,7 +242,7 @@ mod tests {
             pending(acquire(&manager, scoped, "GATED", None).await?).id,
             request.id
         );
-        manager.decide_approval(request.id.clone(), true).await?;
+        manager.decide_approval(request.id, true).await?;
         assert_eq!(
             granted(acquire(&manager, scoped, "GATED", None).await?),
             Some(true)
@@ -276,7 +276,7 @@ mod tests {
         );
 
         let denied = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
-        manager.decide_approval(denied.id.clone(), false).await?;
+        manager.decide_approval(denied.id, false).await?;
         let retry = pending(acquire(&manager, scoped, "GATED", None).await?);
         assert_eq!(
             (retry.id, retry.status),

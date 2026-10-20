@@ -59,7 +59,7 @@ fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output,
 fn approval(kind: &str, status: &str) -> Value {
     let mut reply = json!({
         "type": "approval_request", "data": {
-            "id": "approval-id", "workspace_id": "workspace-id", "workspace": "worker",
+            "id": 1, "workspace_id": "workspace-id", "workspace": "worker",
             "target": "simulator", "name": "default", "reason": "test allocation",
             "specification": {"clean": true, "profile": {"device": "Phone", "runtime": "iOS Test",
                 "requires_approval": true, "approval_lifetime": "lease"}},
@@ -111,7 +111,7 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
                 format!(
-                    "approval-id [{status}] {target} / default (lease) in workspace worker: test allocation\n"
+                    "1 [{status}] {target} / default (lease) in workspace worker: test allocation\n"
                 )
             );
         }

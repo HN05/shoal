@@ -142,7 +142,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
                 let pending = approvals::request_keep(&tx, &id, keep)?;
-                completion.keep_request = pending.as_ref().map(|request| request.id.clone());
+                completion.keep_request = pending.as_ref().map(|request| request.id);
                 tx.execute(
                     "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
@@ -196,7 +196,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let decision = approvals::decide(&tx, &request.id, approve)?;
+                let decision = approvals::decide(&tx, &request.key, approve)?;
                 let completion = settle_keep(&tx, &decision.request)?;
                 tx.commit()?;
                 Ok((decision, completion))
@@ -366,7 +366,7 @@ fn settle_keep(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<Option
     let Some(mut completion) = record
         .map(|record| serde_json::from_str::<Completion>(&record))
         .transpose()?
-        .filter(|completion| completion.keep_request.as_ref() == Some(&request.id))
+        .filter(|completion| completion.keep_request == Some(request.id))
     else {
         return Ok(None);
     };
