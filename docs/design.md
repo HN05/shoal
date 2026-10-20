@@ -491,9 +491,10 @@ the stopped agent's processes are proven stopped. A waiting restore keeps the
 agent's slot, so fixed limits let it take that slot back rather than counting it
 twice, which would deadlock a full machine of stopped agents, while dynamic
 admission measures its load like a new start. Restores also need the recovery
-interval's healthy readings, one per interval, and hold back work queued behind
-them, since starting new agents on a machine that just stopped one would undo
-the protection. Admission binds the recovery epoch, so a stop or reload before
+interval's healthy readings, one per interval, and until then hold back work
+queued behind them, since starting new agents on a machine that just stopped one
+would undo the protection; a restore held only by its repository's limit or by
+surviving processes is passed over like a full repository's launch. Admission binds the recovery epoch, so a stop or reload before
 the agent restarts returns the restore to its place. The slot passes to the
 agent when its restored process registers. The entry is keyed by execution, so a reattached wrapper keeps its
 place and a restart cannot restore it twice; an entry without its wrapper for the
