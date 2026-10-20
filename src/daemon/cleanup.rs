@@ -562,13 +562,14 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
         dry_run,
         ..ManualCleanup::default()
     };
+    let mut fetches = merged::Fetches::default();
     for workspace in manager.list_workspaces().await? {
         if workspace.state != WorkspaceState::Ready {
             let state = workspace.state;
             report.keep(workspace.name, CleanupReason::NotReady { state });
             continue;
         }
-        let snapshot = match requested_candidacy(manager, &workspace.id).await {
+        let snapshot = match requested_candidacy(manager, &workspace, &mut fetches).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
                 report.keep(workspace.name, reason);
@@ -608,16 +609,20 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
 }
 
 /// The snapshot of an idle or merged cleanup candidate, or why idle cleanup
-/// keeps the workspace.
+/// keeps the workspace. Merged candidates need a freshly fetched default branch.
 async fn requested_candidacy(
     manager: &Manager,
-    id: &str,
+    workspace: &Workspace,
+    fetches: &mut merged::Fetches,
 ) -> Result<Result<Snapshot, CleanupReason>> {
-    let reason = match manager.cleanup_candidacy(id).await? {
+    let reason = match manager.cleanup_candidacy(&workspace.id).await? {
         Ok(snapshot) => return Ok(Ok(snapshot)),
         Err(reason) => reason,
     };
-    Ok(manager.merged_snapshot(id).await?.ok_or(reason))
+    if !fetches.fresh(manager, &workspace.repository_id).await {
+        return Ok(Err(reason));
+    }
+    Ok(manager.merged_snapshot(&workspace.id).await?.ok_or(reason))
 }
 
 /// A deleted worktree is forgotten unless it was moved or still has commands

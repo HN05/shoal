@@ -27,27 +27,38 @@ const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    /// When each repository's default branch was last fetched.
-    fetched: HashMap<String, Instant>,
+    fetches: Fetches,
     /// Workspaces whose removal failed, retried only once they change.
     retained: HashMap<String, Snapshot>,
 }
 
-impl State {
-    /// Fetch the default branch unless it was fetched recently; a failed
-    /// fetch leaves the locally known branches to decide.
-    async fn fetch(&mut self, manager: &Manager, repository_id: &str) {
+/// When each repository's default branch was last fetched successfully.
+#[derive(Default)]
+pub(super) struct Fetches(HashMap<String, Instant>);
+
+impl Fetches {
+    /// Whether the default branch is freshly fetched, fetching it unless that
+    /// succeeded recently. Stale refs may show changes the default branch no
+    /// longer has, so after a failed fetch no workspace of the repository is
+    /// a merged candidate.
+    pub(super) async fn fresh(&mut self, manager: &Manager, repository_id: &str) -> bool {
         let now = Instant::now();
         if self
-            .fetched
+            .0
             .get(repository_id)
             .is_some_and(|at| now.duration_since(*at) < FETCH_INTERVAL)
         {
-            return;
+            return true;
         }
-        self.fetched.insert(repository_id.to_owned(), now);
-        if let Err(error) = manager.fetch_default_branch(repository_id).await {
-            log!("merged cleanup could not fetch the default branch: {error:#}");
+        match manager.fetch_default_branch(repository_id).await {
+            Ok(()) => {
+                self.0.insert(repository_id.to_owned(), now);
+                true
+            }
+            Err(error) => {
+                log!("merged cleanup could not fetch the default branch: {error:#}");
+                false
+            }
         }
     }
 }
@@ -137,7 +148,9 @@ async fn idle_candidate(
         if manager.active_at(&workspace.id).await? > deadline {
             return Ok(None);
         }
-        state.fetch(manager, &workspace.repository_id).await;
+        if !state.fetches.fresh(manager, &workspace.repository_id).await {
+            return Ok(None);
+        }
         let Some(snapshot) = manager.merged_snapshot(&workspace.id).await? else {
             return Ok(None);
         };

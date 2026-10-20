@@ -231,3 +231,25 @@ fn last_change_covers_nested_files_and_worktree_git_state() {
     fs::write(git_dir.join("HEAD"), "").unwrap();
     assert!(last_change(&tree, Some(&git_dir)).unwrap() >= newest(&git_dir.join("HEAD")));
 }
+
+#[tokio::test]
+async fn a_failed_fetch_keeps_merged_workspaces() {
+    let f = Fixture::new().await;
+    f.squash_merge();
+    let missing = f.checkout.with_file_name("missing-origin");
+    git(
+        &f.checkout,
+        &["remote", "add", "origin", missing.to_str().unwrap()],
+    );
+    git(
+        &f.checkout,
+        &["update-ref", "refs/remotes/origin/main", "main"],
+    );
+    git(
+        &f.checkout,
+        &["branch", "--set-upstream-to=origin/main", "main"],
+    );
+    assert!(f.kept_after(5).await, "stale refs decide nothing");
+    git(&f.checkout, &["remote", "remove", "origin"]);
+    assert!(!f.kept_after(5).await);
+}

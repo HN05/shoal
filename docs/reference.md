@@ -1742,7 +1742,7 @@ A workspace whose branch merged into the default branch is removed once nothing
 has used it for `idle_minutes`, whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
 gives it, against the default branch's remote-tracking branch, fetched at most
-every ten minutes. Uncommitted and untracked files go into the
+every ten minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
 [restore point](#restore-a-workspace); they keep the workspace when the restore point cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, commands, agents saved for `shoal resume`, directory

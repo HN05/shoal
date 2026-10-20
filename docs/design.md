@@ -1000,8 +1000,8 @@ restore point keeps (the branch has commits of its own), no Git operation under
 way, nothing running or saved for resume, no leases, permits, directory users,
 stacked workspaces, holds or keep choice, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
-it fetches the default branch's remote at most every ten minutes and never moves
-local branches. A link, a watch or a recorded `done` does not keep the
+it decides only after fetching the default branch's remote, at most every ten
+minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
 workspace. `shoal cleanup` removes the candidates of both rules on request without
 their idle periods, including where they are disabled; it is unavailable to
 scoped callers. `repo rm`
