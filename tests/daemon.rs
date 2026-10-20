@@ -315,6 +315,46 @@ fn refuses_to_replace_a_regular_file_at_socket_path() {
     assert_eq!(fs::read_to_string(socket).unwrap(), "keep me");
 }
 
+/// Startup recovery that cannot save its result stops the daemon before it binds.
+#[test]
+fn failed_startup_recovery_never_serves() {
+    // A preparing workspace fails quarantine; a ready one with a missing
+    // worktree fails the ownership audit.
+    for state in ["preparing", "ready"] {
+        let daemon = Daemon::start();
+        let stopped = daemon.run(&["daemon", "stop"]);
+        assert!(stopped.status.success(), "{stopped:?}");
+        let Daemon { mut guard, root } = daemon;
+        assert!(guard.child.wait().unwrap().success());
+        rusqlite::Connection::open(root.path().join("state/state.db"))
+            .unwrap()
+            .execute_batch(&format!(
+                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+                INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                    VALUES ('workspace','repo','worker','/missing/worker','worker','{state}');
+                CREATE TRIGGER block_recovery BEFORE UPDATE OF state ON workspaces
+                    BEGIN SELECT RAISE(ABORT, 'recovery blocked'); END;"
+            ))
+            .unwrap();
+        let stderr = tempfile::NamedTempFile::new().unwrap();
+        guard.child = command(root.path())
+            .args(["daemon", "run"])
+            .stdout(Stdio::null())
+            .stderr(stderr.reopen().unwrap())
+            .spawn()
+            .unwrap();
+        let socket = root.path().join("state/daemon.sock");
+        let status = wait_for("daemon exit", || {
+            assert!(!socket.exists(), "{state}: daemon bound its socket");
+            guard.child.try_wait().unwrap()
+        });
+        assert!(!status.success(), "{state}");
+        let output = fs::read_to_string(stderr.path()).unwrap();
+        assert!(output.contains("recovery blocked"), "{state}: {output}");
+        assert!(!socket.exists(), "{state}");
+    }
+}
+
 #[test]
 fn install_preview_does_not_install_a_service() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
