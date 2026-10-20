@@ -1,5 +1,5 @@
 //! Opening removed workspaces again from their restore records.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -18,6 +18,10 @@ use crate::{
 
 /// `shoal restore`: the named workspace, or the list of restorable ones.
 pub(super) async fn run(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot restore workspaces; ask the user to run shoal restore"
+    );
     let Some(workspace) = workspace else {
         let removed =
             request::<Vec<RemovedWorkspace>>(&ctx.paths, Method::RemovedWorkspaces).await?;
