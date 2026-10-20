@@ -1461,9 +1461,12 @@ as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 
 ### Linked items and cleanup
 
-`shoal link <issue-or-pr-url>` associates an item with the workspace;
+`shoal link <number-or-url>` associates an issue or PR with the workspace;
 `shoal link issue <number-or-url>` and `shoal link pr <number-or-url>` select the
-kind explicitly. Use `--workspace` to select a workspace instead of the current
+kind explicitly. Commands that select items this way give a number without a
+kind the kind of the linked item with that number, otherwise the kind the forge
+reports; GitLab and Bitbucket number issues and PRs separately, so there such a
+number must be linked. Use `--workspace` to select a workspace instead of the current
 context. Numbers resolve against its origin and URLs must match it. An issue
 association is idempotent and must be unlinked before linking a different issue.
 Linking an issue records its title for workspace lists; when the forge cannot be
@@ -1488,7 +1491,7 @@ of items with failed logs in `check_logs`, or a check log object with `--check`.
 
 `shoal watch` polls all linked items every ~30 seconds, and the daemon queues
 what its own polling of a ready workspace's linked items observes for the next
-watch, which returns at once; `watch pr` or `watch issue` filters by kind. `watch <url>`, `watch pr <number-or-url>` and
+watch, which returns at once; `watch pr` or `watch issue` filters by kind. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,

@@ -221,6 +221,30 @@ impl ForgeRepo {
         self.current(kind, number, &value)
     }
 
+    /// Whether `number` names an issue or a PR. Only forges that number both
+    /// in one sequence can tell; elsewhere the caller names the kind.
+    pub(crate) async fn item_kind(&self, account: &Account, number: u64) -> Result<ItemKind> {
+        ensure!(
+            matches!(self.kind, ForgeKind::GitHub | ForgeKind::Forgejo),
+            "this forge numbers issues and PRs separately; put issue or pr before #{number}"
+        );
+        let value = self
+            .send(
+                account,
+                &Request::get(self.item_endpoint(ItemKind::Issue, number)),
+            )
+            .await?;
+        ensure!(
+            value["number"] == number,
+            "the forge returned a different item than #{number}"
+        );
+        Ok(if value["pull_request"].is_null() {
+            ItemKind::Issue
+        } else {
+            ItemKind::Pr
+        })
+    }
+
     /// The requests that carry out `action` on `current`, in order.
     pub(crate) fn plan(&self, current: &Current, action: &Action) -> Result<Vec<Request>> {
         let item = &current.item;

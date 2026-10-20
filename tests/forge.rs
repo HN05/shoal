@@ -533,6 +533,32 @@ fn watches_do_not_report_the_agents_own_comments_back() {
 }
 
 #[test]
+fn bare_numbers_select_the_issue_or_pr_they_name() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let issue = json!({"number": 8, "title": "Issue", "state": "open", "body": "",
+        "labels": [], "pull_request": null});
+    let pr_issue = json!({"number": 9, "title": "Fix", "state": "open", "body": "",
+        "labels": [], "pull_request": {"merged": false}});
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"body": issue},
+        "GET repos/team/project/issues/9": {"body": pr_issue},
+        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
+    }));
+    fixture.ok(&["link", "8", "--workspace", "topic"]);
+    fixture.ok(&["link", "#9", "--workspace", "topic"]);
+    let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
+    assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
+    assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
+
+    let marks = fixture.ok(&["ready", "#9", "--workspace", "topic"]);
+    assert_eq!(marks[0]["kind"], "pr", "{marks}");
+    fixture.ok(&["unlink", "8", "--workspace", "topic"]);
+    let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
+    assert!(links["issue"].is_null(), "{links}");
+    assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
+}
+
+#[test]
 fn pr_and_issue_commands_act_on_linked_or_named_items() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

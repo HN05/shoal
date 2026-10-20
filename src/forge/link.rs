@@ -11,6 +11,7 @@ crate::state::states!(ItemKind {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Selection {
+    /// Missing for every kind, or for a number the CLI has yet to classify.
     pub kind: Option<ItemKind>,
     pub input: Option<String>,
 }
@@ -26,21 +27,20 @@ impl Selection {
                 kind: Some(ItemKind::Issue),
                 input: second,
             },
-            Some(_) => {
+            Some(input) => {
                 ensure!(
                     second.is_none(),
-                    "use a URL, or pr/issue followed by a number or URL"
+                    "use a number or URL, or pr/issue followed by one"
                 );
-                let link = Link::parse(first.as_deref().unwrap())?;
-                let kind = match link.target {
-                    LinkTarget::Issue => ItemKind::Issue,
-                    LinkTarget::Pr => ItemKind::Pr,
-                    LinkTarget::Branch(_) => anyhow::bail!("expected an issue or PR link"),
+                let kind = match IssueInput::parse(input) {
+                    IssueInput::Number => None,
+                    _ => Some(match Link::parse(input)?.target {
+                        LinkTarget::Issue => ItemKind::Issue,
+                        LinkTarget::Pr => ItemKind::Pr,
+                        LinkTarget::Branch(_) => anyhow::bail!("expected an issue or PR link"),
+                    }),
                 };
-                Self {
-                    kind: Some(kind),
-                    input: first,
-                }
+                Self { kind, input: first }
             }
             None => {
                 ensure!(second.is_none(), "an item needs a kind or URL");
@@ -212,8 +212,12 @@ mod tests {
     }
 
     #[test]
-    fn selections_require_kinds_for_numbers_and_match_urls() {
-        assert!(Selection::parse(Some("505".into()), None).is_err());
+    fn selections_leave_bare_number_kinds_open_and_match_urls() {
+        let selection = Selection::parse(Some("505".into()), None).unwrap();
+        assert_eq!(selection.kind, None);
+        assert_eq!(selection.input.as_deref(), Some("505"));
+        assert!(Selection::parse(Some("505".into()), Some("506".into())).is_err());
+        assert!(Selection::parse(Some("0".into()), None).is_err());
         let selection = Selection::parse(Some("pr".into()), Some("505".into())).unwrap();
         assert_eq!(selection.kind, Some(ItemKind::Pr));
         assert_eq!(selection.input.as_deref(), Some("505"));

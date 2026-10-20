@@ -163,8 +163,8 @@ shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue; --link links it
-shoal link pr 42              # Link a PR (or paste its URL)
-shoal link pr 43              # Link another; all must merge before cleanup after done
+shoal link 42                 # Link an issue or PR by number (or paste its URL)
+shoal link pr 43              # Link another PR; all must merge before cleanup after done
 shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal view                    # Linked items with state, failed CI logs, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion

@@ -9,21 +9,79 @@ use crate::{
     cli::{ItemArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        link::{ItemKind, Link, LinkTarget, Selection},
+        link::{self, ItemKind, Link, LinkTarget, Selection},
+        view::Selected,
     },
     git,
     model::{Repository, ReviewMark},
     protocol::Method,
 };
 
+/// The workspace and the items selected in it, with the kind of a bare number
+/// resolved.
+pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Selection)> {
+    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    let workspace =
+        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let selection = resolve_kind(ctx, &workspace, selection).await?;
+    Ok((workspace, selection))
+}
+
+/// Give a number selected without a kind the kind of the linked item with
+/// that number, otherwise the kind the forge reports for it.
+async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> Result<Selection> {
+    let (None, Some(input)) = (selection.kind, &selection.input) else {
+        return Ok(selection);
+    };
+    let number = input.parse::<u64>()?;
+    let kind = match linked_kind(ctx, workspace, number).await? {
+        Some(kind) => kind,
+        None => {
+            let repo = workspace_repository(ctx, workspace).await?;
+            super::issues::origin_forge(&repo)
+                .await?
+                .item_kind(&ctx.forge_account()?, number)
+                .await?
+        }
+    };
+    Ok(Selection {
+        kind: Some(kind),
+        ..selection
+    })
+}
+
+/// The kind of the workspace's linked item numbered `number`.
+async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<ItemKind>> {
+    let linked: Selected = client::request(
+        &ctx.paths,
+        Method::SelectItems {
+            workspace: workspace.to_owned(),
+            selection: Selection::default(),
+        },
+    )
+    .await?;
+    let mut kinds = linked
+        .items
+        .into_iter()
+        .filter(|item| link::item(item.kind, &item.url).is_ok_and(|(_, linked)| linked == number))
+        .map(|item| item.kind);
+    let kind = kinds.next();
+    ensure!(
+        kinds.all(|other| Some(other) == kind),
+        "an issue and a PR #{number} are both linked; put issue or pr before the number"
+    );
+    Ok(kind)
+}
+
 pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let selected = Selection::parse(items.kind_or_url, items.item)?;
     ensure!(
         selected.input.is_some() || ctx.interactive(),
-        "link needs an issue or PR URL, or pr/issue and a number"
+        "link needs an issue or PR number or URL"
     );
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let selected = resolve_kind(ctx, &workspace, selected).await?;
     let (kind, input) = match selected {
         Selection {
             kind: Some(kind),
@@ -132,9 +190,7 @@ async fn pick_open_item(
 }
 
 pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    let selected = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let (workspace, selected) = select(ctx, items).await?;
     if selected.kind != Some(ItemKind::Pr) {
         client::request::<()>(
             &ctx.paths,
@@ -158,16 +214,12 @@ pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {
 }
 
 pub(super) async fn watch(ctx: &Context, items: ItemArgs, timeout: Option<u64>) -> Result<i32> {
-    let selected = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let (workspace, selected) = select(ctx, items).await?;
     workspaces::watch_items(ctx, workspace, selected, timeout).await
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
         Method::MarkReady {
@@ -185,9 +237,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 
 /// `draft` overrides `[unready] draft` when given.
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
         Method::ClearReady {

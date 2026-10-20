@@ -604,6 +604,10 @@ changing recorded ownership. Issue and PR association changes append `linked` or
 `unlinked` events in the same transaction as the association mutation, carrying
 the item's kind and canonical URL so integrations can follow links without
 polling workspace inspection.
+Item selectors make the `pr`/`issue` word optional for numbers: a linked
+item with that number decides the kind, otherwise the forge's issue read where
+issues and PRs share one sequence. Where they do not, an unlinked number stays
+ambiguous and needs its kind rather than a guess between two reads.
 Ready workspaces with linked issues or PRs are polled every 30 seconds; the
 daemon keeps a separate activity snapshot for each item and appends an
 `item_activity` event for each newly observed comment, completed check,

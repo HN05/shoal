@@ -6,7 +6,6 @@ use crate::{
         ItemArgs, client,
         context::Context,
         output::{Palette, Style},
-        ui,
     },
     forge::{
         ForgeRepo,
@@ -24,9 +23,7 @@ pub(super) async fn view(
     no_comments: bool,
     check: Option<String>,
 ) -> Result<i32> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let (workspace, selection) = super::links::select(ctx, items).await?;
     if let Some(check) = check {
         let log: CheckLog = ctx
             .progress(

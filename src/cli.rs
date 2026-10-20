@@ -138,7 +138,7 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Link an issue or PR; URLs identify the kind, numbers need pr/issue.
+    /// Link an issue or PR by number or URL, optionally after pr/issue.
     Link {
         #[command(flatten)]
         items: ItemArgs,
@@ -802,7 +802,7 @@ pub struct BodyArgs {
 
 #[derive(Debug, Args)]
 pub struct ItemArgs {
-    /// pr/issue to select a kind, or an issue/PR URL.
+    /// pr/issue to select a kind, or an issue or PR number or URL.
     #[arg(value_parser = item_reference)]
     pub kind_or_url: Option<String>,
     /// Number or URL when a kind is supplied.
