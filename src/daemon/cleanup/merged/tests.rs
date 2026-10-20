@@ -165,6 +165,22 @@ async fn keep_choices_running_work_and_unsaved_state_retain_a_merged_workspace()
     assert!(f.kept_after(5).await);
     manager.undo_done(id).await.unwrap();
 
+    let repo_path = f.checkout.to_str().unwrap().to_owned();
+    let stacked = manager
+        .create_workspace(repo_path.as_str(), "stacked".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .acquire_hold(&stacked.id, "busy".into(), None)
+        .await
+        .unwrap();
+    manager
+        .set_base_workspace(&stacked.id, Some("topic".into()))
+        .await
+        .unwrap();
+    assert!(f.kept_after(5).await, "a base of another workspace");
+    manager.set_base_workspace(&stacked.id, None).await.unwrap();
+
     let git_dir = f.workspace.git_dir.clone().unwrap();
     fs::write(git_dir.join("MERGE_HEAD"), "").unwrap();
     assert!(f.kept_after(5).await, "a merge under way");

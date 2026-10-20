@@ -323,8 +323,9 @@ impl Manager {
 
     /// The path and signals of a merged cleanup candidate, or `None` when
     /// it is not one: merged into the default branch and unused, with no Git
-    /// operation under way, no hold or keep choice, and any unsaved files
-    /// left over from merged work. Assignment state does not keep it.
+    /// operation under way, no workspace stacked on it, no hold or keep
+    /// choice, and any unsaved files left over from merged work. Assignment
+    /// state does not keep it.
     pub async fn merged_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
         if self.keep_reason(id).await?.is_some() || self.usage_reason(id).await?.is_some() {
             return Ok(None);

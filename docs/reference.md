@@ -1745,7 +1745,8 @@ every ten minutes. Uncommitted and untracked files go into the
 [restore point](#restore-a-workspace); they keep the workspace when the restore point cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, commands, agents saved for `shoal resume`, directory
-users, leases, permits, holds and `done --keep` keep it too. Shoal records the
+users, leases, permits, holds, `done --keep` and workspaces stacked on it keep it
+too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
 index and reflog; the period runs from the latest of those and survives restarts.

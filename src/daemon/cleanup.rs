@@ -211,8 +211,13 @@ impl Rule {
     pub fn allows(self, check: &crate::removal::RemovalCheck) -> bool {
         match self {
             Rule::Idle => check.safe(),
-            // Unsaved files go into the restore point.
-            Rule::Merged => check.unused() && check.matches_default_branch,
+            // Unsaved files go into the restore point. A base stays until PR
+            // cleanup has moved the workspaces stacked on it.
+            Rule::Merged => {
+                check.unused()
+                    && check.matches_default_branch
+                    && check.workspace.stacked_workspaces.is_empty()
+            }
         }
     }
 

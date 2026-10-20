@@ -995,7 +995,7 @@ permits, rechecked immediately before deletion, without fetching. Merged cleanup
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 restore point keeps (the branch has commits of its own), no Git operation under
 way, nothing running or saved for resume, no leases, permits, directory users,
-holds or keep choice, and no recorded activity, file change or per-worktree Git
+stacked workspaces, holds or keep choice, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it fetches the default branch's remote at most every ten minutes and never moves
 local branches. A link, a watch or a recorded `done` does not keep the
