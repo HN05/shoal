@@ -39,7 +39,7 @@ pub(in crate::cli) async fn happy(
         &workspace,
         templates::Delivery::Watched,
     );
-    let prompt = if agent == BuiltinAgent::Codex && !instructions.is_empty() {
+    let prompt = if agent == BuiltinAgent::Codex {
         Some(match prompt {
             Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
             _ => instructions,

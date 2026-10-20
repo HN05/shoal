@@ -78,9 +78,8 @@ tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
 and installs the [bundled issue template](../src/config/templates/issue.md) and
-[bundled agent template](../src/config/templates/agent.md) beside it,
-never touching an existing file except an unedited agent template from an earlier
-release, which it updates; `--dry-run` writes nothing. Installation prints
+chat template beside it, never touching an existing file; `--dry-run` writes
+nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command. `shoal config
 install <name>` replaces the entire global file with a packaged template;
@@ -612,7 +611,7 @@ same name replaces it; defining both in the global file is an error. Names that
 collide with built-in commands are rejected. The picker and completion offer AI
 tools only.
 
-For AI tool launches, `{prompt}` combines the rendered `agent_template` and
+For AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex keep their specialized launchers; other tools
@@ -858,13 +857,14 @@ corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository
 value suppresses local additions while preserving global guidance; an empty
 global value suppresses its base text. Without a global issue or chat template,
-Shoal uses its bundled default as the base; without a global agent template, it
-adds no base instructions. `config show` reports the combined text and the highest
+Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart.
 
-The agent template supplies general instructions, with `{workspace}`, `{branch}`
-and `{path}` from the target worktree, and `{updates}` saying how the launch
+Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
+followed by the agent template, which holds only your additions and cannot
+replace or suppress the guidance. Both may use `{workspace}`, `{branch}` and
+`{path}` from the target worktree, and `{updates}` saying how the launch
 receives issue and PR activity: delivered by its hooks for Claude Code and for
 Codex in a zmx session, otherwise by running `shoal watch pr`. Claude receives `--append-system-prompt`,
 Codex CLI receives a `developer_instructions` config override, and Happy Codex
@@ -1755,7 +1755,7 @@ hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
-the default agent template mentions.
+Shoal's agent guidance mentions.
 An identical message that is still unread is not queued again, and a workspace
 holds at most 50 unread messages. Scoped commands may read their own workspace's
 messages but cannot send any. Removing the workspace deletes its messages.

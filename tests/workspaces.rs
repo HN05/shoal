@@ -3342,7 +3342,7 @@ exit 7
             )
         };
         assert!(
-            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
+            strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
                 &format!("{}\n{args}", fs::canonicalize(path).unwrap().display())
             )
         );
@@ -3456,9 +3456,10 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
             if app {
                 assert_eq!(stdout, format!("\napp\n{path}\nliteral spaces; $(false)\n"));
             } else {
+                let stdout = strip_shoal_arguments(&stdout, '\n');
                 let lines: Vec<_> = stdout.lines().collect();
                 assert_eq!(
-                    without_message_hooks(&lines[1..]),
+                    lines[1..],
                     [
                         "literal spaces; $(false)",
                         "--sandbox",
@@ -3545,7 +3546,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(
-            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+            strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
             format!(
                 "shortcut\n--version\nhello with spaces\n{}",
                 if agent == "claude" {
@@ -3572,7 +3573,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             .unwrap();
         assert!(output.status.success());
         assert_eq!(
-            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+            strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
             "shortcut\n"
         );
     }
@@ -3647,21 +3648,19 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
             assert!(output.status.success(), "{output:?}");
             let stdout = String::from_utf8(output.stdout).unwrap();
             let args = without_message_hooks(&stdout.split('\0').collect::<Vec<_>>());
-            if expected.is_empty() {
-                assert_eq!(args[0], "user prompt");
+            let instructions = if agent == "claude" {
+                assert_eq!(args[0], "--append-system-prompt");
+                args[1].to_owned()
             } else {
-                if agent == "claude" {
-                    assert_eq!(args[..2], ["--append-system-prompt", &expected]);
-                } else {
-                    assert_eq!(args[0], "-c");
-                    let setting: toml::Value = toml::from_str(args[1]).unwrap();
-                    assert_eq!(
-                        setting["developer_instructions"].as_str(),
-                        Some(expected.as_str())
-                    );
-                }
-                assert_eq!(args[2], "user prompt");
-            }
+                assert_eq!(args[0], "-c");
+                let setting: toml::Value = toml::from_str(args[1]).unwrap();
+                setting["developer_instructions"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            };
+            assert_eq!(after_guidance(&instructions), expected);
+            assert_eq!(args[2], "user prompt");
         }
     }
 }
@@ -9670,7 +9669,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
                 "https://forge.example/api/v1/repos/team/project/issues/{number}\n"
             )));
         }
-        let invocation = strip_message_hooks(&fs::read_to_string(&agent_args).unwrap(), '\0');
+        let invocation = strip_shoal_arguments(&fs::read_to_string(&agent_args).unwrap(), '\0');
         let prompt = invocation.split('\0').next().unwrap();
         assert!(prompt.contains(title));
         assert!(prompt.contains(&url));
@@ -9725,11 +9724,7 @@ fn issue_templates_append_saved_or_worktree_context_to_global() {
 printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(false)"}'
 "#,
         ),
-        // The prompt follows the message hook settings.
-        (
-            "claude",
-            "#!/bin/sh\n[ \"$1\" = --settings ] && shift 2\nprintf '%s' \"$1\"\n",
-        ),
+        ("claude", "#!/bin/sh\nprintf '%s\\0' \"$@\"\n"),
     ] {
         let path = bin.join(tool);
         install_test_script_with_mode(&path, script, 0o700);
@@ -9802,7 +9797,8 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        assert_eq!(stdout.split_once('\n').unwrap().1, expected);
+        let args = strip_shoal_arguments(stdout.split_once('\n').unwrap().1, '\0');
+        assert_eq!(args.split('\0').next(), Some(expected));
     }
 }
 
@@ -9924,7 +9920,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(fs::read_to_string(&issue_args).unwrap().contains(&format!(
             "issue\0view\0{number}\0--repo\0github.com/team/project\0"
         )));
-        let invocation = strip_message_hooks(&fs::read_to_string(&agent_args).unwrap(), '\0');
+        let invocation = strip_shoal_arguments(&fs::read_to_string(&agent_args).unwrap(), '\0');
         let mut parts = invocation.split('\0');
         assert_eq!(parts.next(), Some(expected));
         let prompt = parts.next().unwrap();
@@ -12001,7 +11997,13 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             let launch: Value = serde_json::from_slice(lines.next().unwrap()).unwrap();
             assert!(lines.next().is_none());
             assert_eq!(launch["happy_daemon_recorded"], false);
-            assert_eq!(launch["prompt_file"], Value::Null);
+            // Without Happy credentials, the guidance message is saved instead.
+            let prompt_file = launch["prompt_file"].as_str().unwrap();
+            assert!(
+                fs::read_to_string(prompt_file)
+                    .unwrap()
+                    .starts_with(GUIDANCE_START)
+            );
             let config: toml::Value = toml::from_str(
                 &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
             )
@@ -12065,7 +12067,10 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         } else {
             "args=claude\0--happy-starting-mode\0remote\0--started-by\0daemon\0--model\0test\0\n"
         };
-        assert!(recorded.contains(expected_args), "{recorded}");
+        assert!(
+            strip_shoal_arguments(&recorded, '\0').contains(expected_args),
+            "{recorded}"
+        );
         assert!(recorded.contains(&format!("execution={execution_id}\n")));
         assert!(recorded.contains(&format!("workspace={name}\n")));
         assert!(!recorded.contains("scope=\n"), "{recorded}");
@@ -12179,10 +12184,8 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                 args[5].contains(title) && args[5].contains(body),
                 "{args:?}"
             );
-            assert_eq!(
-                args[6..8],
-                ["--append-system-prompt", "General issue-34-fix-api-timeout"]
-            );
+            assert_eq!(args[6], "--append-system-prompt");
+            assert_eq!(after_guidance(args[7]), "General issue-34-fix-api-timeout");
             assert_eq!(args[8..10], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
             assert_eq!(launch["prompt_delivered"], true, "{launch}");
@@ -12204,7 +12207,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
             let prompt = fs::read_to_string(&prompt_file).unwrap();
             assert_eq!(
-                prompt,
+                after_guidance(&prompt),
                 format!("General issue-34-fix-api-timeout\n\nIssue {title}: {body}")
             );
             assert_eq!(launch["prompt_delivered"], false);
@@ -12283,13 +12286,6 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fs::write(happy_home.join("daemon.state.json"), "{}").unwrap();
     let key = base64.encode([7u8; 32]);
     let prompt = "Fix the login bug; keep the API stable.";
-    let plaintext = serde_json::json!({
-        "role": "user",
-        "content": {"type": "text", "text": prompt},
-        "meta": {"sentFrom": "shoal"},
-    })
-    .to_string()
-    .len();
     for (variant, credentials) in [
         (
             "dataKey",
@@ -12317,10 +12313,15 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         assert_eq!(launch["prompt_delivered"], true, "{launch}");
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
-        assert_eq!(
-            fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap(),
-            prompt
-        );
+        let message = fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap();
+        assert_eq!(after_guidance(&message), prompt);
+        let plaintext = serde_json::json!({
+            "role": "user",
+            "content": {"type": "text", "text": message},
+            "meta": {"sentFrom": "shoal"},
+        })
+        .to_string()
+        .len();
         assert!(
             !String::from_utf8_lossy(&output.stderr).contains("warning"),
             "{output:?}"
@@ -13008,7 +13009,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
         format!(
             "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
@@ -13024,7 +13025,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
         format!(
             "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
@@ -13040,7 +13041,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
         "--model\nexample\ncustom default\nprompt=\n"
     );
     let output = fixture.run(&[
@@ -13053,7 +13054,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
         "--model\nexample\ncustom default\nprompt=\n"
     );
 }
@@ -14073,8 +14074,13 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let workspace: Value =
         serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
     let branch = workspace["branch"].as_str().unwrap();
+    let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    assert!(
+        args.starts_with(&format!("--prompt={GUIDANCE_START}")),
+        "{args}"
+    );
     assert_eq!(
-        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+        remove_guidance(&args),
         format!(
             "--prompt=Follow {branch}\n\nLiteral {{branch}}: $(false)\0literal {{prompt}}\0{branch}\0"
         )
@@ -14127,7 +14133,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     ]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert_eq!(
-        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+        remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap()),
         "Follow custom-add\0user message\0"
     );
     let before = fixture.ok(&["ls"]);
@@ -14161,7 +14167,8 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         );
     }
     let workspace = fixture.add("provider");
-    let args = || fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    let args =
+        || remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap());
     for words in [
         vec!["droid", "provider", "--", "user message"],
         vec!["run", "droid", "provider", "--", "user message"],
@@ -14920,9 +14927,85 @@ fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
     remaining
 }
 
-/// Captured agent arguments, one per `separator`, without message hooks.
-fn strip_message_hooks(text: &str, separator: char) -> String {
+/// Captured agent arguments, one per `separator`, without message hooks or
+/// arguments that carry only Shoal's built-in guidance.
+fn strip_shoal_arguments(text: &str, separator: char) -> String {
+    let text = strip_guidance(text, separator);
     without_message_hooks(&text.split(separator).collect::<Vec<_>>()).join(&separator.to_string())
+}
+
+/// Every agent prompt starts with Shoal's guidance, which spans these lines.
+const GUIDANCE_START: &str = "You are working in Shoal workspace ";
+const GUIDANCE_END: &str = "Do not end your session without running `shoal done`.";
+
+/// Removes each argument, with the flag that introduces it, whose whole value is
+/// the guidance; guidance followed by additions stays for [`after_guidance`].
+fn strip_guidance(text: &str, separator: char) -> String {
+    let wrappers = [
+        (format!("--append-system-prompt{separator}"), String::new()),
+        (
+            format!("-c{separator}developer_instructions=\"\"\"\n"),
+            "\"\"\"".to_owned(),
+        ),
+        (String::new(), String::new()),
+    ];
+    let mut text = text.to_owned();
+    let mut from = 0;
+    while let Some(start) = text[from..].find(GUIDANCE_START).map(|start| from + start) {
+        let Some(end) = text[start..]
+            .find(GUIDANCE_END)
+            .map(|end| start + end + GUIDANCE_END.len())
+        else {
+            break;
+        };
+        let (before, after) = (&text[..start], &text[end..]);
+        let wrapper = wrappers.iter().find(|(prefix, suffix)| {
+            before
+                .strip_suffix(prefix.as_str())
+                .is_some_and(|rest| rest.is_empty() || rest.ends_with(separator))
+                && after
+                    .strip_prefix(suffix.as_str())
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with(separator))
+        });
+        match wrapper {
+            Some((prefix, suffix)) => {
+                let removed_end = (end + suffix.len() + separator.len_utf8()).min(text.len());
+                text.replace_range(start - prefix.len()..removed_end, "");
+                from = start - prefix.len();
+            }
+            None => from = end,
+        }
+    }
+    text
+}
+
+#[test]
+fn guidance_markers_match_the_bundled_guidance() {
+    let guidance = include_str!("../src/config/templates/agent.md").trim_end();
+    assert!(guidance.starts_with(GUIDANCE_START));
+    assert!(guidance.ends_with(GUIDANCE_END));
+}
+
+/// The additions that follow Shoal's guidance in a prompt.
+fn after_guidance(prompt: &str) -> String {
+    assert!(prompt.starts_with(GUIDANCE_START), "{prompt}");
+    remove_guidance(prompt)
+}
+
+/// `text` with each copy of the guidance and the blank line after it removed.
+fn remove_guidance(text: &str) -> String {
+    let mut text = text.to_owned();
+    while let Some(start) = text.find(GUIDANCE_START) {
+        let Some(end) = text[start..].find(GUIDANCE_END) else {
+            break;
+        };
+        let mut end = start + end + GUIDANCE_END.len();
+        if text[end..].starts_with("\n\n") {
+            end += 2;
+        }
+        text.replace_range(start..end, "");
+    }
+    text
 }
 
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
@@ -17035,8 +17118,11 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     assert_eq!(
-        fs::read(fixture.root.path().join("agent-args")).unwrap(),
-        b"two words\0quote ' ; $(touch injected)\0"
+        strip_shoal_arguments(
+            &fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+            '\0'
+        ),
+        "two words\0quote ' ; $(touch injected)\0"
     );
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("agent-plan")).unwrap(),
@@ -18223,8 +18309,9 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 
 #[test]
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
+    // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();

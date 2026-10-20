@@ -567,7 +567,7 @@ Agent shortcuts use the execution wrapper: by default Codex CLI gets full access
 approvals and Claude runs with its own settings. Both trust the repository's shared
 Shoal workspaces directory, or an explicitly placed workspace or chat checkout
 outside it, in their user config before launch, creating the file if needed; Happy
-launches and Codex app handoffs do so too. General agent templates become native
+launches and Codex app handoffs do so too. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
@@ -793,9 +793,9 @@ no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
-`install` adds missing templates from the bundled defaults and
-updates a regular file that still matches an earlier bundled default, since agent
-guidance must reach existing installs; edited or linked files stay untouched;
+Shoal's agent guidance is built in and precedes every agent template, so
+adding instructions never freezes or replaces it; `install` adds missing issue
+and chat templates from the bundled defaults and never touches existing files;
 rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
