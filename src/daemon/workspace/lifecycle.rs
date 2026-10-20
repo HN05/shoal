@@ -589,26 +589,42 @@ impl Manager {
         self.forget_workspace(&workspace.id).await;
         // Session logs are run data owned by the record just deleted.
         let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
-        if let Some(hook) = post_remove
-            && let Err(error) = hooks::run_detached(
-                Hook::PostRemove(&hook.checkout),
-                workspace,
-                &hook.command,
-                &self.paths,
-                &hook.env,
-            )
-            .await
-        {
-            let message = format!("workspace removed; {error:#}");
-            self.notify(
-                Some(&workspace.name),
-                crate::daemon::notifications::NotificationKind::HookFailed,
-                &message,
-            )
-            .await;
-            outcome.hook_error = Some(message);
+        if let Some(hook) = post_remove {
+            outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
+            // The hook runs with the workspace identity after removal's sweep.
+            if let Err(error) = self.stop_workspace_processes(&workspace.id).await {
+                crate::daemon::log!(
+                    "processes left by the post-remove hook of {} not stopped: {error:#}",
+                    workspace.name
+                );
+            }
         }
         outcome
+    }
+
+    /// Run the post-remove hook, notifying and returning its failure.
+    async fn run_post_remove_hook(
+        &self,
+        workspace: &Workspace,
+        hook: &PostRemoveHook,
+    ) -> Option<String> {
+        let error = hooks::run_detached(
+            Hook::PostRemove(&hook.checkout),
+            workspace,
+            &hook.command,
+            &self.paths,
+            &hook.env,
+        )
+        .await
+        .err()?;
+        let message = format!("workspace removed; {error:#}");
+        self.notify(
+            Some(&workspace.name),
+            crate::daemon::notifications::NotificationKind::HookFailed,
+            &message,
+        )
+        .await;
+        Some(message)
     }
 
     /// Remove an existing worktree after a restore point keeps its HEAD and

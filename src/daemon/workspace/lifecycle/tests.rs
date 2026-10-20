@@ -21,14 +21,23 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    fixture_with_hook("pre_remove_cmd", |_| script.to_owned()).await
+}
+
+/// A workspace whose repository runs `script(root)` as the `key` hook.
+async fn fixture_with_hook(
+    key: &str,
+    script: impl FnOnce(&std::path::Path) -> String,
+) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let hook = root.path().join("remove-hook.sh");
+    let script = script(root.path());
     fs::write(&hook, format!("#!/bin/sh\nset -eu\n{script}\n")).unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         path.join(".shoal.toml"),
-        format!("pre_remove_cmd = '{}'\n", hook.display()),
+        format!("{key} = '{}'\n", hook.display()),
     )
     .unwrap();
     fs::write(path.join(".gitignore"), "ignored/\n").unwrap();
@@ -596,6 +605,31 @@ async fn removal_stops_processes_carrying_the_workspace_identity() {
     assert!(identity::alive(&unrelated_identity).unwrap());
     owned.wait().await.unwrap();
     unrelated.kill().await.unwrap();
+}
+
+#[tokio::test]
+async fn removal_stops_processes_its_post_remove_hook_leaves() {
+    // The hook returns once its background process has written its PID.
+    let (root, manager, workspace) = fixture_with_hook("post_remove_cmd", |root| {
+        let pid = root.join("background");
+        format!(
+            "python3 -c \"import os, time; os.setsid(); \
+             open('{pid}.tmp', 'w').write(str(os.getpid())); \
+             os.rename('{pid}.tmp', '{pid}'); time.sleep(300)\" >/dev/null 2>&1 &\n\
+             while [ ! -e '{pid}' ]; do sleep 1; done",
+            pid = pid.display()
+        )
+    })
+    .await;
+
+    let outcome = manager
+        .remove_workspace(&workspace.id, BranchChoice::Auto, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.hook_error, None);
+    let pid = fs::read_to_string(root.path().join("background")).unwrap();
+    assert_eq!(identity::capture(pid.parse().unwrap()).unwrap(), None);
 }
 
 #[tokio::test]
