@@ -72,8 +72,8 @@ when behavior changes, distinguishing decisions from proposals.
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
-  preserves associations and watches but never defers cleanup; only holds keep a
-  workspace.
+  preserves associations and watches but never defers cleanup; only holds and
+  open questions keep a workspace.
   Completion cleanup without a PR registration requires every commit pushed or
   merged, retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.

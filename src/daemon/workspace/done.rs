@@ -31,7 +31,8 @@ impl Manager {
             .await
     }
 
-    /// Withdraw a recorded completion; only holds keep the workspace.
+    /// Withdraw a recorded completion; only holds and open questions keep the
+    /// workspace.
     pub async fn undo_done(&self, selector: &str) -> Result<Option<Completion>> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;

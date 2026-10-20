@@ -221,7 +221,7 @@ instead of the PR delivery guidance below.
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
-  cleanup; only holds keep a workspace.
+  cleanup; only holds and open questions keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches and completion but never holds, open

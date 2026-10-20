@@ -965,7 +965,7 @@ Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: holds are the one mechanism that keeps a workspace.
+defers cleanup: only holds and open questions keep a workspace.
 The daemon runs `post_done_cmd`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
