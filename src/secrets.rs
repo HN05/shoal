@@ -20,6 +20,9 @@ pub struct Secret {
     /// Programs that receive the value each time they run; empty gives it to
     /// the agent's environment instead.
     pub tools: Vec<String>,
+    /// Scoped callers fetch it only after the user approves a request.
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
 }
 
 /// Configured secrets keyed by the variable that carries each value.
@@ -46,6 +49,11 @@ pub fn validate(secrets: &Secrets) -> Result<()> {
         ensure!(
             secret.command.iter().all(|word| !word.contains('\0')),
             "secrets.{name}.command contains NUL"
+        );
+        // Environment secrets are fetched before the agent can ask for them.
+        ensure!(
+            !secret.requires_approval || !secret.tools.is_empty(),
+            "secrets.{name}.requires_approval needs tools: an agent's environment is fetched before it can ask"
         );
         for tool in &secret.tools {
             ensure!(
@@ -265,7 +273,7 @@ mod tests {
     fn secret(command: &[&str]) -> Secret {
         Secret {
             command: command.iter().map(|word| word.to_string()).collect(),
-            tools: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -288,9 +296,11 @@ mod tests {
             let secrets = Secrets::from([("TOKEN".into(), scoped)]);
             assert!(validate(&secrets).is_err(), "{tool:?}");
         }
-        let mut scoped = secret(&["true"]);
-        scoped.tools = vec!["agent-browser".into()];
-        assert!(validate(&Secrets::from([("TOKEN".into(), scoped)])).is_ok());
+        let mut gated = secret(&["true"]);
+        gated.requires_approval = true;
+        assert!(validate(&Secrets::from([("TOKEN".into(), gated.clone())])).is_err());
+        gated.tools = vec!["agent-browser".into()];
+        assert!(validate(&Secrets::from([("TOKEN".into(), gated)])).is_ok());
     }
 
     #[tokio::test]

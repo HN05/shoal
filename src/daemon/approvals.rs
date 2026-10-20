@@ -32,8 +32,8 @@ states!(DecisionStatus {
 });
 
 /// What a decision authorizes; one active request per workspace, target and
-/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator` or
-/// `keep`.
+/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
+/// `secret/<name>` or `keep`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -42,6 +42,8 @@ pub enum Target {
     },
     Port(String),
     Simulator,
+    /// Fetching a configured secret; the daemon records the grant, never the value.
+    Secret(String),
     /// Keeping a workspace after an agent marks its assignment done.
     Keep,
 }
@@ -55,6 +57,7 @@ impl fmt::Display for Target {
             Self::Resource { scope, pool } => write!(f, "resource/{scope}/{pool}"),
             Self::Port(name) => write!(f, "port/{name}"),
             Self::Simulator => f.write_str("simulator"),
+            Self::Secret(name) => write!(f, "secret/{name}"),
             Self::Keep => f.write_str("keep"),
         }
     }
@@ -73,6 +76,11 @@ impl FromStr for Target {
             && !name.is_empty()
         {
             return Ok(Self::Port(name.into()));
+        }
+        if let Some(name) = text.strip_prefix("secret/")
+            && !name.is_empty()
+        {
+            return Ok(Self::Secret(name.into()));
         }
         // The scope may itself contain a slash; pool names cannot.
         if let Some((scope, pool)) = text
@@ -100,6 +108,7 @@ pub enum Specification {
     Port(PortSpecification),
     Simulator(SimulatorSpecification),
     Keep(KeepSpecification),
+    Secret(SecretSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,6 +144,15 @@ pub struct SimulatorSpecification {
 #[serde(deny_unknown_fields)]
 pub struct KeepSpecification {
     pub head: String,
+}
+
+/// A secret grant covers the configured source; changing the command or the
+/// tools it serves needs a new decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecretSpecification {
+    pub command: Vec<String>,
+    pub tools: Vec<String>,
 }
 
 impl fmt::Display for Specification {
@@ -867,6 +885,7 @@ mod tests {
             ),
             (Target::Port("web".into()), "port/web"),
             (Target::Simulator, "simulator"),
+            (Target::Secret("TOKEN".into()), "secret/TOKEN"),
         ] {
             assert_eq!(target.to_string(), text);
             assert_eq!(text.parse::<Target>()?, target);
@@ -883,6 +902,7 @@ mod tests {
             "resource/local/lock",
             "resource//lock",
             "simulators",
+            "secret/",
         ] {
             assert!(text.parse::<Target>().is_err(), "{text}");
         }
@@ -900,6 +920,7 @@ mod tests {
                 "range": [3000, 3100]}),
             serde_json::json!({"profile": {"requires_approval": true, "approval_lifetime": "workspace",
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
+            serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
         ];
         for json in recorded {
             let specification: Specification = serde_json::from_value(json.clone())?;
@@ -920,6 +941,7 @@ mod tests {
                 "member": "lock"}),
             serde_json::json!({"preferred": null, "env": "PORT_WEB", "on_conflict": "maybe",
                 "range": [3000, 3100]}),
+            serde_json::json!({"command": ["op"], "tools": [], "head": "abc"}),
         ] {
             assert!(
                 serde_json::from_value::<Specification>(json.clone()).is_err(),

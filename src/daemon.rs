@@ -24,6 +24,7 @@ pub mod recovery;
 pub mod resources;
 mod restart_recovery;
 pub mod scope;
+pub mod secrets;
 pub(crate) mod seed;
 pub mod store;
 mod warnings;
@@ -768,6 +769,18 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::ListApprovals { workspace } => {
             Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
+        }
+        Method::SecretAcquire {
+            workspace,
+            name,
+            reason,
+        } => manager
+            .acquire_secret(&workspace, name, reason, caller)
+            .await?
+            .into_body(Body::SecretGrant),
+        Method::SecretRelease { workspace, name } => {
+            manager.release_secret(&workspace, name).await?;
+            Body::Ok
         }
         Method::DecideApproval { id, approve } => {
             Body::ApprovalRequest(Box::new(manager.decide_approval(id, approve).await?))

@@ -113,6 +113,8 @@ pub async fn authorize(
         | Method::PortAcquire { workspace, .. }
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }
+        | Method::SecretAcquire { workspace, .. }
+        | Method::SecretRelease { workspace, .. }
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),

@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 90;
+pub const VERSION: u32 = 91;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -459,6 +459,17 @@ pub enum Method {
     ListApprovals {
         workspace: Option<String>,
     },
+    /// Confirm the caller may fetch a configured secret, requesting approval
+    /// when it is gated; the daemon never sees the value.
+    SecretAcquire {
+        workspace: String,
+        name: String,
+        reason: Option<String>,
+    },
+    SecretRelease {
+        workspace: String,
+        name: String,
+    },
     DecideApproval {
         id: String,
         approve: bool,
@@ -640,6 +651,7 @@ response_bodies! {
     PortOverview(PortOverview),
     ApprovalRequest(Box<crate::daemon::approvals::ApprovalRequest>),
     ApprovalRequests(Vec<crate::daemon::approvals::ApprovalRequest>),
+    SecretGrant(crate::daemon::secrets::SecretGrant),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     Simulator(Simulator),
