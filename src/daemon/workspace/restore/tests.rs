@@ -278,7 +278,6 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
 
 #[tokio::test]
 async fn a_failed_removal_keeps_its_restore_point() {
-    use std::os::unix::fs::PermissionsExt;
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -290,10 +289,11 @@ async fn a_failed_removal_keeps_its_restore_point() {
         .await
         .unwrap();
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
-    // A directory whose entries cannot change fails Worktrunk's removal after
-    // the restore point is saved.
-    let parent = workspace.path.parent().unwrap().to_owned();
-    fs::set_permissions(&parent, fs::Permissions::from_mode(0o555)).unwrap();
+    // An unreadable Worktrunk config fails the removal after the restore
+    // point is saved.
+    let config = manager.paths.worktrunk_config();
+    let valid = fs::read_to_string(&config).unwrap();
+    fs::write(&config, "not [valid toml").unwrap();
     let removed = manager
         .remove_workspace(
             &workspace.id,
@@ -301,7 +301,7 @@ async fn a_failed_removal_keeps_its_restore_point() {
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await;
-    fs::set_permissions(&parent, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&config, valid).unwrap();
     assert!(removed.is_err());
     let record = record(&manager, &workspace.id).await.unwrap();
     assert_eq!(
