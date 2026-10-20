@@ -18092,28 +18092,26 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
             .contains("app-thread (Open thread)")
     );
-    fixture.ok(&[
-        "exec",
-        "held",
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "--json",
-        "hold",
-        "acquire",
-        "--name",
-        "scoped",
-    ]);
-    fixture.ok(&[
-        "exec",
-        "held",
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "--json",
-        "hold",
-        "release",
-        "--name",
-        "scoped",
-    ]);
+    // Workspace processes list their holds but cannot change them.
+    let scoped = |args: &[&str]| {
+        let mut command = vec!["exec", "held", "--", env!("CARGO_BIN_EXE_shoal"), "--json"];
+        command.extend_from_slice(args);
+        fixture.run(&command)
+    };
+    let listed = scoped(&["hold"]);
+    assert!(listed.status.success(), "{listed:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
+        expected
+    );
+    for action in ["acquire", "release"] {
+        let output = scoped(&["hold", action, "--name", "scoped"]);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("shoal ask"),
+            "{output:?}"
+        );
+    }
     fixture.restart();
     assert_eq!(fixture.ok(&["hold", "held"]), expected);
     let (no, prompt) = fixture.interactive(&["rm", "held"], "n\n");

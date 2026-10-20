@@ -53,7 +53,17 @@ async fn holds_are_idempotent_persistent_and_scoped() {
             },
         )
         .await;
+    // Workspace processes may list their own holds but never change them.
     for target in [&workspace.name, &other.id] {
+        let mut list = Method::HoldList {
+            workspace: target.clone(),
+        };
+        assert_eq!(
+            scope::authorize(&manager, Some("scope"), &mut list)
+                .await
+                .is_ok(),
+            target == &workspace.name
+        );
         for mut method in [
             Method::HoldAcquire {
                 workspace: target.clone(),
@@ -64,16 +74,11 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                 workspace: target.clone(),
                 name: "app".into(),
             },
-            Method::HoldList {
-                workspace: target.clone(),
-            },
         ] {
-            assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
-                    .await
-                    .is_ok(),
-                target == &workspace.name
-            );
+            let error = scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("shoal ask"), "{error:#}");
         }
     }
     assert!(

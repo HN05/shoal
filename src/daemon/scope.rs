@@ -60,9 +60,7 @@ pub async fn authorize(
         | Method::FindWorkspaces { .. }
         | Method::ListRepositories
         | Method::SimCatalog => None,
-        Method::HoldAcquire { workspace, .. }
-        | Method::HoldRelease { workspace, .. }
-        | Method::HoldList { workspace }
+        Method::HoldList { workspace }
         | Method::SetBaseWorkspace { workspace, .. }
         | Method::RenameWorkspace { workspace, .. }
         | Method::WorkspaceUndone { workspace }
@@ -140,6 +138,9 @@ pub async fn authorize(
                 "a setup command cannot recursively run setup"
             );
             Some(workspace)
+        }
+        Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
+            bail!("holds belong to the user and host apps; workspace processes ask with shoal ask")
         }
         Method::AnswerQuestion { .. } => {
             bail!("answering questions is the user's; workspace processes ask with shoal ask")
