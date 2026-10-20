@@ -253,3 +253,27 @@ async fn a_failed_fetch_keeps_merged_workspaces() {
     git(&f.checkout, &["remote", "remove", "origin"]);
     assert!(!f.kept_after(5).await);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_failed_removal_is_retried_after_a_while_or_once_changed() {
+    let snapshot = Snapshot {
+        rule: super::super::Rule::Merged,
+        signals: 1,
+        tree: 2,
+    };
+    let mut state = State::default();
+    assert!(!state.waits("w", snapshot));
+    state
+        .retained
+        .insert("w".into(), (snapshot, Instant::now()));
+    assert!(state.waits("w", snapshot));
+    assert!(!state.waits(
+        "w",
+        Snapshot {
+            tree: 3,
+            ..snapshot
+        }
+    ));
+    tokio::time::advance(RETRY_AFTER).await;
+    assert!(!state.waits("w", snapshot));
+}

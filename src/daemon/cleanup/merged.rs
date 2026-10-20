@@ -21,6 +21,9 @@ use crate::{
     time::unix_seconds,
 };
 
+/// Retry an unchanged workspace whose removal failed after this long.
+const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
+
 /// Fetch a repository's default branch at most this often.
 const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
@@ -28,8 +31,18 @@ const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 #[derive(Default)]
 pub struct State {
     fetches: Fetches,
-    /// Workspaces whose removal failed, retried only once they change.
-    retained: HashMap<String, Snapshot>,
+    /// Workspaces whose removal failed, and when: retried once they change
+    /// or after [`RETRY_AFTER`], so a passing failure does not keep them.
+    retained: HashMap<String, (Snapshot, Instant)>,
+}
+
+impl State {
+    /// Whether a failed removal of this unchanged workspace is too recent to retry.
+    fn waits(&self, id: &str, snapshot: Snapshot) -> bool {
+        self.retained
+            .get(id)
+            .is_some_and(|(retained, at)| *retained == snapshot && at.elapsed() < RETRY_AFTER)
+    }
 }
 
 /// When each repository's default branch was last fetched successfully.
@@ -96,7 +109,7 @@ async fn sweep_workspace(
     let Some(snapshot) = idle_candidate(manager, state, workspace, now).await else {
         return Ok(());
     };
-    if state.retained.get(&workspace.id) == Some(&snapshot) {
+    if state.waits(&workspace.id, snapshot) {
         return Ok(());
     }
     let (kind, message, recorded) = match manager.remove_merged_idle(&workspace.id, snapshot).await
@@ -115,7 +128,9 @@ async fn sweep_workspace(
         }
         Err(error) => {
             log!("merged cleanup retained {}: {error:#}", workspace.name);
-            state.retained.insert(workspace.id.clone(), snapshot);
+            state
+                .retained
+                .insert(workspace.id.clone(), (snapshot, Instant::now()));
             let recorded = manager
                 .record_retained(&workspace.id, EventCause::Merged, &error)
                 .await;
