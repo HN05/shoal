@@ -487,6 +487,21 @@ impl Manager {
             .await
     }
 
+    /// [`request_land`] in its own transaction.
+    pub async fn request_land_approval(
+        &self,
+        request: ApprovalRequest,
+    ) -> Result<Option<ApprovalRequest>> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let undecided = request_land(&tx, request)?;
+                tx.commit()?;
+                Ok(undecided)
+            })
+            .await
+    }
+
     /// [`release`] in its own transaction, once the workspace is ready.
     pub async fn release_approval(
         &self,

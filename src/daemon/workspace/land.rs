@@ -6,8 +6,7 @@ use super::{Manager, branches::UpstreamPolicy};
 use crate::{
     daemon::{
         approvals::{
-            self, ApprovalRequest, LAND, LandSpecification, Lifetime, Specification, Target,
-            Undecided,
+            ApprovalRequest, LAND, LandSpecification, Lifetime, Specification, Target, Undecided,
         },
         log,
     },
@@ -111,31 +110,7 @@ impl Manager {
         if !settings.land.requires_approval {
             return Ok(());
         }
-        let branch = &plan.workspace.branch;
-        let request = ApprovalRequest::new(
-            &plan.workspace.id,
-            Target::Land,
-            LAND,
-            Specification::Land(LandSpecification {
-                branch: branch.clone(),
-                head: plan.source.clone(),
-            }),
-            Lifetime::Lease,
-            Some(&format!(
-                "merge {branch} into {}",
-                plan.default_refresh.branch
-            )),
-        );
-        let undecided = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let undecided = approvals::request_land(&tx, request)?;
-                tx.commit()?;
-                Ok(undecided)
-            })
-            .await?;
-        match undecided {
+        match self.request_land_approval(land_request(plan)).await? {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),
         }
@@ -181,4 +156,23 @@ impl Manager {
         };
         self.managed_workspace_at(&path).await
     }
+}
+
+/// The land request a scoped landing of `plan` asks the user to decide.
+fn land_request(plan: &LandPlan) -> ApprovalRequest {
+    let branch = &plan.workspace.branch;
+    ApprovalRequest::new(
+        &plan.workspace.id,
+        Target::Land,
+        LAND,
+        Specification::Land(LandSpecification {
+            branch: branch.clone(),
+            head: plan.source.clone(),
+        }),
+        Lifetime::Lease,
+        Some(&format!(
+            "merge {branch} into {}",
+            plan.default_refresh.branch
+        )),
+    )
 }
