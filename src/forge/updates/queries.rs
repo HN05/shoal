@@ -80,10 +80,9 @@ impl ForgeRepo {
     ) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_activity(account, number, branch).await,
-            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
-                .rest_activity(account, number, branch)
-                .await
-                .context(self.kind.login_hint()),
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => {
+                self.rest_activity(account, number, branch).await
+            }
         }
     }
 
@@ -135,13 +134,7 @@ impl ForgeRepo {
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
-        let pull = self.read(account, ItemKind::Pr, number).await?;
-        if let Some(branch) = branch {
-            ensure!(
-                pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
-                "PR does not match the workspace branch"
-            );
-        }
+        let pull = self.rest_branch_pull(account, number, branch).await?;
         let mut snapshot = Snapshot {
             state: pull.item.state.as_str().into(),
             ..Default::default()

@@ -162,7 +162,6 @@ impl ForgeRepo {
             ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
                 .rest_merged_commits(account, number, branch)
                 .await
-                .context(self.kind.login_hint())
                 .context(MERGED_HINT.trim_start_matches("; ").to_owned()),
         }
     }

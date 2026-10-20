@@ -30,17 +30,37 @@ impl ForgeRepo {
         number: u64,
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
-        let pull = self.read(account, ItemKind::Pr, number).await?;
-        ensure!(
-            pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
-            "PR does not match the workspace branch"
-        );
+        let pull = self.rest_branch_pull(account, number, Some(branch)).await?;
         if pull.item.state != ItemState::Merged {
             return Ok(None);
         }
         let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
-        let commits = self.pages(account, &endpoint).await?;
+        let commits = self
+            .pages(account, &endpoint)
+            .await
+            .context(self.kind.login_hint())?;
         commit_shas(&commits, self.kind.commit_field()).map(Some)
+    }
+
+    /// The PR, which must have `branch` as its head when one is given. Only a
+    /// failed request suggests logging in.
+    pub(super) async fn rest_branch_pull(
+        &self,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Current> {
+        let pull = self
+            .read(account, ItemKind::Pr, number)
+            .await
+            .context(self.kind.login_hint())?;
+        if let Some(branch) = branch {
+            ensure!(
+                pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
+                "PR does not match the workspace branch"
+            );
+        }
+        Ok(pull)
     }
 
     /// Title, head and base of a PR whose head branch is in this repository.
