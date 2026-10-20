@@ -1841,7 +1841,7 @@ question again returns it while it is open or its answer is undelivered, so an
 interrupted `--wait` can be rerun; the same question with other details is refused.
 A listing returns the newest questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer. Scoped callers ask and list only
-their own workspace's questions. An open question keeps the workspace from automatic
+their own workspace's questions. An open question keeps the workspace from idle
 cleanup; removing the workspace deletes its questions.
 
 ### Leases

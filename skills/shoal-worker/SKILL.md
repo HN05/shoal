@@ -133,7 +133,7 @@ answer, add `--wait`: it blocks without a time limit and prints the answer, so r
 it in the background when your tool calls time out. Asking the identical question
 again waits for the same one. Only the user answers, with `shoal answer`;
 `shoal --json questions` lists your workspace's open questions. An open question
-keeps your workspace from automatic cleanup.
+keeps your workspace from idle cleanup.
 
 ## Workspace context
 

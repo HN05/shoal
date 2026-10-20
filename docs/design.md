@@ -685,7 +685,7 @@ message are recorded together, and a wait that prints the answer delivers the
 message, so the agent sees it once. Re-asking an identical question returns it
 until its answer is delivered, which makes an interrupted wait safe to rerun.
 An open question means an agent is waiting on the user, so it keeps the workspace
-from automatic cleanup; questions belong to the workspace and go with it.
+from idle cleanup; questions belong to the workspace and go with it.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule

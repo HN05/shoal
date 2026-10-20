@@ -266,16 +266,20 @@ pub(crate) async fn reconnect(
 
 /// The reply to a long-lived request that waits for an event, across daemon
 /// restarts: a closed connection asks again at once, and an unreachable socket
-/// is retried for the normal daemon wait budget. Only for requests that are
-/// safe to repeat.
+/// is retried for the normal daemon wait budget. After a restart, a scope
+/// refusal is retried within the same budget too, since a restarted daemon
+/// knows an execution's scope only once its wrapper reattaches. Only for
+/// requests that are safe to repeat.
 pub(crate) async fn await_reply(paths: &Paths, method: impl Fn() -> Method) -> Result<Body> {
-    let mut unreachable_since = None;
+    // When the daemon last went away, or the socket was first found unreachable.
+    let mut outage: Option<Instant> = None;
     loop {
-        match open(paths, method()).await {
-            Ok((_stream, body)) => return Ok(body),
-            Err(error) if stream_closed(&error) => unreachable_since = None,
-            Err(error) if is_unreachable(&error) => {
-                let since = *unreachable_since.get_or_insert_with(Instant::now);
+        let reply = open(paths, method()).await;
+        match reply.and_then(|(_stream, body)| body.into_result()) {
+            Ok(body) => return Ok(body),
+            Err(error) if stream_closed(&error) => outage = Some(Instant::now()),
+            Err(error) if is_unreachable(&error) || (outage.is_some() && scope_denied(&error)) => {
+                let since = *outage.get_or_insert_with(Instant::now);
                 if since.elapsed() >= timing::DAEMON_WAIT_TIMEOUT {
                     return Err(error.context("daemon did not restart"));
                 }
@@ -284,6 +288,12 @@ pub(crate) async fn await_reply(paths: &Paths, method: impl Fn() -> Method) -> R
         }
         sleep(timing::DAEMON_POLL_INTERVAL).await;
     }
+}
+
+fn scope_denied(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<protocol::RemoteError>()
+        .is_some_and(|remote| remote.code == protocol::ErrorCode::ScopeDenied)
 }
 
 /// Wait for the daemon to be running (or stopped).
@@ -363,11 +373,27 @@ mod tests {
         sleep(timing::DAEMON_WAIT_TIMEOUT / 2).await;
         assert!(!waiter.is_finished());
 
+        // The restarted daemon refuses the scope until the wrapper reattaches.
         let listener = UnixListener::bind(&paths.socket)?;
-        let (mut stream, _) = listener.accept().await?;
-        let request: Request = protocol::read(&mut stream).await?;
-        protocol::write(&mut stream, &Response::new(request.id, Body::Ok)).await?;
+        let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+        for body in [refused, Body::Ok] {
+            let (mut stream, _) = listener.accept().await?;
+            let request: Request = protocol::read(&mut stream).await?;
+            protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+        }
         assert!(matches!(waiter.await??, Body::Ok));
+
+        // Without a restart, a scope refusal ends the wait at once.
+        let listener_task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let request: Request = protocol::read(&mut stream).await?;
+            let body = Body::error(ErrorCode::ScopeDenied, "denied");
+            protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+            anyhow::Ok(listener)
+        });
+        let error = await_reply(&paths, || Method::Status).await.unwrap_err();
+        assert!(scope_denied(&error), "{error:#}");
+        let listener = listener_task.await??;
 
         // A daemon that does not return ends the wait.
         drop(listener);
