@@ -34,6 +34,7 @@ mod sessions;
 mod simulators;
 mod skill;
 mod stop;
+mod update;
 mod view;
 pub(in crate::cli) mod workspaces;
 
@@ -526,6 +527,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             dry_run,
             executable,
         } => service::install(&ctx, dry_run, executable).await,
+        Command::Update => update::run(&ctx).await,
         Command::Daemon { command } => service::run(ctx, command, cli.daemon_handoff).await,
     }
 }

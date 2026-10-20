@@ -70,6 +70,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "repo",
             "config",
             "install",
+            "update",
             "daemon",
             "shell",
             "completions",

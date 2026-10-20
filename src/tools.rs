@@ -37,6 +37,7 @@ tools! {
     Tea => ("tea", None),
     GitLab => ("glab", None),
     Curl => ("curl", None),
+    Tar => ("tar", None),
     Diff => ("diff", None),
     Ps => ("ps", None),
     Plutil => ("/usr/bin/plutil", None),

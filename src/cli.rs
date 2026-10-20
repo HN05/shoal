@@ -666,6 +666,8 @@ pub enum Command {
         #[arg(long)]
         executable: Option<PathBuf>,
     },
+    /// Replace a downloaded shoal with the latest GitHub release.
+    Update,
     /// Inspect and control the local daemon.
     Daemon {
         #[command(subcommand)]
@@ -979,6 +981,7 @@ impl Command {
             self,
             Command::Doctor { .. }
                 | Command::Install { .. }
+                | Command::Update
                 | Command::Config {
                     command: ConfigCommand::Install { .. }
                         | ConfigCommand::Reset
@@ -1821,5 +1824,11 @@ mod tests {
         assert!(!show.command.unwrap().is_administrative());
         let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
         assert!(reset.command.unwrap().is_administrative());
+    }
+
+    #[test]
+    fn update_is_administrative() {
+        let update = Cli::try_parse_from(["shoal", "update"]).unwrap();
+        assert!(update.command.unwrap().is_administrative());
     }
 }

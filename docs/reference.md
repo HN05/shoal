@@ -36,7 +36,10 @@ shoal install
 ```
 
 Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
-`main`). Managed daemons notice the replacement and restart once daemon operations are
+`main`). `shoal update` refuses Homebrew installations; for a downloaded binary,
+it installs the latest GitHub release's archive for this platform when that
+release is newer, after checking it against the release's `SHA256SUMS` and its
+reported version, by replacing the resolved executable file. Managed daemons notice the replacement and restart once daemon operations are
 idle and no setup or landing runs; until then, commands of the new release wait
 up to ten minutes for it. Followed event and notification streams and
 item waits reconnect across the handoff, continuing in the installed release
