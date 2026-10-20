@@ -255,9 +255,12 @@ impl ForgeRepo {
     }
 
     /// The path components of `target` after this repository's `section`.
+    /// Forges link jobs over HTTPS even when the remote uses HTTP.
     fn repository_path<'a>(&self, target: &'a str, section: &str) -> Option<Vec<&'a str>> {
         let path = target
-            .strip_prefix(&self.repository_url())?
+            .strip_prefix("https://")
+            .or_else(|| target.strip_prefix("http://"))?
+            .strip_prefix(&format!("{}/{}", self.host, self.path))?
             .strip_prefix(section)?;
         Some(path.split('/').collect())
     }
@@ -610,7 +613,7 @@ mod tests {
         ] {
             assert_eq!(github.locate(target), None, "{target}");
         }
-        let gitlab = ForgeRepo::parse("https://gitlab.com/group/sub/repo").unwrap();
+        let gitlab = ForgeRepo::parse("http://gitlab.com/group/sub/repo").unwrap();
         assert_eq!(
             gitlab.locate("https://gitlab.com/group/sub/repo/-/jobs/56"),
             Some(Location::GitLab { job: 56 })
