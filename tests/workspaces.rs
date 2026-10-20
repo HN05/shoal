@@ -18306,7 +18306,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" ls > \"$HOME/chat-ls\"\n\"$shoal\" --json ls --chats > \"$HOME/chat-chats\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" ls > \"$HOME/chat-ls\"\n\"$shoal\" --json ls --chats > \"$HOME/chat-chats\"\n\"$shoal\" status chat-worker > \"$HOME/chat-status\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -18356,6 +18356,12 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
             vec![format!("◆ {name} chat").as_str(), "running", "claude"],
             vec!["● └ chat-worker", "idle"],
         ]
+    );
+
+    let status = fs::read_to_string(home.join("chat-status")).unwrap();
+    assert!(
+        status.contains(&format!("Chat:          {name} chat (claude)\n")),
+        "{status}"
     );
 
     // Once its agent exits the chat ends, and its workspace returns to the user.

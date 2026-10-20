@@ -32,7 +32,7 @@ use crate::{
     git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
     model::{
-        Completion, ConflictCheck, DiffBase, OpenedWorkspace, Repository, Workspace,
+        Chat, Completion, ConflictCheck, DiffBase, OpenedWorkspace, Repository, Workspace,
         WorkspaceStatus, WorkspaceTarget,
     },
     protocol::{Body, ConfigTarget, Method},
@@ -1322,12 +1322,18 @@ struct StatusView {
     /// Why sessions could not be listed; status still reports the rest.
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions_error: Option<String>,
+    /// How text names the workspace's chat; JSON gives its ID.
+    #[serde(skip)]
+    chat: Option<String>,
 }
 
 impl StatusView {
     async fn request(ctx: &Context, workspace: String) -> Result<Self> {
+        // Listing chats first ends finished ones, returning their workspaces to the user.
+        let chats = client::chats(&ctx.paths).await?;
         let status =
             request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
+        let chat = chat_name(ctx, &chats, &status.inspection.workspace).await?;
         let (sessions, sessions_error) = match zmx::sessions(&status.inspection.workspace.id).await
         {
             Ok(sessions) => (sessions, None),
@@ -1337,8 +1343,26 @@ impl StatusView {
             status,
             sessions,
             sessions_error,
+            chat,
         })
     }
+}
+
+/// The listed chat that opened `workspace` with its agent, else its ID, which
+/// scoped callers see without the chat.
+async fn chat_name(ctx: &Context, chats: &[Chat], workspace: &Workspace) -> Result<Option<String>> {
+    let Some(id) = &workspace.chat else {
+        return Ok(None);
+    };
+    let Some(chat) = chats.iter().find(|chat| chat.id == *id) else {
+        return Ok(Some(id.clone()));
+    };
+    let repositories = super::chat::repositories(ctx, std::slice::from_ref(chat)).await?;
+    Ok(Some(format!(
+        "{} ({})",
+        ui::chat_label(chat, &repositories),
+        chat.agent
+    )))
 }
 
 /// Items and resources find the workspaces that link or hold them; anything
@@ -1449,6 +1473,7 @@ fn render_status(view: &StatusView, json: bool) {
             .agent_state
             .map_or("none", |status| { ui::agent_state_label(status.state) })
     );
+    println!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
 
     println!("Ports:         {}", inspection.ports.len());
     for port in &inspection.ports {

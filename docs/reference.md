@@ -691,7 +691,7 @@ numbering a repository's running chats from 1; `shoal ls` lists it with the
 workspaces it opened, and [workspace events](#workspace-events) report its
 start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
-field names that chat until the chat ends or the workspace is opened outside a
+field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
 chat, which returns it to you.
 
 ### Agent queue
