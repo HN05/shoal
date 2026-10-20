@@ -161,6 +161,20 @@ impl ForgeRepo {
     }
 }
 
+/// The kind of the item a GitHub or Forgejo issue read returned, which
+/// reports a PR as an issue with a `pull_request` field.
+pub(super) fn issue_read_kind(number: u64, value: &Value) -> Result<ItemKind> {
+    ensure!(
+        value["number"] == number,
+        "the forge returned a different item than #{number}"
+    );
+    Ok(if value["pull_request"].is_null() {
+        ItemKind::Issue
+    } else {
+        ItemKind::Pr
+    })
+}
+
 pub(super) fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
@@ -229,6 +243,15 @@ mod tests {
             "pull_request": {"merged": false}});
         assert!(forgejo.current(ItemKind::Issue, 3, &pull).is_err());
         assert!(forgejo.current(ItemKind::Issue, 4, &issue).is_err());
+    }
+
+    #[test]
+    fn issue_reads_tell_issues_from_prs() {
+        let issue = json!({"number": 3, "pull_request": null});
+        let pull = json!({"number": 4, "pull_request": {"merged": false}});
+        assert_eq!(issue_read_kind(3, &issue).unwrap(), ItemKind::Issue);
+        assert_eq!(issue_read_kind(4, &pull).unwrap(), ItemKind::Pr);
+        assert!(issue_read_kind(5, &pull).is_err());
     }
 
     #[test]

@@ -234,15 +234,7 @@ impl ForgeRepo {
                 &Request::get(self.item_endpoint(ItemKind::Issue, number)),
             )
             .await?;
-        ensure!(
-            value["number"] == number,
-            "the forge returned a different item than #{number}"
-        );
-        Ok(if value["pull_request"].is_null() {
-            ItemKind::Issue
-        } else {
-            ItemKind::Pr
-        })
+        super::item::issue_read_kind(number, &value)
     }
 
     /// The requests that carry out `action` on `current`, in order.

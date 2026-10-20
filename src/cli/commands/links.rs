@@ -9,7 +9,7 @@ use crate::{
     cli::{ItemArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        link::{self, ItemKind, Link, LinkTarget, Selection},
+        link::{ItemKind, Link, LinkTarget, Selection},
         view::Selected,
     },
     git,
@@ -60,17 +60,7 @@ async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Opti
         },
     )
     .await?;
-    let mut kinds = linked
-        .items
-        .into_iter()
-        .filter(|item| link::item(item.kind, &item.url).is_ok_and(|(_, linked)| linked == number))
-        .map(|item| item.kind);
-    let kind = kinds.next();
-    ensure!(
-        kinds.all(|other| Some(other) == kind),
-        "an issue and a PR #{number} are both linked; put issue or pr before the number"
-    );
-    Ok(kind)
+    linked.kind_of(number)
 }
 
 pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
