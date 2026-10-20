@@ -474,7 +474,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         .create_workspace(&repo.id, "stopped".into(), None, None, None)
         .await
         .unwrap();
-    let _agent = connected_agent(&manager, &workspace).await;
+    let agent = connected_agent(&manager, &workspace).await;
     let activities = |slots: Vec<Slot>| -> Vec<Activity> {
         slots.into_iter().map(|slot| slot.activity).collect()
     };
@@ -487,6 +487,13 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
             .stop_agent_for_overload("critical memory pressure")
             .await
     );
+    // Until its processes are proven stopped the agent's load may still show.
+    assert!(matches!(
+        activities(manager.occupied_slots().await.unwrap())[..],
+        [Activity::Running(_)]
+    ));
+    manager.queue_agent_restore(&agent.0).await.unwrap();
+    let _restoring = await_restore(&manager, &agent.0).await;
     assert_eq!(
         activities(manager.occupied_slots().await.unwrap()),
         [Activity::Stopped]

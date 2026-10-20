@@ -387,17 +387,18 @@ impl Manager {
         Ok(())
     }
 
-    /// Each tracked agent's execution, workspace and load: one awaiting
-    /// overload recovery runs nothing.
+    /// Each tracked agent's execution, workspace and load. One waiting for
+    /// its restore with every process proven stopped runs nothing; until that
+    /// proof its load may still show.
     pub(super) async fn agent_executions(
         &self,
     ) -> std::collections::HashMap<String, (String, Activity)> {
-        self.agents
-            .lock()
-            .await
+        let agents = self.agents.lock().await;
+        let waiting = self.restore_waiters.lock().unwrap();
+        agents
             .iter()
             .map(|(id, agent)| {
-                let activity = if agent.protected() {
+                let activity = if waiting.contains(id) {
                     Activity::Stopped
                 } else {
                     Activity::Running(agent.started.elapsed())
