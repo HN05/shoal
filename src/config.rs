@@ -268,9 +268,19 @@ pub struct Pr {
     pub draft: bool,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Land {
     pub push: bool,
+    pub requires_approval: bool,
+}
+
+impl Default for Land {
+    fn default() -> Self {
+        Self {
+            push: false,
+            requires_approval: true,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

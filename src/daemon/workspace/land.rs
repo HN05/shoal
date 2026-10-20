@@ -4,6 +4,9 @@ use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, branches::UpstreamPolicy};
 use crate::{
+    daemon::approvals::{
+        self, ApprovalRequest, LAND, LandSpecification, Lifetime, Specification, Target, Undecided,
+    },
     git::{
         self,
         default_branch::DefaultBranchLookup,
@@ -94,6 +97,44 @@ impl Manager {
             merge_temporaries,
             default_refresh,
         })
+    }
+
+    /// A scoped landing needs the user's approval for the branch at the commit
+    /// `plan` lands, unless `[land] requires_approval` is off. The caller holds
+    /// the repository Git gate, so the approved commit is the one that lands.
+    pub(super) async fn authorize_scoped_land(&self, plan: &LandPlan) -> Result<()> {
+        let settings = self.workspace_settings(&plan.workspace).await?;
+        if !settings.land.requires_approval {
+            return Ok(());
+        }
+        let branch = &plan.workspace.branch;
+        let request = ApprovalRequest::new(
+            &plan.workspace.id,
+            Target::Land,
+            LAND,
+            Specification::Land(LandSpecification {
+                branch: branch.clone(),
+                head: plan.source.clone(),
+            }),
+            Lifetime::Lease,
+            Some(&format!(
+                "merge {branch} into {}",
+                plan.default_refresh.branch
+            )),
+        );
+        let undecided = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let undecided = approvals::request_land(&tx, request)?;
+                tx.commit()?;
+                Ok(undecided)
+            })
+            .await?;
+        match undecided {
+            Some(request) => Err(Undecided(Box::new(request)).into()),
+            None => Ok(()),
+        }
     }
 
     /// The managed workspace that has `branch` checked out, if any.

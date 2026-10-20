@@ -978,7 +978,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     && match requested {
                         ExecutionKind::Command => true,
                         ExecutionKind::Setup => kind != ExecutionKind::Setup,
-                        ExecutionKind::Land => false,
+                        ExecutionKind::Land => true,
                     };
                 let result = scope::authorize(&f.manager, Some(token), &mut method).await;
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
@@ -1129,7 +1129,7 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
 }
 
 #[tokio::test]
-async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
+async fn land_refuses_dirty_checkouts_and_other_branches() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     f.add("caller").await;
@@ -1155,35 +1155,122 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
     assert!(format!("{error:#}").contains("not on worker"), "{error:#}");
     git(&workspace.path, &["switch", "worker"]);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
-    f.manager
-        .issue_scope(
-            "token".into(),
-            scope::Caller {
-                execution: Some(scope::ScopedExecution {
-                    kind: ExecutionKind::Command,
-                    id: "execution".into(),
-                }),
-                workspace_id: workspace.id.clone(),
-            },
-        )
-        .await;
-    let mut denied = Method::Execute {
-        kind: crate::daemon::workspace::ExecutionKind::Land,
-        agent: None,
-        recover: false,
-        reattach: false,
-        queue_entry: None,
-        workspace: workspace.id.clone(),
-        wrapper: crate::process::identity::capture(std::process::id())
-            .unwrap()
-            .unwrap(),
+}
+
+/// Begin a land execution as the workspace's agent.
+async fn land_as_agent(
+    f: &Fixture,
+    workspace: &crate::model::Workspace,
+) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+    let caller = scope::Caller {
+        execution: None,
+        workspace_id: workspace.id.clone(),
     };
-    assert!(
-        scope::authorize(&f.manager, Some("token"), &mut denied)
+    f.manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Land, Some(&caller))
+        .await
+}
+
+/// The approval a scoped landing is waiting for or was refused.
+async fn undecided_land(
+    f: &Fixture,
+    workspace: &crate::model::Workspace,
+) -> crate::daemon::approvals::ApprovalRequest {
+    let error = land_as_agent(f, workspace)
+        .await
+        .expect_err("landing needs a decision");
+    *error
+        .downcast::<crate::daemon::approvals::Undecided>()
+        .expect("an approval request")
+        .0
+}
+
+#[tokio::test]
+async fn scoped_land_waits_for_approval_of_its_commit() {
+    use crate::daemon::approvals::{DecisionStatus, Specification};
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    let head = git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let pending = undecided_land(&f, &workspace).await;
+    assert_eq!(pending.status, DecisionStatus::Pending);
+    assert_eq!(pending.subject(), format!("land worker at {head}"));
+    assert_eq!(pending.reason, "merge worker into main");
+    assert_eq!(undecided_land(&f, &workspace).await.id, pending.id);
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+
+    // Approval lets the agent's retry land the approved commit.
+    f.manager
+        .decide_approval(pending.id.clone(), true)
+        .await
+        .unwrap();
+    let started = land_as_agent(&f, &workspace).await.unwrap();
+    assert_eq!(started.plan.land.as_ref().unwrap().source, head);
+    f.manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Land, Some(0))
+        .await
+        .unwrap();
+    drop(started);
+
+    // A later commit needs a new request, which replaces the earlier one.
+    fs::write(workspace.path.join("feature"), "more\n").unwrap();
+    commit(&workspace.path, "feature");
+    let next = undecided_land(&f, &workspace).await;
+    assert_ne!(next.id, pending.id);
+    assert_eq!(next.status, DecisionStatus::Pending);
+    assert_eq!(
+        f.manager
+            .approval_requests(Some("worker"))
             .await
-            .unwrap_err()
-            .to_string()
-            .contains("cannot land")
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Denial leaves the branch unlanded and refuses the same commit again.
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    let denied = undecided_land(&f, &workspace).await;
+    let Specification::Land(land) = &denied.specification else {
+        panic!("land specification expected");
+    };
+    assert_eq!(
+        land.head,
+        git(&workspace.path, &["rev-parse", "HEAD"]).trim()
+    );
+    f.manager
+        .decide_approval(denied.id.clone(), false)
+        .await
+        .unwrap();
+    let refused = undecided_land(&f, &workspace).await;
+    assert_eq!(
+        (refused.id, refused.status),
+        (denied.id, DecisionStatus::Denied)
+    );
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+}
+
+#[tokio::test]
+async fn scoped_land_skips_approval_when_configured() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[land]\nrequires_approval = false\n",
+    )
+    .unwrap();
+    commit(&workspace.path, ".shoal.toml");
+    let started = land_as_agent(&f, &workspace).await.unwrap();
+    assert!(started.plan.land.is_some());
+    assert!(
+        f.manager
+            .approval_requests(Some("worker"))
+            .await
+            .unwrap()
+            .is_empty()
     );
 }
 

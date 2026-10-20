@@ -29,12 +29,12 @@ use crate::{
         client,
         internal::{Worker, internal_command},
     },
-    daemon::workspace::ExecutionKind,
+    daemon::{approvals::Undecided, workspace::ExecutionKind},
     env,
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process,
-    protocol::{Control, ExecutionEvent, Method, Protection, Reattach, timing},
+    protocol::{Body, Control, ExecutionEvent, Method, Protection, Reattach, timing},
 };
 use link::{Link, Received, Refused};
 
@@ -563,7 +563,12 @@ async fn open_execution(
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
-    let plan = ExecutionPlan::try_from(body)?;
+    let plan = match body {
+        Body::ApprovalRequest(request) => {
+            return Err(Undecided(request).into());
+        }
+        body => ExecutionPlan::try_from(body)?,
+    };
     if mode.reattaches() {
         link.allow_reattach(
             paths,

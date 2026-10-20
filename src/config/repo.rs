@@ -320,11 +320,13 @@ pub struct Pr {
     pub draft: Option<bool>,
 }
 
-/// Whether `shoal land` pushes the default branch to its upstream afterwards.
+/// Whether `shoal land` pushes the default branch to its upstream afterwards,
+/// and whether a scoped landing waits for the user's approval.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Land {
     pub push: Option<bool>,
+    pub requires_approval: Option<bool>,
 }
 
 /// Repository value for the global `[cleanup.pr]`.

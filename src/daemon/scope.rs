@@ -106,7 +106,7 @@ pub async fn authorize(
         | Method::Conflicts { workspace, .. }
         | Method::Execute {
             workspace,
-            kind: ExecutionKind::Command,
+            kind: ExecutionKind::Command | ExecutionKind::Land,
             ..
         }
         | Method::WorkspaceHook { workspace, .. }
@@ -139,12 +139,6 @@ pub async fn authorize(
             action: Action::Merge { .. },
             ..
         } => bail!("merging is the user's decision; ask them with shoal notify"),
-        Method::Execute {
-            kind: ExecutionKind::Land,
-            ..
-        } => bail!(
-            "workspace processes cannot land into the default branch; an unscoped shoal land does that"
-        ),
         _ => bail!(
             "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
         ),

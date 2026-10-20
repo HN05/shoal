@@ -240,6 +240,10 @@ impl Effective {
             },
             land: Land {
                 push: built_in(merged.land.push, "land.push")?,
+                requires_approval: built_in(
+                    merged.land.requires_approval,
+                    "land.requires_approval",
+                )?,
             },
             seed: merged.seed,
         })
@@ -304,6 +308,7 @@ fn built_in() -> RepoConfig {
         },
         land: config::repo::Land {
             push: Some(Land::default().push),
+            requires_approval: Some(Land::default().requires_approval),
         },
         ..Default::default()
     }
@@ -597,6 +602,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(unready.draft),
         scalar!(pr.draft),
         scalar!(land.push),
+        scalar!(land.requires_approval),
         scalar!(seed.cmd),
         list!(seed.paths),
     ];
@@ -622,7 +628,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\n\
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
 [seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
@@ -917,6 +923,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             unready.draft.is_some(),
             pr.draft.is_some(),
             land.push.is_some(),
+            land.requires_approval.is_some(),
             seed.cmd.is_some(),
         ] {
             assert!(present, "the fixture must set every option");

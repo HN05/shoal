@@ -109,7 +109,9 @@ instead of the PR delivery guidance below.
   checks, and rechecks its recorded HEAD; keeping completion blocks idle and PR
   cleanup. A scoped keep overriding configured cleanup is an approval request bound
   to HEAD: cleanup waits for the unscoped decision, denial requests cleanup, and a
-  decision changes only the completion still waiting on that request. This is cooperative,
+  decision changes only the completion still waiting on that request. A scoped land
+  is an approval request bound to the branch HEAD unless `[land] requires_approval`
+  is false; approval never skips a landing check and lands only the approved commit. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

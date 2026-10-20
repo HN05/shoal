@@ -18,7 +18,10 @@ use crate::{
         ui::{self, Fallback},
         zmx,
     },
-    daemon::recovery::{ReconcileOptions, Report},
+    daemon::{
+        approvals::Undecided,
+        recovery::{ReconcileOptions, Report},
+    },
     env, execution,
     forge::{
         IssueInput,
@@ -82,7 +85,13 @@ pub(super) async fn land(
                 .push
         }
     };
-    execution::land(&ctx.paths, workspace, ctx.json, push).await
+    match execution::land(&ctx.paths, workspace, ctx.json, push).await {
+        Err(error) => match error.downcast::<Undecided>() {
+            Ok(Undecided(request)) => super::approvals::declined(ctx, &request),
+            Err(error) => Err(error),
+        },
+        landed => landed,
+    }
 }
 
 pub(super) async fn rename(

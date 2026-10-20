@@ -375,8 +375,11 @@ and builds wait under host pressure so they never add load an agent would feel.
 Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, and resources.
-`land`, creation, removal, reconciliation, other workspaces, repository
-administration, and service control need an unscoped caller. PR registration,
+Creation, removal, reconciliation, other workspaces, repository
+administration, and service control need an unscoped caller. A scoped `land` is an
+approval request bound to the branch and its HEAD unless `[land] requires_approval`
+is off; approval lets the agent's retry land that commit through the normal checks,
+so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
@@ -849,8 +852,8 @@ queue lives in memory, so a daemon restart loses the order; commands still polli
 join again.
 
 Approvals are the one daemon-owned way a scoped caller asks the user to decide;
-`shoal approvals` lists and decides every kind. Keeping a completed workspace is
-one kind (see completion); resource access is the other.
+`shoal approvals` lists and decides every kind: keeping a completed workspace (see
+completion), landing a branch (see scope) and resource access.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it, and the decision is sent to the requesting

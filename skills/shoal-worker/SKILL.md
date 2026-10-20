@@ -153,8 +153,11 @@ brings in their latest commits; use `origin/feature/api` for pushed work after
 `shoal sync`. Stay on your workspace's recorded branch. When it builds on
 another workspace's branch, record that with `shoal base set <workspace>`;
 `shoal base` shows it.
-Agents cannot land: when the repository has no remote, the human runs
-`shoal land` to merge your branch into the default branch.
+When the repository has no remote, `shoal --json land` merges your committed
+branch into the default branch. Unless the repository sets `[land]
+requires_approval = false`, it first exits 2 with `approval_pending` for your
+current HEAD: wait for the decision message, then run it again without new
+commits. A new commit needs a new request; stop on `approval_denied`.
 
 ## Ports
 

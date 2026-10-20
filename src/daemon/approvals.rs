@@ -33,7 +33,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>` or `keep`.
+/// `secret/<name>`, `keep` or `land`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -46,10 +46,14 @@ pub enum Target {
     Secret(String),
     /// Keeping a workspace after an agent marks its assignment done.
     Keep,
+    /// Landing a workspace branch into the default branch.
+    Land,
 }
 
 /// The name of a workspace's single keep request.
 pub const KEEP: &str = "done";
+/// The name of a workspace's single land request.
+pub const LAND: &str = "branch";
 
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -59,6 +63,7 @@ impl fmt::Display for Target {
             Self::Simulator => f.write_str("simulator"),
             Self::Secret(name) => write!(f, "secret/{name}"),
             Self::Keep => f.write_str("keep"),
+            Self::Land => f.write_str("land"),
         }
     }
 }
@@ -70,6 +75,7 @@ impl FromStr for Target {
         match text {
             "simulator" => return Ok(Self::Simulator),
             "keep" => return Ok(Self::Keep),
+            "land" => return Ok(Self::Land),
             _ => {}
         }
         if let Some(name) = text.strip_prefix("port/")
@@ -109,6 +115,7 @@ pub enum Specification {
     Simulator(SimulatorSpecification),
     Keep(KeepSpecification),
     Secret(SecretSpecification),
+    Land(LandSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +150,14 @@ pub struct SimulatorSpecification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct KeepSpecification {
+    pub head: String,
+}
+
+/// A land decision covers the branch at one commit; later commits need a new one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LandSpecification {
+    pub branch: String,
     pub head: String,
 }
 
@@ -313,10 +328,14 @@ impl ApprovalRequest {
         }
     }
 
-    /// What the user is asked to decide: the target and lease name, or `keep`.
+    /// What the user is asked to decide: the target and lease name, `keep`,
+    /// or the branch and commit to land.
     pub fn subject(&self) -> String {
-        match self.target {
-            Target::Keep => self.target.to_string(),
+        match (&self.target, &self.specification) {
+            (Target::Keep, _) => self.target.to_string(),
+            (Target::Land, Specification::Land(land)) => {
+                format!("land {} at {}", land.branch, land.head)
+            }
             _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
         }
     }
@@ -386,6 +405,40 @@ pub fn request_keep(
     );
     Ok(pending)
 }
+
+/// Replace a land request for an earlier commit with `request`. Returns the
+/// request still awaiting or refused a decision; an approval for the same
+/// commit lets the landing proceed.
+pub fn request_land(
+    tx: &Transaction<'_>,
+    request: ApprovalRequest,
+) -> Result<Option<ApprovalRequest>> {
+    let owner = request.workspace_id.clone();
+    if current(tx, &owner, &Target::Land, LAND)?
+        .is_some_and(|existing| existing.specification != request.specification)
+    {
+        release(tx, &owner, &Target::Land, LAND)?;
+    }
+    check(tx, request)
+}
+
+/// An operation waiting for, or refused by, the user's decision on a request.
+#[derive(Debug)]
+pub struct Undecided(pub Box<ApprovalRequest>);
+
+impl fmt::Display for Undecided {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "approval {} for {} is {}",
+            self.0.id,
+            self.0.subject(),
+            self.0.status
+        )
+    }
+}
+
+impl std::error::Error for Undecided {}
 
 /// A decided request; `new` is false when the decision repeats the recorded one.
 pub struct Decision {
@@ -692,6 +745,15 @@ mod tests {
             request.decision_message(),
             "Approval id for port/web / default (workspace) was denied: do not retry it."
         );
+        request.target = Target::Land;
+        request.specification = Specification::Land(LandSpecification {
+            branch: "feature".into(),
+            head: "abc".into(),
+        });
+        assert_eq!(
+            request.decision_message(),
+            "Approval id for land feature at abc was denied: do not retry it."
+        );
         request.target = Target::Keep;
         assert_eq!(
             request.decision_message(),
@@ -928,6 +990,8 @@ mod tests {
             (Target::Port("web".into()), "port/web"),
             (Target::Simulator, "simulator"),
             (Target::Secret("TOKEN".into()), "secret/TOKEN"),
+            (Target::Keep, "keep"),
+            (Target::Land, "land"),
         ] {
             assert_eq!(target.to_string(), text);
             assert_eq!(text.parse::<Target>()?, target);
@@ -963,11 +1027,21 @@ mod tests {
             serde_json::json!({"profile": {"requires_approval": true, "approval_lifetime": "workspace",
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
             serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
+            serde_json::json!({"head": "abc"}),
+            serde_json::json!({"branch": "feature", "head": "abc"}),
         ];
         for json in recorded {
             let specification: Specification = serde_json::from_value(json.clone())?;
             assert_eq!(serde_json::to_value(&specification)?, json);
         }
+        assert!(matches!(
+            serde_json::from_value(serde_json::json!({"head": "abc"}))?,
+            Specification::Keep(_)
+        ));
+        assert!(matches!(
+            serde_json::from_value(serde_json::json!({"branch": "feature", "head": "abc"}))?,
+            Specification::Land(_)
+        ));
         assert!(matches!(
             serde_json::from_value(serde_json::json!({"preferred": 8080, "env": "PORT_WEB",
                 "on_conflict": "auto", "range": [1, 2]}))?,
@@ -984,6 +1058,7 @@ mod tests {
             serde_json::json!({"preferred": null, "env": "PORT_WEB", "on_conflict": "maybe",
                 "range": [3000, 3100]}),
             serde_json::json!({"command": ["op"], "tools": [], "head": "abc"}),
+            serde_json::json!({"branch": "feature"}),
         ] {
             assert!(
                 serde_json::from_value::<Specification>(json.clone()).is_err(),

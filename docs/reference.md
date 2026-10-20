@@ -1131,8 +1131,14 @@ branch cannot be held by a managed workspace, and any other checkout of it must 
 clean. The workspace must be clean and on its recorded branch. Git fast-forwards or
 creates a merge commit in the default checkout. A merge that does not apply cleanly
 is aborted: run `shoal merge <default>` in the workspace, resolve there, and land
-again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
-automatic cleanup.
+again. Landed commits count as pushed for `rm` and automatic cleanup.
+
+An agent's scoped `shoal land` needs the user's approval for the branch at its
+current commit unless `[land] requires_approval = false`. The first run records a
+`land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
+after approval, running it again lands that commit with every check above. A new
+commit replaces the request with one for the new commit, and a denied commit
+stays refused with `"approval_denied"`.
 
 With `[land] push`, or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one landing local. A default branch without an
@@ -1140,7 +1146,8 @@ upstream is refused before merging, and a failed push keeps the landed merge.
 
 ```toml
 [land]
-push = false # Default: false
+push = false             # Default: false
+requires_approval = true # Default: true
 ```
 
 ### Diff
@@ -1914,7 +1921,7 @@ and `internal agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
-They cannot `land`, reach other worktrees, create or remove workspaces, read
+They `land` only with [approval](#land-into-the-default-branch) and cannot reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its
@@ -2105,7 +2112,7 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
-these requests, keep requests from `shoal done --keep`, and retained workspace grants; `shoal approvals list <workspace>` filters
+these requests, keep requests from `shoal done --keep`, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals list <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approvals approve [id]` or
 `shoal approvals deny [id]`. Approval reserves no capacity: retry acquisition after

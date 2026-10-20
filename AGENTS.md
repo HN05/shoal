@@ -99,7 +99,9 @@ when behavior changes, distinguishing decisions from proposals.
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
   A scoped keep overriding configured cleanup is a request bound to HEAD;
-  cleanup waits for its decision, and denial requests cleanup.
+  cleanup waits for its decision, and denial requests cleanup. A scoped land
+  is a request bound to the branch HEAD unless `[land] requires_approval` is
+  false; approval lets the retried land proceed under every landing check.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.

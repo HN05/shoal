@@ -11,6 +11,7 @@ use tokio::{
 };
 
 use super::{
+    approvals::Undecided,
     execution_recovery,
     scope::Caller,
     workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest},
@@ -86,7 +87,13 @@ pub(super) async fn execute(
     {
         Ok(begun) => begun,
         Err(error) => {
-            let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
+            let body = match error.downcast::<Undecided>() {
+                Ok(Undecided(request)) => {
+                    manager.notify_approval(&request.workspace, &request).await;
+                    Body::ApprovalRequest(request)
+                }
+                Err(error) => Body::error(ErrorCode::ExecutionFailed, format!("{error:#}")),
+            };
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
@@ -463,6 +470,55 @@ mod tests {
 
     async fn read<T: serde::de::DeserializeOwned>(stream: &mut BufReader<UnixStream>) -> T {
         bounded(protocol::read_buffered(stream)).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn scoped_landing_answers_with_its_approval_request() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "lander".into(), None, None, None)
+            .await
+            .unwrap();
+        let (client, server) = UnixStream::pair().unwrap();
+        let executing = tokio::spawn(execute(
+            server,
+            3,
+            manager.clone(),
+            ExecutionContext {
+                workspace: workspace.id.clone(),
+                wrapper: crate::process::identity::capture(std::process::id())
+                    .unwrap()
+                    .unwrap(),
+                kind: ExecutionKind::Land,
+                agent: None,
+                recover: false,
+                reattach: false,
+                queue_entry: None,
+                caller: Some(Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                }),
+            },
+            manager.background_operations.clone().read_owned().await,
+        ));
+        let response: Response = read(&mut BufReader::new(client)).await;
+        bounded(executing).await.unwrap().unwrap();
+        let Body::ApprovalRequest(request) = response.body else {
+            panic!("landing was not held for approval: {:?}", response.body);
+        };
+        assert_eq!(request.target, crate::daemon::approvals::Target::Land);
+        let notifications = manager.notifications(true, 10).await.unwrap();
+        assert!(
+            notifications
+                .iter()
+                .any(|n| n.message.contains(&request.id)),
+            "{notifications:?}"
+        );
     }
 
     #[tokio::test]

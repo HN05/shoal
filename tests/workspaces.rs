@@ -11585,7 +11585,7 @@ fn manual_auto_removal_rechecks_safety_after_hooks() {
 }
 
 #[test]
-fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
+fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes() {
     let fixture = Fixture::new();
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
@@ -11593,9 +11593,12 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let expected = git(path, &["rev-parse", "HEAD"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let denied = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
-    assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot land"));
+    let pending = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
+    assert_eq!(pending.status.code(), Some(2));
+    let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
+    assert_eq!(pending["code"], "approval_pending");
+    assert_eq!(pending["request"]["target"], "land");
+    assert_eq!(pending["request"]["specification"]["head"], expected.trim());
     let denied = fixture.run(&["exec", "worker", "--", binary, "internal", "land", "{}"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
@@ -11614,7 +11617,22 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
         String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
-    let result = fixture.ok(&["land", "--no-push", "worker"]);
+    fixture.ok(&[
+        "approvals",
+        "approve",
+        pending["request"]["id"].as_str().unwrap(),
+    ]);
+    let landed = fixture.run(&[
+        "exec",
+        "worker",
+        "--",
+        binary,
+        "--json",
+        "land",
+        "--no-push",
+    ]);
+    assert!(landed.status.success(), "{landed:?}");
+    let result: serde_json::Value = serde_json::from_slice(&landed.stdout).unwrap();
     assert_eq!(result["updated"], true);
     assert_eq!(result["fast_forward"], true);
     assert_eq!(result["default_branch"], "main");

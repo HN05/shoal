@@ -186,7 +186,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedExecution> {
         let (workspace, preparation) = self
-            .prepare_execution(selector, wrapper.as_ref(), kind)
+            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some())
             .await?;
         let PreparedExecution {
             setup_cmd,
@@ -339,6 +339,7 @@ impl Manager {
         selector: &str,
         wrapper: Option<&Identity>,
         kind: ExecutionKind,
+        scoped: bool,
     ) -> Result<(Workspace, PreparedExecution)> {
         if let Some(wrapper) = wrapper {
             ensure!(
@@ -347,7 +348,9 @@ impl Manager {
             );
         }
         let workspace = self.workspace(selector).await?;
-        let preparation = self.prepare_execution_kind(&workspace, kind).await?;
+        let preparation = self
+            .prepare_execution_kind(&workspace, kind, scoped)
+            .await?;
         Ok((workspace, preparation))
     }
 
@@ -355,12 +358,16 @@ impl Manager {
         &self,
         workspace: &Workspace,
         kind: ExecutionKind,
+        scoped: bool,
     ) -> Result<PreparedExecution> {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Land => {
                 let guard = self.lock_repository_git(&workspace.repository_id).await;
                 let land = self.prepare_land(&workspace.id).await?;
+                if scoped {
+                    self.authorize_scoped_land(&land).await?;
+                }
                 Ok(PreparedExecution {
                     land: Some(Box::new(land)),
                     lifetime_guard: Some(guard),
