@@ -74,7 +74,8 @@ instead of the PR delivery guidance below.
   administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, opening and changing issues and PRs
-  of the own repository except merging, own-repository sync and
+  of the own repository except merging, rerunning or cancelling their CI jobs,
+  own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or

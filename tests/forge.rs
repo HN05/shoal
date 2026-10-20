@@ -1217,3 +1217,135 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
         assert_eq!(ci["check"], json!({"name": "rust", "result": "failure"}));
     }
 }
+
+#[test]
+fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    let job = |run: u64, job: u64| {
+        format!("https://github.com/team/project/actions/runs/{run}/job/{job}")
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/commits/head/check-runs?per_page=100": {"body": {
+            "total_count": 4, "check_runs": [
+                {"name": "rust", "status": "completed", "conclusion": "failure", "details_url": job(1, 11)},
+                {"name": "docs", "status": "completed", "conclusion": "cancelled", "details_url": job(1, 12)},
+                {"name": "lint", "status": "in_progress", "conclusion": null, "details_url": job(2, 21)},
+                {"name": "fmt", "status": "queued", "conclusion": null, "details_url": job(2, 22)}
+            ]}},
+        "POST repos/team/project/actions/jobs/11/rerun": {"status": 201},
+        "POST repos/team/project/actions/jobs/12/rerun": {"status": 201},
+        "POST repos/team/project/actions/runs/2/cancel": {"status": 202},
+    }));
+    let ci = |action: &str, checks: Value| {
+        fixture.request(json!({"ci_action": {"workspace": "topic", "item": "8",
+            "action": action, "checks": checks}}))
+    };
+    let posts = || {
+        fixture
+            .requests()
+            .into_iter()
+            .map(|request| request[0].as_str().unwrap().to_owned())
+            .filter(|key| key.starts_with("POST"))
+            .collect::<Vec<_>>()
+    };
+    let url = format!("{}/pull/8", fixture.web);
+
+    let rerun = ci("rerun", json!([]));
+    assert_eq!(rerun["type"], "ci_acted", "{rerun}");
+    assert_eq!(
+        rerun["data"],
+        json!({"url": url, "action": "rerun", "checks": ["rust", "docs"]})
+    );
+    assert_eq!(
+        posts(),
+        [
+            "POST repos/team/project/actions/jobs/11/rerun",
+            "POST repos/team/project/actions/jobs/12/rerun"
+        ]
+    );
+
+    // Jobs of one run share its cancellation.
+    let cancel = ci("cancel", json!(["lint", "fmt"]));
+    assert_eq!(cancel["data"]["checks"], json!(["lint", "fmt"]), "{cancel}");
+    assert_eq!(posts(), ["POST repos/team/project/actions/runs/2/cancel"]);
+    let event = fixture
+        .events()
+        .into_iter()
+        .rfind(|event| event["kind"] == "item_changed")
+        .unwrap();
+    assert_eq!(
+        event["item"],
+        json!({"kind": "pr", "url": url, "action": "cancel"})
+    );
+
+    // A named check must be in the state the action needs.
+    let refused = ci("rerun", json!(["lint"]));
+    assert!(
+        refused["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("check lint is not failed"),
+        "{refused}"
+    );
+    assert!(posts().is_empty());
+}
+
+#[test]
+fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 3, "statuses": [
+            {"context": "rust", "status": "pending", "target_url": "/team/project/actions/runs/2765/jobs/1"},
+            {"context": "docs", "status": "pending", "target_url": "/team/project/actions/runs/2765/jobs/0"},
+            {"context": "lint", "status": "failure", "target_url": "/team/project/actions/runs/2764/jobs/0"}
+        ]}},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
+            {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
+        ]}},
+        "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
+    }));
+    let exported = fixture.ok(&["env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let ci = |action: &str| {
+        fixture.request_as(
+            json!({"ci_action": {"workspace": "topic", "item": "8", "action": action,
+                "checks": []}}),
+            Some(scope),
+        )
+    };
+    let cancel = ci("cancel");
+    assert_eq!(
+        cancel["data"]["checks"],
+        json!(["rust", "docs"]),
+        "{cancel}"
+    );
+    let posts = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        posts,
+        [json!([
+            "POST repos/team/project/actions/runs/9331/cancel",
+            null,
+            "token usertoken"
+        ])]
+    );
+
+    let rerun = ci("rerun");
+    assert!(
+        rerun["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Forgejo's API cannot rerun Actions jobs"),
+        "{rerun}"
+    );
+    assert!(fixture.requests().is_empty());
+}

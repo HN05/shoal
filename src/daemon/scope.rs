@@ -102,6 +102,7 @@ pub async fn authorize(
         | Method::WorkspaceStatus { workspace }
         | Method::SelectItems { workspace, .. }
         | Method::CheckLog { workspace, .. }
+        | Method::CiAction { workspace, .. }
         | Method::DiffBase { workspace }
         | Method::Conflicts { workspace, .. }
         | Method::Execute {

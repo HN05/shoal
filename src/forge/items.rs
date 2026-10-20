@@ -335,7 +335,7 @@ pub(super) async fn workspace_forge(workspace: &Workspace) -> Result<ForgeRepo> 
     ForgeRepo::parse(&remote)
 }
 
-fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
+pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
     match kind {
         ItemKind::Issue => workspace
             .links

@@ -5,6 +5,7 @@ pub mod action;
 mod api;
 pub(crate) mod bitbucket;
 pub mod checks;
+pub mod ci;
 pub mod create;
 mod gitlab;
 mod glab;

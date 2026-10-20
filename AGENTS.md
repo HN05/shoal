@@ -47,8 +47,8 @@ when behavior changes, distinguishing decisions from proposals.
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
   acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks, assignment completion and withdrawal, own-repository
-  sync, and opening and changing issues and PRs of the own repository are allowed,
-  except merging a PR.
+  sync, opening and changing issues and PRs of the own repository, and rerunning
+  or cancelling their CI jobs are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own

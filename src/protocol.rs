@@ -338,6 +338,13 @@ pub enum Method {
         selection: crate::forge::link::Selection,
         check: String,
     },
+    /// Rerun failed or cancel running checks on a PR's head; none named means all.
+    CiAction {
+        workspace: String,
+        item: Option<String>,
+        action: crate::forge::ci::CiAction,
+        checks: Vec<String>,
+    },
     /// Workspaces that link an item or hold a resource.
     FindWorkspaces {
         target: crate::model::WorkspaceTarget,
@@ -631,6 +638,7 @@ response_bodies! {
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::forge::view::Selected),
     CheckLog(crate::forge::checks::CheckLog),
+    CiActed(crate::forge::ci::CiActed),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     Diagnostics(Vec<crate::daemon::doctor::Check>),

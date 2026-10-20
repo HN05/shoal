@@ -945,6 +945,11 @@ bounded tails, so scoped callers never need forge credentials. Successful and
 pending checks omit logs; explicit selection limits output to one failed check.
 Failed-check watch updates include its failing step when recorded by the runner; an unavailable
 log is reported on that update without hiding other activity.
+Agents can also rerun failed and cancel running CI jobs on a PR's current head
+through the daemon, as the agent account and under the same scope, with each
+action recorded as an `item_changed` event. Each forge's own job API carries them
+out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, so
+Forgejo only cancels, and Bitbucket Pipelines are not supported.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,
