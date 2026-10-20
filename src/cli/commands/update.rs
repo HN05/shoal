@@ -55,7 +55,7 @@ fn installed_binary() -> Result<PathBuf> {
         .context("resolve the shoal executable")?;
     ensure!(
         !homebrew_installed(&path),
-        "Homebrew installed this shoal; update it with `brew upgrade hn05/tap/shoal`"
+        "Homebrew installed this shoal; update it with Homebrew"
     );
     Ok(path)
 }
