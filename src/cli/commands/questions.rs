@@ -124,6 +124,17 @@ async fn prompt_answer(ctx: &Context, id: Option<i64>) -> Result<(i64, String)> 
 
 /// The open question `id`, or one the user picks.
 async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
+    let id = match id {
+        Some(id) => id,
+        None => pick_open(ctx).await?,
+    };
+    let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
+    ensure!(question.is_open(), "question {id} is already answered");
+    Ok(question)
+}
+
+/// Choose among the newest open questions.
+async fn pick_open(ctx: &Context) -> Result<i64> {
     let questions = request::<Listing>(
         &ctx.paths,
         Method::ListQuestions {
@@ -133,29 +144,20 @@ async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
     )
     .await?
     .questions;
-    let id = match id {
-        Some(id) => id,
-        None => {
-            ensure!(!questions.is_empty(), "no open questions");
-            let entries = questions
-                .iter()
-                .map(|question| {
-                    (
-                        question.id.to_string(),
-                        format!(
-                            "{}  {}: {}",
-                            question.id, question.workspace, question.ask.question
-                        ),
-                    )
-                })
-                .collect();
-            ui::pick(ctx, "Question> ", entries)?.parse()?
-        }
-    };
-    questions
-        .into_iter()
-        .find(|question| question.id == id)
-        .ok_or_else(|| anyhow::anyhow!("no open question {id}"))
+    ensure!(!questions.is_empty(), "no open questions");
+    let entries = questions
+        .iter()
+        .map(|question| {
+            (
+                question.id.to_string(),
+                format!(
+                    "{}  {}: {}",
+                    question.id, question.workspace, question.ask.question
+                ),
+            )
+        })
+        .collect();
+    Ok(ui::pick(ctx, "Question> ", entries)?.parse()?)
 }
 
 fn render(question: &Question, palette: Palette) -> String {

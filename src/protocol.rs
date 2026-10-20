@@ -451,6 +451,10 @@ pub enum Method {
         /// Include answered questions.
         all: bool,
     },
+    /// One question by ID, for the user.
+    ShowQuestion {
+        id: i64,
+    },
     /// The user's answer, queued for the asking workspace's agents.
     AnswerQuestion {
         id: i64,

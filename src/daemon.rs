@@ -765,6 +765,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListQuestions { workspace, all } => {
             Body::Questions(manager.questions(workspace.as_deref(), !all).await?)
         }
+        Method::ShowQuestion { id } => Body::Question(manager.question(id).await?),
         Method::AnswerQuestion { id, answer } => {
             Body::Question(manager.answer_question(id, answer).await?)
         }

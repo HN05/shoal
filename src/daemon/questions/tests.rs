@@ -55,7 +55,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     assert_eq!(
         asked[0].message,
         format!(
-            "question {}: Which database? Recommended: SQLite; answer with shoal answer {}",
+            "question {} (answer with shoal answer {}): Which database? Recommended: SQLite",
             first.id, first.id
         )
     );
@@ -293,15 +293,19 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         listing,
         Method::ListQuestions { workspace: Some(owner), .. } if owner == workspace.id
     ));
-    let mut answer = Method::AnswerQuestion {
-        id: 1,
-        answer: "yes".into(),
-    };
-    assert!(
-        scope::authorize(&manager, Some("scope"), &mut answer)
-            .await
-            .is_err()
-    );
+    for mut method in [
+        Method::AnswerQuestion {
+            id: 1,
+            answer: "yes".into(),
+        },
+        Method::ShowQuestion { id: 1 },
+    ] {
+        assert!(
+            scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_err()
+        );
+    }
 }
 
 /// The largest question `ask` accepts, with the largest answer.
@@ -345,4 +349,32 @@ async fn listings_and_unread_answers_fit_one_response() {
     assert!(newest.is_open());
     let body = crate::protocol::Body::Questions(listing);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
+}
+
+#[tokio::test]
+async fn notifications_of_maximal_questions_fit_one_response() {
+    let (_root, manager, workspace) = fixture().await;
+    let mut first = None;
+    for n in 0..50 {
+        let question = manager
+            .ask_question(&workspace.name, maximal(n))
+            .await
+            .unwrap();
+        first.get_or_insert(question);
+    }
+    let notifications = manager.notifications(true, 50).await.unwrap();
+    assert_eq!(notifications.len(), 50);
+    let first = first.unwrap();
+    let message = &notifications[0].message;
+    assert!(message.len() <= crate::validate::MAX_MESSAGE_LEN);
+    assert!(message.starts_with(&format!(
+        "question {} (answer with shoal answer {}): question 0 ",
+        first.id, first.id
+    )));
+    assert!(message.ends_with('…'));
+    let body = crate::protocol::Body::Notifications(notifications);
+    assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
+
+    assert_eq!(manager.question(first.id).await.unwrap(), first);
+    assert!(manager.question(first.id + 100).await.is_err());
 }

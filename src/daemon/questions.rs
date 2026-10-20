@@ -110,10 +110,15 @@ impl Question {
     }
 
     /// What the user is told about a new question, including how to answer it.
+    /// It is cut to the length of other messages, so a batch of notifications
+    /// still fits one response.
     fn notification(&self) -> String {
-        format!(
-            "question {}: {} Recommended: {}; answer with shoal answer {}",
-            self.id, self.ask.question, self.ask.recommendation, self.id
+        shorten(
+            format!(
+                "question {} (answer with shoal answer {}): {} Recommended: {}",
+                self.id, self.id, self.ask.question, self.ask.recommendation
+            ),
+            crate::validate::MAX_MESSAGE_LEN,
         )
     }
 
@@ -124,6 +129,20 @@ impl Question {
             self.id, self.ask.question
         )
     }
+}
+
+/// `text` cut to at most `max` bytes, ending with an ellipsis when cut.
+fn shorten(mut text: String, max: usize) -> String {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max - '…'.len_utf8();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.truncate(end);
+    text.push('…');
+    text
 }
 
 const SELECT: &str = "SELECT q.id,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
@@ -306,6 +325,13 @@ impl Manager {
             })
             .await?;
         newest_that_fit(questions)
+    }
+
+    pub async fn question(&self, id: i64) -> Result<Question> {
+        self.store
+            .run(move |db| by_id(db, id))
+            .await?
+            .with_context(|| format!("unknown question {id}"))
     }
 
     pub async fn has_open_questions(&self, workspace_id: &str) -> Result<bool> {
