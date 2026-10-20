@@ -195,8 +195,9 @@ instead of the PR delivery guidance below.
   and keep the default branch on removal unless deletion was explicit. Adoption records
   identity and readiness atomically without setup, hooks, or Git setting changes;
   it takes normal cleanup ownership and cannot repair moved managed worktrees.
-  Idle cleanup accepts commits retained on the local default branch as well as
-  remote-tracking branches.
+  Idle cleanup accepts commits on remote-tracking branches and commits merged into
+  the local default branch or its remote-tracking branch, including squash and
+  rebase merges.
 - Releases are pinned to the merged version commit; changelogs use published
   ancestor releases and merged PRs excluding release preparation; deleted branch
   labels require matching repository and exact PR identity. GitHub

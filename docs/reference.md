@@ -1327,7 +1327,8 @@ Removing the repository deletes `.caches`.
 
 Removal retains the default branch unless `--delete-branch`, and every branch while
 the default branch is unknown; other clean branches
-matching default/upstream or merged into the default are deleted. Otherwise fzf
+matching their upstream or merged into the default branch, including squash and
+rebase merges its remote-tracking branch knows about, are deleted. Otherwise fzf
 offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
 changes and untracked files with Git status codes before `Are you sure? [y/N]`.
 Large previews show an omitted-entry count; use `git status` for the full list.
@@ -1408,7 +1409,7 @@ in `status` and `inspect`. Reopening an issue does not undo completion.
 Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
 sweep after their exit hook instead of waiting for the next poll. It stops tracked
 commands using normal branch retention and resource release. Without a PR registration,
-files must be clean and all commits pushed or on the local default branch; an
+files must be clean and all commits pushed or merged; an
 existing registration keeps its merge requirements. Files and the completed HEAD
 are checked again after stopping and removal hooks. Failure retains ownership;
 `status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
@@ -1708,7 +1709,8 @@ HEAD and commands reset the timer; file changes, including ignored files, restar
 it when it expires.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions) and failed checks block cleanup. Pushed means reachable
-from locally known remote branches or the local default branch; no fetch.
+from locally known remote branches, or merged into the default branch as removal
+decides; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
 `shoal cleanup` removes these workspaces now, without their idle delay and also

@@ -915,6 +915,51 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
 }
 
 #[tokio::test]
+async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    let workspace = f.add("worker").await;
+    for file in ["one", "two"] {
+        fs::write(workspace.path.join(file), format!("{file}\n")).unwrap();
+        commit(&workspace.path, file);
+    }
+    let check = async || {
+        f.manager
+            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .await
+            .unwrap()
+    };
+    assert_eq!(check().await.unpushed_commits, 2);
+    assert!(!check().await.can_delete_branch());
+    // The forge squashes the branch onto main, which only the remote-tracking
+    // branch has; the workspace's own commits are never pushed.
+    git(&author, &["pull", "-q", "--no-rebase", "origin", "main"]);
+    git(
+        &author,
+        &["fetch", "-q", workspace.path.to_str().unwrap(), "worker"],
+    );
+    git(&author, &["merge", "-q", "--squash", "FETCH_HEAD"]);
+    git(
+        &author,
+        &[
+            "-c",
+            "user.name=Forge",
+            "-c",
+            "user.email=forge@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "squash",
+        ],
+    );
+    git(&author, &["push", "-q", "origin", "main"]);
+    git(&f.repo, &["fetch", "-q", "origin"]);
+    let check = check().await;
+    assert_eq!(check.unpushed_commits, 0);
+    assert!(check.can_delete_branch());
+}
+
+#[tokio::test]
 async fn execution_scope_preserves_role_authorization_and_expires() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

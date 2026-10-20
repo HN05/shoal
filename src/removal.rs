@@ -20,10 +20,12 @@ pub struct RemovalCheck {
     #[serde(default)]
     pub changed_files_omitted: usize,
     /// Commits reachable from neither a remote-tracking branch nor the local
-    /// default branch, so removing the worktree could lose them.
+    /// default branch, so removing the worktree could lose them; zero when the
+    /// default branch already has HEAD's changes.
     pub unpushed_commits: u64,
     pub branch: Option<String>,
-    /// HEAD's tree equals the local default branch's, or is already merged into it.
+    /// The local default branch or its remote-tracking branch records HEAD's
+    /// tree or has its changes, merged, squashed or rebased.
     pub matches_default_branch: bool,
     pub matches_upstream: bool,
     /// The default branch used by this inspection, when it could be resolved.
@@ -201,14 +203,16 @@ pub async fn inspect(
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());
     let tree = git::status::head_tree(path).await?;
     // The default branch may be absent locally (workspaces created from another ref).
-    let default_ref = match default_branch {
-        Some(name) => git::status::local_branch(path, name).await?,
-        None => None,
+    let default_refs = match default_branch {
+        Some(name) => git::status::default_refs(path, name).await?,
+        None => Vec::new(),
     };
-    if let Some(default_ref) = &default_ref {
-        check.matches_default_branch = git::status::retains_head(path, default_ref, &tree).await?;
+    check.matches_default_branch = git::status::retains_head(path, &default_refs, &tree).await?;
+    // Merged changes are on the default branch even when their commits are not.
+    if !check.matches_default_branch {
+        check.unpushed_commits =
+            git::status::unretained_commits(path, default_refs.first().map(String::as_str)).await?;
     }
-    check.unpushed_commits = git::status::unretained_commits(path, default_ref.as_deref()).await?;
     check.matches_upstream = git::status::upstream_records_tree(path, &tree).await;
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.load_directory_processes().await?;

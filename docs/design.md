@@ -942,7 +942,7 @@ user removes it. A scoped keep that overrides configured cleanup is an approval
 request bound to the completed HEAD: cleanup waits for the user, denial turns the
 completion into cleanup, and `post_done_cmd` runs with the decided choice. Completion
 cleanup without a PR registration requires clean files and every commit pushed or
-on the local default branch; an existing PR registration keeps its merge checks.
+merged; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
 HEAD, including after hooks. Tracked agent exits wake the cleanup sweep after
 their exit hook, without waiting for the polling interval. Changed HEAD retains
@@ -973,12 +973,15 @@ Forgejo only cancels, and Bitbucket Pipelines are not supported.
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,
 and release leases with the record. Failures retain what is needed to retry.
-Manual removal deletes a redundant branch (tree equal to the local default or its
-upstream, or merged into the default) and otherwise requires an explicit keep or
-delete choice. The default branch, and every branch while the default branch cannot
+A branch is merged when the local default branch or its remote-tracking branch
+records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
+(squash merges), or has an equivalent patch for every commit since the fork point
+(rebase merges); merged commits count as retained. Manual removal deletes a
+redundant branch (tree equal to its upstream, or merged) and otherwise requires
+an explicit keep or delete choice. The default branch, and every branch while the default branch cannot
 be resolved, is retained unless deletion is explicit.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
-remote or the default branch, with no executions, directory users, leases, or
+remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. `shoal cleanup`
 removes those candidates on request without their idle delay, including where idle
 cleanup is disabled; it is unavailable to scoped callers. `repo rm`
