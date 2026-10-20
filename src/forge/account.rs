@@ -1,6 +1,6 @@
 //! Whose credentials a forge request uses: the user's own logins, or a
 //! workspace's `[agent_auth]` account.
-use std::{collections::BTreeMap, sync::Mutex};
+use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
 
@@ -16,14 +16,11 @@ use crate::{agent_auth, git_profile, paths::Paths};
 pub(crate) struct Account {
     /// The agent's `gh` wrapper and Git profile; the user's when absent.
     launch: Option<agent_auth::Launch>,
-    /// The token command of each Forgejo or Gitea host, under the config
-    /// key that sets it.
-    forgejo: BTreeMap<String, (String, Vec<String>)>,
+    /// The token source of each Forgejo or Gitea host.
+    forgejo: BTreeMap<String, TokenSource>,
     /// The agent has an `fj` or `tea` wrapper, so a host without an agent
     /// token must not be read with the user's.
     forgejo_wrapper: bool,
-    /// Tokens fetched for this account's requests, by host.
-    forgejo_tokens: Mutex<BTreeMap<String, String>>,
     bitbucket: Credentials,
     /// The Bitbucket authorization, fetched once for this account's requests.
     bitbucket_authorization: OnceCell<Option<Vec<u8>>>,
@@ -62,7 +59,6 @@ impl Account {
             launch: Some(launch),
             forgejo: tokens,
             forgejo_wrapper,
-            forgejo_tokens: Mutex::default(),
             bitbucket: bitbucket.clone(),
             bitbucket_authorization: OnceCell::new(),
         })
@@ -79,30 +75,14 @@ impl Account {
     /// public repositories. An agent with an `fj` or `tea` wrapper needs its
     /// own token for the host.
     pub(super) async fn forgejo_token(&self, host: &str) -> Result<Option<String>> {
-        if let Some(token) = self.cached_forgejo_token(host) {
-            return Ok(Some(token));
-        }
-        let Some((key, command)) = self.forgejo.get(host) else {
+        let Some(source) = self.forgejo.get(host) else {
             ensure!(
                 !self.forgejo_wrapper,
                 "set [agent_auth.forgejo.\"{host}\"] token_command to the agent's token for {host}, so Shoal acts as the agent there"
             );
             return Ok(None);
         };
-        let token = token::fetch(key, command).await?;
-        self.forgejo_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(host.to_owned(), token.clone());
-        Ok(Some(token))
-    }
-
-    fn cached_forgejo_token(&self, host: &str) -> Option<String> {
-        self.forgejo_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(host)
-            .cloned()
+        source.token().await.map(Some)
     }
 
     /// The curl config line that signs a Bitbucket request in, if any.
@@ -114,13 +94,34 @@ impl Account {
     }
 }
 
-/// Each host's token command under the config key that sets it.
-fn token_commands(table: &str, hosts: &ForgejoHosts) -> BTreeMap<String, (String, Vec<String>)> {
+/// A host's token command under the config key that sets it, run at most
+/// once for the account's requests.
+struct TokenSource {
+    key: String,
+    command: Vec<String>,
+    token: OnceCell<String>,
+}
+
+impl TokenSource {
+    async fn token(&self) -> Result<String> {
+        self.token
+            .get_or_try_init(|| token::fetch(&self.key, &self.command))
+            .await
+            .cloned()
+    }
+}
+
+/// Each host's token source from one config table.
+fn token_commands(table: &str, hosts: &ForgejoHosts) -> BTreeMap<String, TokenSource> {
     hosts
         .iter()
         .map(|(host, login)| {
-            let key = format!("{table}.\"{host}\".token_command");
-            (host.clone(), (key, login.token_command.clone()))
+            let source = TokenSource {
+                key: format!("{table}.\"{host}\".token_command"),
+                command: login.token_command.clone(),
+                token: OnceCell::new(),
+            };
+            (host.clone(), source)
         })
         .collect()
 }
@@ -198,5 +199,23 @@ mod tests {
             format!("{error:#}").contains("agent_auth.forgejo"),
             "{error:#}"
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_run_a_hosts_token_command_once() {
+        let root = tempfile::tempdir().unwrap();
+        let runs = root.path().join("runs");
+        let script = format!("echo run >> '{}'; sleep 0.2; echo token", runs.display());
+        let user = hosts(&format!(
+            "[\"forge.example\"]\ntoken_command = ['sh', '-c', \"{script}\"]\n"
+        ));
+        let account = Account::user(&user, &Default::default());
+        let (first, second) = tokio::join!(
+            account.forgejo_token("forge.example"),
+            account.forgejo_token("forge.example")
+        );
+        assert_eq!(first.unwrap().as_deref(), Some("token"));
+        assert_eq!(second.unwrap().as_deref(), Some("token"));
+        assert_eq!(std::fs::read_to_string(&runs).unwrap(), "run\n");
     }
 }
