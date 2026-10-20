@@ -320,7 +320,8 @@ fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> 
 /// The operations that apply `action` to `selected` jobs among all of the
 /// head's `jobs`, and the checks they reach. A GitHub job rerun starts a new
 /// attempt of its run, which then refuses its other jobs, so several failed
-/// jobs of one run rerun together with the rest of its failed jobs.
+/// jobs of one run rerun together with the rest of its failed jobs. GitHub
+/// reruns only finished runs.
 fn operations(
     jobs: &[Job],
     selected: &[Job],
@@ -348,6 +349,20 @@ fn operation(
     let location = job.location.context("check has no CI job")?;
     let in_run = |run| move |other: &&Job| github_run(other) == Some(run);
     let only = |operation| Ok((operation, vec![job.name.clone()]));
+    if let (Location::GitHub { run, .. }, CiAction::Rerun) = (location, action) {
+        // GitHub reruns only finished runs.
+        let running = jobs
+            .iter()
+            .filter(in_run(run))
+            .find(|other| other.state == JobState::Running);
+        if let Some(running) = running {
+            bail!(
+                "check {} is still running in the same workflow run; wait for it or cancel it before rerunning {}",
+                running.name,
+                job.name
+            );
+        }
+    }
     match (location, action) {
         (Location::GitHub { run, .. }, CiAction::Rerun)
             if selected.iter().filter(in_run(run)).count() > 1 =>
@@ -548,7 +563,8 @@ mod tests {
             job("docs", JobState::Failed, github(1, 12)),
             job("lint", JobState::Failed, github(1, 13)),
             job("fmt", JobState::Failed, github(2, 21)),
-            job("test", JobState::Running, github(2, 22)),
+            job("test", JobState::Running, github(3, 31)),
+            job("build", JobState::Failed, github(3, 32)),
         ];
         let post = |endpoint: &str| Operation::Post(endpoint.into());
         let selected = [jobs[0].clone(), jobs[1].clone(), jobs[3].clone()];
@@ -564,8 +580,14 @@ mod tests {
         let (planned, checks) = operations(&jobs, &jobs[..1], CiAction::Rerun).unwrap();
         assert_eq!(planned, [post("actions/jobs/11/rerun")]);
         assert_eq!(checks, ["rust"]);
-        let (planned, _) = operations(&jobs, &jobs[4..], CiAction::Cancel).unwrap();
-        assert_eq!(planned, [post("actions/runs/2/cancel")]);
+        let (planned, _) = operations(&jobs, &jobs[4..5], CiAction::Cancel).unwrap();
+        assert_eq!(planned, [post("actions/runs/3/cancel")]);
+        // A run with a running job refuses reruns until it finishes.
+        let error = operations(&jobs, &jobs[5..], CiAction::Rerun).unwrap_err();
+        assert!(
+            error.to_string().contains("test is still running"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -1535,8 +1535,8 @@ shows, which must be a CI job in that state. The daemon uses the forge's job API
 as the agent account and records an `item_changed` event once a request succeeds;
 a failed request stops the rest. GitHub reruns a failed Actions job, or every
 failed job of a run when several of its jobs are selected, because a rerun starts
-a new attempt of the run, and cancels the job's run; GitLab retries or cancels
-each job. Forgejo's API cannot rerun jobs, so `rerun`
+a new attempt of the run, refuses a rerun while another job of the run is still
+running, and cancels the job's run; GitLab retries or cancels each job. Forgejo's API cannot rerun jobs, so `rerun`
 fails there without sending anything, and `cancel` cancels each check's run.
 Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
 `checks` acted on.
