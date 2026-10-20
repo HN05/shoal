@@ -243,7 +243,6 @@ impl Effective {
             },
             done: Done {
                 cleanup: built_in(merged.done.cleanup, "done.cleanup")?,
-                automatic: built_in(merged.done.automatic, "done.automatic")?,
             },
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
@@ -321,7 +320,7 @@ fn built_in() -> RepoConfig {
         },
         done: config::repo::Done {
             cleanup: Some(Done::default().cleanup),
-            automatic: Some(Done::default().automatic),
+            ..Default::default()
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
@@ -630,7 +629,6 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(cleanup.restore.retention_days),
         scalar!(cleanup.restore.archive_max_mb),
         scalar!(done.cleanup),
-        scalar!(done.automatic),
         scalar!(review.post),
         scalar!(ready.undraft),
         scalar!(unready.draft),
@@ -662,7 +660,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
 [seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
@@ -957,7 +955,6 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             cleanup.restore.retention_days.is_some(),
             cleanup.restore.archive_max_mb.is_some(),
             done.cleanup.is_some(),
-            done.automatic.is_some(),
             review.post.is_some(),
             ready.undraft.is_some(),
             unready.draft.is_some(),

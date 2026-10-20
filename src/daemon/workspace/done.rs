@@ -107,13 +107,12 @@ impl Manager {
         cleanup: Option<bool>,
         requester: Requester,
     ) -> Result<Completion> {
-        // Serialize keep/cleanup choices with automatic completion sweeps.
+        // Serialize keep/cleanup choices with the PR and completion sweeps.
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::forge::pr::current_head(&workspace).await?;
-        self.record_done(&workspace, head, cleanup, EventCause::Manual, requester)
-            .await
+        self.record_done(&workspace, head, cleanup, requester).await
     }
 
     /// Caller holds the PR gate and has verified ownership and this HEAD.
@@ -123,7 +122,6 @@ impl Manager {
         workspace: &Workspace,
         head: String,
         cleanup: Option<bool>,
-        cause: EventCause,
         requester: Requester,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
@@ -148,16 +146,14 @@ impl Manager {
                 tx.execute(
                     "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
-                    rusqlite::params![id, serde_json::to_string(&completion)?, cause],
+                    rusqlite::params![id, serde_json::to_string(&completion)?, EventCause::Manual],
                 )?;
-                if cause == EventCause::Manual {
-                    // Like the continuation it replaced, a hold made from one by
-                    // migration 31 ends at the next explicit done.
-                    tx.execute(
-                        "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
-                        [&id],
-                    )?;
-                }
+                // Like the continuation it replaced, a hold made from one by
+                // migration 31 ends at the next explicit done.
+                tx.execute(
+                    "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
+                    [&id],
+                )?;
                 tx.commit()?;
                 Ok((completion, pending))
             })

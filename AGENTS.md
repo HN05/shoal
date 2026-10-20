@@ -67,9 +67,7 @@ when behavior changes, distinguishing decisions from proposals.
   squash and rebase merges), or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted; every removal of
   an existing worktree keeps an expiring restore point of HEAD and unsaved files. Only explicit
-  `done` records completion unless `[done] automatic` (default false) lets issue
-  closure and merged PR watches record it with the configured cleanup default or
-  existing choice. PR cleanup is on by default: all watched PRs must merge and
+  `done` records completion. PR cleanup is on by default: all watched PRs must merge and
   cover HEAD before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds keep a
@@ -77,8 +75,7 @@ when behavior changes, distinguishing decisions from proposals.
   Completion cleanup without a PR registration requires every commit pushed or
   merged, retaining dirty or newer work through the same
   removal path; a keep choice suppresses idle and PR cleanup. Associated issues
-  and open questions suppress idle cleanup; automatic completion records it once closure is confirmed,
-  without replacing an existing completion or bypassing PR merge requirements.
+  suppress idle cleanup, not merged cleanup; open questions suppress both.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

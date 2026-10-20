@@ -302,18 +302,6 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
         let holds = manager.workspace(&workspace.id).await.unwrap().holds;
         holds.into_iter().map(|hold| hold.name).collect::<Vec<_>>()
     };
-    // Automatic completion never ended a continuation.
-    let head = crate::forge::pr::current_head(&workspace).await.unwrap();
-    manager
-        .record_done(
-            &workspace,
-            head,
-            Some(false),
-            EventCause::Issue,
-            Requester::Unscoped,
-        )
-        .await
-        .unwrap();
     assert_eq!(names().await, ["continue", "thread"]);
     manager
         .mark_done(&workspace.id, Some(false), Requester::Unscoped)
@@ -342,7 +330,7 @@ async fn undone_keeps_an_unreadable_completion() {
 }
 
 #[tokio::test]
-async fn issue_and_watch_completion_wait_for_explicit_done_by_default() {
+async fn issue_and_watch_completion_wait_for_explicit_done() {
     let (_root, manager, workspace) = fixture().await;
     let id = workspace.id.clone();
     let record = serde_json::json!({
@@ -367,7 +355,6 @@ async fn issue_and_watch_completion_wait_for_explicit_done_by_default() {
         })
         .await
         .unwrap();
-    manager.sweep_issues().await.unwrap();
     manager.sweep_prs().await.unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert!(inspection.completion.is_none());

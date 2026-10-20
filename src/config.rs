@@ -340,15 +340,11 @@ impl Default for Land {
 #[derive(Debug, Serialize)]
 pub struct Done {
     pub cleanup: bool,
-    pub automatic: bool,
 }
 
 impl Default for Done {
     fn default() -> Self {
-        Self {
-            cleanup: true,
-            automatic: false,
-        }
+        Self { cleanup: true }
     }
 }
 

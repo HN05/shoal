@@ -391,11 +391,11 @@ impl Manager {
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
                 restacked.context(STACK_ERROR)?;
-                let automatic = settings?.done.automatic;
+                settings?;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
                 if !self
-                    .confirm_pr_completion(&workspace, &mut registration.kind, &head, automatic)
+                    .confirm_pr_completion(&workspace, &mut registration.kind, &head)
                     .await?
                 {
                     return Ok(false);
@@ -467,7 +467,6 @@ impl Manager {
         workspace: &Workspace,
         kind: &mut RegistrationKind,
         head: &str,
-        automatic: bool,
     ) -> Result<bool> {
         match kind {
             RegistrationKind::Acknowledgement { head: acknowledged } => {
@@ -484,32 +483,18 @@ impl Manager {
                     );
                     return Ok(true);
                 }
-                // Without automatic completion only an explicit done is waited on.
-                let completion = self.completion(&workspace.id).await?;
-                if completion.is_none() && !automatic {
+                // Only an explicit done is waited on; merged cleanup covers the rest.
+                let Some(completion) = self.completion(&workspace.id).await? else {
                     return Ok(false);
-                }
+                };
                 if !self.all_prs_merged(workspace, urls, head).await? {
                     return Ok(false);
                 }
-                // A manual done choice takes precedence over automatic completion.
-                if let Some(completion) = completion {
-                    ensure!(
-                        completion.head == head,
-                        "HEAD changed after the assignment was marked done; retaining workspace"
-                    );
-                } else {
-                    self.record_done(
-                        workspace,
-                        head.to_owned(),
-                        None,
-                        crate::daemon::events::EventCause::Pr,
-                        crate::daemon::workspace::Requester::Unscoped,
-                    )
-                    .await?;
-                }
-                // Completion is persisted first; after a crash it is reused above.
-                // The latch prevents repeated forge queries and completion signals.
+                ensure!(
+                    completion.head == head,
+                    "HEAD changed after the assignment was marked done; retaining workspace"
+                );
+                // The latch prevents repeated forge queries.
                 *merged_head = Some(head.to_owned());
             }
         }

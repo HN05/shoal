@@ -13,8 +13,9 @@ and stop on `approval_denied`. Never remove scope to approve your own request.
 
 ## Completion
 
-Shoal keeps your workspace until you run `shoal done`; issue closure and merged
-PRs do not end the assignment unless `[done] automatic` is enabled (see below). Run `shoal done` as your last command once the
+Shoal removes your workspace after you run `shoal done`, or once its branch has
+merged and nothing has used it for hours; issue closure and merged PRs do not
+end the assignment. Run `shoal done` as your last command once the
 assignment is finished: every watched PR merged, or no PR needed. Never end a
 session without it.
 
@@ -99,11 +100,6 @@ such as a PR that is ready, run `shoal notify "<one-line message>"`. Neither
 affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
 Questions).
 
-`[done] automatic = true` also marks the assignment done when the associated
-issue closes or every watched PR merges. With it, run
-`shoal hold acquire --name more-work` before closing the issue or merging a
-watched PR when you receive more work; the hold keeps the workspace until
-`shoal hold release --name more-work`, which you run just before `shoal done`.
 `shoal undone` withdraws a `shoal done` you ran too early. It does not keep the
 workspace.
 

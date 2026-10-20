@@ -323,7 +323,6 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         }
     };
     step("branch observation", observe_branches(manager).await);
-    step("issue cleanup", manager.sweep_issues().await);
     step("completion cleanup", manager.sweep_completed().await);
     step("PR cleanup", manager.sweep_prs().await);
     step("idle cleanup", sweep_idle(manager, timers).await);
@@ -755,14 +754,14 @@ mod tests {
         assert_eq!(health.record(moment(60, 3600), &Ok(())), None);
         assert_eq!(health.check(after(90)).status, CheckStatus::Ok);
 
-        let failed = Err(anyhow::anyhow!("issue cleanup: disk is full"));
+        let failed = Err(anyhow::anyhow!("completion cleanup: disk is full"));
         assert_eq!(
             health.record(moment(90, 3600), &failed).as_deref(),
-            Some("issue cleanup: disk is full")
+            Some("completion cleanup: disk is full")
         );
         assert_eq!(
             health.record(moment(120, 3600), &failed).as_deref(),
-            Some("issue cleanup: disk is full"),
+            Some("completion cleanup: disk is full"),
             "an unrecorded notification is retried"
         );
         health.failure.as_mut().unwrap().notified = true;
@@ -774,7 +773,7 @@ mod tests {
             "{}",
             check.message
         );
-        assert!(check.message.ends_with("issue cleanup: disk is full"));
+        assert!(check.message.ends_with("completion cleanup: disk is full"));
         assert!(
             health
                 .problem(after(150))
@@ -916,24 +915,29 @@ mod tests {
             .register_repository(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
-        let linked = manager
-            .create_workspace(&repo.id, "linked".into(), None, None, None)
+        let done = manager
+            .create_workspace(&repo.id, "done".into(), None, None, None)
             .await
             .unwrap();
         let idle = manager
             .create_workspace(&repo.id, "idle".into(), None, None, None)
             .await
             .unwrap();
-        let id = linked.id.clone();
+        // Completion cleanup retains the dirty workspace and cannot record why.
+        fs::write(done.path.join("work"), "retain").unwrap();
+        manager
+            .mark_done(
+                &done.id,
+                Some(true),
+                crate::daemon::workspace::Requester::Unscoped,
+            )
+            .await
+            .unwrap();
         manager
             .store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
-                    [id],
-                )?;
+            .run(|db| {
                 db.execute_batch(
-                    "CREATE TEMP TRIGGER full_disk BEFORE UPDATE ON workspace_issue
+                    "CREATE TEMP TRIGGER full_disk BEFORE UPDATE ON workspace_completion
                      BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;",
                 )?;
                 Ok(())
@@ -950,11 +954,11 @@ mod tests {
         );
         let error = sweep(&manager, &mut timers).await.unwrap_err().to_string();
         assert!(
-            error.starts_with("issue cleanup: ") && error.contains("disk is full"),
+            error.starts_with("completion cleanup: ") && error.contains("disk is full"),
             "{error}"
         );
         assert!(!idle.path.exists());
-        assert!(linked.path.exists());
+        assert!(done.path.exists());
     }
 
     #[tokio::test]

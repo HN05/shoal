@@ -1,4 +1,4 @@
-//! Persist issue associations and complete assignments when their issues close.
+//! Persist issue associations and look up issue state.
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,6 @@ use super::{
 use crate::{
     daemon::{
         events::{self, EventKind},
-        notifications::NotificationKind,
         workspace::Manager,
     },
     model::Workspace,
@@ -163,69 +162,6 @@ impl Manager {
             })
             .await?;
         self.cleanup_notify.notify_one();
-        Ok(())
-    }
-
-    /// Completion is a one-shot signal: never overwrite a prior keep choice or
-    /// bind an old closure to later work, including after daemon restart.
-    pub async fn sweep_issues(&self) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        for workspace in self.list_workspaces().await? {
-            if workspace.state != WorkspaceState::Ready {
-                continue;
-            }
-            let result = self.complete_closed_issue(&workspace).await;
-            if let Err(error) = &result {
-                self.record_retained(
-                    &workspace.id,
-                    crate::daemon::events::EventCause::Issue,
-                    error,
-                )
-                .await?;
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::CleanupFailed,
-                    format!("issue completion retained the workspace: {error:#}"),
-                )
-                .await;
-            }
-            let id = workspace.id;
-            let error = result.err().map(|error| format!("{error:#}"));
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "UPDATE workspace_issue SET error=?2 WHERE workspace_id=?1",
-                        rusqlite::params![id, error],
-                    )?;
-                    Ok(())
-                })
-                .await?;
-        }
-        Ok(())
-    }
-
-    async fn complete_closed_issue(&self, workspace: &Workspace) -> Result<()> {
-        let Some(issue) = self.issue_registration(&workspace.id).await? else {
-            return Ok(());
-        };
-        if self.completion(&workspace.id).await?.is_some()
-            || !self.workspace_settings(workspace).await?.done.automatic
-        {
-            return Ok(());
-        }
-        self.verify_worktree(workspace).await?;
-        let head = super::pr::current_head(workspace).await?;
-        let (forge, number, _) = self.issue_forge(workspace, &issue.url).await?;
-        if forge.issue_closed(&self.user_account(), number).await? {
-            self.record_done(
-                workspace,
-                head,
-                None,
-                crate::daemon::events::EventCause::Issue,
-                crate::daemon::workspace::Requester::Unscoped,
-            )
-            .await?;
-        }
         Ok(())
     }
 

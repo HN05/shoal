@@ -10861,9 +10861,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
 
 #[test]
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
-    let mut fixture = Fixture::with_config(Some(
-        "[cleanup.auto]\nenabled=false\n[done]\nautomatic=true\n",
-    ));
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["link", "pr", "56", "--workspace", "watch"]);
     assert!(!failed.status.success());
@@ -10959,6 +10957,8 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         fixture.ok(&["inspect", "watch"])["pr_cleanup"]["url"],
         "https://github.com/team/repo/pull/56"
     );
+    // Watched PRs are looked up once the assignment is done.
+    fixture.ok(&["done", "watch"]);
     // A persisted number must not silently follow a changed origin.
     git(
         &fixture.repo,
@@ -16495,10 +16495,10 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 }
 
 #[test]
-fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
+fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
     for (cleanup, manual_keep) in [(false, false), (true, false), (true, true)] {
         let mut fixture = Fixture::with_config(Some(&format!(
-            "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
+            "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\n"
         )));
         let hook = install_done_hook(&fixture);
         set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
@@ -16556,6 +16556,8 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         ]);
         if manual_keep {
             fixture.ok(&["done", "multi", "--keep"]);
+        } else {
+            fixture.ok(&["done", "multi"]);
         }
         write_pr(1, "MERGED", "earlier");
         write_pr(2, "CLOSED", head.trim());
@@ -16569,25 +16571,22 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
                 .lines()
                 .any(|s| s == "2")
         });
-        assert_eq!(
-            fixture.ok(&["inspect", "multi"])["completion"].is_null(),
-            !manual_keep
-        );
+        assert!(fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"].is_null());
         fs::write(root.join("pr-2.json"), serde_json::json!({"number":2,"state":"MERGED","headRefName":"multi","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
         fixture.restart();
         if cleanup && !manual_keep {
             wait_removed(&fixture, "multi");
         } else {
-            wait_until("automatic completion", || {
+            wait_until("confirmed merges", || {
                 fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
             });
             let state = fixture.ok(&["inspect", "multi"]);
             assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
             fixture.ok(&["notifications"]);
-            // A changed default must not re-complete a kept assignment.
+            // A changed default must not change a kept assignment.
             fs::write(
                 root.join(".config/shoal/config.toml"),
-                "[cleanup.auto]\nenabled=false\n[done]\ncleanup=true\nautomatic=true\n",
+                "[cleanup.auto]\nenabled=false\n[done]\ncleanup=true\n",
             )
             .unwrap();
             fixture.restart();
@@ -16841,10 +16840,8 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     });
 }
 
-fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
-    let fixture = Fixture::with_config(Some(&format!(
-        "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
-    )));
+fn issue_fixture(tool: &str) -> Fixture {
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     git(&fixture.repo, &["config", "protocol.allow", "never"]);
     git(
         &fixture.repo,
@@ -16903,156 +16900,10 @@ fn write_issue_state(fixture: &Fixture, tool: &str, state: &str) {
     }
 }
 
-fn wait_issue_field(fixture: &Fixture, field: &str, expected: &str) -> Value {
-    let mut inspection = Value::Null;
-    wait_until(expected, || {
-        inspection = fixture.ok(&["inspect", "issue-work"]);
-        inspection
-            .pointer(field)
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.contains(expected))
-    });
-    inspection
-}
-
-#[test]
-fn closed_issue_completes_for_both_forges_and_failed_queries_retain_work() {
-    for tool in ["gh", "fj"] {
-        let mut fixture = issue_completion_fixture(tool, true);
-        fixture.restart();
-        assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
-        write_issue_state(&fixture, tool, "Unexpected");
-        fixture.restart();
-        let expected = if tool == "gh" {
-            "issue"
-        } else {
-            "unrecognized item state"
-        };
-        let inspection = wait_issue_field(&fixture, "/issue/error", expected);
-        assert!(inspection["completion"].is_null());
-        // A saved URL must not silently follow an edited origin, even if closed.
-        write_issue_state(&fixture, tool, "Closed");
-        let original = git(&fixture.repo, &["remote", "get-url", "origin"]);
-        git(
-            &fixture.repo,
-            &[
-                "remote",
-                "set-url",
-                "origin",
-                "https://other.example/team/repo",
-            ],
-        );
-        fixture.restart();
-        let inspection = wait_issue_field(&fixture, "/issue/error", "different repository");
-        assert!(inspection["completion"].is_null());
-        git(
-            &fixture.repo,
-            &["remote", "set-url", "origin", original.trim()],
-        );
-        fixture.restart();
-        wait_removed(&fixture, "issue-work");
-    }
-}
-
-#[test]
-fn closed_issue_honors_keep_and_does_not_complete_later_work_again() {
-    for explicit_keep in [false, true] {
-        let mut fixture = issue_completion_fixture("gh", explicit_keep);
-        let hook = install_done_hook(&fixture);
-        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
-        if explicit_keep {
-            fixture.ok(&["done", "issue-work", "--keep"]);
-        }
-        write_issue_state(&fixture, "gh", "Closed");
-        fixture.restart();
-        let inspection = wait_issue_field(&fixture, "/completion/head", "");
-        assert_eq!(inspection["completion"]["cleanup"], false);
-        let completion = inspection["completion"].clone();
-        // Completion persists before the hook runs. Observe the hook's output
-        // before restarting so the test cannot cancel the event it asserts.
-        wait_until("post-done hook output", || {
-            fs::read_to_string(fixture.root.path().join("done-events"))
-                .is_ok_and(|events| events.ends_with('\n'))
-        });
-        let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
-        commit_file(path, "later", "preserve later work\n");
-        fixture.restart();
-        assert_eq!(
-            fixture.ok(&["inspect", "issue-work"])["completion"],
-            completion
-        );
-        assert_eq!(
-            fs::read_to_string(fixture.root.path().join("done-events"))
-                .unwrap()
-                .lines()
-                .count(),
-            1
-        );
-        let notifications = fixture.ok(&["notifications", "--all"]);
-        assert_eq!(
-            notifications
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|n| n["kind"] == "workspace_done")
-                .count(),
-            1
-        );
-    }
-}
-
-#[test]
-fn closed_issue_keeps_pr_requirements_and_preserves_dirty_and_newer_work() {
-    let mut fixture = issue_completion_fixture("gh", true);
-    let inspection = fixture.ok(&["inspect", "issue-work"]);
-    let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
-    let head = git(path, &["rev-parse", "HEAD"]).trim().to_owned();
-    let pr_response = fixture.root.path().join("pr-response");
-    let write_pr = |state| {
-        fs::write(
-            &pr_response,
-            serde_json::json!({
-                "number":1,"state":state,"headRefName":"issue-work","commits":[{"oid":head}]
-            })
-            .to_string(),
-        )
-        .unwrap()
-    };
-    install_test_script(
-        fixture.root.path().join("bin/gh"),
-        "#!/bin/sh\nif [ \"$1\" = pr ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n",
-    );
-    write_pr("OPEN");
-    fixture.ok(&["link", "pr", "1", "--workspace", "issue-work"]);
-    write_issue_state(&fixture, "gh", "Closed");
-    fixture.restart();
-    let inspection = wait_issue_field(&fixture, "/completion/head", &head);
-    assert_eq!(inspection["completion"]["cleanup"], true);
-    assert!(path.exists());
-    fs::write(path.join("dirty"), "preserve me").unwrap();
-    write_pr("MERGED");
-    fixture.restart();
-    wait_pr_error(&fixture, "issue-work", "uncommitted");
-    // Removing the PR watch still uses completion's ordinary preservation checks.
-    fixture.ok(&["unlink", "pr", "--workspace", "issue-work"]);
-    wait_issue_field(&fixture, "/completion/error", "uncommitted");
-    commit_file(path, "dirty", "later commit\n");
-    git(
-        path,
-        &["update-ref", "refs/remotes/origin/issue-work", "HEAD"],
-    );
-    fixture.restart();
-    wait_issue_field(&fixture, "/completion/error", "HEAD changed");
-    assert_eq!(
-        fixture.ok(&["inspect", "issue-work"])["completion"]["head"],
-        head
-    );
-}
-
 #[test]
 fn already_closed_issues_are_rejected_before_creating_workspaces() {
     for tool in ["gh", "fj"] {
-        let fixture = issue_completion_fixture(tool, true);
+        let fixture = issue_fixture(tool);
         write_issue_state(&fixture, tool, "Closed");
         let before = fixture.ok(&["ls"]);
         let output = fixture.run(&[
@@ -17852,7 +17703,7 @@ fn wait_for_herdr_close(fixture: &Fixture) {
 
 #[test]
 fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
-    let mut fixture = issue_completion_fixture("gh", true);
+    let fixture = issue_fixture("gh");
     let scoped = |fixture: &Fixture, args: &[&str]| {
         let mut command = vec![
             "exec",
@@ -17869,10 +17720,11 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     assert_eq!(undone["withdrawn"]["cleanup"], false);
     assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
     assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
-    // Only holds keep a workspace; issue closure completes and removes it.
-    write_issue_state(&fixture, "gh", "Closed");
-    fixture.restart();
-    wait_removed(&fixture, "issue-work");
+    // Only holds keep a workspace; cleanup removes the merged one on request.
+    assert_eq!(
+        fixture.ok(&["cleanup"])["removed"],
+        serde_json::json!(["issue-work"])
+    );
 }
 
 #[test]
@@ -18089,57 +17941,6 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
             .unwrap(),
         0
     );
-}
-
-#[test]
-fn holds_allow_closed_issues_to_record_completion_before_cleanup() {
-    let mut fixture = issue_completion_fixture("gh", true);
-    fixture.ok(&["hold", "acquire", "issue-work", "--name", "thread"]);
-    write_issue_state(&fixture, "gh", "Closed");
-    fixture.restart();
-    let inspection = wait_issue_field(&fixture, "/completion/head", "");
-    assert_eq!(inspection["completion"]["cleanup"], true);
-    assert!(inspection["completion"]["error"].is_null());
-    let path = PathBuf::from(inspection["workspace"]["path"].as_str().unwrap());
-    assert!(path.exists());
-    let completion = inspection["completion"].clone();
-    fixture.restart();
-    assert_eq!(
-        fixture.ok(&["inspect", "issue-work"])["completion"],
-        completion
-    );
-    fixture.ok(&["hold", "release", "issue-work", "--name", "thread"]);
-    wait_removed(&fixture, "issue-work");
-}
-
-#[test]
-fn holds_allow_watched_prs_to_record_completion_before_cleanup() {
-    let mut fixture = Fixture::with_config(Some("[done]\nautomatic=true\n"));
-    let workspace = fixture.add("watched-held");
-    fixture.ok(&["hold", "acquire", "watched-held", "--name", "thread"]);
-    fixture.add_github_origin();
-    let bin = fixture.root.path().join("bin");
-    install_test_script(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr-response\"\n");
-    let path = Path::new(workspace["path"].as_str().unwrap());
-    let head = git(path, &["rev-parse", "HEAD"]);
-    fs::write(fixture.root.path().join("pr-response"), serde_json::json!({"number":1,"state":"MERGED","headRefName":"watched-held","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
-    fixture.ok(&["link", "pr", "1", "--workspace", "watched-held"]);
-    fixture.restart();
-    wait_until("held PR completion", || {
-        fixture.ok(&["inspect", "watched-held"])["pr_cleanup"]["merged_head"] == head.trim()
-    });
-    let inspection = fixture.ok(&["inspect", "watched-held"]);
-    assert_eq!(inspection["completion"]["head"], head.trim());
-    assert_eq!(inspection["completion"]["cleanup"], true);
-    assert!(inspection["pr_cleanup"]["error"].is_null());
-    assert!(path.exists());
-    fixture.restart();
-    assert_eq!(
-        fixture.ok(&["inspect", "watched-held"])["completion"],
-        inspection["completion"]
-    );
-    fixture.ok(&["hold", "release", "watched-held", "--name", "thread"]);
-    wait_removed(&fixture, "watched-held");
 }
 
 #[test]

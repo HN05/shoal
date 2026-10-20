@@ -912,24 +912,23 @@ reads use bounded concurrency, retain workspace order and report every failure.
 
 External sessions acquire caller-named workspace holds independently of assignment
 completion. Holds are idempotent by name and persist across restarts. They block
-automatic removal while the worktree exists, allowing automatic completion to
-record done; releasing the last hold restores normal cleanup eligibility. Explicit
+automatic removal while the worktree exists; releasing the last hold restores
+normal cleanup eligibility. Explicit
 removal lists holders and releases holds with the workspace record; deleted-worktree
 cleanup still forgets missing worktrees. Release remains available through failed or
 active lifecycle operations and hooks. Scoped callers manage only their own workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Only an
-explicit done signal completes an assignment unless `[done] automatic` (default
-false) lets issue closure and merged PR watches record it, so a merge or closure
-never removes a workspace whose agent is still working; agent instructions make
-`done` the last step of every assignment. Completion
+explicit done signal completes an assignment; issue closure and merges do not,
+and merged cleanup removes unused merged workspaces from their state instead.
+Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: holds are the one mechanism that keeps a workspace.
 The daemon runs `post_done_cmd`
-after persisting explicit or automatic completion and before cleanup, using normal
+after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through
 a notification without undoing completion or blocking cleanup. Explicit signals
@@ -950,10 +949,7 @@ the workspace until a new completion signal; failed cleanup retains ownership
 and reports why.
 Issue linking and unlinking are own-workspace operations; associations are idempotent
 and replacing one requires unlinking it first. Unlinking preserves recorded completion.
-Issue associations suppress idle cleanup. With automatic completion, the daemon
-polls their repository-bound URLs using its existing forge login and records
-completion once closure is confirmed, honoring the done default without replacing an existing completion.
-Lookup failures retain the workspace; reopening the issue does not undo completion.
+Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
 login, because discussion can exceed a protocol frame: `gh` for GitHub, and
@@ -1016,10 +1012,9 @@ URLs bound to that repository. Top-level `link` and `unlink` manage associations
 unlinking can select one item, one kind or the entire set. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one; the existing branch
-checks apply to each PR. Once confirmed, an explicit completion proceeds to cleanup;
-automatic completion records it through `done`, honoring its configured default or
-a prior explicit choice. The confirmed
-HEAD persists so restart cannot complete the same watch set again. Persisted manual
+checks apply to each PR. PRs are looked up only once the assignment is done, and
+confirmation proceeds to cleanup. The confirmed
+HEAD persists so restart cannot query the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements; legacy single-watch records retain their stored and JSON shape.
 Ambiguous records and conflicting actions are rejected. Own-workspace `watch`

@@ -61,7 +61,7 @@ instead of the PR delivery guidance below.
   Post-remove runs from the repository checkout after ownership is released; failure is a
   warning and notification, never restored ownership. Already-missing worktrees
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
-  after completion persists and before cleanup, including automatic completion;
+  after completion persists and before cleanup;
   failure notifies without undoing completion or blocking cleanup. It excludes
   lifecycle and permit changes and is not replayed on restart. Agent-exit hooks
   expose tracked agent exits while ready, including disconnects, without changing
@@ -93,7 +93,7 @@ instead of the PR delivery guidance below.
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `post_ready_cmd`
   failure keeps them. Only explicit
-  done completes an assignment unless `[done] automatic` is enabled. PR cleanup
+  done completes an assignment. PR cleanup
   defaults on and removes a completed workspace only after every watched PR merges
   and the set contains HEAD; disabling it pauses only that, never linking; completion honors the done default and explicit keep choices before
   stopping tracked agents with clean files and unchanged merged HEAD. PR
@@ -221,9 +221,7 @@ instead of the PR delivery guidance below.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
   cleanup; only holds keep a workspace.
-  Associated issues suppress idle cleanup; with automatic completion they complete
-  the assignment once confirmed closed, without replacing an existing completion or
-  bypassing removal checks.
+  Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches and completion but never holds, keep
   choices, commands, saved stopped work, leases, directory users or a Git

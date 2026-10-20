@@ -346,7 +346,10 @@ pub struct Restore {
 #[serde(default, deny_unknown_fields)]
 pub struct Done {
     pub cleanup: Option<bool>,
-    pub automatic: Option<bool>,
+    /// Retired with automatic completion, which merged cleanup replaced; read
+    /// and ignored so configs written by earlier versions still load.
+    #[serde(rename = "automatic", skip_serializing)]
+    pub retired_automatic: Option<bool>,
 }
 
 /// Whether agent reviews of PRs and issues post their findings to the forge.
@@ -460,6 +463,14 @@ mod tests {
         assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
         assert_eq!(config.cleanup.pr.enabled, None);
         assert!(parse("[cleanup.auto]\nidle_minutes = 0\n").is_err());
+        // Configs written before automatic completion was retired still load.
+        assert_eq!(
+            parse("[done]\ncleanup = false\nautomatic = true\n")
+                .unwrap()
+                .done
+                .cleanup,
+            Some(false)
+        );
         assert!(parse("default_agent = 'happy'\n").is_err());
         assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
     }

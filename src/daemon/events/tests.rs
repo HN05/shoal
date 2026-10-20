@@ -184,7 +184,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
     for (name, cause) in [
         ("manual", EventCause::Manual),
         ("idle", EventCause::Idle),
-        ("issue", EventCause::Issue),
+        ("merged", EventCause::Merged),
         ("pr", EventCause::Pr),
         ("missing", EventCause::MissingDirectory),
     ] {
@@ -207,19 +207,16 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
                     .unwrap();
                 manager.remove_idle(&workspace.id, snapshot).await.unwrap();
             }
-            EventCause::Issue => {
-                let head = crate::forge::pr::current_head(&workspace).await.unwrap();
+            EventCause::Merged => {
+                let snapshot = manager
+                    .merged_snapshot(&workspace.id)
+                    .await
+                    .unwrap()
+                    .unwrap();
                 manager
-                    .record_done(
-                        &workspace,
-                        head,
-                        Some(true),
-                        EventCause::Issue,
-                        crate::daemon::workspace::Requester::Unscoped,
-                    )
+                    .remove_merged_idle(&workspace.id, snapshot)
                     .await
                     .unwrap();
-                manager.sweep_completed().await.unwrap();
             }
             EventCause::Pr => {
                 manager

@@ -8,11 +8,9 @@ The user and Shoal may send you messages, such as a request to free memory or
 disk space. They arrive as context after tool calls or in `shoal watch` output,
 and `shoal messages` shows new ones. Follow them.
 
-Shoal keeps this workspace until you run `shoal done`. Issue closure and merged
-PRs do not end the assignment unless `[done] automatic` is enabled; then run
-`shoal hold acquire --name more-work` before either happens if you have more
-work, and `shoal hold release --name more-work` just before `shoal done`.
-Finish every assignment with these steps:
+Shoal removes this workspace after you run `shoal done`, or once its branch has
+merged and nothing has used it for hours; issue closure and merged PRs do not
+end the assignment. Finish every assignment with these steps:
 
 1. Open the PR with `shoal pr open`, which pushes the branch and links the PR.
    Link a PR opened another way with `shoal link pr <number-or-url>`.
