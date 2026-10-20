@@ -1347,6 +1347,19 @@ is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
 ### Restore a workspace
 
+```sh
+shoal restore          # list removed workspaces that can be restored
+shoal restore topic    # open topic again with its unsaved files and links
+```
+
+`shoal restore <workspace>` opens the newest removed workspace with that name or
+ID on its branch, recreating the branch at the removed HEAD when it was deleted,
+puts its unsaved files back as uncommitted changes, links its issue, runs setup,
+and links its PRs; a link that fails is a warning. It refuses when another
+workspace uses the branch, when the branch no longer contains the removed HEAD,
+or when it moved past HEAD while unsaved files would have to be applied to it;
+the error names the commit to recover by hand. Workspace processes cannot run it.
+
 Every removal of an existing worktree, manual or automatic, keeps a restore
 point: a commit of HEAD plus its uncommitted and untracked files, without
 ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a

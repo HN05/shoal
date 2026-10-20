@@ -86,6 +86,22 @@ pub async fn snapshot(worktree: &Path, message: &str) -> Result<String> {
     Ok(commit.trim().to_owned())
 }
 
+/// Write the files of `snapshot` into the worktree, leaving the index alone:
+/// changed and untracked files come back as unsaved changes, and files the
+/// snapshot lacks are deleted.
+pub async fn apply(worktree: &Path, snapshot: &str) -> Result<()> {
+    let mut command = isolated_command_without_submodules(worktree);
+    command.args([
+        "restore",
+        &format!("--source={snapshot}"),
+        "--worktree",
+        "--",
+        ":/",
+    ]);
+    subprocess::output(command).await?;
+    Ok(())
+}
+
 /// Point `reference` at `commit`, keeping it reachable.
 pub async fn save(repo: &Path, reference: &str, commit: &str) -> Result<()> {
     run_isolated(repo, &["update-ref", reference, commit]).await?;

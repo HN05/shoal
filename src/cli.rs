@@ -579,9 +579,10 @@ pub enum Command {
         #[arg(long, conflicts_with = "keep_branch")]
         delete_branch: bool,
     },
-    /// Remove every workspace automatic cleanup would remove, without waiting for its idle delay.
+    /// Remove every workspace idle or merged cleanup would remove, without waiting for their idle periods.
     ///
-    /// Applies where idle cleanup is disabled; dirty, unpushed, held or busy workspaces are kept.
+    /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces are
+    /// kept, and the unsaved files of merged ones go into their restore points.
     Cleanup {
         /// List the workspaces without removing them.
         #[arg(long)]
@@ -590,6 +591,10 @@ pub enum Command {
         #[arg(long)]
         caches: bool,
     },
+    /// Open a removed workspace again on its branch, with its unsaved files and links.
+    ///
+    /// Without a workspace, lists the removed workspaces that can be restored.
+    Restore { workspace: Option<String> },
     /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,

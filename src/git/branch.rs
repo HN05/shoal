@@ -30,6 +30,11 @@ pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Create a local branch at `commit`; an existing branch is an error.
+pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
+    git::run_isolated(repo, &["branch", "--no-track", "--", name, commit]).await
+}
+
 pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "-m", "--", from, to]).await
 }

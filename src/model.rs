@@ -110,6 +110,16 @@ pub struct RemovedWorkspace {
     pub expires_at: u64,
 }
 
+/// A workspace `shoal restore` opened again from its restore record; the
+/// caller sets it up and links its PRs.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestoredWorkspace {
+    pub opened: OpenedWorkspace,
+    pub removed: RemovedWorkspace,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
 /// An agent's statement that linked work is ready for review at a commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewMark {

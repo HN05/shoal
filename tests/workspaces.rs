@@ -657,6 +657,33 @@ fn cleanup_removes_idle_candidates_on_request() {
 }
 
 #[test]
+fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("scratch");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(path.join("notes"), "draft\n").unwrap();
+    fixture.ok(&["rm", "scratch", "--yes", "--delete-branch"]);
+    assert!(!path.exists());
+    let removed = fixture.ok(&["restore"]);
+    assert_eq!(removed[0]["name"], "scratch");
+    assert_eq!(removed[0]["cause"], "manual");
+    let listing = String::from_utf8(fixture.run(&["restore"]).stdout).unwrap();
+    assert!(
+        listing.starts_with("scratch  scratch  removed "),
+        "{listing:?}"
+    );
+
+    let restored = fixture.ok(&["restore", "scratch"]);
+    assert_eq!(restored["workspace"]["name"], "scratch");
+    assert_eq!(restored["workspace"]["state"], "ready");
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    let again = fixture.run(&["restore", "scratch"]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("no restorable workspace scratch"));
+}
+
+#[test]
 fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
     let first = fixture.ok(&["repo", "list"]);
@@ -12686,7 +12713,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     assert_eq!(notification["kind"], "workspace_removed");
     assert_eq!(
         notification["message"],
-        "removed after the merge acknowledgement"
+        "removed after the merge acknowledgement; restore it with shoal restore waiter"
     );
     follower.kill().unwrap();
     follower.wait().unwrap();

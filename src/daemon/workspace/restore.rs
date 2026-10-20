@@ -1,14 +1,14 @@
 //! Restore points for removed workspaces: every removal of an existing
 //! worktree keeps its HEAD and unsaved files reachable under a private ref
 //! and records what `shoal restore` needs, until the record expires.
-use anyhow::{Result, ensure};
-use rusqlite::{Connection, params};
+use anyhow::{Context, Result, bail, ensure};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
     daemon::{events::EventCause, log},
     git,
-    model::{RemovedWorkspace, Repository, Workspace},
+    model::{RemovedWorkspace, Repository, RestoredWorkspace, Workspace},
     removal::RemovalCheck,
     time::unix_seconds,
 };
@@ -78,6 +78,111 @@ impl Manager {
         };
         Ok(git::status::commits_since(&workspace.path, base).await? > 0
             && self.archives_unsaved_files(workspace).await?)
+    }
+
+    /// Restorable workspaces, newest first.
+    pub async fn removed_workspaces(&self) -> Result<Vec<RemovedWorkspace>> {
+        self.store
+            .run(|db| {
+                db.prepare("SELECT record FROM removed_workspaces ORDER BY rowid DESC")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .map(|record| Ok(serde_json::from_str(&record?)?))
+                    .collect()
+            })
+            .await
+    }
+
+    /// Open a removed workspace again on its branch at the removed HEAD, with
+    /// its unsaved files and linked issue; the caller sets it up and links
+    /// its PRs. The record goes once the files are back.
+    pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
+        let removed = self.removed_workspace(selector).await?;
+        let branch = self.restore_branch(&removed).await?;
+        let opened = self
+            .open_branch(removed.repository_id.as_str(), &branch, None, None, None)
+            .await?;
+        if removed.snapshot != removed.head {
+            git::restore::apply(&opened.workspace.path, &removed.snapshot).await?;
+        }
+        let mut warnings = Vec::new();
+        if let Some(url) = &removed.links.issue
+            && let Err(error) = self
+                .set_issue(&opened.workspace.id, url, removed.links.issue_title.clone())
+                .await
+        {
+            warnings.push(format!("cannot link issue {url}: {error:#}"));
+        }
+        self.forget_restore_point(&removed).await?;
+        Ok(RestoredWorkspace {
+            opened,
+            removed,
+            warnings,
+        })
+    }
+
+    async fn removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
+        let name = selector.to_owned();
+        self.store
+            .run(move |db| find(db, &name))
+            .await?
+            .with_context(|| {
+                format!("no restorable workspace {selector}; shoal restore lists them")
+            })
+    }
+
+    /// The branch to open: one at the removed HEAD, or at a later commit when
+    /// nothing unsaved has to be applied, created at HEAD when it was deleted.
+    async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
+        let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
+        let branch = removed
+            .branch
+            .clone()
+            .unwrap_or_else(|| removed.name.clone());
+        if let Some(workspace) = self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .find(|workspace| workspace.repository_id == repo.id && workspace.branch == branch)
+        {
+            bail!("workspace {} already uses branch {branch}", workspace.name);
+        }
+        let local = git::local_ref(&branch);
+        if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
+            git::branch::create(&repo.path, &branch, &removed.head).await?;
+            return Ok(branch);
+        }
+        let tip = git::verify_revision(
+            &repo.path,
+            &format!("{local}^{{commit}}"),
+            git::run_isolated,
+        )
+        .await?;
+        let tip = tip.trim();
+        ensure!(
+            git::is_ancestor(&repo.path, &removed.head, tip, git::isolated_command).await?,
+            "branch {branch} no longer contains the removed HEAD {}; restore it under another name with git branch <name> {}",
+            removed.head,
+            removed.snapshot
+        );
+        ensure!(
+            tip == removed.head || removed.snapshot == removed.head,
+            "branch {branch} moved past the removed HEAD; open it with shoal new and apply the unsaved files with git cherry-pick --no-commit {}",
+            removed.snapshot
+        );
+        Ok(branch)
+    }
+
+    /// Delete a restored workspace's record and the ref that kept its commits.
+    async fn forget_restore_point(&self, removed: &RemovedWorkspace) -> Result<()> {
+        let repo = self.repository(&removed.repository_id).await?;
+        git::restore::delete(&repo.path, &git::restore::reference(&removed.workspace_id)).await?;
+        let id = removed.workspace_id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+                Ok(())
+            })
+            .await
     }
 
     /// Drop the restore point of a removal that did not happen.
@@ -157,6 +262,11 @@ impl Manager {
     }
 }
 
+/// A removal notification that says how to undo it.
+pub(crate) fn removal_notice(workspace: &str, removal: &str) -> String {
+    format!("{removal}; restore it with shoal restore {workspace}")
+}
+
 /// Persist a restore record in the removal's transaction.
 pub(super) fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     db.execute(
@@ -171,6 +281,22 @@ pub(super) fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> 
         ],
     )?;
     Ok(())
+}
+
+/// The restore record of a removed workspace, by name or ID; the newest wins
+/// when one name was removed more than once.
+fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM removed_workspaces WHERE workspace_id=?1 OR name=?1
+                ORDER BY rowid DESC LIMIT 1",
+            [selector],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record
+        .map(|record| serde_json::from_str(&record))
+        .transpose()?)
 }
 
 #[cfg(test)]

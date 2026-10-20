@@ -25,6 +25,7 @@ mod repo_menu;
 mod repo_setup;
 mod repositories;
 mod resources;
+mod restore;
 pub(crate) mod resume;
 mod review;
 mod secrets;
@@ -446,6 +447,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             .await
         }
         Command::Cleanup { dry_run, caches } => cleanup::run(&ctx, dry_run, caches).await,
+        Command::Restore { workspace } => restore::run(&ctx, workspace).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
         Command::Codex {

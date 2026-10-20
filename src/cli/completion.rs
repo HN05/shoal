@@ -57,6 +57,8 @@ enum Target {
     Workspaces,
     /// Workspaces described by what `shoal resume` restores in them.
     ResumeWorkspaces,
+    /// Removed workspaces `shoal restore` can open again.
+    RemovedWorkspaces,
     Pools,
     Members,
     ResourceNames,
@@ -180,6 +182,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
+                ("workspace", _, "restore") => Some(Target::RemovedWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces),
                 ("pool", "resource", _) => Some(Target::Pools),
                 ("resource", "resource", _) => Some(Target::Members),
@@ -398,6 +401,17 @@ impl Typed {
                 current,
             ));
         }
+        if matches!(target, Target::RemovedWorkspaces) {
+            let removed = client::request::<Vec<crate::model::RemovedWorkspace>>(
+                &paths,
+                Method::RemovedWorkspaces,
+            )
+            .await?;
+            return Ok(removed
+                .into_iter()
+                .map(|workspace| CompletionCandidate::new(workspace.name))
+                .collect());
+        }
         if matches!(target, Target::ApprovalRequests) {
             let requests = client::request::<Vec<ApprovalRequest>>(
                 &paths,
@@ -488,6 +502,7 @@ impl Typed {
             | Target::Repositories
             | Target::Workspaces
             | Target::ResumeWorkspaces
+            | Target::RemovedWorkspaces
             | Target::ApprovalRequests
             | Target::Questions => unreachable!(),
         }

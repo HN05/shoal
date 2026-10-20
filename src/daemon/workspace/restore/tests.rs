@@ -116,3 +116,119 @@ async fn removal_keeps_a_restore_point_until_it_expires() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn restore_reopens_the_branch_with_its_files_and_issue() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    let head = git(&workspace.path, &["rev-parse", "HEAD"]);
+    fs::write(workspace.path.join("work"), "edited\n").unwrap();
+    fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    fs::remove_file(workspace.path.join("tracked")).unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,'https://github.com/acme/repo/issues/1','Fix it')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let status = git(&workspace.path, &["status", "--porcelain"]);
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::DeleteBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    let error = manager.restore_workspace("missing").await.unwrap_err();
+    assert!(format!("{error:#}").contains("no restorable workspace missing"));
+    assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
+
+    git(
+        &checkout,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/repo.git",
+        ],
+    );
+    let restored = manager.restore_workspace("topic").await.unwrap();
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    let path = &restored.opened.workspace.path;
+    assert!(!restored.opened.reused);
+    assert_eq!(restored.opened.workspace.branch, "topic");
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(path, &["status", "--porcelain"]), status);
+    assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
+    let workspace = manager.workspace("topic").await.unwrap();
+    assert_eq!(
+        workspace.links.issue.as_deref(),
+        Some("https://github.com/acme/repo/issues/1")
+    );
+    assert!(manager.removed_workspaces().await.unwrap().is_empty());
+    assert!(
+        git::restore::workspace_ids(&checkout)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::KeepBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    // The kept branch was reset elsewhere, losing the removed commit.
+    git(&checkout, &["branch", "-f", "topic", "main"]);
+    let error = manager.restore_workspace("topic").await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("no longer contains the removed HEAD"),
+        "{error:#}"
+    );
+    git(&checkout, &["branch", "-D", "topic"]);
+    manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let error = manager.restore_workspace("topic").await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("already uses branch topic"),
+        "{error:#}"
+    );
+    assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
+}

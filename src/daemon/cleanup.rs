@@ -409,7 +409,10 @@ async fn sweep_workspace(
             log!("auto cleanup removed {}", workspace.name);
             (
                 NotificationKind::WorkspaceRemoved,
-                "removed by idle cleanup".to_owned(),
+                crate::daemon::workspace::removal_notice(
+                    &workspace.name,
+                    "removed by idle cleanup",
+                ),
                 Ok(()),
             )
         }

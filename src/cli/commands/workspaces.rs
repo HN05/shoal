@@ -1068,7 +1068,7 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
 
 /// Run the configured `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
-async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
+pub(super) async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let command = request::<Option<PathBuf>>(
         &ctx.paths,
         Method::WorkspaceHook {
@@ -1110,7 +1110,10 @@ async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
 
 /// Run the setup command, then let an interactive user decide what to do with
 /// a failed workspace. `None` means the workspace was deleted or kept as-is.
-async fn setup_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
+pub(super) async fn setup_workspace(
+    ctx: &Context,
+    workspace: &Workspace,
+) -> Result<Option<Workspace>> {
     let result = execution::setup(&ctx.paths, workspace.id.clone(), ctx.json).await;
     if let Err(error) = &result
         && let Some(failure) = error.downcast_ref::<execution::SetupVerificationFailure>()

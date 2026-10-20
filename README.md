@@ -160,6 +160,7 @@ shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
+shoal restore fix-login       # Open a removed workspace again with its unsaved files
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
@@ -328,6 +329,8 @@ merged workspaces after 4 idle hours whether or not their agent ran `shoal done`
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and why
 it keeps the others, `--caches` also empties shared caches nothing is using, and `shoal status` shows why it keeps one workspace.
+Every removal can be undone for 30 days: `shoal restore` lists removed workspaces,
+and `shoal restore <workspace>` opens one again with its uncommitted files and links.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

@@ -979,7 +979,12 @@ with a temporary index under `refs/shoal/removed/<workspace id>`, and its record
 (branch, HEAD, base and links) commits with the removal. Unsaved files beyond
 `[cleanup.restore] archive_max_mb` are not kept; merged cleanup then retains the
 workspace, and every other removal keeps only HEAD. Records and refs expire after
-`retention_days`; a ref no record or workspace owns is deleted.
+`retention_days`; a ref no record or workspace owns is deleted. `shoal restore`
+reopens the branch through the existing-branch path, creating it at the removed
+HEAD when deleted and refusing one that no longer contains it, then applies the
+snapshot's files without staging them and links what the record names; the record
+and ref go once the files are back. Restoring is allocation, so scoped callers
+cannot.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point

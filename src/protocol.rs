@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 95;
+pub const VERSION: u32 = 96;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -381,6 +381,12 @@ pub enum Method {
         /// Also empty the shared caches of repositories nothing is using.
         caches: bool,
     },
+    /// Removed workspaces that can still be restored.
+    RemovedWorkspaces,
+    /// Open a removed workspace again from its restore record.
+    RestoreWorkspace {
+        workspace: String,
+    },
     Diagnose,
     Doctor {
         workspace: Option<String>,
@@ -681,6 +687,8 @@ response_bodies! {
     CiActed(crate::forge::ci::CiActed),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
+    RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
+    RestoredWorkspace(crate::model::RestoredWorkspace),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),

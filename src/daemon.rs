@@ -731,6 +731,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Cleanup { dry_run, caches } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, caches).await?)
         }
+        Method::RemovedWorkspaces => Body::RemovedWorkspaces(manager.removed_workspaces().await?),
+        Method::RestoreWorkspace { workspace } => {
+            Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
+        }
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
         Method::Doctor { workspace, options } => Body::Doctor(
             manager
