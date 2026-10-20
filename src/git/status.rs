@@ -60,3 +60,31 @@ async fn records_tree(repo: &Path, revision: &str, tree: &str) -> bool {
         .await
         .is_ok_and(|other| other == tree)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{Duration, SystemTime},
+    };
+
+    use crate::test_support::repository;
+
+    #[tokio::test]
+    async fn status_leaves_a_stale_index_unwritten() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        let tracked = fs::File::options()
+            .write(true)
+            .open(repo.join("tracked"))
+            .unwrap();
+        tracked
+            .set_modified(SystemTime::now() - Duration::from_secs(3600))
+            .unwrap();
+        let index = fs::read(repo.join(".git/index")).unwrap();
+
+        assert_eq!(super::porcelain(&repo).await.unwrap(), "");
+        assert_eq!(super::changed_files(&repo).await.unwrap(), "");
+        assert_eq!(fs::read(repo.join(".git/index")).unwrap(), index);
+    }
+}

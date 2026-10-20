@@ -86,10 +86,12 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, St
     }))
 }
 
-/// `git -C <repo>` with the caller's normal configuration and hooks.
+/// `git -C <repo>` with the caller's normal configuration and hooks. Queries
+/// skip optional locks, so a status that refreshes the index never holds the
+/// lock a concurrent Git command in the same worktree needs.
 pub fn command(repo: &Path) -> Command {
     let mut command = Command::new(Tool::Git.program());
-    command.arg("-C").arg(repo);
+    command.arg("--no-optional-locks").arg("-C").arg(repo);
     command
 }
 

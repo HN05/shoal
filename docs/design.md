@@ -230,8 +230,10 @@ failed fetches. `--base REF` starts from any locally resolvable
 commit ref without refreshing, except when it names the local default branch or a
 configured remote's branch, which is fetched first and must succeed.
 Creation, default-branch refresh, setup, repository removal, and recovery share
-a per-repository Git gate. Daemon ref updates disable hooks, Git credential prompts,
-and SSH askpass while preserving the user's SSH transport configuration;
+a per-repository Git gate. Shoal's own Git commands skip optional locks, so
+background status checks never hold a worktree's index lock. Daemon ref updates
+disable hooks, Git credential prompts, and SSH askpass while preserving the user's
+SSH transport configuration;
 interactive Git commands retain normal prompting. Ancestry and exact-ref checks
 distinguish negative answers from command failures; failed checks stop branch
 selection, refresh, and removal with the Git diagnostic.
