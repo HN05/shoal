@@ -183,7 +183,7 @@ impl Manager {
         selector: &str,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
-        parent_execution: Option<&str>,
+        caller: Option<&Caller>,
     ) -> Result<StartedExecution> {
         let (workspace, preparation) = self
             .prepare_execution(selector, wrapper.as_ref(), kind)
@@ -197,7 +197,12 @@ impl Manager {
             _resources,
         } = preparation;
         let registered = self
-            .register_execution(&workspace.id, wrapper, kind, parent_execution)
+            .register_execution(
+                &workspace.id,
+                wrapper,
+                kind,
+                caller.and_then(Caller::execution_id),
+            )
             .await?;
         // Setup releases its Git gate before the hook; resources remain guarded
         // until pre-setup completes, while landing's gate travels with the plan.

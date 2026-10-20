@@ -12,6 +12,7 @@ use tokio::{
 
 use super::{
     execution_recovery,
+    scope::Caller,
     workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest},
 };
 use crate::daemon::log;
@@ -30,7 +31,8 @@ pub(super) struct ExecutionContext {
     pub reattach: bool,
     /// The starting queue entry whose slot this agent takes over.
     pub queue_entry: Option<String>,
-    pub parent_execution: Option<String>,
+    /// The scoped caller starting the execution.
+    pub caller: Option<Caller>,
 }
 
 /// An execution whose wrapper holds this connection.
@@ -72,14 +74,14 @@ pub(super) async fn execute(
         recover,
         reattach,
         queue_entry,
-        parent_execution,
+        caller,
     } = context;
     let StartedExecution {
         plan,
         stop,
         _git_guard,
     } = match manager
-        .begin_execution(&workspace, Some(wrapper), kind, parent_execution.as_deref())
+        .begin_execution(&workspace, Some(wrapper), kind, caller.as_ref())
         .await
     {
         Ok(begun) => begun,
@@ -529,7 +531,7 @@ mod tests {
                 recover: false,
                 reattach: false,
                 queue_entry: None,
-                parent_execution: None,
+                caller: None,
             },
             manager.background_operations.clone().read_owned().await,
         ));
@@ -608,7 +610,7 @@ mod tests {
                 agent: None,
                 recover: false,
                 reattach: true,
-                parent_execution: None,
+                caller: None,
                 queue_entry: None,
             },
             manager.background_operations.clone().read_owned().await,

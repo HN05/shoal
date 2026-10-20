@@ -342,8 +342,7 @@ async fn serve(
                     recover,
                     reattach,
                     queue_entry,
-                    parent_execution: caller
-                        .and_then(|caller| caller.execution_id().map(str::to_owned)),
+                    caller,
                 },
                 operation_guard,
             )
