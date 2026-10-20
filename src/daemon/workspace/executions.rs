@@ -251,7 +251,8 @@ impl Manager {
         // that a restart releases.
         let reattach_token = (kind == ExecutionKind::Command).then(|| scope_token.clone());
         let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
-        let ports = self
+        let (cache_repository, configured_caches) = (repository.clone(), settings.caches.clone());
+        let (ports, caches) = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -267,12 +268,13 @@ impl Manager {
                     ],
                 )?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
+                // Under the write lock emptying caches takes, and undone with
+                // the execution's row when the directories cannot be prepared.
+                let caches = crate::caches::directories(&cache_repository, &configured_caches)?;
                 tx.commit()?;
-                Ok(ports)
+                Ok((ports, caches))
             })
             .await?;
-        // After the execution is recorded, so emptying caches waits for it.
-        let caches = crate::caches::directories(&repository, &settings.caches)?;
         let environment = crate::env::render_configured_environment(
             &settings.env,
             &workspace,
