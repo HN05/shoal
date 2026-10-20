@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 48;
+const SCHEMA_VERSION: i64 = 49;
 
 #[cfg(test)]
 mod benchmark;
@@ -377,7 +377,16 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (46, include_str!("store/display_numbers.sql"), None),
     (47, include_str!("store/workspace_items.sql"), None),
     (48, include_str!("store/agent_queue_restores.sql"), None),
+    (49, CLEANUP_GRACE, None),
 ];
+
+/// When the grace period of an unattended removal ends, and whether the
+/// current sweep pass still wants to remove the workspace.
+const CLEANUP_GRACE: &str = "CREATE TABLE IF NOT EXISTS cleanup_grace (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    cleanup_at INTEGER NOT NULL,
+    claimed INTEGER NOT NULL CHECK(claimed IN (0, 1))
+);";
 
 /// Restore records outlive their workspace, not their repository.
 const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
@@ -890,6 +899,9 @@ mod tests {
         }
         if version >= 48 {
             db.execute_batch(include_str!("store/agent_queue_restores.sql"))?;
+        }
+        if version >= 49 {
+            db.execute_batch(CLEANUP_GRACE)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

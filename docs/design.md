@@ -1029,7 +1029,13 @@ an explicit keep or delete choice. The default branch, and every branch while th
 be resolved, is retained unless deletion is explicit.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
-permits, rechecked immediately before deletion, without fetching. Merged cleanup
+permits, rechecked immediately before deletion, without fetching. Every unattended
+removal except for disk space first waits `[cleanup] grace_minutes`, because
+removal stops the agent the user may still want to continue: the first attempt
+that passes removal's initial checks persists an end time, each sweep pass claims
+it again while some rule still removes the workspace, and the pass ends periods
+no attempt claimed, so they restart instead of carrying over to a later eligibility.
+User requests and disk pressure remove at once. Merged cleanup
 (`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 restore point keeps (the branch has commits of its own), no Git operation under

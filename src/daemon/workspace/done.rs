@@ -316,8 +316,7 @@ impl Manager {
         }
         let cause = self.completion_cause(&workspace.id).await?;
         self.remove_completed(&workspace.id, &completion.head, cause)
-            .await?;
-        Ok(true)
+            .await
     }
 
     pub(super) async fn completion_cause(&self, id: &str) -> Result<EventCause> {

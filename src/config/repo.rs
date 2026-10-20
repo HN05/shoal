@@ -276,6 +276,7 @@ pub struct Codex {
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Cleanup {
+    pub grace_minutes: Option<u64>,
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
     pub merged: MergedCleanup,
@@ -284,6 +285,12 @@ pub struct Cleanup {
 
 impl Cleanup {
     pub fn validate(&self) -> anyhow::Result<()> {
+        if let Some(minutes) = self.grace_minutes {
+            anyhow::ensure!(
+                minutes <= 525600,
+                "cleanup.grace_minutes must be at most 525600"
+            );
+        }
         for (key, minutes) in [
             ("cleanup.auto.idle_minutes", self.auto.idle_minutes),
             ("cleanup.merged.idle_minutes", self.merged.idle_minutes),

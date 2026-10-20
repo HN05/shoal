@@ -1550,6 +1550,12 @@ fn render_status(view: &StatusView, json: bool) {
     render_recorded("Opened:", &workspace.links.opened);
     render_recorded("Related:", &workspace.links.related);
     println!("Cleanup:       {}", status.cleanup_reason);
+    if let Some(at) = status.cleanup_at {
+        println!(
+            "Grace period:  ends {}",
+            crate::time::local_minutes(at as i64)
+        );
+    }
     if let Some(error) = &status.cleanup_error {
         println!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
     }

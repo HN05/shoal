@@ -190,12 +190,32 @@ pub struct Simulators {
     pub preferred: Vec<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Cleanup {
+    pub grace_minutes: u64,
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
     pub merged: MergedCleanup,
     pub restore: Restore,
+}
+
+impl Default for Cleanup {
+    fn default() -> Self {
+        Self {
+            grace_minutes: 10,
+            auto: AutoCleanup::default(),
+            pr: PrCleanup::default(),
+            merged: MergedCleanup::default(),
+            restore: Restore::default(),
+        }
+    }
+}
+
+impl Cleanup {
+    /// How long a workspace stays eligible before automatic cleanup removes it.
+    pub fn grace(&self) -> Duration {
+        Duration::from_secs(self.grace_minutes * 60)
+    }
 }
 
 #[derive(Debug, Serialize)]

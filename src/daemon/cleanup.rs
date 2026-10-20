@@ -28,6 +28,7 @@ use crate::{
     time::{local_seconds, unix_seconds},
 };
 
+mod grace;
 mod merged;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -327,6 +328,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
             failed.push(format!("{name}: {error:#}"));
         }
     };
+    step("grace periods", manager.begin_grace_pass().await);
     step("branch observation", observe_branches(manager).await);
     step("completion cleanup", manager.sweep_completed().await);
     step("PR cleanup", manager.sweep_prs().await);
@@ -336,6 +338,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         merged::sweep(manager, &mut timers.merged).await,
     );
     step("restore expiry", manager.expire_restore_points().await);
+    step("grace periods", manager.end_unclaimed_grace().await);
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())
 }
@@ -407,9 +410,13 @@ async fn sweep_workspace(
         timers.start(&workspace.id, snapshot, now);
         return Ok(());
     }
+    let removal = manager.remove_idle(&workspace.id, snapshot).await;
+    if matches!(removal, Ok(false)) {
+        return Ok(());
+    }
     timers.idle.remove(&workspace.id);
-    let (kind, message, recorded) = match manager.remove_idle(&workspace.id, snapshot).await {
-        Ok(()) => {
+    let (kind, message, recorded) = match removal {
+        Ok(_) => {
             log!("auto cleanup removed {}", workspace.name);
             (
                 NotificationKind::WorkspaceRemoved,
@@ -1122,7 +1129,11 @@ mod tests {
         commit(&repository_dir, ".gitignore");
         let config = crate::config::Config::path(&manager.paths);
         fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::write(config, "[resources.test-lock]\n").unwrap();
+        fs::write(
+            config,
+            "[cleanup]\ngrace_minutes = 0\n[resources.test-lock]\n",
+        )
+        .unwrap();
         manager.reload_config().await.unwrap();
         let repo = manager
             .register_repository(repository_dir.to_str().unwrap().into(), None, None)

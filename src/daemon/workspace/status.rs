@@ -40,6 +40,7 @@ impl Manager {
         );
         let unread_notifications = self.unread_notifications().await?;
         let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
+        let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();
         let setup_finished = self
             .store
@@ -56,6 +57,7 @@ impl Manager {
             unread_notifications,
             cleanup_error: self.cleanup_problem(),
             cleanup_reason,
+            cleanup_at,
             prs,
             issue_status,
         })

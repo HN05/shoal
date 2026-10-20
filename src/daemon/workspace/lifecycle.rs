@@ -97,6 +97,18 @@ impl Removal<'_> {
         )
     }
 
+    /// Unattended removals wait out the grace period, except to free disk
+    /// space; a user's request does not.
+    fn waits_for_grace(self) -> bool {
+        match self {
+            Removal::Merged { .. } | Removal::Completed { .. } => true,
+            Removal::Automatic { cause, .. } => {
+                !matches!(cause, EventCause::DiskSpace | EventCause::Manual)
+            }
+            Removal::Manual { .. } | Removal::Deleted => false,
+        }
+    }
+
     /// Unattended removals retain a held workspace, whenever the hold was
     /// taken; a user's request overrides holds.
     fn respects_holds(self) -> bool {
@@ -443,12 +455,13 @@ impl Manager {
         Ok(None)
     }
 
-    pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
+    /// `Ok(false)` while the grace period runs, as for every unattended removal.
+    pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<bool> {
         self.remove_unused(selector, snapshot, EventCause::Idle)
             .await
     }
 
-    pub async fn remove_merged_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
+    pub async fn remove_merged_idle(&self, selector: &str, snapshot: Snapshot) -> Result<bool> {
         self.remove_unused(selector, snapshot, EventCause::Merged)
             .await
     }
@@ -457,6 +470,7 @@ impl Manager {
     pub async fn remove_for_disk_space(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::DiskSpace)
             .await
+            .map(|_| ())
     }
 
     /// Remove an idle cleanup candidate on the user's request, without
@@ -464,6 +478,7 @@ impl Manager {
     pub async fn remove_on_request(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::Manual)
             .await
+            .map(|_| ())
     }
 
     async fn remove_unused(
@@ -471,17 +486,15 @@ impl Manager {
         selector: &str,
         snapshot: Snapshot,
         cause: EventCause,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let _guard = self.pr_gate.lock().await;
-        self.remove(selector, Removal::Automatic { snapshot, cause })
+        self.remove_after_grace(selector, Removal::Automatic { snapshot, cause })
             .await
-            .map(|_| ())
     }
 
-    pub async fn remove_merged(&self, selector: &str, head: &str) -> Result<()> {
-        self.remove(selector, Removal::Merged { head })
+    pub async fn remove_merged(&self, selector: &str, head: &str) -> Result<bool> {
+        self.remove_after_grace(selector, Removal::Merged { head })
             .await
-            .map(|_| ())
     }
 
     pub(super) async fn remove_completed(
@@ -489,10 +502,35 @@ impl Manager {
         selector: &str,
         head: &str,
         cause: EventCause,
-    ) -> Result<()> {
-        self.remove(selector, Removal::Completed { head, cause })
+    ) -> Result<bool> {
+        self.remove_after_grace(selector, Removal::Completed { head, cause })
             .await
-            .map(|_| ())
+    }
+
+    /// Remove the workspace unless its grace period is still running.
+    async fn remove_after_grace(&self, selector: &str, removal: Removal<'_>) -> Result<bool> {
+        let workspace = self.workspace(selector).await?;
+        if self.grace_running(&workspace, removal).await? {
+            return Ok(false);
+        }
+        self.remove(selector, removal).await.map(|_| true)
+    }
+
+    /// The first attempt that passes removal's initial checks starts the
+    /// grace period, so it never runs while the workspace could not go. A
+    /// failing check is left to removal, which reports it.
+    async fn grace_running(&self, workspace: &Workspace, removal: Removal<'_>) -> Result<bool> {
+        if !removal.waits_for_grace()
+            || self
+                .recheck_removal(workspace, removal, Stage::Initial)
+                .await
+                .is_err()
+        {
+            return Ok(false);
+        }
+        let grace = self.workspace_settings(workspace).await?.cleanup.grace();
+        let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
+        Ok(crate::time::unix_seconds() < cleanup_at)
     }
 
     /// Forget a workspace whose directory was deleted outside Shoal.

@@ -54,9 +54,15 @@ pub fn repository(root: &Path, name: &str) -> PathBuf {
 }
 
 /// Keep the temporary root alive until all manager operations have finished.
+/// Its global config removes eligible workspaces on their first sweep, as
+/// reopened managers also read; grace period tests set their own.
 pub async fn manager() -> (tempfile::TempDir, Arc<Manager>) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    let manager = Manager::open(Paths::for_test(root.path())).await.unwrap();
+    let paths = Paths::for_test(root.path());
+    let config = crate::config::Config::path(&paths);
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "[cleanup]\ngrace_minutes = 0\n").unwrap();
+    let manager = Manager::open(paths).await.unwrap();
     (root, manager)
 }
 

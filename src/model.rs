@@ -273,6 +273,10 @@ pub struct WorkspaceStatus {
     pub cleanup_error: Option<String>,
     /// Why automatic cleanup keeps this workspace now.
     pub cleanup_reason: CleanupReason,
+    /// Unix seconds when automatic cleanup removes the workspace, while its
+    /// grace period runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_at: Option<u64>,
     /// The current state of each watched PR.
     #[serde(default)]
     pub prs: Vec<crate::forge::pr::state::PrStatus>,

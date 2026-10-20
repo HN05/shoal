@@ -39,6 +39,10 @@ struct Fixture {
     repo: PathBuf,
 }
 
+/// Global config without a cleanup grace period, at the root so the rest of a
+/// test's config follows unchanged.
+const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
+
 impl Fixture {
     fn new() -> Self {
         Self::with_config(None)
@@ -54,10 +58,14 @@ impl Fixture {
             "workspace integration tests require Worktrunk (wt)"
         );
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        if let Some(config) = config {
-            fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-            fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
-        }
+        // Remove eligible workspaces on their first sweep unless a test sets
+        // its own grace period.
+        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
+        fs::write(
+            root.path().join(".config/shoal/config.toml"),
+            format!("{NO_GRACE}{}", config.unwrap_or_default()),
+        )
+        .unwrap();
         if fake_sim {
             let script = root.path().join("bin/xcrun");
             install_test_script(&script, include_str!("fixtures/simctl.py"));

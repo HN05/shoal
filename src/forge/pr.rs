@@ -405,7 +405,9 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                self.remove_merged(&workspace.id, &head).await?;
+                if !self.remove_merged(&workspace.id, &head).await? {
+                    return Ok(false);
+                }
                 log!("PR cleanup removed {}", workspace.name);
                 Ok(true)
             }

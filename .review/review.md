@@ -228,6 +228,9 @@ instead of the PR delivery guidance below.
   choices, commands, saved stopped work, leases, directory users or a Git
   operation under way; its idle period is persisted so restarts cannot shorten
   or reset it, and removal rechecks its snapshot through the shared path.
+  Every unattended removal except for disk space waits `[cleanup] grace_minutes`,
+  started only once removal's initial checks pass and ended by any sweep pass that
+  no longer removes the workspace; user requests never wait.
   Every removal of an existing worktree saves a restore point (ref and record)
   before deleting files and keeps both when removal fails; merged cleanup may
   discard unsaved files only once the restore point keeps them.

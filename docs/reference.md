@@ -1777,6 +1777,23 @@ from locally known remote branches, or merged into the default branch as removal
 decides; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
+
+#### Grace period
+
+Every automatic removal except for low disk space waits `grace_minutes` from the
+first sweep that would remove the workspace, so its agent keeps running while you
+decide to take the work back: idle, merged and PR cleanup, and cleanup after
+`shoal done`. A workspace that would not pass removal's checks, such as one with
+unsaved work after `done`, does not start it. `shoal status` shows when the grace
+period ends; a sweep that no longer removes the workspace, as after `undone`, a
+new commit or new activity, ends it, and a later attempt starts a new one. The end
+time survives restarts. `shoal rm`, `shoal cleanup` and disk-space removal do not wait.
+
+```toml
+[cleanup]
+grace_minutes = 10 # Default: 10; 0 removes at once
+```
+
 #### Merged workspaces
 
 A workspace whose branch merged into the default branch is removed once nothing

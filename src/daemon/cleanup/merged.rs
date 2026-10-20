@@ -114,7 +114,8 @@ async fn sweep_workspace(
     }
     let (kind, message, recorded) = match manager.remove_merged_idle(&workspace.id, snapshot).await
     {
-        Ok(()) => {
+        Ok(false) => return Ok(()),
+        Ok(true) => {
             log!("merged cleanup removed {}", workspace.name);
             state.retained.remove(&workspace.id);
             (

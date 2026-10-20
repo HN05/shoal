@@ -64,7 +64,9 @@ when behavior changes, distinguishing decisions from proposals.
   whatever their assignment state, archiving unsaved files left over on a branch
   with commits; only holds and keep choices keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed or merged into the default branch (including
-  squash and rebase merges), or deleted worktrees. Keep one removal path for manual and automatic
+  squash and rebase merges), or deleted worktrees. Unattended removals except for disk
+  space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
+  persisted across restarts. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted; every removal of
   an existing worktree keeps an expiring restore point of HEAD and unsaved files. Only explicit
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and
