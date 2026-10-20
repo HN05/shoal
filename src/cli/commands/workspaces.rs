@@ -843,6 +843,7 @@ async fn open_add_workspace(
                 branch,
                 git_profile,
                 base,
+                chat: None,
             },
         )
         .await
@@ -856,6 +857,7 @@ async fn open_add_workspace(
                 name,
                 base,
                 git_profile,
+                chat: None,
             },
         )
         .await?;

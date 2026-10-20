@@ -1734,7 +1734,7 @@ Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed` and `item_activity`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity` and `chat_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -1743,11 +1743,17 @@ of a change Shoal made to an issue or PR. `item_activity` events add an
 `item_activity` object with the item's `kind` and `url`, and an `update` object
 with the observed update's `kind` and `message`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
+`chat_changed` events add `chat`, the ID of the [chat](#chats) that opened the
+workspace, or null once it returned to you.
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, or `removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.
+
+A `type: "chat"` line records a chat's start or end: its `id`, `created_at`,
+`kind` (`chat_started` or `chat_ended`) and a `chat` object with its `id`,
+`repository_id`, `number`, `agent`, `pid` and Unix-seconds `started_at`.
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.

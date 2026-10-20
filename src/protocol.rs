@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 94;
+pub const VERSION: u32 = 95;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -166,6 +166,8 @@ pub enum Method {
         branch: String,
         git_profile: Option<String>,
         base: Option<String>,
+        /// The chat opening the workspace; `None` gives it to the user.
+        chat: Option<String>,
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,
@@ -173,6 +175,8 @@ pub enum Method {
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
+        /// The chat opening the workspace; `None` gives it to the user.
+        chat: Option<String>,
     },
     AdoptWorkspace {
         repository: crate::forge::repository::Selector,
@@ -184,6 +188,14 @@ pub enum Method {
         branch: String,
     },
     ListWorkspaces,
+    // Chats in registered checkouts.
+    /// Record a chat whose agent replaces process `pid`.
+    StartChat {
+        repository: crate::forge::repository::Selector,
+        agent: String,
+        pid: u32,
+    },
+    ListChats,
     // The agent queue under `max_agents`.
     QueueAdd {
         request: crate::model::QueueRequest,
@@ -652,6 +664,8 @@ response_bodies! {
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
     Workspaces(Vec<Workspace>),
+    Chat(crate::model::Chat),
+    Chats(Vec<crate::model::Chat>),
     Branches(Vec<crate::git::existing_branch::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),

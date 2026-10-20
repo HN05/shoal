@@ -43,6 +43,7 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
             EventItem::Event(event) => {
                 println!("{} {} {}", event.id, event.details.kind, event.details.name)
             }
+            EventItem::Chat(event) => println!("{} {} {}", event.id, event.kind, event.chat.id),
             EventItem::Gap {
                 since,
                 oldest_id,
@@ -51,10 +52,7 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
                 "event gap after {since}; retained events start at {oldest_id} (latest {latest_id})"
             ),
         })?;
-        cursor = Some(match item {
-            EventItem::Event(event) => event.id,
-            EventItem::Gap { oldest_id, .. } => oldest_id - 1,
-        });
+        cursor = Some(item.cursor());
     }
 }
 

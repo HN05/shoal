@@ -174,8 +174,12 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
-    // Ready-for-review marks and agent states record into the journal, so
-    // they go with it.
+    // Ready-for-review marks, agent states and chats record into the
+    // journal, so they go with it.
+    db.execute_batch(
+        "DROP TRIGGER workspace_chat_changed; DROP INDEX workspaces_chat;
+         ALTER TABLE workspaces DROP COLUMN chat_id; DROP TABLE chats;",
+    )?;
     db.execute_batch("DROP TABLE workspace_review; DROP TABLE workspace_agent_state;")?;
     for trigger in [
         "workspace_events_retention",
@@ -191,7 +195,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migrations 31 to 39 add these columns and tables again when the
+    // Migrations 31 to 42 add these columns and tables again when the
     // emulated database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;

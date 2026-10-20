@@ -66,6 +66,9 @@ pub struct Workspace {
     /// Workspaces that record this one as their base.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stacked_workspaces: Vec<WorkspaceRef>,
+    /// The running chat that opened this workspace.
+    #[serde(default)]
+    pub chat: Option<String>,
 }
 
 /// Another workspace a record refers to, with its current name and branch.
@@ -141,6 +144,7 @@ impl Workspace {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            chat: None,
             links: WorkspaceLinks::default(),
             running: false,
         }
@@ -446,6 +450,19 @@ pub struct LandPlan {
     pub checkout: Option<PathBuf>,
     pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
+}
+
+/// An agent the user talks with in a repository's registered checkout,
+/// outside any workspace, while its process runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Chat {
+    pub id: String,
+    pub repository_id: String,
+    /// Tells the repository's running chats apart; the first is 1.
+    pub number: u32,
+    pub agent: String,
+    pub pid: u32,
+    pub started_at: i64,
 }
 
 /// An agent launch waiting for, or starting in, a `max_agents` slot.

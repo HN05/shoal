@@ -761,10 +761,17 @@ cannot create workspaces. Its instructions describe the discussion only, from a
 chat template that repositories can extend like the other prompt templates; the
 orchestrator skill is available when the user asks for coordination. Belonging
 to no workspace, a chat is not a tracked execution: queuing, overload stops and
-resume serve unattended agents, while the user attends a chat. A repository may
-have several chats, so each call starts a new one and focuses it. Only Claude and
-Codex run chats, because they take instructions apart from the first message.
-Proposal: show chats in `ls` and journal events (#732).
+resume serve unattended agents, while the user attends a chat. It is still a
+daemon record, so lists and integrations can follow it: the agent replaces Shoal's
+process, leaving no wrapper to report its exit, so the record lasts while a
+process with the registered identity lives, checked periodically and before
+chats are listed. Starts and ends are journal events. A workspace belongs to the
+chat that last opened it until that chat ends, and opening it outside a chat
+returns it to the user, so Shoal knows which chat coordinates which workers;
+routing their messages to it is a proposal (#811). A repository may have several chats, so each call starts a new
+one and focuses it, numbered by the lowest free number among the repository's
+running chats. Only Claude and Codex run chats, because they take instructions
+apart from the first message.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither

@@ -6,6 +6,7 @@ pub mod allocation;
 pub mod approvals;
 mod auto_update;
 pub(crate) mod caches;
+mod chats;
 pub mod cleanup;
 pub(crate) mod cpu_usage;
 mod disk;
@@ -150,6 +151,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
     spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
     spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
+    spawn_supervised(&mut background, &manager, "chats", chats::run);
     spawn_supervised(
         &mut background,
         &manager,
@@ -487,22 +489,29 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             branch,
             git_profile,
             base,
-        } => Body::OpenedWorkspace(
-            manager
+            chat,
+        } => {
+            let mut opened = manager
                 .open_branch(&repository, &branch, git_profile.as_deref(), path, base)
-                .await?,
-        ),
+                .await?;
+            manager.assign_chat(&opened.workspace.id, chat).await?;
+            opened.workspace = manager.workspace(&opened.workspace.id).await?;
+            Body::OpenedWorkspace(opened)
+        }
         Method::CreateWorkspace {
             path,
             repository,
             name,
             base,
             git_profile,
-        } => Body::Workspace(
-            manager
+            chat,
+        } => {
+            let workspace = manager
                 .create_workspace(&repository, name, base, git_profile.as_deref(), path)
-                .await?,
-        ),
+                .await?;
+            manager.assign_chat(&workspace.id, chat).await?;
+            Body::Workspace(manager.workspace(&workspace.id).await?)
+        }
         Method::AdoptWorkspace {
             repository,
             path,
@@ -530,6 +539,16 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             }
             Body::Workspaces(workspaces)
         }
+        Method::StartChat {
+            repository,
+            agent,
+            pid,
+        } => Body::Chat(manager.start_chat(repository, agent, pid).await?),
+        Method::ListChats => Body::Chats(if caller.is_some() {
+            Vec::new()
+        } else {
+            manager.chats().await?
+        }),
         Method::QueueAdd { request } => Body::QueueAdmission(manager.queue_add(request).await?),
         Method::ListQueue => Body::QueueEntries(if caller.is_some() {
             Vec::new()
@@ -894,7 +913,6 @@ async fn watch_workspace_events(
     follow: bool,
     startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
-    use crate::daemon::events::EventItem;
     if since.is_some_and(|id| id < 0) {
         return protocol::write(
             &mut stream,
@@ -925,16 +943,13 @@ async fn watch_workspace_events(
         let items = manager.workspace_events(cursor, 100).await?;
         let mut delivered = false;
         for item in items {
-            match &item {
-                EventItem::Event(event) => {
-                    if !follow && event.id > end {
-                        break;
-                    }
-                    cursor = Some(event.id);
-                    delivered = true;
+            if let Some(id) = item.event_id() {
+                if !follow && id > end {
+                    break;
                 }
-                EventItem::Gap { oldest_id, .. } => cursor = Some(oldest_id - 1),
+                delivered = true;
             }
+            cursor = Some(item.cursor());
             protocol::write(
                 &mut writer,
                 &Response::new(request_id, Body::EventItem(item)),

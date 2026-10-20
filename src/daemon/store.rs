@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 41;
+const SCHEMA_VERSION: i64 = 42;
 
 #[cfg(test)]
 mod benchmark;
@@ -361,6 +361,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         None,
     ),
     (41, include_str!("store/questions.sql"), None),
+    (42, include_str!("store/chats.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -522,6 +523,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         agent_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),
+        chat: None,
         links: WorkspaceLinks::default(),
         running: false,
         id: row.get("id")?,
@@ -812,6 +814,9 @@ mod tests {
                 );",
             )?;
         }
+        if version >= 42 {
+            db.execute_batch(include_str!("store/chats.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1028,7 +1033,8 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null, "links": {"issue": null, "prs": []}, "running": false
+                "base_workspace": null, "links": {"issue": null, "prs": []}, "running": false,
+                "chat": null
             }),
         )?;
         check_columns(

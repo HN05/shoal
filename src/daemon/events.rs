@@ -36,7 +36,17 @@ states!(EventKind {
     ItemChanged => "item_changed",
     /// An issue or PR changed on its forge.
     ItemActivity => "item_activity",
+    /// A chat opened the workspace, or it returned to the user.
+    ChatChanged => "chat_changed",
 });
+
+states!(
+    /// What happened to a chat.
+    ChatEventKind {
+        Started => "chat_started",
+        Ended => "chat_ended",
+    }
+);
 
 states!(EventCause {
     Manual => "manual",
@@ -83,6 +93,13 @@ pub struct EventDetails {
     /// An issue or PR changed on its forge.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_activity: Option<Box<ItemActivityEvent>>,
+    /// Present on chat changes; null once the workspace returned to the user.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "present_or_null"
+    )]
+    pub chat: Option<Option<String>>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -156,14 +173,55 @@ pub struct WorkspaceEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatEvent {
+    pub id: i64,
+    pub created_at: i64,
+    pub kind: ChatEventKind,
+    pub chat: crate::model::Chat,
+}
+
+/// A journal row as stored: chat events carry the chat in place of a workspace.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Record {
+    Chat {
+        kind: ChatEventKind,
+        chat: crate::model::Chat,
+    },
+    Workspace(Box<EventDetails>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
     Event(Box<WorkspaceEvent>),
+    Chat(Box<ChatEvent>),
     Gap {
         since: i64,
         oldest_id: i64,
         latest_id: i64,
     },
+}
+
+impl EventItem {
+    /// The journal ID of an event; a gap has none.
+    pub fn event_id(&self) -> Option<i64> {
+        match self {
+            Self::Event(event) => Some(event.id),
+            Self::Chat(event) => Some(event.id),
+            Self::Gap { .. } => None,
+        }
+    }
+
+    /// Where a replay resumes after this item: the event, or for a gap the
+    /// start of the retained journal.
+    pub fn cursor(&self) -> i64 {
+        match self {
+            Self::Event(event) => event.id,
+            Self::Chat(event) => event.id,
+            Self::Gap { oldest_id, .. } => oldest_id - 1,
+        }
+    }
 }
 
 /// Append in the transaction that owns the transition, before deleting ownership.
@@ -308,7 +366,10 @@ impl Manager {
             let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
             for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
                 let (id,created_at,record) = row?;
-                items.push(EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details:serde_json::from_str(&record)? })));
+                items.push(match serde_json::from_str(&record)? {
+                    Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details: *details })),
+                    Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent { id,created_at,kind,chat })),
+                });
             }
             Ok(items)
         }).await
