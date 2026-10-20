@@ -39,12 +39,11 @@ impl Manager {
             .trim()
             .to_owned();
         let files_omitted = check.dirty && !self.archives_unsaved_files(workspace).await?;
-        let snapshot = if files_omitted {
-            head.clone()
-        } else {
-            let message = format!("Shoal restore point for {}", workspace.name);
-            git::restore::snapshot(path, &message).await?
-        };
+        // A failed attempt may have deleted files its snapshot alone keeps.
+        let earlier = self.earlier_snapshot(&workspace.id).await?;
+        let message = format!("Shoal restore point for {}", workspace.name);
+        let snapshot =
+            git::restore::snapshot(path, &message, !files_omitted, earlier.as_deref()).await?;
         let reference = git::restore::reference(&workspace.id);
         git::restore::save(&repo.path, &reference, &snapshot).await?;
         let removed_at = unix_seconds();
@@ -66,6 +65,13 @@ impl Manager {
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
+    }
+
+    /// The snapshot an earlier removal attempt of this workspace saved.
+    async fn earlier_snapshot(&self, workspace_id: &str) -> Result<Option<String>> {
+        let id = workspace_id.to_owned();
+        let earlier = self.store.run(move |db| recorded(db, &id)).await?;
+        Ok(earlier.map(|removed| removed.snapshot))
     }
 
     /// Whether a restore point would keep all of the workspace's unsaved files.
@@ -368,6 +374,20 @@ fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
             "SELECT record FROM removed_workspaces WHERE (workspace_id=?1 OR name=?1)
                 AND workspace_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC LIMIT 1",
             [selector],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record
+        .map(|record| serde_json::from_str(&record))
+        .transpose()?)
+}
+
+/// The restore record kept for a workspace ID, whether or not it still exists.
+fn recorded(db: &Connection, workspace_id: &str) -> Result<Option<RemovedWorkspace>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM removed_workspaces WHERE workspace_id=?1",
+            [workspace_id],
             |row| row.get(0),
         )
         .optional()?;

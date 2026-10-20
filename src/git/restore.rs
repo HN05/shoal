@@ -83,18 +83,26 @@ async fn changed_submodule(worktree: &Path) -> Result<bool> {
     Ok(false)
 }
 
-/// A commit of the worktree's files, ignored ones excepted, on top of HEAD;
-/// HEAD itself when nothing changed. A temporary index keeps the worktree's
-/// own index and files untouched.
-pub async fn snapshot(worktree: &Path, message: &str) -> Result<String> {
+/// A commit on top of HEAD with the worktree's files, ignored ones excepted,
+/// or with HEAD's tree when `files` is false, keeping `earlier` reachable as
+/// its second parent; HEAD itself when it would add neither. A temporary
+/// index keeps the worktree's own index and files untouched.
+pub async fn snapshot(
+    worktree: &Path,
+    message: &str,
+    files: bool,
+    earlier: Option<&str>,
+) -> Result<String> {
     let head = run_isolated(worktree, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
     let head = head.trim().to_owned();
+    let earlier = earlier.filter(|earlier| *earlier != head);
     let status = run_isolated(
         worktree,
         &["status", "--porcelain", "--untracked-files=all"],
     )
     .await?;
-    if status.is_empty() {
+    let files = files && !status.is_empty();
+    if !files && earlier.is_none() {
         return Ok(head);
     }
     let index = tempfile::tempdir().context("create a temporary index directory")?;
@@ -111,9 +119,14 @@ pub async fn snapshot(worktree: &Path, message: &str) -> Result<String> {
         subprocess::output(command).await
     };
     in_index(&["read-tree", &head]).await?;
-    in_index(&["add", "--all", "--", ":/"]).await?;
+    if files {
+        in_index(&["add", "--all", "--", ":/"]).await?;
+    }
     let tree = in_index(&["write-tree"]).await?;
-    let commit = in_index(&["commit-tree", tree.trim(), "-p", &head, "-m", message]).await?;
+    let mut args = vec!["commit-tree", tree.trim(), "-p", &head];
+    args.extend(earlier.iter().flat_map(|earlier| ["-p", earlier]));
+    args.extend(["-m", message]);
+    let commit = in_index(&args).await?;
     Ok(commit.trim().to_owned())
 }
 
@@ -158,7 +171,10 @@ mod tests {
         fs::write(repo.join(".gitignore"), "ignored\n").unwrap();
         crate::test_support::commit(&repo, ".gitignore");
         let head = git(&repo, &["rev-parse", "HEAD"]);
-        assert_eq!(snapshot(&repo, "clean").await.unwrap(), head.trim());
+        assert_eq!(
+            snapshot(&repo, "clean", true, None).await.unwrap(),
+            head.trim()
+        );
 
         fs::write(repo.join("tracked"), "changed\n").unwrap();
         fs::write(repo.join("staged"), "staged\n").unwrap();
@@ -169,7 +185,7 @@ mod tests {
         let status = git(&repo, &["status", "--porcelain"]);
         assert_eq!(unsaved_bytes(&repo).await.unwrap(), Some(8 + 7 + 6));
 
-        let commit = snapshot(&repo, "restore point").await.unwrap();
+        let commit = snapshot(&repo, "restore point", true, None).await.unwrap();
         assert_eq!(git(&repo, &["status", "--porcelain"]), status);
         assert_eq!(git(&repo, &["rev-parse", &format!("{commit}^")]), head);
         let files = git(&repo, &["ls-tree", "-r", "--name-only", &commit]);

@@ -974,7 +974,8 @@ restore point is a commit of HEAD plus the unsaved files Git does not ignore, bu
 with a temporary index under `refs/shoal/removed/<workspace id>`, and its record
 (branch, HEAD, base and links) persists before any file is deleted, so an
 interrupted or failed removal stays restorable; records of workspaces that still
-exist are not offered, and the next removal replaces them. Unsaved files beyond
+exist are not offered, and the next removal replaces them, keeping the earlier
+snapshot as its second parent. Unsaved files beyond
 `[cleanup.restore] archive_max_mb` are not kept; merged cleanup then retains the
 workspace, and every other removal keeps only HEAD. Records and refs expire after
 `retention_days`; a ref no record or workspace owns is deleted. `shoal restore`

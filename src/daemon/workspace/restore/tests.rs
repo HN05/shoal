@@ -354,3 +354,51 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
         Some("lower")
     );
 }
+
+#[tokio::test]
+async fn a_retried_removal_keeps_the_earlier_snapshot_reachable() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let save = async || {
+        let check = manager
+            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        manager
+            .save_restore_point(&repo, &workspace, &check, EventCause::Manual)
+            .await
+            .unwrap()
+    };
+    fs::write(workspace.path.join("first"), "first\n").unwrap();
+    let first = save().await;
+    // The failed attempt deleted the file; the retry finds the rest.
+    fs::remove_file(workspace.path.join("first")).unwrap();
+    fs::write(workspace.path.join("second"), "second\n").unwrap();
+    let second = save().await;
+    assert_eq!(
+        git(&checkout, &["rev-parse", &format!("{}^2", second.snapshot)]).trim(),
+        first.snapshot
+    );
+    assert_eq!(
+        git(
+            &checkout,
+            &["show", &format!("{}^2:first", second.snapshot)]
+        ),
+        "first\n"
+    );
+    // A clean retry still keeps it.
+    fs::remove_file(workspace.path.join("second")).unwrap();
+    let third = save().await;
+    assert_eq!(
+        git(&checkout, &["rev-parse", &format!("{}^2", third.snapshot)]).trim(),
+        second.snapshot
+    );
+}
