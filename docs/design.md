@@ -459,8 +459,10 @@ sets, so the user picks how hard to push the machine rather than the
 mechanism's windows and intervals. An idle machine always admits one agent;
 critical readings admit none. Dynamic is machine-wide, so a repository's
 `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
-for that layer. Per-agent memory profiles and routing automatic recovery
-through admission remain proposals.
+for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
+started on a nearly full disk is soon stopped by disk protection. Per-agent
+memory profiles and routing automatic recovery through admission remain
+proposals.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

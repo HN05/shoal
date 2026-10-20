@@ -18480,7 +18480,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
 #[test]
 fn add_queues_agents_past_max_agents_until_removed() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture

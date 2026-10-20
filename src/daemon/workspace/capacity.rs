@@ -3,6 +3,7 @@
 //! Agents start one at a time while measured load leaves room for another.
 //! An agent first reads files and only later edits and compiles, so a recent
 //! start counts at the load a settled agent shows until it settles itself.
+//! Fixed limits apply the same free disk space rule.
 use std::{path::Path, time::Duration};
 
 use crate::{config::overload::Overload, fsutil, process::load};
@@ -104,8 +105,13 @@ pub(crate) fn sample(paths: &[&Path], settings: &Overload, cpu: Option<CpuSample
             .max(1),
         cpu,
         memory: sample_memory(settings),
-        disk_free: sample_disk(paths, settings.disk.enabled, fsutil::available_bytes),
+        disk_free: disk_free(paths, settings),
     }
+}
+
+/// The least free space across `paths`, as [`sample`] probes it.
+pub(crate) fn disk_free(paths: &[&Path], settings: &Overload) -> Option<u64> {
+    sample_disk(paths, settings.disk.enabled, fsutil::available_bytes)
 }
 
 fn sample_memory(settings: &Overload) -> MemoryState {
@@ -158,13 +164,44 @@ pub(crate) fn limit(sample: HostSample, agents: Agents, settings: &Overload) -> 
     agents.total + u32::from(start)
 }
 
+/// The machine-wide limit free disk space sets beside a fixed limit, for
+/// `total` slots in use: none below the stop threshold or without a reading,
+/// the slots in use below the warning threshold but one when none is used,
+/// and no limit otherwise.
+pub(crate) fn disk_limit(free: Option<u64>, total: u32, settings: &Overload) -> Option<u32> {
+    match disk(free, settings) {
+        Disk::Healthy => None,
+        Disk::Low => Some(total.max(1)),
+        Disk::Critical => Some(0),
+    }
+}
+
+/// Free disk space against the overload thresholds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Disk {
+    Healthy,
+    Low,
+    Critical,
+}
+
+fn disk(free: Option<u64>, settings: &Overload) -> Disk {
+    match free {
+        Some(free) if free >= settings.disk.stop_free_bytes() => {
+            if free >= settings.warning.disk_free_bytes() {
+                Disk::Healthy
+            } else {
+                Disk::Low
+            }
+        }
+        _ => Disk::Critical,
+    }
+}
+
 fn blocked(sample: HostSample, settings: &Overload) -> bool {
     matches!(
         sample.memory,
         MemoryState::Critical | MemoryState::Unavailable
-    ) || sample
-        .disk_free
-        .is_none_or(|free| free < settings.disk.stop_free_bytes())
+    ) || disk(sample.disk_free, settings) == Disk::Critical
 }
 
 /// Whether one more agent fits below the warning thresholds once every
@@ -174,9 +211,7 @@ fn room(sample: HostSample, agents: Agents, settings: &Overload) -> bool {
         return false;
     };
     let memory = sample.memory == MemoryState::Healthy;
-    let disk = sample
-        .disk_free
-        .is_some_and(|free| free >= settings.warning.disk_free_bytes());
+    let disk = disk(sample.disk_free, settings) == Disk::Healthy;
     let per_agent = agent_load(cpu, agents.settled, sample.parallelism);
     let projected = cpu.recent + per_agent * f64::from(agents.warming + 1);
     memory && disk && projected < f64::from(settings.warning.cpu_used_percent)
@@ -347,5 +382,17 @@ mod tests {
         ] {
             assert_eq!(limit(blocked, Agents::default(), &settings), 0);
         }
+    }
+
+    #[test]
+    fn low_disk_holds_fixed_limits_and_critical_disk_starts_none() {
+        let settings = Overload::default();
+        let warning = settings.warning.disk_free_bytes();
+        let stop = settings.disk.stop_free_bytes();
+        assert_eq!(disk_limit(Some(warning), 3, &settings), None);
+        assert_eq!(disk_limit(Some(warning - 1), 3, &settings), Some(3));
+        assert_eq!(disk_limit(Some(stop), 0, &settings), Some(1));
+        assert_eq!(disk_limit(Some(stop - 1), 0, &settings), Some(0));
+        assert_eq!(disk_limit(None, 0, &settings), Some(0));
     }
 }

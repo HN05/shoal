@@ -13,6 +13,7 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
             .iter()
             .map(|(id, limit)| (id.to_string(), *limit))
             .collect(),
+        disk: None,
     }
 }
 
@@ -33,6 +34,12 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
     assert!(admit(&vec!["b".to_owned(); 3], &queue, &limits).is_empty());
     // Without any limit every entry starts.
     assert_eq!(admit(&[], &queue, &Limits::default()).len(), 4);
+    // Low disk holds the machine below its fixed limit.
+    let low_disk = Limits {
+        disk: Some(2),
+        ..limits
+    };
+    assert_eq!(admit(&["a".into()], &queue, &low_disk), ["b1"]);
 }
 
 async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Repository {
@@ -43,8 +50,12 @@ async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Re
         .unwrap()
 }
 
+/// Limit the machine to `limit` agents; host disk must not decide the test.
 fn limit_globally(manager: &Manager, limit: u32) {
-    let config: Config = toml::from_str(&format!("max_agents = {limit}")).unwrap();
+    let config: Config = toml::from_str(&format!(
+        "max_agents = {limit}\n[overload.disk]\nenabled = false"
+    ))
+    .unwrap();
     manager.publish_config(config);
 }
 
@@ -325,4 +336,26 @@ async fn dynamic_admission_staggers_starts() {
     let second = add(&manager, &repo, "second").await;
     assert!(!second.start);
     assert_eq!(second.waiting, 1);
+}
+
+#[tokio::test]
+async fn low_disk_holds_fixed_limits_after_the_first_start() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // No disk has this much free space, and none has less than a GiB.
+    manager.publish_config(
+        toml::from_str("max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576\n[overload.disk]\nstop_free_gib = 1")
+            .unwrap(),
+    );
+    // With no agent running, one starts anyway.
+    assert!(add(&manager, &repo, "first").await.start);
+    assert!(!add(&manager, &repo, "second").await.start);
+    // Starting now still starts at once.
+    assert!(
+        manager
+            .queue_add(request(&repo, "urgent", true))
+            .await
+            .unwrap()
+            .start
+    );
 }

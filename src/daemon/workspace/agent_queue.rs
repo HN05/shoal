@@ -3,6 +3,7 @@
 //! tracks, so a limit applies however an agent started.
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -30,6 +31,8 @@ pub(crate) const START_GRACE: Duration = Duration::from_secs(120);
 pub(crate) struct Limits {
     pub global: Option<u32>,
     pub repositories: HashMap<String, Option<u32>>,
+    /// The machine-wide limit free disk space sets while a fixed limit applies.
+    pub disk: Option<u32>,
 }
 
 impl Limits {
@@ -57,7 +60,11 @@ pub(crate) fn admit(
     }
     let mut admitted = Vec::new();
     for (id, repository) in waiting {
-        if limits.global.is_some_and(|limit| total >= limit as usize) {
+        if [limits.global, limits.disk]
+            .into_iter()
+            .flatten()
+            .any(|limit| total >= limit as usize)
+        {
             break;
         }
         let used = used.entry(repository).or_default();
@@ -241,17 +248,20 @@ impl Manager {
         Ok(caller_admitted)
     }
 
-    /// The global limit given the `slots` in use, and each named
-    /// repository's effective limit. A repository without its own value
-    /// inherits the global one, which the machine limit already covers.
+    /// The global limit given the `slots` in use, each named repository's
+    /// effective limit, and the disk limit when any of them is fixed. A
+    /// repository without its own value inherits the global one, which the
+    /// machine limit already covers.
     async fn agent_limits(&self, repositories: Vec<String>, slots: &[Slot]) -> Result<Limits> {
         let config = self.config();
+        let global = config.max_agents.unwrap_or_default();
         let mut limits = Limits {
-            global: match config.max_agents.unwrap_or_default() {
+            global: match global {
                 AgentLimit::Dynamic => Some(self.dynamic_limit(slots).await?),
                 limit => fixed_limit(limit),
             },
             repositories: HashMap::new(),
+            disk: None,
         };
         for id in repositories {
             if limits.repositories.contains_key(&id) {
@@ -265,16 +275,17 @@ impl Manager {
                 .repositories
                 .insert(id, resolved.max_agents.and_then(fixed_limit));
         }
+        if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
+            limits.disk = self.disk_limit(slots).await?;
+        }
         Ok(limits)
     }
 
     /// The machine-wide limit measured load allows for `slots`.
     async fn dynamic_limit(&self, slots: &[Slot]) -> Result<u32> {
         let config = self.config();
-        let workspaces = self.list_workspaces().await?;
-        let paths: Vec<&std::path::Path> = std::iter::once(self.paths.state.as_path())
-            .chain(workspaces.iter().map(|workspace| workspace.path.as_path()))
-            .collect();
+        let paths = self.admission_paths().await?;
+        let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         let cpu = self
             .cpu_usage
             .lock()
@@ -285,6 +296,31 @@ impl Manager {
             Agents::count(slots.iter().map(|slot| slot.activity)),
             &config.overload,
         ))
+    }
+
+    /// The machine-wide limit free disk space sets for `slots` beside fixed limits.
+    async fn disk_limit(&self, slots: &[Slot]) -> Result<Option<u32>> {
+        let config = self.config();
+        let paths = self.admission_paths().await?;
+        let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+        Ok(capacity::disk_limit(
+            capacity::disk_free(&paths, &config.overload),
+            slots.len().try_into().unwrap_or(u32::MAX),
+            &config.overload,
+        ))
+    }
+
+    /// The paths whose free space admission reads: daemon state first, then
+    /// every workspace.
+    async fn admission_paths(&self) -> Result<Vec<PathBuf>> {
+        Ok(std::iter::once(self.paths.state.clone())
+            .chain(
+                self.list_workspaces()
+                    .await?
+                    .into_iter()
+                    .map(|workspace| workspace.path),
+            )
+            .collect())
     }
 
     /// The used slots. Each agent in a workspace that is not done uses one

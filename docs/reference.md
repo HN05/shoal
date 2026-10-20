@@ -703,7 +703,10 @@ plus every such warming agent. With no agent running, one starts whatever the
 load. Critical memory, disk below `overload.disk.stop_free_gib`, or a failed
 memory or disk reading starts none; a missing CPU reading starts only that first
 agent. Disabled memory or disk protection ignores that signal. Set a positive
-number for a fixed limit or `none` for unlimited admission. The global value
+number for a fixed limit or `none` for unlimited admission. While a fixed
+limit applies, so does the disk rule: below `[overload.warning] disk_free_gib`
+an agent starts only when none uses a slot, and below
+`overload.disk.stop_free_gib` or without a reading none starts. The global value
 counts every agent on the machine; a repository's fixed value (saved config or
 `.shoal.toml` in its registered checkout) counts only that repository's agents,
 within the global limit, while `dynamic` there adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
