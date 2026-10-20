@@ -15038,6 +15038,59 @@ fn remove_guidance(text: &str) -> String {
     text
 }
 
+#[test]
+fn agents_wait_for_the_answer_to_their_question() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let asker = fixture
+        .command()
+        .args(["exec", "asker", "--", env!("CARGO_BIN_EXE_shoal"), "--json"])
+        .args(["ask", "Which database?", "--recommend", "SQLite"])
+        .args(["--choice", "SQLite", "--choice", "Postgres", "--wait"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let question = wait_for("the question", || {
+        fixture
+            .ok(&["questions"])
+            .as_array()
+            .unwrap()
+            .first()
+            .cloned()
+    });
+    assert_eq!(question["workspace"], "asker");
+    assert_eq!(question["recommendation"], "SQLite");
+    let id = question["id"].to_string();
+
+    let output = scoped_command(&fixture, "asker", &["answer", &id, "1"]);
+    assert!(!output.status.success(), "agents cannot answer: {output:?}");
+    fixture.ok(&["answer", &id, "2"]);
+    let output = asker.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(answered["answer"], "Postgres");
+    // The wait printed the answer, so its message is not delivered again.
+    assert_eq!(fixture.ok(&["messages", "asker"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["questions"]), serde_json::json!([]));
+
+    let output = scoped_command(
+        &fixture,
+        "asker",
+        &["ask", "Which cache?", "--recommend", "None"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let open: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(open["answer"], Value::Null);
+    assert_eq!(
+        fixture
+            .ok(&["questions", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
     fixture
         .command()

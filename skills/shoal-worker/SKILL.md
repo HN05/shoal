@@ -1,6 +1,6 @@
 ---
 name: shoal-worker
-description: Use inside a Shoal workspace to finish assignments with `shoal done`, mark work ready for review, notify the user, open, change, watch and wait on PRs and issues, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+description: Use inside a Shoal workspace to finish assignments with `shoal done`, mark work ready for review, notify the user, ask the user questions, open, change, watch and wait on PRs and issues, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
 # Shoal worker
@@ -94,9 +94,10 @@ your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[ready] undraft = false`; new commits make the mark outdated, so run it
 again after later fixes, and `shoal unready` withdraws it (`--draft` also
-returns the PR to draft). To get the user's
-attention without finishing, such as when you need a decision, run
-`shoal notify "<one-line message>"`. Neither affects completion or cleanup.
+returns the PR to draft). To tell the user about status without finishing,
+such as a PR that is ready, run `shoal notify "<one-line message>"`. Neither
+affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
+Questions).
 
 `[done] automatic = true` also marks the assignment done when the associated
 issue closes or every watched PR merges. With it, run
@@ -113,6 +114,26 @@ free memory or disk space. Claude Code and Codex launched through Shoal receive
 them with PR activity, as described above; a new message also ends `shoal --json watch pr`
 with a `messages` array, and `shoal --json messages` shows new ones. Each
 message is shown once. Follow it.
+
+## Questions
+
+When you need the user to decide something, ask a question rather than
+notifying:
+
+```sh
+shoal --json ask "Which database should the cache use?" --recommend SQLite \
+  --reason "No server to run" --choice SQLite --choice Postgres
+```
+
+State the decision in one line and always recommend an answer, so the user can
+reply with a word or a choice number; `--choice` is optional. The answer arrives
+as a message naming the question, like any other message. Continue with other
+work meanwhile, or end your turn to wait. When you cannot continue without the
+answer, add `--wait`: it blocks without a time limit and prints the answer, so run
+it in the background when your tool calls time out. Asking the identical question
+again waits for the same one. Only the user answers, with `shoal answer`;
+`shoal --json questions` lists your workspace's open questions. An open question
+keeps your workspace from automatic cleanup.
 
 ## Workspace context
 

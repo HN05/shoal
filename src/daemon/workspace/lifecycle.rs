@@ -323,6 +323,9 @@ impl Manager {
         if self.issue_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::Issue));
         }
+        if self.has_open_questions(id).await? {
+            return Ok(Some(CleanupReason::Question));
+        }
         if crate::execution::recovery::pending(&self.paths, id)? {
             return Ok(Some(CleanupReason::Recovering));
         }

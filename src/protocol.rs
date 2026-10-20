@@ -439,6 +439,28 @@ pub enum Method {
         workspace: String,
         ids: Vec<i64>,
     },
+    /// A question from a workspace's agents to the user; asking an identical
+    /// question again returns it until its answer is delivered.
+    AskQuestion {
+        workspace: String,
+        ask: crate::daemon::questions::Ask,
+    },
+    /// Questions, in every workspace unless one is named.
+    ListQuestions {
+        workspace: Option<String>,
+        /// Include answered questions.
+        all: bool,
+    },
+    /// The user's answer, queued for the asking workspace's agents.
+    AnswerQuestion {
+        id: i64,
+        answer: String,
+    },
+    /// Long-lived: the question once it is answered.
+    AwaitAnswer {
+        workspace: String,
+        id: i64,
+    },
     /// The workspace's undelivered agent messages and queued item updates,
     /// without waiting or polling the forge; acknowledge them with
     /// [`Method::AcknowledgePrUpdates`]. It replaces a running watch.
@@ -653,6 +675,8 @@ response_bodies! {
     SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
     AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
+    Question(crate::daemon::questions::Question),
+    Questions(Vec<crate::daemon::questions::Question>),
     Notification(Notification),
     EventItem(EventItem),
     PrUpdates(crate::forge::pr::wait::Updates),

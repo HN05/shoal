@@ -23,7 +23,7 @@ use crate::{
         repo::ConfigLayers,
         resolve::Stack,
     },
-    daemon::{approvals::ApprovalRequest, resources::Overview},
+    daemon::{approvals::ApprovalRequest, questions::Question, resources::Overview},
     env,
     model::{PortOverview, Workspace},
     paths::Paths,
@@ -61,6 +61,7 @@ enum Target {
     Members,
     ResourceNames,
     ApprovalRequests,
+    Questions,
     Ports,
     ReservedPorts,
     SimNames,
@@ -175,6 +176,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             }
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
                 ("id", "approvals", "approve" | "deny") => Some(Target::ApprovalRequests),
+                ("id", _, "answer") => Some(Target::Questions),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
@@ -408,6 +410,19 @@ impl Typed {
                 .map(|r| CompletionCandidate::new(r.id))
                 .collect());
         }
+        if matches!(target, Target::Questions) {
+            let method = Method::ListQuestions {
+                workspace: None,
+                all: false,
+            };
+            let questions = client::request::<Vec<Question>>(&paths, method).await?;
+            return Ok(questions
+                .into_iter()
+                .map(|q| {
+                    CompletionCandidate::new(q.id.to_string()).help(Some(q.ask.question.into()))
+                })
+                .collect());
+        }
         let workspaces = client::workspaces(&paths).await?;
         if matches!(target, Target::Workspaces | Target::ResumeWorkspaces) {
             let resume = matches!(target, Target::ResumeWorkspaces);
@@ -473,7 +488,8 @@ impl Typed {
             | Target::Repositories
             | Target::Workspaces
             | Target::ResumeWorkspaces
-            | Target::ApprovalRequests => unreachable!(),
+            | Target::ApprovalRequests
+            | Target::Questions => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }

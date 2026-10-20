@@ -46,7 +46,7 @@ when behavior changes, distinguishing decisions from proposals.
   ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
-  acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks, assignment completion and withdrawal, own-repository
+  acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, assignment completion and withdrawal, own-repository
   sync, opening and changing issues and PRs of the own repository, and rerunning
   or cancelling their CI jobs are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
@@ -72,7 +72,7 @@ when behavior changes, distinguishing decisions from proposals.
   Completion cleanup without a PR registration requires every commit pushed or
   on the local default branch, retaining dirty or newer work through the same
   removal path; a keep choice suppresses idle and PR cleanup. Associated issues
-  suppress idle cleanup; automatic completion records it once closure is confirmed,
+  and open questions suppress idle cleanup; automatic completion records it once closure is confirmed,
   without replacing an existing completion or bypassing PR merge requirements.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with

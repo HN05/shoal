@@ -69,6 +69,8 @@ pub async fn authorize(
         | Method::SendMessage { workspace, .. }
         | Method::AgentMessages { workspace }
         | Method::MarkAgentMessagesDelivered { workspace, .. }
+        | Method::AskQuestion { workspace, .. }
+        | Method::AwaitAnswer { workspace, .. }
         | Method::AgentUpdates { workspace }
         | Method::AwaitAgentWake { workspace, .. }
         | Method::MarkReady { workspace, .. }
@@ -120,6 +122,7 @@ pub async fn authorize(
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
         Method::ListApprovals { workspace }
+        | Method::ListQuestions { workspace, .. }
         | Method::SimOverview { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {
@@ -135,6 +138,9 @@ pub async fn authorize(
                 "a setup command cannot recursively run setup"
             );
             Some(workspace)
+        }
+        Method::AnswerQuestion { .. } => {
+            bail!("answering questions is the user's; workspace processes ask with shoal ask")
         }
         Method::ItemAction {
             action: Action::Merge { .. },

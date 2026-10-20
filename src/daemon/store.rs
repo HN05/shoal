@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 40;
+const SCHEMA_VERSION: i64 = 41;
 
 #[cfg(test)]
 mod benchmark;
@@ -360,6 +360,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
             WHERE kind='access_requested';",
         None,
     ),
+    (41, include_str!("store/questions.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -790,6 +791,9 @@ mod tests {
         }
         if version >= 36 {
             db.execute_batch(include_str!("store/agent_messages.sql"))?;
+        }
+        if version >= 41 {
+            db.execute_batch(include_str!("store/questions.sql"))?;
         }
         if version >= 37 {
             db.execute_batch(include_str!("store/workspace_agent_state.sql"))?;

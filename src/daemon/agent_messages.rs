@@ -3,7 +3,7 @@
 //! messages through `shoal messages`, watches and agent hooks, and a delivered
 //! message is deleted.
 use anyhow::{Result, ensure};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
 use crate::daemon::workspace::Manager;
@@ -17,6 +17,44 @@ pub struct AgentMessage {
     /// Unix seconds.
     pub created_at: i64,
     pub message: String,
+}
+
+/// Queue `message` in the caller's transaction, returning its ID, or `None`
+/// when an identical message is still unread. Callers wake watches with
+/// `agent_messages_changed` after committing.
+pub(crate) fn insert(
+    tx: &Transaction<'_>,
+    workspace_id: &str,
+    message: &str,
+) -> Result<Option<i64>> {
+    let pending: Option<i64> = tx
+        .query_row(
+            "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2",
+            params![workspace_id, message],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if pending.is_some() {
+        return Ok(None);
+    }
+    let unread: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM agent_messages WHERE workspace_id=?1",
+        [workspace_id],
+        |row| row.get(0),
+    )?;
+    ensure!(
+        unread < MAX_UNREAD,
+        "the workspace already has {MAX_UNREAD} unread agent messages"
+    );
+    tx.execute(
+        "INSERT INTO agent_messages(workspace_id,created_at,message) VALUES (?1,?2,?3)",
+        params![
+            workspace_id,
+            i64::try_from(crate::time::unix_seconds())?,
+            message
+        ],
+    )?;
+    Ok(Some(tx.last_insert_rowid()))
 }
 
 impl Manager {
@@ -38,35 +76,9 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let pending: Option<i64> = tx
-                    .query_row(
-                        "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2",
-                        params![workspace_id, message],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                if pending.is_some() {
-                    return Ok(false);
-                }
-                let unread: i64 = tx.query_row(
-                    "SELECT COUNT(*) FROM agent_messages WHERE workspace_id=?1",
-                    [&workspace_id],
-                    |row| row.get(0),
-                )?;
-                ensure!(
-                    unread < MAX_UNREAD,
-                    "the workspace already has {MAX_UNREAD} unread agent messages"
-                );
-                tx.execute(
-                    "INSERT INTO agent_messages(workspace_id,created_at,message) VALUES (?1,?2,?3)",
-                    params![
-                        workspace_id,
-                        i64::try_from(crate::time::unix_seconds())?,
-                        message
-                    ],
-                )?;
+                let queued = insert(&tx, &workspace_id, &message)?;
                 tx.commit()?;
-                Ok(true)
+                Ok(queued.is_some())
             })
             .await?;
         if queued {

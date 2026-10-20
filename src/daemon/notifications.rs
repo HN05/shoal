@@ -13,6 +13,8 @@ const RETAINED: usize = 500;
 
 states!(NotificationKind {
     ApprovalRequested => "approval_requested",
+    /// A workspace's agent asked the user a question.
+    QuestionAsked => "question_asked",
     /// A resource or simulator request found no free capacity.
     ResourceBusy => "resource_busy",
     /// A preferred port was in use.

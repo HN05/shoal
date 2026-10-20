@@ -18,7 +18,8 @@ Finish every assignment with these steps:
    Link a PR opened another way with `shoal link pr <number-or-url>`.
 2. While watched PRs are open, {updates}
    When a PR is ready to merge, run `shoal ready`, and again
-   after later fixes. Run `shoal notify "<message>"` when you need the user.
+   after later fixes. Ask with `shoal ask` when you need a decision from the
+   user, and run `shoal notify "<message>"` to report status.
    Merge only when authorized.
 3. When the assignment is finished (every watched PR merged, or no PR needed),
    run `shoal done` as your last command. It may stop this session and removes

@@ -128,6 +128,8 @@ pub struct Manager {
     pub(crate) notifications_changed: watch::Sender<i64>,
     /// Counts queued agent messages; wakes watches waiting for them.
     pub(crate) agent_messages_changed: watch::Sender<u64>,
+    /// Counts answered questions; wakes waits for an answer.
+    pub(crate) questions_changed: watch::Sender<u64>,
     /// Counts background polls that queued item updates; wakes watches.
     pub(crate) item_updates_queued: watch::Sender<u64>,
     /// Counts agent state changes and deliveries to agents; wakes waits for
@@ -183,6 +185,7 @@ impl Manager {
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
             agent_messages_changed: watch::channel(0).0,
+            questions_changed: watch::channel(0).0,
             item_updates_queued: watch::channel(0).0,
             agent_wake_changed: watch::channel(0).0,
             agent_queue_gate: Mutex::new(()),

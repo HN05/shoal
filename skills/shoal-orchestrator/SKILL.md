@@ -54,7 +54,7 @@ shoal --json internal events --follow --since <id>
 ```
 
 Notifications report agent exits, messages agents sent with `shoal notify`,
-busy resources, pending approval requests and cleanup Shoal did on its own; reading them marks them read. Events stream
+questions they asked, busy resources, pending approval requests and cleanup Shoal did on its own; reading them marks them read. Events stream
 workspace lifecycle changes, including `review_ready` marks agents set with
 `shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their
 hooks report, which `ls` and `status` also show, without consuming notifications; resume from the
@@ -72,6 +72,17 @@ Report pending requests to the user with their recorded settings and reason,
 then approve or deny as the user decides. Resource approval reserves no
 capacity; the agent retries its acquisition. A `keep` request comes from an
 agent's `shoal done --keep`: approval keeps the workspace, denial cleans it up.
+
+## Questions
+
+```sh
+shoal --json questions
+shoal answer <id> "<answer or choice number>"
+```
+
+Agents ask with `shoal ask`; each question names the decision, the agent's
+recommendation and any choices. Relay them to the user and answer as the user
+decides; the answer reaches the agent as a message.
 
 ## Finish and clean up
 

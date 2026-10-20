@@ -675,6 +675,18 @@ no forge text, and it is appended to anything typed but not yet sent. Shoal does
 pre-trust hooks where the agent requires review. Identical unread messages collapse,
 and scoped processes may read their own workspace's messages but not send any.
 
+Questions are how an agent asks the user for a decision whose answer is text,
+separate from approvals, whose answer is yes or no. A question states the
+decision and the agent's recommendation, so most answers are a word or a choice
+number. Only the user answers, and the answer travels as an agent message naming
+the question, so the same hooks deliver it and wake an idle agent; an agent that
+cannot continue without it waits on the question instead. The answer and its
+message are recorded together, and a wait that prints the answer delivers the
+message, so the agent sees it once. Re-asking an identical question returns it
+until its answer is delivered, which makes an interrupted wait safe to rerun.
+An open question means an agent is waiting on the user, so it keeps the workspace
+from automatic cleanup; questions belong to the workspace and go with it.
+
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
@@ -862,7 +874,7 @@ and a place lasts while a request is in progress or polled within 30 seconds. Th
 queue lives in memory, so a daemon restart loses the order; commands still polling
 join again.
 
-Approvals are the one daemon-owned way a scoped caller asks the user to decide;
+Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` lists and decides every kind: keeping a completed workspace (see
 completion), landing a branch (see scope) and resource access. Approving a land
 request whose branch moved since it was requested is refused as stale and drops it.

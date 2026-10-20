@@ -20,6 +20,7 @@ mod overload;
 #[cfg(test)]
 mod overload_tests;
 pub mod ports;
+pub mod questions;
 pub(crate) mod queue;
 pub mod recovery;
 pub mod resources;
@@ -377,6 +378,10 @@ async fn serve(
             return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
                 .await;
         }
+        Method::AwaitAnswer { workspace, id } => {
+            drop(operation_guard);
+            return await_answer(stream, request.id, server.manager, workspace, id).await;
+        }
         Method::AwaitAgentWake { workspace, due } => {
             drop(operation_guard);
             return await_agent_wake(stream, request.id, server.manager, workspace, due).await;
@@ -433,6 +438,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. }
         | Method::AwaitAgentWake { .. }
+        | Method::AwaitAnswer { .. }
         | Method::WatchItems { .. } => {
             anyhow::bail!("unsupported operation")
         }
@@ -753,6 +759,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?;
             Body::Ok
         }
+        Method::AskQuestion { workspace, ask } => {
+            Body::Question(manager.ask_question(&workspace, ask).await?)
+        }
+        Method::ListQuestions { workspace, all } => {
+            Body::Questions(manager.questions(workspace.as_deref(), !all).await?)
+        }
+        Method::AnswerQuestion { id, answer } => {
+            Body::Question(manager.answer_question(id, answer).await?)
+        }
         Method::MarkNotificationsRead { ids } => {
             manager.mark_notifications_read(ids).await?;
             Body::Ok
@@ -1007,6 +1022,30 @@ async fn await_agent_wake(
     };
     // A restarting daemon could cut the reply off. Closing the connection
     // unanswered sends the launcher to wait again on the replacement.
+    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
+        return Ok(());
+    };
+    protocol::write(&mut stream, &Response::new(request_id, body)).await
+}
+
+/// Like [`await_agent_wake`]: a closed connection cancels the wait, and a
+/// restarting daemon leaves it unanswered so the client asks again.
+async fn await_answer(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+    workspace: String,
+    id: i64,
+) -> Result<()> {
+    let mut closed = [0u8; 1];
+    let result = tokio::select! {
+        result = manager.await_answer(&workspace, id) => result,
+        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+    };
+    let body = match result {
+        Ok(question) => Body::Question(question),
+        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
+    };
     let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
         return Ok(());
     };

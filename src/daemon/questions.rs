@@ -1,0 +1,322 @@
+//! Questions a workspace's agents ask the user. A question names the decision
+//! and the agent's recommendation; only the user answers, and the answer
+//! reaches the agents as a message. Removing the workspace deletes them.
+use anyhow::{Context, Result, bail, ensure};
+use rusqlite::{Connection, Transaction, params};
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+use crate::daemon::{agent_messages, notifications::NotificationKind, workspace::Manager};
+
+/// Longest answer, in bytes; answers may span lines.
+pub const MAX_ANSWER_LEN: usize = 4096;
+/// Most choices a question may offer.
+pub const MAX_CHOICES: usize = 20;
+/// Rechecks a waited-for question when no answer wakes the wait, so removal
+/// of its workspace ends it.
+const POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// What an agent asks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ask {
+    pub question: String,
+    pub recommendation: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    pub id: i64,
+    pub workspace_id: String,
+    /// The workspace's current name.
+    pub workspace: String,
+    /// Unix seconds.
+    pub created_at: i64,
+    #[serde(flatten)]
+    pub ask: Ask,
+    /// `None` while the question is open.
+    pub answer: Option<String>,
+    pub answered_at: Option<i64>,
+    /// The agent message carrying the answer, until it is delivered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<i64>,
+}
+
+impl Ask {
+    pub fn validate(&self) -> Result<()> {
+        for (field, value) in [
+            ("question", Some(&self.question)),
+            ("recommendation", Some(&self.recommendation)),
+            ("reason", self.reason.as_ref()),
+        ] {
+            if let Some(value) = value {
+                crate::validate::message(value).with_context(|| format!("invalid {field}"))?;
+            }
+        }
+        ensure!(
+            self.choices.len() <= MAX_CHOICES,
+            "a question offers at most {MAX_CHOICES} choices"
+        );
+        for choice in &self.choices {
+            crate::validate::message(choice).context("invalid choice")?;
+        }
+        Ok(())
+    }
+
+    /// The answer an agent receives: a choice number names that choice.
+    fn resolve(&self, answer: &str) -> Result<String> {
+        if let Ok(number) = answer.trim().parse::<usize>()
+            && !self.choices.is_empty()
+        {
+            return number
+                .checked_sub(1)
+                .and_then(|index| self.choices.get(index))
+                .cloned()
+                .with_context(|| format!("choose a number from 1 to {}", self.choices.len()));
+        }
+        validate_answer(answer)?;
+        Ok(answer.to_owned())
+    }
+}
+
+/// Answers may span lines but carry no other control characters, which would
+/// corrupt terminal output.
+fn validate_answer(answer: &str) -> Result<()> {
+    ensure!(
+        !answer.trim().is_empty()
+            && answer.len() <= MAX_ANSWER_LEN
+            && !answer.chars().any(|c| c.is_control() && c != '\n'),
+        "answers must be nonempty text without control characters other than newlines (max {MAX_ANSWER_LEN} bytes)"
+    );
+    Ok(())
+}
+
+impl Question {
+    pub fn is_open(&self) -> bool {
+        self.answer.is_none()
+    }
+
+    /// What the user is told about a new question, including how to answer it.
+    fn notification(&self) -> String {
+        format!(
+            "question {}: {} Recommended: {}; answer with shoal answer {}",
+            self.id, self.ask.question, self.ask.recommendation, self.id
+        )
+    }
+
+    /// The agent message carrying `answer`; it names the question it answers.
+    fn answer_message(&self, answer: &str) -> String {
+        format!(
+            "Answer to question {} ({}): {answer}",
+            self.id, self.ask.question
+        )
+    }
+}
+
+const SELECT: &str = "SELECT q.id,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
+    q.reason,q.choices,q.answer,q.answered_at,
+    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
+    FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
+
+fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
+    Ok((
+        Question {
+            id: row.get(0)?,
+            workspace_id: row.get(1)?,
+            workspace: row.get(2)?,
+            created_at: row.get(3)?,
+            ask: Ask {
+                question: row.get(4)?,
+                recommendation: row.get(5)?,
+                reason: row.get(6)?,
+                choices: Vec::new(),
+            },
+            answer: row.get(8)?,
+            answered_at: row.get(9)?,
+            message_id: row.get(10)?,
+        },
+        row.get(7)?,
+    ))
+}
+
+fn query(db: &Connection, filter: &str, params: impl rusqlite::Params) -> Result<Vec<Question>> {
+    db.prepare(&format!("{SELECT} {filter} ORDER BY q.id"))?
+        .query_map(params, decode)?
+        .map(|row| {
+            let (mut question, choices) = row?;
+            question.ask.choices = serde_json::from_str(&choices)
+                .with_context(|| format!("question {} has invalid choices", question.id))?;
+            Ok(question)
+        })
+        .collect()
+}
+
+fn by_id(db: &Connection, id: i64) -> Result<Option<Question>> {
+    Ok(query(db, "WHERE q.id=?1", [id])?.pop())
+}
+
+/// An identical question the agents have not received the answer to, so
+/// asking again, as after an interrupted wait, returns it.
+fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Option<Question>> {
+    let candidates = query(
+        tx,
+        "WHERE q.workspace_id=?1 AND q.question=?2",
+        params![workspace_id, ask.question],
+    )?;
+    let Some(question) = candidates
+        .into_iter()
+        .rev()
+        .find(|question| question.is_open() || question.message_id.is_some())
+    else {
+        return Ok(None);
+    };
+    ensure!(
+        question.ask == *ask,
+        "question {} asks the same with different details; ask a different question",
+        question.id
+    );
+    Ok(Some(question))
+}
+
+fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
+    tx.execute(
+        "INSERT INTO questions(workspace_id,created_at,question,recommendation,reason,choices)
+            VALUES (?1,?2,?3,?4,?5,?6)",
+        params![
+            workspace_id,
+            i64::try_from(crate::time::unix_seconds())?,
+            ask.question,
+            ask.recommendation,
+            ask.reason,
+            serde_json::to_string(&ask.choices)?
+        ],
+    )?;
+    Ok(tx.last_insert_rowid())
+}
+
+/// Record `answer` and queue the message that carries it, together.
+fn record_answer(tx: &Transaction<'_>, id: i64, answer: &str) -> Result<Question> {
+    let mut question = by_id(tx, id)?.with_context(|| format!("unknown question {id}"))?;
+    if !question.is_open() {
+        bail!("question {id} is already answered");
+    }
+    let answer = question.ask.resolve(answer)?;
+    let message = question.answer_message(&answer);
+    let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
+    let answered_at = i64::try_from(crate::time::unix_seconds())?;
+    tx.execute(
+        "UPDATE questions SET answer=?2,answered_at=?3,message_id=?4 WHERE id=?1",
+        params![id, answer, answered_at, message_id],
+    )?;
+    question.answer = Some(answer);
+    question.answered_at = Some(answered_at);
+    question.message_id = message_id;
+    Ok(question)
+}
+
+impl Manager {
+    /// Record the question, or return the same one asked again, and tell the
+    /// user about a new one.
+    pub async fn ask_question(&self, selector: &str, ask: Ask) -> Result<Question> {
+        ask.validate()?;
+        let workspace = self.workspace(selector).await?;
+        let (question, new) = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                if let Some(question) = repeated(&tx, &workspace.id, &ask)? {
+                    return Ok((question, false));
+                }
+                let id = insert(&tx, &workspace.id, &ask)?;
+                let question = by_id(&tx, id)?.context("recorded question is missing")?;
+                tx.commit()?;
+                Ok((question, true))
+            })
+            .await?;
+        if new {
+            self.notify(
+                Some(&question.workspace),
+                NotificationKind::QuestionAsked,
+                question.notification(),
+            )
+            .await;
+        }
+        Ok(question)
+    }
+
+    /// Questions, oldest first; `open_only` leaves out answered ones.
+    pub async fn questions(
+        &self,
+        selector: Option<&str>,
+        open_only: bool,
+    ) -> Result<Vec<Question>> {
+        let owner = self.workspace_filter(selector).await?;
+        self.store
+            .run(move |db| {
+                query(
+                    db,
+                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND (NOT ?2 OR q.answer IS NULL)",
+                    params![owner, open_only],
+                )
+            })
+            .await
+    }
+
+    pub async fn has_open_questions(&self, workspace_id: &str) -> Result<bool> {
+        let id = workspace_id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM questions WHERE workspace_id=?1 AND answer IS NULL",
+                    [id],
+                )
+            })
+            .await
+    }
+
+    /// Record the user's answer and queue it for the workspace's agents.
+    pub async fn answer_question(&self, id: i64, answer: String) -> Result<Question> {
+        let question = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let question = record_answer(&tx, id, &answer)?;
+                tx.commit()?;
+                Ok(question)
+            })
+            .await?;
+        self.agent_messages_changed.send_modify(|count| *count += 1);
+        self.questions_changed.send_modify(|count| *count += 1);
+        Ok(question)
+    }
+
+    /// Return the workspace's question `id` once it is answered.
+    pub async fn await_answer(&self, selector: &str, id: i64) -> Result<Question> {
+        let workspace = self.workspace(selector).await?;
+        // Subscribe before reading, so an answer in between still wakes.
+        let mut changed = self.questions_changed.subscribe();
+        loop {
+            let question = self
+                .store
+                .run(move |db| by_id(db, id))
+                .await?
+                .filter(|question| question.workspace_id == workspace.id)
+                .with_context(|| format!("workspace {} has no question {id}", workspace.name))?;
+            if !question.is_open() {
+                return Ok(question);
+            }
+            // A closed channel only disables its wake; the poll still rechecks.
+            tokio::select! {
+                Ok(()) = changed.changed() => {}
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

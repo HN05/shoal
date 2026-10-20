@@ -19,6 +19,7 @@ mod menu;
 mod messages;
 mod notifications;
 mod ports;
+mod questions;
 mod recovery;
 mod repo_menu;
 mod repo_setup;
@@ -365,6 +366,24 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             notifications::send(&ctx, workspace, message).await
         }
         Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
+        Command::Ask {
+            question,
+            recommend,
+            reason,
+            choices,
+            wait,
+            workspace,
+        } => {
+            let ask = crate::daemon::questions::Ask {
+                question,
+                recommendation: recommend,
+                reason,
+                choices,
+            };
+            questions::ask(&ctx, workspace, ask, wait).await
+        }
+        Command::Questions { workspace, all } => questions::list(&ctx, workspace, all).await,
+        Command::Answer { id, answer } => questions::answer(&ctx, id, answer).await,
         Command::Messages { workspace, hook } => {
             if hook {
                 messages::hook(&ctx).await

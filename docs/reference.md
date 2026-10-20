@@ -1697,7 +1697,7 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
 it when it expires.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
-simulator leases, permits, holds and failed checks block cleanup. Pushed means reachable
+simulator leases, permits, holds, open [questions](#questions) and failed checks block cleanup. Pushed means reachable
 from locally known remote branches or the local default branch; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
@@ -1818,6 +1818,29 @@ Shoal's agent guidance mentions.
 An identical message that is still unread is not queued again, and a workspace
 holds at most 50 unread messages. Scoped commands may read their own workspace's
 messages but cannot send any. Removing the workspace deletes its messages.
+
+### Questions
+
+```sh
+shoal ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
+shoal questions [workspace] [--all]  # Open questions; --all includes answered ones
+shoal answer [id] [answer]           # Answer text or a choice number; omitted, pick and type
+```
+
+`shoal ask` records a question for the user from a workspace's agents: the
+decision, the recommended answer, an optional reason and optional choices, each
+one line with the same limits as `notify`. It raises a `question_asked`
+notification and prints the question ID. `shoal answer` records the answer,
+resolving a choice number to that choice, and queues it for the workspace's agents
+as a message naming the question, so the [agent messages](#agent-messages) hooks
+deliver it and wake an idle agent. An answer may span lines, up to 4096 bytes.
+`--wait` blocks without a time limit until the answer arrives and prints it, which
+also delivers its message; it survives daemon restarts. Asking an identical
+question again returns it while it is open or its answer is undelivered, so an
+interrupted `--wait` can be rerun; the same question with other details is refused.
+Only unscoped callers answer. Scoped callers ask and list only their own
+workspace's questions. An open question keeps the workspace from automatic
+cleanup; removing the workspace deletes its questions.
 
 ### Leases
 
@@ -1967,8 +1990,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 ### Scoped workspace commands
 
-PR watches, merge acknowledgements, `notify`, `messages`, `ready`, `unready`
-and `internal agent-state` are own-workspace scope exceptions.
+PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
+`ready`, `unready` and `internal agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
