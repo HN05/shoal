@@ -127,7 +127,7 @@ impl ForgeRepo {
         let pr = match kind {
             ItemKind::Issue => None,
             ItemKind::Pr => Some(PrSummary {
-                head: text(&value["head"]["ref"]).context("PR has no head branch")?,
+                head: self.head_branch(number, value)?,
                 base: text(&value["base"]["ref"]).context("PR has no base branch")?,
                 draft: if self.kind == ForgeKind::Forgejo {
                     draft_prefix(&title).is_some()
@@ -158,6 +158,16 @@ impl ForgeRepo {
             reviewers: Vec::new(),
             user_ids: Default::default(),
         })
+    }
+
+    /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
+    /// head and keeps the branch name only as the head's label.
+    fn head_branch(&self, number: u64, value: &Value) -> Result<String> {
+        let head = text(&value["head"]["ref"]).context("PR has no head branch")?;
+        if self.kind == ForgeKind::Forgejo && head == format!("refs/pull/{number}/head") {
+            return text(&value["head"]["label"]).context("PR has no head branch");
+        }
+        Ok(head)
     }
 }
 
@@ -229,6 +239,16 @@ mod tests {
         assert_eq!(current.item.state, ItemState::Open);
         assert!(current.item.pr.unwrap().draft);
         assert_eq!(current.head_repository, None);
+    }
+
+    #[test]
+    fn forgejo_pulls_keep_their_deleted_head_branch() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "Fix", "state": "closed", "merged": true,
+            "head": {"ref": "refs/pull/7/head", "label": "topic"}, "base": {"ref": "main"}});
+        let current = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        assert_eq!(current.item.state, ItemState::Merged);
+        assert_eq!(current.item.pr.unwrap().head, "topic");
     }
 
     #[test]
