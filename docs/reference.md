@@ -587,7 +587,7 @@ Shoal treats a Herdr pane as a plain terminal:
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
 # tab_name = "{repo}: {branch}" # Customize the tab name
-close_when_done = true  # Close after the workspace is completed or removed
+close_when_done = true  # Close after done keeps the workspace, or at removal
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,

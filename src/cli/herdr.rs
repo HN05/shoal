@@ -515,8 +515,9 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
 #[derive(Debug, PartialEq)]
 enum Lifecycle {
     Active,
-    /// `stopped` while an agent or command waits for `shoal resume`.
-    Completed {
+    /// Done without cleanup. `stopped` while an agent or command waits for
+    /// `shoal resume`.
+    Kept {
         running: bool,
         stopped: bool,
     },
@@ -524,13 +525,13 @@ enum Lifecycle {
 }
 
 impl Lifecycle {
-    /// Completion waits for the agent's final response: its tracked execution
+    /// A kept completion waits for the agent's final response: its tracked execution
     /// resolves, or Herdr reports that the agent finished its turn. A stopped
     /// agent keeps the tab, which shows why it stopped and where it resumes.
     fn closes_tab(&self, agent: AgentStatus) -> bool {
         match self {
-            Self::Active | Self::Completed { stopped: true, .. } => false,
-            Self::Completed { running, .. } => {
+            Self::Active | Self::Kept { stopped: true, .. } => false,
+            Self::Kept { running, .. } => {
                 !running || matches!(agent, AgentStatus::Idle | AgentStatus::Done)
             }
             Self::Removed => true,
@@ -540,10 +541,18 @@ impl Lifecycle {
 
 async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
     match client::inspect(&ctx.paths, workspace.into()).await {
-        Ok(inspection) if inspection.completion.is_some() => Ok(Lifecycle::Completed {
-            running: !inspection.executions.is_empty(),
-            stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
-        }),
+        // Completion cleanup keeps the tab until removal, after its grace period.
+        Ok(inspection)
+            if inspection
+                .completion
+                .as_ref()
+                .is_some_and(|completion| !completion.cleanup) =>
+        {
+            Ok(Lifecycle::Kept {
+                running: !inspection.executions.is_empty(),
+                stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
+            })
+        }
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
             if client::workspaces(&ctx.paths)
@@ -613,7 +622,7 @@ mod tests {
     use tokio::{io::BufReader, net::UnixListener};
 
     #[tokio::test]
-    async fn completion_waits_for_running_and_unresolved_executions() {
+    async fn kept_completion_waits_for_running_and_unresolved_executions() {
         for state in [ExecutionState::Running, ExecutionState::Unknown] {
             let execution = Execution {
                 id: "agent".into(),
@@ -624,24 +633,29 @@ mod tests {
                 group_id: None,
             };
             assert_eq!(
-                inspect_lifecycle(true, vec![execution]).await,
-                Lifecycle::Completed {
+                inspect_lifecycle(Some(false), vec![execution]).await,
+                Lifecycle::Kept {
                     running: true,
                     stopped: false
                 }
             );
         }
         assert_eq!(
-            inspect_lifecycle(true, vec![]).await,
-            Lifecycle::Completed {
+            inspect_lifecycle(Some(false), vec![]).await,
+            Lifecycle::Kept {
                 running: false,
                 stopped: false
             }
         );
-        assert_eq!(inspect_lifecycle(false, vec![]).await, Lifecycle::Active);
+        assert_eq!(inspect_lifecycle(None, vec![]).await, Lifecycle::Active);
+        // Completion cleanup closes the tab only once it removes the workspace.
         assert_eq!(
-            inspect_with_records(true, vec![], true).await,
-            Lifecycle::Completed {
+            inspect_lifecycle(Some(true), vec![]).await,
+            Lifecycle::Active
+        );
+        assert_eq!(
+            inspect_with_records(Some(false), vec![], true).await,
+            Lifecycle::Kept {
                 running: false,
                 stopped: true
             }
@@ -649,9 +663,9 @@ mod tests {
     }
 
     #[test]
-    fn completion_closes_the_tab_once_the_agent_finishes_its_turn() {
+    fn kept_completion_closes_the_tab_once_the_agent_finishes_its_turn() {
         use AgentStatus::*;
-        let completed = |running, stopped| Lifecycle::Completed { running, stopped };
+        let completed = |running, stopped| Lifecycle::Kept { running, stopped };
         let running = completed(true, false);
         for status in [Idle, Done] {
             assert!(running.closes_tab(status));
@@ -735,12 +749,13 @@ mod tests {
         assert!(!tab_not_found(b"connection reset"));
     }
 
-    async fn inspect_lifecycle(completed: bool, executions: Vec<Execution>) -> Lifecycle {
-        inspect_with_records(completed, executions, false).await
+    /// `completion` is the recorded cleanup choice.
+    async fn inspect_lifecycle(completion: Option<bool>, executions: Vec<Execution>) -> Lifecycle {
+        inspect_with_records(completion, executions, false).await
     }
 
     async fn inspect_with_records(
-        completed: bool,
+        completion: Option<bool>,
         executions: Vec<Execution>,
         stopped: bool,
     ) -> Lifecycle {
@@ -767,9 +782,9 @@ mod tests {
                     "topic".into(),
                     WorkspaceState::Ready,
                 ),
-                completion: completed.then(|| Completion {
+                completion: completion.map(|cleanup| Completion {
                     head: "head".into(),
-                    cleanup: false,
+                    cleanup,
                     error: None,
                     keep_request: None,
                 }),
