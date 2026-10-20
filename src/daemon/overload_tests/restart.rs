@@ -317,6 +317,8 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
         executions(&reopened, &workspace).await[0].state,
         ExecutionState::Running
     );
+    // An update waits for the restore here too.
+    assert!(reopened.background_operations.try_write().is_err());
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
     publish_recovery(&reopened);

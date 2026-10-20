@@ -172,10 +172,11 @@ pub(super) async fn reattach(
 
 /// Relay controls and events after `response` until the wrapper reports
 /// completion or disconnects, then record the outcome. A wrapper reattaches
-/// only while its child runs with the daemon's acknowledgement, so the
-/// registration's `operation` holds back a daemon update until then, as does
-/// an overload stop until the agent is restored. Otherwise a running
-/// execution does not; recording its changes takes the guard again.
+/// only while its child runs with the daemon's acknowledgement or while it
+/// waits to restore its agent, so the registration's `operation` holds back a
+/// daemon update until the child runs, as does an overload stop, or a
+/// reattachment while waiting, until the agent is restored. Otherwise a
+/// running execution does not; recording its changes takes the guard again.
 async fn serve(
     stream: UnixStream,
     manager: &Manager,
@@ -188,7 +189,7 @@ async fn serve(
     let mut readers = JoinSet::new();
     readers.spawn(read_execution_events(reader, events));
     let mut handoff_claimed = false;
-    let mut unattachable = (!execution.started).then_some(operation);
+    let mut unattachable = (!execution.started || execution.awaiting_restore).then_some(operation);
     let result = async {
         protocol::write(&mut writer, &response).await?;
         relay(
