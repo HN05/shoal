@@ -182,10 +182,13 @@ impl ForgeRepo {
         run_id(&runs, number, head)
     }
 
-    /// Web URLs use a repository run number and zero-based job index, neither API ID.
+    /// Web URLs use a repository run number and zero-based job index, neither
+    /// API ID. A host may link over HTTPS while its remote uses HTTP.
     pub(super) fn job_location(&self, target: &str) -> Result<(u64, usize)> {
-        let root = format!("{}://{}", self.web_scheme, self.host);
-        let relative = target.strip_prefix(&root).unwrap_or(target);
+        let relative = ["https", "http"]
+            .iter()
+            .find_map(|scheme| target.strip_prefix(&format!("{scheme}://{}", self.host)))
+            .unwrap_or(target);
         let prefix = format!("/{}/actions/runs/", self.path);
         let parts = relative
             .strip_prefix(&prefix)
@@ -276,11 +279,14 @@ mod tests {
     #[test]
     fn web_job_locations_are_repository_bound_and_use_indices() {
         let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let http = ForgeRepo::parse("http://forge.example/team/repo").unwrap();
         for target in [
             "/team/repo/actions/runs/2765/jobs/1",
             "https://forge.example/team/repo/actions/runs/2765/jobs/1",
+            "http://forge.example/team/repo/actions/runs/2765/jobs/1",
         ] {
             assert_eq!(forge.job_location(target).unwrap(), (2765, 1));
+            assert_eq!(http.job_location(target).unwrap(), (2765, 1));
         }
         for target in [
             "https://evil.example/team/repo/actions/runs/2765/jobs/1",
