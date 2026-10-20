@@ -304,25 +304,42 @@ impl Manager {
     /// first, since their own cleanup paths decide removal, then commands and
     /// leases.
     async fn recorded_cleanup_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+        if let Some(reason) = self.keep_reason(id).await? {
+            return Ok(Some(reason));
+        }
+        if let Some(reason) = self.assignment_reason(id).await? {
+            return Ok(Some(reason));
+        }
+        self.usage_reason(id).await
+    }
+
+    /// Holds and a keep choice, which keep a workspace from every unattended removal.
+    async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.has_holds(id).await? {
             return Ok(Some(CleanupReason::Held));
         }
         let completion = self.completion(id).await?;
-        if completion
-            .as_ref()
+        Ok(completion
             .is_some_and(|completion| !completion.cleanup)
-        {
-            return Ok(Some(CleanupReason::Kept));
-        }
+            .then_some(CleanupReason::Kept))
+    }
+
+    /// Assignment state whose own cleanup path decides removal.
+    async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.pr_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::PrWatch));
         }
-        if completion.is_some() {
+        if self.completion(id).await?.is_some() {
             return Ok(Some(CleanupReason::Completed));
         }
         if self.issue_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::Issue));
         }
+        Ok(None)
+    }
+
+    /// Open questions, commands, saved stopped work and leases.
+    async fn usage_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.has_open_questions(id).await? {
             return Ok(Some(CleanupReason::Question));
         }

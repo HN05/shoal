@@ -48,16 +48,7 @@ impl Manager {
     ) -> Result<SyncedRepository> {
         let repo = self.repository(selector).await?;
         let _guard = self.lock_repository_git(&repo.id).await;
-        let default =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let remote = upstream(&repo, &git::local_ref(&default))
-            .await?
-            .map(|(remote, _)| remote);
-        if let Some(remote) = &remote {
-            fetch::remote(&repo.path, remote)
-                .await
-                .with_context(|| format!("could not fetch {remote}"))?;
-        }
+        let (default, remote) = fetch_default_remote(&repo).await?;
         let default_branch = self
             .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
             .await
@@ -302,6 +293,22 @@ impl Manager {
         }
         Ok(())
     }
+}
+
+/// Resolve the default branch and fetch its remote, when it has one. The
+/// caller holds the repository's Git gate.
+async fn fetch_default_remote(repo: &Repository) -> Result<(String, Option<String>)> {
+    let default =
+        crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+    let remote = upstream(repo, &git::local_ref(&default))
+        .await?
+        .map(|(remote, _)| remote);
+    if let Some(remote) = &remote {
+        fetch::remote(&repo.path, remote)
+            .await
+            .with_context(|| format!("could not fetch {remote}"))?;
+    }
+    Ok((default, remote))
 }
 
 #[cfg(test)]
