@@ -1291,6 +1291,18 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
         "{refused}"
     );
     assert!(posts().is_empty());
+
+    let rerun = fixture.ok(&[
+        "ci",
+        "rerun",
+        "8",
+        "--check",
+        "rust",
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(rerun["checks"], json!(["rust"]), "{rerun}");
+    assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
 }
 
 #[test]

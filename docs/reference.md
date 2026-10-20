@@ -1523,6 +1523,21 @@ as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and
 `draft`.
 
+```sh
+shoal ci rerun                      # rerun every failed job on the linked PR's head
+shoal ci cancel 12 --check rust     # cancel one running check of PR 12
+```
+
+`shoal ci rerun` reruns failed jobs on the current head of the linked PR or the
+one named, and `shoal ci cancel` cancels running ones: every such check, or each
+repeated `--check` by the name `shoal view` shows, which must be in that state.
+The daemon uses the forge's job API as the agent account and records an
+`item_changed` event. GitHub reruns each Actions job and cancels its run, and
+GitLab retries or cancels each job. Forgejo's API cannot rerun jobs, so `rerun`
+fails there without sending anything, and `cancel` cancels each check's run.
+Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
+`checks` acted on.
+
 ### Linked items and cleanup
 
 `shoal link <number-or-url>` associates an issue or PR with the workspace;

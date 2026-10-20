@@ -73,6 +73,10 @@ reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 `shoal view` automatically includes failed Forgejo Actions log tails;
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
+`shoal --json ci rerun --check '<check name>'` reruns a failed check on the PR's
+current head, after you have read its log and fixed or reported the cause, and
+`shoal --json ci cancel` cancels running ones; omit `--check` for all of them.
+Forgejo cannot rerun through its API.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
 `shoal done --keep --reason "<why>"` when the user wants to review in this

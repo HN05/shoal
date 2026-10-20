@@ -378,6 +378,11 @@ pub enum Command {
         #[command(subcommand)]
         command: PrCommand,
     },
+    /// Rerun failed or cancel running CI jobs of a PR.
+    Ci {
+        #[command(subcommand)]
+        command: CiCommand,
+    },
     /// Open, change, comment on, close or reopen an issue of the workspace's repository.
     Issue {
         #[command(subcommand)]
@@ -721,6 +726,30 @@ pub enum PrCommand {
         #[arg(long)]
         delete_branch: bool,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CiCommand {
+    /// Rerun failed jobs on the PR's current head.
+    Rerun {
+        #[command(flatten)]
+        checks: CiChecks,
+    },
+    /// Cancel running jobs on the PR's current head.
+    Cancel {
+        #[command(flatten)]
+        checks: CiChecks,
+    },
+}
+
+/// A PR and the checks on its head to act on.
+#[derive(Debug, Args)]
+pub struct CiChecks {
+    #[command(flatten)]
+    pub item: ItemSelector,
+    /// Act only on this check, as `shoal view` names it; repeat for more. Defaults to every failed or running check.
+    #[arg(long = "check", value_name = "NAME")]
+    pub checks: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]
