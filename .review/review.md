@@ -108,10 +108,9 @@ instead of the PR delivery guidance below.
   records and conflicting actions without blocking other workspaces' cleanup;
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
-  checks, and rechecks its recorded HEAD; keeping completion blocks idle and PR
-  cleanup. A scoped keep overriding configured cleanup is an approval request bound
-  to HEAD: cleanup waits for the unscoped decision, denial requests cleanup, and a
-  decision changes only the completion still waiting on that request. A scoped land
+  checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
+  and PR cleanup. Holds and open questions block every unattended removal, rechecked
+  after the removal reserves the workspace. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
   is false; approval never skips a landing check and lands only the approved commit. This is cooperative,
   not a security boundary, so judge it as such.
@@ -129,7 +128,8 @@ instead of the PR delivery guidance below.
   with successful removal. Active permits block automatic cleanup. Caller-named workspace holds persist
   across restarts, block automatic removal without deferring completion, and are
   released with successful removal; deleted-worktree cleanup still forgets them.
-  Scoped callers manage holds only on their own workspace. Permit hooks
+  Holds belong to the user and host apps: scoped callers list their own
+  workspace's holds but cannot acquire or release them. Permit hooks
   run after persistent acquisition and before release, including removal while
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
@@ -224,8 +224,8 @@ instead of the PR delivery guidance below.
   cleanup; only holds keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
-  Merged cleanup ignores links, watches and completion but never holds, keep
-  choices, commands, saved stopped work, leases, directory users or a Git
+  Merged cleanup ignores links, watches and completion but never holds, open
+  questions, commands, saved stopped work, leases, directory users or a Git
   operation under way; its idle period is persisted so restarts cannot shorten
   or reset it, and removal rechecks its snapshot through the shared path.
   Every unattended removal except for disk space waits `[cleanup] grace_minutes`,
