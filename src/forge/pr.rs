@@ -518,9 +518,16 @@ impl Manager {
             };
             contains_head |= commits.iter().any(|commit| commit == head);
         }
+        if contains_head {
+            return Ok(true);
+        }
         // A branch rebased after its PR merged has new commits for the same changes.
+        let merged = self
+            .default_branch_has_head(workspace)
+            .await
+            .context("merged PRs do not contain HEAD; could not check the default branch")?;
         ensure!(
-            contains_head || self.default_branch_has_head(workspace).await?,
+            merged,
             "merged PRs do not contain HEAD and the default branch lacks its changes; retaining workspace"
         );
         Ok(true)

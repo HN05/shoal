@@ -10995,8 +10995,10 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         ],
     );
     write_response("MERGED", &"a".repeat(40));
+    // Checking the default branch for HEAD's changes must not reach GitHub.
+    git(&fixture.repo, &["config", "protocol.https.allow", "never"]);
     fixture.restart();
-    wait_pr_error(&fixture, "watch", "does not contain");
+    wait_pr_error(&fixture, "watch", "do not contain HEAD");
     fs::write(&response, "malformed output").unwrap();
     fixture.restart();
     wait_pr_error(&fixture, "watch", "expected");
