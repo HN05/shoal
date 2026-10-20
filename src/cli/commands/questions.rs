@@ -1,12 +1,14 @@
 //! `shoal ask` records a question for the user, `shoal questions` lists them
 //! and `shoal answer` sends the user's answer to the asking agents.
+use std::ffi::OsString;
+
 use anyhow::{Result, ensure};
 
 use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        installed::{Executable, arguments},
+        installed::{Executable, arguments, replace_option},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -39,11 +41,20 @@ pub(super) async fn ask(
         )?;
         return Ok(0);
     }
+    // The workspace ID stays valid if the workspace is renamed meanwhile.
+    let workspace = question.workspace_id.clone();
     let question = if question.is_open() {
-        await_answer(ctx, &workspace, question.id).await?
+        await_answer(ctx, &workspace, question.id, false).await?
     } else {
         question
     };
+    print_answer(ctx, workspace, &question).await?;
+    Ok(0)
+}
+
+/// Continue an earlier `ask --wait` for question `id` of `workspace`.
+pub(super) async fn resume(ctx: &Context, workspace: String, id: i64) -> Result<i32> {
+    let question = await_answer(ctx, &workspace, id, true).await?;
     print_answer(ctx, workspace, &question).await?;
     Ok(0)
 }
@@ -65,18 +76,30 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     .await
 }
 
-/// Wait across daemon restarts; after an upgrade, the installed release asks
-/// the same question again and waits for it.
-async fn await_answer(ctx: &Context, workspace: &str, id: i64) -> Result<Question> {
+/// Wait across daemon restarts; after an upgrade, the installed release
+/// resumes the wait for the same question.
+async fn await_answer(
+    ctx: &Context,
+    workspace: &str,
+    id: i64,
+    restarted: bool,
+) -> Result<Question> {
     let executable = Executable::current();
     let method = || Method::AwaitAnswer {
         workspace: workspace.to_owned(),
         id,
     };
-    match client::await_reply(&ctx.paths, method).await {
+    match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, arguments)),
+        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, id))),
     }
+}
+
+/// This command's arguments, resuming the wait for question `id` of `workspace`
+/// without asking again.
+fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
+    let arguments = replace_option(arguments(), "--workspace", workspace);
+    replace_option(arguments, "--resume", &id.to_string())
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {

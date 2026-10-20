@@ -270,6 +270,10 @@ pub enum Command {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,
+        /// Continue waiting for this question, as the installed release does
+        /// after an upgrade restarted the daemon.
+        #[arg(long, hide = true, requires = "workspace")]
+        resume: Option<i64>,
     },
     /// List open questions from workspace agents.
     Questions {

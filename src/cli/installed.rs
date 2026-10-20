@@ -99,7 +99,7 @@ pub(crate) fn arguments_with(option: &str, value: Option<impl ToString>) -> Vec<
     }
 }
 
-fn replace_option(
+pub(crate) fn replace_option(
     arguments: impl IntoIterator<Item = OsString>,
     option: &str,
     value: &str,

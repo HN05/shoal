@@ -268,11 +268,16 @@ pub(crate) async fn reconnect(
 /// restarts: a closed connection asks again at once, and an unreachable socket
 /// is retried for the normal daemon wait budget. After a restart, a scope
 /// refusal is retried within the same budget too, since a restarted daemon
-/// knows an execution's scope only once its wrapper reattaches. Only for
-/// requests that are safe to repeat.
-pub(crate) async fn await_reply(paths: &Paths, method: impl Fn() -> Method) -> Result<Body> {
+/// knows an execution's scope only once its wrapper reattaches; `restarted`
+/// says the daemon restarted before this wait began. Only for requests that
+/// are safe to repeat.
+pub(crate) async fn await_reply(
+    paths: &Paths,
+    method: impl Fn() -> Method,
+    restarted: bool,
+) -> Result<Body> {
     // When the daemon last went away, or the socket was first found unreachable.
-    let mut outage: Option<Instant> = None;
+    let mut outage = restarted.then(Instant::now);
     loop {
         let reply = open(paths, method()).await;
         match reply.and_then(|(_stream, body)| body.into_result()) {
@@ -362,7 +367,7 @@ mod tests {
         let listener = UnixListener::bind(&paths.socket)?;
         let waiter = tokio::spawn({
             let paths = paths.clone();
-            async move { await_reply(&paths, || Method::Status).await }
+            async move { await_reply(&paths, || Method::Status, false).await }
         });
         // The daemon goes away mid-wait and leaves no socket behind.
         let (stream, _) = listener.accept().await?;
@@ -391,14 +396,31 @@ mod tests {
             protocol::write(&mut stream, &Response::new(request.id, body)).await?;
             anyhow::Ok(listener)
         });
-        let error = await_reply(&paths, || Method::Status).await.unwrap_err();
+        let error = await_reply(&paths, || Method::Status, false)
+            .await
+            .unwrap_err();
         assert!(scope_denied(&error), "{error:#}");
         let listener = listener_task.await??;
+
+        // A wait resumed after a restart retries the refusal at once.
+        let resumed = tokio::spawn({
+            let paths = paths.clone();
+            async move { await_reply(&paths, || Method::Status, true).await }
+        });
+        let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+        for body in [refused, Body::Ok] {
+            let (mut stream, _) = listener.accept().await?;
+            let request: Request = protocol::read(&mut stream).await?;
+            protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+        }
+        assert!(matches!(resumed.await??, Body::Ok));
 
         // A daemon that does not return ends the wait.
         drop(listener);
         std::fs::remove_file(&paths.socket)?;
-        let error = await_reply(&paths, || Method::Status).await.unwrap_err();
+        let error = await_reply(&paths, || Method::Status, false)
+            .await
+            .unwrap_err();
         assert!(is_unreachable(&error), "{error:#}");
         Ok(())
     }

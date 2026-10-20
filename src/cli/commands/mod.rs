@@ -366,6 +366,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             notifications::send(&ctx, workspace, message).await
         }
         Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
+        // Clap requires --workspace with --resume.
+        Command::Ask {
+            workspace: Some(workspace),
+            resume: Some(id),
+            ..
+        } => questions::resume(&ctx, workspace, id).await,
         Command::Ask {
             question,
             recommend,
@@ -373,6 +379,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             choices,
             wait,
             workspace,
+            ..
         } => {
             let ask = crate::daemon::questions::Ask {
                 question,

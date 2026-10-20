@@ -15042,11 +15042,12 @@ fn remove_guidance(text: &str) -> String {
 fn agents_wait_for_the_answer_to_their_question() {
     let fixture = Fixture::new();
     fixture.add("asker");
+    // Unscoped, so the workspace can be renamed while it waits.
     let asker = fixture
         .command()
-        .args(["exec", "asker", "--", env!("CARGO_BIN_EXE_shoal"), "--json"])
-        .args(["ask", "Which database?", "--recommend", "SQLite"])
-        .args(["--choice", "SQLite", "--choice", "Postgres", "--wait"])
+        .args(["--json", "ask", "Which database?", "--recommend", "SQLite"])
+        .args(["--choice", "SQLite", "--choice", "Postgres"])
+        .args(["--workspace", "asker", "--wait"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -15063,13 +15064,15 @@ fn agents_wait_for_the_answer_to_their_question() {
 
     let output = scoped_command(&fixture, "asker", &["answer", &id, "1"]);
     assert!(!output.status.success(), "agents cannot answer: {output:?}");
+    let renamed = fixture.rename("asker", "renamed");
+    assert_eq!(renamed["data"]["name"], "renamed", "{renamed}");
     fixture.ok(&["answer", &id, "2"]);
     let output = asker.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(answered["answer"], "Postgres");
     // The wait printed the answer, so its message is not delivered again.
-    assert_eq!(fixture.ok(&["messages", "asker"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["messages", "renamed"]), serde_json::json!([]));
     assert_eq!(
         fixture.ok(&["questions"]),
         serde_json::json!({"questions": [], "omitted": 0})
@@ -15077,12 +15080,42 @@ fn agents_wait_for_the_answer_to_their_question() {
 
     let output = scoped_command(
         &fixture,
-        "asker",
+        "renamed",
         &["ask", "Which cache?", "--recommend", "None"],
     );
     assert!(output.status.success(), "{output:?}");
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(open["answer"], Value::Null);
+    assert_eq!(
+        fixture.ok(&["questions", "--all"])["questions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    // An upgraded release resumes a wait by the recorded IDs without asking again.
+    let workspace = open["workspace_id"].as_str().unwrap();
+    let id = open["id"].to_string();
+    let resumed = fixture
+        .command()
+        .args([
+            "--json",
+            "ask",
+            "Which cache?",
+            "--recommend",
+            "None",
+            "--wait",
+        ])
+        .args(["--workspace", workspace, "--resume", &id])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    fixture.ok(&["answer", &id, "Redis"]);
+    let output = resumed.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(answered["answer"], "Redis");
     assert_eq!(
         fixture.ok(&["questions", "--all"])["questions"]
             .as_array()
