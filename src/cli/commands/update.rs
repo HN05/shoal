@@ -139,20 +139,13 @@ impl Release {
     /// Download, verify and unpack the archive beside `target`, then move its
     /// binary over `target` so running commands keep the file they started.
     async fn install(&self, target: &Path) -> Result<()> {
-        let directory = target
-            .parent()
-            .context("the shoal executable has no directory")?;
-        let staging = tempfile::Builder::new()
-            .prefix(".shoal-update-")
-            .tempdir_in(directory)
-            .with_context(|| format!("create a download directory in {}", directory.display()))?;
+        let staging = staging_directory(target)?;
         let archive = staging.path().join(&self.archive);
         self.download(&archive).await?;
         self.verify(&archive)?;
         let binary = unpack(&archive, staging.path()).await?;
         self.check_version(&binary).await?;
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755))?;
-        fs::rename(&binary, target).with_context(|| format!("replace {}", target.display()))
+        replace_executable(&binary, target)
     }
 
     async fn download(&self, destination: &Path) -> Result<()> {
@@ -213,6 +206,23 @@ fn curl() -> Command {
         "=https",
     ]);
     curl
+}
+
+/// A private directory beside `target`, so the new binary renames over it
+/// on the same filesystem.
+fn staging_directory(target: &Path) -> Result<tempfile::TempDir> {
+    let directory = target
+        .parent()
+        .context("the shoal executable has no directory")?;
+    tempfile::Builder::new()
+        .prefix(".shoal-update-")
+        .tempdir_in(directory)
+        .with_context(|| format!("create a download directory in {}", directory.display()))
+}
+
+fn replace_executable(binary: &Path, target: &Path) -> Result<()> {
+    fs::set_permissions(binary, fs::Permissions::from_mode(0o755))?;
+    fs::rename(binary, target).with_context(|| format!("replace {}", target.display()))
 }
 
 /// Extract the archive's `shoal` binary into `directory`.
