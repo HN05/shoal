@@ -38,7 +38,7 @@ use crate::{
         store::{self, Store},
     },
     git::{self, default_branch::DefaultBranchLookup, worktrunk},
-    model::{Inspection, Repository, Workspace},
+    model::{Execution, Inspection, Repository, Workspace},
     paths::Paths,
     state::WorkspaceState,
 };
@@ -321,6 +321,12 @@ impl Manager {
                 store::exists(db, "SELECT 1 FROM executions WHERE workspace_id=?1", [id])
             })
             .await
+    }
+
+    /// Read recorded executions in every state for a known workspace ID.
+    pub(super) async fn workspace_executions(&self, id: &str) -> Result<Vec<Execution>> {
+        let id = id.to_owned();
+        self.store.run(move |db| store::executions(db, &id)).await
     }
 
     /// Count recorded executions in every state without decoding their details.

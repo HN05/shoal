@@ -11,6 +11,9 @@ use crate::{
     state::{ExecutionState, WorkspaceState, states},
 };
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct ReconcileOptions {
     /// Apply safe state repairs instead of only reporting.
@@ -178,9 +181,8 @@ impl Manager {
         }
         // Connected wrappers handle their own foreground process groups.
         let running = self
-            .inspect_workspace(&workspace.id)
+            .workspace_executions(&workspace.id)
             .await?
-            .executions
             .iter()
             .any(|e| e.state == ExecutionState::Running);
         let quiescent = matches!(
@@ -248,7 +250,7 @@ impl Manager {
         };
         let workspace = &workspace;
         self.reconcile_directory(workspace, options, report).await?;
-        let executions = self.inspect_workspace(&workspace.id).await?.executions;
+        let executions = self.workspace_executions(&workspace.id).await?;
         let ids: HashSet<_> = executions.iter().map(|e| e.id.clone()).collect();
         let mut scan = process::scan(ids.clone()).await?;
         for execution in executions {
