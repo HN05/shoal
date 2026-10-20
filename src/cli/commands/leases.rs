@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 
-use super::{ports, resources, resources::Members, simulators, workspace_overviews};
+use super::{ports, resources, resources::Members, secrets, simulators, workspace_overviews};
 use crate::{
     cli::{
         AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind, WorkspaceScope, client,
@@ -95,6 +95,11 @@ pub(super) async fn acquire(
             );
             resources::acquire(ctx, workspace, request).await
         }
+        AcquireKind::Secret {
+            name,
+            reason,
+            queue,
+        } => secrets::acquire(ctx, workspace, name, reason, queue).await,
     }
 }
 
@@ -125,6 +130,7 @@ enum Held {
     Sim { name: String },
     Resource { pool: String, name: String },
     Repo { pool: String, name: String },
+    Secret { name: String },
 }
 
 impl fmt::Display for Held {
@@ -134,6 +140,7 @@ impl fmt::Display for Held {
             Self::Sim { name } => write!(f, "simulator {name}"),
             Self::Resource { pool, name } => write!(f, "resource {pool}/{name}"),
             Self::Repo { pool, name } => write!(f, "repo {pool}/{name}"),
+            Self::Secret { name } => write!(f, "secret {name}"),
         }
     }
 }
@@ -178,6 +185,9 @@ async fn select_held(
         }
         Some(ReleaseKind::Sim { name: Some(name) }) => {
             return Ok(vec![Held::Sim { name: name.clone() }]);
+        }
+        Some(ReleaseKind::Secret { name: Some(name) }) => {
+            return Ok(vec![Held::Secret { name: name.clone() }]);
         }
         _ => {}
     }
@@ -255,7 +265,8 @@ fn requested(request: ApprovalRequest) -> Option<Held> {
             Held::Repo { pool, name }
         }
         (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
-        (Target::Keep | Target::Secret(_), _) => return None,
+        (Target::Secret(_), _) => Held::Secret { name },
+        (Target::Keep, _) => return None,
     })
 }
 
@@ -273,7 +284,8 @@ fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
     match (held, kind) {
         (_, None)
         | (Held::Port { .. }, Some(ReleaseKind::Port { .. }))
-        | (Held::Sim { .. }, Some(ReleaseKind::Sim { .. })) => true,
+        | (Held::Sim { .. }, Some(ReleaseKind::Sim { .. }))
+        | (Held::Secret { .. }, Some(ReleaseKind::Secret { .. })) => true,
         (Held::Resource { pool, name }, Some(ReleaseKind::Resource { selection }))
         | (Held::Repo { pool, name }, Some(ReleaseKind::Repo { selection })) => {
             selects(pool, name, selection)
@@ -296,6 +308,10 @@ async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> 
         Held::Resource { pool, name } | Held::Repo { pool, name } => Method::ResourceRelease {
             workspace,
             pool: pool.clone(),
+            name: name.clone(),
+        },
+        Held::Secret { name } => Method::SecretRelease {
+            workspace,
             name: name.clone(),
         },
     };

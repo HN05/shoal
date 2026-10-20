@@ -1313,6 +1313,17 @@ pub enum AcquireKind {
         #[command(flatten)]
         lease: LeaseOptions,
     },
+    /// Request access to a configured secret that requires approval.
+    Secret {
+        /// Variable name of the secret in `[secrets]`.
+        name: String,
+        /// Explain what the secret is needed for.
+        #[arg(long)]
+        reason: Option<String>,
+        /// Wait until approved or denied.
+        #[arg(long)]
+        queue: bool,
+    },
 }
 
 /// A pool, optionally narrowed to one named lease.
@@ -1345,6 +1356,8 @@ pub enum ReleaseKind {
         #[command(flatten)]
         selection: PoolSelection,
     },
+    /// End a secret grant or cancel its request, or every one.
+    Secret { name: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]

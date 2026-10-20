@@ -26,6 +26,7 @@ mod repositories;
 mod resources;
 pub(crate) mod resume;
 mod review;
+mod secrets;
 mod service;
 mod sessions;
 mod simulators;

@@ -13336,6 +13336,7 @@ fn tool_secrets_reach_only_their_tools() {
     assert_eq!(output.stdout, b"INNER|OUTER|INNER_TOKEN:OUTER_TOKEN\n");
 }
 
+
 #[test]
 fn agent_git_profile_applies_only_to_agent_processes() {
     let fixture = Fixture::with_config(Some(
@@ -15085,16 +15086,19 @@ fn pending_approval(output: Output) -> Value {
 
 #[test]
 fn release_cancels_pending_requests_without_leases() {
-    let fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
+    let fixture = Fixture::with_config(Some(
+        "[resources.signing]\nrequires_approval=true\n[secrets.TOKEN]\ncommand=['true']\ntools=['sign']\nrequires_approval=true\n",
+    ));
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
     fixture.add("agent");
     for args in [
-        ["acquire", "resource", "signing", "--reason", "sign build"],
-        ["acquire", "port", "web", "--reason", "serve preview"],
+        &["acquire", "resource", "signing", "--reason", "sign build"][..],
+        &["acquire", "port", "web", "--reason", "serve preview"],
+        &["acquire", "secret", "TOKEN", "--reason", "sign build"],
     ] {
-        pending_approval(scoped_command(&fixture, "agent", &args));
+        pending_approval(scoped_command(&fixture, "agent", args));
     }
-    assert_eq!(fixture.ok(&["approvals"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["approvals"]).as_array().unwrap().len(), 3);
     let released = fixture.ok(&[
         "release",
         "resource",
@@ -15111,7 +15115,7 @@ fn release_cancels_pending_requests_without_leases() {
     let released = fixture.ok(&["release", "--workspace", "agent"]);
     assert_eq!(
         released["released"],
-        serde_json::json!([{"kind": "port", "name": "web"}])
+        serde_json::json!([{"kind": "port", "name": "web"}, {"kind": "secret", "name": "TOKEN"}])
     );
     assert!(
         fixture

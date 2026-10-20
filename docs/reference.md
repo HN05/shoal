@@ -1742,7 +1742,8 @@ messages but cannot send any. Removing the workspace deletes its messages.
 ### Leases
 
 `shoal acquire <kind>` reserves a port, simulator, resource permit, or related
-repository for the current workspace, or the one named by `--workspace`.
+repository for the current workspace, or the one named by `--workspace`, or
+requests access to a [secret](#agent-secrets) that requires approval.
 Simulator, resource, and repository leases take `--name` (default `default`) to
 hold several, `--reason`, and `--queue` to wait, without a time limit, until the
 lease is acquired or its approval denied. `acquire repo` selects only `kind = "repo"` members.
