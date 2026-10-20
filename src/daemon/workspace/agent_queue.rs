@@ -327,12 +327,7 @@ impl Manager {
     /// while it runs, awaits reattachment or waits for resume, counted once by
     /// its execution; so does each starting entry until its agent registers.
     async fn occupied_slots(&self) -> Result<Vec<Slot>> {
-        let mut agents: HashMap<String, (String, Activity)> = self
-            .agent_executions()
-            .await
-            .into_iter()
-            .map(|(id, (workspace, running))| (id, (workspace, Activity::Running(running))))
-            .collect();
+        let mut agents = self.agent_executions().await;
         let (open, unknown, starting) = self
             .store
             .run(|db| {

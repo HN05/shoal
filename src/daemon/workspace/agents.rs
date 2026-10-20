@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
-use super::{GuardMode, Manager};
+use super::{GuardMode, Manager, capacity::Activity};
 pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
@@ -388,20 +388,22 @@ impl Manager {
         Ok(())
     }
 
-    /// Each tracked agent's execution, workspace and running time, including
-    /// one awaiting overload recovery.
+    /// Each tracked agent's execution, workspace and load: one awaiting
+    /// overload recovery runs nothing.
     pub(super) async fn agent_executions(
         &self,
-    ) -> std::collections::HashMap<String, (String, Duration)> {
+    ) -> std::collections::HashMap<String, (String, Activity)> {
         self.agents
             .lock()
             .await
             .iter()
             .map(|(id, agent)| {
-                (
-                    id.clone(),
-                    (agent.workspace_id.clone(), agent.started.elapsed()),
-                )
+                let activity = if agent.protected() {
+                    Activity::Stopped
+                } else {
+                    Activity::Running(agent.started.elapsed())
+                };
+                (id.clone(), (agent.workspace_id.clone(), activity))
             })
             .collect()
     }
