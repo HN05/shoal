@@ -148,6 +148,28 @@ pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
     }
 }
 
+/// The file naming the owner of a directory Shoal created beside workspaces.
+pub const OWNER_MARKER: &str = "owner";
+
+/// Create `root` marked as `owner`'s when it is missing; an existing one is
+/// left for [`is_marked_dir`] to judge.
+pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
+    if root.symlink_metadata().is_err() {
+        fs::create_dir_all(root)?;
+        fs::write(root.join(OWNER_MARKER), format!("{owner}\n"))?;
+    }
+    Ok(())
+}
+
+/// Whether `root` is a real directory marked as `owner`'s, so nothing Shoal
+/// creates or deletes there is reached through a symlink or belongs to anyone
+/// else.
+pub fn is_marked_dir(root: &Path, owner: &str) -> bool {
+    fs::symlink_metadata(root).is_ok_and(|metadata| metadata.is_dir())
+        && fs::read_to_string(root.join(OWNER_MARKER))
+            .is_ok_and(|marked| marked.trim_end() == owner)
+}
+
 /// Space unprivileged processes may still write on the filesystem holding `path`.
 pub fn available_bytes(path: &Path) -> io::Result<u64> {
     use std::os::unix::ffi::OsStrExt;

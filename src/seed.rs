@@ -15,12 +15,9 @@ use std::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::clone_tree;
+use crate::fsutil::{OWNER_MARKER, clone_tree, create_marked_dir, is_marked_dir};
 
 const MANIFEST: &str = "manifest.json";
-/// Names the repository that owns a seed directory, so Shoal never builds in
-/// or deletes from one it did not create.
-const OWNER: &str = "owner";
 const OUTPUTS: &str = "outputs";
 
 /// Where one repository's seed lives, beside its workspaces.
@@ -63,22 +60,15 @@ impl Layout {
     /// Create the seed directory, or require the existing one to be this
     /// repository's.
     pub fn claim(&self) -> Result<()> {
-        if self.root.symlink_metadata().is_err() {
-            fs::create_dir_all(&self.root)?;
-            fs::write(self.root.join(OWNER), format!("{}\n", self.owner))?;
-        }
+        create_marked_dir(&self.root, &self.owner)?;
         self.ensure_owned()
     }
 
-    /// Require the seed directory to be a real directory marked as this
-    /// repository's, so nothing Shoal creates or deletes there is reached
-    /// through a symlink or belongs to anyone else.
+    /// Require the seed directory to be marked as this repository's, so Shoal
+    /// never builds in or deletes from one it did not create.
     pub fn ensure_owned(&self) -> Result<()> {
-        let owned = fs::symlink_metadata(&self.root).is_ok_and(|metadata| metadata.is_dir())
-            && fs::read_to_string(self.root.join(OWNER))
-                .is_ok_and(|owner| owner.trim_end() == self.owner);
         anyhow::ensure!(
-            owned,
+            is_marked_dir(&self.root, &self.owner),
             "{} is not a seed directory Shoal created; move it away to use the seed",
             self.root.display()
         );
@@ -105,7 +95,7 @@ impl Layout {
         for directory in [self.snapshot(), self.staging(), self.retired()] {
             remove_dir(&directory)?;
         }
-        for file in [self.log(), self.root.join(OWNER)] {
+        for file in [self.log(), self.root.join(OWNER_MARKER)] {
             match fs::remove_file(&file) {
                 Err(error) if error.kind() != ErrorKind::NotFound => {
                     return Err(error).with_context(|| format!("delete {}", file.display()));
