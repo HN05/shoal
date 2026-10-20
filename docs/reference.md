@@ -1371,7 +1371,8 @@ are GitLab; any other host is Forgejo or Gitea, which share an API. Lookups use
 your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
 saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
 token `[bitbucket]` configures. Without a login, only public repositories are
-readable. Shoal stores no forge credentials.
+readable. Shoal stores no forge credentials. An issue or PR number may be
+written `#42`.
 
 Bitbucket has no official CLI, so the global `[bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for

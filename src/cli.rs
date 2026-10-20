@@ -19,7 +19,10 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::agent::{Agent, BuiltinAgent};
+use crate::{
+    agent::{Agent, BuiltinAgent},
+    forge::IssueInput,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -101,6 +104,7 @@ pub enum Command {
         #[arg(long)]
         here: bool,
         /// Registered repository, or an issue, PR or branch URL.
+        #[arg(value_parser = item_reference)]
         repository: Option<String>,
         /// Repository for an issue number or a pasted link.
         #[arg(long = "repo")]
@@ -111,7 +115,7 @@ pub enum Command {
         #[arg(long, conflicts_with_all = ["branch", "issue"])]
         existing: Option<String>,
         /// Derive a name and agent prompt from a forge issue number or URL.
-        #[arg(long)]
+        #[arg(long, value_parser = item_reference)]
         issue: Option<String>,
         /// Create this worktree at an exact new directory instead of the repository default.
         #[arg(long)]
@@ -300,6 +304,7 @@ pub enum Command {
         #[arg(value_name = "TARGET")]
         workspace: Option<String>,
         /// Number, URL, or resource name after pr, issue or resource.
+        #[arg(value_parser = item_reference)]
         item: Option<String>,
     },
     /// Enter a workspace, or use - for the previous directory.
@@ -333,10 +338,10 @@ pub enum Command {
         /// Workspace to review, or a PR or issue URL.
         workspace: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace")]
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
         pr: Option<String>,
         /// Have an agent refine this issue before implementation, in the workspace that works on it.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with_all = ["workspace", "pr", "manual"])]
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with_all = ["workspace", "pr", "manual"], value_parser = item_reference)]
         issue: Option<String>,
         /// Registered repository of the PR or issue; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
@@ -761,6 +766,7 @@ pub enum IssueCommand {
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
+    #[arg(value_parser = item_reference)]
     pub item: Option<String>,
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
@@ -797,9 +803,10 @@ pub struct BodyArgs {
 #[derive(Debug, Args)]
 pub struct ItemArgs {
     /// pr/issue to select a kind, or an issue/PR URL.
+    #[arg(value_parser = item_reference)]
     pub kind_or_url: Option<String>,
     /// Number or URL when a kind is supplied.
-    #[arg(requires = "kind_or_url")]
+    #[arg(requires = "kind_or_url", value_parser = item_reference)]
     pub item: Option<String>,
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
@@ -879,6 +886,14 @@ impl ValueEnum for BuiltinAgent {
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(clap::builder::PossibleValue::new(self.as_str()))
     }
+}
+
+/// An issue or PR argument, where `#42` means `42`.
+fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
+    Ok(match input.strip_prefix('#') {
+        Some(number) if IssueInput::parse(number) == IssueInput::Number => number.to_owned(),
+        _ => input.to_owned(),
+    })
 }
 
 /// clap parser for [`Agent`] that also advertises its values for completion.
@@ -1425,6 +1440,33 @@ mod tests {
             assert!(toml::from_str::<crate::config::Config>(&text).is_err());
             assert!(toml::from_str::<crate::config::repo::RepoConfig>(&text).is_err());
             assert!(serde_json::from_value::<Agent>(invalid.into()).is_err());
+        }
+    }
+
+    #[test]
+    fn item_arguments_accept_hash_numbers() {
+        let items = |args: &[&str]| {
+            let parsed = Cli::try_parse_from(args).unwrap();
+            let Some(Command::Link { items }) = parsed.command else {
+                panic!("wrong command")
+            };
+            (items.kind_or_url, items.item)
+        };
+        assert_eq!(items(&["shoal", "link", "#42"]), (Some("42".into()), None));
+        assert_eq!(
+            items(&["shoal", "link", "pr", "#42"]),
+            (Some("pr".into()), Some("42".into()))
+        );
+        for unchanged in [
+            "#",
+            "#x",
+            "##42",
+            "https://forge.example/team/repo/issues/1",
+        ] {
+            assert_eq!(
+                items(&["shoal", "link", unchanged]),
+                (Some(unchanged.into()), None)
+            );
         }
     }
 
