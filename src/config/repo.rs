@@ -55,6 +55,7 @@ pub struct RepoConfig {
     pub agent_resume: crate::config::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
     /// Agent an issue workspace starts when `--agent` is omitted.
@@ -200,6 +201,10 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
     if config.agent_template.is_none() {
         config.agent_template =
             crate::config::templates::read(workspace_dir, crate::config::templates::AGENT_FILE)?;
+    }
+    if config.chat_template.is_none() {
+        config.chat_template =
+            crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
     }
     Ok(config)
 }

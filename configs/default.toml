@@ -32,10 +32,12 @@ root_dir = "~/shoal"
 # detached zmx session outside Herdr. Set to always (true) or never (false) focus.
 # focus = true
 
-# Prompt templates normally live beside this file as issue-template.md and
-# agent-template.md. Inline text takes precedence over the corresponding file.
+# Prompt templates normally live beside this file as issue-template.md,
+# agent-template.md and chat-template.md. Inline text takes precedence over the
+# corresponding file.
 # issue_template = "Work on issue #{number}: {title}\n{url}\n\n{body}"
 # agent_template = "Follow repository instructions in {workspace} at {path}."
+# chat_template = "Discuss the {repo} repository at {path} without changing it."
 
 # Git identity for new worktrees (no default); may also be set per repository.
 # git_profile = "work"

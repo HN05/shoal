@@ -17891,6 +17891,53 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
 }
 
 #[test]
+fn chat_instructions_append_the_checkout_template_to_the_global_one() {
+    let fixture = Fixture::new();
+    install_recording_agent(&fixture, "claude");
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("chat-template.md"),
+        "Discuss {repo} at {path}",
+    )
+    .unwrap();
+    fs::write(
+        fixture.repo.join("chat-template.md"),
+        "Plans live in docs {branch}",
+    )
+    .unwrap();
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    let chat = || {
+        let (output, transcript) = fixture.terminal_command(
+            fixture
+                .command()
+                .current_dir(&fixture.repo)
+                .env("ZMX_SESSION", "outer")
+                .args(["chat", "--agent", "claude"]),
+            "",
+            true,
+        );
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        chat_args(&fixture)
+    };
+    let name = checkout.file_name().unwrap().to_str().unwrap();
+    assert_eq!(
+        chat(),
+        [
+            "--append-system-prompt".to_owned(),
+            format!(
+                "Discuss {name} at {}\n\nPlans live in docs {{branch}}",
+                checkout.display()
+            ),
+        ]
+    );
+    // Empty templates pass no instructions.
+    fs::write(config_dir.join("chat-template.md"), "").unwrap();
+    fs::write(fixture.repo.join("chat-template.md"), "").unwrap();
+    assert!(!chat().iter().any(|arg| arg == "--append-system-prompt"));
+}
+
+#[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let fixture = Fixture::with_config(Some("focus = false\n"));
     install_fake_herdr(&fixture);

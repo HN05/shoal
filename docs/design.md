@@ -717,7 +717,8 @@ its next turn ends.
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout with the user's authority instead of in a
 workspace: coordinating work is one thing a chat may do, and scoped sessions
-cannot create workspaces. Its instructions describe the discussion only; the
+cannot create workspaces. Its instructions describe the discussion only, from a
+chat template that repositories can extend like the other prompt templates; the
 orchestrator skill is available when the user asks for coordination. Belonging
 to no workspace, a chat is not a tracked execution: queuing, overload stops and
 resume serve unattended agents, while the user attends a chat. A repository may
@@ -773,8 +774,8 @@ One option table defines both the merge and its provenance, so a reported layer
 is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
 Prompt templates select repository additions by saved/worktree precedence and
-append them to global guidance, using the bundled issue template when no global
-issue template is configured. Empty repository values suppress only the addition.
+append them to global guidance, using the bundled issue or chat template when
+no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.

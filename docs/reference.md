@@ -661,9 +661,10 @@ plans, or to coordinate work, without changing code. The repository is the named
 one, else the current checkout's or workspace's, else a picker. The agent is
 `--agent`, which must be `claude` or `codex`, else `default_agent` when it is
 one of them, else a picker of the installed ones. The agent's configured launcher
-runs in the registered checkout with chat instructions passed as native
-instructions, so it waits for your first message; `{path}` is the checkout and
-other workspace placeholders stay literal. The checkout is trusted in the agent's
+runs in the registered checkout with the rendered
+[chat template](#prompt-templates) as native instructions, so it waits for your
+first message. The template substitutes `{repo}` and `{path}`; in the launcher,
+`{path}` is the checkout and other workspace placeholders stay literal. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
@@ -826,15 +827,16 @@ beneath an agent drop the inherited values and launchers.
 
 ### Prompt templates
 
-`issue_template` and `agent_template` in the saved repository TOML win over
-the worktree's TOML values or `issue-template.md` and `agent-template.md` in the repository root.
+`issue_template`, `agent_template` and `chat_template` in the saved repository
+TOML win over the worktree's TOML values or `issue-template.md`,
+`agent-template.md` and `chat-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository
 value suppresses local additions while preserving global guidance; an empty
-global value suppresses its base text. Without a global issue template, Shoal
-uses its bundled default as the base; without a global agent template, it adds
-no base instructions. `config show` reports the combined text and the highest
+global value suppresses its base text. Without a global issue or chat template,
+Shoal uses its bundled default as the base; without a global agent template, it
+adds no base instructions. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart.
 

@@ -79,6 +79,7 @@ pub struct Config {
     pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub bitbucket: crate::forge::bitbucket::Credentials,
     pub git: crate::git_profile::Git,
@@ -454,6 +455,9 @@ impl Config {
         if config.agent_template.is_none() {
             config.agent_template = templates::read(directory, templates::AGENT_FILE)?;
         }
+        if config.chat_template.is_none() {
+            config.chat_template = templates::read(directory, templates::CHAT_FILE)?;
+        }
         Ok(config)
     }
 
@@ -470,6 +474,7 @@ impl Config {
             agent_resume: self.agent_resume.clone(),
             issue_template: self.issue_template.clone(),
             agent_template: self.agent_template.clone(),
+            chat_template: self.chat_template.clone(),
             agent_auth: self.agent_auth.clone(),
             git_profile: self.git_profile.clone(),
             default_agent: self.default_agent.clone(),

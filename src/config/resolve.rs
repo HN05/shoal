@@ -24,6 +24,7 @@ pub struct Effective {
     pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
     pub default_agent: Option<crate::agent::Agent>,
@@ -168,6 +169,7 @@ impl Effective {
             agent_resume: merged.agent_resume,
             issue_template: merged.issue_template,
             agent_template: merged.agent_template,
+            chat_template: merged.chat_template,
             agent_auth: merged.agent_auth,
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
@@ -253,6 +255,7 @@ fn built_in() -> RepoConfig {
     RepoConfig {
         max_agents: Some(config::AgentLimit::Dynamic),
         issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
+        chat_template: Some(config::templates::CHAT_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
             enabled: Some(true),
@@ -546,6 +549,11 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
             get: |config| &config.agent_template,
             get_mut: |config| &mut config.agent_template,
         })),
+        Box::new(Template(Scalar {
+            key: "chat_template",
+            get: |config| &config.chat_template,
+            get_mut: |config| &mut config.chat_template,
+        })),
         scalar!(agent_auth.fj),
         scalar!(agent_auth.fj_home),
         scalar!(agent_auth.gh),
@@ -605,7 +613,7 @@ mod tests {
     /// value that does not survive layering. Adding a field to `RepoConfig`
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
-issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
+issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
@@ -632,8 +640,12 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 
     #[test]
     fn templates_append_one_repository_value_and_report_the_composed_text() {
-        for key in ["issue_template", "agent_template"] {
-            let default = (key == "issue_template").then_some(config::templates::ISSUE_DEFAULT);
+        for key in ["issue_template", "agent_template", "chat_template"] {
+            let default = match key {
+                "issue_template" => Some(config::templates::ISSUE_DEFAULT),
+                "chat_template" => Some(config::templates::CHAT_DEFAULT),
+                _ => None,
+            };
             let config = |value: Option<&str>| {
                 value.map_or_else(String::new, |value| {
                     format!("{key} = {}", toml::Value::String(value.into()))
@@ -812,6 +824,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             agent_resume,
             issue_template,
             agent_template,
+            chat_template,
             agent_auth,
             git_profile,
             default_agent,
@@ -863,6 +876,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         for present in [
             issue_template.is_some(),
             agent_template.is_some(),
+            chat_template.is_some(),
             agent_auth.fj.is_some(),
             agent_auth.fj_home.is_some(),
             agent_auth.gh.is_some(),

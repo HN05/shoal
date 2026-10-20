@@ -141,7 +141,7 @@ fn command(
     agent: BuiltinAgent,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    let args = templates::instruction_args(agent, instructions(repo))
+    let args = templates::instruction_args(agent, instructions(settings, repo))
         .into_iter()
         .chain(args)
         .collect();
@@ -156,14 +156,14 @@ fn command(
     )
 }
 
-fn instructions(repo: &Repository) -> String {
-    format!(
-        "You are chatting with the user about the {name} repository in its registered \
-         checkout at {path}. Discuss the repository, its issues, pull requests and plans, \
-         and answer questions. Do not change files in this checkout; code changes belong \
-         in Shoal workspaces.",
-        name = repository::name(repo),
-        path = repo.path.display(),
+/// The resolved chat template with the repository's name and checkout.
+fn instructions(settings: &Effective, repo: &Repository) -> String {
+    templates::render(
+        settings.chat_template.as_deref().unwrap_or_default(),
+        &[
+            ("{repo}", repository::name(repo)),
+            ("{path}", &repo.path.to_string_lossy()),
+        ],
     )
 }
 

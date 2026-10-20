@@ -11,6 +11,8 @@ pub const ISSUE_FILE: &str = "issue-template.md";
 pub const ISSUE_DEFAULT: &str = include_str!("templates/issue.md");
 pub const AGENT_FILE: &str = "agent-template.md";
 pub const AGENT_DEFAULT: &str = include_str!("templates/agent.md");
+pub const CHAT_FILE: &str = "chat-template.md";
+pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 /// Earlier shipped agent defaults. An installed copy that still matches one was
 /// never edited, so `install` replaces it; add the old text here when changing it.
 const AGENT_RETIRED: &[&str] = &[
@@ -43,6 +45,7 @@ fn install_at(directory: &Path) -> Result<()> {
     for (name, contents, retired) in [
         (ISSUE_FILE, ISSUE_DEFAULT, &[][..]),
         (AGENT_FILE, AGENT_DEFAULT, AGENT_RETIRED),
+        (CHAT_FILE, CHAT_DEFAULT, &[][..]),
     ] {
         let path = directory.join(name);
         match fs::OpenOptions::new()
@@ -154,6 +157,8 @@ mod tests {
         install_at(directory.path()).unwrap();
         let path = directory.path().join(ISSUE_FILE);
         assert_eq!(fs::read_to_string(&path).unwrap(), ISSUE_DEFAULT);
+        let chat = directory.path().join(CHAT_FILE);
+        assert_eq!(fs::read_to_string(chat).unwrap(), CHAT_DEFAULT);
         fs::write(&path, "custom").unwrap();
         let agent = directory.path().join(AGENT_FILE);
         assert_eq!(fs::read_to_string(&agent).unwrap(), AGENT_DEFAULT);
