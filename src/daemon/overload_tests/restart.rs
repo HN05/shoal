@@ -367,13 +367,18 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         Some(Stage::Stopping)
     );
     let serving = serve_fixture(reopened.clone());
+    // Reattachment commits `Running` before it discards the stop, so wait on
+    // the discard itself.
     bounded(async {
-        while executions(&reopened, &workspace).await[0].state != ExecutionState::Running {
+        while record(&reopened, &workspace, &id).is_some() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await;
-    assert!(record(&reopened, &workspace, &id).is_none());
+    assert_eq!(
+        executions(&reopened, &workspace).await[0].state,
+        ExecutionState::Running
+    );
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.
     bounded(reopened.stop_workspace(&workspace.id, StopRequest::manual()))
