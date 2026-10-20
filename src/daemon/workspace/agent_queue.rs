@@ -19,7 +19,7 @@ use crate::{
     daemon::notifications::NotificationKind,
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::ConfigTarget,
-    state::{ExecutionState, QueueState},
+    state::{ExecutionState, QueueKind, QueueState},
 };
 
 /// How long a starting entry keeps its slot without a holder: long enough for
@@ -94,7 +94,8 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
-const ENTRY_COLUMNS: &str = "id,repository_id,name,agent,issue_title,state,created_at,workspace_id";
+const ENTRY_COLUMNS: &str =
+    "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id";
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch no limit applies
@@ -134,10 +135,11 @@ impl Manager {
                 );
                 let now = crate::time::unix_seconds() as i64;
                 tx.execute(
-                    "INSERT INTO agent_queue(id,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
                     params![
                         inserted,
+                        QueueKind::Launch,
                         repository.id,
                         request.name,
                         request.agent,
@@ -480,7 +482,7 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                let (entry, plan) = db
+                let (entry, plan): (QueueEntry, Option<String>) = db
                     .query_row(
                         &format!("SELECT {ENTRY_COLUMNS},plan FROM agent_queue WHERE id=?1"),
                         [&id],
@@ -488,6 +490,7 @@ impl Manager {
                     )
                     .optional()?
                     .context("queue entry no longer exists")?;
+                let plan = plan.context("queue entry restores an agent; it has no launch plan")?;
                 ensure!(
                     entry.state == QueueState::Starting,
                     "queue entry {} is still waiting for a slot",
@@ -513,6 +516,11 @@ impl Manager {
         ensure!(
             matches.next().is_none(),
             "several queue entries are named {selector}; pass the entry ID"
+        );
+        ensure!(
+            entry.kind == QueueKind::Launch,
+            "{0} waits to restore its stopped agent; shoal stop {0} cancels the restore",
+            entry.name
         );
         ensure!(
             entry.state == QueueState::Queued,
@@ -665,6 +673,7 @@ fn fixed_limit(limit: AgentLimit) -> Option<u32> {
 fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {
         id: row.get("id")?,
+        kind: row.get("kind")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
         agent: row.get("agent")?,

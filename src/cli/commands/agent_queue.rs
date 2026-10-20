@@ -16,7 +16,7 @@ use crate::{
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
     protocol::Method,
-    state::QueueState,
+    state::{QueueKind, QueueState},
 };
 
 /// Reconnect a hold this soon after the daemon restarts.
@@ -194,12 +194,14 @@ pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<St
     ))
 }
 
-/// Remove `selector` from the queue when it names a waiting entry; `None`
+/// Remove `selector` from the queue when it names a waiting launch; `None`
 /// leaves it to workspace removal, which a starting entry belongs to. A name
 /// shared with a workspace is refused rather than guessed.
 pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>> {
     let Some(entry) = entries(ctx).await?.into_iter().find(|entry| {
-        entry.state == QueueState::Queued && (entry.id == selector || entry.name == selector)
+        entry.kind == QueueKind::Launch
+            && entry.state == QueueState::Queued
+            && (entry.id == selector || entry.name == selector)
     }) else {
         return Ok(None);
     };

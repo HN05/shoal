@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 47;
+const SCHEMA_VERSION: i64 = 48;
 
 #[cfg(test)]
 mod benchmark;
@@ -376,6 +376,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (45, REMOVED_WORKSPACES, None),
     (46, include_str!("store/display_numbers.sql"), None),
     (47, include_str!("store/workspace_items.sql"), None),
+    (48, include_str!("store/agent_queue_restores.sql"), None),
 ];
 
 /// Restore records outlive their workspace, not their repository.
@@ -887,6 +888,9 @@ mod tests {
         if version >= 47 {
             db.execute_batch(include_str!("store/workspace_items.sql"))?;
         }
+        if version >= 48 {
+            db.execute_batch(include_str!("store/agent_queue_restores.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -930,6 +934,29 @@ mod tests {
             migrate(&mut db)?;
             assert_eq!(schema_snapshot(&db)?, expected);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn queued_launches_keep_their_order_as_typed_entries() -> Result<()> {
+        let mut db = historical_database(47)?;
+        db.execute_batch(
+            "INSERT INTO agent_queue(seq,id,repository_id,name,agent,plan,env,state,created_at)
+                VALUES (7,'later','repo','later','claude','{}','{}','queued',1),
+                       (3,'first','repo','first','claude','{}','{}','queued',1);",
+        )?;
+        migrate(&mut db)?;
+        let entries = db
+            .prepare("SELECT id,kind FROM agent_queue ORDER BY seq")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(
+            entries,
+            [
+                ("first".into(), "launch".into()),
+                ("later".into(), "launch".into())
+            ]
+        );
         Ok(())
     }
 

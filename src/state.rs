@@ -173,6 +173,12 @@ states!(QueueState {
     /// Admitted to a slot; its agent has not registered yet.
     Starting => "starting",
 });
+states!(QueueKind {
+    /// A new agent that `shoal add` plans.
+    Launch => "launch",
+    /// A protection-stopped agent's automatic restore in its own workspace.
+    Restore => "restore",
+});
 states!(AgentState: ValueEnum {
     /// The agent is working on a turn.
     Working => "working",

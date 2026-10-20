@@ -7,7 +7,7 @@ use crate::{
     daemon::resources::ResourceLease,
     process::identity::Identity,
     sim::Simulator,
-    state::{AgentState, ExecutionState, QueueState, WorkspaceState},
+    state::{AgentState, ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -518,12 +518,14 @@ pub struct Chat {
     pub started_at: i64,
 }
 
-/// An agent launch waiting for, or starting in, a `max_agents` slot.
+/// An agent launch or restore waiting for, or starting in, a `max_agents` slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {
     pub id: String,
+    pub kind: QueueKind,
     pub repository_id: String,
-    /// The workspace name derived from the planned branch.
+    /// The workspace name: derived from the planned branch for a launch, the
+    /// stopped agent's for a restore.
     pub name: String,
     pub agent: String,
     pub issue_title: Option<String>,
@@ -531,7 +533,7 @@ pub struct QueueEntry {
     /// The 1-based place among waiting entries; `None` once starting.
     pub position: Option<usize>,
     pub created_at: i64,
-    /// The workspace a starting entry opened.
+    /// The workspace a starting launch opened, or a restore's own.
     pub workspace_id: Option<String>,
 }
 

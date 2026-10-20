@@ -24,7 +24,7 @@ use crate::{
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
-    state::AgentState,
+    state::{AgentState, QueueKind},
 };
 
 fn require_interactive(ctx: &Context) -> Result<()> {
@@ -753,8 +753,16 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     (text, Some(status.style()))
 }
 
+/// What a queue entry starts: a launch's issue title, or a restore.
+fn queue_subject(entry: &QueueEntry) -> String {
+    match entry.kind {
+        QueueKind::Launch => entry.issue_title.clone().unwrap_or_default(),
+        QueueKind::Restore => format!("Automatic restore of {}", entry.agent),
+    }
+}
+
 /// One aligned row per agent queue entry: its workspace name, its repository
-/// when the entries span several, its place, and the issue title.
+/// when the entries span several, its place, and what it starts.
 pub fn queue_rows(
     entries: &[QueueEntry],
     repositories: &[Repository],
@@ -785,7 +793,7 @@ pub fn queue_rows(
                     None,
                 ),
                 queue_status_cell(entry),
-                (entry.issue_title.clone().unwrap_or_default(), None),
+                (queue_subject(entry), None),
             ]
         })
         .collect();
