@@ -431,17 +431,18 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
     let executable = super::installed::Executable::current();
     // A missing daemon or a failed query does not prove completion or removal.
     // Retain the observer across daemon restarts, but not deletion of its state.
+    // A closed tab leaves nothing to close, whatever the daemon reports.
     while ctx.paths.state.exists() {
-        match workspace_lifecycle(ctx, &workspace).await {
-            Ok(Lifecycle::Active) => {}
-            Ok(lifecycle) => match tab.agent_status().await {
-                None => break,
-                Some(status) if lifecycle.closes_tab(status) => {
-                    tab.close().await;
-                    break;
-                }
-                Some(_) => {}
-            },
+        let lifecycle = workspace_lifecycle(ctx, &workspace).await;
+        let Some(status) = tab.agent_status().await else {
+            break;
+        };
+        match lifecycle {
+            Ok(lifecycle) if lifecycle.closes_tab(status) => {
+                tab.close().await;
+                break;
+            }
+            Ok(_) => {}
             Err(error) if error.is::<client::ProtocolMismatch>() => {
                 if let Some(failure) = executable.take_over(super::installed::arguments) {
                     return Err(failure);

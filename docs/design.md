@@ -434,7 +434,8 @@ never while stopped work waits for resume, so the tab keeps the stop's cause and
 `shoal resume --all` can restore the agent in its pane; removal closes them
 immediately.
 Preparation failures and shell or untracked desktop handoffs retain them until
-that lifecycle change. A tab watcher refused for a protocol mismatch restarts
+that lifecycle change. A tab watcher ends once Herdr no longer reports its tab,
+whatever the daemon reports; one refused for a protocol mismatch restarts
 from the installation path Shoal was started through, never a resolved versioned
 binary, once another binary is installed there, so tabs opened before an upgrade
 still close.

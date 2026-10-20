@@ -16989,7 +16989,9 @@ import json, os, shlex, sys
 from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
-with (root / 'herdr-calls').open('a') as calls:
+# Tab watchers poll `tab get`; keep those reads out of the recorded actions.
+log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else 'herdr-calls'
+with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
     print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
@@ -16998,6 +17000,10 @@ elif args[:2] == ['pane', 'run']:
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
 elif args[:2] == ['tab', 'get']:
+    closed = root / 'closed-tabs'
+    if closed.exists() and args[2] in closed.read_text().split():
+        print(json.dumps({'error': {'code': 'tab_not_found'}}))
+        sys.exit(1)
     print(json.dumps({'result': {'tab_id': args[2]}}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
@@ -17693,6 +17699,52 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     fixture.ok(&["done", "happy-tab", "--keep"]);
     wait_for_herdr_close(&fixture);
     assert!(fixture.ok(&["inspect", "happy-tab"])["completion"].is_object());
+}
+
+#[test]
+fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
+    let mut fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    let watch = |fixture: &Fixture, workspace: &str, tab: &str| {
+        fixture
+            .command()
+            .env("PATH", fixture.interactive_path())
+            .args(["internal", "herdr-watch", workspace, tab])
+            .spawn()
+            .unwrap()
+    };
+    let tab_gets = |fixture: &Fixture, tab: &str| {
+        fs::read_to_string(fixture.root.path().join("herdr-tab-gets"))
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| serde_json::from_str::<Vec<String>>(line).unwrap()[2] == tab)
+            .count()
+    };
+    let close_tab = |fixture: &Fixture, tab: &str| {
+        let closed = fixture.root.path().join("closed-tabs");
+        let mut tabs = fs::read_to_string(&closed).unwrap_or_default();
+        tabs.push_str(&format!("{tab}\n"));
+        fs::write(closed, tabs).unwrap();
+    };
+    let active = fixture.add("active")["id"].as_str().unwrap().to_owned();
+    let mut watchers = Vec::new();
+    for (tab, daemon_running) in [("w1:t1", true), ("w1:t2", false)] {
+        if !daemon_running {
+            fixture.daemon.child.kill().unwrap();
+            fixture.daemon.child.wait().unwrap();
+        }
+        let mut watcher = watch(&fixture, &active, tab);
+        wait_until("Herdr tab polling", || tab_gets(&fixture, tab) >= 2);
+        assert!(watcher.try_wait().unwrap().is_none());
+        close_tab(&fixture, tab);
+        watchers.push(watcher);
+    }
+    for mut watcher in watchers {
+        let status = wait_for("tab watcher exit", || watcher.try_wait().unwrap());
+        assert!(status.success());
+    }
+    // Only reads: a gone tab leaves nothing to close.
+    assert!(!fixture.root.path().join("herdr-calls").exists());
 }
 
 fn wait_for_herdr_close(fixture: &Fixture) {
