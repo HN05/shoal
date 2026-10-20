@@ -56,10 +56,15 @@ pub mod timing {
     pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
     /// Wait for the daemon to persist the spawned child's process group.
     pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
-    /// Leave room beyond the process scan budgets for ownership checks and persistence.
-    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(20);
+    /// Cover stopping an exited agent's survivors and the completion scan,
+    /// with room for ownership checks and persistence.
+    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(40);
     /// Bound the ps inventory subprocess used by the daemon's completion scan.
     pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Give an identity-verified survivor time to handle SIGTERM before SIGKILL.
+    pub const PROCESS_TERM_GRACE: Duration = Duration::from_secs(2);
+    /// Wait for a survivor to disappear after SIGKILL before reporting it.
+    pub const PROCESS_KILL_WAIT: Duration = Duration::from_secs(1);
     /// Wait within one scan for processes caught mid-exec to publish their environment.
     pub const PROCESS_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
     /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
@@ -85,7 +90,9 @@ pub mod timing {
     const _: () = {
         assert!(
             COMPLETION_ACK_TIMEOUT.as_millis()
-                > PROCESS_INVENTORY_TIMEOUT.as_millis() + PROCESS_SETTLE_TIMEOUT.as_millis()
+                > 2 * (PROCESS_INVENTORY_TIMEOUT.as_millis() + PROCESS_SETTLE_TIMEOUT.as_millis())
+                    + PROCESS_TERM_GRACE.as_millis()
+                    + PROCESS_KILL_WAIT.as_millis()
         );
         assert!(
             DETACHED_LAUNCH_TIMEOUT.as_millis()

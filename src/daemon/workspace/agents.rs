@@ -231,15 +231,28 @@ impl Manager {
         Ok(Pause::Paused)
     }
 
+    /// Stop what an agent that reported its exit left running outside its
+    /// process group, such as background shell commands, so nothing outlives
+    /// it. The completion scan that follows decides whether anything survived.
+    pub(crate) async fn stop_exited_agent_processes(&self, id: &str) {
+        let query_id = id.to_owned();
+        let stopped = async {
+            let record = self
+                .store
+                .run(move |db| crate::daemon::store::find_execution(db, &query_id))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
+            inspect_processes(&record).await?.stop_owned().await
+        };
+        if let Err(error) = stopped.await {
+            log!("processes of exited agent {id} not stopped: {error:#}");
+        }
+    }
+
     /// Stop the execution's verified survivors and report what keeps its
     /// processes from being proven stopped, if anything does.
     async fn stop_agent_survivors(&self, record: &crate::model::Execution) -> Option<String> {
-        let ids = std::collections::HashSet::from([record.id.clone()]);
-        let processes = async {
-            let scan = crate::process::identity::scan(ids).await?;
-            crate::process::execution::Processes::inspect(record, &scan).await
-        };
-        let processes = match processes.await {
+        let processes = match inspect_processes(record).await {
             Ok(processes) => processes,
             Err(error) => return Some(format!("process inspection failed: {error:#}")),
         };
@@ -524,6 +537,15 @@ pub(crate) enum Pause {
     Paused,
     /// Processes survive, or the evidence cannot prove that none do.
     Unproven(String),
+}
+
+/// Scan for the execution's processes and combine the evidence.
+async fn inspect_processes(
+    record: &crate::model::Execution,
+) -> anyhow::Result<crate::process::execution::Processes> {
+    let ids = std::collections::HashSet::from([record.id.clone()]);
+    let scan = crate::process::identity::scan(ids).await?;
+    crate::process::execution::Processes::inspect(record, &scan).await
 }
 
 /// Probe until it finds nothing preventing proof or `patience` passes, and

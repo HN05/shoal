@@ -372,15 +372,34 @@ async fn tracked_agent_with_background_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    run_tracked_agent(concat!(
+    run_tracked_agent(&with_background("touch started; while :; do sleep 1; done")).await;
+}
+
+/// Like `tracked_agent_with_background_child`, but the agent exits on its own
+/// once the test creates `exit`, leaving its background command running.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_exiting_with_background_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    run_tracked_agent(&with_background(
+        "touch started; while [ ! -e exit ]; do sleep 1; done",
+    ))
+    .await;
+}
+
+/// Run `script` after starting a background command in its own process group.
+fn with_background(script: &str) -> String {
+    concat!(
         "trap 'exit 0' TERM; python3 -c \"",
         "import os, time; os.setpgid(0, 0); ",
         "open('background.tmp', 'w').write(str(os.getpid())); ",
         "os.rename('background.tmp', 'background'); ",
         "time.sleep(300)\" & ",
-        "touch started; while :; do sleep 1; done"
-    ))
-    .await;
+    )
+    .to_owned()
+        + script
 }
 
 async fn run_tracked_agent(script: &str) {
@@ -656,11 +675,25 @@ async fn launch_with_background(
     tokio::task::JoinHandle<Result<i32>>,
     crate::process::identity::Identity,
 ) {
-    let launched = launch_child(
+    launch_agent_with_background(
         manager,
         workspace,
         "daemon::overload_tests::tracked_agent_with_background_child",
-    );
+    )
+    .await
+}
+
+/// Launch the agent helper `test`, which starts a background command outside
+/// its process group, and return that command's identity once both run.
+async fn launch_agent_with_background(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> (
+    tokio::task::JoinHandle<Result<i32>>,
+    crate::process::identity::Identity,
+) {
+    let launched = launch_child(manager, workspace, test);
     wait_launched(manager, workspace, "background", 1).await;
     wait_started(manager, workspace).await;
     let pid = fs::read_to_string(workspace.path.join("background")).unwrap();
@@ -668,6 +701,30 @@ async fn launch_with_background(
         .unwrap()
         .unwrap();
     (launched, background)
+}
+
+#[tokio::test]
+async fn agent_exit_stops_commands_outside_the_agent_group() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (launched, background) = launch_agent_with_background(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_agent_exiting_with_background_child",
+    )
+    .await;
+    fs::write(workspace.path.join("exit"), "").unwrap();
+    // The wrapper exits only after the daemon acknowledges the exit.
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert!(!crate::process::identity::alive(&background).unwrap());
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    serving.abort();
 }
 
 #[tokio::test]

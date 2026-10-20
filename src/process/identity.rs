@@ -509,7 +509,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
     if targets.is_empty() {
         return Ok(());
     }
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let deadline = tokio::time::Instant::now() + timing::PROCESS_TERM_GRACE;
     while tokio::time::Instant::now() < deadline && targets.iter().any(|p| alive(p).unwrap_or(true))
     {
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -517,7 +517,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
     for identity in targets {
         signal(identity, libc::SIGKILL)?;
     }
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+    let deadline = tokio::time::Instant::now() + timing::PROCESS_KILL_WAIT;
     while tokio::time::Instant::now() < deadline && targets.iter().any(|p| alive(p).unwrap_or(true))
     {
         tokio::time::sleep(Duration::from_millis(25)).await;

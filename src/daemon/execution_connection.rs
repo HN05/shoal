@@ -399,6 +399,9 @@ async fn finish(
     } else {
         None
     };
+    if agent.is_some() && result.is_ok() {
+        manager.stop_exited_agent_processes(&execution_id).await;
+    }
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
