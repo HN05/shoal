@@ -278,31 +278,41 @@ impl Manager {
 
     async fn delete_expired_records(&self) -> Result<()> {
         let now = unix_seconds() as i64;
-        let expired: Vec<(String, String)> = self
+        let expired: Vec<RemovedWorkspace> = self
             .store
             .run(move |db| {
-                db.prepare(
-                    "SELECT workspace_id, repository_id FROM removed_workspaces WHERE expires_at <= ?1",
-                )?
-                .query_map([now], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()
-                .map_err(Into::into)
+                db.prepare("SELECT record FROM removed_workspaces WHERE expires_at <= ?1")?
+                    .query_map([now], |row| row.get::<_, String>(0))?
+                    .map(|record| Ok(serde_json::from_str(&record?)?))
+                    .collect()
             })
             .await?;
-        for (workspace_id, repository_id) in expired {
-            let repo = self.repository(&repository_id).await?;
-            git::restore::delete(&repo.path, &git::restore::reference(&workspace_id)).await?;
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "DELETE FROM removed_workspaces WHERE workspace_id=?1",
-                        [workspace_id],
-                    )?;
-                    Ok(())
-                })
-                .await?;
+        for removed in expired {
+            self.expire(&removed).await?;
         }
         Ok(())
+    }
+
+    /// Delete an expired restore point unless a retried removal replaced it
+    /// since it was selected: the ref goes only while it names this snapshot,
+    /// and the record only while it is this one.
+    async fn expire(&self, removed: &RemovedWorkspace) -> Result<()> {
+        let repo = self.repository(&removed.repository_id).await?;
+        let reference = git::restore::reference(&removed.workspace_id);
+        if !git::restore::delete_at(&repo.path, &reference, &removed.snapshot).await? {
+            return Ok(());
+        }
+        let (id, snapshot) = (removed.workspace_id.clone(), removed.snapshot.clone());
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "DELETE FROM removed_workspaces
+                     WHERE workspace_id=?1 AND json_extract(record,'$.snapshot')=?2",
+                    [id, snapshot],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// A ref without a record is left by a removal that stopped between them.

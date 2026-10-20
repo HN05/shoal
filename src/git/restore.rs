@@ -165,6 +165,20 @@ pub async fn delete(repo: &Path, reference: &str) -> Result<()> {
     Ok(())
 }
 
+/// Delete `reference` only while it names `commit`; `false` when it names
+/// another commit by then. A missing ref counts as deleted.
+pub async fn delete_at(repo: &Path, reference: &str, commit: &str) -> Result<bool> {
+    let deleted = run_isolated(repo, &["update-ref", "-d", reference, commit]).await;
+    if deleted.is_ok() || !super::ref_exists(repo, reference, super::isolated_command).await? {
+        return Ok(true);
+    }
+    let current = super::verify_revision(repo, reference, run_isolated).await?;
+    if current.trim() != commit {
+        return Ok(false);
+    }
+    deleted.map(|_| true)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
