@@ -376,11 +376,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
         // Clap requires --workspace with --resume.
         Command::Ask {
+            question,
             workspace: Some(workspace),
             resume: Some(id),
-            asked_at: Some(asked_at),
             ..
-        } => questions::resume(&ctx, workspace, id, asked_at).await,
+        } => questions::resume(&ctx, workspace, questions::Asked { id, question }).await,
         Command::Ask {
             question,
             recommend,

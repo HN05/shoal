@@ -694,10 +694,10 @@ workspace and go with it.
 
 Questions and approval requests are named by the smallest number no stored one
 holds, because the user types them; their records keep a separate internal key
-that is never shown. A wait follows its question's number and creation time, so a
-later question reusing the number cannot answer it, and a replaced keep or land
-request takes a new number, so a decision meant for the old one cannot approve a
-newer commit.
+that is never shown. A wait follows its question's number and text, so a later
+question reusing the number cannot answer it, and a keep or land request for an
+earlier commit stays as outdated until the workspace goes, so its number is never
+reused and a decision meant for it cannot approve a newer commit.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
@@ -896,7 +896,7 @@ join again.
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: keeping a completed workspace (see
 completion), landing a branch (see scope) and resource access. Approving a land
-request whose branch moved since it was requested is refused as stale and drops it.
+request whose branch moved since it was requested is refused as stale and marks it outdated.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it, and the decision is sent to the requesting

@@ -52,15 +52,9 @@ pub(super) async fn ask(
     Ok(0)
 }
 
-/// Continue an earlier `ask --wait` for question `id` of `workspace`, asked
-/// at `asked_at`.
-pub(super) async fn resume(
-    ctx: &Context,
-    workspace: String,
-    id: i64,
-    asked_at: i64,
-) -> Result<i32> {
-    let question = await_answer(ctx, &workspace, Asked { id, asked_at }, true).await?;
+/// Continue an earlier `ask --wait` for the `asked` question of `workspace`.
+pub(super) async fn resume(ctx: &Context, workspace: String, asked: Asked) -> Result<i32> {
+    let question = await_answer(ctx, &workspace, asked, true).await?;
     print_answer(ctx, workspace, &question).await?;
     Ok(0)
 }
@@ -82,19 +76,18 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     .await
 }
 
-/// The question a wait follows: its number and when it was asked, since a
-/// later question may reuse the number.
-#[derive(Clone, Copy)]
-struct Asked {
-    id: i64,
-    asked_at: i64,
+/// The question a wait follows: its number and text, since a later question
+/// may reuse the number.
+pub(super) struct Asked {
+    pub(super) id: i64,
+    pub(super) question: String,
 }
 
 impl From<&Question> for Asked {
     fn from(question: &Question) -> Self {
         Self {
             id: question.id,
-            asked_at: question.created_at,
+            question: question.ask.question.clone(),
         }
     }
 }
@@ -112,20 +105,19 @@ async fn await_answer(
     let method = || Method::AwaitAnswer {
         workspace: workspace.to_owned(),
         id: asked.id,
-        asked_at: asked.asked_at,
+        question: asked.question.clone(),
     };
     match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, asked))),
+        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, asked.id))),
     }
 }
 
-/// This command's arguments, resuming the wait for the `asked` question of
-/// `workspace` without asking again.
-fn resume_arguments(workspace: &str, asked: Asked) -> Vec<OsString> {
+/// This command's arguments, which name the question's text, resuming the
+/// wait for its number `id` in `workspace` without asking again.
+fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
     let arguments = replace_option(arguments(), "--workspace", workspace);
-    let arguments = replace_option(arguments, "--resume", &asked.id.to_string());
-    replace_option(arguments, "--asked-at", &asked.asked_at.to_string())
+    replace_option(arguments, "--resume", &id.to_string())
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {

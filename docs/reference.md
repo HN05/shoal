@@ -2265,8 +2265,9 @@ by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown
 with their workspace, reason and settings. A request takes the smallest number no
-stored request holds, except a keep or land request replacing an earlier one never
-takes that one's number. Approval reserves no capacity: retry acquisition after
+stored request holds. A keep or land request replaced by one for a newer commit, or
+a land request found stale, stays listed as `outdated` until the workspace is
+removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.

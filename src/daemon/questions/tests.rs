@@ -218,7 +218,7 @@ async fn a_wait_returns_the_answer() {
         let name = workspace.name.clone();
         async move {
             manager
-                .await_answer(&name, question.id, question.created_at)
+                .await_answer(&name, question.id, "Which database?")
                 .await
         }
     });
@@ -234,13 +234,24 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let error = manager
-        .await_answer(&other.name, question.id, question.created_at)
+        .await_answer(&other.name, question.id, "Which database?")
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
-    // A later question reusing the number is not the one the wait follows.
+
+    // A later question reusing the number, even within the same second, is
+    // not the one the wait follows.
+    manager
+        .mark_agent_messages_delivered(&workspace.name, vec![answered.message_id.unwrap()])
+        .await
+        .unwrap();
+    let reused = manager
+        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .await
+        .unwrap();
+    assert_eq!(reused.id, question.id);
     let error = manager
-        .await_answer(&workspace.name, question.id, question.created_at - 1)
+        .await_answer(&workspace.name, question.id, "Which database?")
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
@@ -306,7 +317,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Method::AwaitAnswer {
                 workspace: target.clone(),
                 id: 1,
-                asked_at: 0,
+                question: "Which database?".into(),
             },
             Method::ListQuestions {
                 workspace: Some(target.clone()),

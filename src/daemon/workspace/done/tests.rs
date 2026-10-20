@@ -481,13 +481,17 @@ async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
         .unwrap();
     assert_ne!(next, id);
     manager.undo_done(&workspace.id).await.unwrap();
-    assert!(
-        manager
-            .approval_requests(Some(&workspace.id))
-            .await
-            .unwrap()
-            .is_empty()
+    // The request for the earlier HEAD stays outdated, keeping its number.
+    let requests = manager
+        .approval_requests(Some(&workspace.id))
+        .await
+        .unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        (requests[0].id, requests[0].status),
+        (id, DecisionStatus::Outdated)
     );
+    assert!(manager.decide_approval(id, true).await.is_err());
     assert!(manager.decide_approval(next, true).await.is_err());
 }
 

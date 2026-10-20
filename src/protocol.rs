@@ -486,12 +486,12 @@ pub enum Method {
         id: i64,
         answer: String,
     },
-    /// Long-lived: the question once it is answered. `asked_at` tells it
+    /// Long-lived: the question once it is answered. Its text tells it
     /// from a later question reusing its number.
     AwaitAnswer {
         workspace: String,
         id: i64,
-        asked_at: i64,
+        question: String,
     },
     /// The workspace's undelivered agent messages and queued item updates,
     /// without waiting or polling the forge; acknowledge them with

@@ -130,7 +130,7 @@ impl Manager {
         if workspace.branch == land.branch && head.as_deref() == Some(land.head.as_str()) {
             return Ok(());
         }
-        self.drop_stale_land_request(request).await?;
+        self.retire_stale_land_request(request).await?;
         bail!(
             "approval request {} is stale: {} moved since it was requested",
             request.id,
@@ -138,10 +138,10 @@ impl Manager {
         )
     }
 
-    /// Delete a stale land request and tell the requesting agent; failing to
+    /// Retire a stale land request and tell the requesting agent; failing to
     /// queue the message only logs.
-    async fn drop_stale_land_request(&self, request: &ApprovalRequest) -> Result<()> {
-        self.discard_approval(request.key.clone()).await?;
+    async fn retire_stale_land_request(&self, request: &ApprovalRequest) -> Result<()> {
+        self.retire_approval(request.clone()).await?;
         let message = format!(
             "Approval {} for {} is stale: the branch moved; run shoal land again to request landing it.",
             request.id,

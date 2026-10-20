@@ -15120,11 +15120,10 @@ fn agents_wait_for_the_answer_to_their_question() {
         1
     );
 
-    // An upgraded release resumes a wait by the recorded number and time
-    // without asking again.
+    // An upgraded release resumes a wait by the recorded number and the
+    // question's text without asking again.
     let workspace = open["workspace_id"].as_str().unwrap();
     let id = open["id"].to_string();
-    let asked_at = open["created_at"].to_string();
     let resumed = fixture
         .command()
         .args([
@@ -15135,14 +15134,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "None",
             "--wait",
         ])
-        .args([
-            "--workspace",
-            workspace,
-            "--resume",
-            &id,
-            "--asked-at",
-            &asked_at,
-        ])
+        .args(["--workspace", workspace, "--resume", &id])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();

@@ -417,14 +417,13 @@ fn validate_simulator_records(db: &Connection) -> Result<()> {
 
 /// The smallest positive number no row of `table` holds in its `number`
 /// column, so the numbers users type stay short.
-/// `avoid` is never taken, such as the number of a request being replaced.
-pub fn free_number(db: &Connection, table: &str, avoid: Option<i64>) -> Result<i64> {
+pub fn free_number(db: &Connection, table: &str) -> Result<i64> {
     Ok(db.query_row(
         &format!(
-            "SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT ?1+1 UNION ALL SELECT number+1 FROM {table})
-                WHERE n IS NOT ?1 AND n NOT IN (SELECT number FROM {table})"
+            "SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM {table})
+                WHERE n NOT IN (SELECT number FROM {table})"
         ),
-        [avoid],
+        [],
         |row| row.get(0),
     )?)
 }
@@ -1025,11 +1024,10 @@ mod tests {
             |r| r.get(0),
         )?;
         assert_eq!(keep, 2);
-        assert_eq!(free_number(&db, "questions", None)?, 3);
-        assert_eq!(free_number(&db, "access_requests", Some(3))?, 4);
+        assert_eq!(free_number(&db, "questions")?, 3);
+        assert_eq!(free_number(&db, "access_requests")?, 3);
         db.execute("DELETE FROM questions WHERE number=1", [])?;
-        assert_eq!(free_number(&db, "questions", None)?, 1);
-        assert_eq!(free_number(&db, "questions", Some(1))?, 3);
+        assert_eq!(free_number(&db, "questions")?, 1);
         Ok(())
     }
 

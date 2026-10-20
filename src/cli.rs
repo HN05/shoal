@@ -272,12 +272,8 @@ pub enum Command {
         workspace: Option<String>,
         /// Continue waiting for this question, as the installed release does
         /// after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires_all = ["workspace", "asked_at"])]
+        #[arg(long, hide = true, requires = "workspace")]
         resume: Option<i64>,
-        /// When the resumed question was asked, in Unix seconds, telling it
-        /// from a later question with the same number.
-        #[arg(long, hide = true, requires = "resume")]
-        asked_at: Option<i64>,
     },
     /// List open questions from workspace agents.
     Questions { workspace: Option<String> },

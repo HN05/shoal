@@ -1239,7 +1239,7 @@ async fn undecided_land(
 
 #[tokio::test]
 async fn scoped_land_waits_for_approval_of_its_commit() {
-    use crate::daemon::approvals::{DecisionStatus, Specification};
+    use crate::daemon::approvals::{ApprovalRequest, DecisionStatus, Specification};
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
@@ -1265,32 +1265,38 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         .unwrap();
     drop(started);
 
-    // A later commit needs a new request, which replaces the earlier one.
+    // A later commit needs a new request, which replaces the earlier one;
+    // the earlier one stays outdated, keeping its number.
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
     let next = undecided_land(&f, &workspace).await;
     assert_ne!(next.id, pending.id);
     assert_eq!(next.status, DecisionStatus::Pending);
+    let statuses = |requests: Vec<ApprovalRequest>| -> Vec<_> {
+        requests
+            .into_iter()
+            .map(|request| (request.id, request.status))
+            .collect()
+    };
     assert_eq!(
-        f.manager
-            .approval_requests(Some("worker"))
-            .await
-            .unwrap()
-            .len(),
-        1
+        statuses(f.manager.approval_requests(Some("worker")).await.unwrap()),
+        [
+            (pending.id, DecisionStatus::Outdated),
+            (next.id, DecisionStatus::Pending)
+        ]
     );
 
-    // Approving after the branch moved drops the stale request and tells the agent.
+    // Approving after the branch moved retires the stale request and tells the agent.
     fs::write(workspace.path.join("feature"), "even more\n").unwrap();
     commit(&workspace.path, "feature");
     let error = f.manager.decide_approval(next.id, true).await.unwrap_err();
     assert!(error.to_string().contains("is stale"), "{error:#}");
-    assert!(
-        f.manager
-            .approval_requests(Some("worker"))
-            .await
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        statuses(f.manager.approval_requests(Some("worker")).await.unwrap()),
+        [
+            (pending.id, DecisionStatus::Outdated),
+            (next.id, DecisionStatus::Outdated)
+        ]
     );
     let messages = f.manager.agent_messages("worker").await.unwrap();
     assert!(

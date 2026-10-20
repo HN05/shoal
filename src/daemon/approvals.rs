@@ -29,6 +29,7 @@ states!(DecisionStatus {
     Pending => "pending",
     Approved => "approved",
     Denied => "denied",
+    Outdated => "outdated",
 });
 
 /// What a decision authorizes; one active request per workspace, target and
@@ -271,17 +272,9 @@ impl std::error::Error for ReasonRequired {}
 
 /// The caller holds the allocation transaction (or simulator gate). The exact
 /// specification includes effective policy, so a changed policy cannot reuse a grant.
-pub fn check(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Option<ApprovalRequest>> {
-    check_replacing(tx, request, None)
-}
-
-/// [`check`], recording a new request under a number other than `replaced`,
-/// the number of the request it replaces, so a decision meant for that
-/// request cannot decide this one.
-fn check_replacing(
+pub fn check(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
-    replaced: Option<i64>,
 ) -> Result<Option<ApprovalRequest>> {
     store::require_ready(tx, &request.workspace_id)?;
     if let Some(existing) = current(tx, &request.workspace_id, &request.target, &request.name)? {
@@ -307,7 +300,7 @@ fn check_replacing(
         |r| r.get(0),
     )?;
     request.key = uuid::Uuid::new_v4().to_string();
-    request.id = store::free_number(tx, "access_requests", replaced)?;
+    request.id = store::free_number(tx, "access_requests")?;
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES (?1,?2,?3,?4,?5,?6)",
         params![request.key,request.workspace_id,request.target,request.name,serde_json::to_string(&request)?,request.id])?;
     Ok(Some(request))
@@ -385,6 +378,19 @@ impl ApprovalRequest {
     }
 }
 
+/// Keep a request for an earlier commit as outdated until its workspace is
+/// removed: its number is never reused for a newer commit's request, and
+/// deciding it is refused.
+pub fn retire(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
+    let mut request = request.clone();
+    request.status = DecisionStatus::Outdated;
+    tx.execute(
+        "UPDATE access_requests SET record=?2,active=0 WHERE id=?1",
+        params![request.key, serde_json::to_string(&request)?],
+    )?;
+    Ok(())
+}
+
 /// Cancel requests or end lease grants; retain approved workspace grants.
 pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -> Result<bool> {
     let Some(request) = current(tx, owner, target, name)? else {
@@ -414,19 +420,15 @@ pub fn request_keep(
         release(tx, owner, &Target::Keep, KEEP)?;
         return Ok(None);
     };
-    let mut replaced = None;
     match existing {
         // A repeated request keeps the reason the user is deciding on.
         Some(existing) if existing.specification == request.specification => {
             request.reason = existing.reason;
         }
-        Some(existing) => {
-            release(tx, owner, &Target::Keep, KEEP)?;
-            replaced = Some(existing.id);
-        }
+        Some(existing) => retire(tx, &existing)?,
         None => {}
     }
-    let pending = check_replacing(tx, request, replaced)?;
+    let pending = check(tx, request)?;
     ensure!(
         pending
             .as_ref()
@@ -444,12 +446,12 @@ pub fn request_land(
     request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
     let owner = request.workspace_id.clone();
-    let replaced = current(tx, &owner, &Target::Land, LAND)?
-        .filter(|existing| existing.specification != request.specification);
-    if replaced.is_some() {
-        release(tx, &owner, &Target::Land, LAND)?;
+    if let Some(existing) = current(tx, &owner, &Target::Land, LAND)?
+        .filter(|existing| existing.specification != request.specification)
+    {
+        retire(tx, &existing)?;
     }
-    check_replacing(tx, request, replaced.map(|existing| existing.id))
+    check(tx, request)
 }
 
 /// An operation waiting for, or refused by, the user's decision on a request.
@@ -481,6 +483,11 @@ pub struct Decision {
 pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
     store::require_ready(tx, &request.workspace_id)?;
+    ensure!(
+        request.status != DecisionStatus::Outdated,
+        "approval request {} is outdated: its commit is no longer current",
+        request.id
+    );
     let status = if approve {
         DecisionStatus::Approved
     } else {
@@ -551,11 +558,13 @@ impl Manager {
             .await
     }
 
-    /// Delete the request stored under `key`, such as a stale one.
-    pub async fn discard_approval(&self, key: String) -> Result<()> {
+    /// [`retire`] in its own transaction, such as for a stale request.
+    pub async fn retire_approval(&self, request: ApprovalRequest) -> Result<()> {
         self.store
             .run(move |db| {
-                db.execute("DELETE FROM access_requests WHERE id=?1", [&key])?;
+                let tx = db.transaction()?;
+                retire(&tx, &request)?;
+                tx.commit()?;
                 Ok(())
             })
             .await
@@ -679,7 +688,7 @@ mod tests {
             .optional()?
         {
             Some(number) => number,
-            None => store::free_number(db, "access_requests", None)?,
+            None => store::free_number(db, "access_requests")?,
         };
         db.execute(
             "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active,number)
@@ -810,6 +819,44 @@ mod tests {
             .await?;
         assert!(manager.decide_approval(1, true).await.is_err());
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn replaced_land_requests_keep_their_numbers_and_refuse_decisions() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager
+            .store
+            .run(|db| {
+                owners(db)?;
+                let tx = db.transaction()?;
+                let mut requests = Vec::new();
+                for head in ["first", "second", "third"] {
+                    let request = ApprovalRequest::new(
+                        "owner",
+                        Target::Land,
+                        LAND,
+                        Specification::Land(LandSpecification {
+                            branch: "feature".into(),
+                            head: head.into(),
+                        }),
+                        Lifetime::Lease,
+                        Some("land it"),
+                    );
+                    requests.push(request_land(&tx, request)?.unwrap());
+                }
+                let numbers: Vec<_> = requests.iter().map(|request| request.id).collect();
+                assert_eq!(numbers, [1, 2, 3]);
+                for outdated in &requests[..2] {
+                    let error = decide(&tx, &outdated.key, true).err().unwrap();
+                    assert!(error.to_string().contains("is outdated"), "{error:#}");
+                    let stored = by_key(&tx, &outdated.key)?.unwrap();
+                    assert_eq!(stored.status, DecisionStatus::Outdated);
+                    assert!(!stored.active);
+                }
+                assert!(decide(&tx, &requests[2].key, true)?.new);
+                Ok(())
+            })
+            .await
     }
 
     #[test]

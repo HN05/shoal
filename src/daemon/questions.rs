@@ -215,7 +215,7 @@ fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Optio
 
 /// Record `ask` under the smallest free number and return that number.
 fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
-    let number = crate::daemon::store::free_number(tx, "questions", None)?;
+    let number = crate::daemon::store::free_number(tx, "questions")?;
     tx.execute(
         "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,reason,choices)
             VALUES (?1,?2,?3,?4,?5,?6,?7)",
@@ -385,9 +385,10 @@ impl Manager {
         Ok(question)
     }
 
-    /// Return the workspace's question `id`, asked at `asked_at`, once it is
-    /// answered. The time tells it from a later question reusing the number.
-    pub async fn await_answer(&self, selector: &str, id: i64, asked_at: i64) -> Result<Question> {
+    /// Return the workspace's question `id` asking `text` once it is answered.
+    /// The text tells it from a later question reusing the number; a later
+    /// identical question asks the same, so its answer serves the wait too.
+    pub async fn await_answer(&self, selector: &str, id: i64, text: &str) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.questions_changed.subscribe();
@@ -397,7 +398,7 @@ impl Manager {
                 .run(move |db| by_id(db, id))
                 .await?
                 .filter(|question| {
-                    question.workspace_id == workspace.id && question.created_at == asked_at
+                    question.workspace_id == workspace.id && question.ask.question == text
                 })
                 .with_context(|| {
                     format!(

@@ -242,6 +242,7 @@ mod tests {
             (DecisionStatus::Pending, "pending"),
             (DecisionStatus::Approved, "approved"),
             (DecisionStatus::Denied, "denied"),
+            (DecisionStatus::Outdated, "outdated"),
         ]);
         assert_spellings(&[
             (ResourceKind::Semaphore, "semaphore"),
