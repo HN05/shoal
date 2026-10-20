@@ -111,9 +111,12 @@ impl Manager {
         let Some(command) = kind.command(&settings) else {
             return Ok(None);
         };
+        let repository = self.repository(&workspace.repository_id).await?;
+        // The caller renders the hook's [env], whose caches only the daemon creates.
+        crate::caches::directories(&repository, &settings.caches)?;
         let checkout = match kind.directory() {
             HookDirectory::Worktree => workspace.path.clone(),
-            HookDirectory::Checkout => self.repository(&workspace.repository_id).await?.path,
+            HookDirectory::Checkout => repository.path,
         };
         Ok(Some(
             kind.directory()

@@ -220,4 +220,41 @@ mod tests {
             })
         );
     }
+
+    #[tokio::test]
+    async fn hooks_the_cli_runs_find_their_caches_prepared() {
+        let (root, manager) = manager().await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "agent".into(), None, None, None)
+            .await
+            .unwrap();
+        let repo = manager.repository(&repo.id).await.unwrap();
+        std::fs::write(
+            workspace.path.join(".shoal.toml"),
+            "post_setup_cmd = 'attach.sh'\n[caches.go]\nscope = 'shared'\n",
+        )
+        .unwrap();
+        manager
+            .workspace_hook(&workspace, crate::hooks::HookKind::PostSetup)
+            .await
+            .unwrap()
+            .unwrap();
+        let configured = BTreeMap::from([(
+            "go".to_owned(),
+            Cache {
+                scope: CacheScope::Shared,
+            },
+        )]);
+        let go = Layout::of(&repo).unwrap().locate(&configured)["go"].clone();
+        assert!(go.is_dir());
+        assert_eq!(
+            crate::caches::directories(&repo, &configured).unwrap()["go"],
+            go
+        );
+    }
 }
