@@ -20,6 +20,7 @@ pub mod notifications;
 mod overload;
 #[cfg(test)]
 mod overload_tests;
+mod ownership;
 pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
@@ -34,18 +35,15 @@ mod warnings;
 pub mod workspace;
 
 use std::{
-    fs::{self, File, OpenOptions},
-    os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
     panic::AssertUnwindSafe,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, ensure};
-use fs2::FileExt;
+use anyhow::{Result, ensure};
 use futures_util::FutureExt;
 use tokio::{
-    net::{UnixListener, UnixStream},
+    net::UnixStream,
     signal::unix::{SignalKind, signal},
     sync::watch,
     task::JoinSet,
@@ -53,6 +51,7 @@ use tokio::{
 };
 
 pub(crate) use log::log;
+use ownership::Ownership;
 use ports::Acquisition;
 use scope::Caller;
 use workspace::{ExecutionKind, Manager, StopRequest};
@@ -69,18 +68,6 @@ const ITEM_ACTIVITY_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// Keeps a background loop that panics at once from spinning.
 const RESTART_DELAY: Duration = Duration::from_secs(10);
 
-/// Never unlink the lock file: waiters must all lock the same inode.
-struct Ownership {
-    paths: Paths,
-    _lock: File,
-}
-
-impl Drop for Ownership {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.paths.socket);
-    }
-}
-
 /// Settings fixed for the daemon's lifetime and shared by every connection.
 #[derive(Clone)]
 struct Server {
@@ -93,40 +80,11 @@ struct Server {
 
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     paths.prepare()?;
-    let (lock, inherited_listener) = match handoff {
-        Some(handoff) => {
-            ensure!(managed, "daemon handoff requires managed mode");
-            handoff.verify(&paths)?;
-            (handoff.lock, Some(handoff.listener))
-        }
-        None => (
-            OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .mode(0o600)
-                .open(paths.daemon_lock())?,
-            None,
-        ),
-    };
-    lock.try_lock_exclusive()
-        .context("a daemon already owns this state directory")?;
-    if inherited_listener.is_none() {
-        remove_stale_socket(&paths)?;
-    }
-    let ownership = Ownership {
-        paths: paths.clone(),
-        _lock: lock,
-    };
+    let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
     manager.store.quarantine_interrupted_operations().await?;
     manager.audit_worktrees().await?;
-    let listener = match inherited_listener {
-        Some(listener) => UnixListener::from_std(listener).context("inherit daemon socket")?,
-        None => UnixListener::bind(&paths.socket).context("bind daemon socket")?,
-    };
-    fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
+    let listener = ownership.listen()?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
@@ -202,30 +160,9 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     manager.store.shutdown().await;
     if quiescence.is_some() {
         log!("daemon executable was updated; restarting");
-        return handoff::exec(
-            &update.expect("update monitor enabled").path,
-            &paths,
-            &listener,
-            &ownership._lock,
-        );
+        return ownership.hand_off(&update.expect("update monitor enabled").path, &listener);
     }
     result
-}
-
-fn remove_stale_socket(paths: &Paths) -> Result<()> {
-    match fs::symlink_metadata(&paths.socket) {
-        Ok(meta) => {
-            ensure!(
-                meta.file_type().is_socket(),
-                "refusing to replace non-socket {}",
-                paths.socket.display()
-            );
-            fs::remove_file(&paths.socket)?;
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e.into()),
-    }
-    Ok(())
 }
 
 /// Register a manager-owned loop with panic supervision.

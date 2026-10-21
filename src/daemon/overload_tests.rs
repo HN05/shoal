@@ -1,7 +1,12 @@
 use super::notifications::NotificationKind;
 use super::*;
 use crate::test_support::{manager, repository};
-use std::{fs::OpenOptions, future::Future, os::unix::fs::PermissionsExt};
+use std::{
+    fs::{self, OpenOptions},
+    future::Future,
+    os::unix::fs::PermissionsExt,
+};
+use tokio::net::UnixListener;
 
 mod restart;
 
