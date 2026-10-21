@@ -985,75 +985,71 @@ async fn wait_pr_updates(
 }
 
 async fn watch_item_updates(
-    mut stream: UnixStream,
+    stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
     selection: crate::forge::link::Selection,
     timeout_secs: Option<u64>,
 ) -> Result<()> {
-    let mut closed = [0u8; 1];
-    let result = tokio::select! {
-        result = manager.wait_items(&workspace, &selection, timeout_secs) => result,
-        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+    let updates = async {
+        let updates = manager
+            .wait_items(&workspace, &selection, timeout_secs)
+            .await?;
+        Ok(Body::PrUpdates(updates))
     };
-    let body = match result {
-        Ok(updates) => Body::PrUpdates(updates),
-        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
-    };
-    // A restarting daemon could cut the reply off. Closing the connection
-    // unanswered sends the client to wait again on the replacement, where
-    // the updates remain pending.
-    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
-        return Ok(());
-    };
-    protocol::write(&mut stream, &Response::new(request_id, body)).await
+    answer_wait(stream, request_id, &manager, updates).await
 }
 
 async fn await_agent_wake(
-    mut stream: UnixStream,
+    stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
     due: bool,
 ) -> Result<()> {
-    let mut closed = [0u8; 1];
-    let result = tokio::select! {
-        result = manager.wait_agent_wake(&workspace, due) => result,
-        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+    let wake = async {
+        manager.wait_agent_wake(&workspace, due).await?;
+        Ok(Body::Ok)
     };
-    let body = match result {
-        Ok(()) => Body::Ok,
-        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
-    };
-    // A restarting daemon could cut the reply off. Closing the connection
-    // unanswered sends the launcher to wait again on the replacement.
-    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
-        return Ok(());
-    };
-    protocol::write(&mut stream, &Response::new(request_id, body)).await
+    answer_wait(stream, request_id, &manager, wake).await
 }
 
-/// Like [`await_agent_wake`]: a closed connection cancels the wait, and a
-/// restarting daemon leaves it unanswered so the client asks again.
 async fn await_answer(
-    mut stream: UnixStream,
+    stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
     id: i64,
     ask: crate::daemon::questions::Ask,
 ) -> Result<()> {
+    let answer = async {
+        let question = manager.await_answer(&workspace, id, &ask).await?;
+        Ok(Body::Question(question))
+    };
+    answer_wait(stream, request_id, &manager, answer).await
+}
+
+/// Answer a request that waits on the daemon without holding off its restart.
+/// A closed connection cancels the wait. A restarting daemon could cut the
+/// reply off, so it closes the connection unanswered instead: the client asks
+/// again on the replacement, where the awaited result remains pending.
+async fn answer_wait(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: &Manager,
+    wait: impl Future<Output = Result<Body>>,
+) -> Result<()> {
     let mut closed = [0u8; 1];
     let result = tokio::select! {
-        result = manager.await_answer(&workspace, id, &ask) => result,
+        result = wait => result,
         _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
     };
-    let body = match result {
-        Ok(question) => Body::Question(question),
-        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
-    };
-    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
+    let body = result
+        .unwrap_or_else(|error| Body::error(ErrorCode::OperationFailed, format!("{error:#}")));
+    // Hold the operation guard through the write so a restart cannot begin
+    // while the reply is in flight.
+    let Ok(_operation) = manager.background_operations.try_read() else {
         return Ok(());
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
