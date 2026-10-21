@@ -15,7 +15,7 @@ This is a read-only inspection. Repository delivery instructions do not apply:
 do not edit files, commit, push, open PRs or create issues. The audit action
 opens the issues. Do not inspect credentials or local configuration, install
 tools, execute tests or application code, or mutate workspaces, services or
-simulators. Trace existing code and tests for evidence. Do not delegate.
+simulators. Trace existing code and tests for evidence.
 
 ## Evidence
 
