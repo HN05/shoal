@@ -28,7 +28,7 @@ use crate::{
     protocol::ConfigTarget,
     seed::{
         Layout, Snapshot,
-        preset::{self, Build, Step},
+        build::{self, Build, Step},
     },
     state::WorkspaceState,
 };
@@ -50,8 +50,8 @@ struct Plan {
 impl Plan {
     /// The seed `settings` describe, or `None` when they configure none.
     async fn new(repo: &Repository, layout: &Layout, settings: &Effective) -> Result<Option<Self>> {
-        let paths = preset::outputs(&settings.seed);
-        let Some(build) = Build::of(&settings.seed, &layout.worktree()) else {
+        let paths = build::outputs(&settings.seed, &settings.presets);
+        let Some(build) = Build::of(&settings.seed, &settings.presets, &layout.worktree()) else {
             return Ok(None);
         };
         if paths.is_empty() {
@@ -793,7 +793,7 @@ mod tests {
         // The runner's own target directory must not take the build.
         fs::write(
             checkout.join(".shoal.toml"),
-            "[seed]\npresets = ['cargo']\n[env]\nCARGO_TARGET_DIR = '{workspace_path}/target'\n",
+            "presets = ['cargo']\n[env]\nCARGO_TARGET_DIR = '{workspace_path}/target'\n",
         )
         .unwrap();
         for file in ["Cargo.toml", "src/lib.rs", ".shoal.toml"] {

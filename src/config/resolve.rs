@@ -46,6 +46,7 @@ pub struct Effective {
     pub ports: Ports,
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, config::repo::Cache>,
+    pub presets: Vec<crate::presets::Preset>,
     pub secrets: crate::secrets::Secrets,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -200,6 +201,7 @@ impl Effective {
             ports,
             env: merged.env,
             caches: merged.caches,
+            presets: merged.presets,
             secrets: merged.secrets,
             resources: merged.resources,
             resource_pools: merged.resource_pools,
@@ -621,6 +623,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         named!("ports", ports.definitions),
         named!("env", env),
         named!("caches", caches),
+        list!(presets),
         named!("secrets", secrets),
         named!("resources", resources),
         named!("resource_pools", resource_pools),
@@ -642,7 +645,6 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(pr.draft),
         scalar!(land.push),
         scalar!(land.requires_approval),
-        list!(seed.presets),
         scalar!(seed.cmd),
         list!(seed.paths),
     ];
@@ -662,14 +664,14 @@ mod tests {
 issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
-pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
+pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
 [cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\n[land]\npush = true\nrequires_approval = false\n\
-[seed]\npresets = ['cargo']\ncmd = 'scripts/seed'\npaths = ['target']\n";
+[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -892,6 +894,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             ports,
             env,
             caches,
+            presets,
             secrets,
             resources,
             resource_pools,
@@ -920,7 +923,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         assert!(
             !ports.definitions.is_empty()
                 && !simulators.preferred.is_empty()
-                && !seed.presets.is_empty()
+                && !presets.is_empty()
                 && !seed.paths.is_empty()
         );
         for present in [

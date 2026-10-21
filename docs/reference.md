@@ -1295,6 +1295,25 @@ JSON `hook_error`, and a `hook_failed`
 notification. It is skipped for already-missing worktrees and is not replayed
 following a daemon restart. Use a pre-remove hook when failure must retain ownership.
 
+### Build tool presets
+
+`presets` names the build tools a repository uses, and Shoal sets each one up so
+its workspaces stop repeating the same work:
+
+```toml
+presets = ["cargo", "bun"]
+```
+
+| Preset | Sets up |
+|---|---|
+| `cargo` | A [seed](#seed-builds) running `cargo build --all-targets`, keeping `target` |
+| `npm` | A seed running `npm ci`, keeping `node_modules` |
+| `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
+| `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
+| `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
+
+Presets that keep the same seed output cannot be combined.
+
 ### Seed builds
 
 A repository can keep a build of its default branch that new workspaces start
@@ -1302,21 +1321,12 @@ from, so a branch rebuilds only what it changed and shares the rest on disk:
 
 ```toml
 [seed]
-presets = ["cargo", "npm"]  # Tools whose usual build and outputs the seed uses
-cmd = "scripts/seed.sh"     # Or a build of your own in the worktree; must exit 0
-paths = ["target"]          # Or your build outputs, relative to the worktree
+cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
+paths = ["target"]       # Build outputs, relative to the worktree, new workspaces start with
 ```
 
-| Preset | Build | Keeps |
-|---|---|---|
-| `cargo` | `cargo build --all-targets` | `target` |
-| `npm` | `npm ci` | `node_modules` |
-| `pnpm` | `pnpm install --frozen-lockfile` | `node_modules` |
-| `yarn` | `yarn install --frozen-lockfile` | `node_modules` |
-| `bun` | `bun install --frozen-lockfile` | `node_modules` |
-
-Presets that keep the same output cannot be combined. `cmd` replaces the
-presets' commands and `paths` their outputs.
+[Presets](#build-tool-presets) add their builds and outputs to the seed; `cmd`
+replaces the presets' commands and `paths` their outputs.
 
 The daemon keeps a locked, detached worktree at the local default branch's tip in
 the repository directory's `.seed`, and runs the build there when that branch or

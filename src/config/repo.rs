@@ -84,6 +84,8 @@ pub struct RepoConfig {
     pub ports: PortDefaults,
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, Cache>,
+    /// Build tools whose usual setup the repository's workspaces share.
+    pub presets: Vec<crate::presets::Preset>,
     /// Machine-specific, so the global config or saved repository config sets
     /// it, never the worktree file.
     pub secrets: crate::secrets::Secrets,
@@ -121,29 +123,10 @@ pub struct Cache {
     pub scope: CacheScope,
 }
 
-states!(
-    /// A build tool whose usual seed build and outputs Shoal knows.
-    SeedPreset {
-        /// Cargo's `target`.
-        Cargo => "cargo",
-        /// npm's `node_modules`.
-        Npm => "npm",
-        /// pnpm's `node_modules`.
-        Pnpm => "pnpm",
-        /// Yarn's `node_modules`.
-        Yarn => "yarn",
-        /// Bun's `node_modules`.
-        Bun => "bun",
-    }
-);
-
 /// The default-branch build new workspaces start from.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Seed {
-    /// Tools whose build and outputs the seed uses where `cmd` and `paths`
-    /// are unset.
-    pub presets: Vec<SeedPreset>,
     /// Executable in the seed worktree that builds the default branch.
     pub cmd: Option<String>,
     /// Worktree-relative build outputs cloned into each new workspace.
@@ -152,16 +135,6 @@ pub struct Seed {
 
 impl Seed {
     fn validate(&self) -> Result<()> {
-        for (index, preset) in self.presets.iter().enumerate() {
-            for earlier in &self.presets[..index] {
-                ensure!(earlier != preset, "seed.presets names {preset} twice");
-                ensure!(
-                    earlier.output() != preset.output(),
-                    "seed.presets {earlier} and {preset} both keep {}",
-                    preset.output()
-                );
-            }
-        }
         // The seed runs unattended from the default branch, so its command
         // is the repository's own file, like its outputs.
         if let Some(command) = &self.cmd {
@@ -283,6 +256,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
     crate::caches::validate(&config.caches)?;
+    crate::presets::validate(&config.presets)?;
     crate::secrets::validate(&config.secrets)?;
     config.seed.validate()?;
     Ok(config)

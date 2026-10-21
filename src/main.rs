@@ -15,6 +15,7 @@ mod happy;
 mod hooks;
 mod model;
 mod paths;
+mod presets;
 mod process;
 mod protocol;
 mod removal;
