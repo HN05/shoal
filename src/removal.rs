@@ -48,7 +48,7 @@ pub enum BranchChoice {
 }
 
 crate::state::open_enum! {
-    /// Worktrunk 0.78.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
+    /// Worktrunk 0.81.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
     /// synthetic outcome for an already-missing worktree registration. Future
     /// Worktrunk values decode as `Unknown` without claiming confirmed deletion.
     BranchOutcome {

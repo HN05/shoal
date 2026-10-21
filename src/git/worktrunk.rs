@@ -14,7 +14,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Fields consumed from Worktrunk 0.78.0's SwitchJsonOutput. Other fields are
+/// Fields consumed from Worktrunk 0.81.0's SwitchJsonOutput. Other fields are
 /// informational; only `created` (not `existing` or `already_at`) is success.
 #[derive(Debug, Deserialize)]
 struct CreationOutput {
@@ -22,7 +22,7 @@ struct CreationOutput {
     path: PathBuf,
 }
 
-/// Fields consumed from RemovalPlan::to_json in Worktrunk 0.78.0. A detached
+/// Fields consumed from RemovalPlan::to_json in Worktrunk 0.81.0. A detached
 /// worktree has no branch. Extra fields vary for worktree/branch-only removal.
 #[derive(Deserialize)]
 struct RemovalOutput {
@@ -78,7 +78,7 @@ fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
 }
 
 /// Names that cannot portably identify a literal branch through Worktrunk.
-/// Worktrunk 0.78.0 expands `@`; Git treats `HEAD` and full object IDs
+/// Worktrunk 0.81.0 expands `@`; Git treats `HEAD` and full object IDs
 /// specially. Reserve both supported object-ID lengths regardless of the
 /// repository's format. Check the whole name, not individual components:
 /// `topic/HEAD` and `HEAD/topic` are literal branches.
@@ -101,27 +101,14 @@ pub async fn create(
     branch: &str,
     base: Option<&str>,
 ) -> Result<()> {
-    let literal = serde_json::to_string(
-        workspace_dir
-            .to_str()
-            .context("workspace path is not UTF-8")?,
-    )?;
-    // Worktrunk renders this setting as a template. Emit the entire path as
-    // one string expression so template syntax in a literal directory stays inert.
-    let template = serde_json::to_string(&format!("{{{{ {literal} }}}}"))?;
     let mut command = command(repository_dir, worktrunk_config);
-    command
-        .arg("--config-set")
-        .arg(format!("worktree-path = {template}"))
-        .arg("switch");
+    command.arg("switch");
     if let Some(base) = base {
         command.args(["--create", "--base", base]);
-    } else {
-        // Worktrunk otherwise routes the default branch to the main checkout,
-        // ignoring worktree-path. Use a full ref for this invocation only:
-        // it still resolves, but cannot equal a literal branch name.
-        default_branch_override(&mut command, &crate::git::local_ref(branch))?;
     }
+    // --path is literal, unlike the worktree-path template, and also places
+    // the default branch, which the template would route to the main checkout.
+    command.arg("--path").arg(workspace_dir);
     command.args([branch, "--no-cd", "--no-hooks", "--format=json"]);
     decode_creation(&subprocess::output(command).await?, workspace_dir)
 }

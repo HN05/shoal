@@ -15,7 +15,7 @@ fn git(repo: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-/// Exercise the real adapter against the CI-pinned Worktrunk (0.78.0).
+/// Exercise the real adapter against the CI-pinned Worktrunk (0.81.0).
 /// Its selector expands @; its Git worktree command interprets full object
 /// IDs according to the repository's object format. Other hex lengths and
 /// nested components remain literal. A successful exit alone is insufficient:
@@ -90,4 +90,36 @@ async fn literal_branch_compatibility_with_worktrunk() {
             }
         }
     }
+}
+
+/// Template syntax in the workspace path stays literal, and the default branch
+/// opens at that path instead of being routed to the main checkout.
+#[tokio::test]
+async fn default_branch_opens_at_a_literal_path() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = root.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    git(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    );
+    git(&repo, &["switch", "-c", "other"]);
+    let config = root.path().join("worktrunk.toml");
+    std::fs::write(&config, "").unwrap();
+    let workspace = root.path().join("main {{ branch }}");
+    create(&repo, &config, &workspace, "main", None)
+        .await
+        .unwrap();
+    let head = crate::git::run(&workspace, &["symbolic-ref", "HEAD"]).await;
+    assert_eq!(head.unwrap(), "refs/heads/main\n");
 }
