@@ -1313,7 +1313,7 @@ presets = ["cargo", "bun"]
 | `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
 | `go` | `GOFLAGS=-trimpath`, and a seed running `go build ./...` |
 | `xcode` | One compilation cache for every workspace's `xcodebuild`, with shared Swift package checkouts |
-| `zig` | A shared cache as `ZIG_LOCAL_CACHE_DIR`, and a seed running `zig build` |
+| `zig` | The shared cache `preset.zig` as `ZIG_LOCAL_CACHE_DIR`, and a seed running `zig build` |
 | `ccache` | ccache as the compiler launcher of CMake builds, with the workspace as its base directory |
 
 Presets that keep the same seed output cannot be combined. A variable `[env]`
@@ -1327,7 +1327,7 @@ when a build directory is first configured. With the workspace as ccache's base
 directory and its working directory left out of the hash, a compile another
 workspace ran hits, and debug info records that workspace's directory.
 
-The `xcode` preset keeps a [shared cache](#shared-caches) named `xcode` holding
+The `xcode` preset keeps a [shared cache](#shared-caches) named `preset.xcode` holding
 an xcconfig, Xcode's compilation cache and Swift package checkouts. It sets
 `XCODE_XCCONFIG_FILE` to the xcconfig, and puts an `xcodebuild` wrapper first on
 the PATH of every process Shoal starts in a workspace and of `shoal env`. The

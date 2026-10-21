@@ -13,6 +13,8 @@ use crate::{
 
 mod xcode;
 
+const XCODE_CACHE: &str = "preset.xcode";
+
 states!(
     /// A build tool whose usual setup Shoal knows.
     Preset {
@@ -75,10 +77,10 @@ impl Preset {
         match self {
             Self::Go => &[("GOFLAGS", "-trimpath")],
             Self::Xcode => &[
-                ("XCODE_XCCONFIG_FILE", "{cache.xcode}/shoal.xcconfig"),
-                (crate::env::PATH_PREFIX, "{cache.xcode}/bin"),
+                ("XCODE_XCCONFIG_FILE", "{cache.preset.xcode}/shoal.xcconfig"),
+                (crate::env::PATH_PREFIX, "{cache.preset.xcode}/bin"),
             ],
-            Self::Zig => &[("ZIG_LOCAL_CACHE_DIR", "{cache.zig}")],
+            Self::Zig => &[("ZIG_LOCAL_CACHE_DIR", "{cache.preset.zig}")],
             Self::Ccache => &[
                 ("CCACHE_BASEDIR", "{workspace_path}"),
                 ("CCACHE_NOHASHDIR", "true"),
@@ -89,9 +91,14 @@ impl Preset {
         }
     }
 
-    /// The shared cache the preset keeps its files in, named after it.
+    /// The shared cache the preset keeps its files in. Configured cache
+    /// names cannot contain a dot, so only the preset prepares it.
     fn cache(self) -> Option<&'static str> {
-        matches!(self, Self::Xcode | Self::Zig).then_some(self.as_str())
+        match self {
+            Self::Xcode => Some(XCODE_CACHE),
+            Self::Zig => Some("preset.zig"),
+            _ => None,
+        }
     }
 }
 
@@ -111,7 +118,7 @@ pub fn caches(presets: &[Preset], mut caches: BTreeMap<String, Cache>) -> BTreeM
 /// Write the files a preset keeps in its cache `directory`, once the
 /// directory exists.
 pub fn prepare_cache(name: &str, directory: &Path) -> Result<()> {
-    if name == Preset::Xcode.as_str() {
+    if name == XCODE_CACHE {
         xcode::prepare(directory)?;
     }
     Ok(())
@@ -148,6 +155,7 @@ pub fn validate(presets: &[Preset]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn preset_variables_give_way_to_configured_ones() {
@@ -163,11 +171,11 @@ mod tests {
     fn zig_and_ccache_presets_point_their_caches_past_workspace_paths() {
         let presets = [Preset::Zig, Preset::Ccache];
         assert_eq!(
-            caches(&presets, BTreeMap::new())["zig"].scope,
+            caches(&presets, BTreeMap::new())["preset.zig"].scope,
             CacheScope::Shared
         );
         let env = environment(&presets, BTreeMap::new());
-        assert_eq!(env["ZIG_LOCAL_CACHE_DIR"], "{cache.zig}");
+        assert_eq!(env["ZIG_LOCAL_CACHE_DIR"], "{cache.preset.zig}");
         assert_eq!(env["CCACHE_BASEDIR"], "{workspace_path}");
         assert_eq!(env["CMAKE_CXX_COMPILER_LAUNCHER"], "ccache");
     }
@@ -175,15 +183,19 @@ mod tests {
     #[test]
     fn the_xcode_preset_keeps_its_files_in_a_shared_cache() {
         let caches = caches(&[Preset::Xcode], BTreeMap::new());
-        assert_eq!(caches["xcode"].scope, CacheScope::Shared);
+        assert_eq!(caches[XCODE_CACHE].scope, CacheScope::Shared);
+        // A configured cache of the same tool name is the user's own.
+        let root = tempfile::tempdir().unwrap();
+        prepare_cache("xcode", root.path()).unwrap();
+        assert!(fs::read_dir(root.path()).unwrap().next().is_none());
         let env = environment(&[Preset::Xcode], BTreeMap::new());
         assert_eq!(
             env["XCODE_XCCONFIG_FILE"],
-            format!("{{cache.xcode}}/{}", xcode::XCCONFIG)
+            format!("{{cache.{XCODE_CACHE}}}/{}", xcode::XCCONFIG)
         );
         assert_eq!(
             env[crate::env::PATH_PREFIX],
-            format!("{{cache.xcode}}/{}", xcode::BIN)
+            format!("{{cache.{XCODE_CACHE}}}/{}", xcode::BIN)
         );
     }
 }
