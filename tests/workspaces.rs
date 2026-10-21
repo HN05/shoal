@@ -18730,7 +18730,8 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert_eq!(calls[1], ["run", "background", "-d", "true"]);
     assert_eq!(calls[2][..2], ["send", "background"]);
     assert!(
-        calls[2][2].ends_with(" internal add && exit\r"),
+        calls[2][2].starts_with("SHOAL_ENDS_SESSION=1 ")
+            && calls[2][2].ends_with(" internal add && exit; exec \"$SHELL\" -l\r"),
         "{calls:?}"
     );
     let session: Value =
@@ -18817,8 +18818,16 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
     }
     // The sessions cannot resume without a configured restore command; the
     // test observes what each was asked to run.
-    let (output, transcript) =
-        fixture.terminal_command(fixture.command().args(["resume", "--all"]), "", true);
+    let shell = fixture.root.path().join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\necho \"$@\" >> \"$HOME/login-shells\"\n");
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHELL", &shell)
+            .args(["resume", "--all"]),
+        "",
+        true,
+    );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert!(
         transcript.contains("Resuming 2 agents in detached zmx sessions"),
@@ -18841,10 +18850,48 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .find(|call| call.starts_with(&["send".into(), name.to_string()]))
             .unwrap();
         assert!(
-            send[2].ends_with(&format!(" resume {id} --execution {execution} && exit\r")),
+            send[2].ends_with(&format!(
+                " resume {id} --execution {execution} && exit; exec \"$SHELL\" -l\r"
+            )),
             "{send:?}"
         );
     }
+    // Each failed start leaves the user's own login shell to show why.
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("login-shells")).unwrap_or_default(),
+        "-l\n-l\n"
+    );
+}
+
+#[test]
+fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', 'echo \"${SHOAL_ENDS_SESSION-unset}\" > \"$HOME/agent-env\"; exit 3']\n",
+    ));
+    let home = fixture.root.path();
+    let shell = home.join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\necho \"$@\" >> \"$HOME/login-shells\"\n");
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().env("SHELL", &shell).args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "failing",
+            "--agent",
+            "pi",
+            "--",
+            "go",
+        ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let log = fs::read_to_string(home.join("zmx-failing.log")).unwrap_or_default();
+    assert_eq!(
+        fs::read_to_string(home.join("agent-env")).unwrap_or_default(),
+        "unset\n",
+        "{log}"
+    );
+    assert!(!home.join("login-shells").exists(), "{log}");
 }
 
 #[test]

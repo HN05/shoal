@@ -520,7 +520,9 @@ time stays unbounded. The daemon starts admitted entries through a detached CLI
 worker carrying the queuing terminal's Herdr variables, since terminal launch
 logic stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
 a detached zmx session whose shell is given the worker, because zmx gives
-commands it runs itself no terminal input.
+commands it runs itself no terminal input. That shell is zmx's bash, so the
+session ends once its agent or workspace shell has run, whatever the exit
+status, and only a failed start replaces it with the user's login shell.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

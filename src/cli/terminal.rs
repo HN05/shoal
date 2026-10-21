@@ -217,7 +217,7 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
         .status()
         .await
         .context("open workspace shell")?;
-    Ok(crate::execution::exit_code(status))
+    Ok(env::session_exit_code(crate::execution::exit_code(status)))
 }
 
 /// Label the session this process runs in, when it runs in one, so

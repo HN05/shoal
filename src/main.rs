@@ -59,6 +59,8 @@ fn main() {
     unsafe { std::env::remove_var(env::ADD_PLAN) };
     // SAFETY: as above; the queue entry goes to this process's own launch only.
     unsafe { env::take_queue_entry() };
+    // SAFETY: as above; only this process's own launch ends its session.
+    unsafe { env::take_session_end() };
     run_cli(cli);
 }
 

@@ -165,9 +165,10 @@ pub(in crate::cli) async fn run_in_background(
 }
 
 /// Run `argv` in a new detached session named after `name`, as if typed at
-/// its shell, since zmx gives commands it runs itself no terminal input. The
-/// shell exits once `argv` succeeds and otherwise stays to show why it failed.
-/// `env` reaches the shell, which keeps it, inert, while it stays.
+/// its shell, since zmx gives commands it runs itself no terminal input. That
+/// shell is zmx's bash, so the session ends once `argv` succeeds, which it does
+/// once its agent or workspace shell has run, and otherwise becomes the user's
+/// login shell to show why it failed. `env` reaches that shell, inert there.
 async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
     ensure_program("background launch", Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
@@ -186,8 +187,11 @@ async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> 
         .await
         .context("create a zmx session")?;
     let mut send = Command::new(Tool::Zmx.program());
-    send.args(["send", &name])
-        .arg(format!("{} && exit\r", crate::shell::quote(&words)));
+    send.args(["send", &name]).arg(format!(
+        "{}=1 {} && exit; exec \"$SHELL\" -l\r",
+        env::ENDS_SESSION,
+        crate::shell::quote(&words)
+    ));
     Run::new(send)
         .checked()
         .await

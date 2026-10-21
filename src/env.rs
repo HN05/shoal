@@ -22,6 +22,9 @@ pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
+/// Set on the command a detached zmx session's shell runs, which ends the
+/// session once its agent or workspace shell has run; removed at startup.
+pub const ENDS_SESSION: &str = "SHOAL_ENDS_SESSION";
 /// The chat whose agent this process runs under; workspaces opened here belong
 /// to that chat.
 pub const CHAT: &str = "SHOAL_CHAT";
@@ -323,6 +326,32 @@ pub(crate) unsafe fn take_queue_entry() {
     }
     // SAFETY: the caller guarantees no other thread reads the environment.
     unsafe { std::env::remove_var(QUEUE_ENTRY) };
+}
+
+static ENDS_LAUNCH_SESSION: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Keep whether this process ends the session it runs in, and drop the marker
+/// from the environment so the agent's own children do not inherit it.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub(crate) unsafe fn take_session_end() {
+    if std::env::var_os(ENDS_SESSION).is_some_and(|value| !value.is_empty()) {
+        ENDS_LAUNCH_SESSION.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::remove_var(ENDS_SESSION) };
+}
+
+/// The exit status to report for `code`, the exit of the agent or shell this
+/// process ran: success when that ends its session, which reads only success.
+pub(crate) fn session_exit_code(code: i32) -> i32 {
+    if ENDS_LAUNCH_SESSION.load(std::sync::atomic::Ordering::Relaxed) {
+        0
+    } else {
+        code
+    }
 }
 
 /// Record the queue entry whose slot the agent this process launches takes.

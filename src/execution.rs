@@ -132,14 +132,19 @@ pub async fn run(
     agent: Option<String>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_tracked(
+    let ran_agent = agent.is_some();
+    let result = run_tracked(
         paths,
         workspace,
         command,
         Mode::Command { record: false },
         agent,
     )
-    .await
+    .await;
+    if ran_agent {
+        return result.map(env::session_exit_code);
+    }
+    result
 }
 
 /// A command the user chose, recorded when `shoal stop` interrupts it.
@@ -173,6 +178,7 @@ pub async fn run_recovery(
         Some(agent),
     )
     .await
+    .map(env::session_exit_code)
 }
 
 /// The background half of a detached launch: an ordinary tracked wrapper whose
