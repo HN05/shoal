@@ -199,7 +199,7 @@ impl Effective {
             post_setup_cmd: merged.post_setup_cmd,
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
-            env: merged.env,
+            env: crate::presets::environment(&merged.presets, merged.env),
             caches: merged.caches,
             presets: merged.presets,
             secrets: merged.secrets,

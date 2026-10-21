@@ -1,6 +1,9 @@
 //! Build tools a repository names in `presets`, and what each sets up so its
 //! workspaces stop repeating the same work: a seed build of the default
-//! branch whose outputs new workspaces clone.
+//! branch whose outputs new workspaces clone, and environment that lets a
+//! tool's own cache serve every workspace.
+use std::collections::BTreeMap;
+
 use anyhow::{Result, ensure};
 
 use crate::state::states;
@@ -18,6 +21,9 @@ states!(
         Yarn => "yarn",
         /// Bun: seeds `node_modules`.
         Bun => "bun",
+        /// Go: builds without workspace paths so its shared build cache
+        /// serves every workspace, and seeds that cache.
+        Go => "go",
     }
 );
 
@@ -32,16 +38,40 @@ impl Preset {
             Self::Pnpm => &["pnpm", "install", "--frozen-lockfile"],
             Self::Yarn => &["yarn", "install", "--frozen-lockfile"],
             Self::Bun => &["bun", "install", "--frozen-lockfile"],
+            Self::Go => &["go", "build", "./..."],
         }
     }
 
-    /// The worktree-relative seed output new workspaces start with.
-    pub fn seed_output(self) -> &'static str {
+    /// The worktree-relative seed output new workspaces start with, if the
+    /// build keeps one inside the worktree.
+    pub fn seed_output(self) -> Option<&'static str> {
         match self {
-            Self::Cargo => "target",
-            Self::Npm | Self::Pnpm | Self::Yarn | Self::Bun => "node_modules",
+            Self::Cargo => Some("target"),
+            Self::Npm | Self::Pnpm | Self::Yarn | Self::Bun => Some("node_modules"),
+            Self::Go => None,
         }
     }
+
+    /// Variables the preset sets where `[env]` does not. Go's cache keys
+    /// include a package's directory unless paths are trimmed.
+    fn environment(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::Go => &[("GOFLAGS", "-trimpath")],
+            _ => &[],
+        }
+    }
+}
+
+/// `env` with every preset's variables it does not set itself.
+pub fn environment(
+    presets: &[Preset],
+    mut env: BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    for (name, value) in presets.iter().flat_map(|preset| preset.environment()) {
+        env.entry((*name).to_owned())
+            .or_insert_with(|| (*value).to_owned());
+    }
+    env
 }
 
 /// Each preset is named once, and no two keep the same seed output.
@@ -49,12 +79,28 @@ pub fn validate(presets: &[Preset]) -> Result<()> {
     for (index, preset) in presets.iter().enumerate() {
         for earlier in &presets[..index] {
             ensure!(earlier != preset, "presets names {preset} twice");
-            ensure!(
-                earlier.seed_output() != preset.seed_output(),
-                "presets {earlier} and {preset} both keep {}",
-                preset.seed_output()
-            );
+            if let Some(output) = preset.seed_output() {
+                ensure!(
+                    earlier.seed_output() != Some(output),
+                    "presets {earlier} and {preset} both keep {output}"
+                );
+            }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preset_variables_give_way_to_configured_ones() {
+        let configured = BTreeMap::from([("GOFLAGS".to_owned(), "-mod=vendor".to_owned())]);
+        assert_eq!(environment(&[Preset::Go], configured.clone()), configured);
+        assert_eq!(
+            environment(&[Preset::Cargo, Preset::Go], BTreeMap::new())["GOFLAGS"],
+            "-trimpath"
+        );
+    }
 }

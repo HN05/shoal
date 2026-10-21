@@ -56,7 +56,7 @@ pub fn outputs(seed: &Seed, presets: &[Preset]) -> Vec<String> {
     }
     presets
         .iter()
-        .map(|preset| preset.seed_output().to_owned())
+        .filter_map(|preset| preset.seed_output().map(str::to_owned))
         .collect()
 }
 
@@ -102,6 +102,11 @@ mod tests {
         assert_eq!(steps[0].label, "seed.cmd");
         assert_eq!(steps[0].argv, [worktree.join("seed.sh").into_os_string()]);
         assert_eq!(outputs(&own.seed, &own.presets), ["out"]);
+        // Go keeps its cache outside the worktree, so its seed has no outputs.
+        let go = config("presets = ['go']\n");
+        let build = Build::of(&go.seed, &go.presets, worktree).unwrap();
+        assert_eq!(labels(&build), ["go build ./..."]);
+        assert!(outputs(&go.seed, &go.presets).is_empty());
         let none = config("");
         assert!(Build::of(&none.seed, &none.presets, worktree).is_none());
     }

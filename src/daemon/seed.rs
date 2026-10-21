@@ -50,13 +50,9 @@ struct Plan {
 impl Plan {
     /// The seed `settings` describe, or `None` when they configure none.
     async fn new(repo: &Repository, layout: &Layout, settings: &Effective) -> Result<Option<Self>> {
-        let paths = build::outputs(&settings.seed, &settings.presets);
         let Some(build) = Build::of(&settings.seed, &settings.presets, &layout.worktree()) else {
             return Ok(None);
         };
-        if paths.is_empty() {
-            return Ok(None);
-        }
         let branch = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         // Builds see the workspaces' [env], so their outputs stay reusable.
         let identity = Workspace::new_record(
@@ -68,7 +64,7 @@ impl Plan {
         );
         Ok(Some(Self {
             build,
-            paths,
+            paths: build::outputs(&settings.seed, &settings.presets),
             environment: crate::env::render_configured_environment(
                 &settings.env,
                 &identity,

@@ -1311,8 +1311,13 @@ presets = ["cargo", "bun"]
 | `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
 | `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
+| `go` | `GOFLAGS=-trimpath`, and a seed running `go build ./...` |
 
-Presets that keep the same seed output cannot be combined.
+Presets that keep the same seed output cannot be combined. A variable `[env]`
+sets takes precedence over a preset's. Go's build cache is shared by every
+checkout, but it keys a package by its directory unless paths are trimmed; with
+`-trimpath`, binaries, panics and `runtime.Caller` report module paths instead
+of file system paths. The seed fills that cache from the default branch.
 
 ### Seed builds
 
@@ -1322,7 +1327,7 @@ from, so a branch rebuilds only what it changed and shares the rest on disk:
 ```toml
 [seed]
 cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
-paths = ["target"]       # Build outputs, relative to the worktree, new workspaces start with
+paths = ["target"]       # Optional build outputs, relative to the worktree, new workspaces start with
 ```
 
 [Presets](#build-tool-presets) add their builds and outputs to the seed; `cmd`
