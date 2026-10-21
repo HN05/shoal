@@ -873,6 +873,25 @@ impl Manager {
             .await
     }
 
+    /// Start the grace period of `execution`'s restore, whose wrapper lost
+    /// its connection and may reattach.
+    pub(crate) async fn keep_restore_place(&self, execution: &str) {
+        let (execution, now) = (execution.to_owned(), crate::time::unix_seconds() as i64);
+        let kept = self
+            .store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE agent_queue SET seen_at=?2 WHERE execution_id=?1",
+                    params![execution, now],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = kept {
+            crate::daemon::log!("agent queue: {error:#}");
+        }
+    }
+
     /// Take `execution`'s restore out of the queue, once its agent registered
     /// again or the restore ended without it.
     pub(crate) async fn remove_restore(&self, execution: &str) {

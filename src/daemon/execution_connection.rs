@@ -221,9 +221,14 @@ async fn serve(
         Ok(Ended::Finished(exit_code)) => Ok(exit_code),
         Err(error) => Err(error),
     };
-    // The restore ends with its wrapper; the next daemon keeps a detached one's.
+    // A restore ends when its wrapper finishes. One that lost its connection
+    // reattaches, so it keeps its place for the start grace period, as a
+    // detached one does for the next daemon.
     if execution.agent.is_some() {
-        manager.remove_restore(&execution.id).await;
+        match &result {
+            Ok(_) => manager.remove_restore(&execution.id).await,
+            Err(_) => manager.keep_restore_place(&execution.id).await,
+        }
     }
     let operation = match unattachable {
         Some(operation) => operation,

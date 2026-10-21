@@ -1134,6 +1134,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
             .await
     );
     wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
     launched.abort();
     bounded(async {
         loop {
@@ -1150,6 +1151,8 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     })
     .await;
     assert!(!workspace.path.join("restored").exists());
+    // The restore keeps its place while the wrapper may reattach.
+    assert!(!queue_is_empty(&manager).await);
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     assert!(
         !reopened

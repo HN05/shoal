@@ -757,9 +757,9 @@ restore per interval, and until they arrive nothing queued behind it starts; a
 stop, reload or unhealthy reading before the restored agent starts returns it to
 its place. The restored
 agent takes the slot over once it runs. Stopping the workspace or a failed
-restore removes the entry and keeps the recovery record. A daemon restart keeps
-the order; an entry whose waiting wrapper has not reattached within two minutes
-is removed, leaving its record to `shoal resume`.
+restore removes the entry and keeps the recovery record. A daemon restart or a
+lost connection keeps the order; an entry whose waiting wrapper has not
+reattached within two minutes is removed, leaving its record to `shoal resume`.
 
 `shoal ls` lists entries after the workspaces as `queued, position N` or
 `starting`, a restore with its agent; `ls --queue` lists only them (`--json`
