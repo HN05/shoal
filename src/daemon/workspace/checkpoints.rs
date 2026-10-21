@@ -270,6 +270,13 @@ impl Manager {
             self.archives_unsaved_files(workspace).await?,
             "a checkpoint cannot keep the workspace's unsaved files; commit or remove them first"
         );
+        let ignored = git::checkpoint::ignored_paths_in(path, &checkpoint.commit).await?;
+        ensure!(
+            ignored.is_empty(),
+            "checkpoint {} would overwrite ignored files no checkpoint keeps; move them first: {}",
+            checkpoint.number,
+            ignored.join(", ")
+        );
         Ok(())
     }
 
@@ -293,7 +300,10 @@ impl Manager {
             .await
     }
 
-    /// Give a restored workspace the checkpoints of the one it replaces.
+    /// Give a restored workspace the checkpoints of the one it replaces:
+    /// their new refs first, then their records, then the old refs, so each
+    /// commit stays owned and reachable whichever step fails. The Git gate
+    /// keeps expiry from seeing the refs before their records move.
     pub(super) async fn move_checkpoints(
         &self,
         repo: &Repository,
@@ -301,11 +311,18 @@ impl Manager {
         to: &str,
     ) -> Result<()> {
         let _git = self.lock_repository_git(&repo.id).await;
+        let old = from.to_owned();
+        let moving = self
+            .store
+            .run(move |db| workspace_checkpoints(db, &old))
+            .await?;
+        for checkpoint in &moving {
+            let reference = git::checkpoint::reference(to, checkpoint.number);
+            git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
+        }
         let (old, new) = (from.to_owned(), to.to_owned());
         let moved = self.store.run(move |db| reassign(db, &old, &new)).await?;
         for checkpoint in moved {
-            let reference = git::checkpoint::reference(to, checkpoint.number);
-            git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
             let old = git::checkpoint::reference(from, checkpoint.number);
             git::checkpoint::delete_at(&repo.path, &old, &checkpoint.commit).await?;
         }

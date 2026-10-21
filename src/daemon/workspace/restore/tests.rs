@@ -146,7 +146,11 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         removed.links.issue.as_deref(),
         Some("https://forge/issue/1")
     );
-    assert_eq!(removed.expires_at - removed.removed_at, 30 * 24 * 3600);
+    assert_eq!(removed.expires_at, removed.checkpoint.expires_at);
+    assert_eq!(
+        removed.checkpoint.expires_at - removed.checkpoint.created_at,
+        30 * 24 * 3600
+    );
     let reference = git::checkpoint::reference(&workspace.id, removed.checkpoint.number);
     assert_eq!(
         git(&checkout, &["rev-parse", &reference]).trim(),

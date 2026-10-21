@@ -1021,8 +1021,9 @@ would keep the same branch, HEAD and files. Unsaved files beyond
 expire after `retention_days`, and so do those no workspace or removal record owns.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
 other lifecycle operations and new executions, refuses while another execution is
-recorded, keeps the current state in a checkpoint, then resets the branch, cleans
-untracked files and applies the snapshot's files without staging them. Scoped
+recorded or the snapshot would overwrite ignored files, keeps the current state in
+a checkpoint, then cleans untracked files under the current ignore rules, resets
+the branch and applies the snapshot's files without staging them. Scoped
 callers may do this in their own workspace, since the replaced state stays a
 checkpoint.
 Removal's record (base, links and stopped agents' recovery records, with its

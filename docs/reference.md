@@ -1393,8 +1393,9 @@ the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`.
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back
 as uncommitted changes, deleting tracked changes and untracked files it lacks.
 It refuses while an execution other than the caller's own runs in the workspace,
-during a Git operation, on another branch than the checkpoint's, or when a
-checkpoint could not keep the unsaved files. Workspace processes may list and
+during a Git operation, on another branch than the checkpoint's, when a
+checkpoint could not keep the unsaved files, or when it would overwrite ignored
+files, which no checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
 `shoal restore <workspace>` lists an existing workspace's checkpoints. For a

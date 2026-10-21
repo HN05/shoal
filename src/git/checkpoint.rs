@@ -199,14 +199,58 @@ pub async fn apply(worktree: &Path, snapshot: &str) -> Result<()> {
 
 /// Move the worktree's branch, or its detached HEAD, to `head` and replace
 /// its unsaved files with those of `snapshot`, deleting tracked changes and
-/// untracked files the snapshot lacks; ignored files stay.
+/// untracked files the snapshot lacks. Untracked files are cleaned under the
+/// current ignore rules, before the reset can change them, so ignored files
+/// stay; [`ignored_paths_in`] finds those the snapshot would overwrite.
 pub async fn rewind(worktree: &Path, head: &str, snapshot: &str) -> Result<()> {
-    run_without_submodules(worktree, &["reset", "--quiet", "--hard", head, "--"]).await?;
     run_without_submodules(worktree, &["clean", "--quiet", "--force", "-d", "--", ":/"]).await?;
+    run_without_submodules(worktree, &["reset", "--quiet", "--hard", head, "--"]).await?;
     if snapshot != head {
         apply(worktree, snapshot).await?;
     }
     Ok(())
+}
+
+/// The paths of `snapshot` where the worktree has an ignored file, or lies
+/// inside an ignored directory: restoring it would overwrite them, and no
+/// checkpoint keeps ignored files.
+pub async fn ignored_paths_in(worktree: &Path, snapshot: &str) -> Result<Vec<String>> {
+    let ignored = run_isolated(
+        worktree,
+        &[
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+        ],
+    )
+    .await?;
+    let ignored: Vec<&str> = ignored
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .collect();
+    if ignored.is_empty() {
+        return Ok(Vec::new());
+    }
+    let paths = run_isolated(
+        worktree,
+        &["ls-tree", "-r", "-z", "--name-only", snapshot, "--"],
+    )
+    .await?;
+    Ok(paths
+        .split('\0')
+        .filter(|path| {
+            ignored
+                .iter()
+                .any(|ignored| match ignored.strip_suffix('/') {
+                    Some(directory) => path.starts_with(&format!("{directory}/")),
+                    None => path == ignored,
+                })
+        })
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Point `reference` at `commit`, keeping it reachable.
@@ -323,6 +367,44 @@ mod tests {
         assert_eq!(fs::read_to_string(repo.join("kept")).unwrap(), "kept\n");
         assert!(!repo.join("untracked").exists());
         assert!(repo.join("ignored").exists());
+    }
+
+    #[tokio::test]
+    async fn rewind_keeps_files_ignored_only_after_the_checkpoint() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+        fs::write(repo.join("generated"), "checkpointed\n").unwrap();
+        let checkpoint = snapshot(&repo, "checkpoint", true).await.unwrap();
+        fs::remove_file(repo.join("generated")).unwrap();
+
+        // A later commit ignores files the checkpoint's rules do not.
+        fs::write(repo.join(".gitignore"), "build/\ngenerated\n").unwrap();
+        crate::test_support::commit(&repo, ".gitignore");
+        fs::create_dir(repo.join("build")).unwrap();
+        fs::write(repo.join("build/out"), "output\n").unwrap();
+        assert!(
+            ignored_paths_in(&repo, &checkpoint)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        fs::write(repo.join("generated"), "regenerated\n").unwrap();
+        assert_eq!(
+            ignored_paths_in(&repo, &checkpoint).await.unwrap(),
+            ["generated"]
+        );
+        fs::remove_file(repo.join("generated")).unwrap();
+
+        rewind(&repo, head.trim(), &checkpoint).await.unwrap();
+        assert_eq!(
+            fs::read_to_string(repo.join("build/out")).unwrap(),
+            "output\n"
+        );
+        assert_eq!(
+            fs::read_to_string(repo.join("generated")).unwrap(),
+            "checkpointed\n"
+        );
     }
 
     #[tokio::test]
