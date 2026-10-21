@@ -349,9 +349,9 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         )
         .await
         .unwrap();
-    // Both are about to expire when the restore claims them.
+    // Both expire before a restore's claim would end.
     let id = workspace.id.clone();
-    let soon = crate::time::unix_seconds() as i64 + 5;
+    let soon = (crate::time::unix_seconds() + RESTORE_CLAIM.as_secs() / 2) as i64;
     manager
         .store
         .run(move |db| {
@@ -369,8 +369,8 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         })
         .await
         .unwrap();
+    let floor = crate::time::unix_seconds() + RESTORE_CLAIM.as_secs();
     let claimed = manager.claim_removed_workspace("topic").await.unwrap();
-    let floor = crate::time::unix_seconds() + RESTORE_CLAIM.as_secs() - 60;
     assert!(claimed.expires_at >= floor);
     assert!(claimed.checkpoint.expires_at >= floor);
     let saved = record(&manager, &workspace.id).await.unwrap();
