@@ -62,6 +62,18 @@ impl Manager {
         workspace: &Workspace,
         expected_branch: &str,
     ) -> Result<()> {
+        self.check_reopen(workspace, expected_branch).await?;
+        self.touch(&workspace.id).await;
+        Ok(())
+    }
+
+    /// Refuse reopening a workspace that is not ready, no longer its verified
+    /// worktree, or off `expected_branch`, without touching it.
+    pub(crate) async fn check_reopen(
+        &self,
+        workspace: &Workspace,
+        expected_branch: &str,
+    ) -> Result<()> {
         ensure!(
             workspace.state == WorkspaceState::Ready,
             "workspace {} is {}; inspect or set it up before reopening",
@@ -75,7 +87,6 @@ impl Manager {
             "workspace {} is no longer on its recorded branch",
             workspace.name
         );
-        self.touch(&workspace.id).await;
         Ok(())
     }
 

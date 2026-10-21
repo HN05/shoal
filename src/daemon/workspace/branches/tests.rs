@@ -665,7 +665,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
 async fn creation_check_refuses_what_creation_refuses_without_creating() {
     let f = Fixture::new().await;
     git(&f.repo, &["branch", "topic"]);
-    f.add("owned").await;
+    let owned = f.add("owned").await;
     let options = |base, git_profile, path| NewWorktreeOptions {
         git_profile,
         path,
@@ -682,6 +682,8 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
         ),
         (None, Some("topic"), options(Some("main"), None, None)),
         (None, Some("owned"), none),
+        // The branch is unknown, so it may reopen the workspace at its path.
+        (None, None, options(None, None, Some(&*owned.path))),
     ] {
         f.manager
             .check_creation(&f.repo_id, branch, existing, options)
@@ -740,6 +742,34 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
     assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 1);
     assert!(!new_path.exists());
     assert!(git(&f.repo, &["branch", "--list", "new"]).is_empty());
+
+    git(&owned.path, &["switch", "--detach"]);
+    assert!(
+        f.manager
+            .check_creation(&f.repo_id, None, Some("owned"), none)
+            .await
+            .is_err()
+    );
+
+    // A registration without a reserved directory keeps it unreserved.
+    let id = f.repo_id.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    f.manager
+        .check_creation(&f.repo_id, Some("other"), None, none)
+        .await
+        .unwrap();
+    let repo = f.manager.repository(&f.repo_id).await.unwrap();
+    assert_eq!(repo.workspaces_dir, None);
 }
 
 #[tokio::test]

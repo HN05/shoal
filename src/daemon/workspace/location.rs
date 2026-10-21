@@ -25,13 +25,24 @@ impl Manager {
             Some(path) => self.workspace_location(repo, &path).await?,
             None => canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?.join(name),
         };
-        ensure!(
-            path.symlink_metadata()
-                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-            "workspace path already exists: {}",
-            path.display()
-        );
+        ensure_unused(&path)?;
         Ok(path)
+    }
+
+    /// Refuse what [`Self::new_workspace_path`] would refuse without reserving
+    /// the repository's directory, which holds nothing before it is reserved.
+    pub(super) async fn check_new_workspace_path(
+        &self,
+        repo: &Repository,
+        name: &str,
+        path: Option<&Path>,
+    ) -> Result<()> {
+        let path = match (path, &repo.workspaces_dir) {
+            (Some(path), _) => self.workspace_location(repo, path).await?,
+            (None, Some(directory)) => canonical_with_missing_tail(directory)?.join(name),
+            (None, None) => return Ok(()),
+        };
+        ensure_unused(&path)
     }
 
     pub(super) async fn workspace_location(
@@ -96,6 +107,18 @@ impl Manager {
 
 fn overlaps(a: &Path, b: &Path) -> bool {
     a.starts_with(b) || b.starts_with(a)
+}
+
+/// Refuse any existing entry at a new workspace's path, including a dangling
+/// symlink.
+fn ensure_unused(path: &Path) -> Result<()> {
+    ensure!(
+        path.symlink_metadata()
+            .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+        "workspace path already exists: {}",
+        path.display()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

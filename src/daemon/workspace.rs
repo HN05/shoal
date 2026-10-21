@@ -450,7 +450,9 @@ impl Manager {
                 Some(name.to_owned())
             }
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
-                branches::OpenTarget::Reopen(_) => return Ok(()),
+                branches::OpenTarget::Reopen(workspace) => {
+                    return self.check_reopen(&workspace, &workspace.branch).await;
+                }
                 branches::OpenTarget::Create(branch) => Some(branch.name),
             },
             (None, None) => None,
@@ -461,26 +463,15 @@ impl Manager {
         if let Some(base) = options.base {
             check_base(&repo, base).await?;
         }
-        self.check_new_workspace_path(&repo, name.as_deref(), options.path)
-            .await
-    }
-
-    /// Refuse the new worktree's explicit path, or the default one derived
-    /// from `branch` once it is known.
-    async fn check_new_workspace_path(
-        &self,
-        repo: &Repository,
-        branch: Option<&str>,
-        path: Option<&std::path::Path>,
-    ) -> Result<()> {
-        if branch.is_none() && path.is_none() {
-            return Ok(());
+        // Without a branch, the caller may still choose to reopen a workspace
+        // at its current path.
+        match name {
+            Some(name) => {
+                self.check_new_workspace_path(&repo, &derive_workspace_name(&name), options.path)
+                    .await
+            }
+            None => Ok(()),
         }
-        // An explicit path ignores the name.
-        let name = derive_workspace_name(branch.unwrap_or_default());
-        self.new_workspace_path(repo, &name, path.map(Into::into))
-            .await?;
-        Ok(())
     }
 
     // The caller holds the per-repository Git gate through materialization.
