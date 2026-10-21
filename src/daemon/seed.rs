@@ -436,7 +436,7 @@ async fn run_build(
 ) -> Result<()> {
     let mut output = fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
     let deadline = tokio::time::Instant::now() + BUILD_TIMEOUT;
-    for step in plan.build.steps(worktree)? {
+    for step in plan.build.steps(worktree).await? {
         writeln!(output, "$ {}", step.label)?;
         run_step(&step, plan, worktree, &output, log, deadline, &mut cancel).await?;
     }

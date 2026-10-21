@@ -38,17 +38,21 @@ impl Build {
     }
 
     /// The commands to run, in order, for the commit checked out in `worktree`.
-    pub fn steps(&self, worktree: &Path) -> Result<Vec<Step>> {
-        match self {
-            Self::Script(command) => Ok(vec![Step {
-                label: "seed.cmd".into(),
-                argv: vec![command.into()],
-            }]),
-            Self::Presets(presets) => presets
-                .iter()
-                .map(|preset| preset_step(*preset, worktree))
-                .collect(),
+    pub async fn steps(&self, worktree: &Path) -> Result<Vec<Step>> {
+        let presets = match self {
+            Self::Script(command) => {
+                return Ok(vec![Step {
+                    label: "seed.cmd".into(),
+                    argv: vec![command.into()],
+                }]);
+            }
+            Self::Presets(presets) => presets,
+        };
+        let mut steps = Vec::new();
+        for preset in presets {
+            steps.push(preset_step(*preset, worktree).await?);
         }
+        Ok(steps)
     }
 }
 
@@ -71,10 +75,10 @@ fn output(preset: SeedPreset) -> &'static str {
     }
 }
 
-fn preset_step(preset: SeedPreset, worktree: &Path) -> Result<Step> {
+async fn preset_step(preset: SeedPreset, worktree: &Path) -> Result<Step> {
     let argv: &[&str] = match preset {
         SeedPreset::Cargo => &["cargo", "build", "--all-targets"],
-        SeedPreset::Npm => node_install(worktree)?,
+        SeedPreset::Npm => node_install(worktree).await?,
     };
     Ok(Step {
         label: argv.join(" "),
@@ -82,15 +86,17 @@ fn preset_step(preset: SeedPreset, worktree: &Path) -> Result<Step> {
     })
 }
 
-/// The install that reproduces the committed lockfile exactly.
-fn node_install(worktree: &Path) -> Result<&'static [&'static str]> {
-    if worktree.join("pnpm-lock.yaml").is_file() {
+/// The install that reproduces the committed lockfile exactly. Only
+/// tracked lockfiles count: the reused seed worktree keeps untracked files
+/// earlier builds left.
+async fn node_install(worktree: &Path) -> Result<&'static [&'static str]> {
+    const PNPM: &str = "pnpm-lock.yaml";
+    const NPM: [&str; 2] = ["package-lock.json", "npm-shrinkwrap.json"];
+    let tracked = crate::git::seed::tracked(worktree, &[PNPM, NPM[0], NPM[1]]).await?;
+    if tracked.contains(PNPM) {
         return Ok(&["pnpm", "install", "--frozen-lockfile"]);
     }
-    if ["package-lock.json", "npm-shrinkwrap.json"]
-        .iter()
-        .any(|lockfile| worktree.join(lockfile).is_file())
-    {
+    if NPM.iter().any(|lockfile| tracked.contains(*lockfile)) {
         return Ok(&["npm", "ci"]);
     }
     bail!("the npm seed preset needs a committed package-lock.json or pnpm-lock.yaml")
@@ -99,29 +105,33 @@ fn node_install(worktree: &Path) -> Result<&'static [&'static str]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{commit, repository};
     use std::fs;
 
     fn seed(text: &str) -> Seed {
         crate::config::repo::parse(text).unwrap().seed
     }
 
-    fn labels(build: &Build, worktree: &Path) -> Vec<String> {
+    async fn labels(build: &Build, worktree: &Path) -> Vec<String> {
         build
             .steps(worktree)
+            .await
             .unwrap()
             .into_iter()
             .map(|step| step.label)
             .collect()
     }
 
-    #[test]
-    fn presets_build_and_keep_what_their_tools_use() {
-        let worktree = tempfile::tempdir().unwrap();
-        fs::write(worktree.path().join("pnpm-lock.yaml"), "").unwrap();
+    #[tokio::test]
+    async fn presets_build_and_keep_what_their_tools_use() {
+        let root = tempfile::tempdir().unwrap();
+        let worktree = repository(root.path(), "repo");
+        fs::write(worktree.join("pnpm-lock.yaml"), "").unwrap();
+        commit(&worktree, "pnpm-lock.yaml");
         let presets = seed("[seed]\npresets = ['cargo', 'npm']\n");
-        let build = Build::of(&presets, worktree.path()).unwrap();
+        let build = Build::of(&presets, &worktree).unwrap();
         assert_eq!(
-            labels(&build, worktree.path()),
+            labels(&build, &worktree).await,
             [
                 "cargo build --all-targets",
                 "pnpm install --frozen-lockfile"
@@ -131,24 +141,26 @@ mod tests {
 
         // A command and paths of the repository's own replace the presets'.
         let own = seed("[seed]\npresets = ['cargo']\ncmd = 'seed.sh'\npaths = ['out']\n");
-        let build = Build::of(&own, worktree.path()).unwrap();
-        assert_eq!(labels(&build, worktree.path()), ["seed.cmd"]);
-        assert_eq!(
-            build.steps(worktree.path()).unwrap()[0].argv,
-            [worktree.path().join("seed.sh").into_os_string()]
-        );
+        let build = Build::of(&own, &worktree).unwrap();
+        let steps = build.steps(&worktree).await.unwrap();
+        assert_eq!(steps[0].label, "seed.cmd");
+        assert_eq!(steps[0].argv, [worktree.join("seed.sh").into_os_string()]);
         assert_eq!(outputs(&own), ["out"]);
-        assert!(Build::of(&seed(""), worktree.path()).is_none());
+        assert!(Build::of(&seed(""), &worktree).is_none());
     }
 
-    #[test]
-    fn the_npm_preset_follows_the_committed_lockfile() {
-        let worktree = tempfile::tempdir().unwrap();
+    #[tokio::test]
+    async fn the_npm_preset_follows_the_committed_lockfile() {
+        let root = tempfile::tempdir().unwrap();
+        let worktree = repository(root.path(), "repo");
         let build = Build::Presets(vec![SeedPreset::Npm]);
-        let error = build.steps(worktree.path()).unwrap_err();
+        // A lockfile an earlier build left behind is not the commit's.
+        fs::write(worktree.join("pnpm-lock.yaml"), "").unwrap();
+        let error = build.steps(&worktree).await.unwrap_err();
         assert!(error.to_string().contains("package-lock.json"), "{error}");
-        fs::write(worktree.path().join("package-lock.json"), "{}").unwrap();
-        assert_eq!(labels(&build, worktree.path()), ["npm ci"]);
+        fs::write(worktree.join("package-lock.json"), "{}").unwrap();
+        commit(&worktree, "package-lock.json");
+        assert_eq!(labels(&build, &worktree).await, ["npm ci"]);
     }
 
     #[test]
