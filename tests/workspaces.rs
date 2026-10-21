@@ -1137,6 +1137,60 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let choices = resumable();
     assert!(choices.contains("first:stopped: 1 command"), "{choices}");
     assert!(choices.contains("second:nothing to resume"), "{choices}");
+    // Other commands name why they would refuse a workspace.
+    let described = |args: &[&str]| {
+        let mut words = vec!["shoal"];
+        words.extend_from_slice(args);
+        let output = fixture
+            .command()
+            .arg("--")
+            .args(&words)
+            .env("SHOAL_COMPLETE", "zsh")
+            .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fs::write(
+        fixture.root.path().join("zmx-sessions"),
+        format!(
+            "  name=first\tpid=1\tclients=0\tshoal.workspace={}\n",
+            first["id"].as_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let choices = described(&["attach", ""]);
+    assert!(choices.contains(&"first".into()), "{choices:?}");
+    assert!(
+        choices.contains(&"second:no agent session".into()),
+        "{choices:?}"
+    );
+    for (args, refusal) in [
+        (vec!["stop", ""], "nothing running"),
+        (vec!["undone", ""], "not done"),
+        (vec!["unready", "--workspace", ""], "not marked ready"),
+        (vec!["hold", "release", ""], "no holds"),
+        (
+            vec!["base", "clear", "--workspace", ""],
+            "no base workspace",
+        ),
+    ] {
+        let choices = described(&args);
+        assert!(
+            choices.contains(&format!("second:{refusal}")),
+            "{args:?} {choices:?}"
+        );
+    }
+    fixture.ok(&["hold", "acquire", "second", "--name", "review"]);
+    assert!(described(&["hold", "release", ""]).contains(&"second".into()));
+    fixture.ok(&["hold", "release", "second", "--name", "review"]);
+    assert!(described(&["exec", ""]).contains(&"second".into()));
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();

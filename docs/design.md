@@ -570,6 +570,8 @@ redirected or JSON output.
 Completion queries the installed binary per Tab and uses read-only daemon calls
 with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
+Each command states what it needs of its workspace in one table, and completion
+describes a workspace that fails it by the reason instead of leaving it out.
 
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at

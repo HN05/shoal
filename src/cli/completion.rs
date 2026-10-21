@@ -14,7 +14,9 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use crate::{
     agent::{Agent, BuiltinAgent},
     cli::{
-        agents, client, ui,
+        agents,
+        availability::{Availability, Need},
+        client, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{
@@ -54,7 +56,8 @@ struct Settings {
 enum Target {
     Commands,
     Repositories,
-    Workspaces,
+    /// Workspaces, each described by why the command would refuse it.
+    Workspaces(Need),
     /// Workspaces described by what `shoal resume` restores in them.
     ResumeWorkspaces,
     /// Removed workspaces `shoal restore` can open again, then existing
@@ -148,7 +151,7 @@ pub fn command() -> Command {
             command = withdraw(command, name);
         }
     }
-    decorate(command, "", Arc::new(typed))
+    decorate(command, &[], Arc::new(typed))
 }
 
 /// Keep a launcher whose executable is missing out of completion. Hidden
@@ -165,8 +168,14 @@ fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
 }
 
 /// Attach live completers to the arguments that name daemon-managed objects.
-fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
-    let name = command.get_name().to_owned();
+/// `path` names `command` below the root.
+fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
+    let name = path.last().cloned().unwrap_or_default();
+    let parent = match path {
+        [.., parent, _] => parent.as_str(),
+        _ => "",
+    };
+    let need = Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>());
     // A workspace argument beside `--all` offers it first among the names,
     // so the flag itself is not listed again after them.
     let offer_all = ["workspace", "all"]
@@ -184,7 +193,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
                 ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
-                ("workspace", _, _) => Some(Target::Workspaces),
+                ("workspace", _, _) => Some(Target::Workspaces(need)),
                 ("pool", "resource", _) => Some(Target::Pools),
                 ("resource", "resource", _) => Some(Target::Members),
                 ("name", "resource", "release") => Some(Target::ResourceNames),
@@ -204,7 +213,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 let offer_all = offer_all
                     && !typed.all
-                    && matches!(target, Target::Workspaces | Target::ResumeWorkspaces);
+                    && matches!(target, Target::Workspaces(_) | Target::ResumeWorkspaces);
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
                     if offer_all && "--all".starts_with(current.to_string_lossy().as_ref()) {
@@ -274,7 +283,11 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 arg
             }
         })
-        .mut_subcommands(|subcommand| decorate(subcommand, &name, typed.clone()))
+        .mut_subcommands(|subcommand| {
+            let mut path = path.to_vec();
+            path.push(subcommand.get_name().to_owned());
+            decorate(subcommand, &path, typed.clone())
+        })
 }
 
 impl Typed {
@@ -443,18 +456,22 @@ impl Typed {
                 .collect());
         }
         let workspaces = client::workspaces(&paths).await?;
-        if matches!(target, Target::Workspaces | Target::ResumeWorkspaces) {
-            let resume = matches!(target, Target::ResumeWorkspaces);
+        if let Target::Workspaces(need) = target {
+            let availability = Availability::load(need).await;
+            return Ok(workspaces
+                .iter()
+                .map(|w| {
+                    CompletionCandidate::new(&w.name).help(availability.refusal(w).map(Into::into))
+                })
+                .collect());
+        }
+        if matches!(target, Target::ResumeWorkspaces) {
             return Ok(workspaces
                 .into_iter()
                 .map(|w| {
-                    let candidate = CompletionCandidate::new(&w.name);
-                    if !resume {
-                        return candidate;
-                    }
                     let status = ui::resumable(&paths, &w.id)
                         .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
-                    candidate.help(Some(status.into()))
+                    CompletionCandidate::new(&w.name).help(Some(status.into()))
                 })
                 .collect());
         }
@@ -505,7 +522,7 @@ impl Typed {
             }
             Target::Commands
             | Target::Repositories
-            | Target::Workspaces
+            | Target::Workspaces(_)
             | Target::ResumeWorkspaces
             | Target::RestorableWorkspaces
             | Target::ApprovalRequests

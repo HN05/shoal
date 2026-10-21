@@ -280,6 +280,15 @@ pub async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
     Ok(sessions)
 }
 
+/// The IDs of workspaces with at least one agent session.
+pub async fn session_workspaces() -> Result<HashSet<String>> {
+    Ok(list()
+        .await?
+        .into_iter()
+        .filter_map(|(_, fields)| field(&fields, WORKSPACE_LABEL).map(str::to_owned))
+        .collect())
+}
+
 type Fields = Vec<(String, String)>;
 
 /// Every zmx session with its fields and labels.
