@@ -133,18 +133,21 @@ impl Manager {
 
     pub async fn reconcile(&self, selector: &str, options: ReconcileOptions) -> Result<Report> {
         Self::validate_reconcile_options(options)?;
-        let workspace = self.workspace(selector).await?;
+        let queued = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
-        let _guard = self.lock_repository_git(&workspace.repository_id).await;
+        let _guard = self.lock_repository_git(&queued.repository_id).await;
+        // Read again: a repair that held the gate meanwhile may have changed it.
+        let workspace = self.workspace(&queued.id).await?;
         let mut report = Report::new(workspace.clone());
-        self.prepare_reconcile(&workspace, options, &mut report)
+        let reserved_from = self
+            .prepare_reconcile(&workspace, options, &mut report)
             .await?;
         let result = self
             .reconcile_reserved(&workspace, options, &mut report)
             .await;
-        if options.repair {
-            self.finalize_repair(&workspace, &result, &mut report)
+        if let Some(previous) = reserved_from {
+            self.finalize_repair(&workspace, previous, &result, &mut report)
                 .await?;
         }
         result?;
@@ -159,18 +162,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Returns the state a repair reserved the lifecycle from.
     async fn prepare_reconcile(
         &self,
         workspace: &Workspace,
         options: ReconcileOptions,
         report: &mut Report,
-    ) -> Result<()> {
+    ) -> Result<Option<WorkspaceState>> {
         self.stop_for_reconcile(workspace, options, report).await?;
-        if options.repair {
-            self.reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
-                .await?;
+        if !options.repair {
+            return Ok(None);
         }
-        Ok(())
+        self.reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
+            .await
+            .map(Some)
     }
 
     async fn stop_for_reconcile(
@@ -206,11 +211,12 @@ impl Manager {
     async fn finalize_repair(
         &self,
         workspace: &Workspace,
+        previous: WorkspaceState,
         result: &Result<()>,
         report: &mut Report,
     ) -> Result<()> {
         let state = if result.is_err() {
-            workspace.state
+            previous
         } else if matches!(report.directory, DirectoryState::Valid) && report.issues.is_empty() {
             WorkspaceState::Ready
         } else {
