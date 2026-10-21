@@ -74,7 +74,7 @@ async fn pick(ctx: &Context, selector: &str) -> Result<String> {
         !candidates.is_empty(),
         "no other workspace in this repository"
     );
-    ui::pick_workspace(ctx, candidates)
+    ui::pick_workspace(ctx, candidates).await
 }
 
 /// The base and stacked workspaces, when the workspace has any.

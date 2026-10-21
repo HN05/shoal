@@ -35,6 +35,9 @@ use crate::{
 pub struct Cli {
     #[arg(skip)]
     pub(crate) daemon_handoff: Option<crate::daemon::handoff::Handoff>,
+    /// What the command needs of its workspace, from its subcommand path.
+    #[arg(skip)]
+    pub(crate) need: availability::Need,
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,
@@ -979,6 +982,29 @@ pub enum HoldCommand {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
+}
+
+impl Cli {
+    /// Parse the process arguments as `Cli::parse` does, recording what the
+    /// command needs of its workspace.
+    pub fn from_args() -> Self {
+        let mut matches = <Self as clap::CommandFactory>::command().get_matches();
+        let mut path = vec![];
+        let mut leaf = &matches;
+        while let Some((name, child)) = leaf.subcommand() {
+            path.push(name.to_owned());
+            leaf = child;
+        }
+        let mut cli = <Self as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
+            .unwrap_or_else(|error| {
+                error
+                    .format(&mut <Self as clap::CommandFactory>::command())
+                    .exit()
+            });
+        let path: Vec<_> = path.iter().map(String::as_str).collect();
+        cli.need = availability::Need::of_command(&path);
+        cli
+    }
 }
 
 impl Command {

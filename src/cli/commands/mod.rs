@@ -213,7 +213,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         print_help(path)?;
         return Ok(0);
     }
-    let ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
+    let mut ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
+    ctx.need = cli.need;
     let command = match cli.command {
         Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
         Some(command) => command,

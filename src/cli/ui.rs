@@ -13,7 +13,9 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        WorkspaceScope, client,
+        WorkspaceScope,
+        availability::Availability,
+        client,
         context::Context,
         list_status::ListStatus,
         output::{Palette, Style},
@@ -443,7 +445,7 @@ pub async fn select_workspace(
 ) -> Result<String> {
     match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Workspace(id) => Ok(id),
-        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces),
+        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await,
     }
 }
 
@@ -458,7 +460,7 @@ pub async fn select_workspace_filter(
     }
     match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
         Resolution::Workspace(id) => Ok(Some(id)),
-        Resolution::Picker(workspaces) => pick_workspace_or_all(ctx, workspaces),
+        Resolution::Picker(workspaces) => pick_workspace_or_all(ctx, workspaces).await,
     }
 }
 
@@ -546,8 +548,11 @@ fn resume_status_cell(resumable: Option<(String, bool)>) -> Cell {
     }
 }
 
-fn pick_workspace_or_all(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Option<String>> {
-    let mut entries = workspace_entries(ctx, workspaces);
+async fn pick_workspace_or_all(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+) -> Result<Option<String>> {
+    let mut entries = workspace_entries(ctx, workspaces).await;
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     let id = pick(ctx, "Workspace> ", entries)?;
     Ok((id != ALL_ID).then_some(id))
@@ -593,17 +598,35 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
         .into_iter()
         .filter(|w| w.path.is_dir())
         .collect();
-    pick_workspace(ctx, workspaces)
+    pick_workspace(ctx, workspaces).await
 }
 
-pub fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
-    pick(ctx, "Workspace> ", workspace_entries(ctx, workspaces))
+pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+    pick(ctx, "Workspace> ", workspace_entries(ctx, workspaces).await)
 }
 
-fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
+/// Workspaces the command would act on come first; the rest show why it
+/// would refuse them in place of their status.
+async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
+    let availability = Availability::load(ctx.need).await;
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
-    let rows = workspace_rows(&workspaces, &[], &stopped, Palette::stderr(ctx.json));
-    workspaces.into_iter().map(|w| w.id).zip(rows).collect()
+    let mut rows = workspaces
+        .into_iter()
+        .map(|w| (availability.refusal(&w), w))
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|(refusal, _)| refusal.is_some());
+    let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
+        .into_iter()
+        .map(|(refusal, w)| {
+            let status = match refusal {
+                Some(refusal) => (refusal, Some(Style::Muted)),
+                None => status_cell(&w, stopped.contains(&w.id)),
+            };
+            (status, w)
+        })
+        .unzip();
+    let labels = rows_with_status(&workspaces, &[], statuses, Palette::stderr(ctx.json));
+    workspaces.into_iter().map(|w| w.id).zip(labels).collect()
 }
 
 /// Workspaces with agents or commands saved by `shoal stop` for `shoal resume`.

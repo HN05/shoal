@@ -396,6 +396,8 @@ registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D delet
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
 interactive fzf picker; a deleted current directory provides no workspace context.
+The picker lists workspaces the command would refuse last, with the reason in
+place of their status, such as `no agent session` for `attach`.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers

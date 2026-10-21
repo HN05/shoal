@@ -31,7 +31,6 @@ mod time;
 mod tools;
 mod validate;
 
-use clap::Parser;
 use cli::Cli;
 use serde_json::json;
 
@@ -39,7 +38,7 @@ fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
         .var(env::COMPLETE)
         .complete();
-    let mut cli = Cli::parse();
+    let mut cli = Cli::from_args();
     cli.daemon_handoff = daemon::handoff::Handoff::take().unwrap_or_else(|error| {
         eprintln!("error: {error:#}");
         std::process::exit(1);

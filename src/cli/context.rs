@@ -5,7 +5,10 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::{
-    cli::output::{Palette, Style},
+    cli::{
+        availability::Need,
+        output::{Palette, Style},
+    },
     paths::Paths,
 };
 
@@ -15,6 +18,8 @@ pub struct Context {
     pub(in crate::cli) place: Option<super::terminal::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
+    /// What the command needs of the workspace a picker offers.
+    pub(in crate::cli) need: Need,
 }
 
 impl Context {
@@ -39,6 +44,7 @@ impl Context {
             paths,
             json,
             place: None,
+            need: Need::Any,
         }
     }
 

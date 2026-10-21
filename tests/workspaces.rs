@@ -18878,6 +18878,18 @@ fn attach_selects_a_session_of_the_workspace() {
     let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "persist"]);
+    // The picker lists a workspace without a session last, saying so.
+    fixture.add("idle");
+    let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(
+        rows[2].contains("idle") && rows[2].contains("no agent session"),
+        "{rows:?}"
+    );
+    assert!(!rows[0].contains("no agent session"), "{rows:?}");
+    assert_eq!(attached(), ["attach", "persist"]);
     // The fake session is still listed afterwards, as after a detach.
     assert!(
         transcript.contains("detached from persist; run `shoal attach persist` to return"),

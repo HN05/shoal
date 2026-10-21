@@ -172,7 +172,7 @@ pub async fn run(
                     .context("repository-only commands require a current or explicit workspace")
                     .context(unknown_command(name)));
             }
-            ui::pick_workspace(ctx, defining)?
+            ui::pick_workspace(ctx, defining).await?
         }
         workspace => workspace?,
     };
