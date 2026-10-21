@@ -807,9 +807,18 @@ mod tests {
         let layout = Layout::of(&repo).unwrap();
         let log = fs::read_to_string(layout.log()).unwrap();
         assert!(log.starts_with("$ cargo build --all-targets\n"), "{log}");
-        if Snapshot::open(&layout).unwrap().is_none() {
-            return; // Without copy-on-write cloning the seed is never copied.
+        let built = layout.worktree().join("target/debug/libseeded.rlib");
+        assert!(built.is_file(), "{log}");
+        // Without copy-on-write cloning the seed is never copied.
+        let probe = layout.root().join("probe");
+        fs::write(&probe, "x").unwrap();
+        let cloning = crate::fsutil::clone_tree(&probe, &layout.root().join("probe-clone"))
+            .await
+            .is_ok();
+        if !cloning {
+            return;
         }
+        assert!(Snapshot::open(&layout).unwrap().is_some(), "{log}");
         let workspace = manager
             .create_workspace(&repo.id, "feature".into(), None, None, None)
             .await
