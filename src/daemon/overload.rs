@@ -30,6 +30,8 @@ struct Monitor {
     cpu: Sustained,
     cpu_warning: Sustained,
     healthy: Sustained,
+    /// Whether the last sample was safe for recovery, across window resets.
+    safe: bool,
     recovery_epoch: u64,
     cpu_used: Option<f64>,
     previous_cpu: Option<crate::process::load::CpuTicks>,
@@ -179,7 +181,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         let safe = memory_safe && cpu_safe && disk_safe;
         // Readings that turn unsafe revoke a restore admitted on the earlier
         // ones before its agent starts.
-        if monitor.healthy.since.is_some() && !safe {
+        if std::mem::replace(&mut monitor.safe, safe) && !safe {
             manager.reset_overload_recovery();
         }
         let recovered = monitor
@@ -273,7 +275,9 @@ mod tests {
                 .recovery_epoch
                 .load(std::sync::atomic::Ordering::Relaxed)
         };
-        // A restore admitted now holds this epoch while it checks its workspace.
+        // Admitting a restore advances the epoch it then holds while it checks
+        // its workspace.
+        manager.reset_overload_recovery();
         let admitted = epoch();
         manager.publish_disk_reading(None);
         tokio::time::timeout(Duration::from_secs(3600), async {
