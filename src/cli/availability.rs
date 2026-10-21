@@ -19,7 +19,8 @@ pub enum Need {
     Ready,
     /// A workspace that accepts issue and PR link changes.
     Links,
-    /// A ready or failed workspace with nothing running, for setup.
+    /// A workspace setup can reserve: preparing, ready or failed, with
+    /// nothing running besides a scoped caller's own execution.
     Setup,
     /// A worktree directory to enter.
     Directory,
@@ -50,13 +51,14 @@ impl Need {
             ["setup"] => Self::Setup,
             ["base", "clear"] => Self::Base,
             ["hold", "release"] => Self::Holds,
-            ["link" | "unlink"] | ["pr" | "issue", "open"] => Self::Links,
+            ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "rename"
                 | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
             | ["hold", "acquire"]
+            | ["pr", "open"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
                 "status" | "inspect" | "diff" | "conflicts" | "rm" | "doctor" | "leases"
@@ -82,6 +84,9 @@ pub struct Availability {
     need: Need,
     /// Workspace IDs with agent sessions, loaded only for [`Need::Session`].
     sessions: HashSet<String>,
+    /// A scoped caller's own execution runs in its workspace without
+    /// blocking setup there.
+    scoped: bool,
 }
 
 impl Availability {
@@ -91,7 +96,11 @@ impl Availability {
         } else {
             HashSet::new()
         };
-        Self { need, sessions }
+        Self {
+            need,
+            sessions,
+            scoped: crate::env::is_scoped(),
+        }
     }
 
     /// Why the command would refuse `workspace`, as pickers and completion
@@ -112,10 +121,15 @@ impl Availability {
             Need::Ready => None,
             Need::Links if !state.accepts_links() => unsettled(),
             Need::Links => None,
-            Need::Setup if !matches!(state, WorkspaceState::Ready | WorkspaceState::Failed) => {
+            Need::Setup
+                if !matches!(
+                    state,
+                    WorkspaceState::Preparing | WorkspaceState::Ready | WorkspaceState::Failed
+                ) =>
+            {
                 unsettled()
             }
-            Need::Setup => workspace.running.then(|| "running".to_owned()),
+            Need::Setup => (workspace.running && !self.scoped).then(|| "running".to_owned()),
             Need::Directory => (!workspace.path.is_dir()).then(|| "directory missing".to_owned()),
             Need::Session => {
                 (!self.sessions.contains(&workspace.id)).then(|| "no agent session".to_owned())
@@ -169,6 +183,10 @@ mod tests {
             let path: Vec<_> = path.iter().map(String::as_str).collect();
             assert!(Need::of(&path).is_some(), "{path:?}");
         }
+        // Opening a PR pushes through a tracked command; opening an issue
+        // only links it.
+        assert_eq!(Need::of(&["pr", "open"]), Some(Need::Ready));
+        assert_eq!(Need::of(&["issue", "open"]), Some(Need::Links));
         assert_eq!(Need::of(&["review-tool"]), None);
         assert_eq!(Need::of_command(&["review-tool"]), Need::Ready);
     }
@@ -187,6 +205,7 @@ mod tests {
         Availability {
             need,
             sessions: HashSet::new(),
+            scoped: false,
         }
         .refusal(workspace)
     }
@@ -205,12 +224,22 @@ mod tests {
         );
         assert_eq!(refusal(Need::Setup, &failed), None);
         assert_eq!(
-            refusal(Need::Setup, &workspace(WorkspaceState::Preparing)).as_deref(),
-            Some("preparing")
+            refusal(Need::Setup, &workspace(WorkspaceState::Preparing)),
+            None
+        );
+        assert_eq!(
+            refusal(Need::Setup, &workspace(WorkspaceState::Removing)).as_deref(),
+            Some("removing")
         );
         let mut running = ready.clone();
         running.running = true;
         assert_eq!(refusal(Need::Setup, &running).as_deref(), Some("running"));
+        let own = Availability {
+            need: Need::Setup,
+            sessions: HashSet::new(),
+            scoped: true,
+        };
+        assert_eq!(own.refusal(&running), None);
         assert_eq!(refusal(Need::Running, &running), None);
         assert_eq!(
             refusal(Need::Running, &ready).as_deref(),
@@ -234,6 +263,7 @@ mod tests {
         let attachable = Availability {
             need: Need::Session,
             sessions: HashSet::from([ready.id.clone()]),
+            scoped: false,
         };
         assert_eq!(attachable.refusal(&ready), None);
     }
