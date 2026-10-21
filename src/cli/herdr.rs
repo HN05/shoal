@@ -133,6 +133,14 @@ impl TabDirective {
         self.0.keep().context("keep the tab's shell directive")?;
         Ok(())
     }
+
+    /// Remove the directive this process inherited from its tab, whose shell
+    /// is gone or about to go without reaching a prompt.
+    fn discard_inherited() {
+        if let Some(directive) = std::env::var_os(env::SHELL_DIRECTIVE) {
+            let _ = std::fs::remove_file(directive);
+        }
+    }
 }
 
 /// The label `shoal add` gives a workspace's tab: the `tab_name` template,
@@ -500,9 +508,7 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    if let Some(directive) = std::env::var_os(env::SHELL_DIRECTIVE) {
-        let _ = std::fs::remove_file(directive);
-    }
+    TabDirective::discard_inherited();
     Ok(0)
 }
 
