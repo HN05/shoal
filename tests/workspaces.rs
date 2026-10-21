@@ -1117,9 +1117,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in [
-        "rm", "cd", "exec", "diff", "status", "inspect", "done", "undone",
-    ] {
+    for command in ["rm", "cd", "exec", "diff", "status", "inspect", "done"] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -1141,7 +1139,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .all(|(i, _)| i > target)
     );
     // `--all` comes once, before a scope's workspaces, until it is typed.
-    let choices = complete(&["stop", ""], fixture.root.path());
+    let choices = complete(&["doctor", ""], fixture.root.path());
     assert_eq!(choices[0], "--all", "{choices:?}");
     assert!(choices.contains(&"first".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
@@ -1191,30 +1189,45 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         ),
     )
     .unwrap();
+    // Attach leaves out workspaces without a session.
     let choices = described(&["attach", ""]);
     assert!(choices.contains(&"first".into()), "{choices:?}");
     assert!(
-        choices.contains(&"second:no agent session".into()),
+        !choices.iter().any(|choice| choice.starts_with("second")),
         "{choices:?}"
     );
-    for (args, refusal) in [
-        (vec!["stop", ""], "nothing running"),
-        (vec!["undone", ""], "not done"),
-        (vec!["unready", "--workspace", ""], "not marked ready"),
-        (vec!["hold", "release", ""], "no holds"),
-        (
-            vec!["base", "clear", "--workspace", ""],
-            "no base workspace",
-        ),
+    // Workspaces without what the command acts on are left out.
+    for args in [
+        vec!["stop", ""],
+        vec!["undone", ""],
+        vec!["unready", "--workspace", ""],
+        vec!["hold", "release", ""],
+        vec!["base", "clear", "--workspace", ""],
     ] {
         let choices = described(&args);
         assert!(
-            choices.contains(&format!("second:{refusal}")),
+            !choices.iter().any(|choice| choice.starts_with("second")),
             "{args:?} {choices:?}"
         );
     }
     fixture.ok(&["hold", "acquire", "second", "--name", "review"]);
     assert!(described(&["hold", "release", ""]).contains(&"second".into()));
+    // A workspace that is not ready shows its state.
+    let failed = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "broken",
+            "--base",
+            "not-a-ref",
+        ])
+        .output()
+        .unwrap();
+    assert!(!failed.status.success());
+    let choices = described(&["exec", ""]);
+    assert!(choices.contains(&"broken:failed".into()), "{choices:?}");
+    assert!(choices.contains(&"second".into()), "{choices:?}");
     fixture.ok(&["hold", "release", "second", "--name", "review"]);
     assert!(described(&["exec", ""]).contains(&"second".into()));
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
@@ -4351,6 +4364,11 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
     );
 
     for action in ["inspect", "stop"] {
+        // Stop leaves the idle workspaces out of its picker, offering all.
+        let pick = match action {
+            "stop" => "--all",
+            _ => other["id"].as_str().unwrap(),
+        };
         for (cwd, explicit, json, expected, picker) in [
             (nested.as_path(), None, false, &own, false),
             (nested.as_path(), None, true, &own, false),
@@ -4368,7 +4386,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             let mut command = fixture.command();
             command
                 .current_dir(cwd)
-                .env("PICK_ID", other["id"].as_str().unwrap())
+                .env("PICK_ID", pick)
                 .stdin(slave.try_clone().unwrap())
                 .stderr(slave);
             if json {
@@ -7245,10 +7263,14 @@ head -n 1 "$HOME/picker-input"
 fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     let fixture = Fixture::new();
     fixture.add("first");
-    let (output, rows) = fixture.pick(&["stop"], "--all", "");
+    let (output, rows) = fixture.pick(&["hold", "list"], "--all", "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("first"), "{rows}");
     assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
+    // Stop leaves out workspaces with nothing running.
+    let (output, rows) = fixture.pick(&["stop"], "--all", "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(rows, "--all\tAll workspaces\n", "{rows}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("No running agents or commands"),
         "{output:?}"
@@ -18889,6 +18911,13 @@ fn attach_selects_a_session_of_the_workspace() {
         transcript.contains("persist has no agent sessions"),
         "{transcript}"
     );
+    // Without a session anywhere, there is nothing to pick.
+    let (output, transcript) = fixture.interactive(&["attach"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("no workspace has an agent session"),
+        "{transcript}"
+    );
 
     let session = |name: &str, workspace: &Value| {
         format!(
@@ -18904,17 +18933,14 @@ fn attach_selects_a_session_of_the_workspace() {
     let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "persist"]);
-    // The picker lists a workspace without a session last, saying so.
-    fixture.add("idle");
+    // The picker leaves out a workspace without a session.
+    let idle = fixture.add("idle");
     let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 3, "{rows:?}");
-    assert!(
-        rows[2].contains("idle") && rows[2].contains("no agent session"),
-        "{rows:?}"
-    );
-    assert!(!rows[0].contains("no agent session"), "{rows:?}");
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    let idle = idle["id"].as_str().unwrap();
+    assert!(!rows.iter().any(|row| row.starts_with(idle)), "{rows:?}");
     assert_eq!(attached(), ["attach", "persist"]);
     // The fake session is still listed afterwards, as after a detach.
     assert!(

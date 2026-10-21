@@ -81,6 +81,35 @@ impl Need {
     pub fn of_command(path: &[&str]) -> Self {
         Self::of(path).unwrap_or(Self::Ready)
     }
+
+    /// What a picker reports when no workspace is left to offer.
+    pub fn none_offered(self) -> &'static str {
+        match self {
+            Self::Session => "no workspace has an agent session",
+            Self::Running => "nothing is running in any workspace",
+            Self::Done => "no workspace is done",
+            Self::Base => "no workspace has a base workspace",
+            Self::Holds => "no workspace has holds",
+            Self::Marks => "no workspace is marked ready",
+            Self::Directory => "no workspace directory exists",
+            Self::Any | Self::Ready | Self::Links | Self::Setup | Self::Checkpoint => {
+                "no workspaces"
+            }
+        }
+    }
+}
+
+/// How a command's need judges one workspace.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Fit {
+    /// The command would act on it.
+    Accepted,
+    /// The command would refuse it for a reason worth showing, such as its
+    /// state or a running execution.
+    Refused(String),
+    /// It lacks what the command acts on, such as an agent session to attach
+    /// to; pickers and completion leave it out.
+    Hidden,
 }
 
 /// A need with the live facts it is judged against.
@@ -112,60 +141,54 @@ impl Availability {
         }
     }
 
-    /// Why the command would refuse `workspace`, as pickers and completion
-    /// describe it; `None` when it would act on it.
-    pub fn refusal(&self, workspace: &Workspace) -> Option<String> {
+    /// How the command would treat `workspace`.
+    pub fn fit(&self, workspace: &Workspace) -> Fit {
         let state = workspace.state;
-        // A workspace that is not ready is named by its state, as lists do.
-        let unsettled = || {
-            Some(
+        let accepts = |states: &[WorkspaceState]| states.contains(&state);
+        let lacks = match self.need {
+            Need::Directory => !workspace.path.is_dir(),
+            Need::Session => !self.sessions.contains(&workspace.id),
+            Need::Running => !workspace.running,
+            Need::Done => !workspace.done,
+            Need::Base => workspace.base_workspace.is_none(),
+            Need::Holds => workspace.holds.is_empty(),
+            Need::Marks => workspace.review.is_empty(),
+            Need::Any | Need::Ready | Need::Links | Need::Setup | Need::Checkpoint => false,
+        };
+        let settled = match self.need {
+            Need::Ready | Need::Done => accepts(&[WorkspaceState::Ready]),
+            Need::Links => state.accepts_links(),
+            Need::Setup => accepts(&[
+                WorkspaceState::Preparing,
+                WorkspaceState::Ready,
+                WorkspaceState::Failed,
+            ]),
+            Need::Checkpoint => accepts(&[
+                WorkspaceState::Ready,
+                WorkspaceState::Stopping,
+                WorkspaceState::Failed,
+            ]),
+            Need::Any
+            | Need::Directory
+            | Need::Session
+            | Need::Running
+            | Need::Base
+            | Need::Holds
+            | Need::Marks => true,
+        };
+        if lacks {
+            Fit::Hidden
+        } else if !settled {
+            // A workspace that is not ready is named by its state, as lists do.
+            Fit::Refused(
                 ListStatus::of_workspace(workspace, false)
                     .label()
                     .to_owned(),
             )
-        };
-        match self.need {
-            Need::Any => None,
-            Need::Ready | Need::Done if state != WorkspaceState::Ready => unsettled(),
-            Need::Ready => None,
-            Need::Links if !state.accepts_links() => unsettled(),
-            Need::Links => None,
-            Need::Setup
-                if !matches!(
-                    state,
-                    WorkspaceState::Preparing | WorkspaceState::Ready | WorkspaceState::Failed
-                ) =>
-            {
-                unsettled()
-            }
-            Need::Setup => self
-                .busy
-                .contains(&workspace.id)
-                .then(|| "running".to_owned()),
-            Need::Checkpoint
-                if !matches!(
-                    state,
-                    WorkspaceState::Ready | WorkspaceState::Stopping | WorkspaceState::Failed
-                ) =>
-            {
-                unsettled()
-            }
-            Need::Checkpoint => None,
-            Need::Directory => (!workspace.path.is_dir()).then(|| "directory missing".to_owned()),
-            Need::Session => {
-                (!self.sessions.contains(&workspace.id)).then(|| "no agent session".to_owned())
-            }
-            Need::Running => (!workspace.running).then(|| "nothing running".to_owned()),
-            Need::Done => (!workspace.done).then(|| "not done".to_owned()),
-            Need::Base => workspace
-                .base_workspace
-                .is_none()
-                .then(|| "no base workspace".to_owned()),
-            Need::Holds => workspace.holds.is_empty().then(|| "no holds".to_owned()),
-            Need::Marks => workspace
-                .review
-                .is_empty()
-                .then(|| "not marked ready".to_owned()),
+        } else if self.need == Need::Setup && self.busy.contains(&workspace.id) {
+            Fit::Refused("running".to_owned())
+        } else {
+            Fit::Accepted
         }
     }
 }
@@ -244,7 +267,7 @@ mod tests {
         )
     }
 
-    fn refusal(need: Need, workspace: &Workspace) -> Option<String> {
+    fn fit(need: Need, workspace: &Workspace) -> Fit {
         Availability {
             need,
             sessions: HashSet::new(),
@@ -254,63 +277,52 @@ mod tests {
                 .into_iter()
                 .collect(),
         }
-        .refusal(workspace)
+        .fit(workspace)
+    }
+
+    fn refused(reason: &str) -> Fit {
+        Fit::Refused(reason.to_owned())
     }
 
     #[test]
-    fn refusals_name_the_missing_condition() {
+    fn states_and_running_work_are_shown_and_missing_targets_hidden() {
         let ready = workspace(WorkspaceState::Ready);
         let failed = workspace(WorkspaceState::Failed);
-        assert_eq!(refusal(Need::Any, &failed), None);
-        assert_eq!(refusal(Need::Ready, &ready), None);
-        assert_eq!(refusal(Need::Ready, &failed).as_deref(), Some("failed"));
-        assert_eq!(refusal(Need::Links, &failed), None);
-        assert_eq!(
-            refusal(Need::Links, &workspace(WorkspaceState::Removing)).as_deref(),
-            Some("removing")
-        );
-        assert_eq!(refusal(Need::Checkpoint, &failed), None);
-        assert_eq!(
-            refusal(Need::Checkpoint, &workspace(WorkspaceState::Preparing)).as_deref(),
-            Some("preparing")
-        );
-        assert_eq!(refusal(Need::Setup, &failed), None);
-        assert_eq!(
-            refusal(Need::Setup, &workspace(WorkspaceState::Preparing)),
-            None
-        );
-        assert_eq!(
-            refusal(Need::Setup, &workspace(WorkspaceState::Removing)).as_deref(),
-            Some("removing")
-        );
+        assert_eq!(fit(Need::Any, &failed), Fit::Accepted);
+        assert_eq!(fit(Need::Ready, &ready), Fit::Accepted);
+        assert_eq!(fit(Need::Ready, &failed), refused("failed"));
+        assert_eq!(fit(Need::Links, &failed), Fit::Accepted);
+        let removing = workspace(WorkspaceState::Removing);
+        assert_eq!(fit(Need::Links, &removing), refused("removing"));
+        assert_eq!(fit(Need::Checkpoint, &failed), Fit::Accepted);
+        let preparing = workspace(WorkspaceState::Preparing);
+        assert_eq!(fit(Need::Checkpoint, &preparing), refused("preparing"));
+        assert_eq!(fit(Need::Setup, &failed), Fit::Accepted);
+        assert_eq!(fit(Need::Setup, &preparing), Fit::Accepted);
+        assert_eq!(fit(Need::Setup, &removing), refused("removing"));
         let mut running = ready.clone();
         running.running = true;
-        assert_eq!(refusal(Need::Setup, &running).as_deref(), Some("running"));
-        assert_eq!(refusal(Need::Running, &running), None);
-        assert_eq!(
-            refusal(Need::Running, &ready).as_deref(),
-            Some("nothing running")
-        );
-        assert_eq!(refusal(Need::Done, &ready).as_deref(), Some("not done"));
+        assert_eq!(fit(Need::Setup, &running), refused("running"));
+        // Nothing to act on hides the workspace, whatever its state.
+        assert_eq!(fit(Need::Running, &running), Fit::Accepted);
+        assert_eq!(fit(Need::Running, &ready), Fit::Hidden);
+        assert_eq!(fit(Need::Done, &failed), Fit::Hidden);
         let mut done = failed.clone();
         done.done = true;
-        assert_eq!(refusal(Need::Done, &done).as_deref(), Some("failed"));
-        assert_eq!(refusal(Need::Directory, &ready), None);
+        assert_eq!(fit(Need::Done, &done), refused("failed"));
+        assert_eq!(fit(Need::Holds, &ready), Fit::Hidden);
+        assert_eq!(fit(Need::Base, &ready), Fit::Hidden);
+        assert_eq!(fit(Need::Marks, &ready), Fit::Hidden);
+        assert_eq!(fit(Need::Directory, &ready), Fit::Accepted);
         let mut moved = ready.clone();
         moved.path = std::env::temp_dir().join("shoal-availability-missing");
-        assert_eq!(
-            refusal(Need::Directory, &moved).as_deref(),
-            Some("directory missing")
-        );
-        assert_eq!(
-            refusal(Need::Session, &ready).as_deref(),
-            Some("no agent session")
-        );
+        assert_eq!(fit(Need::Directory, &moved), Fit::Hidden);
+        assert_eq!(fit(Need::Session, &ready), Fit::Hidden);
         let attachable = Availability {
             need: Need::Session,
             sessions: HashSet::from([ready.id.clone()]),
             busy: HashSet::new(),
         };
-        assert_eq!(attachable.refusal(&ready), None);
+        assert_eq!(attachable.fit(&ready), Fit::Accepted);
     }
 }

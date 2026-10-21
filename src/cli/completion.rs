@@ -15,7 +15,7 @@ use crate::{
     agent::{Agent, BuiltinAgent},
     cli::{
         agents,
-        availability::{Availability, Need},
+        availability::{Availability, Fit, Need},
         client, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -460,8 +460,13 @@ impl Typed {
             let availability = Availability::load(need, &paths, &workspaces).await;
             return Ok(workspaces
                 .iter()
-                .map(|w| {
-                    CompletionCandidate::new(&w.name).help(availability.refusal(w).map(Into::into))
+                .filter_map(|w| {
+                    let candidate = CompletionCandidate::new(&w.name);
+                    match availability.fit(w) {
+                        Fit::Accepted => Some(candidate),
+                        Fit::Refused(reason) => Some(candidate.help(Some(reason.into()))),
+                        Fit::Hidden => None,
+                    }
                 })
                 .collect());
         }

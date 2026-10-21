@@ -14,7 +14,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     cli::{
         WorkspaceScope,
-        availability::Availability,
+        availability::{Availability, Fit},
         client,
         context::Context,
         list_status::ListStatus,
@@ -593,16 +593,13 @@ async fn resolve_workspace(
 
 /// Always run the picker, including for scoped callers (whose list is filtered).
 pub async fn workspace_picker(ctx: &Context) -> Result<String> {
-    let workspaces = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .filter(|w| w.path.is_dir())
-        .collect();
-    pick_workspace(ctx, workspaces).await
+    pick_workspace(ctx, client::workspaces(&ctx.paths).await?).await
 }
 
 pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
-    pick(ctx, "Workspace> ", workspace_entries(ctx, workspaces).await)
+    let entries = workspace_entries(ctx, workspaces).await;
+    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    pick(ctx, "Workspace> ", entries)
 }
 
 /// The picker entries for `workspaces`, judged against what the command needs.
@@ -617,8 +614,9 @@ async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries
     )
 }
 
-/// Workspaces the command would act on come first; the rest show why it
-/// would refuse them in place of their status.
+/// Workspaces the command would act on come first; those it would refuse
+/// follow with the reason in place of their status, and those without what
+/// it acts on are left out.
 fn availability_entries(
     workspaces: Vec<Workspace>,
     availability: &Availability,
@@ -627,7 +625,11 @@ fn availability_entries(
 ) -> Entries {
     let mut rows = workspaces
         .into_iter()
-        .map(|w| (availability.refusal(&w), w))
+        .filter_map(|w| match availability.fit(&w) {
+            Fit::Accepted => Some((None, w)),
+            Fit::Refused(reason) => Some((Some(reason), w)),
+            Fit::Hidden => None,
+        })
         .collect::<Vec<_>>();
     rows.sort_by_key(|(refusal, _)| refusal.is_some());
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows

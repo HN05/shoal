@@ -396,8 +396,10 @@ registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D delet
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
 interactive fzf picker; a deleted current directory provides no workspace context.
-The picker lists workspaces the command would refuse last, with the reason in
-place of their status, such as `no agent session` for `attach`.
+The picker leaves out workspaces without what the command acts on, such as an
+agent session for `attach` or a running agent or command for `stop`, and reports
+when none is left. Workspaces the command would refuse for their state, or for
+`setup` a running execution, come last with the reason in place of their status.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
@@ -2089,8 +2091,8 @@ paths without a daemon; with one running it also suggests repository-configured
 commands, repositories, workspaces, pools, members, lease names, ports,
 and simulator leases for the current or named workspace, honoring `--state-dir`
 and scope with a 500 ms timeout, never starting a daemon or picker. A workspace
-the command would refuse is described by the reason, such as `no agent session`
-for `attach` or the state of one that is not ready. Targets sort before flags,
+the command would refuse for its state, or for `setup` a running execution, is
+described by the reason; one without what the command acts on is left out. Targets sort before flags,
 also in fzf-tab. `shoal completions <shell>` prints scripts for
 Bash, Zsh, Fish, PowerShell, and Elvish.
 
