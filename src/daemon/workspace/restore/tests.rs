@@ -329,6 +329,70 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
 }
 
 #[tokio::test]
+async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::DeleteBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    // Both are about to expire when the restore claims them.
+    let id = workspace.id.clone();
+    let soon = crate::time::unix_seconds() as i64 + 5;
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE removed_workspaces SET expires_at=?2, record=json_set(record,
+                    '$.expires_at', ?2, '$.checkpoint.expires_at', ?2) WHERE workspace_id=?1",
+                rusqlite::params![id, soon],
+            )?;
+            db.execute(
+                "UPDATE checkpoints SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
+                 WHERE workspace_id=?1",
+                rusqlite::params![id, soon],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let claimed = manager.claim_removed_workspace("topic").await.unwrap();
+    let floor = crate::time::unix_seconds() + RESTORE_CLAIM.as_secs() - 60;
+    assert!(claimed.expires_at >= floor);
+    assert!(claimed.checkpoint.expires_at >= floor);
+    let saved = record(&manager, &workspace.id).await.unwrap();
+    assert_eq!(saved.expires_at, claimed.expires_at);
+    assert_eq!(saved.checkpoint.expires_at, claimed.checkpoint.expires_at);
+    let id = workspace.id.clone();
+    let checkpoint_expiry: i64 = manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT expires_at FROM checkpoints WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(checkpoint_expiry as u64, claimed.checkpoint.expires_at);
+    manager.restore_workspace("topic").await.unwrap();
+}
+
+#[tokio::test]
 async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");

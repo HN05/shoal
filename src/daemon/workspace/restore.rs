@@ -91,7 +91,7 @@ impl Manager {
     /// and stopped agents; the caller sets it up and links its PRs. The
     /// record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
-        let removed = self.removed_workspace(selector).await?;
+        let removed = self.claim_removed_workspace(selector).await?;
         let branch = self.restore_branch(&removed).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
@@ -162,10 +162,13 @@ impl Manager {
         warnings
     }
 
-    async fn removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
+    /// The removal record to reopen, kept with its checkpoints for at least
+    /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
+    /// them while the restore runs.
+    async fn claim_removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
         let name = selector.to_owned();
         self.store
-            .run(move |db| find(db, &name))
+            .run(move |db| claim(db, &name))
             .await?
             .with_context(|| {
                 format!("no restorable workspace {selector}; shoal restore lists them")
@@ -275,6 +278,39 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
         ],
     )?;
     Ok(())
+}
+
+/// How long a restore that started keeps its removal record and checkpoints
+/// from expiring.
+pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Find a removal record and keep it and its checkpoints for at least
+/// [`RESTORE_CLAIM`].
+fn claim(db: &mut Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
+    let tx = db.transaction()?;
+    let Some(mut removed) = find(&tx, selector)? else {
+        return Ok(None);
+    };
+    let until = (unix_seconds() + RESTORE_CLAIM.as_secs()) as i64;
+    for table in ["removed_workspaces", "checkpoints"] {
+        tx.execute(
+            &format!(
+                "UPDATE {table} SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
+                 WHERE workspace_id=?1 AND expires_at < ?2"
+            ),
+            params![removed.workspace_id, until],
+        )?;
+    }
+    tx.execute(
+        "UPDATE removed_workspaces
+         SET record=json_set(record, '$.checkpoint.expires_at', ?2)
+         WHERE workspace_id=?1 AND json_extract(record, '$.checkpoint.expires_at') < ?2",
+        params![removed.workspace_id, until],
+    )?;
+    tx.commit()?;
+    removed.expires_at = removed.expires_at.max(until as u64);
+    removed.checkpoint.expires_at = removed.checkpoint.expires_at.max(until as u64);
+    Ok(Some(removed))
 }
 
 /// The unexpired removal record of a removed workspace, by name or ID; the

@@ -1044,7 +1044,8 @@ HEAD when deleted and refusing one that no longer contains it, then applies the
 snapshot's files without staging them, links what the record names and saves its
 agents' recovery records under the new workspace ID for `shoal resume`; once the
 files are back, one transaction moves the checkpoints to that ID and deletes the
-record. Reopening is
+record. A restore first claims the record, keeping it and its checkpoints from
+expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
