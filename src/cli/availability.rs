@@ -4,8 +4,9 @@
 use std::collections::HashSet;
 
 use crate::{
-    cli::{internal, list_status::ListStatus, zmx},
+    cli::{client, internal, list_status::ListStatus, zmx},
     model::Workspace,
+    paths::Paths,
     state::WorkspaceState,
 };
 
@@ -19,8 +20,8 @@ pub enum Need {
     Ready,
     /// A workspace that accepts issue and PR link changes.
     Links,
-    /// A workspace setup can reserve: preparing, ready or failed, with
-    /// nothing running besides a scoped caller's own execution.
+    /// A workspace setup can reserve: preparing, ready or failed, with no
+    /// execution running besides the caller's own.
     Setup,
     /// A worktree directory to enter.
     Directory,
@@ -84,22 +85,27 @@ pub struct Availability {
     need: Need,
     /// Workspace IDs with agent sessions, loaded only for [`Need::Session`].
     sessions: HashSet<String>,
-    /// A scoped caller's own execution runs in its workspace without
-    /// blocking setup there.
-    scoped: bool,
+    /// Workspace IDs with an execution that blocks setup, loaded only for
+    /// [`Need::Setup`].
+    busy: HashSet<String>,
 }
 
 impl Availability {
-    pub async fn load(need: Need) -> Self {
+    pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Self {
         let sessions = if need == Need::Session {
             zmx::session_workspaces().await.unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
+        let busy = if need == Need::Setup {
+            busy_workspaces(paths, workspaces).await
         } else {
             HashSet::new()
         };
         Self {
             need,
             sessions,
-            scoped: crate::env::is_scoped(),
+            busy,
         }
     }
 
@@ -129,7 +135,10 @@ impl Availability {
             {
                 unsettled()
             }
-            Need::Setup => (workspace.running && !self.scoped).then(|| "running".to_owned()),
+            Need::Setup => self
+                .busy
+                .contains(&workspace.id)
+                .then(|| "running".to_owned()),
             Need::Directory => (!workspace.path.is_dir()).then(|| "directory missing".to_owned()),
             Need::Session => {
                 (!self.sessions.contains(&workspace.id)).then(|| "no agent session".to_owned())
@@ -147,6 +156,28 @@ impl Availability {
                 .then(|| "not marked ready".to_owned()),
         }
     }
+}
+
+/// Workspaces whose running executions would block setup. Setup exempts
+/// the caller's own execution, so the caller's workspace counts only with
+/// another execution, as its inspection lists them.
+async fn busy_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {
+    let own = std::env::var(crate::env::EXECUTION_ID).ok();
+    let mut busy = HashSet::new();
+    for workspace in workspaces.iter().filter(|w| w.running) {
+        let blocking = match &own {
+            Some(own) => client::inspect(paths, workspace.id.clone())
+                .await
+                .map_or(true, |inspection| {
+                    inspection.executions.iter().any(|e| &e.id != own)
+                }),
+            None => true,
+        };
+        if blocking {
+            busy.insert(workspace.id.clone());
+        }
+    }
+    busy
 }
 
 #[cfg(test)]
@@ -205,7 +236,11 @@ mod tests {
         Availability {
             need,
             sessions: HashSet::new(),
-            scoped: false,
+            busy: workspace
+                .running
+                .then(|| workspace.id.clone())
+                .into_iter()
+                .collect(),
         }
         .refusal(workspace)
     }
@@ -234,12 +269,6 @@ mod tests {
         let mut running = ready.clone();
         running.running = true;
         assert_eq!(refusal(Need::Setup, &running).as_deref(), Some("running"));
-        let own = Availability {
-            need: Need::Setup,
-            sessions: HashSet::new(),
-            scoped: true,
-        };
-        assert_eq!(own.refusal(&running), None);
         assert_eq!(refusal(Need::Running, &running), None);
         assert_eq!(
             refusal(Need::Running, &ready).as_deref(),
@@ -263,7 +292,7 @@ mod tests {
         let attachable = Availability {
             need: Need::Session,
             sessions: HashSet::from([ready.id.clone()]),
-            scoped: false,
+            busy: HashSet::new(),
         };
         assert_eq!(attachable.refusal(&ready), None);
     }

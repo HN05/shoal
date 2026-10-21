@@ -457,7 +457,7 @@ impl Typed {
         }
         let workspaces = client::workspaces(&paths).await?;
         if let Target::Workspaces(need) = target {
-            let availability = Availability::load(need).await;
+            let availability = Availability::load(need, &paths, &workspaces).await;
             return Ok(workspaces
                 .iter()
                 .map(|w| {

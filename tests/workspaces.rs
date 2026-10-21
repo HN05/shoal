@@ -1047,6 +1047,32 @@ fn unregistered_repository_path_diagnostic_keeps_the_typed_argument() {
 }
 
 #[test]
+fn setup_completion_exempts_only_the_callers_own_execution() {
+    let fixture = Fixture::new();
+    fixture.add("first");
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    // Completion for setup, run inside `first` through `depth` nested execs.
+    let complete = |depth: usize| {
+        let mut words = vec![];
+        for _ in 0..depth {
+            words.extend([shoal, "exec", "first", "--"]);
+        }
+        words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=2"]);
+        words.extend([shoal, "--", "shoal", "setup", ""]);
+        let output = fixture.command().args(&words[1..]).output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let own = complete(1);
+    assert!(own.lines().any(|line| line == "first"), "{own}");
+    let nested = complete(2);
+    assert!(
+        nested.lines().any(|line| line == "first:running"),
+        "{nested}"
+    );
+}
+
+#[test]
 fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);

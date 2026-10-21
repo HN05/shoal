@@ -607,7 +607,7 @@ pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result
 
 /// The picker entries for `workspaces`, judged against what the command needs.
 async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
-    let availability = Availability::load(ctx.need).await;
+    let availability = Availability::load(ctx.need, &ctx.paths, &workspaces).await;
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
     availability_entries(
         workspaces,
