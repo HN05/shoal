@@ -1307,10 +1307,16 @@ cmd = "scripts/seed.sh"     # Or a build of your own in the worktree; must exit 
 paths = ["target"]          # Or your build outputs, relative to the worktree
 ```
 
-The `cargo` preset runs `cargo build --all-targets` and keeps `target`; `npm`
-runs `pnpm install --frozen-lockfile` when the commit has a `pnpm-lock.yaml`,
-otherwise `npm ci`, and keeps `node_modules`. `cmd` replaces the presets'
-commands and `paths` their outputs.
+| Preset | Build | Keeps |
+|---|---|---|
+| `cargo` | `cargo build --all-targets` | `target` |
+| `npm` | `npm ci` | `node_modules` |
+| `pnpm` | `pnpm install --frozen-lockfile` | `node_modules` |
+| `yarn` | `yarn install --frozen-lockfile` | `node_modules` |
+| `bun` | `bun install --frozen-lockfile` | `node_modules` |
+
+Presets that keep the same output cannot be combined. `cmd` replaces the
+presets' commands and `paths` their outputs.
 
 The daemon keeps a locked, detached worktree at the local default branch's tip in
 the repository directory's `.seed`, and runs the build there when that branch or

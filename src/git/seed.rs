@@ -79,17 +79,6 @@ pub async fn unmodified_files(worktree: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Which of the worktree-relative `paths` the worktree's index tracks.
-pub async fn tracked(worktree: &Path, paths: &[&str]) -> Result<HashSet<String>> {
-    let pathspecs: Vec<String> = paths
-        .iter()
-        .map(|path| format!(":(literal){path}"))
-        .collect();
-    let mut args = vec!["ls-files", "-z", "--"];
-    args.extend(pathspecs.iter().map(String::as_str));
-    Ok(names(&run(worktree, &args).await?).collect())
-}
-
 fn names(listing: &str) -> impl Iterator<Item = String> + '_ {
     listing
         .split('\0')

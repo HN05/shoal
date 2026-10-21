@@ -126,8 +126,14 @@ states!(
     SeedPreset {
         /// Cargo's `target`.
         Cargo => "cargo",
-        /// npm's or pnpm's `node_modules`.
+        /// npm's `node_modules`.
         Npm => "npm",
+        /// pnpm's `node_modules`.
+        Pnpm => "pnpm",
+        /// Yarn's `node_modules`.
+        Yarn => "yarn",
+        /// Bun's `node_modules`.
+        Bun => "bun",
     }
 );
 
@@ -147,10 +153,14 @@ pub struct Seed {
 impl Seed {
     fn validate(&self) -> Result<()> {
         for (index, preset) in self.presets.iter().enumerate() {
-            ensure!(
-                !self.presets[..index].contains(preset),
-                "seed.presets names {preset} twice"
-            );
+            for earlier in &self.presets[..index] {
+                ensure!(earlier != preset, "seed.presets names {preset} twice");
+                ensure!(
+                    earlier.output() != preset.output(),
+                    "seed.presets {earlier} and {preset} both keep {}",
+                    preset.output()
+                );
+            }
         }
         // The seed runs unattended from the default branch, so its command
         // is the repository's own file, like its outputs.
