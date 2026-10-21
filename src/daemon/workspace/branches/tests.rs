@@ -833,6 +833,11 @@ async fn creation_check_asks_the_remote_for_a_new_branch_base_only() {
     let f = Fixture::new().await;
     let author = f.remote();
     git(&author, &["push", "origin", "HEAD:refs/heads/unfetched"]);
+    // A tracking ref the remote no longer has.
+    git(
+        &f.repo,
+        &["update-ref", "refs/remotes/origin/stale", "HEAD"],
+    );
     git(&f.repo, &["branch", "topic"]);
     let base = |base| NewWorktreeOptions {
         base: Some(base),
@@ -842,6 +847,10 @@ async fn creation_check_asks_the_remote_for_a_new_branch_base_only() {
         (Some("new"), None, base("origin/unfetched")),
         (None, None, base("origin/unfetched")),
         (None, Some("topic"), base("origin/main")),
+        // An unsettled branch may still open a local branch, which uses the
+        // stale ref without fetching.
+        (None, None, base("origin/stale")),
+        (None, Some("topic"), base("origin/stale")),
         // Opening a remote branch fetches and creates it before resolving the
         // base, which may name it in any form.
         (None, Some("origin/unfetched"), base("origin/unfetched")),
@@ -859,6 +868,13 @@ async fn creation_check_asks_the_remote_for_a_new_branch_base_only() {
             base("origin/missing"),
             "not a branch on origin",
         ),
+        (
+            Some("new"),
+            None,
+            base("origin/stale"),
+            "not a branch on origin",
+        ),
+        (None, None, base("origin/missing"), "not a branch on origin"),
         // Opening an existing branch compares against the base without fetching it.
         (
             None,
