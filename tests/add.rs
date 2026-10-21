@@ -133,25 +133,34 @@ fn unregistered_repositories_are_registered_on_confirmation() {
 
 #[test]
 fn interactive_commands_refuse_their_arguments_before_prompting() {
-    for (args, expected, refusal) in [
+    for (args, answer, expected, refusal) in [
         (
             &["add", "missing"][..],
-            "check_creation missing",
+            "",
+            &["check_creation missing"][..],
             "repository is not registered",
+        ),
+        // The typed branch is checked again before the agent picker.
+        (
+            &["add", "test", "--base", "main"],
+            "taken\n",
+            &["check_creation test", "check_creation test taken"],
+            "workspace name already exists: taken",
         ),
         (
             &["repo", "rename", "missing"],
-            "list_repositories",
+            "",
+            &["list_repositories"],
             "repository is not registered: missing",
         ),
     ] {
         let daemon = FakeDaemon::start();
         let (output, transcript) = prompt::answer(
             daemon.command().args(args),
-            "",
+            answer,
             prompt::AnswerOptions::default(),
         );
-        assert_eq!(daemon.methods(), [expected], "{args:?}: {transcript}");
+        assert_eq!(daemon.methods(), expected, "{args:?}: {transcript}");
         assert!(!output.status.success(), "{args:?}: {transcript}");
         assert!(transcript.contains(refusal), "{args:?}: {transcript}");
     }
@@ -226,16 +235,25 @@ impl FakeDaemon {
                         }})
                     }
                     "check_creation" => {
-                        let repository = request["method"]["check_creation"]["repository"]
-                            .as_str()
-                            .unwrap();
+                        let check = &request["method"]["check_creation"];
+                        let repository = check["repository"].as_str().unwrap();
+                        let branch = check["branch"].as_str();
                         method = format!("check_creation {repository}");
-                        if ["test", "registered"].contains(&repository) {
-                            json!({"type": "ok"})
+                        if let Some(branch) = branch {
+                            method = format!("{method} {branch}");
+                        }
+                        let refusal = if !["test", "registered"].contains(&repository) {
+                            Some("repository is not registered")
+                        } else if branch == Some("taken") {
+                            Some("workspace name already exists: taken")
                         } else {
-                            json!({"type": "error", "data": {
-                                "code": "test", "message": "repository is not registered"
-                            }})
+                            None
+                        };
+                        match refusal {
+                            None => json!({"type": "ok"}),
+                            Some(message) => json!({"type": "error", "data": {
+                                "code": "test", "message": message
+                            }}),
                         }
                     }
                     "queue_add" => json!({"type": "queue_admission", "data": {

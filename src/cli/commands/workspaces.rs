@@ -253,10 +253,7 @@ pub(super) async fn add(
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
-    // Only a terminal prompts; without one, creation refuses the arguments itself.
-    if ctx.interactive() {
-        check_add_creation(ctx, &target, &creation).await?;
-    }
+    check_add_creation(ctx, &target, &creation).await?;
     let settings = AddSettings {
         ctx,
         repository: &target.selector,
@@ -283,6 +280,8 @@ pub(super) async fn add(
         None => None,
     };
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
+    // An issue or a typed name settles the branch; check it before the agent picker.
+    check_add_creation(ctx, &target, &creation).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, issue.is_some()).await?;
     let tab_label = match &issue {
         Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
@@ -618,8 +617,12 @@ async fn resolve_add_target(
 }
 
 /// Refuse what creation would refuse in the given repository, branch and
-/// options before a prompt asks for the rest of the addition.
+/// options before a prompt asks for the rest of the addition. Only a terminal
+/// prompts; without one, creation refuses the arguments itself.
 async fn check_add_creation(ctx: &Context, target: &AddTarget, creation: &Creation) -> Result<()> {
+    if !ctx.interactive() {
+        return Ok(());
+    }
     request::<()>(
         &ctx.paths,
         Method::CheckCreation {
