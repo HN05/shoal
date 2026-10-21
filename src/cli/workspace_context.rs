@@ -64,6 +64,7 @@ mod tests {
             chat: None,
             links: crate::model::WorkspaceLinks::default(),
             running: false,
+            done: false,
             id: format!("id-{name}"),
             repository_id: "repo".into(),
             name: name.into(),

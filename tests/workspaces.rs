@@ -17932,10 +17932,16 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     };
     fixture.ok(&["hold", "acquire", "issue-work", "--name", "review"]);
     scoped(&fixture, &["done"]);
+    assert_eq!(
+        fixture.ok(&["inspect", "issue-work"])["workspace"]["done"],
+        true
+    );
     let undone = scoped(&fixture, &["undone"]);
     assert_eq!(undone["withdrawn"]["cleanup"], true);
     assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
-    assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
+    let inspection = fixture.ok(&["inspect", "issue-work"]);
+    assert!(inspection["completion"].is_null());
+    assert_eq!(inspection["workspace"]["done"], false);
     fixture.ok(&["hold", "release", "issue-work", "--name", "review"]);
     // Only holds keep a workspace; cleanup removes the merged one on request,
     // which needs a default branch it can fetch.

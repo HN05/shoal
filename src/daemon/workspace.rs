@@ -1023,6 +1023,11 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
         "SELECT 1 FROM executions WHERE workspace_id=?1 AND state=?2",
         rusqlite::params![workspace.id, crate::state::ExecutionState::Running],
     )?;
+    workspace.done = store::exists(
+        db,
+        "SELECT 1 FROM workspace_completion WHERE workspace_id=?1",
+        [&workspace.id],
+    )?;
     Ok(())
 }
 

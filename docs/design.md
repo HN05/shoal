@@ -66,7 +66,8 @@ list of watched PR URLs, and `opened` and `related` lists of items with their ki
 URL and known title; acknowledgement-only PR cleanup records have no URL to
 expose. Linking the same issue again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
-executions after a daemon restart do not count.
+executions after a daemon restart do not count. Their `done` flag says whether a
+completion is recorded.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
 and recovery transitions so adjacent frames cannot be lost. After commands and

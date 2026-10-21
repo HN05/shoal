@@ -60,6 +60,9 @@ pub struct Workspace {
     /// Whether an agent or command started through Shoal is running here.
     #[serde(default)]
     pub running: bool,
+    /// Whether `shoal done` recorded a completion that is not withdrawn.
+    #[serde(default)]
+    pub done: bool,
     /// The workspace whose branch this one's branch builds on.
     #[serde(default)]
     pub base_workspace: Option<WorkspaceRef>,
@@ -241,6 +244,7 @@ impl Workspace {
             chat: None,
             links: WorkspaceLinks::default(),
             running: false,
+            done: false,
         }
     }
 

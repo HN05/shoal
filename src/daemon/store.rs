@@ -646,6 +646,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         chat: None,
         links: WorkspaceLinks::default(),
         running: false,
+        done: false,
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
@@ -1361,7 +1362,7 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false,
+                "base_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
                 "chat": null
             }),
         )?;
