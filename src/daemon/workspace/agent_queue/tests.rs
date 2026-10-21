@@ -638,11 +638,13 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
         ]
     );
     // The restored agent registers and takes over the slot it kept.
-    manager.remove_restore(&agents[0].0).await;
+    let register =
+        |execution: &str| manager.record_execution_child(execution.to_owned(), None, 4242);
+    register(&agents[0].0).await.unwrap();
     publish_recovery(&manager);
     manager.dispatch_queue().await.unwrap();
     bounded(second_restore).await.unwrap().unwrap();
-    manager.remove_restore(&agents[1].0).await;
+    register(&agents[1].0).await.unwrap();
     // Both agents have their slots back, so the launch keeps waiting.
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await, [("later".into(), Launch, Queued)]);

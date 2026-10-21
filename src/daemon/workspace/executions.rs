@@ -450,7 +450,8 @@ impl Manager {
         );
         self.store
             .run(move |db| {
-                let updated = db.execute(
+                let tx = db.transaction()?;
+                let updated = tx.execute(
                     "UPDATE executions SET child=?2,group_id=?3 WHERE id=?1 AND group_id IS NULL",
                     params![id, store::json_text(child.as_ref())?, group_id],
                 )?;
@@ -458,6 +459,9 @@ impl Manager {
                     updated == 1,
                     "execution already registered or no longer exists"
                 );
+                // A restored agent takes over the slot its restore kept.
+                tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [&id])?;
+                tx.commit()?;
                 Ok(())
             })
             .await
@@ -634,6 +638,11 @@ impl Manager {
         )
         .await;
         drop(connections);
+        // A restore whose agent runs again ended, even if the previous daemon
+        // stopped before removing it.
+        if request.awaiting_restore.is_none() {
+            self.remove_restore(&request.execution).await;
+        }
         if let Some(agent) = &request.agent {
             self.track_agent(
                 &request.execution,

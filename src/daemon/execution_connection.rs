@@ -273,8 +273,6 @@ async fn relay(
     } = execution;
     let (kind, recover, reattach) = (*kind, *recover, *reattach);
     let mut awaiting_started = !*started;
-    // A restored agent takes over its restore's slot once its child registers.
-    let mut restoring = false;
     // A wrapper that reattached while waiting continues its pause here.
     let mut resumed_pause = std::mem::take(awaiting_restore);
     let mut sent_stop = resumed_pause;
@@ -339,9 +337,6 @@ async fn relay(
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
                 protocol::write(writer, &Control::Started).await?;
-                if std::mem::take(&mut restoring) {
-                    manager.remove_restore(execution_id).await;
-                }
             }
             ExecutionEvent::Finished { exit_code } => return Ok(Ended::Finished(exit_code)),
             ExecutionEvent::Paused => {
@@ -369,7 +364,6 @@ async fn relay(
                     Action::Resume(ports) => {
                         *handoff_claimed = false;
                         awaiting_started = true;
-                        restoring = true;
                         sent_stop = false;
                         protocol::write(writer, &Control::Resume { ports }).await?;
                     }
