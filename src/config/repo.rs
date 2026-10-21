@@ -84,8 +84,9 @@ pub struct RepoConfig {
     pub ports: PortDefaults,
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, Cache>,
-    /// Build tools whose usual setup the repository's workspaces share.
-    pub presets: Vec<crate::presets::Preset>,
+    /// Build tools whose usual setup the repository's workspaces share; an
+    /// empty list turns off presets a lower layer names.
+    pub presets: Option<Vec<crate::presets::Preset>>,
     /// Machine-specific, so the global config or saved repository config sets
     /// it, never the worktree file.
     pub secrets: crate::secrets::Secrets,
@@ -256,7 +257,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
     crate::caches::validate(&config.caches)?;
-    crate::presets::validate(&config.presets)?;
+    crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
     crate::secrets::validate(&config.secrets)?;
     config.seed.validate()?;
     Ok(config)

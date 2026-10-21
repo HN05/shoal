@@ -126,7 +126,7 @@ pub struct Config {
     pub caches: BTreeMap<String, repo::Cache>,
     /// Build tools whose usual setup every repository's workspaces share
     /// unless the repository names its own.
-    pub presets: Vec<crate::presets::Preset>,
+    pub presets: Option<Vec<crate::presets::Preset>>,
     pub secrets: crate::secrets::Secrets,
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -639,7 +639,7 @@ impl Config {
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
         crate::env::validate_configured_environment(&config.env)?;
         crate::caches::validate(&config.caches)?;
-        crate::presets::validate(&config.presets)?;
+        crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
         crate::secrets::validate(&config.secrets)?;
         // A global file is complete on its own: its bounds must combine with
         // the built-in defaults, so `config set ports.end 4000` is refused

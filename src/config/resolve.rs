@@ -166,6 +166,7 @@ impl Effective {
             definitions: merged.ports.definitions,
         };
         ports.validate()?;
+        let presets = merged.presets.unwrap_or_default();
         Ok(Self {
             commands: merged.commands,
             providers: Default::default(),
@@ -199,9 +200,9 @@ impl Effective {
             post_setup_cmd: merged.post_setup_cmd,
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
-            env: crate::presets::environment(&merged.presets, merged.env),
-            caches: crate::presets::caches(&merged.presets, merged.caches),
-            presets: merged.presets,
+            env: crate::presets::environment(&presets, merged.env),
+            caches: crate::presets::caches(&presets, merged.caches),
+            presets,
             secrets: merged.secrets,
             resources: merged.resources,
             resource_pools: merged.resource_pools,
@@ -623,7 +624,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         named!("ports", ports.definitions),
         named!("env", env),
         named!("caches", caches),
-        list!(presets),
+        scalar!(presets),
         named!("secrets", secrets),
         named!("resources", resources),
         named!("resource_pools", resource_pools),
@@ -825,6 +826,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             ),
             [Preset::Bun]
         );
+        // An empty list turns the inherited presets off.
+        assert!(presets("presets = ['xcode']\n", "presets = []\n", "").is_empty());
     }
 
     #[test]
@@ -944,7 +947,6 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         assert!(
             !ports.definitions.is_empty()
                 && !simulators.preferred.is_empty()
-                && !presets.is_empty()
                 && !seed.paths.is_empty()
         );
         for present in [
@@ -998,6 +1000,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             land.push.is_some(),
             land.requires_approval.is_some(),
             seed.cmd.is_some(),
+            presets.is_some(),
         ] {
             assert!(present, "the fixture must set every option");
         }
