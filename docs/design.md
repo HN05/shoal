@@ -1019,12 +1019,14 @@ excludes expiry, never under the repository's Git gate, which removal holds. Che
 (while the workspace is ready or stopping), before a restore to a checkpoint, and
 by removal; all but requested ones extend the newest checkpoint instead when they
 would keep the same branch, HEAD and files. Unsaved files beyond
-`[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only. Checkpoints
+`[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only. A snapshot
+fails when HEAD or the branch moves while it is taken, so its record's HEAD
+always matches its files. Checkpoints
 expire after `retention_days`, and so do those no workspace or removal record owns.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
 other lifecycle operations and new executions, refuses while another execution is
 recorded or the checkpoint's HEAD or files collide with ignored ones, keeps the current state in
-a checkpoint, then cleans untracked files under the current ignore rules, resets
+a checkpoint and stops when that one keeps HEAD only, then cleans untracked files under the current ignore rules, resets
 the branch and applies the snapshot's files without staging them. Scoped
 callers may do this in their own workspace, since the replaced state stays a
 checkpoint.

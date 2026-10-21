@@ -229,7 +229,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
     assert!(
         refused(Some(&own))
             .await
-            .contains("cannot keep the workspace's unsaved files")
+            .contains("could not keep the workspace's unsaved files")
     );
     fs::remove_dir_all(f.workspace.path.join("nested")).unwrap();
 

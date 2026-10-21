@@ -91,14 +91,9 @@ impl Manager {
             .cleanup
             .restore
             .retention();
-        let path = &workspace.path;
-        let head = git::revision(path, "HEAD", git::run)
-            .await?
-            .trim()
-            .to_owned();
         let files_omitted = !self.archives_unsaved_files(workspace).await?;
         let message = format!("Shoal checkpoint of {}", workspace.name);
-        let commit = git::checkpoint::snapshot(path, &message, !files_omitted).await?;
+        let snapshot = git::checkpoint::snapshot(&workspace.path, &message, !files_omitted).await?;
         let created_at = unix_seconds();
         Ok(Checkpoint {
             workspace_id: workspace.id.clone(),
@@ -106,9 +101,9 @@ impl Manager {
             number: 0,
             name,
             cause,
-            branch: current_branch(path).await?,
-            head,
-            commit,
+            branch: snapshot.branch,
+            head: snapshot.head,
+            commit: snapshot.commit,
             files_omitted,
             created_at,
             expires_at: created_at + retention.as_secs(),
@@ -217,7 +212,8 @@ impl Manager {
         })
     }
 
-    /// Keep the current state and move the worktree to `checkpoint`.
+    /// Keep the current state and move the worktree to `checkpoint`, unless
+    /// that checkpoint could not keep the unsaved files.
     async fn rewind(
         &self,
         workspace: &Workspace,
@@ -229,6 +225,11 @@ impl Manager {
         let replaced = self
             .checkpoint(workspace, CheckpointCause::Restore, None)
             .await?;
+        ensure!(
+            !replaced.files_omitted,
+            "checkpoint {} could not keep the workspace's unsaved files; commit or remove them first",
+            replaced.number
+        );
         let _git = self.lock_repository_git(&workspace.repository_id).await;
         git::checkpoint::rewind(&workspace.path, &checkpoint.head, &checkpoint.commit)
             .await
@@ -241,7 +242,7 @@ impl Manager {
         Ok(replaced)
     }
 
-    /// Refuse a rewind that would lose unsaved files, disturb another
+    /// Refuse a rewind that would delete ignored files, disturb another
     /// execution or a Git operation, or switch branches.
     async fn ensure_rewindable(
         &self,
@@ -268,10 +269,6 @@ impl Manager {
             checkpoint.number,
             branch_label(checkpoint.branch.as_deref()),
             branch_label(branch.as_deref())
-        );
-        ensure!(
-            self.archives_unsaved_files(workspace).await?,
-            "a checkpoint cannot keep the workspace's unsaved files; commit or remove them first"
         );
         let ignored =
             git::checkpoint::ignored_collisions(path, &checkpoint.head, &checkpoint.commit).await?;
