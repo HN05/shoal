@@ -174,13 +174,23 @@ enum Image {
 }
 
 /// macOS refuses the arguments of a process whose exec has not published them
-/// yet; Linux reads them as empty instead.
+/// yet, often right after reading them as empty; Linux reads them as empty
+/// instead.
 const REFUSED_WHILE_LOADING: bool = cfg!(target_os = "macos");
 
 /// Linux reads an empty environment while a process replaces its image and
 /// after an exiting process releases its memory; neither is evidence about
 /// ownership. Wait for loading images, then confirm a settled empty read.
 fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visibility> {
+    visibility_with(identity, deadline, environment)
+}
+
+/// `visibility`, reading environments with `environment`.
+fn visibility_with(
+    identity: &Identity,
+    deadline: std::time::Instant,
+    mut environment: impl FnMut(u32) -> Result<Vec<Vec<u8>>>,
+) -> Result<Visibility> {
     loop {
         let read = environment(identity.pid);
         if !alive(identity)? {
@@ -209,13 +219,14 @@ fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visib
             }
             Image::Loading => return Ok(Visibility::Unreadable),
             // The image may have settled after the empty read.
-            Image::Settled => {
-                return Ok(match environment(identity.pid) {
-                    Ok(environment) => Visibility::Environment(environment),
-                    _ if alive(identity)? => Visibility::Unreadable,
-                    _ => Visibility::Gone,
-                });
-            }
+            Image::Settled => match environment(identity.pid) {
+                Ok(environment) => return Ok(Visibility::Environment(environment)),
+                Err(_) if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                _ if alive(identity)? => return Ok(Visibility::Unreadable),
+                _ => return Ok(Visibility::Gone),
+            },
         }
     }
 }
@@ -642,6 +653,31 @@ mod tests {
             visibility(&identity, deadline).unwrap(),
             Visibility::Gone
         ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn refusal_after_an_empty_read_waits_for_the_published_environment() {
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("30")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let identity = capture(child.id().unwrap()).unwrap().unwrap();
+        // The order macOS reports while a spawned process execs.
+        let mut reads = [
+            Ok(vec![]),
+            Err(anyhow::anyhow!("cannot inspect process environment")),
+            Ok(vec![b"SHOAL_TEST_PROCESS=1".to_vec()]),
+        ]
+        .into_iter();
+        let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+        let visibility = visibility_with(&identity, deadline, |_| reads.next().unwrap()).unwrap();
+        let Visibility::Environment(environment) = visibility else {
+            panic!("published environment is not visible");
+        };
+        assert_eq!(environment, [b"SHOAL_TEST_PROCESS=1".to_vec()]);
+        child.kill().await.unwrap();
     }
 
     #[tokio::test]
