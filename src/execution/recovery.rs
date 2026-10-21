@@ -400,14 +400,19 @@ impl LastSession {
 
     /// Save execution `id` of `agent` as the workspace's last session.
     pub(crate) fn save(paths: &Paths, workspace_id: &str, agent: &str, id: &str) -> Result<()> {
-        let last = Self {
+        Self {
             agent: agent.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
-        };
+        }
+        .write(paths, workspace_id)
+    }
+
+    /// Save this as the workspace's last session.
+    pub(crate) fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()> {
         std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
         crate::fsutil::replace_atomically(
             &Self::path(paths, workspace_id),
-            &serde_json::to_vec(&last)?,
+            &serde_json::to_vec(self)?,
             ReplaceOptions {
                 permissions: Permissions::Temporary,
                 sync: true,

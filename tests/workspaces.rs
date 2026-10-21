@@ -4051,7 +4051,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 }
 
 #[test]
-fn resume_continues_the_session_of_an_agent_that_exited_on_its_own() {
+fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_restore() {
     let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("quit");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -4072,6 +4072,16 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
+    // The removal record keeps the last session for the restored workspace.
+    fixture.ok(&["rm", "quit", "--yes", "--keep-branch"]);
+    let removed = fixture.ok(&["restore"]);
+    assert_eq!(
+        removed[0]["last_session"],
+        serde_json::json!({"agent": "claude", "session": "quit-session"}),
+        "{removed}"
+    );
+    let restored = fixture.ok(&["restore", "quit"]);
+    assert_eq!(restored["warnings"], serde_json::json!([]));
     let output = fixture
         .command()
         .current_dir(path)

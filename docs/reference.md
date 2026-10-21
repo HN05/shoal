@@ -1410,13 +1410,13 @@ removed one it opens the newest removed workspace with that name or ID on its br
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
-for `shoal resume`, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
+and the last session for `shoal resume`, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
 a warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Workspace processes cannot reopen removed workspaces.
 
-Removal records the branch, base, links and stopped agents with its checkpoint, and
+Removal records the branch, base, links, stopped agents and last session with its checkpoint, and
 keeps them until the checkpoint expires. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands
