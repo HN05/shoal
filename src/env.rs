@@ -244,13 +244,18 @@ pub fn apply_configured(command: &mut Command, values: &BTreeMap<String, OsStrin
 }
 
 /// Rendered `[env]` values as a shell or another program sets them, with a
-/// preset's directories first on `path`.
+/// preset's directories first on the configured PATH, or else `inherited`.
 pub fn export_configured(
     mut values: BTreeMap<String, String>,
-    path: Option<OsString>,
+    inherited: Option<OsString>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(prefix) = values.remove(PATH_PREFIX) {
-        let joined = joined_path(OsStr::new(&prefix), &path.unwrap_or_default())
+        let path = values
+            .get("PATH")
+            .map(OsString::from)
+            .or(inherited)
+            .unwrap_or_default();
+        let joined = joined_path(OsStr::new(&prefix), &path)
             .ok()
             .and_then(|joined| joined.into_string().ok());
         let joined = joined.context("PATH cannot be exported with the preset directories")?;
@@ -471,6 +476,16 @@ mod tests {
             exported,
             BTreeMap::from([("PATH".to_owned(), "/cache/xcode/bin:/usr/bin".to_owned())])
         );
+        // A PATH `[env]` sets is the one the directories go before.
+        let exported = export_configured(
+            BTreeMap::from([
+                (PATH_PREFIX.to_owned(), "/cache/xcode/bin".to_owned()),
+                ("PATH".to_owned(), "/tools".to_owned()),
+            ]),
+            Some("/usr/bin".into()),
+        )
+        .unwrap();
+        assert_eq!(exported["PATH"], "/cache/xcode/bin:/tools");
     }
 
     #[test]
