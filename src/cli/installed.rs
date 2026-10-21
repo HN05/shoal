@@ -1,11 +1,9 @@
 //! Hand long-running commands to the installed release after an upgrade
 //! changes the daemon protocol.
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, path::PathBuf};
 
 use super::client::ProtocolMismatch;
+use crate::fsutil::FileIdentity;
 
 /// The binary this command runs, so an upgrade that changes the daemon
 /// protocol can hand the command to the installed release.
@@ -13,8 +11,6 @@ pub(crate) struct Executable {
     path: Option<PathBuf>,
     identity: Option<FileIdentity>,
 }
-
-type FileIdentity = (u64, u64, i64, i64);
 
 impl Executable {
     pub(crate) fn current() -> Self {
@@ -28,19 +24,23 @@ impl Executable {
     }
 
     fn at(path: PathBuf) -> Self {
-        let identity = file_identity(&path);
+        let identity = FileIdentity::of(&path).ok();
         Self {
             path: Some(path),
             identity,
         }
     }
 
-    /// Whether another binary now sits at this path, as after an upgrade.
+    /// Whether another binary now sits at this path, as after an upgrade,
+    /// including one installed where none was found at the start.
     fn replaced(&self) -> bool {
-        self.path
-            .as_deref()
-            .and_then(file_identity)
-            .is_some_and(|now| self.identity != Some(now))
+        let Some(path) = self.path.as_deref() else {
+            return false;
+        };
+        match self.identity {
+            Some(identity) => identity.replaced_at(path),
+            None => FileIdentity::of(path).is_ok(),
+        }
     }
 
     /// After an upgrade replaced this binary, continue the command from the
@@ -71,18 +71,6 @@ impl Executable {
         }
         self.take_over(arguments).unwrap_or(error)
     }
-}
-
-// Follows symlinks, so retargeting a versioned install link counts as a change.
-fn file_identity(path: &Path) -> Option<FileIdentity> {
-    use std::os::unix::fs::MetadataExt as _;
-    let metadata = std::fs::metadata(path).ok()?;
-    Some((
-        metadata.dev(),
-        metadata.ino(),
-        metadata.mtime(),
-        metadata.mtime_nsec(),
-    ))
 }
 
 /// This command's arguments.
@@ -126,26 +114,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn executable_is_replaced_by_a_new_file_or_link_target() {
+    fn a_binary_installed_after_the_start_replaces_the_missing_one() {
         let temp = tempfile::tempdir().unwrap();
-        let first = temp.path().join("first");
-        let second = temp.path().join("second");
-        let link = temp.path().join("shoal");
-        std::fs::write(&first, "old").unwrap();
-        std::fs::write(&second, "new").unwrap();
-        std::os::unix::fs::symlink(&first, &link).unwrap();
-        let executable = Executable::at(link.clone());
-        assert!(!executable.replaced());
-
-        std::fs::remove_file(&link).unwrap();
-        std::os::unix::fs::symlink(&second, &link).unwrap();
-        assert!(executable.replaced());
-
-        let executable = Executable::at(first.clone());
-        std::fs::rename(&second, &first).unwrap();
-        assert!(executable.replaced());
-        std::fs::remove_file(&first).unwrap();
+        let path = temp.path().join("shoal");
+        let executable = Executable::at(path.clone());
         assert!(!executable.replaced(), "a missing binary cannot take over");
+        std::fs::write(&path, "new").unwrap();
+        assert!(executable.replaced());
     }
 
     // A failed exec would leave this process without its ignored SIGPIPE.

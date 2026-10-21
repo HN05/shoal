@@ -139,6 +139,36 @@ fn same_file(left: &Path, right: &Path) -> bool {
     }
 }
 
+/// What tells a file at a path apart from its replacement. It follows
+/// symlinks, so retargeting a link, renaming another file over it or rewriting
+/// it in place all change the identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileIdentity {
+    device: u64,
+    inode: u64,
+    size: u64,
+    modified: std::time::SystemTime,
+}
+
+impl FileIdentity {
+    pub fn of(path: &Path) -> io::Result<Self> {
+        use std::os::unix::fs::MetadataExt as _;
+        let metadata = fs::metadata(path)?;
+        Ok(Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            size: metadata.len(),
+            modified: metadata.modified()?,
+        })
+    }
+
+    /// Whether another file now sits at `path`. A missing or unreadable file
+    /// is no replacement.
+    pub fn replaced_at(&self, path: &Path) -> bool {
+        Self::of(path).is_ok_and(|current| current != *self)
+    }
+}
+
 /// Read UTF-8 text; only a missing file is treated as absent.
 pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
     match fs::read_to_string(path) {
@@ -319,6 +349,32 @@ mod tests {
         create_marked_dir(&theirs, "repo").unwrap();
         assert!(!is_marked_dir(&theirs, "repo"));
         assert_eq!(fs::read_dir(&theirs).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn file_identity_changes_with_a_new_file_or_link_target() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let link = temp.path().join("shoal");
+        fs::write(&first, "old").unwrap();
+        fs::write(&second, "new binary").unwrap();
+        std::os::unix::fs::symlink(&first, &link).unwrap();
+        let original = FileIdentity::of(&link).unwrap();
+        assert!(!original.replaced_at(&link));
+
+        fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&second, &link).unwrap();
+        assert!(original.replaced_at(&link));
+
+        let original = FileIdentity::of(&first).unwrap();
+        fs::rename(&second, &first).unwrap();
+        assert!(original.replaced_at(&first));
+        fs::remove_file(&first).unwrap();
+        assert!(
+            !original.replaced_at(&first),
+            "a missing file is no replacement"
+        );
     }
 
     #[test]

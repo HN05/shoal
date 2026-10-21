@@ -1,42 +1,12 @@
 //! Restart a managed daemon after its installed executable is replaced.
 use super::workspace::Manager;
-use anyhow::Result;
-use std::{
-    fs,
-    os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
+use crate::fsutil::FileIdentity;
+use std::path::PathBuf;
 use tokio::sync::RwLockWriteGuard;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ExecutableIdentity {
-    path: PathBuf,
-    device: u64,
-    inode: u64,
-    size: u64,
-    modified: SystemTime,
-}
-
-fn identity(path: &Path) -> Result<ExecutableIdentity> {
-    let path = fs::canonicalize(path)?;
-    let metadata = fs::metadata(&path)?;
-    Ok(ExecutableIdentity {
-        path,
-        device: metadata.dev(),
-        inode: metadata.ino(),
-        size: metadata.len(),
-        modified: metadata.modified()?,
-    })
-}
-
-fn replaced(original: &ExecutableIdentity, path: &Path) -> bool {
-    identity(path).is_ok_and(|current| current != *original)
-}
 
 pub(super) struct Update {
     pub(super) path: PathBuf,
-    original: ExecutableIdentity,
+    original: FileIdentity,
 }
 
 impl Update {
@@ -45,13 +15,13 @@ impl Update {
             return None;
         }
         let path = crate::service::executable(None).ok()?;
-        let original = identity(&path).ok()?;
+        let original = FileIdentity::of(&path).ok()?;
         Some(Self { path, original })
     }
 
     pub(super) fn pending(&self) -> bool {
         crate::fsutil::is_executable(&self.path).unwrap_or(false)
-            && replaced(&self.original, &self.path)
+            && self.original.replaced_at(&self.path)
     }
 }
 
@@ -67,27 +37,6 @@ pub(super) fn quiesce(manager: &Manager) -> Option<RwLockWriteGuard<'_, ()>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
-    #[test]
-    fn replacement_detects_atomic_package_swap() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("shoal");
-        let replacement = directory.path().join("shoal.new");
-        fs::write(&path, "old").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        let original = identity(&path).unwrap();
-        fs::write(&replacement, "new binary").unwrap();
-        fs::rename(replacement, &path).unwrap();
-        assert!(replaced(&original, &path));
-    }
-    #[test]
-    fn unchanged_executable_is_not_restarted() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("shoal");
-        fs::write(&path, "same").unwrap();
-        let original = identity(&path).unwrap();
-        assert!(!replaced(&original, &path));
-    }
 
     #[tokio::test]
     async fn restart_waits_for_background_work_and_executions_that_cannot_reattach() {
