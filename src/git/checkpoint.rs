@@ -11,47 +11,20 @@ const REFS: &str = "refs/shoal/checkpoints/";
 /// Where removals kept their snapshots before checkpoints replaced them.
 const LEGACY_REFS: &str = "refs/shoal/removed/";
 
-/// The ref that keeps a workspace's checkpoint.
-pub fn reference(workspace_id: &str, number: u64) -> String {
-    format!("{REFS}{workspace_id}/{number}")
+/// The ref that keeps a checkpoint's commit reachable. It is named by the
+/// commit, so whichever checkpoints keep that commit own it.
+pub fn reference(commit: &str) -> String {
+    format!("{REFS}{commit}")
 }
 
-/// A checkpoint ref in the repository and the commit it keeps.
-pub struct SavedRef {
-    pub reference: String,
-    /// The workspace ID and checkpoint number the ref names; `None` for a
-    /// name no checkpoint has.
-    pub checkpoint: Option<(String, u64)>,
-    pub commit: String,
+/// Every checkpoint ref in the repository, with the commit it keeps.
+pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, String)>> {
+    refs(repo, REFS).await
 }
 
-/// Every checkpoint ref in the repository.
-pub async fn saved_refs(repo: &Path) -> Result<Vec<SavedRef>> {
-    Ok(refs(repo, REFS)
-        .await?
-        .into_iter()
-        .map(|(reference, commit)| SavedRef {
-            checkpoint: reference.strip_prefix(REFS).and_then(|name| {
-                let (workspace_id, number) = name.rsplit_once('/')?;
-                Some((workspace_id.to_owned(), number.parse().ok()?))
-            }),
-            reference,
-            commit,
-        })
-        .collect())
-}
-
-/// The refs removals kept before checkpoints, by workspace ID, with the
-/// commit each keeps.
-pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, String, String)>> {
-    Ok(refs(repo, LEGACY_REFS)
-        .await?
-        .into_iter()
-        .filter_map(|(reference, commit)| {
-            let workspace_id = reference.strip_prefix(LEGACY_REFS)?.to_owned();
-            Some((reference, workspace_id, commit))
-        })
-        .collect())
+/// The refs removals kept before checkpoints, with the commit each keeps.
+pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, String)>> {
+    refs(repo, LEGACY_REFS).await
 }
 
 async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, String)>> {
@@ -201,7 +174,7 @@ pub async fn apply(worktree: &Path, snapshot: &str) -> Result<()> {
 /// its unsaved files with those of `snapshot`, deleting tracked changes and
 /// untracked files the snapshot lacks. Untracked files are cleaned under the
 /// current ignore rules, before the reset can change them, so ignored files
-/// stay; [`ignored_paths_in`] finds those the snapshot would overwrite.
+/// stay; [`ignored_collisions`] finds those the rewind would replace.
 pub async fn rewind(worktree: &Path, head: &str, snapshot: &str) -> Result<()> {
     run_without_submodules(worktree, &["clean", "--quiet", "--force", "-d", "--", ":/"]).await?;
     run_without_submodules(worktree, &["reset", "--quiet", "--hard", head, "--"]).await?;
@@ -211,10 +184,15 @@ pub async fn rewind(worktree: &Path, head: &str, snapshot: &str) -> Result<()> {
     Ok(())
 }
 
-/// The paths of `snapshot` where the worktree has an ignored file, or lies
-/// inside an ignored directory: restoring it would overwrite them, and no
+/// The paths of `head` and `snapshot` that collide with an ignored file or
+/// directory in the worktree: the same path, or one inside the other.
+/// Rewinding to them would delete or overwrite those files, and no
 /// checkpoint keeps ignored files.
-pub async fn ignored_paths_in(worktree: &Path, snapshot: &str) -> Result<Vec<String>> {
+pub async fn ignored_collisions(
+    worktree: &Path,
+    head: &str,
+    snapshot: &str,
+) -> Result<Vec<String>> {
     let ignored = run_isolated(
         worktree,
         &[
@@ -230,26 +208,37 @@ pub async fn ignored_paths_in(worktree: &Path, snapshot: &str) -> Result<Vec<Str
     let ignored: Vec<&str> = ignored
         .split('\0')
         .filter(|path| !path.is_empty())
+        .map(|path| path.trim_end_matches('/'))
         .collect();
     if ignored.is_empty() {
         return Ok(Vec::new());
     }
-    let paths = run_isolated(
-        worktree,
-        &["ls-tree", "-r", "-z", "--name-only", snapshot, "--"],
-    )
-    .await?;
+    let mut paths = std::collections::BTreeSet::new();
+    for commit in [head, snapshot] {
+        let tree = run_isolated(
+            worktree,
+            &["ls-tree", "-r", "-z", "--name-only", commit, "--"],
+        )
+        .await?;
+        paths.extend(
+            tree.split('\0')
+                .filter(|path| !path.is_empty())
+                .map(str::to_owned),
+        );
+    }
+    let contains = |outer: &str, inner: &str| {
+        inner == outer
+            || inner
+                .strip_prefix(outer)
+                .is_some_and(|rest| rest.starts_with('/'))
+    };
     Ok(paths
-        .split('\0')
+        .into_iter()
         .filter(|path| {
             ignored
                 .iter()
-                .any(|ignored| match ignored.strip_suffix('/') {
-                    Some(directory) => path.starts_with(&format!("{directory}/")),
-                    None => path == ignored,
-                })
+                .any(|ignored| contains(ignored, path) || contains(path, ignored))
         })
-        .map(str::to_owned)
         .collect())
 }
 
@@ -328,12 +317,12 @@ mod tests {
         );
         assert!(!same_files(&repo, &commit, head.trim()).await.unwrap());
 
-        let reference = reference("workspace", 2);
+        let reference = reference(&commit);
         save(&repo, &reference, &commit).await.unwrap();
-        let saved = saved_refs(&repo).await.unwrap();
-        assert_eq!(saved.len(), 1);
-        assert_eq!(saved[0].checkpoint, Some(("workspace".to_owned(), 2)));
-        assert_eq!(saved[0].commit, commit);
+        assert_eq!(
+            saved_refs(&repo).await.unwrap(),
+            [(reference.clone(), commit.clone())]
+        );
         assert!(delete_at(&repo, &reference, &commit).await.unwrap());
         assert!(saved_refs(&repo).await.unwrap().is_empty());
     }
@@ -383,18 +372,20 @@ mod tests {
         crate::test_support::commit(&repo, ".gitignore");
         fs::create_dir(repo.join("build")).unwrap();
         fs::write(repo.join("build/out"), "output\n").unwrap();
-        assert!(
-            ignored_paths_in(&repo, &checkpoint)
+        let collisions = async || {
+            ignored_collisions(&repo, head.trim(), &checkpoint)
                 .await
                 .unwrap()
-                .is_empty()
-        );
+        };
+        assert!(collisions().await.is_empty());
         fs::write(repo.join("generated"), "regenerated\n").unwrap();
-        assert_eq!(
-            ignored_paths_in(&repo, &checkpoint).await.unwrap(),
-            ["generated"]
-        );
+        assert_eq!(collisions().await, ["generated"]);
         fs::remove_file(repo.join("generated")).unwrap();
+        // An ignored directory where the checkpoint has a file collides too.
+        fs::create_dir(repo.join("generated")).unwrap();
+        fs::write(repo.join("generated/cache"), "cache\n").unwrap();
+        assert_eq!(collisions().await, ["generated"]);
+        fs::remove_dir_all(repo.join("generated")).unwrap();
 
         rewind(&repo, head.trim(), &checkpoint).await.unwrap();
         assert_eq!(

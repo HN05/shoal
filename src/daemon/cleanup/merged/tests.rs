@@ -119,8 +119,14 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
     fs::write(f.workspace.path.join("scratch"), "notes\n").unwrap();
     assert!(!f.kept_after(5).await);
 
-    let reference = crate::git::checkpoint::reference(&f.workspace.id, 1);
-    let snapshot = git(&f.checkout, &["rev-parse", &reference]);
+    let snapshot = git(
+        &f.checkout,
+        &[
+            "for-each-ref",
+            "--format=%(objectname)",
+            "refs/shoal/checkpoints/",
+        ],
+    );
     let snapshot = snapshot.trim();
     assert_eq!(
         git(&f.checkout, &["rev-parse", &format!("{snapshot}^")]),

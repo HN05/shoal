@@ -262,33 +262,19 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     f.write("scratch", "more notes\n");
     let second = manager.take_checkpoint("topic", None).await.unwrap();
 
-    // An expired checkpoint goes with its ref; one extended after expiry
-    // selected it stays.
+    // An expired checkpoint goes with its ref.
     f.set_expiry(first.number, 0).await;
     manager.expire_checkpoints().await.unwrap();
-    assert_eq!(
-        checkpoint_refs(&f.checkout),
-        [git::checkpoint::reference(&f.workspace.id, second.number)]
-    );
-    let (id, commit) = (f.workspace.id.clone(), second.commit.clone());
-    let deleted = manager
-        .store
-        .run(move |db| delete_unless_extended(db, &id, second.number, &commit))
-        .await
-        .unwrap();
-    assert!(!deleted);
+    let kept = [git::checkpoint::reference(&second.commit)];
+    assert_eq!(checkpoint_refs(&f.checkout), kept);
 
     // A removal snapshot from before checkpoints moves to the checkpoint the
     // store migration recorded for it.
     let legacy = format!("refs/shoal/removed/{}", f.workspace.id);
     git(&f.checkout, &["update-ref", &legacy, &second.commit]);
-    let reference = git::checkpoint::reference(&f.workspace.id, second.number);
-    git(&f.checkout, &["update-ref", "-d", &reference]);
+    git(&f.checkout, &["update-ref", "-d", &kept[0]]);
     manager.expire_checkpoints().await.unwrap();
-    assert_eq!(
-        checkpoint_refs(&f.checkout),
-        [git::checkpoint::reference(&f.workspace.id, second.number)]
-    );
+    assert_eq!(checkpoint_refs(&f.checkout), kept);
 
     // A workspace that is gone without a removal record owns nothing.
     let id = f.workspace.id.clone();

@@ -151,7 +151,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         removed.checkpoint.expires_at - removed.checkpoint.created_at,
         30 * 24 * 3600
     );
-    let reference = git::checkpoint::reference(&workspace.id, removed.checkpoint.number);
+    let reference = git::checkpoint::reference(&removed.checkpoint.commit);
     assert_eq!(
         git(&checkout, &["rev-parse", &reference]).trim(),
         removed.checkpoint.commit
@@ -324,7 +324,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     assert_eq!(checkpoints[0].cause, CheckpointCause::Removal);
     assert_eq!(
         checkpoint_refs(&checkout),
-        [git::checkpoint::reference(&workspace.id, 1)]
+        [git::checkpoint::reference(&checkpoints[0].commit)]
     );
 }
 
@@ -538,10 +538,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     );
     assert_eq!(
         checkpoint_refs(&checkout),
-        [git::checkpoint::reference(
-            &workspace.id,
-            record.checkpoint.number
-        )]
+        [git::checkpoint::reference(&record.checkpoint.commit)]
     );
     assert!(
         manager.removed_workspaces().await.unwrap().is_empty(),
@@ -620,11 +617,10 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
     // An unchanged retry extends the latest checkpoint instead.
     let third = save().await;
     assert_eq!(third.number, second.number);
-    assert_eq!(
-        checkpoint_refs(&checkout),
-        [
-            git::checkpoint::reference(&workspace.id, 1),
-            git::checkpoint::reference(&workspace.id, 2)
-        ]
-    );
+    let mut kept = vec![
+        git::checkpoint::reference(&first.commit),
+        git::checkpoint::reference(&second.commit),
+    ];
+    kept.sort();
+    assert_eq!(checkpoint_refs(&checkout), kept);
 }

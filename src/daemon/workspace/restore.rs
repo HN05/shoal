@@ -117,13 +117,6 @@ impl Manager {
             opened.workspace.name
         );
         let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
-        let repo = self.repository(&removed.repository_id).await?;
-        if let Err(error) = self
-            .move_checkpoints(&repo, &removed.workspace_id, &opened.workspace.id)
-            .await
-        {
-            warnings.push(format!("cannot keep the earlier checkpoints: {error:#}"));
-        }
         if let Err(error) = crate::execution::recovery::save_stopped_agents(
             &self.paths,
             &opened.workspace.id,
@@ -133,7 +126,7 @@ impl Manager {
                 "cannot save stopped agents for shoal resume: {error:#}"
             ));
         }
-        self.forget_removal_record(&removed).await?;
+        self.adopt_removal(&removed, &opened.workspace.id).await?;
         Ok(RestoredWorkspace {
             opened,
             removed,
@@ -242,18 +235,6 @@ impl Manager {
         .await
         .is_ok();
         Ok(exists.then(|| commit.clone()))
-    }
-
-    /// Delete a restored workspace's record; its checkpoints moved to the new
-    /// workspace.
-    async fn forget_removal_record(&self, removed: &RemovedWorkspace) -> Result<()> {
-        let id = removed.workspace_id.clone();
-        self.store
-            .run(move |db| {
-                db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
-                Ok(())
-            })
-            .await
     }
 }
 

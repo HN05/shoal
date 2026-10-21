@@ -104,6 +104,10 @@ pub struct Manager {
     pub(crate) queues: super::queue::Queues,
     /// Serializes repository registration, removal, and local config changes.
     registry_gate: Mutex<()>,
+    /// Orders checkpoint records and refs against expiry, so a ref is never
+    /// deleted between its record and its write. Held only for those steps,
+    /// since removal takes checkpoints under the repository's Git gate.
+    checkpoint_gate: Mutex<()>,
     /// Per-repository gate for ref updates and worktree creation/removal.
     git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Excludes lifecycle transitions and overlapping permit hooks per workspace.
@@ -179,6 +183,7 @@ impl Manager {
             simulator_gate: Mutex::new(()),
             queues: Default::default(),
             registry_gate: Mutex::new(()),
+            checkpoint_gate: Mutex::new(()),
             git_gates: Mutex::new(HashMap::new()),
             resource_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),

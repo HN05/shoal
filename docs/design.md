@@ -1011,9 +1011,11 @@ executions, saving an existing worktree's agent sessions but no commands, run
 removal hooks, remove owned simulators, take a checkpoint, remove the worktree, and release leases with the record. Failures retain what is
 needed to retry. Workspaces are cheap to remove because removal is reversible.
 A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built
-with a temporary index under `refs/shoal/checkpoints/<workspace id>/<number>`,
-with a record in the store; the record goes first and a ref without one is
-deleted. Checkpoints are taken on request, when an agent exits or is stopped
+with a temporary index and kept under `refs/shoal/checkpoints/<commit>`, with a
+record in the store. A ref is named by its commit, so it belongs to whichever
+records keep that commit and moving checkpoints to another workspace changes
+only records; a ref no record keeps is deleted. Writing a record and its ref
+excludes expiry, never under the repository's Git gate, which removal holds. Checkpoints are taken on request, when an agent exits or is stopped
 (while the workspace is ready or stopping), before a restore to a checkpoint, and
 by removal; all but requested ones extend the newest checkpoint instead when they
 would keep the same branch, HEAD and files. Unsaved files beyond
@@ -1021,7 +1023,7 @@ would keep the same branch, HEAD and files. Unsaved files beyond
 expire after `retention_days`, and so do those no workspace or removal record owns.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
 other lifecycle operations and new executions, refuses while another execution is
-recorded or the snapshot would overwrite ignored files, keeps the current state in
+recorded or the checkpoint's HEAD or files collide with ignored ones, keeps the current state in
 a checkpoint, then cleans untracked files under the current ignore rules, resets
 the branch and applies the snapshot's files without staging them. Scoped
 callers may do this in their own workspace, since the replaced state stays a
@@ -1034,9 +1036,10 @@ one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
 the workspace. Records expire with their checkpoint. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
-snapshot's files without staging them, links what the record names, moves the
-checkpoints to the new workspace ID and saves its agents' recovery records under
-it for `shoal resume`; the record goes once the files are back. Reopening is
+snapshot's files without staging them, links what the record names and saves its
+agents' recovery records under the new workspace ID for `shoal resume`; once the
+files are back, one transaction moves the checkpoints to that ID and deletes the
+record. Reopening is
 allocation, so scoped callers cannot.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree

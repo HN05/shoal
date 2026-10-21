@@ -7,7 +7,9 @@ use super::Manager;
 use crate::{
     daemon::{log, scope::Caller},
     git,
-    model::{Checkpoint, CheckpointCause, Repository, RestoredCheckpoint, Workspace},
+    model::{
+        Checkpoint, CheckpointCause, RemovedWorkspace, Repository, RestoredCheckpoint, Workspace,
+    },
     state::WorkspaceState,
     time::unix_seconds,
 };
@@ -116,10 +118,11 @@ impl Manager {
     /// Record a snapshot under the workspace's next number, then point its
     /// ref at the commit; a ref that cannot be written takes the record back.
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
+        let repo = self.repository(&checkpoint.repository_id).await?;
+        let _refs = self.checkpoint_gate.lock().await;
         let record = checkpoint.clone();
         checkpoint.number = self.store.run(move |db| insert(db, &record)).await?;
-        let repo = self.repository(&checkpoint.repository_id).await?;
-        let reference = git::checkpoint::reference(&checkpoint.workspace_id, checkpoint.number);
+        let reference = git::checkpoint::reference(&checkpoint.commit);
         if let Err(error) = git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await
         {
             let (id, number) = (checkpoint.workspace_id.clone(), checkpoint.number);
@@ -270,7 +273,8 @@ impl Manager {
             self.archives_unsaved_files(workspace).await?,
             "a checkpoint cannot keep the workspace's unsaved files; commit or remove them first"
         );
-        let ignored = git::checkpoint::ignored_paths_in(path, &checkpoint.commit).await?;
+        let ignored =
+            git::checkpoint::ignored_collisions(path, &checkpoint.head, &checkpoint.commit).await?;
         ensure!(
             ignored.is_empty(),
             "checkpoint {} would overwrite ignored files no checkpoint keeps; move them first: {}",
@@ -300,33 +304,26 @@ impl Manager {
             .await
     }
 
-    /// Give a restored workspace the checkpoints of the one it replaces:
-    /// their new refs first, then their records, then the old refs, so each
-    /// commit stays owned and reachable whichever step fails. The Git gate
-    /// keeps expiry from seeing the refs before their records move.
-    pub(super) async fn move_checkpoints(
+    /// Give a reopened workspace the checkpoints of the removed one and drop
+    /// its removal record, at once, so the checkpoints always have an owner.
+    pub(super) async fn adopt_removal(
         &self,
-        repo: &Repository,
-        from: &str,
-        to: &str,
+        removed: &RemovedWorkspace,
+        workspace_id: &str,
     ) -> Result<()> {
-        let _git = self.lock_repository_git(&repo.id).await;
-        let old = from.to_owned();
-        let moving = self
-            .store
-            .run(move |db| workspace_checkpoints(db, &old))
-            .await?;
-        for checkpoint in &moving {
-            let reference = git::checkpoint::reference(to, checkpoint.number);
-            git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
-        }
-        let (old, new) = (from.to_owned(), to.to_owned());
-        let moved = self.store.run(move |db| reassign(db, &old, &new)).await?;
-        for checkpoint in moved {
-            let old = git::checkpoint::reference(from, checkpoint.number);
-            git::checkpoint::delete_at(&repo.path, &old, &checkpoint.commit).await?;
-        }
-        Ok(())
+        let (from, to) = (removed.workspace_id.clone(), workspace_id.to_owned());
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                reassign(&tx, &from, &to)?;
+                tx.execute(
+                    "DELETE FROM removed_workspaces WHERE workspace_id=?1",
+                    [&from],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
     }
 
     /// Delete expired checkpoints and removal records, checkpoints no
@@ -347,80 +344,54 @@ impl Manager {
         Ok(())
     }
 
-    /// Under the repository's Git gate, so a move of checkpoints is never
-    /// half seen.
     async fn expire_repository_checkpoints(&self, repo: &Repository) -> Result<()> {
-        let _git = self.lock_repository_git(&repo.id).await;
-        self.delete_expired_checkpoints(repo).await?;
+        let _refs = self.checkpoint_gate.lock().await;
+        let repository_id = repo.id.clone();
+        self.store
+            .run(move |db| delete_expired(db, &repository_id))
+            .await?;
         self.adopt_legacy_refs(repo).await?;
         self.delete_unowned_refs(repo).await
     }
 
-    /// Delete checkpoints that expired or that neither a workspace nor a
-    /// removal record owns, with their refs.
-    async fn delete_expired_checkpoints(&self, repo: &Repository) -> Result<()> {
-        let repository_id = repo.id.clone();
-        let expired = self
-            .store
-            .run(move |db| expired_or_unowned(db, &repository_id))
-            .await?;
-        for checkpoint in expired {
-            let (id, number, commit) = (
-                checkpoint.workspace_id.clone(),
-                checkpoint.number,
-                checkpoint.commit.clone(),
-            );
-            let deleted = self
-                .store
-                .run(move |db| delete_unless_extended(db, &id, number, &commit))
-                .await?;
-            if deleted {
-                let reference = git::checkpoint::reference(&checkpoint.workspace_id, number);
-                git::checkpoint::delete_at(&repo.path, &reference, &checkpoint.commit).await?;
-            }
-        }
-        Ok(())
-    }
-
-    /// A ref without its checkpoint is left by a write that failed between
-    /// them, or by a checkpoint deleted before its ref.
+    /// A ref no checkpoint keeps is left by deleted checkpoints, or by a
+    /// write that failed between the record and the ref.
     async fn delete_unowned_refs(&self, repo: &Repository) -> Result<()> {
-        for saved in git::checkpoint::saved_refs(&repo.path).await? {
-            let owned = match saved.checkpoint {
-                Some((id, number)) => self
-                    .store
-                    .run(move |db| find(db, &id, number))
-                    .await?
-                    .is_some_and(|checkpoint| checkpoint.commit == saved.commit),
-                None => false,
-            };
-            if !owned {
-                git::checkpoint::delete_at(&repo.path, &saved.reference, &saved.commit).await?;
+        for (reference, commit) in git::checkpoint::saved_refs(&repo.path).await? {
+            if !self.keeps_commit(repo, &commit).await? {
+                git::checkpoint::delete_at(&repo.path, &reference, &commit).await?;
             }
         }
         Ok(())
     }
 
-    /// Move the refs removals kept before checkpoints to the checkpoint the
-    /// store migration recorded for each, deleting those it did not.
+    /// Move the refs removals kept before checkpoints to the checkpoint ref
+    /// of the commit when the store migration recorded a checkpoint for it,
+    /// deleting the rest.
     async fn adopt_legacy_refs(&self, repo: &Repository) -> Result<()> {
-        for (legacy, workspace_id, commit) in git::checkpoint::legacy_refs(&repo.path).await? {
-            let (id, kept) = (workspace_id.clone(), commit.clone());
-            let checkpoint = self
-                .store
-                .run(move |db| {
-                    Ok(workspace_checkpoints(db, &id)?
-                        .into_iter()
-                        .find(|checkpoint| checkpoint.commit == kept))
-                })
-                .await?;
-            if let Some(checkpoint) = checkpoint {
-                let reference = git::checkpoint::reference(&workspace_id, checkpoint.number);
+        for (legacy, commit) in git::checkpoint::legacy_refs(&repo.path).await? {
+            if self.keeps_commit(repo, &commit).await? {
+                let reference = git::checkpoint::reference(&commit);
                 git::checkpoint::save(&repo.path, &reference, &commit).await?;
             }
             git::checkpoint::delete_at(&repo.path, &legacy, &commit).await?;
         }
         Ok(())
+    }
+
+    /// Whether a checkpoint of the repository keeps `commit`.
+    async fn keeps_commit(&self, repo: &Repository, commit: &str) -> Result<bool> {
+        let (id, commit) = (repo.id.clone(), commit.to_owned());
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM checkpoints
+                     WHERE repository_id=?1 AND json_extract(record, '$.commit')=?2",
+                    [id, commit],
+                )
+            })
+            .await
     }
 }
 
@@ -478,27 +449,24 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
     )? == 1)
 }
 
-/// Give `to` the unexpired checkpoints of `from`, returning them as they were.
-fn reassign(db: &mut Connection, from: &str, to: &str) -> Result<Vec<Checkpoint>> {
-    let tx = db.transaction()?;
-    let moved = workspace_checkpoints(&tx, from)?;
-    for checkpoint in &moved {
+/// Give `to` the unexpired checkpoints of `from`.
+fn reassign(db: &Connection, from: &str, to: &str) -> Result<()> {
+    for checkpoint in workspace_checkpoints(db, from)? {
         let record = Checkpoint {
             workspace_id: to.to_owned(),
-            ..checkpoint.clone()
+            ..checkpoint
         };
-        tx.execute(
+        db.execute(
             "UPDATE checkpoints SET workspace_id=?3, record=?4 WHERE workspace_id=?1 AND number=?2",
             params![
                 from,
-                checkpoint.number as i64,
+                record.number as i64,
                 to,
                 serde_json::to_string(&record)?
             ],
         )?;
     }
-    tx.commit()?;
-    Ok(moved)
+    Ok(())
 }
 
 fn delete_expired_removals(db: &Connection) -> Result<()> {
@@ -517,34 +485,16 @@ fn delete(db: &Connection, workspace_id: &str, number: u64) -> Result<()> {
     Ok(())
 }
 
-/// Delete a checkpoint selected for expiry unless it was extended or
-/// replaced since; `false` when it stays.
-fn delete_unless_extended(
-    db: &Connection,
-    workspace_id: &str,
-    number: u64,
-    commit: &str,
-) -> Result<bool> {
-    Ok(db.execute(
-        "DELETE FROM checkpoints WHERE workspace_id=?1 AND number=?2
-            AND json_extract(record, '$.commit')=?3
+/// Delete the repository's checkpoints that expired or that neither a
+/// workspace nor a removal record owns.
+fn delete_expired(db: &Connection, repository_id: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM checkpoints WHERE repository_id=?1
             AND (expires_at <= unixepoch() OR (workspace_id NOT IN (SELECT id FROM workspaces)
                 AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)))",
-        params![workspace_id, number as i64, commit],
-    )? == 1)
-}
-
-/// The repository's checkpoints that expired or that neither a workspace nor
-/// a removal record owns.
-fn expired_or_unowned(db: &Connection, repository_id: &str) -> Result<Vec<Checkpoint>> {
-    db.prepare(
-        "SELECT record FROM checkpoints WHERE repository_id=?1
-            AND (expires_at <= unixepoch() OR (workspace_id NOT IN (SELECT id FROM workspaces)
-                AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)))",
-    )?
-    .query_map([repository_id], |row| row.get::<_, String>(0))?
-    .map(|record| Ok(serde_json::from_str(&record?)?))
-    .collect()
+        [repository_id],
+    )?;
+    Ok(())
 }
 
 fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {

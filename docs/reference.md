@@ -1380,7 +1380,7 @@ shoal restore          # list removed workspaces that can be restored
 ```
 
 A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
-ignored ones, under `refs/shoal/checkpoints/<workspace id>/<number>` in the
+ignored ones, under `refs/shoal/checkpoints/<commit>` in the
 repository; taking one leaves the worktree and its index untouched. `shoal
 checkpoint [workspace]` takes one, and Shoal takes one when an agent exits or is
 stopped, before a restore to a checkpoint, and on every removal of an existing
@@ -1394,8 +1394,9 @@ then moves the workspace's branch to the checkpoint's HEAD and puts its files ba
 as uncommitted changes, deleting tracked changes and untracked files it lacks.
 It refuses while an execution other than the caller's own runs in the workspace,
 during a Git operation, on another branch than the checkpoint's, when a
-checkpoint could not keep the unsaved files, or when it would overwrite ignored
-files, which no checkpoint keeps. Workspace processes may list and
+checkpoint could not keep the unsaved files, or when the checkpoint has a path at,
+inside or around an ignored file, which it would delete or overwrite and no
+checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
 `shoal restore <workspace>` lists an existing workspace's checkpoints. For a
