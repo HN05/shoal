@@ -764,6 +764,20 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
         }
+        Method::Checkpoint { workspace, name } => {
+            Body::Checkpoint(manager.take_checkpoint(&workspace, name).await?)
+        }
+        Method::Checkpoints { workspace } => {
+            Body::Checkpoints(manager.checkpoints(&workspace).await?)
+        }
+        Method::RestoreCheckpoint {
+            workspace,
+            checkpoint,
+        } => Body::RestoredCheckpoint(
+            manager
+                .restore_checkpoint(&workspace, checkpoint, caller)
+                .await?,
+        ),
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
         Method::Doctor { workspace, options } => Body::Doctor(
             manager

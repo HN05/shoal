@@ -265,8 +265,8 @@ impl Default for MergedCleanup {
     }
 }
 
-/// How long removed workspaces stay restorable, and how much of their
-/// unsaved files a restore point keeps.
+/// How long checkpoints and removed workspaces stay restorable, and how
+/// much of the unsaved files a checkpoint keeps.
 #[derive(Debug, Serialize)]
 pub struct Restore {
     pub retention_days: u64,

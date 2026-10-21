@@ -1,6 +1,6 @@
-//! Restore points for removed workspaces: every removal of an existing
-//! worktree keeps its HEAD and unsaved files reachable under a private ref
-//! and records what `shoal restore` needs, until the record expires.
+//! Removal records: every removal of an existing worktree takes a checkpoint
+//! and records what `shoal restore` needs to reopen the workspace, until the
+//! record expires.
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -8,91 +8,60 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
-    daemon::{events::EventCause, log},
+    daemon::events::EventCause,
     forge::link::Relation,
     git,
-    model::{RemovedWorkspace, Repository, RestoredWorkspace, Workspace, WorkspaceLinks},
-    removal::RemovalCheck,
+    model::{CheckpointCause, RemovedWorkspace, RestoredWorkspace, Workspace, WorkspaceLinks},
     time::unix_seconds,
 };
 
 impl Manager {
-    /// Keep HEAD and, within the archive limit, the unsaved files reachable,
-    /// and record them before any file is deleted, so an interrupted or failed
-    /// removal stays restorable. Records of workspaces that still exist are
-    /// not listed.
-    pub(super) async fn save_restore_point(
+    /// Take the removal's checkpoint and record what `shoal restore` reopens
+    /// before any file is deleted, so an interrupted or failed removal stays
+    /// restorable. Records of workspaces that still exist are not listed.
+    pub(super) async fn save_removal_record(
         &self,
-        repo: &Repository,
         workspace: &Workspace,
-        check: &RemovalCheck,
         cause: EventCause,
     ) -> Result<RemovedWorkspace> {
-        let retention = self
-            .workspace_settings(workspace)
-            .await?
-            .cleanup
-            .restore
-            .retention();
-        let path = &workspace.path;
-        let head = git::revision(path, "HEAD", git::run)
-            .await?
-            .trim()
-            .to_owned();
-        let files_omitted = check.dirty && !self.archives_unsaved_files(workspace).await?;
-        // A failed attempt may have deleted files its snapshot alone keeps.
-        let earlier = self.earlier_snapshot(&workspace.id).await?;
-        let message = format!("Shoal restore point for {}", workspace.name);
-        let snapshot =
-            git::restore::snapshot(path, &message, !files_omitted, earlier.as_deref()).await?;
-        let reference = git::restore::reference(&workspace.id);
-        git::restore::save(&repo.path, &reference, &snapshot).await?;
+        let checkpoint = self
+            .checkpoint(workspace, CheckpointCause::Removal, None)
+            .await?;
         // Removal refuses link changes, so links read now are final, unlike
         // those of the snapshot taken before it started.
         let links = self.workspace(&workspace.id).await?.links;
         // Removal has stopped every agent, and deletes the state their
         // records are in.
         let agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
-        let removed_at = unix_seconds();
         let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),
             name: workspace.name.clone(),
-            branch: check.branch.clone(),
-            head,
-            snapshot,
-            files_omitted,
+            expires_at: checkpoint.expires_at,
+            checkpoint,
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
             links,
             agents,
             cause,
-            removed_at,
-            expires_at: removed_at + retention.as_secs(),
+            removed_at: unix_seconds(),
         };
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
     }
 
-    /// The snapshot an earlier removal attempt of this workspace saved.
-    async fn earlier_snapshot(&self, workspace_id: &str) -> Result<Option<String>> {
-        let id = workspace_id.to_owned();
-        let earlier = self.store.run(move |db| recorded(db, &id)).await?;
-        Ok(earlier.map(|removed| removed.snapshot))
-    }
-
-    /// Whether a restore point would keep all of the workspace's unsaved files.
+    /// Whether a checkpoint would keep all of the workspace's unsaved files.
     pub(super) async fn archives_unsaved_files(&self, workspace: &Workspace) -> Result<bool> {
         let settings = self.workspace_settings(workspace).await?.cleanup.restore;
-        Ok(git::restore::unsaved_bytes(&workspace.path)
+        Ok(git::checkpoint::unsaved_bytes(&workspace.path)
             .await?
             .is_some_and(|bytes| bytes <= settings.archive_max_bytes()))
     }
 
     /// Whether merged cleanup may archive the workspace's unsaved files: the
     /// branch has commits of its own, so they are left over from merged work
-    /// rather than work never committed, and they fit the restore archive.
+    /// rather than work never committed, and a checkpoint keeps them.
     pub(super) async fn unsaved_files_are_leftovers(&self, workspace: &Workspace) -> Result<bool> {
         let Some(base) = &workspace.base_commit else {
             return Ok(false);
@@ -118,15 +87,16 @@ impl Manager {
     }
 
     /// Open a removed workspace again on its branch at the removed HEAD, with
-    /// its unsaved files, linked issue, opened and related items, and stopped
-    /// agents; the caller sets it up and links its PRs. The record goes once
-    /// the files are back.
+    /// its unsaved files, checkpoints, linked issue, opened and related items,
+    /// and stopped agents; the caller sets it up and links its PRs. The
+    /// record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
         let removed = self.removed_workspace(selector).await?;
         let branch = self.restore_branch(&removed).await?;
-        let files = (removed.snapshot != removed.head).then(|| RestoredFiles {
-            head: removed.head.clone(),
-            snapshot: removed.snapshot.clone(),
+        let checkpoint = &removed.checkpoint;
+        let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
+            head: checkpoint.head.clone(),
+            snapshot: checkpoint.commit.clone(),
         });
         let base = self.restore_base(&removed).await?;
         let opened = self
@@ -147,6 +117,13 @@ impl Manager {
             opened.workspace.name
         );
         let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
+        let repo = self.repository(&removed.repository_id).await?;
+        if let Err(error) = self
+            .move_checkpoints(&repo, &removed.workspace_id, &opened.workspace.id)
+            .await
+        {
+            warnings.push(format!("cannot keep the earlier checkpoints: {error:#}"));
+        }
         if let Err(error) = crate::execution::recovery::save_stopped_agents(
             &self.paths,
             &opened.workspace.id,
@@ -156,7 +133,7 @@ impl Manager {
                 "cannot save stopped agents for shoal resume: {error:#}"
             ));
         }
-        self.forget_restore_point(&removed).await?;
+        self.forget_removal_record(&removed).await?;
         Ok(RestoredWorkspace {
             opened,
             removed,
@@ -206,7 +183,8 @@ impl Manager {
     /// nothing unsaved has to be applied, created at HEAD when it was deleted.
     async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
         let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
-        let branch = removed
+        let checkpoint = &removed.checkpoint;
+        let branch = checkpoint
             .branch
             .clone()
             .unwrap_or_else(|| removed.name.clone());
@@ -220,7 +198,7 @@ impl Manager {
         }
         let local = git::local_ref(&branch);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, &branch, &removed.head).await?;
+            git::branch::create(&repo.path, &branch, &checkpoint.head).await?;
             return Ok(branch);
         }
         let tip = git::verify_revision(
@@ -231,15 +209,15 @@ impl Manager {
         .await?;
         let tip = tip.trim();
         ensure!(
-            git::is_ancestor(&repo.path, &removed.head, tip, git::isolated_command).await?,
+            git::is_ancestor(&repo.path, &checkpoint.head, tip, git::isolated_command).await?,
             "branch {branch} no longer contains the removed HEAD {}; restore it under another name with git branch <name> {}",
-            removed.head,
-            removed.snapshot
+            checkpoint.head,
+            checkpoint.commit
         );
         ensure!(
-            tip == removed.head || removed.snapshot == removed.head,
+            tip == checkpoint.head || checkpoint.commit == checkpoint.head,
             "branch {branch} moved past the removed HEAD; open it with shoal new and apply the unsaved files with git cherry-pick --no-commit {}",
-            removed.snapshot
+            checkpoint.commit
         );
         Ok(branch)
     }
@@ -266,10 +244,9 @@ impl Manager {
         Ok(exists.then(|| commit.clone()))
     }
 
-    /// Delete a restored workspace's record and the ref that kept its commits.
-    async fn forget_restore_point(&self, removed: &RemovedWorkspace) -> Result<()> {
-        let repo = self.repository(&removed.repository_id).await?;
-        git::restore::delete(&repo.path, &git::restore::reference(&removed.workspace_id)).await?;
+    /// Delete a restored workspace's record; its checkpoints moved to the new
+    /// workspace.
+    async fn forget_removal_record(&self, removed: &RemovedWorkspace) -> Result<()> {
         let id = removed.workspace_id.clone();
         self.store
             .run(move |db| {
@@ -278,112 +255,15 @@ impl Manager {
             })
             .await
     }
-
-    /// Drop a restore point and its record.
-    pub(super) async fn discard_restore_point(&self, repo: &Repository, workspace_id: &str) {
-        let reference = git::restore::reference(workspace_id);
-        if let Err(error) = git::restore::delete(&repo.path, &reference).await {
-            log!("restore point {reference} not deleted: {error:#}");
-        }
-        let id = workspace_id.to_owned();
-        let deleted = self
-            .store
-            .run(move |db| {
-                db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
-                Ok(())
-            })
-            .await;
-        if let Err(error) = deleted {
-            log!("restore record of {workspace_id} not deleted: {error:#}");
-        }
-    }
-
-    /// Delete expired restore records and their refs, and refs that no
-    /// record or workspace owns. A failure keeps the record for the next pass
-    /// and does not skip the others.
-    pub async fn expire_restore_points(&self) -> Result<()> {
-        let mut failed = Vec::new();
-        if let Err(error) = self.delete_expired_records().await {
-            failed.push(format!("{error:#}"));
-        }
-        for repo in self.repositories().await? {
-            if let Err(error) = self.delete_unowned_refs(&repo).await {
-                failed.push(format!("{}: {error:#}", repo.path.display()));
-            }
-        }
-        ensure!(failed.is_empty(), "{}", failed.join("; "));
-        Ok(())
-    }
-
-    async fn delete_expired_records(&self) -> Result<()> {
-        let now = unix_seconds() as i64;
-        let expired: Vec<RemovedWorkspace> = self
-            .store
-            .run(move |db| {
-                db.prepare("SELECT record FROM removed_workspaces WHERE expires_at <= ?1")?
-                    .query_map([now], |row| row.get::<_, String>(0))?
-                    .map(|record| Ok(serde_json::from_str(&record?)?))
-                    .collect()
-            })
-            .await?;
-        for removed in expired {
-            self.expire(&removed).await?;
-        }
-        Ok(())
-    }
-
-    /// Delete an expired restore point unless a retried removal replaced it
-    /// since it was selected: the ref goes only while it names this snapshot,
-    /// and the record only while it is this one.
-    async fn expire(&self, removed: &RemovedWorkspace) -> Result<()> {
-        let repo = self.repository(&removed.repository_id).await?;
-        let reference = git::restore::reference(&removed.workspace_id);
-        if !git::restore::delete_at(&repo.path, &reference, &removed.snapshot).await? {
-            return Ok(());
-        }
-        let (id, snapshot) = (removed.workspace_id.clone(), removed.snapshot.clone());
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM removed_workspaces
-                     WHERE workspace_id=?1 AND json_extract(record,'$.snapshot')=?2",
-                    [id, snapshot],
-                )?;
-                Ok(())
-            })
-            .await
-    }
-
-    /// A ref without a record is left by a removal that stopped between them.
-    async fn delete_unowned_refs(&self, repo: &Repository) -> Result<()> {
-        for workspace_id in git::restore::workspace_ids(&repo.path).await? {
-            let id = workspace_id.clone();
-            let owned = self
-                .store
-                .run(move |db| {
-                    crate::daemon::store::exists(
-                        db,
-                        "SELECT 1 FROM removed_workspaces WHERE workspace_id=?1
-                         UNION SELECT 1 FROM workspaces WHERE id=?1",
-                        [id],
-                    )
-                })
-                .await?;
-            if !owned {
-                self.discard_restore_point(repo, &workspace_id).await;
-            }
-        }
-        Ok(())
-    }
 }
 
-/// The unsaved files of a restore point, written into the new worktree.
+/// The unsaved files of a removal's checkpoint, written into the new worktree.
 pub(super) struct RestoredFiles {
     pub head: String,
     pub snapshot: String,
 }
 
-/// Write a restore point's files into a new worktree still at the removed
+/// Write a removal checkpoint's files into a new worktree still at the removed
 /// HEAD, before the workspace can be used.
 pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Result<()> {
     let head = git::revision(worktree, "HEAD", git::run).await?;
@@ -392,7 +272,7 @@ pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Resul
         "the branch moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
         files.snapshot
     );
-    git::restore::apply(worktree, &files.snapshot).await
+    git::checkpoint::apply(worktree, &files.snapshot).await
 }
 
 /// A removal notification that says how to undo it.
@@ -400,7 +280,7 @@ pub(crate) fn removal_notice(workspace: &str, removal: &str) -> String {
     format!("{removal}; restore it with shoal restore {workspace}")
 }
 
-/// Persist a restore record, replacing one an earlier attempt left.
+/// Persist a removal record, replacing one an earlier attempt left.
 fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     db.execute(
         "INSERT OR REPLACE INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
@@ -416,7 +296,7 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
     Ok(())
 }
 
-/// The unexpired restore record of a removed workspace, by name or ID; the
+/// The unexpired removal record of a removed workspace, by name or ID; the
 /// newest wins when one name was removed more than once.
 fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
     let record: Option<String> = db
@@ -433,19 +313,5 @@ fn find(db: &Connection, selector: &str) -> Result<Option<RemovedWorkspace>> {
         .transpose()?)
 }
 
-/// The restore record kept for a workspace ID, whether or not it still exists.
-fn recorded(db: &Connection, workspace_id: &str) -> Result<Option<RemovedWorkspace>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM removed_workspaces WHERE workspace_id=?1",
-            [workspace_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
-}
-
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

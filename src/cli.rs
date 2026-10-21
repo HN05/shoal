@@ -574,7 +574,7 @@ pub enum Command {
     /// Remove every workspace idle or merged cleanup would remove, without waiting for their idle periods.
     ///
     /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces are
-    /// kept, and the unsaved files of merged ones go into their restore points.
+    /// kept, and the unsaved files of merged ones go into their checkpoints.
     Cleanup {
         /// List the workspaces without removing them.
         #[arg(long)]
@@ -583,10 +583,23 @@ pub enum Command {
         #[arg(long)]
         caches: bool,
     },
-    /// Open a removed workspace again on its branch, with its unsaved files and links.
+    /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
+    Checkpoint {
+        workspace: Option<String>,
+        /// Describe the checkpoint in shoal restore's list.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Return a workspace to a checkpoint, or open a removed workspace again with its unsaved files and links.
     ///
-    /// Without a workspace, lists the removed workspaces that can be restored.
-    Restore { workspace: Option<String> },
+    /// Without a workspace, lists the removed workspaces that can be restored. With an existing
+    /// workspace, lists its checkpoints; with a checkpoint number as well, returns to it after
+    /// keeping the current state in a new checkpoint.
+    Restore {
+        workspace: Option<String>,
+        #[arg(requires = "workspace")]
+        checkpoint: Option<u64>,
+    },
     /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,

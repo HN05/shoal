@@ -665,7 +665,7 @@ enum Halt {
     /// reattachment.
     Pause {
         reason: Option<String>,
-        /// The restore point of the removed workspace keeps the session.
+        /// The removal record of the removed workspace keeps the session.
         removed: bool,
     },
 }

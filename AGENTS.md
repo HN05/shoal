@@ -46,7 +46,7 @@ when behavior changes, distinguishing decisions from proposals.
   ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
-  acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, assignment completion and withdrawal, own-repository
+  acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, opening and changing issues and PRs of the own repository, and rerunning
   or cancelling their CI jobs are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
@@ -68,7 +68,8 @@ when behavior changes, distinguishing decisions from proposals.
   space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
   persisted across restarts except where idle timers start over. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted; every removal of
-  an existing worktree keeps an expiring restore point of HEAD and unsaved files. Only explicit
+  an existing worktree keeps an expiring checkpoint of HEAD and unsaved files, and
+  restoring a checkpoint first keeps the state it replaces in another. Only explicit
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion

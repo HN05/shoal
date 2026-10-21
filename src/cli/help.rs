@@ -30,6 +30,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "undone",
             "rm",
             "cleanup",
+            "checkpoint",
             "restore",
         ],
     ),

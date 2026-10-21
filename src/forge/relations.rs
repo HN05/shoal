@@ -225,7 +225,7 @@ fn remove(
 }
 
 /// Refuse changes while the workspace is removed or otherwise in transition,
-/// so a restore point taken during removal holds its final links.
+/// so a removal record taken during removal holds its final links.
 pub(crate) fn ensure_accepts_links(db: &Connection, id: &str) -> Result<()> {
     let state = state(db, id)?;
     ensure!(

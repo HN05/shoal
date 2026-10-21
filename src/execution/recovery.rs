@@ -235,7 +235,7 @@ pub struct StoppedAgent {
     pub stopped_at: u64,
 }
 
-/// The workspace's stopped agents, for its restore point. Their wrappers have
+/// The workspace's stopped agents, for its removal record. Their wrappers have
 /// exited, so none waits to restore them.
 pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<StoppedAgent>> {
     let mut agents = Vec::new();

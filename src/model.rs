@@ -107,19 +107,56 @@ pub struct LinkedItem {
     pub title: Option<String>,
 }
 
+crate::state::states!(
+    /// Why a checkpoint was taken.
+    CheckpointCause {
+        Manual => "manual",
+        /// An agent exited or was stopped.
+        AgentStopped => "agent_stopped",
+        /// The state a restore to an earlier checkpoint replaced.
+        Restore => "restore",
+        Removal => "removal",
+    }
+);
+
+/// A workspace's HEAD and unsaved files, kept until `expires_at`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Checkpoint {
+    pub workspace_id: String,
+    pub repository_id: String,
+    /// Counts the workspace's checkpoints from 1.
+    pub number: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub cause: CheckpointCause,
+    /// The branch checked out; `None` for a detached HEAD.
+    pub branch: Option<String>,
+    pub head: String,
+    /// HEAD, or a commit on top of it with the unsaved files.
+    pub commit: String,
+    /// Unsaved files exceeded the archive limit and were not kept.
+    pub files_omitted: bool,
+    pub created_at: u64,
+    pub expires_at: u64,
+}
+
+/// A workspace `shoal restore` returned to one of its checkpoints, and the
+/// checkpoint of the state it replaced.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestoredCheckpoint {
+    pub workspace: Workspace,
+    pub checkpoint: Checkpoint,
+    pub replaced: Checkpoint,
+}
+
 /// What `shoal restore` recreates of a removed workspace until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {
     pub workspace_id: String,
     pub repository_id: String,
     pub name: String,
-    /// The branch checked out at removal; `None` for a detached HEAD.
-    pub branch: Option<String>,
-    pub head: String,
-    /// HEAD, or a commit on top of it with the unsaved files.
-    pub snapshot: String,
-    /// Unsaved files exceeded the archive limit and were not kept.
-    pub files_omitted: bool,
+    /// The checkpoint taken at removal.
+    pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
     pub base_commit: Option<String>,
     pub links: WorkspaceLinks,
@@ -132,7 +169,7 @@ pub struct RemovedWorkspace {
     pub expires_at: u64,
 }
 
-/// A workspace `shoal restore` opened again from its restore record; the
+/// A workspace `shoal restore` opened again from its removal record; the
 /// caller sets it up and links its PRs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RestoredWorkspace {

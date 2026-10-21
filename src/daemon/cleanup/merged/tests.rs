@@ -111,7 +111,7 @@ async fn files_never_committed_keep_a_workspace_without_commits() {
 }
 
 #[tokio::test]
-async fn unsaved_files_of_a_merged_workspace_go_into_its_restore_point() {
+async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
     let f = Fixture::new().await;
     f.squash_merge();
     let head = git(&f.workspace.path, &["rev-parse", "HEAD"]);
@@ -119,7 +119,7 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_restore_point() {
     fs::write(f.workspace.path.join("scratch"), "notes\n").unwrap();
     assert!(!f.kept_after(5).await);
 
-    let reference = format!("refs/shoal/removed/{}", f.workspace.id);
+    let reference = crate::git::checkpoint::reference(&f.workspace.id, 1);
     let snapshot = git(&f.checkout, &["rev-parse", &reference]);
     let snapshot = snapshot.trim();
     assert_eq!(

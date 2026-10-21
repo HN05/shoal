@@ -90,7 +90,9 @@ workspace the user wants ended, use `shoal --json done <workspace>`,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal hold acquire <workspace> --name review` and release the hold
-afterwards; `shoal restore <workspace>` reopens a removed one. `shoal --json cleanup` removes every workspace automatic
+afterwards; `shoal restore <workspace>` reopens a removed one, or lists an
+existing one's checkpoints, and `shoal restore <workspace> <number>` returns it
+to a checkpoint. `shoal --json cleanup` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `--dry-run` lists
 them and why it keeps each other workspace, as `status` gives in `cleanup_reason`;
 `--caches` also empties shared tool caches nothing is using. When the repository has no remote, `shoal land <workspace>`

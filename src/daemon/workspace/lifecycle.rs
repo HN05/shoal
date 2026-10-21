@@ -83,7 +83,7 @@ impl Removal<'_> {
         }
     }
 
-    /// Merged cleanup removes unsaved files once a restore point keeps them.
+    /// Merged cleanup removes unsaved files once a checkpoint keeps them.
     fn discards_archived_files(self) -> bool {
         matches!(
             self,
@@ -661,7 +661,7 @@ impl Manager {
         Some(message)
     }
 
-    /// Remove an existing worktree after a restore point keeps its HEAD and
+    /// Remove an existing worktree after a checkpoint keeps its HEAD and
     /// unsaved files.
     async fn remove_present_worktree(
         &self,
@@ -704,7 +704,7 @@ impl Manager {
                 .await?;
         }
         // Processes can write files as they stop, which the final inspection
-        // and the restore point must include.
+        // and the checkpoint must include.
         self.stop_workspace_processes(&workspace.id).await?;
         let check = self
             .recheck_removal(
@@ -716,14 +716,12 @@ impl Manager {
             )
             .await?;
         let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
-        let restore = self
-            .save_restore_point(&repo, workspace, &check, removal.cause())
-            .await?;
+        let record = self.save_removal_record(workspace, removal.cause()).await?;
         let removed = async {
             let files = if removal.discards_archived_files() && check.dirty {
                 ensure!(
-                    !restore.files_omitted,
-                    "unsaved files exceed the restore archive limit; retaining the workspace"
+                    !record.checkpoint.files_omitted,
+                    "a checkpoint cannot keep the unsaved files; retaining the workspace"
                 );
                 FileRemoval::Force
             } else {
@@ -733,8 +731,8 @@ impl Manager {
                 .await
         }
         .await;
-        // A failed removal may have deleted some files, so its restore point
-        // stays; the next attempt replaces it, and it expires like any other.
+        // A failed removal may have deleted some files, so its checkpoint
+        // stays; the next attempt takes another, and both expire as usual.
         removed
     }
 

@@ -212,7 +212,7 @@ impl Rule {
     pub fn allows(self, check: &crate::removal::RemovalCheck) -> bool {
         match self {
             Rule::Idle => check.safe(),
-            // Unsaved files go into the restore point. A base stays until PR
+            // Unsaved files go into the checkpoint. A base stays until PR
             // cleanup has moved the workspaces stacked on it.
             Rule::Merged => {
                 check.unused()
@@ -337,7 +337,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         "merged cleanup",
         merged::sweep(manager, &mut timers.merged).await,
     );
-    step("restore expiry", manager.expire_restore_points().await);
+    step("checkpoint expiry", manager.expire_checkpoints().await);
     step("grace periods", manager.end_unclaimed_grace().await);
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())

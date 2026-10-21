@@ -145,6 +145,8 @@ states!(WorkspaceState: Variants {
     Stopping => "stopping",
     Removing => "removing",
     Reconciling => "reconciling",
+    /// Returning to a checkpoint.
+    Restoring => "restoring",
     Failed => "failed",
 });
 
@@ -152,14 +154,21 @@ impl WorkspaceState {
     /// Lifecycle operations interrupted when the daemon stops.
     pub fn transient() -> impl Iterator<Item = Self> {
         Self::ALL.iter().copied().filter(|state| match state {
-            Self::Preparing | Self::Stopping | Self::Removing | Self::Reconciling => true,
+            Self::Preparing
+            | Self::Stopping
+            | Self::Removing
+            | Self::Reconciling
+            | Self::Restoring => true,
             Self::Ready | Self::Failed => false,
         })
     }
 
     /// A workspace being stopped, removed or reconciled takes no link changes.
     pub fn accepts_links(self) -> bool {
-        matches!(self, Self::Ready | Self::Preparing | Self::Failed)
+        matches!(
+            self,
+            Self::Ready | Self::Preparing | Self::Restoring | Self::Failed
+        )
     }
 }
 
@@ -349,6 +358,7 @@ mod tests {
             ("stopping", WorkspaceState::Stopping),
             ("removing", WorkspaceState::Removing),
             ("reconciling", WorkspaceState::Reconciling),
+            ("restoring", WorkspaceState::Restoring),
             ("failed", WorkspaceState::Failed),
         ] {
             assert_eq!(

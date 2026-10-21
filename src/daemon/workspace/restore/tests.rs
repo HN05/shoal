@@ -2,9 +2,23 @@ use std::fs;
 
 use super::*;
 use crate::{
+    model::CheckpointCause,
     removal::{BranchChoice, InspectionPolicy},
     test_support::{commit, git, manager, repository},
 };
+
+/// The checkpoint refs in the repository, sorted.
+pub(in crate::daemon::workspace) fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
+    let mut refs: Vec<String> = git(
+        repo,
+        &["for-each-ref", "--format=%(refname)", "refs/shoal/"],
+    )
+    .lines()
+    .map(str::to_owned)
+    .collect();
+    refs.sort();
+    refs
+}
 
 async fn record(manager: &Manager, id: &str) -> Option<RemovedWorkspace> {
     let id = id.to_owned();
@@ -23,7 +37,7 @@ async fn record(manager: &Manager, id: &str) -> Option<RemovedWorkspace> {
 }
 
 #[tokio::test]
-async fn restore_point_keeps_files_workspace_processes_write_as_they_stop() {
+async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -77,14 +91,14 @@ async fn restore_point_keeps_files_workspace_processes_write_as_they_stop() {
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:flushed", removed.snapshot)]
+            &["show", &format!("{}:flushed", removed.checkpoint.commit)]
         ),
         "flushed\n"
     );
 }
 
 #[tokio::test]
-async fn removal_keeps_a_restore_point_until_it_expires() {
+async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -123,24 +137,25 @@ async fn removal_keeps_a_restore_point_until_it_expires() {
     assert_eq!(git(&checkout, &["branch", "--list", "topic"]), "");
     let removed = record(&manager, &workspace.id).await.unwrap();
     assert_eq!(removed.name, "topic");
-    assert_eq!(removed.branch.as_deref(), Some("topic"));
-    assert_eq!(removed.head, head.trim());
-    assert!(!removed.files_omitted);
+    assert_eq!(removed.checkpoint.branch.as_deref(), Some("topic"));
+    assert_eq!(removed.checkpoint.head, head.trim());
+    assert_eq!(removed.checkpoint.cause, CheckpointCause::Removal);
+    assert!(!removed.checkpoint.files_omitted);
     assert_eq!(removed.cause, EventCause::Manual);
     assert_eq!(
         removed.links.issue.as_deref(),
         Some("https://forge/issue/1")
     );
     assert_eq!(removed.expires_at - removed.removed_at, 30 * 24 * 3600);
-    let reference = git::restore::reference(&workspace.id);
+    let reference = git::checkpoint::reference(&workspace.id, removed.checkpoint.number);
     assert_eq!(
         git(&checkout, &["rev-parse", &reference]).trim(),
-        removed.snapshot
+        removed.checkpoint.commit
     );
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:scratch", removed.snapshot)]
+            &["show", &format!("{}:scratch", removed.checkpoint.commit)]
         ),
         "notes\n"
     );
@@ -175,37 +190,38 @@ async fn removal_keeps_a_restore_point_until_it_expires() {
         .await
         .unwrap();
 
-    // Expiry deletes the record and its ref, and refs nothing owns.
+    // Expiry deletes the record, its checkpoint and its ref, and refs
+    // nothing owns.
     git(
         &checkout,
         &["update-ref", "refs/shoal/removed/unknown", "HEAD"],
     );
-    manager.expire_restore_points().await.unwrap();
-    assert!(record(&manager, &workspace.id).await.is_some());
-    assert_eq!(
-        git::restore::workspace_ids(&checkout).await.unwrap(),
-        std::slice::from_ref(&workspace.id)
+    git(
+        &checkout,
+        &["update-ref", "refs/shoal/checkpoints/unknown/1", "HEAD"],
     );
+    manager.expire_checkpoints().await.unwrap();
+    assert!(record(&manager, &workspace.id).await.is_some());
+    assert_eq!(checkpoint_refs(&checkout), [reference]);
     let id = workspace.id.clone();
     manager
         .store
         .run(move |db| {
             db.execute(
                 "UPDATE removed_workspaces SET expires_at=0 WHERE workspace_id=?1",
-                [id],
+                [&id],
+            )?;
+            db.execute(
+                "UPDATE checkpoints SET expires_at=0 WHERE workspace_id=?1",
+                [&id],
             )?;
             Ok(())
         })
         .await
         .unwrap();
-    manager.expire_restore_points().await.unwrap();
+    manager.expire_checkpoints().await.unwrap();
     assert!(record(&manager, &workspace.id).await.is_none());
-    assert!(
-        git::restore::workspace_ids(&checkout)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(checkpoint_refs(&checkout).is_empty());
 }
 
 #[tokio::test]
@@ -297,11 +313,14 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         [("https://github.com/acme/repo/pull/3".to_owned(), None)]
     );
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
-    assert!(
-        git::restore::workspace_ids(&checkout)
-            .await
-            .unwrap()
-            .is_empty()
+    // The removal's checkpoint belongs to the new workspace.
+    let checkpoints = manager.checkpoints("topic").await.unwrap().unwrap();
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(checkpoints[0].workspace_id, workspace.id);
+    assert_eq!(checkpoints[0].cause, CheckpointCause::Removal);
+    assert_eq!(
+        checkpoint_refs(&checkout),
+        [git::checkpoint::reference(&workspace.id, 1)]
     );
 }
 
@@ -348,7 +367,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
 }
 
 #[tokio::test]
-async fn a_restore_point_keeps_links_made_until_removal_starts() {
+async fn a_removal_record_keeps_links_made_until_removal_starts() {
     use crate::forge::link::{ItemKind, Relation};
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
@@ -421,12 +440,8 @@ async fn a_restore_point_keeps_links_made_until_removal_starts() {
             .await
             .is_err()
     );
-    let check = manager
-        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
-        .await
-        .unwrap();
     manager
-        .save_restore_point(&repo, &workspace, &check, EventCause::Manual)
+        .save_removal_record(&workspace, EventCause::Manual)
         .await
         .unwrap();
     let saved = record(&manager, &workspace.id).await.unwrap();
@@ -458,12 +473,8 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
     fs::write(workspace.path.join("work"), "work\n").unwrap();
     commit(&workspace.path, "work");
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
-    let check = manager
-        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
-        .await
-        .unwrap();
     manager
-        .save_restore_point(&repo, &workspace, &check, EventCause::Idle)
+        .save_removal_record(&workspace, EventCause::Idle)
         .await
         .unwrap();
     assert!(
@@ -471,13 +482,13 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
         "the workspace still exists"
     );
     // The files go, then the daemon stops before the removal commits; the
-    // next sweeps forget the deleted worktree and keep its restore point.
+    // next sweeps forget the deleted worktree and keep its checkpoint.
     fs::remove_dir_all(&workspace.path).unwrap();
     crate::daemon::cleanup::sweep(&manager, &mut Default::default())
         .await
         .unwrap();
     assert!(manager.workspace(&workspace.id).await.is_err());
-    manager.expire_restore_points().await.unwrap();
+    manager.expire_checkpoints().await.unwrap();
     assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
 
     let restored = manager.restore_workspace("topic").await.unwrap();
@@ -487,7 +498,7 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
 }
 
 #[tokio::test]
-async fn a_failed_removal_keeps_its_restore_point() {
+async fn a_failed_removal_keeps_its_checkpoint() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -499,8 +510,8 @@ async fn a_failed_removal_keeps_its_restore_point() {
         .await
         .unwrap();
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
-    // An unreadable Worktrunk config fails the removal after the restore
-    // point is saved.
+    // An unreadable Worktrunk config fails the removal after the checkpoint
+    // is saved.
     let config = manager.paths.worktrunk_config();
     let valid = fs::read_to_string(&config).unwrap();
     fs::write(&config, "not [valid toml").unwrap();
@@ -517,13 +528,16 @@ async fn a_failed_removal_keeps_its_restore_point() {
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:scratch", record.snapshot)]
+            &["show", &format!("{}:scratch", record.checkpoint.commit)]
         ),
         "notes\n"
     );
     assert_eq!(
-        git::restore::workspace_ids(&checkout).await.unwrap(),
-        std::slice::from_ref(&workspace.id)
+        checkpoint_refs(&checkout),
+        [git::checkpoint::reference(
+            &workspace.id,
+            record.checkpoint.number
+        )]
     );
     assert!(
         manager.removed_workspaces().await.unwrap().is_empty(),
@@ -566,7 +580,7 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
 }
 
 #[tokio::test]
-async fn a_retried_removal_keeps_the_earlier_snapshot_reachable() {
+async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -578,14 +592,11 @@ async fn a_retried_removal_keeps_the_earlier_snapshot_reachable() {
         .await
         .unwrap();
     let save = async || {
-        let check = manager
-            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
-            .await
-            .unwrap();
         manager
-            .save_restore_point(&repo, &workspace, &check, EventCause::Manual)
+            .save_removal_record(&workspace, EventCause::Manual)
             .await
             .unwrap()
+            .checkpoint
     };
     fs::write(workspace.path.join("first"), "first\n").unwrap();
     let first = save().await;
@@ -593,71 +604,23 @@ async fn a_retried_removal_keeps_the_earlier_snapshot_reachable() {
     fs::remove_file(workspace.path.join("first")).unwrap();
     fs::write(workspace.path.join("second"), "second\n").unwrap();
     let second = save().await;
+    assert_eq!((first.number, second.number), (1, 2));
     assert_eq!(
-        git(&checkout, &["rev-parse", &format!("{}^2", second.snapshot)]).trim(),
-        first.snapshot
-    );
-    assert_eq!(
-        git(
-            &checkout,
-            &["show", &format!("{}^2:first", second.snapshot)]
-        ),
+        git(&checkout, &["show", &format!("{}:first", first.commit)]),
         "first\n"
     );
-    // A clean retry still keeps it.
-    fs::remove_file(workspace.path.join("second")).unwrap();
+    assert_eq!(
+        record(&manager, &workspace.id).await.unwrap().checkpoint,
+        second
+    );
+    // An unchanged retry extends the latest checkpoint instead.
     let third = save().await;
+    assert_eq!(third.number, second.number);
     assert_eq!(
-        git(&checkout, &["rev-parse", &format!("{}^2", third.snapshot)]).trim(),
-        second.snapshot
-    );
-}
-
-#[tokio::test]
-async fn expiry_spares_a_restore_point_a_retry_replaced() {
-    let (root, manager) = manager().await;
-    let checkout = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
-        .await
-        .unwrap();
-    let save = async || {
-        let check = manager
-            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
-            .await
-            .unwrap();
-        manager
-            .save_restore_point(&repo, &workspace, &check, EventCause::Manual)
-            .await
-            .unwrap()
-    };
-    fs::write(workspace.path.join("first"), "first\n").unwrap();
-    let selected = save().await;
-    // Expiry selected the first attempt's record; a retry replaces it before
-    // the deletions run.
-    fs::write(workspace.path.join("second"), "second\n").unwrap();
-    let retried = save().await;
-    manager.expire(&selected).await.unwrap();
-    let reference = git::restore::reference(&workspace.id);
-    assert_eq!(
-        git(&checkout, &["rev-parse", &reference]).trim(),
-        retried.snapshot
-    );
-    assert_eq!(
-        record(&manager, &workspace.id).await.unwrap().snapshot,
-        retried.snapshot
-    );
-    // The record it selected is deleted with its ref.
-    manager.expire(&retried).await.unwrap();
-    assert!(record(&manager, &workspace.id).await.is_none());
-    assert!(
-        git::restore::workspace_ids(&checkout)
-            .await
-            .unwrap()
-            .is_empty()
+        checkpoint_refs(&checkout),
+        [
+            git::checkpoint::reference(&workspace.id, 1),
+            git::checkpoint::reference(&workspace.id, 2)
+        ]
     );
 }

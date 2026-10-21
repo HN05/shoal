@@ -1,26 +1,69 @@
-//! Restore points: commits that keep a removed worktree's HEAD and unsaved
-//! files reachable under a private ref until the restore record expires.
+//! Checkpoints: commits that keep a worktree's HEAD and unsaved files
+//! reachable under private refs until their records expire.
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use super::{isolated_command_without_submodules, run_isolated};
+use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
 use crate::subprocess;
 
-const REFS: &str = "refs/shoal/removed/";
+const REFS: &str = "refs/shoal/checkpoints/";
+/// Where removals kept their snapshots before checkpoints replaced them.
+const LEGACY_REFS: &str = "refs/shoal/removed/";
 
-/// The ref that keeps a removed workspace's restore point.
-pub fn reference(workspace_id: &str) -> String {
-    format!("{REFS}{workspace_id}")
+/// The ref that keeps a workspace's checkpoint.
+pub fn reference(workspace_id: &str, number: u64) -> String {
+    format!("{REFS}{workspace_id}/{number}")
 }
 
-/// The workspace IDs with a restore point ref in the repository.
-pub async fn workspace_ids(repo: &Path) -> Result<Vec<String>> {
-    let refs = run_isolated(repo, &["for-each-ref", "--format=%(refname)", REFS]).await?;
+/// A checkpoint ref in the repository and the commit it keeps.
+pub struct SavedRef {
+    pub reference: String,
+    /// The workspace ID and checkpoint number the ref names; `None` for a
+    /// name no checkpoint has.
+    pub checkpoint: Option<(String, u64)>,
+    pub commit: String,
+}
+
+/// Every checkpoint ref in the repository.
+pub async fn saved_refs(repo: &Path) -> Result<Vec<SavedRef>> {
+    Ok(refs(repo, REFS)
+        .await?
+        .into_iter()
+        .map(|(reference, commit)| SavedRef {
+            checkpoint: reference.strip_prefix(REFS).and_then(|name| {
+                let (workspace_id, number) = name.rsplit_once('/')?;
+                Some((workspace_id.to_owned(), number.parse().ok()?))
+            }),
+            reference,
+            commit,
+        })
+        .collect())
+}
+
+/// The refs removals kept before checkpoints, by workspace ID, with the
+/// commit each keeps.
+pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, String, String)>> {
+    Ok(refs(repo, LEGACY_REFS)
+        .await?
+        .into_iter()
+        .filter_map(|(reference, commit)| {
+            let workspace_id = reference.strip_prefix(LEGACY_REFS)?.to_owned();
+            Some((reference, workspace_id, commit))
+        })
+        .collect())
+}
+
+async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, String)>> {
+    let refs = run_isolated(
+        repo,
+        &["for-each-ref", "--format=%(refname) %(objectname)", prefix],
+    )
+    .await?;
     Ok(refs
         .lines()
-        .filter_map(|reference| reference.strip_prefix(REFS))
-        .map(str::to_owned)
+        .filter_map(|line| line.split_once(' '))
+        .map(|(reference, commit)| (reference.to_owned(), commit.to_owned()))
         .collect())
 }
 
@@ -84,25 +127,17 @@ async fn changed_submodule(worktree: &Path) -> Result<bool> {
 }
 
 /// A commit on top of HEAD with the worktree's files, ignored ones excepted
-/// unless staged, or with HEAD's tree when `files` is false, keeping `earlier` reachable as
-/// its second parent; HEAD itself when it would add neither. A temporary
-/// index keeps the worktree's own index and files untouched.
-pub async fn snapshot(
-    worktree: &Path,
-    message: &str,
-    files: bool,
-    earlier: Option<&str>,
-) -> Result<String> {
+/// unless staged, or HEAD itself when `files` is false or nothing is unsaved.
+/// A temporary index keeps the worktree's own index and files untouched.
+pub async fn snapshot(worktree: &Path, message: &str, files: bool) -> Result<String> {
     let head = run_isolated(worktree, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
     let head = head.trim().to_owned();
-    let earlier = earlier.filter(|earlier| *earlier != head);
     let status = run_isolated(
         worktree,
         &["status", "--porcelain", "--untracked-files=all"],
     )
     .await?;
-    let files = files && !status.is_empty();
-    if !files && earlier.is_none() {
+    if !files || status.is_empty() {
         return Ok(head);
     }
     let index = tempfile::tempdir().context("create a temporary index directory")?;
@@ -118,24 +153,32 @@ pub async fn snapshot(
             .args(args);
         subprocess::output(command).await
     };
-    if files {
-        // The worktree's own index keeps paths staged despite ignore rules.
-        let own = run_isolated(
-            worktree,
-            &["rev-parse", "--path-format=absolute", "--git-path", "index"],
-        )
-        .await?;
-        std::fs::copy(own.trim(), &index).context("copy the worktree's index")?;
-        in_index(&["add", "--all", "--", ":/"]).await?;
-    } else {
-        in_index(&["read-tree", &head]).await?;
-    }
+    // The worktree's own index keeps paths staged despite ignore rules.
+    let own = run_isolated(
+        worktree,
+        &["rev-parse", "--path-format=absolute", "--git-path", "index"],
+    )
+    .await?;
+    std::fs::copy(own.trim(), &index).context("copy the worktree's index")?;
+    in_index(&["add", "--all", "--", ":/"]).await?;
     let tree = in_index(&["write-tree"]).await?;
-    let mut args = vec!["commit-tree", tree.trim(), "-p", &head];
-    args.extend(earlier.iter().flat_map(|earlier| ["-p", earlier]));
-    args.extend(["-m", message]);
-    let commit = in_index(&args).await?;
+    let commit = in_index(&["commit-tree", tree.trim(), "-p", &head, "-m", message]).await?;
     Ok(commit.trim().to_owned())
+}
+
+/// Whether two snapshots keep the same files.
+pub async fn same_files(repo: &Path, first: &str, second: &str) -> Result<bool> {
+    let trees = run_isolated(
+        repo,
+        &[
+            "rev-parse",
+            &format!("{first}^{{tree}}"),
+            &format!("{second}^{{tree}}"),
+        ],
+    )
+    .await?;
+    let mut trees = trees.lines();
+    Ok(trees.next() == trees.next())
 }
 
 /// Write the files of `snapshot` into the worktree, leaving the index alone:
@@ -154,14 +197,21 @@ pub async fn apply(worktree: &Path, snapshot: &str) -> Result<()> {
     Ok(())
 }
 
-/// Point `reference` at `commit`, keeping it reachable.
-pub async fn save(repo: &Path, reference: &str, commit: &str) -> Result<()> {
-    run_isolated(repo, &["update-ref", reference, commit]).await?;
+/// Move the worktree's branch, or its detached HEAD, to `head` and replace
+/// its unsaved files with those of `snapshot`, deleting tracked changes and
+/// untracked files the snapshot lacks; ignored files stay.
+pub async fn rewind(worktree: &Path, head: &str, snapshot: &str) -> Result<()> {
+    run_without_submodules(worktree, &["reset", "--quiet", "--hard", head, "--"]).await?;
+    run_without_submodules(worktree, &["clean", "--quiet", "--force", "-d", "--", ":/"]).await?;
+    if snapshot != head {
+        apply(worktree, snapshot).await?;
+    }
     Ok(())
 }
 
-pub async fn delete(repo: &Path, reference: &str) -> Result<()> {
-    run_isolated(repo, &["update-ref", "-d", reference]).await?;
+/// Point `reference` at `commit`, keeping it reachable.
+pub async fn save(repo: &Path, reference: &str, commit: &str) -> Result<()> {
+    run_isolated(repo, &["update-ref", reference, commit]).await?;
     Ok(())
 }
 
@@ -193,10 +243,7 @@ mod tests {
         fs::write(repo.join(".gitignore"), "ignored\nforced\n").unwrap();
         crate::test_support::commit(&repo, ".gitignore");
         let head = git(&repo, &["rev-parse", "HEAD"]);
-        assert_eq!(
-            snapshot(&repo, "clean", true, None).await.unwrap(),
-            head.trim()
-        );
+        assert_eq!(snapshot(&repo, "clean", true).await.unwrap(), head.trim());
 
         fs::write(repo.join("tracked"), "changed\n").unwrap();
         fs::write(repo.join("staged"), "staged\n").unwrap();
@@ -209,7 +256,7 @@ mod tests {
         let status = git(&repo, &["status", "--porcelain"]);
         assert_eq!(unsaved_bytes(&repo).await.unwrap(), Some(8 + 7 + 6 + 7));
 
-        let commit = snapshot(&repo, "restore point", true, None).await.unwrap();
+        let commit = snapshot(&repo, "checkpoint", true).await.unwrap();
         assert_eq!(git(&repo, &["status", "--porcelain"]), status);
         assert_eq!(git(&repo, &["rev-parse", &format!("{commit}^")]), head);
         let files = git(&repo, &["ls-tree", "-r", "--name-only", &commit]);
@@ -226,11 +273,56 @@ mod tests {
         assert_eq!(unsaved_bytes(&repo).await.unwrap(), None);
         fs::remove_dir_all(nested).unwrap();
 
-        let reference = reference("workspace");
+        assert!(
+            same_files(
+                &repo,
+                &commit,
+                &snapshot(&repo, "again", true).await.unwrap()
+            )
+            .await
+            .unwrap()
+        );
+        assert!(!same_files(&repo, &commit, head.trim()).await.unwrap());
+
+        let reference = reference("workspace", 2);
         save(&repo, &reference, &commit).await.unwrap();
-        assert_eq!(workspace_ids(&repo).await.unwrap(), ["workspace"]);
-        delete(&repo, &reference).await.unwrap();
-        assert!(workspace_ids(&repo).await.unwrap().is_empty());
+        let saved = saved_refs(&repo).await.unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].checkpoint, Some(("workspace".to_owned(), 2)));
+        assert_eq!(saved[0].commit, commit);
+        assert!(delete_at(&repo, &reference, &commit).await.unwrap());
+        assert!(saved_refs(&repo).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rewind_replaces_head_and_unsaved_files_but_keeps_ignored_ones() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        fs::write(repo.join(".gitignore"), "ignored\n").unwrap();
+        crate::test_support::commit(&repo, ".gitignore");
+        let head = git(&repo, &["rev-parse", "HEAD"]);
+        fs::write(repo.join("tracked"), "checkpointed\n").unwrap();
+        fs::write(repo.join("kept"), "kept\n").unwrap();
+        let checkpoint = snapshot(&repo, "checkpoint", true).await.unwrap();
+        let status = git(&repo, &["status", "--porcelain"]);
+
+        fs::write(repo.join("later"), "later\n").unwrap();
+        crate::test_support::commit(&repo, "later");
+        fs::write(repo.join("tracked"), "later\n").unwrap();
+        fs::remove_file(repo.join("kept")).unwrap();
+        fs::write(repo.join("untracked"), "later\n").unwrap();
+        fs::write(repo.join("ignored"), "build output\n").unwrap();
+
+        rewind(&repo, head.trim(), &checkpoint).await.unwrap();
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), head);
+        assert_eq!(git(&repo, &["status", "--porcelain"]), status);
+        assert_eq!(
+            fs::read_to_string(repo.join("tracked")).unwrap(),
+            "checkpointed\n"
+        );
+        assert_eq!(fs::read_to_string(repo.join("kept")).unwrap(), "kept\n");
+        assert!(!repo.join("untracked").exists());
+        assert!(repo.join("ignored").exists());
     }
 
     #[tokio::test]

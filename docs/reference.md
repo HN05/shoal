@@ -286,7 +286,7 @@ the current resume configuration; without one, built-in terminal agents continue
 the latest session in the workspace. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
-is registered; removal keeps them with the [restore point](#restore-a-workspace). A failed launch retains its records;
+is registered; removal keeps them in its [removal record](#checkpoints-and-restore). A failed launch retains its records;
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
@@ -1358,7 +1358,7 @@ changes and untracked files with Git status codes before `Are you sure? [y/N]`.
 Large previews show an omitted-entry count; use `git status` for the full list.
 Both choices discard uncommitted and untracked files from the worktree; every
 removal of an existing worktree first keeps them, with HEAD, in a
-[restore point](#restore-a-workspace). `--keep-branch`/`--delete-branch`
+[checkpoint](#checkpoints-and-restore). `--keep-branch`/`--delete-branch`
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
 Removal stops tracked commands and every verified process that carries the
@@ -1370,33 +1370,49 @@ Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
-### Restore a workspace
+### Checkpoints and restore
 
 ```sh
+shoal checkpoint --name "before migration"  # keep the current workspace's state
+shoal restore topic    # list topic's checkpoints, or open removed topic again
+shoal restore topic 3  # return topic to checkpoint 3
 shoal restore          # list removed workspaces that can be restored
-shoal restore topic    # open topic again with its unsaved files and links
 ```
 
-`shoal restore <workspace>` opens the newest removed workspace with that name or
-ID on its branch and recorded base, which restores its stack link while the base
+A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
+ignored ones, under `refs/shoal/checkpoints/<workspace id>/<number>` in the
+repository; taking one leaves the worktree and its index untouched. `shoal
+checkpoint [workspace]` takes one, and Shoal takes one when an agent exits or is
+stopped, before a restore to a checkpoint, and on every removal of an existing
+worktree. An automatic checkpoint that would keep what the newest one keeps
+extends that one instead. When the unsaved files exceed `archive_max_mb`, include
+an untracked nested repository or a changed submodule, whose files it cannot hold,
+the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`.
+
+`shoal restore <workspace> <number>` keeps the current state in a new checkpoint,
+then moves the workspace's branch to the checkpoint's HEAD and puts its files back
+as uncommitted changes, deleting tracked changes and untracked files it lacks.
+It refuses while an execution other than the caller's own runs in the workspace,
+during a Git operation, on another branch than the checkpoint's, or when a
+checkpoint could not keep the unsaved files. Workspace processes may list and
+restore their own workspace's checkpoints.
+
+`shoal restore <workspace>` lists an existing workspace's checkpoints. For a
+removed one it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
-for `shoal resume`, runs setup, and links its PRs; a link or save that fails is
+for `shoal resume`, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
 a warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
-the error names the commit to recover by hand. Workspace processes cannot run it.
+the error names the commit to recover by hand. Workspace processes cannot reopen removed workspaces.
 
-Every removal of an existing worktree, manual or automatic, keeps a restore
-point: a commit of HEAD plus its uncommitted and untracked files, without
-ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a
-record of the branch, HEAD, base, links and stopped agents. Links cannot change once removal
+Removal records the branch, base, links and stopped agents with its checkpoint, and
+keeps them until the checkpoint expires. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
-does, keeping their recovery records in the restore point; interrupted commands
-are not saved. When the unsaved files
-exceed `archive_max_mb`, include an untracked nested repository or a changed
-submodule, whose files it cannot hold, the restore point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
+does, keeping their recovery records in the removal record; interrupted commands
+are not saved. When the removal's checkpoint keeps HEAD only, merged cleanup keeps the workspace instead.
 
 ```toml
 [cleanup.restore]
@@ -1412,7 +1428,7 @@ false. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
-reversible with [`shoal restore`](#restore-a-workspace); to review in a workspace,
+reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#workspace-holds) it. Completion and PR cleanup wait while a hold or an open
 [question](#questions) remains.
 
@@ -1801,7 +1817,7 @@ has used it for `idle_minutes`, whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
 gives it, against the default branch's remote-tracking branch, fetched at most
 every ten minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
-[restore point](#restore-a-workspace); they keep the workspace when the restore point cannot keep
+[removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), commands, agents saved for
 `shoal resume`, directory users, leases, permits, holds and

@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 50;
+const SCHEMA_VERSION: i64 = 52;
 
 #[cfg(test)]
 mod benchmark;
@@ -379,6 +379,8 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (48, include_str!("store/agent_queue_restores.sql"), None),
     (49, CLEANUP_GRACE, None),
     (50, RETIRED_KEEP_REQUESTS, None),
+    (51, CHECKPOINTS, None),
+    (52, REMOVAL_CHECKPOINTS, None),
 ];
 
 /// When the grace period of an unattended removal ends, and whether the
@@ -398,7 +400,41 @@ const RETIRED_KEEP_REQUESTS: &str = "UPDATE workspace_completion
         WHERE json_valid(record);
     DELETE FROM access_requests WHERE target_key='keep';";
 
-/// Restore records outlive their workspace, not their repository.
+/// Checkpoints outlive their workspace, not their repository.
+const CHECKPOINTS: &str = "CREATE TABLE checkpoints (
+    workspace_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL,
+    record TEXT NOT NULL,
+    PRIMARY KEY(workspace_id, number)
+);";
+
+/// A removal's snapshot becomes its workspace's first checkpoint, which the
+/// removal record names; the daemon moves its ref on the next expiry pass.
+const REMOVAL_CHECKPOINTS: &str =
+    "INSERT INTO checkpoints(workspace_id,number,repository_id,expires_at,record)
+        SELECT workspace_id, 1, repository_id, expires_at, json_object(
+            'workspace_id', workspace_id,
+            'repository_id', repository_id,
+            'number', 1,
+            'cause', 'removal',
+            'branch', json_extract(record, '$.branch'),
+            'head', json_extract(record, '$.head'),
+            'commit', json_extract(record, '$.snapshot'),
+            'files_omitted', json(CASE WHEN json_extract(record, '$.files_omitted')
+                THEN 'true' ELSE 'false' END),
+            'created_at', json_extract(record, '$.removed_at'),
+            'expires_at', expires_at)
+        FROM removed_workspaces WHERE json_valid(record);
+    UPDATE removed_workspaces SET record=json_remove(
+            json_set(record, '$.checkpoint', (SELECT json(checkpoints.record) FROM checkpoints
+                WHERE checkpoints.workspace_id=removed_workspaces.workspace_id)),
+            '$.branch', '$.head', '$.snapshot', '$.files_omitted')
+        WHERE json_valid(record);
+    DELETE FROM removed_workspaces WHERE NOT json_valid(record);";
+
+/// Removal records outlive their workspace, not their repository.
 const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
     workspace_id TEXT PRIMARY KEY,
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
@@ -936,6 +972,9 @@ mod tests {
         if version >= 49 {
             db.execute_batch(CLEANUP_GRACE)?;
         }
+        if version >= 51 {
+            db.execute_batch(CHECKPOINTS)?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1053,6 +1092,59 @@ mod tests {
                 "Converted from an earlier Shoal version"
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
+        let mut db = historical_database(50)?;
+        db.execute(
+            "INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+                VALUES ('gone','repo','topic',200,?1)",
+            [serde_json::json!({
+                "workspace_id": "gone",
+                "repository_id": "repo",
+                "name": "topic",
+                "branch": "topic",
+                "head": "aaaa",
+                "snapshot": "bbbb",
+                "files_omitted": true,
+                "base_ref": null,
+                "base_commit": null,
+                "links": {"issue": null, "prs": []},
+                "cause": "manual",
+                "removed_at": 100,
+                "expires_at": 200,
+            })
+            .to_string()],
+        )?;
+        migrate(&mut db)?;
+        let checkpoint: String = db.query_row(
+            "SELECT record FROM checkpoints WHERE workspace_id='gone' AND number=1",
+            [],
+            |r| r.get(0),
+        )?;
+        let checkpoint: crate::model::Checkpoint = serde_json::from_str(&checkpoint)?;
+        assert_eq!(
+            checkpoint,
+            crate::model::Checkpoint {
+                workspace_id: "gone".into(),
+                repository_id: "repo".into(),
+                number: 1,
+                name: None,
+                cause: crate::model::CheckpointCause::Removal,
+                branch: Some("topic".into()),
+                head: "aaaa".into(),
+                commit: "bbbb".into(),
+                files_omitted: true,
+                created_at: 100,
+                expires_at: 200,
+            }
+        );
+        let removed: String =
+            db.query_row("SELECT record FROM removed_workspaces", [], |r| r.get(0))?;
+        let removed: crate::model::RemovedWorkspace = serde_json::from_str(&removed)?;
+        assert_eq!(removed.checkpoint, checkpoint);
         Ok(())
     }
 
@@ -1358,7 +1450,8 @@ mod tests {
                     WorkspaceState::Preparing
                     | WorkspaceState::Stopping
                     | WorkspaceState::Removing
-                    | WorkspaceState::Reconciling => (
+                    | WorkspaceState::Reconciling
+                    | WorkspaceState::Restoring => (
                         WorkspaceState::Failed,
                         "daemon stopped during workspace operation; inspect before cleanup",
                     ),

@@ -159,7 +159,9 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
-shoal restore fix-login       # Open a removed workspace again with its unsaved files
+shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
+shoal restore fix-login       # List checkpoints, or open a removed workspace again
+shoal restore fix-login 3     # Return the workspace to checkpoint 3
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
@@ -331,7 +333,10 @@ Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and w
 it keeps the others, `--caches` also empties shared caches nothing is using, and `shoal status` shows why it keeps one workspace.
 Every removal can be undone for 30 days: `shoal restore` lists removed workspaces,
 and `shoal restore <workspace>` opens one again with its uncommitted files and links;
-`shoal resume` then continues the agents the removal stopped.
+`shoal resume` then continues the agents the removal stopped. Removal keeps the
+workspace's HEAD and unsaved files in a checkpoint, as `shoal checkpoint` does and
+Shoal does when an agent exits or is stopped; `shoal restore <workspace> <number>`
+returns an existing workspace to one of them.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

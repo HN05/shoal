@@ -686,9 +686,35 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     assert_eq!(restored["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
-    let again = fixture.run(&["restore", "scratch"]);
-    assert!(!again.status.success());
-    assert!(String::from_utf8_lossy(&again.stderr).contains("no restorable workspace scratch"));
+    let missing = fixture.run(&["restore", "missing"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("no restorable workspace missing"));
+
+    // The restored workspace keeps the removal's checkpoint, and returns to
+    // any checkpoint after keeping the state it replaces.
+    let checkpoints = fixture.ok(&["restore", "scratch"]);
+    assert_eq!(checkpoints[0]["number"], 1);
+    assert_eq!(checkpoints[0]["cause"], "removal");
+    let checkpoint = fixture.ok(&["checkpoint", "scratch", "--name", "draft"]);
+    assert_eq!(checkpoint["number"], 2);
+    fs::write(path.join("notes"), "rewritten\n").unwrap();
+    let restored = fixture.ok(&["restore", "scratch", "2"]);
+    assert_eq!(restored["replaced"]["number"], 3);
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+    let listing = String::from_utf8(fixture.run(&["restore", "scratch"]).stdout).unwrap();
+    let causes: Vec<_> = listing
+        .lines()
+        .map(|line| line.split("  ").nth(2).unwrap_or_default())
+        .collect();
+    assert_eq!(
+        causes,
+        ["removal", "manual", "before restore"],
+        "{listing:?}"
+    );
+    assert!(
+        listing.lines().nth(1).unwrap().ends_with("scratch  draft"),
+        "{listing:?}"
+    );
 }
 
 #[test]

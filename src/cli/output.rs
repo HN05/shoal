@@ -84,7 +84,8 @@ impl Palette {
             WorkspaceState::Preparing
             | WorkspaceState::Stopping
             | WorkspaceState::Removing
-            | WorkspaceState::Reconciling => "◌",
+            | WorkspaceState::Reconciling
+            | WorkspaceState::Restoring => "◌",
         };
         self.paint(workspace_state_style(state), marker)
     }
@@ -143,7 +144,8 @@ pub fn workspace_state_style(state: WorkspaceState) -> Style {
         WorkspaceState::Preparing
         | WorkspaceState::Stopping
         | WorkspaceState::Removing
-        | WorkspaceState::Reconciling => Style::Warning,
+        | WorkspaceState::Reconciling
+        | WorkspaceState::Restoring => Style::Warning,
     }
 }
 

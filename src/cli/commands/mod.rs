@@ -435,7 +435,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             .await
         }
         Command::Cleanup { dry_run, caches } => cleanup::run(&ctx, dry_run, caches).await,
-        Command::Restore { workspace } => restore::run(&ctx, workspace).await,
+        Command::Checkpoint { workspace, name } => restore::checkpoint(&ctx, workspace, name).await,
+        Command::Restore {
+            workspace,
+            checkpoint,
+        } => restore::run(&ctx, workspace, checkpoint).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
         Command::Codex {

@@ -5,6 +5,7 @@ pub(crate) mod agent_state;
 mod agents;
 mod branches;
 pub(crate) mod capacity;
+mod checkpoints;
 mod conflicts;
 mod diff;
 mod done;

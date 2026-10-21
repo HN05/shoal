@@ -95,6 +95,7 @@ impl Manager {
         exit_code: Option<i32>,
         complete: bool,
     ) {
+        self.checkpoint_after_agent(&workspace.id).await;
         if let Err(error) = self
             .run_agent_exit_hook(workspace, agent, exit_code, complete)
             .await

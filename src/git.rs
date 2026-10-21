@@ -13,8 +13,8 @@ pub use queries::{
     current_branch, git_dir, latest_subject, metadata_path, remote_url, remotes, revision,
     symbolic_revision, verify_revision, worktree_root,
 };
+pub mod checkpoint;
 pub mod repo;
-pub mod restore;
 pub mod seed;
 pub mod status;
 pub mod worktrunk;

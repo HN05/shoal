@@ -71,7 +71,7 @@ pub enum Save {
     Nothing,
     /// Agent sessions and interrupted commands.
     Everything,
-    /// Agent sessions, which the removed workspace's restore point keeps.
+    /// Agent sessions, which the removed workspace's removal record keeps.
     RemovedAgents,
 }
 
@@ -91,7 +91,7 @@ impl StopRequest {
         }
     }
 
-    /// Removal of a missing worktree, which keeps no restore point.
+    /// Removal of a missing worktree, which keeps no checkpoint or record.
     pub(super) fn removal() -> Self {
         Self {
             reason: "the workspace is being removed".into(),
@@ -99,7 +99,7 @@ impl StopRequest {
         }
     }
 
-    /// Removal of an existing worktree, whose restore point keeps its agents.
+    /// Removal of an existing worktree, whose removal record keeps its agents.
     pub(super) fn restorable_removal() -> Self {
         Self {
             save: Save::RemovedAgents,

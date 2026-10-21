@@ -415,9 +415,23 @@ pub enum Method {
     },
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,
-    /// Open a removed workspace again from its restore record.
+    /// Open a removed workspace again from its removal record.
     RestoreWorkspace {
         workspace: String,
+    },
+    /// Keep the workspace's HEAD and unsaved files in a new checkpoint.
+    Checkpoint {
+        workspace: String,
+        name: Option<String>,
+    },
+    /// An existing workspace's checkpoints; none when no workspace matches.
+    Checkpoints {
+        workspace: String,
+    },
+    /// Return a workspace to one of its checkpoints.
+    RestoreCheckpoint {
+        workspace: String,
+        checkpoint: u64,
     },
     Diagnose,
     Doctor {
@@ -729,6 +743,9 @@ response_bodies! {
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
     RestoredWorkspace(crate::model::RestoredWorkspace),
+    Checkpoint(crate::model::Checkpoint),
+    Checkpoints(Option<Vec<crate::model::Checkpoint>>),
+    RestoredCheckpoint(crate::model::RestoredCheckpoint),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),
@@ -896,7 +913,7 @@ pub enum Control {
     Pause {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
-        /// The workspace is being removed; its restore point keeps the session.
+        /// The workspace is being removed; its removal record keeps the session.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         removed: bool,
     },

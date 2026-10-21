@@ -956,7 +956,7 @@ removal lists holders and releases holds with the workspace record; deleted-work
 cleanup still forgets missing worktrees. Release remains available through failed or
 active lifecycle operations and hooks. Holds belong to the user and to apps hosting
 external sessions; scoped callers list their own workspace's holds but cannot change
-them. Removal is reversible through restore points, so agents have no way to keep a
+them. Removal is reversible through checkpoints, so agents have no way to keep a
 workspace: one that needs the user asks, and an open question, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included.
 
@@ -1008,23 +1008,35 @@ Forgejo only cancels, and Bitbucket Pipelines are not supported.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run
-removal hooks, remove owned simulators, keep a restore point, remove the worktree, and release leases with the record. Failures retain what is
-needed to retry. Workspaces are cheap to remove because removal is reversible: the
-restore point is a commit of HEAD plus the unsaved files Git does not ignore, built
-with a temporary index under `refs/shoal/removed/<workspace id>`, and its record
-(branch, HEAD, base, links and stopped agents' recovery records) persists before any file is deleted, so an
-interrupted or failed removal stays restorable; records of workspaces that still
-exist are not offered, and the next removal replaces them, keeping the earlier
-snapshot as its second parent. Unsaved files beyond
-`[cleanup.restore] archive_max_mb` are not kept; merged cleanup then retains the
-workspace, and every other removal keeps only HEAD. Records and refs expire after
-`retention_days`; a ref no record or workspace owns is deleted. `shoal restore`
+removal hooks, remove owned simulators, take a checkpoint, remove the worktree, and release leases with the record. Failures retain what is
+needed to retry. Workspaces are cheap to remove because removal is reversible.
+A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built
+with a temporary index under `refs/shoal/checkpoints/<workspace id>/<number>`,
+with a record in the store; the record goes first and a ref without one is
+deleted. Checkpoints are taken on request, when an agent exits or is stopped
+(while the workspace is ready or stopping), before a restore to a checkpoint, and
+by removal; all but requested ones extend the newest checkpoint instead when they
+would keep the same branch, HEAD and files. Unsaved files beyond
+`[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only. Checkpoints
+expire after `retention_days`, and so do those no workspace or removal record owns.
+Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
+other lifecycle operations and new executions, refuses while another execution is
+recorded, keeps the current state in a checkpoint, then resets the branch, cleans
+untracked files and applies the snapshot's files without staging them. Scoped
+callers may do this in their own workspace, since the replaced state stays a
+checkpoint.
+Removal's record (base, links and stopped agents' recovery records, with its
+checkpoint) persists before any file is deleted, so an interrupted or failed
+removal stays restorable; records of workspaces that still exist are not offered,
+and a retried removal replaces the record with a new checkpoint while the earlier
+one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
+the workspace. Records expire with their checkpoint. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
-snapshot's files without staging them, links what the record names and saves its
-agents' recovery records under the new workspace ID for `shoal resume`; the record
-and ref go once the files are back. Restoring is allocation, so scoped callers
-cannot.
+snapshot's files without staging them, links what the record names, moves the
+checkpoints to the new workspace ID and saves its agents' recovery records under
+it for `shoal resume`; the record goes once the files are back. Reopening is
+allocation, so scoped callers cannot.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point
@@ -1044,7 +1056,7 @@ Idle cleanup keeps its timers in memory, so a restart starts its grace period ov
 too: resuming would need the pre-restart snapshot to prove nothing changed. User requests and disk pressure remove at once. Merged cleanup
 (`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
-restore point keeps (the branch has commits of its own), no Git operation under
+removal's checkpoint keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running or saved for resume, no leases, permits, directory users,
 stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;

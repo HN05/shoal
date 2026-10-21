@@ -109,6 +109,15 @@ Questions).
 you more work during the grace period, run it before starting. It does not keep
 the workspace.
 
+## Checkpoints
+
+`shoal --json checkpoint --name "<what comes next>"` keeps your workspace's HEAD
+and unsaved files before a risky change; Shoal also takes one when you exit or
+are stopped. `shoal --json restore <workspace>` lists them, and
+`shoal --json restore <workspace> <number>` returns to one after keeping the
+current state in a new checkpoint. It refuses while another command runs in the
+workspace.
+
 ## Messages
 
 The user and Shoal can send messages to your workspace, such as a request to
