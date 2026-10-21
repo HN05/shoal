@@ -58,20 +58,14 @@ impl Worker {
         #[cfg(test)]
         let opens = self.opens.clone();
         let job = Box::new(move |connection: &mut Option<Connection>, path: &Path| {
-            let result = (|| {
-                if connection.is_none() {
-                    *connection = Some(connect(path)?);
-                    #[cfg(test)]
-                    opens.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                }
-                let db = connection.as_mut().expect("connection was opened");
-                let before = db.total_changes();
-                let result = operation(db);
-                if db.total_changes() != before {
-                    changed.send_replace(());
-                }
-                result
-            })();
+            let result = execute_operation(
+                connection,
+                path,
+                &changed,
+                #[cfg(test)]
+                &opens,
+                operation,
+            );
             let _ = send.send(result);
         });
         // Callers are bounded by the daemon's client limit, so waiting for queue
@@ -96,6 +90,32 @@ impl Worker {
         let mut stopped = self.stopped.clone();
         let _ = stopped.changed().await;
     }
+}
+
+/// Run one admitted operation on the worker thread, opening the connection when
+/// needed and publishing a change before the caller receives the result.
+fn execute_operation<T>(
+    connection: &mut Option<Connection>,
+    path: &Path,
+    changed: &watch::Sender<()>,
+    #[cfg(test)] opens: &std::sync::atomic::AtomicU64,
+    operation: impl FnOnce(&mut Connection) -> Result<T>,
+) -> Result<T> {
+    let db = match connection {
+        Some(db) => db,
+        None => {
+            let db = connection.insert(connect(path)?);
+            #[cfg(test)]
+            opens.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            db
+        }
+    };
+    let before = db.total_changes();
+    let result = operation(db);
+    if db.total_changes() != before {
+        changed.send_replace(());
+    }
+    result
 }
 
 fn connect(path: &Path) -> Result<Connection> {
