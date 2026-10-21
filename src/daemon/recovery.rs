@@ -347,75 +347,26 @@ impl Manager {
     ) -> Result<ExecutionReport> {
         let connected = self.execution_connected(&execution.id).await;
         let mut processes = Processes::inspect(execution, scan).await?;
-        let mut notes = Vec::new();
         if options.stop && !connected {
-            if processes.stop().await? {
-                report.changes.push(format!(
-                    "Stopped recorded survivors of execution {}",
-                    execution.id
-                ));
-            }
-            // A surviving process can fork while stopping. Rescan rather than
-            // assuming that signaling the original list completed the job.
-            *scan = process::scan(ids.clone()).await?;
-            processes = Processes::inspect(execution, scan).await?;
+            processes = stop_survivors(execution, processes, report, scan, ids).await?;
         }
-        let unverified = processes.unverified();
-        if connected {
-            notes.push("Execution is connected; not a stale record".into());
-        }
-        if !connected && processes.wrapper.is_some() {
-            notes.push("Recorded execution wrapper is still alive".into());
-        }
-        if !processes.owned.is_empty() {
-            notes.push(format!(
-                "{} owned process(es) remain",
-                processes.owned.len()
-            ));
-        }
-        if !processes.launch_recorded {
-            notes.push("Execution has incomplete launch identity; explicit --acknowledge-stopped is required after checking its processes".into());
-        }
-        if !processes.unreadable.is_empty() {
-            notes.push(format!(
-                "{} same-user process environments could not be inspected",
-                processes.unreadable.len()
-            ));
-        }
-        if !unverified.is_empty() {
-            notes.push("Unverified process-group survivors require manual inspection; Shoal will not signal them".into());
-        }
+        let mut notes = execution_notes(connected, &processes);
         let mut cleared = false;
-        let safe = !connected
-            && !processes.has_survivors()
-            // An acknowledgement can cover a missing launch identity, but
-            // never an environment that could not be inspected.
-            && processes.unreadable.is_empty()
-            && (processes.visibility_complete() || options.acknowledge_stopped);
-        if options.repair && safe {
-            // Even an explicit acknowledgement cannot ignore visible cwd users.
-            let cwd_users = if workspace.path.is_dir() {
-                crate::process::in_directory(&workspace.path).await?
-            } else {
-                vec![]
-            };
-            if cwd_users.is_empty() {
-                let id = execution.id.clone();
-                self.store
-                    .run(move |db| {
-                        db.execute("DELETE FROM executions WHERE id=?1", [&id])?;
-                        Ok(())
-                    })
-                    .await?;
-                cleared = true;
-                report
-                    .changes
-                    .push(format!("Cleared stopped execution {}", execution.id));
-            } else {
-                notes.push(format!(
+        if options.repair && clearable(connected, &processes, options.acknowledge_stopped) {
+            match self
+                .clear_stopped_execution(workspace, &execution.id)
+                .await?
+            {
+                Clearance::Cleared => {
+                    cleared = true;
+                    report
+                        .changes
+                        .push(format!("Cleared stopped execution {}", execution.id));
+                }
+                Clearance::DirectoryInUse(users) => notes.push(format!(
                     "Processes still use the directory: {}",
-                    cwd_users.join(", ")
-                ));
+                    users.join(", ")
+                )),
             }
         }
         if !connected && !cleared {
@@ -428,11 +379,92 @@ impl Manager {
             state: execution.state,
             connected,
             wrapper_alive: processes.wrapper.is_some(),
+            unverified_processes: processes.unverified(),
             processes: processes.owned,
-            unverified_processes: unverified,
             unreadable_processes: processes.unreadable,
             cleared,
             notes,
         })
     }
+
+    /// Delete an execution record judged clearable, unless processes still use
+    /// the workspace directory: even an explicit acknowledgement cannot ignore
+    /// visible cwd users.
+    async fn clear_stopped_execution(&self, workspace: &Workspace, id: &str) -> Result<Clearance> {
+        let users = if workspace.path.is_dir() {
+            crate::process::in_directory(&workspace.path).await?
+        } else {
+            vec![]
+        };
+        if !users.is_empty() {
+            return Ok(Clearance::DirectoryInUse(users));
+        }
+        self.forget_execution(id).await?;
+        Ok(Clearance::Cleared)
+    }
+}
+
+enum Clearance {
+    Cleared,
+    DirectoryInUse(Vec<String>),
+}
+
+/// Stop the recorded survivors of a disconnected execution and inspect again.
+async fn stop_survivors(
+    execution: &crate::model::Execution,
+    processes: Processes,
+    report: &mut Report,
+    scan: &mut process::Scan,
+    ids: &HashSet<String>,
+) -> Result<Processes> {
+    if processes.stop().await? {
+        report.changes.push(format!(
+            "Stopped recorded survivors of execution {}",
+            execution.id
+        ));
+    }
+    // A surviving process can fork while stopping. Rescan rather than
+    // assuming that signaling the original list completed the job.
+    *scan = process::scan(ids.clone()).await?;
+    Processes::inspect(execution, scan).await
+}
+
+/// Whether the evidence proves the execution ended, so repair may clear it.
+fn clearable(connected: bool, processes: &Processes, acknowledge_stopped: bool) -> bool {
+    !connected
+        && !processes.has_survivors()
+        // An acknowledgement can cover a missing launch identity, but
+        // never an environment that could not be inspected.
+        && processes.unreadable.is_empty()
+        && (processes.visibility_complete() || acknowledge_stopped)
+}
+
+/// Explain what keeps an execution from being a provably stale record.
+fn execution_notes(connected: bool, processes: &Processes) -> Vec<String> {
+    let mut notes = Vec::new();
+    if connected {
+        notes.push("Execution is connected; not a stale record".into());
+    }
+    if !connected && processes.wrapper.is_some() {
+        notes.push("Recorded execution wrapper is still alive".into());
+    }
+    if !processes.owned.is_empty() {
+        notes.push(format!(
+            "{} owned process(es) remain",
+            processes.owned.len()
+        ));
+    }
+    if !processes.launch_recorded {
+        notes.push("Execution has incomplete launch identity; explicit --acknowledge-stopped is required after checking its processes".into());
+    }
+    if !processes.unreadable.is_empty() {
+        notes.push(format!(
+            "{} same-user process environments could not be inspected",
+            processes.unreadable.len()
+        ));
+    }
+    if !processes.unverified().is_empty() {
+        notes.push("Unverified process-group survivors require manual inspection; Shoal will not signal them".into());
+    }
+    notes
 }

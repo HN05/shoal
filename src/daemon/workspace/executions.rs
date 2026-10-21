@@ -840,13 +840,7 @@ impl Manager {
                     !after.has_survivors() && after.visibility_complete(),
                     "process state remains uncertain; use shoal doctor to inspect it"
                 );
-                let id = execution.id.clone();
-                self.store
-                    .run(move |db| {
-                        db.execute("DELETE FROM executions WHERE id=?1", [id])?;
-                        Ok(())
-                    })
-                    .await?;
+                self.forget_execution(&execution.id).await?;
             }
         }
         Ok(())
@@ -941,6 +935,17 @@ impl Manager {
             );
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
+    }
+
+    /// Delete an execution record whose processes the caller proved stopped.
+    pub(crate) async fn forget_execution(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM executions WHERE id=?1", [id])?;
+                Ok(())
+            })
+            .await
     }
 
     pub(crate) async fn execution_connected(&self, id: &str) -> bool {
