@@ -355,13 +355,29 @@ impl Manager {
         self.recovery_ready.send_replace(None);
     }
 
-    /// Whether the overload monitor published sustained healthy readings
-    /// since the last restore or protection stop.
-    pub(super) fn recovery_published(&self) -> bool {
+    /// The recovery epoch the overload monitor published sustained healthy
+    /// readings for, if it still holds.
+    pub(super) fn published_recovery(&self) -> Option<u64> {
         let epoch = self
             .recovery_epoch
-            .load(std::sync::atomic::Ordering::Relaxed);
-        *self.recovery_ready.borrow() == Some(epoch)
+            .load(std::sync::atomic::Ordering::SeqCst);
+        (*self.recovery_ready.borrow() == Some(epoch)).then_some(epoch)
+    }
+
+    /// Consume the healthy interval published for `epoch`, returning the
+    /// epoch a restore admitted on it holds; `None` when a stop, reload or
+    /// unsafe reading advanced the epoch first.
+    pub(super) fn consume_recovery(&self, epoch: u64) -> Option<u64> {
+        self.recovery_epoch
+            .compare_exchange(
+                epoch,
+                epoch + 1,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .ok()?;
+        self.recovery_ready.send_replace(None);
+        Some(epoch + 1)
     }
 
     /// Queue the automatic restore of the protection-stopped agent `id`.

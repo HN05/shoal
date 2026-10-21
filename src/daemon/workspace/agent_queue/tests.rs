@@ -629,7 +629,7 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     manager.dispatch_queue().await.unwrap();
     let [first_restore, second_restore] = restoring;
     bounded(first_restore).await.unwrap().unwrap();
-    assert!(!manager.recovery_published());
+    assert_eq!(manager.published_recovery(), None);
     assert_eq!(
         queue(&manager).await[..2],
         [
@@ -696,6 +696,20 @@ async fn a_stop_after_admission_returns_the_restore_to_its_place() {
 }
 
 #[tokio::test]
+async fn admission_consumes_only_the_published_recovery_epoch() {
+    let (_temp, manager) = manager().await;
+    publish_recovery(&manager);
+    let published = manager.published_recovery().unwrap();
+    // A stop between the check and the admission withdraws the readings.
+    manager.reset_overload_recovery();
+    assert_eq!(manager.consume_recovery(published), None);
+    publish_recovery(&manager);
+    let published = manager.published_recovery().unwrap();
+    assert_eq!(manager.consume_recovery(published), Some(published + 1));
+    assert_eq!(manager.published_recovery(), None);
+}
+
+#[tokio::test]
 async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -711,7 +725,7 @@ async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
     // Each restore would take back its own slot, but the other one fills the machine.
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await[0], ("first".into(), Restore, Queued));
-    assert!(manager.recovery_published());
+    assert!(manager.published_recovery().is_some());
 
     // `shoal stop` cancels the second restore; its wrapper ends with the
     // recovery record, which still holds the slot until it is discarded.

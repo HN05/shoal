@@ -227,10 +227,16 @@ impl Manager {
         let slots = self.occupied_slots().await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
-        let admitted = admit(&occupied, &waiting, &limits, self.recovery_published());
+        let published = self.published_recovery();
+        let admitted = admit(&occupied, &waiting, &limits, published.is_some());
         let restored: Vec<&String> = admitted.iter().filter_map(|id| restores.get(id)).collect();
         if !restored.is_empty() {
-            self.grant_restores(&restored);
+            // A stop, reload or unsafe reading since the check withdrew the
+            // readings; the pass it wakes decides again.
+            let Some(epoch) = published.and_then(|epoch| self.consume_recovery(epoch)) else {
+                return Ok(false);
+            };
+            self.grant_restores(&restored, epoch);
         }
         let starts = self.mark_starting(admitted).await?;
         self.start_launches(starts, caller).await
@@ -277,14 +283,9 @@ impl Manager {
         Ok((waiting, restores))
     }
 
-    /// Bind the admitted restores of `executions` to a new recovery epoch,
-    /// so the next restore needs another healthy interval and a stop or
-    /// reload before a restored agent starts revokes its admission.
-    fn grant_restores(&self, executions: &[&String]) {
-        self.reset_overload_recovery();
-        let epoch = self
-            .recovery_epoch
-            .load(std::sync::atomic::Ordering::Relaxed);
+    /// Bind the admitted restores of `executions` to `epoch`, which a stop,
+    /// reload or unsafe reading before their agents start advances.
+    fn grant_restores(&self, executions: &[&String], epoch: u64) {
         let mut waiters = self.restore_waiters.lock().unwrap();
         for execution in executions {
             if let Some(granted) = waiters.get_mut(*execution) {
