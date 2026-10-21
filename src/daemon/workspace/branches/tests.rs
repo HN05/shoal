@@ -842,8 +842,10 @@ async fn creation_check_asks_the_remote_for_a_new_branch_base_only() {
         (Some("new"), None, base("origin/unfetched")),
         (None, None, base("origin/unfetched")),
         (None, Some("topic"), base("origin/main")),
-        // Opening a remote branch fetches it, so it can be its own base.
+        // Opening a remote branch fetches it and creates it locally, so either
+        // name can be its own base.
         (None, Some("origin/unfetched"), base("origin/unfetched")),
+        (None, Some("origin/unfetched"), base("unfetched")),
     ] {
         f.manager
             .check_creation(&f.repo_id, branch, existing, options)

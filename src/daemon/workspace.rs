@@ -930,32 +930,45 @@ async fn recorded_base(
 }
 
 /// Refuse a base creation could not use. A new branch first fetches a remote
-/// branch base, which the remote must have; opening an existing branch fetches
-/// only that branch, so any other base must resolve to a commit here.
+/// branch base, which the remote must have; opening an existing branch only
+/// materializes that branch, so any other base must resolve to a commit here.
 async fn check_base(
     repo: &crate::model::Repository,
     base: &str,
     opened: Option<&git::existing_branch::Branch>,
 ) -> Result<()> {
-    match (opened, git::remote_branch(&repo.path, base).await?) {
-        (None, Some((remote, branch))) => {
-            ensure!(
-                git::remote_has_branch(&repo.path, &remote, &branch).await?,
-                "base {base} is not a branch on {remote}"
-            );
-            return Ok(());
+    let remote = git::remote_branch(&repo.path, base).await?;
+    match opened {
+        None => {
+            if let Some((remote, branch)) = &remote {
+                ensure!(
+                    git::remote_has_branch(&repo.path, remote, branch).await?,
+                    "base {base} is not a branch on {remote}"
+                );
+                return Ok(());
+            }
         }
-        (Some(opened), Some((remote, branch)))
-            if opened.remote.as_deref() == Some(remote.as_str()) && opened.name == branch =>
-        {
-            return Ok(());
-        }
-        _ => {}
+        Some(opened) if materializes(opened, base, remote.as_ref()) => return Ok(()),
+        Some(_) => {}
     }
     git::resolve_commit(&repo.path, base, git::run_isolated)
         .await
         .with_context(|| format!("base {base} is not a commit"))?;
     Ok(())
+}
+
+/// Whether `base` names the remote branch being opened, which opening fetches
+/// and creates locally, by its local or remote name.
+fn materializes(
+    opened: &git::existing_branch::Branch,
+    base: &str,
+    remote: Option<&(String, String)>,
+) -> bool {
+    let Some(opened_remote) = &opened.remote else {
+        return false;
+    };
+    git::strip_local(base).unwrap_or(base) == opened.name
+        || remote.is_some_and(|(remote, branch)| remote == opened_remote && *branch == opened.name)
 }
 
 /// Existing worktrees use a live local default ref, or their opening commit.
