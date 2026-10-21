@@ -3,7 +3,7 @@ use super::{
     Manager,
     paths::{canonical_with_missing_tail, contains_protected_directory},
 };
-use crate::{git, model::Repository};
+use crate::{daemon::store, git, model::Repository};
 use anyhow::{Result, ensure};
 use std::{
     fs,
@@ -29,11 +29,11 @@ impl Manager {
         Ok(path)
     }
 
-    /// Refuse what [`Self::new_workspace_path`] would refuse for the workspace
-    /// `name` without reserving the repository's directory, which holds
-    /// nothing before it is reserved. Without a name, an explicit path may
-    /// still reopen the workspace already there, so only its location is
-    /// checked.
+    /// Refuse what [`Self::new_workspace_path`] and recording the workspace
+    /// would refuse for the workspace `name`, without reserving the
+    /// repository's directory, which holds nothing before it is reserved.
+    /// Without a name, an explicit path may still reopen the workspace already
+    /// there, so only its location is checked.
     pub(super) async fn check_new_workspace_path(
         &self,
         repo: &Repository,
@@ -52,7 +52,10 @@ impl Manager {
             (None, Some(directory)) => canonical_with_missing_tail(directory)?.join(name),
             (None, None) => return Ok(()),
         };
-        ensure_unused(&path)
+        ensure_unused(&path)?;
+        self.store
+            .run(move |db| store::ensure_path_unrecorded(db, &path))
+            .await
     }
 
     pub(super) async fn workspace_location(

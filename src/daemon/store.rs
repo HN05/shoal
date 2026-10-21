@@ -455,6 +455,23 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
 }
 
+/// Refuse a new workspace path that contains or lies inside a recorded
+/// workspace's path, whether or not that directory still exists.
+pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result<()> {
+    let recorded = db
+        .prepare("SELECT path FROM workspaces")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for other in recorded.iter().map(std::path::Path::new) {
+        ensure!(
+            !path.starts_with(other) && !other.starts_with(path),
+            "workspace path overlaps a recorded workspace: {}",
+            other.display()
+        );
+    }
+    Ok(())
+}
+
 /// Refuse a workspace name another workspace or an unfinished rename holds.
 pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
     ensure!(

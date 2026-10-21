@@ -444,6 +444,7 @@ impl Manager {
         options: NewWorktreeOptions<'_>,
     ) -> Result<()> {
         let repo = self.repository(repository).await?;
+        self.ensure_repository_available(&repo.id).await?;
         let name = match (branch, existing) {
             (Some(name), _) => {
                 git::check_branch_name(Some(&repo.path), name).await?;
@@ -545,15 +546,11 @@ impl Manager {
                     &record.branch,
                     None,
                 )?;
+                store::ensure_path_unrecorded(&tx, &record.path)?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in workspaces {
-                    let path = &workspace.path;
-                    ensure!(
-                        !record.path.starts_with(path) && !path.starts_with(&record.path),
-                        "workspace path overlaps a recorded workspace: {}", path.display()
-                    );
                     let owns = match record.git_dir.as_ref() {
                         Some(git_dir) => owns_git_dir(
                             &workspace,
