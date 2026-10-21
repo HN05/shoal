@@ -8552,7 +8552,15 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("another worktree"));
     }
-    assert!(!fixture.run(&["codex", "desktop"]).status.success());
+    // Without a Codex on PATH, the shortcut fails instead of reaching the
+    // runner's own installation.
+    let output = fixture
+        .command()
+        .args(["codex", "desktop"])
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
 }
 
 fn commit_file(path: &Path, file: &str, contents: &str) {
