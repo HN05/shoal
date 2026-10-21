@@ -618,6 +618,8 @@ URL before tracked setup or agent launch. Reopening first follows the issue
 association, then an existing local branch with the derived name, rather than
 suffixing a new branch; conflicts fail before the agent picker. Associations are idempotent and cannot
 be replaced. Status and inspection expose them.
+The derived name is the issue number and at most three title words, short
+enough to read in full in tabs, session names and branch lists.
 
 `add <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.

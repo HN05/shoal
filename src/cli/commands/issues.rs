@@ -6,7 +6,6 @@ use crate::{
     forge::{ForgeRepo, account::Account, repository},
     git,
     model::Repository,
-    validate::MAX_NAME_LEN,
 };
 
 /// The explicit alternative for commands that accept `--repo` or a forge URL.
@@ -133,19 +132,25 @@ pub(in crate::cli) struct Issue {
 }
 
 impl Issue {
+    /// `<number>-<words>`: up to three title words, or `issue-<number>` when
+    /// the title has none, so a bare number is never mistaken for a revision.
     pub fn branch_name(&self) -> String {
-        let mut name = format!("issue-{}", self.number);
-        let words = self.title.split(|c: char| !c.is_ascii_alphanumeric());
-        for word in words.filter(|word| !word.is_empty()) {
-            if name.len() + 1 >= MAX_NAME_LEN {
+        let words = title_words(&self.title);
+        if words.is_empty() {
+            return format!("issue-{}", self.number);
+        }
+        let mut name = self.number.to_string();
+        for (index, word) in words.iter().enumerate() {
+            let room = BRANCH_NAME_LEN - name.len() - 1;
+            if word.len() > room {
+                if index == 0 {
+                    name.push('-');
+                    name.push_str(&word[..room]);
+                }
                 break;
             }
             name.push('-');
-            name.extend(
-                word.chars()
-                    .take(MAX_NAME_LEN - name.len())
-                    .map(|c| c.to_ascii_lowercase()),
-            );
+            name.push_str(word);
         }
         name
     }
@@ -166,6 +171,26 @@ impl Issue {
             ],
         )
     }
+}
+
+/// Fits a zmx session name, which keeps the first 32 characters.
+const BRANCH_NAME_LEN: usize = 32;
+const BRANCH_NAME_WORDS: usize = 3;
+/// Title words that add length without naming the issue.
+const FILLER_WORDS: &[&str] = &[
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "its", "of",
+    "on", "or", "s", "that", "the", "this", "to", "when", "with",
+];
+
+/// The first lowercase ASCII words of `title` that name the issue.
+fn title_words(title: &str) -> Vec<String> {
+    title
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .filter(|word| !FILLER_WORDS.contains(&word.as_str()))
+        .take(BRANCH_NAME_WORDS)
+        .collect()
 }
 
 /// The forge that hosts the repository's origin remote.
@@ -299,10 +324,14 @@ mod tests {
             url: "url".into(),
             details: "body".into(),
         };
-        assert_eq!(issue.branch_name(), "issue-34-fix-api-touch-tmp-no");
-        issue.title = "x".repeat(200);
-        assert_eq!(issue.branch_name().len(), MAX_NAME_LEN);
-        issue.title = "日本語".into();
+        assert_eq!(issue.branch_name(), "34-fix-api-touch");
+        issue.title = "Remove a merged workspace whose HEAD is a rebased copy".into();
+        assert_eq!(issue.branch_name(), "34-remove-merged-workspace");
+        issue.title = format!("{} done", "x".repeat(200));
+        assert_eq!(issue.branch_name(), format!("34-{}", "x".repeat(29)));
+        issue.title = format!("Fix {}", "x".repeat(200));
+        assert_eq!(issue.branch_name(), "34-fix");
+        issue.title = "日本語 to the".into();
         assert_eq!(issue.branch_name(), "issue-34");
         assert!(issue.prompt(None).contains("url\n\nIssue details:\nbody"));
     }

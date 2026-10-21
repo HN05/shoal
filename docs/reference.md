@@ -313,8 +313,10 @@ otherwise lookup fails with the `shoal repo add` command to run. Lookups use you
 [forge login](#forges).
 
 Issue links and `shoal add <number>` require an open issue and derive
-`issue-<number>-<title-slug>`. Numbers use `--repo`, the current registered checkout
-or workspace, then an interactive repository picker. An existing association
+`<number>-<words>` from up to three title words, skipping filler such as “a” and
+“the”, within 32 characters; a title without ASCII words gives `issue-<number>`.
+Numbers use `--repo`, the current registered checkout or workspace, then an
+interactive repository picker. An existing association
 reopens its workspace; otherwise the derived local branch reopens as `--existing`
 would. Lookup and ownership failures create nothing. The command starts
 `--agent`, else the configured `default_agent`, else an interactive agent picker.
@@ -712,7 +714,7 @@ shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal ls --queue                              # Waiting and starting entries
-shoal rm issue-612-add-a-queue-cmd            # Removes a waiting launch
+shoal rm 612-add-queue-cmd                    # Removes a waiting launch
 ```
 
 `max_agents` limits the agents that run at once. It defaults to `dynamic`,

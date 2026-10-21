@@ -437,7 +437,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
-    let renamed = fixture.ok(&["rename", "issue-34-fix-api-timeout", "renamed-issue"]);
+    let renamed = fixture.ok(&["rename", "34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(reopened["path"], created["path"]);
@@ -2552,14 +2552,14 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
             .output()
             .unwrap()
     };
-    let name = "issue-12-clarify-retries";
+    let name = "12-clarify-retries";
     let output = review(&["--issue", "12"]);
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     for expected in [
         "Review issue #12: Clarify retries\nhttps://forge.example/team/project/issues/12",
         "Retry failed uploads.",
-        "Refine the issue before implementation starts; this workspace is on branch issue-12-clarify-retries.",
+        "Refine the issue before implementation starts; this workspace is on branch 12-clarify-retries.",
         "Post this as one comment on issue #12 without editing the issue.",
     ] {
         assert!(stdout.contains(expected), "{stdout}");
@@ -9775,7 +9775,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             String::from_utf8_lossy(&output.stderr)
         );
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        let name = format!("issue-{number}-fix-api-timeout-false");
+        let name = format!("{number}-fix-api-timeout");
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
         assert_eq!(fixture.ok(&["inspect", &name])["issue"]["url"], url);
@@ -10010,7 +10010,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let cwd = match number {
             45 => fixture.repo.join("nested"),
             46 => PathBuf::from(
-                fixture.ok(&["inspect", "issue-41-paste-an-issue"])["workspace"]["path"]
+                fixture.ok(&["inspect", "41-paste-issue"])["workspace"]["path"]
                     .as_str()
                     .unwrap(),
             )
@@ -10034,7 +10034,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             String::from_utf8_lossy(&output.stderr)
         );
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        let name = format!("issue-{number}-paste-an-issue");
+        let name = format!("{number}-paste-issue");
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
         assert!(fs::read_to_string(&issue_args).unwrap().contains(&format!(
@@ -10078,10 +10078,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(
-            workspace["name"],
-            format!("issue-{number}-create-workspace")
-        );
+        assert_eq!(workspace["name"], format!("{number}-create-workspace"));
         let inspection = fixture.ok(&["inspect", workspace["name"].as_str().unwrap()]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -10160,14 +10157,13 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["inspect", "issue-298-pick-an-agent"]);
+        let inspection = fixture.ok(&["inspect", "298-pick-agent"]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
             assert!(!agent_args.exists());
             // The shared review picker also accepts the choice without a launch.
-            let (output, transcript) =
-                fixture.interactive(&["review", "issue-298-pick-an-agent"], "");
+            let (output, transcript) = fixture.interactive(&["review", "298-pick-agent"], "");
             assert!(output.status.success(), "{output:?}\n{transcript}");
             assert!(!agent_args.exists());
         } else {
@@ -10175,7 +10171,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             assert!(prompt.contains("Issue context"), "{prompt}");
             fs::remove_file(&agent_args).unwrap();
         }
-        fixture.ok(&["rm", "issue-298-pick-an-agent", "--yes", "--delete-branch"]);
+        fixture.ok(&["rm", "298-pick-agent", "--yes", "--delete-branch"]);
     }
 
     // A regular add uses the same picker when no agent was named or configured.
@@ -10388,7 +10384,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     );
     let repo = fixture.repo.to_str().unwrap();
     let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
-    let branch = "issue-34-fix-api-timeout";
+    let branch = "34-fix-api-timeout";
     let branches = |fixture: &Fixture| -> Vec<Value> {
         fixture
             .ok(&["ls"])
@@ -10556,7 +10552,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     fixture.add("topic");
     fixture.add_github_origin();
     // An existing branch avoids refreshing the default branch from GitHub.
-    git(&fixture.repo, &["branch", "issue-34-fix-api-timeout"]);
+    git(&fixture.repo, &["branch", "34-fix-api-timeout"]);
     install_test_script(
         fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
@@ -10593,7 +10589,7 @@ esac
     };
     let (output, transcript) = add("Use an issue", "34");
     assert!(output.status.success(), "{output:?} {transcript}");
-    let issue = fixture.ok(&["inspect", "issue-34-fix-api-timeout"]);
+    let issue = fixture.ok(&["inspect", "34-fix-api-timeout"]);
     assert_eq!(
         issue["issue"]["url"],
         "https://github.com/team/project/issues/34"
@@ -12313,7 +12309,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
         let launch: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').nth(1).unwrap()).unwrap();
         let name = launch["workspace"]["name"].as_str().unwrap().to_owned();
-        assert_eq!(name, "issue-34-fix-api-timeout");
+        assert_eq!(name, "34-fix-api-timeout");
         wait_until("fake happy record", || record.exists());
         let recorded = fs::read_to_string(&record).unwrap();
         // The prompt spans lines; the record ends the NUL-separated list before `scope=`.
@@ -12343,7 +12339,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                 "{args:?}"
             );
             assert_eq!(args[6], "--append-system-prompt");
-            assert_eq!(after_guidance(args[7]), "General issue-34-fix-api-timeout");
+            assert_eq!(after_guidance(args[7]), "General 34-fix-api-timeout");
             assert_eq!(args[8..10], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
             assert_eq!(launch["prompt_delivered"], true, "{launch}");
@@ -12366,7 +12362,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             let prompt = fs::read_to_string(&prompt_file).unwrap();
             assert_eq!(
                 after_guidance(&prompt),
-                format!("General issue-34-fix-api-timeout\n\nIssue {title}: {body}")
+                format!("General 34-fix-api-timeout\n\nIssue {title}: {body}")
             );
             assert_eq!(launch["prompt_delivered"], false);
             assert_eq!(launch["happy_session_id"], Value::Null);
@@ -17412,7 +17408,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
-            fixture.ok(&["rm", "issue-34-fix-api-timeout", "--keep-branch", "--yes"]);
+            fixture.ok(&["rm", "34-fix-api-timeout", "--keep-branch", "--yes"]);
             wait_for_herdr_close(&fixture);
         }
     }
