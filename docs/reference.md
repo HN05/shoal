@@ -1387,7 +1387,8 @@ stopped, before a restore to a checkpoint, and on every removal of an existing
 worktree. An automatic checkpoint that would keep what the newest one keeps
 extends that one instead. When the unsaved files exceed `archive_max_mb`, include
 an untracked nested repository or a changed submodule, whose files it cannot hold,
-the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`.
+the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`; their
+numbers are never reused, so a number names one checkpoint for good.
 
 `shoal restore <workspace> <number>` keeps the current state in a new checkpoint,
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back

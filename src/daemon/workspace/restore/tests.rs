@@ -322,9 +322,11 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     assert_eq!(checkpoints.len(), 1);
     assert_eq!(checkpoints[0].workspace_id, workspace.id);
     assert_eq!(checkpoints[0].cause, CheckpointCause::Removal);
-    assert_eq!(
-        checkpoint_refs(&checkout),
-        [git::checkpoint::reference(&checkpoints[0].commit)]
+    // Its numbering continues after the moved checkpoints.
+    let next = manager.take_checkpoint("topic", None).await.unwrap();
+    assert_eq!(next.number, checkpoints[0].number + 1);
+    assert!(
+        checkpoint_refs(&checkout).contains(&git::checkpoint::reference(&checkpoints[0].commit))
     );
 }
 

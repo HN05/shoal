@@ -233,6 +233,26 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
 }
 
 #[tokio::test]
+async fn numbers_are_never_reused_after_checkpoints_expire() {
+    let f = Fixture::new().await;
+    let manager = &f.manager;
+    manager.take_checkpoint("topic", None).await.unwrap();
+    let second = manager.take_checkpoint("topic", None).await.unwrap();
+    f.set_expiry(second.number, 0).await;
+    manager.expire_checkpoints().await.unwrap();
+    let third = manager.take_checkpoint("topic", None).await.unwrap();
+    assert_eq!(third.number, 3);
+    let error = manager
+        .restore_checkpoint("topic", second.number, None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("has no checkpoint 2"),
+        "{error:#}"
+    );
+}
+
+#[tokio::test]
 async fn restore_returns_to_a_checkpoint_after_keeping_the_current_state() {
     let f = Fixture::new().await;
     let manager = &f.manager;

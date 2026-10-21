@@ -408,6 +408,10 @@ const CHECKPOINTS: &str = "CREATE TABLE checkpoints (
     expires_at INTEGER NOT NULL,
     record TEXT NOT NULL,
     PRIMARY KEY(workspace_id, number)
+);
+CREATE TABLE checkpoint_numbers (
+    workspace_id TEXT PRIMARY KEY,
+    last INTEGER NOT NULL
 );";
 
 /// A removal's snapshot becomes its workspace's first checkpoint, which the
@@ -427,6 +431,7 @@ const REMOVAL_CHECKPOINTS: &str =
             'created_at', json_extract(record, '$.removed_at'),
             'expires_at', expires_at)
         FROM removed_workspaces WHERE json_valid(record);
+    INSERT INTO checkpoint_numbers(workspace_id,last) SELECT workspace_id, 1 FROM checkpoints;
     UPDATE removed_workspaces SET record=json_remove(
             json_set(record, '$.checkpoint', (SELECT json(checkpoints.record) FROM checkpoints
                 WHERE checkpoints.workspace_id=removed_workspaces.workspace_id)),
@@ -1145,6 +1150,12 @@ mod tests {
             db.query_row("SELECT record FROM removed_workspaces", [], |r| r.get(0))?;
         let removed: crate::model::RemovedWorkspace = serde_json::from_str(&removed)?;
         assert_eq!(removed.checkpoint, checkpoint);
+        let last: i64 = db.query_row(
+            "SELECT last FROM checkpoint_numbers WHERE workspace_id='gone'",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(last, 1);
         Ok(())
     }
 

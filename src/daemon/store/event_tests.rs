@@ -214,6 +214,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
          DROP INDEX access_request_number; ALTER TABLE access_requests DROP COLUMN number;",
     )?;
     db.execute_batch("DROP TABLE workspace_items;")?;
-    db.execute_batch("DROP TABLE checkpoints;")?;
+    db.execute_batch("DROP TABLE checkpoints; DROP TABLE checkpoint_numbers;")?;
     Ok(())
 }

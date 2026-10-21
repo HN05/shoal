@@ -416,8 +416,11 @@ fn branch_label(branch: Option<&str>) -> String {
 /// Record a checkpoint under the workspace's next number and return it.
 fn insert(db: &mut Connection, checkpoint: &Checkpoint) -> Result<u64> {
     let tx = db.transaction()?;
+    // The sequence outlives expired checkpoints, so a number never names a
+    // second one.
     let number: i64 = tx.query_row(
-        "SELECT COALESCE(MAX(number), 0) + 1 FROM checkpoints WHERE workspace_id=?1",
+        "INSERT INTO checkpoint_numbers(workspace_id,last) VALUES (?1,1)
+            ON CONFLICT(workspace_id) DO UPDATE SET last=last+1 RETURNING last",
         [&checkpoint.workspace_id],
         |row| row.get(0),
     )?;
@@ -456,6 +459,16 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
 
 /// Give `to` the unexpired checkpoints of `from`.
 fn reassign(db: &Connection, from: &str, to: &str) -> Result<()> {
+    db.execute(
+        "INSERT INTO checkpoint_numbers(workspace_id,last)
+            SELECT ?2, last FROM checkpoint_numbers WHERE workspace_id=?1
+            ON CONFLICT(workspace_id) DO UPDATE SET last=max(last, excluded.last)",
+        params![from, to],
+    )?;
+    db.execute(
+        "DELETE FROM checkpoint_numbers WHERE workspace_id=?1",
+        [from],
+    )?;
     for checkpoint in workspace_checkpoints(db, from)? {
         let record = Checkpoint {
             workspace_id: to.to_owned(),
@@ -474,9 +487,17 @@ fn reassign(db: &Connection, from: &str, to: &str) -> Result<()> {
     Ok(())
 }
 
+/// Delete expired removal records, and the numbering of workspaces that
+/// neither exist nor have a removal record or checkpoint left.
 fn delete_expired_removals(db: &Connection) -> Result<()> {
     db.execute(
         "DELETE FROM removed_workspaces WHERE expires_at <= unixepoch()",
+        [],
+    )?;
+    db.execute(
+        "DELETE FROM checkpoint_numbers WHERE workspace_id NOT IN (SELECT id FROM workspaces)
+            AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)
+            AND workspace_id NOT IN (SELECT workspace_id FROM checkpoints)",
         [],
     )?;
     Ok(())
