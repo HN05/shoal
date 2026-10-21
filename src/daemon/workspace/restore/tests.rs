@@ -318,7 +318,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     );
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
     // The removal's checkpoint belongs to the new workspace.
-    let checkpoints = manager.checkpoints("topic").await.unwrap().unwrap();
+    let checkpoints = manager.checkpoints("topic", None).await.unwrap().unwrap();
     assert_eq!(checkpoints.len(), 1);
     assert_eq!(checkpoints[0].workspace_id, workspace.id);
     assert_eq!(checkpoints[0].cause, CheckpointCause::Removal);

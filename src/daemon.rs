@@ -767,8 +767,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Checkpoint { workspace, name } => {
             Body::Checkpoint(manager.take_checkpoint(&workspace, name).await?)
         }
-        Method::Checkpoints { workspace } => {
-            Body::Checkpoints(manager.checkpoints(&workspace).await?)
+        Method::Checkpoints { workspace, after } => {
+            Body::Checkpoints(manager.checkpoints(&workspace, after).await?)
         }
         Method::RestoreCheckpoint {
             workspace,

@@ -30,6 +30,12 @@ impl Manager {
             "workspace is {}; take a checkpoint once that operation finishes",
             workspace.state
         );
+        if let Some(name) = &name {
+            ensure!(
+                name.chars().count() <= NAME_LIMIT,
+                "checkpoint names have at most {NAME_LIMIT} characters"
+            );
+        }
         self.verify_worktree(&workspace).await?;
         self.checkpoint(&workspace, CheckpointCause::Manual, name)
             .await
@@ -147,15 +153,20 @@ impl Manager {
         Ok(extended.then_some(latest))
     }
 
-    /// The unexpired checkpoints of an existing workspace, oldest first;
+    /// A page of the unexpired checkpoints of an existing workspace numbered
+    /// after `after`, oldest first, small enough for one protocol frame;
     /// `None` when no workspace has that name or ID.
-    pub async fn checkpoints(&self, selector: &str) -> Result<Option<Vec<Checkpoint>>> {
+    pub async fn checkpoints(
+        &self,
+        selector: &str,
+        after: Option<u64>,
+    ) -> Result<Option<Vec<Checkpoint>>> {
         let Ok(workspace) = self.workspace(selector).await else {
             return Ok(None);
         };
         let id = workspace.id;
         self.store
-            .run(move |db| workspace_checkpoints(db, &id))
+            .run(move |db| checkpoint_page(db, &id, after.unwrap_or(0)))
             .await
             .map(Some)
     }
@@ -510,6 +521,32 @@ fn find(db: &Connection, workspace_id: &str, number: u64) -> Result<Option<Check
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
+}
+
+/// The record bytes of one listing page, leaving room in a protocol frame
+/// for the envelope; [`NAME_LIMIT`] keeps one record well below it.
+const PAGE_BYTES: usize = crate::protocol::MAX_FRAME / 2;
+/// The longest checkpoint name, in characters.
+const NAME_LIMIT: usize = 200;
+
+/// The checkpoints numbered after `after`, oldest first, as many as fit in
+/// [`PAGE_BYTES`] and at least one.
+fn checkpoint_page(db: &Connection, workspace_id: &str, after: u64) -> Result<Vec<Checkpoint>> {
+    let mut statement = db.prepare(
+        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2
+            AND expires_at > unixepoch() ORDER BY number",
+    )?;
+    let mut rows = statement.query(params![workspace_id, after as i64])?;
+    let (mut page, mut bytes) = (Vec::new(), 0);
+    while let Some(row) = rows.next()? {
+        let record: String = row.get(0)?;
+        bytes += record.len() + 1;
+        if bytes > PAGE_BYTES && !page.is_empty() {
+            break;
+        }
+        page.push(serde_json::from_str(&record)?);
+    }
+    Ok(page)
 }
 
 /// The workspace's unexpired checkpoints, oldest first.

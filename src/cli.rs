@@ -586,7 +586,7 @@ pub enum Command {
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
     Checkpoint {
         workspace: Option<String>,
-        /// Describe the checkpoint in shoal restore's list.
+        /// Describe the checkpoint in shoal restore's list, in at most 200 characters.
         #[arg(long)]
         name: Option<String>,
     },

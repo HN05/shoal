@@ -1017,8 +1017,8 @@ records keep that commit and moving checkpoints to another workspace changes
 only records; a ref no record keeps is deleted. The ref is written before its
 record, so a record never names an unreachable commit, and the pair excludes
 expiry, never under the repository's Git gate, which removal holds. An agent's
-checkpoint waits until the processes it left have stopped, and a restore excludes
-link changes like other lifecycle operations. Checkpoints are taken on request, when an agent exits or is stopped
+checkpoint is taken only once the processes it left are proven stopped, and a
+restore excludes link changes like other lifecycle operations. Checkpoints are taken on request, when an agent exits or is stopped
 (while the workspace is ready or stopping), before a restore to a checkpoint, and
 by removal; all but requested ones extend the newest checkpoint instead when they
 would keep the same branch, HEAD and files. Unsaved files beyond

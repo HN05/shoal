@@ -64,14 +64,7 @@ pub(super) async fn run(
     if let Some(checkpoint) = checkpoint {
         return restore_checkpoint(ctx, workspace, checkpoint).await;
     }
-    let checkpoints = request::<Option<Vec<Checkpoint>>>(
-        &ctx.paths,
-        Method::Checkpoints {
-            workspace: workspace.clone(),
-        },
-    )
-    .await?;
-    if let Some(checkpoints) = checkpoints {
+    if let Some(checkpoints) = checkpoints(ctx, &workspace).await? {
         ctx.show(&checkpoints, |checkpoints| print_checkpoints(checkpoints))?;
         return Ok(0);
     }
@@ -80,6 +73,28 @@ pub(super) async fn run(
         "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
     );
     reopen(ctx, workspace).await
+}
+
+/// Every checkpoint of an existing workspace, requested page by page;
+/// `None` when no workspace matches.
+async fn checkpoints(ctx: &Context, workspace: &str) -> Result<Option<Vec<Checkpoint>>> {
+    let mut checkpoints = Vec::new();
+    loop {
+        let after = checkpoints
+            .last()
+            .map(|checkpoint: &Checkpoint| checkpoint.number);
+        let method = Method::Checkpoints {
+            workspace: workspace.to_owned(),
+            after,
+        };
+        let Some(page) = request::<Option<Vec<Checkpoint>>>(&ctx.paths, method).await? else {
+            return Ok(None);
+        };
+        if page.is_empty() {
+            return Ok(Some(checkpoints));
+        }
+        checkpoints.extend(page);
+    }
 }
 
 async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -> Result<i32> {

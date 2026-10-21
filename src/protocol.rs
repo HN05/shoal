@@ -424,9 +424,11 @@ pub enum Method {
         workspace: String,
         name: Option<String>,
     },
-    /// An existing workspace's checkpoints; none when no workspace matches.
+    /// A page of an existing workspace's checkpoints numbered after `after`;
+    /// none when no workspace matches.
     Checkpoints {
         workspace: String,
+        after: Option<u64>,
     },
     /// Return a workspace to one of its checkpoints.
     RestoreCheckpoint {

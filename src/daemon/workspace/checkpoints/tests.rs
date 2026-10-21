@@ -93,7 +93,7 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     manager.checkpoint_after_agent(&f.workspace.id).await;
     let numbers = async || {
         manager
-            .checkpoints("topic")
+            .checkpoints("topic", None)
             .await
             .unwrap()
             .unwrap()
@@ -106,9 +106,84 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
     manager.checkpoint_after_agent(&f.workspace.id).await;
     manager.checkpoint_after_agent(&f.workspace.id).await;
     assert_eq!(numbers().await, [1, 3]);
-    let listed = manager.checkpoints("topic").await.unwrap().unwrap();
+    let listed = manager.checkpoints("topic", None).await.unwrap().unwrap();
     assert_eq!(listed[1].cause, CheckpointCause::AgentStopped);
-    assert!(manager.checkpoints("missing").await.unwrap().is_none());
+    assert!(
+        manager
+            .checkpoints("missing", None)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn listings_come_in_pages_that_fit_a_protocol_frame() {
+    let f = Fixture::new().await;
+    let long = "n".repeat(NAME_LIMIT + 1);
+    let error = f
+        .manager
+        .take_checkpoint("topic", Some(long))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("at most 200 characters"),
+        "{error:#}"
+    );
+    let checkpoint = f
+        .manager
+        .take_checkpoint("topic", Some("n".repeat(NAME_LIMIT)))
+        .await
+        .unwrap();
+    let record = checkpoint.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            for _ in 0..300 {
+                insert(db, &record)?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let mut numbers = Vec::new();
+    let mut after = None;
+    loop {
+        let page = f
+            .manager
+            .checkpoints("topic", after)
+            .await
+            .unwrap()
+            .unwrap();
+        let Some(last) = page.last() else { break };
+        let size = serde_json::to_vec(&page).unwrap().len();
+        assert!(size <= PAGE_BYTES, "{size} bytes");
+        after = Some(last.number);
+        numbers.extend(page.iter().map(|c| c.number));
+    }
+    assert_eq!(numbers, (1..=301).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_stopped() {
+    let f = Fixture::new().await;
+    f.write("scratch", "notes\n");
+    let count = async || {
+        f.manager
+            .checkpoints("topic", None)
+            .await
+            .unwrap()
+            .unwrap()
+            .len()
+    };
+    f.manager
+        .post_agent_exit(&f.workspace, "claude", Some(0), false)
+        .await;
+    assert_eq!(count().await, 0);
+    f.manager
+        .post_agent_exit(&f.workspace, "claude", Some(0), true)
+        .await;
+    assert_eq!(count().await, 1);
 }
 
 #[tokio::test]
@@ -126,7 +201,7 @@ async fn agents_leave_no_checkpoint_while_another_lifecycle_operation_runs() {
     );
     assert!(
         f.manager
-            .checkpoints("topic")
+            .checkpoints("topic", None)
             .await
             .unwrap()
             .unwrap()

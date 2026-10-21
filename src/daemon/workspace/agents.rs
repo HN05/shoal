@@ -95,7 +95,11 @@ impl Manager {
         exit_code: Option<i32>,
         complete: bool,
     ) {
-        self.checkpoint_after_agent(&workspace.id).await;
+        // Processes that are not proven stopped may still write; removal or
+        // the next checkpoint keeps what they leave.
+        if complete {
+            self.checkpoint_after_agent(&workspace.id).await;
+        }
         if let Err(error) = self
             .run_agent_exit_hook(workspace, agent, exit_code, complete)
             .await
