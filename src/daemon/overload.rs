@@ -176,11 +176,15 @@ pub(super) async fn run(manager: Arc<Manager>) {
                 .cpu_used
                 .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
         let disk_safe = !settings.disk.enabled || manager.disk_space_recovered();
-        let recovered = monitor.healthy.observe(
-            now,
-            memory_safe && cpu_safe && disk_safe,
-            settings.recovery.sustained_seconds,
-        );
+        let safe = memory_safe && cpu_safe && disk_safe;
+        // Readings that turn unsafe revoke a restore admitted on the earlier
+        // ones before its agent starts.
+        if monitor.healthy.since.is_some() && !safe {
+            manager.reset_overload_recovery();
+        }
+        let recovered = monitor
+            .healthy
+            .observe(now, safe, settings.recovery.sustained_seconds);
         manager
             .recovery_ready
             .send_replace(recovered.then_some(epoch));
@@ -247,6 +251,39 @@ mod tests {
         wait_published(&mut ready).await;
         let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
         assert!(recovered.elapsed() >= window);
+        monitor.abort();
+    }
+
+    #[tokio::test]
+    async fn unsafe_readings_revoke_the_recovery_epoch() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let mut config = crate::config::Config::default();
+        config.overload.memory.enabled = false;
+        manager.publish_config(config);
+        let generation = manager
+            .config_generation
+            .load(std::sync::atomic::Ordering::SeqCst);
+        manager.publish_disk_reading(Some(generation));
+        let mut ready = manager.recovery_ready.subscribe();
+        tokio::time::pause();
+        let monitor = tokio::spawn(run(manager.clone()));
+        wait_published(&mut ready).await;
+        let epoch = || {
+            manager
+                .recovery_epoch
+                .load(std::sync::atomic::Ordering::Relaxed)
+        };
+        // A restore admitted now holds this epoch while it checks its workspace.
+        let admitted = epoch();
+        manager.publish_disk_reading(None);
+        tokio::time::timeout(Duration::from_secs(3600), async {
+            while epoch() == admitted {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        })
+        .await
+        .expect("unsafe readings never revoked the epoch");
+        assert_eq!(*ready.borrow(), None);
         monitor.abort();
     }
 

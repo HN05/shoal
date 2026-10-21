@@ -494,8 +494,9 @@ admission measures its load like a new start. Restores also need the recovery
 interval's healthy readings, one per interval, and until then hold back work
 queued behind them, since starting new agents on a machine that just stopped one
 would undo the protection; a restore held only by its repository's limit or by
-surviving processes is passed over like a full repository's launch. Admission binds the recovery epoch, so a stop or reload before
-the agent restarts returns the restore to its place. The slot passes to the
+surviving processes is passed over like a full repository's launch. Admission binds the recovery epoch, which stops, reloads and
+readings turning unsafe advance, so any of them before the agent restarts
+returns the restore to its place. The slot passes to the
 agent when its restored process registers. The entry is keyed by execution, so a reattached wrapper keeps its
 place and a restart cannot restore it twice; an entry without its wrapper for the
 start grace period is dropped, and cancellation or failure leaves the recovery
