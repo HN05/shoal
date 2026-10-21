@@ -346,11 +346,12 @@ async fn relay(
             ExecutionEvent::Finished { exit_code } => return Ok(Ended::Finished(exit_code)),
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
-                if agent.is_some() {
-                    manager.checkpoint_after_agent(&workspace.id).await;
-                }
                 if !recovering {
                     execution_recovery::stop_survivors(manager, execution_id, &workspace.id).await;
+                    // Survivors wrote their last files as they stopped.
+                    if agent.is_some() {
+                        manager.checkpoint_after_agent(&workspace.id).await;
+                    }
                     continue;
                 }
                 use execution_recovery::Action;

@@ -163,12 +163,10 @@ impl WorkspaceState {
         })
     }
 
-    /// A workspace being stopped, removed or reconciled takes no link changes.
+    /// A workspace being stopped, removed, reconciled or restored takes no
+    /// link changes.
     pub fn accepts_links(self) -> bool {
-        matches!(
-            self,
-            Self::Ready | Self::Preparing | Self::Restoring | Self::Failed
-        )
+        matches!(self, Self::Ready | Self::Preparing | Self::Failed)
     }
 }
 

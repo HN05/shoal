@@ -110,20 +110,17 @@ impl Manager {
         })
     }
 
-    /// Record a snapshot under the workspace's next number, then point its
-    /// ref at the commit; a ref that cannot be written takes the record back.
+    /// Point the commit's ref at it, then record the snapshot under the
+    /// workspace's next number, so a record never outlives a missing ref; a
+    /// ref left by a failed record goes with the next expiry pass, which the
+    /// checkpoint mutex keeps from running in between.
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
         let repo = self.repository(&checkpoint.repository_id).await?;
         let _refs = self.checkpoint_gate.lock().await;
+        let reference = git::checkpoint::reference(&checkpoint.commit);
+        git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
         let record = checkpoint.clone();
         checkpoint.number = self.store.run(move |db| insert(db, &record)).await?;
-        let reference = git::checkpoint::reference(&checkpoint.commit);
-        if let Err(error) = git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await
-        {
-            let (id, number) = (checkpoint.workspace_id.clone(), checkpoint.number);
-            self.store.run(move |db| delete(db, &id, number)).await?;
-            return Err(error);
-        }
         Ok(checkpoint)
     }
 
@@ -470,14 +467,6 @@ fn delete_expired_removals(db: &Connection) -> Result<()> {
     db.execute(
         "DELETE FROM removed_workspaces WHERE expires_at <= unixepoch()",
         [],
-    )?;
-    Ok(())
-}
-
-fn delete(db: &Connection, workspace_id: &str, number: u64) -> Result<()> {
-    db.execute(
-        "DELETE FROM checkpoints WHERE workspace_id=?1 AND number=?2",
-        params![workspace_id, number as i64],
     )?;
     Ok(())
 }

@@ -61,6 +61,8 @@ pub(super) async fn pause(
         }
         ready = async {
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
+            // Every process the agent left has stopped writing.
+            manager.checkpoint_after_agent(workspace_id).await;
             manager.admit_agent_restore(execution_id, workspace_id).await
         } => ready,
     };
