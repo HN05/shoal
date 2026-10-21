@@ -3,7 +3,7 @@
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -66,14 +66,8 @@ impl Config {
             );
             std::os::unix::fs::symlink(&path, directory.path().join(name))?;
         }
-        let inherited = std::env::var_os("PATH").unwrap_or_default();
-        let path = std::env::join_paths(
-            std::iter::once(directory.path().to_owned()).chain(std::env::split_paths(&inherited)),
-        )?;
-        Ok(Some(Wrappers {
-            _directory: directory,
-            path,
-        }))
+        std::env::join_paths([directory.path()])?;
+        Ok(Some(Wrappers { directory }))
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -105,8 +99,7 @@ pub struct Launch {
 }
 
 struct Wrappers {
-    _directory: tempfile::TempDir,
-    path: OsString,
+    directory: tempfile::TempDir,
 }
 
 impl Launch {
@@ -116,7 +109,7 @@ impl Launch {
     /// for each identity setting it names.
     pub fn apply(&self, command: &mut tokio::process::Command) {
         if let Some(wrappers) = &self.wrappers {
-            command.env("PATH", &wrappers.path);
+            crate::env::prepend_path(command, wrappers.directory.path().as_os_str());
         }
         if self.git.is_empty() {
             return;

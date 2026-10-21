@@ -111,26 +111,12 @@ impl Launch {
             );
         }
         if let Some(launchers) = &self.launchers {
-            let inherited = command
-                .as_std()
-                .get_envs()
-                .find(|(name, _)| *name == "PATH")
-                .and_then(|(_, value)| value.map(OsStr::to_owned))
-                .or_else(|| std::env::var_os("PATH"))
-                .unwrap_or_default();
-            let prepend = |list: &OsStr| {
-                std::env::join_paths(std::iter::once(launchers.path().to_owned()).chain(
-                    std::env::split_paths(list).filter(|entry| !entry.as_os_str().is_empty()),
-                ))
-            };
             // `prepare` rejects a launcher directory that cannot join a PATH.
-            if let (Ok(path), Ok(directories)) = (
-                prepend(&inherited),
-                prepend(&std::env::var_os(env::SECRET_TOOLS).unwrap_or_default()),
-            ) {
-                command
-                    .env("PATH", path)
-                    .env(env::SECRET_TOOLS, directories);
+            let launcher = launchers.path().as_os_str();
+            let inherited = std::env::var_os(env::SECRET_TOOLS).unwrap_or_default();
+            if let Ok(directories) = env::joined_path(launcher, &inherited) {
+                env::prepend_path(command, launcher);
+                command.env(env::SECRET_TOOLS, directories);
             }
         }
     }

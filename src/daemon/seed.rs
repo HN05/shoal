@@ -507,9 +507,9 @@ fn step_command(step: &Step, plan: &Plan, worktree: &Path, output: &fs::File) ->
     if let Some(path) = crate::env::path_without_secret_tools() {
         command.env("PATH", path);
     }
+    crate::env::apply_configured(&mut command, &plan.environment);
     command
         .current_dir(worktree)
-        .envs(&plan.environment)
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output.try_clone()?)

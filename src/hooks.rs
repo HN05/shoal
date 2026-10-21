@@ -165,9 +165,9 @@ fn command(
         .env_remove(env::RESERVED_PORT_ENV)
         .env_remove(env::SECRET_ENV)
         .env_remove(env::SECRET_TOOLS)
-        .envs(configured_env)
         .process_group(0)
         .kill_on_drop(true);
+    env::apply_configured(&mut command, configured_env);
     if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {
         command.env(env::RESOURCE_LEASE, serde_json::to_string(lease)?);
     }

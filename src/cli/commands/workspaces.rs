@@ -60,6 +60,7 @@ pub(super) async fn environment(
             Method::WorkspaceEnv { workspace },
         )
         .await?;
+        let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
         ctx.show(&values, |values| {
             for (name, value) in values {
                 println!("{name}={value}");

@@ -1,7 +1,11 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, and process scanning agree on the contract.
-use anyhow::{Result, ensure};
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+use anyhow::{Context, Result, ensure};
+use std::{
+    collections::BTreeMap,
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 use tokio::process::Command;
 
 use crate::{
@@ -46,6 +50,10 @@ pub const SECRET_ENV: &str = "SHOAL_SECRET_ENV";
 /// Secret tool launcher directories an agent launch put on PATH, which hooks
 /// started beneath it remove.
 pub const SECRET_TOOLS: &str = "SHOAL_SECRET_TOOLS";
+/// A rendered `[env]` entry that names directories to put first on the PATH
+/// of the process it reaches instead of a variable to set; only presets
+/// set it.
+pub const PATH_PREFIX: &str = "SHOAL_PATH_PREFIX";
 /// Which hook is running, using the configuration key without `_cmd`.
 pub const HOOK: &str = "SHOAL_HOOK";
 /// Recorded worktree path, including after removal.
@@ -223,6 +231,61 @@ pub fn path_without_secret_tools() -> Option<OsString> {
     .ok()
 }
 
+/// Set rendered `[env]` values on `command`, putting a preset's directories
+/// first on the PATH it would otherwise get.
+pub fn apply_configured(command: &mut Command, values: &BTreeMap<String, OsString>) {
+    for (name, value) in values {
+        if name == PATH_PREFIX {
+            prepend_path(command, value);
+        } else {
+            command.env(name, value);
+        }
+    }
+}
+
+/// Rendered `[env]` values as a shell or another program sets them, with a
+/// preset's directories first on `path`.
+pub fn export_configured(
+    mut values: BTreeMap<String, String>,
+    path: Option<OsString>,
+) -> Result<BTreeMap<String, String>> {
+    if let Some(prefix) = values.remove(PATH_PREFIX) {
+        let joined = joined_path(OsStr::new(&prefix), &path.unwrap_or_default())
+            .ok()
+            .and_then(|joined| joined.into_string().ok());
+        let joined = joined.context("PATH cannot be exported with the preset directories")?;
+        values.insert("PATH".into(), joined);
+    }
+    Ok(values)
+}
+
+/// Put the colon-separated `directories` first on the PATH `command` would
+/// get, ahead of any directories an earlier step put there. Directories that
+/// cannot join a PATH leave it unchanged.
+pub fn prepend_path(command: &mut Command, directories: &OsStr) {
+    let current = command
+        .as_std()
+        .get_envs()
+        .find(|(name, _)| *name == "PATH")
+        .and_then(|(_, value)| value.map(OsStr::to_owned))
+        .or_else(|| std::env::var_os("PATH"))
+        .unwrap_or_default();
+    if let Ok(path) = joined_path(directories, &current) {
+        command.env("PATH", path);
+    }
+}
+
+pub fn joined_path(
+    directories: &OsStr,
+    path: &OsStr,
+) -> Result<OsString, std::env::JoinPathsError> {
+    std::env::join_paths(
+        std::env::split_paths(directories)
+            .chain(std::env::split_paths(path))
+            .filter(|entry| !entry.as_os_str().is_empty()),
+    )
+}
+
 /// Shared identity values for hooks, tracked executions and external processes.
 fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, OsString> {
     BTreeMap::from([
@@ -367,7 +430,48 @@ pub(crate) fn queue_entry() -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsStr;
+
+    fn path_of(command: &Command) -> Option<OsString> {
+        command
+            .as_std()
+            .get_envs()
+            .find(|(name, _)| *name == "PATH")
+            .and_then(|(_, value)| value.map(OsStr::to_owned))
+    }
+
+    #[test]
+    fn preset_directories_go_first_on_the_path_a_process_gets() {
+        let mut command = Command::new("true");
+        command.env("PATH", "/usr/bin:/bin");
+        let values = BTreeMap::from([
+            (PATH_PREFIX.to_owned(), OsString::from("/cache/xcode/bin")),
+            ("GOFLAGS".to_owned(), OsString::from("-trimpath")),
+        ]);
+        apply_configured(&mut command, &values);
+        assert_eq!(path_of(&command).unwrap(), "/cache/xcode/bin:/usr/bin:/bin");
+        assert!(
+            command
+                .as_std()
+                .get_envs()
+                .all(|(name, _)| name != PATH_PREFIX)
+        );
+        // A later step, such as the agent account's wrappers, goes before it.
+        prepend_path(&mut command, OsStr::new("/wrappers"));
+        assert_eq!(
+            path_of(&command).unwrap(),
+            "/wrappers:/cache/xcode/bin:/usr/bin:/bin"
+        );
+
+        let exported = export_configured(
+            BTreeMap::from([(PATH_PREFIX.to_owned(), "/cache/xcode/bin".to_owned())]),
+            Some("/usr/bin".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            exported,
+            BTreeMap::from([("PATH".to_owned(), "/cache/xcode/bin:/usr/bin".to_owned())])
+        );
+    }
 
     #[test]
     fn configured_values_render_identity_and_only_reserved_ports_once() {

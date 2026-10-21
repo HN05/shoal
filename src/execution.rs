@@ -1006,8 +1006,8 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
 /// variables inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     env::apply_workspace_identity(process, &plan.workspace, paths);
+    env::apply_configured(process, &plan.environment);
     process
-        .envs(&plan.environment)
         .envs(env::workspace_environment(
             &plan.workspace,
             paths,
