@@ -33,6 +33,29 @@ pub(super) enum OpenTarget {
     Create(Branch),
 }
 
+/// Refuse new-worktree options for a workspace that opening reuses, except a
+/// path naming where it already is.
+fn check_reopen_options(workspace: &Workspace, options: NewWorktreeOptions<'_>) -> Result<()> {
+    ensure!(
+        options.git_profile.is_none(),
+        "--git-profile applies only to new worktrees; workspace {} already exists",
+        workspace.name
+    );
+    ensure!(
+        options.base.is_none(),
+        "--base applies only to new worktrees; workspace {} already exists",
+        workspace.name
+    );
+    if let Some(path) = options.path {
+        ensure!(
+            std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
+            "workspace already exists at {}; --path cannot relocate it",
+            workspace.path.display()
+        );
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum UpstreamPolicy {
     Required,
@@ -295,23 +318,7 @@ impl Manager {
             ensure_not_checked_out(&repo.path, &branch.name).await?;
             return Ok(OpenTarget::Create(branch));
         };
-        ensure!(
-            options.git_profile.is_none(),
-            "--git-profile applies only to new worktrees; workspace {} already exists",
-            workspace.name
-        );
-        ensure!(
-            options.base.is_none(),
-            "--base applies only to new worktrees; workspace {} already exists",
-            workspace.name
-        );
-        if let Some(path) = options.path {
-            ensure!(
-                std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
-                "workspace already exists at {}; --path cannot relocate it",
-                workspace.path.display()
-            );
-        }
+        check_reopen_options(&workspace, options)?;
         Ok(OpenTarget::Reopen(Box::new(workspace)))
     }
 
