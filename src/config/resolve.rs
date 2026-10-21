@@ -200,7 +200,7 @@ impl Effective {
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
             env: crate::presets::environment(&merged.presets, merged.env),
-            caches: merged.caches,
+            caches: crate::presets::caches(&merged.presets, merged.caches),
             presets: merged.presets,
             secrets: merged.secrets,
             resources: merged.resources,

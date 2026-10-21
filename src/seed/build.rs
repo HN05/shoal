@@ -29,10 +29,15 @@ impl Build {
     /// The build `seed` and `presets` describe for the seed worktree, or
     /// `None` when they name neither a command nor a preset.
     pub fn of(seed: &Seed, presets: &[Preset], worktree: &Path) -> Option<Self> {
+        let building: Vec<_> = presets
+            .iter()
+            .copied()
+            .filter(|preset| preset.seed_command().is_some())
+            .collect();
         match &seed.cmd {
             Some(command) => Some(Self::Script(worktree.join(command))),
-            None if presets.is_empty() => None,
-            None => Some(Self::Presets(presets.to_vec())),
+            None if building.is_empty() => None,
+            None => Some(Self::Presets(building)),
         }
     }
 
@@ -43,7 +48,7 @@ impl Build {
                 label: "seed.cmd".into(),
                 argv: vec![command.into()],
             }],
-            Self::Presets(presets) => presets.iter().map(|preset| step(*preset)).collect(),
+            Self::Presets(presets) => presets.iter().filter_map(|preset| step(*preset)).collect(),
         }
     }
 }
@@ -60,12 +65,12 @@ pub fn outputs(seed: &Seed, presets: &[Preset]) -> Vec<String> {
         .collect()
 }
 
-fn step(preset: Preset) -> Step {
-    let argv = preset.seed_command();
-    Step {
+fn step(preset: Preset) -> Option<Step> {
+    let argv = preset.seed_command()?;
+    Some(Step {
         label: argv.join(" "),
         argv: argv.iter().map(OsString::from).collect(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -107,7 +112,7 @@ mod tests {
         let build = Build::of(&go.seed, &go.presets, worktree).unwrap();
         assert_eq!(labels(&build), ["go build ./..."]);
         assert!(outputs(&go.seed, &go.presets).is_empty());
-        let none = config("");
+        let none = config("presets = ['xcode']\n");
         assert!(Build::of(&none.seed, &none.presets, worktree).is_none());
     }
 

@@ -385,10 +385,22 @@ on tracked files its commit left unchanged, since mtime-based tools otherwise tr
 every freshly checked-out file as new. Platforms without clones skip the seed
 rather than copy. Seeds are best effort: failures notify and never fail creation,
 and builds wait under host pressure so they never add load an agent would feel.
-Presets name a tool's usual build and outputs, so common stacks need no script.
-They run the default branch's own build code, as `seed.cmd` would, and cover
-Cargo better than a shared compiler cache such as sccache, which needs another
-tool and gives up incremental builds.
+A repository's `presets` name the build tools it uses, and each sets up what
+that tool needs to stop repeating work across workspaces, so common stacks need
+no script. Tools whose build outputs survive a move into another path get a
+seed: Cargo, whose seed covers it better than a shared compiler cache such as
+sccache, which needs another tool and gives up incremental builds, and the Node
+package managers. Preset seeds run the default branch's own build code, as
+`seed.cmd` would. Tools whose caches already serve every checkout get only what
+makes their cache keys independent of the workspace path: Go trims paths, and
+Xcode, whose DerivedData records absolute paths so no seed survives the move,
+shares one compilation cache with the workspace and DerivedData paths mapped
+out of its keys. Xcode also needs one package checkout per set of resolved
+pins, which only an `xcodebuild` argument can choose, so the preset puts a
+wrapper first on workspace processes' PATH. These presets trade real source
+paths in debug info and stack traces for the shared cache, which is why they
+are opt-in. Neither shrinks a workspace's own build directory: Xcode copies
+cached results into each DerivedData.
 
 Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
 sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`

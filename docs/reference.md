@@ -1312,12 +1312,27 @@ presets = ["cargo", "bun"]
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
 | `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
 | `go` | `GOFLAGS=-trimpath`, and a seed running `go build ./...` |
+| `xcode` | One compilation cache for every workspace's `xcodebuild`, with shared Swift package checkouts |
 
 Presets that keep the same seed output cannot be combined. A variable `[env]`
 sets takes precedence over a preset's. Go's build cache is shared by every
 checkout, but it keys a package by its directory unless paths are trimmed; with
 `-trimpath`, binaries, panics and `runtime.Caller` report module paths instead
 of file system paths. The seed fills that cache from the default branch.
+
+The `xcode` preset keeps a [shared cache](#shared-caches) named `xcode` holding
+an xcconfig, Xcode's compilation cache and Swift package checkouts. It sets
+`XCODE_XCCONFIG_FILE` to the xcconfig, and puts an `xcodebuild` wrapper first on
+the PATH of every process Shoal starts in a workspace and of `shoal env`. The
+xcconfig turns compilation caching on and maps the workspace and its DerivedData
+folder out of cache keys, so a workspace reuses what another compiled. Packages
+checked out per workspace would still miss, so the wrapper passes
+`-clonedSourcePackagesDirPath` keyed by the content of the `Package.resolved`
+of the project it builds, unless the command passes its own. Mapping replaces
+the workspace path in `#filePath` and debug info with `/^workspace`. Builds from
+the Xcode app, root-level Swift packages (whose package name is the folder
+name) and a configured `XCODE_XCCONFIG_FILE` do not use it. Each workspace
+still keeps its own DerivedData, since Xcode copies cached results into it.
 
 ### Seed builds
 

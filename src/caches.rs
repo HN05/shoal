@@ -76,9 +76,10 @@ impl Layout {
             .with_context(|| format!("create {}", self.root.display()))?;
         self.ensure_owned()?;
         let directories = self.locate(caches);
-        for directory in directories.values() {
+        for (name, directory) in &directories {
             fs::create_dir_all(directory)
                 .with_context(|| format!("create {}", directory.display()))?;
+            crate::presets::prepare_cache(name, directory)?;
         }
         Ok(directories)
     }
