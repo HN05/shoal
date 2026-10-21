@@ -253,7 +253,8 @@ instead of the PR delivery guidance below.
   and completion or workspace removal closes it.
   Default focus follows the resolved launch: agents started with an issue prompt
   or forwarded arguments stay in the background, tabs waiting for input receive
-  focus, and explicit focus settings override either default.
+  focus, and explicit focus settings override either default. `--focus` also
+  starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
 - Commands refuse invalid given arguments before any prompt for omitted ones;

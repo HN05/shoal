@@ -41,7 +41,7 @@ is in `prompt_file` and the user must send it from the app.
 With `max_agents` configured (the default starts agents one at a time while measured load allows), `add` may queue the agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
 daemon starts it when a slot frees; `shoal --json ls --queue` lists entries, and
-`--now` starts one regardless only when the user asks.
+`--now` or `--focus` starts one regardless only when the user asks.
 
 ## Follow progress
 

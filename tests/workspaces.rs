@@ -18918,6 +18918,28 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(removed["name"], "second", "{removed}");
     assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
 
+    // A focused launch is one the user waits for, so it skips the queue.
+    let mut focused = fixture
+        .command()
+        .args(["add", repo, "focused", "--agent", "waiter", "--focus"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the focused agent start", || {
+        fixture
+            .ok(&["ls"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "focused" && workspace["running"] == true)
+    });
+    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+    fixture.ok(&["stop", "focused"]);
+    focused.wait().unwrap();
+    fixture.ok(&["rm", "focused", "--yes"]);
+
     // A queued agent named like a workspace is removed only by its ID.
     let shared = fixture.ok(&["add", repo, "first", "--agent", "waiter"]);
     assert_eq!(shared["state"], "queued", "{shared}");

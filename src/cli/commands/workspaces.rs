@@ -231,6 +231,14 @@ pub(super) struct AddOptions {
     pub now: bool,
 }
 
+impl AddOptions {
+    /// Whether the agent skips the queue: a focused launch is one the user
+    /// waits for, so it starts at once as `--now` does.
+    fn starts_now(self) -> bool {
+        self.now || self.focus
+    }
+}
+
 pub(super) enum AgentLaunch {
     Explicit(Option<Agent>),
     /// An ordinary add uses the interactive picker when no agent is named.
@@ -301,7 +309,9 @@ pub(super) async fn add(
     if let Some(agent) = plan.agent_name() {
         let title = issue.as_ref().map(|issue| issue.title.clone());
         let name = planned_workspace_name(ctx, &target, &plan.creation).await?;
-        match super::agent_queue::admit(ctx, &plan, agent, name, title, options.now).await? {
+        match super::agent_queue::admit(ctx, &plan, agent, name, title, options.starts_now())
+            .await?
+        {
             super::agent_queue::Admission::Start(entry) => plan.queue_entry = entry,
             super::agent_queue::Admission::Queued(entry, waiting) => {
                 return super::agent_queue::report_queued(ctx, &entry, waiting);

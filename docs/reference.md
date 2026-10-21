@@ -581,7 +581,7 @@ precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into; the
 top-level `focus` option overrides this for tabs and zmx sessions alike, and
-`shoal add --focus` focuses one launch.
+`shoal add --focus` focuses one launch and starts it at once, as `--now` does.
 `enabled`, `new_tab` and `close_when_done` default to true; with `enabled = false`
 Shoal treats a Herdr pane as a plain terminal:
 
@@ -749,7 +749,8 @@ background tab in the same Herdr workspace; otherwise it runs in a detached zmx
 session labelled for `shoal attach`. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the
 workspace for two minutes, records a `queue_failed` notification with the reason
-and frees the slot. `--now` starts at once and still takes a slot.
+and frees the slot. `--now` starts at once and still takes a slot, and so does
+`--focus`, since the user waits for a focused launch.
 
 An agent's automatic restore after a protection stop waits in the same queue,
 in order with launches, from when its processes stop. It keeps the agent's slot,
