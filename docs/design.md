@@ -143,7 +143,12 @@ Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
-command is not known to be safe. Scoped callers cannot stop executions.
+command is not known to be safe. Scoped callers cannot stop executions. An
+agent that exits on its own before its assignment is done leaves its workspace
+a last session for `shoal resume` instead of stopped work: the user may have
+quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.
+Built-in agents resume the session ID their hooks report, since the workspace's
+latest session may belong to another agent.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and
 wire names use one macro to share explicit spellings across conversions and reject
@@ -523,9 +528,9 @@ and other refused arguments fail without fallback, before any prompt for the
 omitted ones; `add` asks the daemon to check its creation request first.
 Noninteractive and JSON calls without a current workspace require a target.
 Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations retain their scope.
-`resume` uses the current workspace only when it has stopped work; its picker
+`resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
-restore, or that nothing would, and with no stopped work anywhere it reports
+restore, or that nothing would, and with nothing to resume anywhere it reports
 that without a picker. Its agent picker names agents by name, stop time and
 reason. Shell
 navigation refreshes the Zsh line-editor prompt after changing directories,

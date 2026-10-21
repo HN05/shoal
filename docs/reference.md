@@ -216,8 +216,8 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-Codex and Claude automatically continue the latest session in the workspace by
-default, without a session picker, with a prompt to continue their unfinished
+Codex and Claude automatically continue the session their hooks last reported,
+otherwise the latest session in the workspace, by default, without a session picker, with a prompt to continue their unfinished
 assignment on manual or automatic resume. Configured commands receive that
 prompt through `{prompt}`; other agents need an entry in `[agent_resume]`.
 A failed command lookup warns and
@@ -254,10 +254,14 @@ Run stop and resume outside scoped executions.
 `shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace,
 or pick the agent by name, stop time and reason on a terminal. Without a
-workspace, resume uses the current workspace when it has stopped work, otherwise
-a picker listing every workspace with what it would restore, stopped work first;
-with no stopped work anywhere it reports that without a picker. Completion
-describes each workspace the same way.
+workspace, resume uses the current workspace when it has something to resume,
+otherwise a picker listing every workspace with what it would restore, stopped
+work first; with nothing to resume anywhere it reports that without a picker.
+Completion describes each workspace the same way.
+A workspace without stopped work resumes its last agent that exited on its
+own, such as one the user quit, unless the assignment is done; the next agent
+started there or `shoal done` replaces it, and `--discard` forgets it. Unlike
+stopped work it uses no agent slot, never delays cleanup and is not part of `--all`.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
@@ -283,7 +287,7 @@ problem, and the daemon checks again until they exit; inspect it with
 reattaches drops a protection stop that never reached it. Unrelated executions may keep running.
 The command uses
 the current resume configuration; without one, built-in terminal agents continue
-the latest session in the workspace. Other agents require a configured restore
+the saved session. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
 is registered; removal keeps them in its [removal record](#checkpoints-and-restore). A failed launch retains its records;

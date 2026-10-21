@@ -452,8 +452,8 @@ impl Typed {
                     if !resume {
                         return candidate;
                     }
-                    let status = ui::stopped_work(&paths, &w.id)
-                        .unwrap_or_else(|| ui::NOTHING_TO_RESUME.into());
+                    let status = ui::resumable(&paths, &w.id)
+                        .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
                     candidate.help(Some(status.into()))
                 })
                 .collect());

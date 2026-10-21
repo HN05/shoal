@@ -51,7 +51,8 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         })
         .await
         .unwrap();
-    let report = |state| manager.set_agent_state(&workspace.name, state, Some("agent".into()));
+    let report =
+        |state| manager.set_agent_state(&workspace.name, state, Some("agent".into()), None);
 
     let working = report(AgentState::Working).await.unwrap();
     // A repeated state keeps its start time and records no change.
@@ -93,7 +94,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     // A report from outside a tracked execution stays until replaced, and
     // removal takes it without an event.
     manager
-        .set_agent_state(&workspace.name, AgentState::Idle, None)
+        .set_agent_state(&workspace.name, AgentState::Idle, None, None)
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -129,6 +130,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         let mut method = Method::SetAgentState {
             workspace: target.clone(),
             state: AgentState::Waiting,
+            session: None,
         };
         assert_eq!(
             scope::authorize(&manager, Some("scope"), &mut method)

@@ -235,7 +235,8 @@ false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
 executions. Agents restore once space returns; `shoal resume` restores the rest. Stop agents manually with `shoal stop`, then restore
-a stopped session with `shoal resume`. Codex and Claude automatically continue
+a stopped session with `shoal resume`. `shoal resume` also continues an agent that
+exited on its own, such as one you quit. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.
 

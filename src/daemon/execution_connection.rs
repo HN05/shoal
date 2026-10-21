@@ -49,6 +49,8 @@ struct Connected {
     started: bool,
     /// The wrapper reattached while waiting to restore its stopped agent.
     awaiting_restore: bool,
+    /// The daemon stopped the command before it finished.
+    stopped: bool,
     stop: watch::Receiver<bool>,
 }
 
@@ -126,6 +128,7 @@ pub(super) async fn execute(
         reattach,
         started: false,
         awaiting_restore: false,
+        stopped: false,
         stop,
     };
     let response = Response::new(request_id, Body::Execution(plan));
@@ -167,6 +170,7 @@ pub(super) async fn reattach(
         reattach: true,
         started: true,
         awaiting_restore: request.awaiting_restore.is_some(),
+        stopped: false,
         stop,
     };
     serve(
@@ -273,6 +277,7 @@ async fn relay(
         reattach,
         started,
         awaiting_restore,
+        stopped,
         stop,
         ..
     } = execution;
@@ -334,6 +339,7 @@ async fn relay(
         match event {
             ExecutionEvent::Started { child, group_id } => {
                 awaiting_started = false;
+                *started = true;
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
                     None => manager.background_operations.clone().read_owned().await,
@@ -341,9 +347,15 @@ async fn relay(
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
+                if agent.is_some() {
+                    manager.forget_last_session(&workspace.id);
+                }
                 protocol::write(writer, &Control::Started).await?;
             }
-            ExecutionEvent::Finished { exit_code } => return Ok(Ended::Finished(exit_code)),
+            ExecutionEvent::Finished { exit_code } => {
+                *stopped = sent_stop;
+                return Ok(Ended::Finished(exit_code));
+            }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
                 if !recovering {
@@ -380,7 +392,10 @@ async fn relay(
                     Action::Stop(reason) => {
                         protocol::write(writer, &Control::Stop { reason }).await?
                     }
-                    Action::Finished(exit_code) => return Ok(Ended::Finished(exit_code)),
+                    Action::Finished(exit_code) => {
+                        *stopped = true;
+                        return Ok(Ended::Finished(exit_code));
+                    }
                 }
             }
         }
@@ -402,6 +417,8 @@ async fn finish(
         kind,
         workspace,
         agent,
+        started,
+        stopped,
         ..
     } = execution;
     let mut overload_reason = if agent.is_some() {
@@ -418,6 +435,13 @@ async fn finish(
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
+    if let Some(agent) = &agent
+        && result.is_ok()
+    {
+        manager
+            .end_agent_session(&workspace, agent, &execution_id, started && !stopped)
+            .await;
+    }
     if overload_reason.is_some() && !handoff_claimed && complete {
         let record =
             crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution_id);

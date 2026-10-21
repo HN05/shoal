@@ -1,10 +1,10 @@
 //! The turn state agents report from their hooks: a status signal for
 //! integrations that never notifies, completes, or changes cleanup.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::{model::AgentStatus, state::AgentState};
+use crate::{execution::recovery, model::AgentStatus, state::AgentState};
 
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
     Ok(db
@@ -23,15 +23,21 @@ pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
 
 impl Manager {
     /// Record the state reported from `execution`, which clears it when its
-    /// record goes. Repeating the current report writes nothing, since hooks
-    /// repeat it after every tool call, and a repeated state keeps its start.
+    /// record goes, and the agent `session` it reports for resuming it.
+    /// Repeating the current report writes nothing, since hooks repeat it
+    /// after every tool call, and a repeated state keeps its start.
     pub async fn set_agent_state(
         &self,
         selector: &str,
         state: AgentState,
         execution: Option<String>,
+        session: Option<String>,
     ) -> Result<AgentStatus> {
         let id = self.workspace(selector).await?.id;
+        if let (Some(execution), Some(session)) = (&execution, &session) {
+            ensure!(recovery::valid_session(session), "invalid agent session ID");
+            recovery::save_session(&self.paths, &id, execution, session)?;
+        }
         let now = i64::try_from(crate::time::unix_seconds())?;
         let (status, changed) = self
             .store

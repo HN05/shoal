@@ -107,6 +107,7 @@ impl Manager {
                 Ok(())
             })
             .await?;
+        self.forget_last_session(&workspace.id);
         self.notify(
             Some(&workspace.name),
             NotificationKind::WorkspaceDone,

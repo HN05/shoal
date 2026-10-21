@@ -55,6 +55,10 @@ pub struct Record {
     /// The wrapper that restores the agent automatically while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting: Option<Identity>,
+    /// The session the agent's hooks last reported, which built-in agents
+    /// resume by ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 impl Recovery {
@@ -63,7 +67,7 @@ impl Recovery {
             let workspace = client::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
-            Self::resolve(paths, &workspace, agent, None).await
+            Self::resolve(paths, &workspace, agent, None, None).await
         }
         .await;
         resolved.unwrap_or_else(|error| {
@@ -79,11 +83,14 @@ impl Recovery {
 
     /// Ask the restored session to continue, including `handoff` where the
     /// command accepts a prompt: built-in agents and `{prompt}` in `[agent_resume]`.
+    /// Built-in agents resume `session` when known, otherwise the workspace's
+    /// latest session.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
         agent: &str,
         handoff: Option<&str>,
+        session: Option<&str>,
     ) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
@@ -111,13 +118,15 @@ impl Recovery {
             .await?;
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else {
-            let mut args: Vec<OsString> = match name.as_str() {
+            let mut args: Vec<OsString> = match (name.as_str(), session) {
+                ("codex", Some(session)) => vec!["resume".into(), session.into()],
                 // Codex's worktrees feature widens `--last` to every linked
                 // worktree of the repository; restore this workspace's session.
-                "codex" => ["resume", "--last", "-c", "features.worktrees=false"]
+                ("codex", None) => ["resume", "--last", "-c", "features.worktrees=false"]
                     .map(OsString::from)
                     .into(),
-                "claude" => vec!["--continue".into()],
+                ("claude", Some(session)) => vec!["--resume".into(), session.into()],
+                ("claude", None) => vec!["--continue".into()],
                 _ => vec![],
             };
             if let Ok(agent) = name.parse::<crate::agent::BuiltinAgent>() {
@@ -139,6 +148,30 @@ impl Recovery {
             automatic,
             handoff_delivered: handoff_delivered && handoff.is_some(),
         })
+    }
+
+    /// The command restoring the agent stopped with `record`: the session it
+    /// saved, otherwise the restore command resolved at launch.
+    pub(super) async fn restore_command(
+        &self,
+        paths: &Paths,
+        workspace: &Workspace,
+        record: Option<&Path>,
+    ) -> Vec<OsString> {
+        let session = record
+            .and_then(|path| Record::load(path).ok().flatten())
+            .and_then(|record| record.session);
+        let Some(session) = session else {
+            return self.command.clone();
+        };
+        match Self::resolve(paths, workspace, &self.agent, None, Some(&session)).await {
+            Ok(recovery) if !recovery.command.is_empty() => recovery.command,
+            Ok(_) => self.command.clone(),
+            Err(error) => {
+                eprintln!("warning: cannot resume session {session}: {error:#}");
+                self.command.clone()
+            }
+        }
     }
 
     /// `waiting` names this wrapper when it restores the agent automatically.
@@ -165,6 +198,7 @@ impl Record {
             stage: Some(stage),
             place,
             waiting: None,
+            session: None,
         }
     }
 
@@ -202,6 +236,9 @@ fn write_record(
     let directory = paths.workspace_state(workspace_id);
     std::fs::create_dir_all(&directory)?;
     let path = record_path(paths, workspace_id, id);
+    record.session = record
+        .session
+        .or_else(|| reported_session(paths, workspace_id, id));
     // A later save without a field, such as shutdown racing an overload stop
     // or the daemon's handoff after the wrapper's, keeps the value saved first,
     // and never moves the stage back.
@@ -209,6 +246,7 @@ fn write_record(
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
         record.place = record.place.or(saved.place);
         record.waiting = record.waiting.or(saved.waiting);
+        record.session = record.session.or(saved.session);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
@@ -291,6 +329,108 @@ pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBu
 
 const AGENT_SUFFIX: &str = ".recovery.json";
 const COMMAND_SUFFIX: &str = ".command.json";
+const SESSION_SUFFIX: &str = ".session";
+const LAST_SESSION: &str = "last-session.json";
+
+/// Whether `session` can name an agent session on a restore command line:
+/// letters, digits, `-` and `_`, never read as an option.
+pub(crate) fn valid_session(session: &str) -> bool {
+    !session.is_empty()
+        && session.len() <= 128
+        && !session.starts_with('-')
+        && session
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+fn session_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+    paths
+        .workspace_state(workspace_id)
+        .join(format!("{id}{SESSION_SUFFIX}"))
+}
+
+/// Record the session the hooks of execution `id` report, writing only a change.
+pub(crate) fn save_session(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    session: &str,
+) -> Result<()> {
+    if reported_session(paths, workspace_id, id).as_deref() == Some(session) {
+        return Ok(());
+    }
+    std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
+    crate::fsutil::replace_atomically(
+        &session_path(paths, workspace_id, id),
+        session.as_bytes(),
+        ReplaceOptions {
+            permissions: Permissions::Temporary,
+            sync: false,
+        },
+    )?;
+    Ok(())
+}
+
+/// The session the hooks of execution `id` last reported.
+fn reported_session(paths: &Paths, workspace_id: &str, id: &str) -> Option<String> {
+    std::fs::read_to_string(session_path(paths, workspace_id, id))
+        .ok()
+        .filter(|session| valid_session(session))
+}
+
+/// Forget the session of an execution that has ended.
+pub(crate) fn forget_session(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
+    consume(&session_path(paths, workspace_id, id))
+}
+
+/// The workspace's last agent that exited on its own, which `shoal resume`
+/// continues when nothing is stopped there. Unlike stopped work, it uses no
+/// agent slot and never delays cleanup.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LastSession {
+    pub agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+}
+
+impl LastSession {
+    pub(crate) fn path(paths: &Paths, workspace_id: &str) -> PathBuf {
+        paths.workspace_state(workspace_id).join(LAST_SESSION)
+    }
+
+    /// Save execution `id` of `agent` as the workspace's last session.
+    pub(crate) fn save(paths: &Paths, workspace_id: &str, agent: &str, id: &str) -> Result<()> {
+        let last = Self {
+            agent: agent.replace(' ', "-"),
+            session: reported_session(paths, workspace_id, id),
+        };
+        std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
+        crate::fsutil::replace_atomically(
+            &Self::path(paths, workspace_id),
+            &serde_json::to_vec(&last)?,
+            ReplaceOptions {
+                permissions: Permissions::Temporary,
+                sync: true,
+            },
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn load(paths: &Paths, workspace_id: &str) -> Result<Option<Self>> {
+        let path = Self::path(paths, workspace_id);
+        match std::fs::read(&path) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map(Some)
+                .with_context(|| format!("read {}", path.display())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub(crate) fn forget(paths: &Paths, workspace_id: &str) -> Result<()> {
+        consume(&Self::path(paths, workspace_id))
+    }
+}
 
 /// A command `shoal stop` interrupted, reported by `shoal resume` instead of
 /// being rerun: replaying an arbitrary command is not known to be safe.

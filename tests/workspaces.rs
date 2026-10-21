@@ -4039,10 +4039,51 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         );
     }
     assert!(!prompts[1].contains("command-started"), "{restored}");
-    assert!(!state.exists() || fs::read_dir(&state).unwrap().next().is_none());
+    // The restored agents exited on their own, leaving only the last session.
+    let left = fs::read_dir(&state)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(left, ["last-session.json"]);
     let output = fixture.run(&["exec", "stopped", "--", env!("CARGO_BIN_EXE_shoal"), "stop"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace processes can only"));
+}
+
+#[test]
+fn resume_continues_the_session_of_an_agent_that_exited_on_its_own() {
+    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("quit");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    // The agent reports its session as Claude Code's hooks do, then quits.
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; exit 0; fi\n\
+             printf '{{\"session_id\":\"quit-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "quit"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .arg("resume")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(path.join("resumed")).unwrap(),
+        "quit-session"
+    );
 }
 
 #[test]

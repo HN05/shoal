@@ -2,7 +2,7 @@
 use crate::{
     cli::{WorkspaceScope, client, context::Context, terminal, ui},
     daemon::recovery::{ReconcileOptions, Report},
-    execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
+    execution::recovery::{LastSession, Record, Recovery, Saved, SavedCommand, consume},
     model::{Inspection, Workspace},
     protocol::{ConfigTarget, Method},
     state::ExecutionState,
@@ -43,6 +43,12 @@ pub async fn run(
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, !discard);
+    }
+    if saved.is_empty()
+        && execution.is_none()
+        && let Some(last) = LastSession::load(&ctx.paths, &workspace_id)?
+    {
+        return continue_last_session(ctx, &inspection.workspace, last, discard).await;
     }
     ensure!(
         !saved.is_empty(),
@@ -92,8 +98,59 @@ pub async fn run(
         eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
     }
     let handoff = handoff(&saved.commands);
-    let recovery =
-        Recovery::resolve(&ctx.paths, workspace, &recorded.agent, handoff.as_deref()).await?;
+    let recovery = Recovery::resolve(
+        &ctx.paths,
+        workspace,
+        &recorded.agent,
+        handoff.as_deref(),
+        recorded.session.as_deref(),
+    )
+    .await?;
+    if !saved.commands.is_empty() && !recovery.handoff_delivered {
+        eprintln!("{}", command_list(workspace, &saved.commands));
+    }
+    let mut records = vec![selected];
+    records.extend(saved.commands.into_iter().map(|command| command.path));
+    launch(ctx, workspace, recovery, records).await
+}
+
+/// Continue the agent that last exited on its own in the workspace, or forget
+/// it with `discard`.
+async fn continue_last_session(
+    ctx: &Context,
+    workspace: &Workspace,
+    last: LastSession,
+    discard: bool,
+) -> Result<i32> {
+    let path = LastSession::path(&ctx.paths, &workspace.id);
+    let _claim = claim(&path)?;
+    if discard {
+        consume(&path)?;
+        ctx.show(
+            &json!({"discarded": [], "last_session": last.agent}),
+            |_| println!("Discarded the last agent session for {}", workspace.name),
+        )?;
+        return Ok(0);
+    }
+    eprintln!("shoal: continuing the last {} session", last.agent);
+    let recovery = Recovery::resolve(
+        &ctx.paths,
+        workspace,
+        &last.agent,
+        None,
+        last.session.as_deref(),
+    )
+    .await?;
+    launch(ctx, workspace, recovery, vec![path]).await
+}
+
+/// Start the restore command, consuming `records` once the agent runs.
+async fn launch(
+    ctx: &Context,
+    workspace: &Workspace,
+    recovery: Recovery,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
     ensure!(
         !recovery.command.is_empty(),
         "configure [agent_resume].{} with a session restore command",
@@ -106,11 +163,6 @@ pub async fn run(
             recovery.agent
         );
     }
-    if !saved.commands.is_empty() && !recovery.handoff_delivered {
-        eprintln!("{}", command_list(workspace, &saved.commands));
-    }
-    let mut records = vec![selected];
-    records.extend(saved.commands.into_iter().map(|command| command.path));
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     if let Some(code) = terminal::run_agent(

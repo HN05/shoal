@@ -158,7 +158,7 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff)
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff, None)
             .await
             .unwrap();
         assert!(recovery.automatic);
@@ -184,7 +184,18 @@ async fn built_in_restore_child() {
             .collect();
         assert_eq!(recovery.command, expected);
     }
-    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None)
+    // A reported session is resumed by its ID.
+    for (agent, restore) in [
+        ("codex", &["codex-fixture", "resume", "s1"][..]),
+        ("claude", &["claude-fixture", "--resume", "s1"][..]),
+    ] {
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Some("s1"))
+            .await
+            .unwrap();
+        let restore = restore.iter().map(std::ffi::OsString::from);
+        assert!(recovery.command.starts_with(&restore.collect::<Vec<_>>()));
+    }
+    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None, None)
         .await
         .unwrap();
     assert!(!unsupported.automatic);
@@ -194,7 +205,7 @@ async fn built_in_restore_child() {
         "[agent_resume]\ncodex = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"))
+    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
         .await
         .unwrap();
     assert!(overridden.automatic);
@@ -208,7 +219,7 @@ async fn built_in_restore_child() {
         "[agent_resume]\ncodex = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"))
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
         .await
         .unwrap();
     assert!(prompted.handoff_delivered);
@@ -221,7 +232,7 @@ async fn built_in_restore_child() {
         ]
         .map(std::ffi::OsString::from)
     );
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None)
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, None)
         .await
         .unwrap();
     assert!(!prompted.handoff_delivered);
@@ -417,6 +428,17 @@ async fn tracked_agent_exiting_with_background_child() {
     .await;
 }
 
+/// An agent that exits on its own once the test creates `exit`.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_exiting_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    run_tracked_agent("trap 'exit 0' TERM; touch started; while [ ! -e exit ]; do sleep 1; done")
+        .await;
+}
+
 /// Run `script` after starting a background command in its own process group.
 fn with_background(script: &str) -> String {
     concat!(
@@ -496,6 +518,9 @@ async fn isolated_overload_test() {
         }
         "resume_without_an_agent_reports_stopped_commands_once" => {
             resume_without_an_agent_reports_stopped_commands_once_body().await
+        }
+        "resume_continues_an_agent_that_exited_on_its_own" => {
+            resume_continues_an_agent_that_exited_on_its_own_body().await
         }
         "discard_clears_pending_recovery_without_launching_an_agent" => {
             discard_clears_pending_recovery_without_launching_an_agent_body().await
@@ -638,6 +663,104 @@ async fn resume_without_an_agent_reports_stopped_commands_once_body() {
     assert_eq!(bounded(resume()).await.unwrap().unwrap(), 0);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_ne!(bounded(resume()).await.unwrap().unwrap(), 0);
+    serving.abort();
+}
+
+#[tokio::test]
+async fn resume_continues_an_agent_that_exited_on_its_own() {
+    run_isolated_overload_test("resume_continues_an_agent_that_exited_on_its_own").await;
+}
+
+/// Report `session` from the workspace's running agent, as its hooks do.
+async fn report_session(manager: &Manager, workspace: &crate::model::Workspace, session: &str) {
+    let execution = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions[0]
+        .id
+        .clone();
+    manager
+        .set_agent_state(
+            &workspace.id,
+            crate::state::AgentState::Idle,
+            Some(execution),
+            Some(session.into()),
+        )
+        .await
+        .unwrap();
+}
+
+async fn resume_continues_an_agent_that_exited_on_its_own_body() {
+    use crate::execution::recovery::{LastSession, Saved};
+    let (_root, manager, workspace, serving) = fixture().await;
+    let last = || LastSession::load(&manager.paths, &workspace.id).unwrap();
+    // An agent Shoal stops is stopped work that keeps its session.
+    let agent = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    report_session(&manager, &workspace, "stopped-session").await;
+    assert_eq!(
+        bounded(stop_isolated(&manager, &workspace)).await.unwrap(),
+        0
+    );
+    bounded(agent).await.unwrap().unwrap();
+    assert_eq!(last(), None);
+    let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
+    let record = crate::execution::recovery::Record::load(&saved.agents[0].1)
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.session.as_deref(), Some("stopped-session"));
+    assert_eq!(
+        bounded(resume_isolated(&manager, &workspace, true))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+
+    // One that exits on its own leaves its session to resume, which uses no
+    // slot and keeps nothing from cleanup.
+    fs::remove_file(workspace.path.join("started")).unwrap();
+    let agent = launch_child(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_agent_exiting_child",
+    );
+    wait_started(&manager, &workspace).await;
+    report_session(&manager, &workspace, "quit-session").await;
+    fs::write(workspace.path.join("exit"), "").unwrap();
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        last(),
+        Some(LastSession {
+            agent: "fixture".into(),
+            session: Some("quit-session".into()),
+        })
+    );
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert_eq!(
+        bounded(resume_isolated(&manager, &workspace, false))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    // The restored agent exited on its own too; finishing the assignment
+    // forgets it.
+    assert!(last().is_some());
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    assert_eq!(last(), None);
+    assert_ne!(
+        bounded(resume_isolated(&manager, &workspace, false))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
     serving.abort();
 }
 

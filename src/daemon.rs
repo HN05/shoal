@@ -683,11 +683,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             selection,
             draft,
         } => Body::ReviewMarks(manager.clear_ready(&workspace, selection, draft).await?),
-        Method::SetAgentState { workspace, state } => {
+        Method::SetAgentState {
+            workspace,
+            state,
+            session,
+        } => {
             let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
             Body::AgentStatus(
                 manager
-                    .set_agent_state(&workspace, state, execution)
+                    .set_agent_state(&workspace, state, execution, session)
                     .await?,
             )
         }

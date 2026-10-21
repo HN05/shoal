@@ -1180,7 +1180,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
         };
-        let state = |state| manager.set_agent_state(&workspace.id, state, None);
+        let state = |state| manager.set_agent_state(&workspace.id, state, None, None);
         state(crate::state::AgentState::Working).await.unwrap();
         manager
             .send_agent_message(&workspace.id, "Rebase onto main".into())

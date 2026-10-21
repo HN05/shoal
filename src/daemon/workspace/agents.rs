@@ -88,6 +88,37 @@ impl Manager {
         .await;
     }
 
+    /// Forget a finished agent's reported session, first keeping it as the
+    /// workspace's last session when the agent `exited` on its own before the
+    /// assignment finished, for `shoal resume` to continue.
+    pub(crate) async fn end_agent_session(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &str,
+        execution: &str,
+        exited: bool,
+    ) {
+        use crate::execution::recovery::{self, LastSession};
+        let kept = async {
+            if exited && self.completion(&workspace.id).await?.is_none() {
+                LastSession::save(&self.paths, &workspace.id, agent, execution)?;
+            }
+            recovery::forget_session(&self.paths, &workspace.id, execution)
+        }
+        .await;
+        if let Err(error) = kept {
+            log!("agent session of {execution} not kept: {error:#}");
+        }
+    }
+
+    /// A new agent or a finished assignment replaces the last session.
+    pub(crate) fn forget_last_session(&self, workspace_id: &str) {
+        let forgotten = crate::execution::recovery::LastSession::forget(&self.paths, workspace_id);
+        if let Err(error) = forgotten {
+            log!("last agent session of {workspace_id} not forgotten: {error:#}");
+        }
+    }
+
     pub(crate) async fn post_agent_exit(
         &self,
         workspace: &crate::model::Workspace,

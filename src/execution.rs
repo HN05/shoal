@@ -456,7 +456,13 @@ async fn run_tracked(
                             match recovery::wait(&mut link).await? {
                                 recovery::Waited::Resume(ports) => {
                                     plan.ports = ports;
-                                    next_command = recovery.command.clone();
+                                    next_command = recovery
+                                        .restore_command(
+                                            paths,
+                                            &plan.workspace,
+                                            recovery_record.as_deref(),
+                                        )
+                                        .await;
                                     eprintln!("shoal: restoring agent session");
                                     continue;
                                 }

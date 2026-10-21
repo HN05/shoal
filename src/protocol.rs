@@ -279,10 +279,13 @@ pub enum Method {
         selection: crate::forge::link::Selection,
         draft: Option<bool>,
     },
-    /// The caller's execution, when scoped, is recorded as the reporter.
+    /// The caller's execution, when scoped, is recorded as the reporter,
+    /// and `session` as the agent session it resumes.
     SetAgentState {
         workspace: String,
         state: crate::state::AgentState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
     },
     SetIssue {
         workspace: String,

@@ -463,8 +463,8 @@ pub async fn select_workspace_filter(
 }
 
 /// Like `select_workspace_filter`, but the current workspace counts only with
-/// stopped work, and the picker lists what each workspace has to resume.
-/// Without stopped work anywhere it selects all.
+/// something to resume, and the picker lists what each workspace has to
+/// resume. Without anything to resume anywhere it selects all.
 pub async fn select_stopped_workspace(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -475,7 +475,7 @@ pub async fn select_stopped_workspace(
     let explicit = scope.workspace.is_some();
     let workspaces =
         match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
-            Resolution::Workspace(id) if explicit || stopped_work(&ctx.paths, &id).is_some() => {
+            Resolution::Workspace(id) if explicit || resumable(&ctx.paths, &id).is_some() => {
                 return Ok(Some(id));
             }
             Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
@@ -484,20 +484,24 @@ pub async fn select_stopped_workspace(
     pick_resume_workspace(ctx, workspaces)
 }
 
-/// Workspaces with stopped work come first; `None` picks all, or nothing is
-/// stopped.
+/// Workspaces with stopped work come first, then those with a last session;
+/// `None` picks all, or nothing is resumable.
 fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Option<String>> {
     let mut rows = workspaces
         .into_iter()
-        .map(|w| (stopped_work(&ctx.paths, &w.id), w))
+        .map(|w| (resumable(&ctx.paths, &w.id), w))
         .collect::<Vec<_>>();
-    if rows.iter().all(|(stopped, _)| stopped.is_none()) {
+    if rows.iter().all(|(resumable, _)| resumable.is_none()) {
         return Ok(None);
     }
-    rows.sort_by_key(|(stopped, _)| stopped.is_none());
+    rows.sort_by_key(|(resumable, _)| match resumable {
+        Some((_, true)) => 0,
+        Some((_, false)) => 1,
+        None => 2,
+    });
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
         .into_iter()
-        .map(|(stopped, w)| (resume_status_cell(stopped), w))
+        .map(|(resumable, w)| (resume_status_cell(resumable), w))
         .unzip();
     let labels = rows_with_status(&workspaces, &[], statuses, Palette::stderr(ctx.json));
     let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(labels).collect();
@@ -507,11 +511,13 @@ fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Op
 }
 
 /// What `shoal resume` restores in a workspace, such as `stopped: claude,
-/// 1 command`; `None` when nothing is saved.
-pub fn stopped_work(paths: &Paths, workspace_id: &str) -> Option<String> {
+/// 1 command` or `exited: claude`, and whether it is stopped work; `None`
+/// when nothing is saved.
+pub fn resumable(paths: &Paths, workspace_id: &str) -> Option<(String, bool)> {
     let saved = recovery::Saved::load(paths, workspace_id).unwrap_or_default();
     if saved.is_empty() {
-        return None;
+        let last = recovery::LastSession::load(paths, workspace_id).ok()??;
+        return Some((format!("exited: {}", last.agent), false));
     }
     let mut parts = saved
         .agents
@@ -526,15 +532,16 @@ pub fn stopped_work(paths: &Paths, workspace_id: &str) -> Option<String> {
         1 => parts.push("1 command".into()),
         n => parts.push(format!("{n} commands")),
     }
-    Some(format!("stopped: {}", parts.join(", ")))
+    Some((format!("stopped: {}", parts.join(", ")), true))
 }
 
 /// How the resume picker and completion name a workspace without stopped work.
 pub const NOTHING_TO_RESUME: &str = "nothing to resume";
 
-fn resume_status_cell(stopped: Option<String>) -> Cell {
-    match stopped {
-        Some(text) => (text, Some(ListStatus::Stopped.style())),
+fn resume_status_cell(resumable: Option<(String, bool)>) -> Cell {
+    match resumable {
+        Some((text, true)) => (text, Some(ListStatus::Stopped.style())),
+        Some((text, false)) => (text, None),
         None => (NOTHING_TO_RESUME.into(), Some(Style::Muted)),
     }
 }
