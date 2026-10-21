@@ -17,6 +17,22 @@ use crate::{
     model::{OpenedWorkspace, PulledBranch, Repository, SyncedRepository, Workspace},
 };
 
+/// Options that apply only when opening creates a new worktree.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct NewWorktreeOptions<'a> {
+    pub git_profile: Option<&'a str>,
+    pub path: Option<&'a Path>,
+    pub base: Option<&'a str>,
+}
+
+/// What opening an existing branch does.
+pub(super) enum OpenTarget {
+    /// Reopen the workspace that owns the branch.
+    Reopen(Box<Workspace>),
+    /// Create a worktree for the branch.
+    Create(Branch),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum UpstreamPolicy {
     Required,
@@ -224,43 +240,28 @@ impl Manager {
         files: Option<super::restore::RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
-        let branch = self.select_existing_branch(&repo, selector).await?;
-        let name = &branch.name;
-        if let Some(workspace) = self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .find(|w| w.repository_id == repo.id && w.branch == *name)
-        {
-            ensure!(
-                git_profile.is_none(),
-                "--git-profile applies only to new worktrees; workspace {} already exists",
-                workspace.name
-            );
-            ensure!(
-                base.is_none(),
-                "--base applies only to new worktrees; workspace {} already exists",
-                workspace.name
-            );
-            if let Some(path) = &path {
-                ensure!(
-                    std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
-                    "workspace already exists at {}; --path cannot relocate it",
-                    workspace.path.display()
-                );
+        let options = NewWorktreeOptions {
+            git_profile,
+            path: path.as_deref(),
+            base: base.as_deref(),
+        };
+        let branch = match self.open_target(&repo, selector, options).await? {
+            OpenTarget::Reopen(workspace) => {
+                self.reopen_owned_workspace(&workspace, &workspace.branch)
+                    .await?;
+                return Ok(OpenedWorkspace {
+                    workspace: *workspace,
+                    reused: true,
+                });
             }
-            self.reopen_owned_workspace(&workspace, name).await?;
-            return Ok(OpenedWorkspace {
-                workspace,
-                reused: true,
-            });
-        }
-        ensure_not_checked_out(&repo.path, name).await?;
+            OpenTarget::Create(branch) => branch,
+        };
+        let name = branch.name.clone();
         let workspace = self
             .create_branch_workspace(
                 &repo,
                 name.clone(),
-                name.clone(),
+                name,
                 super::WorkspaceSource::Existing {
                     branch,
                     base,
@@ -274,6 +275,44 @@ impl Manager {
             workspace,
             reused: false,
         })
+    }
+
+    /// What opening `selector` does: reopen the workspace that owns the branch,
+    /// which new-worktree options cannot change, or create one from it.
+    pub(super) async fn open_target(
+        &self,
+        repo: &Repository,
+        selector: &str,
+        options: NewWorktreeOptions<'_>,
+    ) -> Result<OpenTarget> {
+        let branch = self.select_existing_branch(repo, selector).await?;
+        let Some(workspace) = self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .find(|w| w.repository_id == repo.id && w.branch == branch.name)
+        else {
+            ensure_not_checked_out(&repo.path, &branch.name).await?;
+            return Ok(OpenTarget::Create(branch));
+        };
+        ensure!(
+            options.git_profile.is_none(),
+            "--git-profile applies only to new worktrees; workspace {} already exists",
+            workspace.name
+        );
+        ensure!(
+            options.base.is_none(),
+            "--base applies only to new worktrees; workspace {} already exists",
+            workspace.name
+        );
+        if let Some(path) = options.path {
+            ensure!(
+                std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
+                "workspace already exists at {}; --path cannot relocate it",
+                workspace.path.display()
+            );
+        }
+        Ok(OpenTarget::Reopen(Box::new(workspace)))
     }
 
     /// Resolve and validate the local or remote branch selected by the caller.
