@@ -141,7 +141,7 @@ impl Issue {
         }
         let mut name = self.number.to_string();
         for (index, word) in words.iter().enumerate() {
-            let room = BRANCH_NAME_LEN - name.len() - 1;
+            let room = BRANCH_NAME_LEN.saturating_sub(name.len() + 1);
             if word.len() > room {
                 if index == 0 {
                     name.push('-');
@@ -328,6 +328,8 @@ mod tests {
         issue.title = "Remove a merged workspace whose HEAD is a rebased copy".into();
         assert_eq!(issue.branch_name(), "34-remove-merged-workspace");
         issue.title = format!("{} done", "x".repeat(200));
+        assert_eq!(issue.branch_name(), format!("34-{}", "x".repeat(29)));
+        issue.title = format!("{} done", "x".repeat(29));
         assert_eq!(issue.branch_name(), format!("34-{}", "x".repeat(29)));
         issue.title = format!("Fix {}", "x".repeat(200));
         assert_eq!(issue.branch_name(), "34-fix");
