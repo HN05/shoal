@@ -46,7 +46,8 @@ pub struct Effective {
     pub ports: Ports,
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, config::repo::Cache>,
-    pub presets: Vec<crate::presets::Preset>,
+    /// Unset when no layer names presets.
+    pub presets: Option<Vec<crate::presets::Preset>>,
     pub secrets: crate::secrets::Secrets,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -166,7 +167,8 @@ impl Effective {
             definitions: merged.ports.definitions,
         };
         ports.validate()?;
-        let presets = merged.presets.unwrap_or_default();
+        let presets = merged.presets;
+        let named = presets.as_deref().unwrap_or_default();
         Ok(Self {
             commands: merged.commands,
             providers: Default::default(),
@@ -200,8 +202,8 @@ impl Effective {
             post_setup_cmd: merged.post_setup_cmd,
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
-            env: crate::presets::environment(&presets, merged.env),
-            caches: crate::presets::caches(&presets, merged.caches),
+            env: crate::presets::environment(named, merged.env),
+            caches: crate::presets::caches(named, merged.caches),
             presets,
             secrets: merged.secrets,
             resources: merged.resources,
@@ -810,8 +812,13 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     #[test]
     fn presets_come_from_the_global_config_unless_the_repository_names_its_own() {
         use crate::presets::Preset;
-        let presets =
-            |global, worktree, saved| stack(global, worktree, saved).resolve().unwrap().presets;
+        let presets = |global, worktree, saved| {
+            stack(global, worktree, saved)
+                .resolve()
+                .unwrap()
+                .presets
+                .unwrap_or_default()
+        };
         assert!(presets("", "", "").is_empty());
         assert_eq!(presets("presets = ['xcode']\n", "", ""), [Preset::Xcode]);
         assert_eq!(
