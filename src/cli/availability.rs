@@ -23,6 +23,8 @@ pub enum Need {
     /// A workspace setup can reserve: preparing, ready or failed, with no
     /// execution running besides the caller's own.
     Setup,
+    /// A workspace a checkpoint can be taken of: ready, stopping or failed.
+    Checkpoint,
     /// A worktree directory to enter.
     Directory,
     /// An agent session to attach to.
@@ -50,6 +52,7 @@ impl Need {
             ["undone"] => Self::Done,
             ["unready"] => Self::Marks,
             ["setup"] => Self::Setup,
+            ["checkpoint"] => Self::Checkpoint,
             ["base", "clear"] => Self::Base,
             ["hold", "release"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
@@ -139,6 +142,15 @@ impl Availability {
                 .busy
                 .contains(&workspace.id)
                 .then(|| "running".to_owned()),
+            Need::Checkpoint
+                if !matches!(
+                    state,
+                    WorkspaceState::Ready | WorkspaceState::Stopping | WorkspaceState::Failed
+                ) =>
+            {
+                unsettled()
+            }
+            Need::Checkpoint => None,
             Need::Directory => (!workspace.path.is_dir()).then(|| "directory missing".to_owned()),
             Need::Session => {
                 (!self.sessions.contains(&workspace.id)).then(|| "no agent session".to_owned())
@@ -256,6 +268,11 @@ mod tests {
         assert_eq!(
             refusal(Need::Links, &workspace(WorkspaceState::Removing)).as_deref(),
             Some("removing")
+        );
+        assert_eq!(refusal(Need::Checkpoint, &failed), None);
+        assert_eq!(
+            refusal(Need::Checkpoint, &workspace(WorkspaceState::Preparing)).as_deref(),
+            Some("preparing")
         );
         assert_eq!(refusal(Need::Setup, &failed), None);
         assert_eq!(
