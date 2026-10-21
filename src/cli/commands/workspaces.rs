@@ -153,12 +153,17 @@ pub(super) async fn copy_ignored_worker(ctx: &Context, setup_cmd: Option<PathBuf
     // Tracked setup runs in the workspace root.
     let workspace = std::env::current_dir()?;
     git::worktrunk::copy_ignored(&ctx.paths.worktrunk_config(), &workspace).await?;
-    let Some(setup_cmd) = setup_cmd else {
-        return Ok(0);
-    };
+    match setup_cmd {
+        Some(setup_cmd) => Err(become_setup(&setup_cmd)),
+        None => Ok(0),
+    }
+}
+
+/// Replace this process with `setup_cmd`; returns only the error when that fails.
+fn become_setup(setup_cmd: &Path) -> anyhow::Error {
     let error =
-        std::os::unix::process::CommandExt::exec(&mut std::process::Command::new(&setup_cmd));
-    Err(error).with_context(|| format!("run {}", setup_cmd.display()))
+        std::os::unix::process::CommandExt::exec(&mut std::process::Command::new(setup_cmd));
+    anyhow::Error::new(error).context(format!("run {}", setup_cmd.display()))
 }
 
 pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32> {
