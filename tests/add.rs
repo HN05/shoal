@@ -94,6 +94,7 @@ fn unregistered_repositories_are_registered_on_confirmation() {
     let registered = vec![
         "list_repositories",
         "register_repository https://other.example/team/repo",
+        "check_creation registered",
         "layered_config registered",
     ];
     let url_args: &[&str] = &["add", "https://other.example/team/repo/issues/7"];
@@ -127,6 +128,32 @@ fn unregistered_repositories_are_registered_on_confirmation() {
             "{transcript}"
         );
         assert!(transcript.contains(diagnostic), "{transcript}");
+    }
+}
+
+#[test]
+fn interactive_commands_refuse_their_arguments_before_prompting() {
+    for (args, expected, refusal) in [
+        (
+            &["add", "missing"][..],
+            "check_creation missing",
+            "repository is not registered",
+        ),
+        (
+            &["repo", "rename", "missing"],
+            "list_repositories",
+            "repository is not registered: missing",
+        ),
+    ] {
+        let daemon = FakeDaemon::start();
+        let (output, transcript) = prompt::answer(
+            daemon.command().args(args),
+            "",
+            prompt::AnswerOptions::default(),
+        );
+        assert_eq!(daemon.methods(), [expected], "{args:?}: {transcript}");
+        assert!(!output.status.success(), "{args:?}: {transcript}");
+        assert!(transcript.contains(refusal), "{args:?}: {transcript}");
     }
 }
 
@@ -197,6 +224,19 @@ impl FakeDaemon {
                                 "default_agent": "custom", "commands": {"custom": ["false"]}
                             }
                         }})
+                    }
+                    "check_creation" => {
+                        let repository = request["method"]["check_creation"]["repository"]
+                            .as_str()
+                            .unwrap();
+                        method = format!("check_creation {repository}");
+                        if ["test", "registered"].contains(&repository) {
+                            json!({"type": "ok"})
+                        } else {
+                            json!({"type": "error", "data": {
+                                "code": "test", "message": "repository is not registered"
+                            }})
+                        }
                     }
                     "queue_add" => json!({"type": "queue_admission", "data": {
                         "start": true, "entry": null, "waiting": 0

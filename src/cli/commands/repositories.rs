@@ -85,7 +85,12 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             let repository = chosen(ctx, repository).await?;
             let name = match name {
                 Some(name) => name,
-                None => ui::input(ctx, "New name")?,
+                None => {
+                    // Refuse an unknown repository before asking for its name.
+                    repository::select(&client::repositories(&ctx.paths).await?, &repository)
+                        .await?;
+                    ui::input(ctx, "New name")?
+                }
             };
             let repo =
                 request::<Repository>(&ctx.paths, Method::RenameRepository { repository, name })

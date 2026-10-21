@@ -253,6 +253,10 @@ pub(super) async fn add(
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
+    // Only a terminal prompts; without one, creation refuses the arguments itself.
+    if ctx.interactive() {
+        check_add_creation(ctx, &target, &creation).await?;
+    }
     let settings = AddSettings {
         ctx,
         repository: &target.selector,
@@ -611,6 +615,23 @@ async fn resolve_add_target(
         selector,
         repositories: tokio::sync::OnceCell::new_with(repositories),
     })
+}
+
+/// Refuse what creation would refuse in the given repository, branch and
+/// options before a prompt asks for the rest of the addition.
+async fn check_add_creation(ctx: &Context, target: &AddTarget, creation: &Creation) -> Result<()> {
+    request::<()>(
+        &ctx.paths,
+        Method::CheckCreation {
+            repository: target.selector.clone(),
+            branch: creation.branch.clone(),
+            existing: creation.existing.clone(),
+            base: creation.base.clone(),
+            git_profile: creation.git_profile.clone(),
+            path: creation.path.clone(),
+        },
+    )
+    .await
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

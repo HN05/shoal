@@ -517,9 +517,10 @@ commands it runs itself no terminal input.
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
 picker; a deleted current directory provides no workspace context. Explicit misses
-fail without fallback; noninteractive and JSON calls
-without a current workspace require a target. Scope remains daemon-enforced.
-Bare `cd` always picks; all-workspace operations retain their scope.
+and other refused arguments fail without fallback, before any prompt for the
+omitted ones; `add` asks the daemon to check its creation request first.
+Noninteractive and JSON calls without a current workspace require a target.
+Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations retain their scope.
 `resume` uses the current workspace only when it has stopped work; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with no stopped work anywhere it reports

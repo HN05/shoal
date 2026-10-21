@@ -255,6 +255,8 @@ instead of the PR delivery guidance below.
   focus, and explicit focus settings override either default.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
+- Commands refuse invalid given arguments before any prompt for omitted ones;
+  interactive `add` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
   and review returns without starting a reviewer. An agent whose executables are
   not on PATH is refused before any work and left out of pickers, the workspace
