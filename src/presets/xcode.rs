@@ -49,7 +49,9 @@ CLANG_OTHER_PREFIX_MAPPINGS = $(inherited) $(SHOAL_PREFIX_MAPPINGS)
 }
 
 /// Finds the `Package.resolved` of the project or workspace `xcodebuild`
-/// builds, as `xcodebuild` picks it, and keys the checkouts by its content.
+/// builds, as `xcodebuild` picks it: a named container, or else the
+/// directory's project ahead of its workspace. The checkouts are keyed by
+/// that file's content.
 /// A caller's own `-clonedSourcePackagesDirPath` wins.
 fn wrapper(directory: &Path) -> String {
     let packages = directory.join("SourcePackages");
@@ -65,7 +67,7 @@ for argument in "$@"; do
   esac
 done
 if [ -z "$container" ]; then
-  for candidate in *.xcworkspace *.xcodeproj; do
+  for candidate in *.xcodeproj *.xcworkspace; do
     if [ -e "$candidate" ]; then container=$candidate; break; fi
   done
 fi
@@ -156,6 +158,13 @@ mod tests {
             run(&["-project", "App.xcodeproj", "build"]).lines().nth(1),
             Some(checkouts)
         );
+        // Beside a workspace, xcodebuild still builds the project by default.
+        let workspace = project.join("App.xcworkspace/xcshareddata/swiftpm");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("Package.resolved"), "{\"pins\": []}").unwrap();
+        assert_eq!(run(&["build"]).lines().nth(1), Some(checkouts));
+        let pinned = run(&["-workspace", "App.xcworkspace", "build"]);
+        assert_ne!(pinned.lines().nth(1), Some(checkouts));
         assert_eq!(
             run(&["-clonedSourcePackagesDirPath", "/mine", "build"]),
             "-clonedSourcePackagesDirPath\n/mine\nbuild\n"
