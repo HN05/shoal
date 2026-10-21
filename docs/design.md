@@ -392,8 +392,9 @@ seed: Cargo, whose seed covers it better than a shared compiler cache such as
 sccache, which needs another tool and gives up incremental builds, and the Node
 package managers. Preset seeds run the default branch's own build code, as
 `seed.cmd` would. Tools whose caches already serve every checkout get only what
-makes their cache keys independent of the workspace path: Go trims paths, and
-Xcode, whose DerivedData records absolute paths so no seed survives the move,
+makes their cache keys independent of the workspace path, or one cache where
+each checkout keeps its own: Go trims paths, ccache takes the workspace as its
+base directory, Zig shares its local cache, and Xcode, whose DerivedData records absolute paths so no seed survives the move,
 shares one compilation cache with the workspace and DerivedData paths mapped
 out of its keys. Xcode also needs one package checkout per set of resolved
 pins, which only an `xcodebuild` argument can choose, so the preset puts a

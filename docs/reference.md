@@ -1313,12 +1313,19 @@ presets = ["cargo", "bun"]
 | `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
 | `go` | `GOFLAGS=-trimpath`, and a seed running `go build ./...` |
 | `xcode` | One compilation cache for every workspace's `xcodebuild`, with shared Swift package checkouts |
+| `zig` | A shared cache as `ZIG_LOCAL_CACHE_DIR`, and a seed running `zig build` |
+| `ccache` | ccache as the compiler launcher of CMake builds, with the workspace as its base directory |
 
 Presets that keep the same seed output cannot be combined. A variable `[env]`
 sets takes precedence over a preset's. Go's build cache is shared by every
 checkout, but it keys a package by its directory unless paths are trimmed; with
 `-trimpath`, binaries, panics and `runtime.Caller` report module paths instead
 of file system paths. The seed fills that cache from the default branch.
+
+The `ccache` preset needs ccache installed and CMake 3.17 or later, and applies
+when a build directory is first configured. With the workspace as ccache's base
+directory and its working directory left out of the hash, a compile another
+workspace ran hits, and debug info records that workspace's directory.
 
 The `xcode` preset keeps a [shared cache](#shared-caches) named `xcode` holding
 an xcconfig, Xcode's compilation cache and Swift package checkouts. It sets

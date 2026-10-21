@@ -31,6 +31,10 @@ states!(
         Go => "go",
         /// Xcode: one compilation cache for every workspace's `xcodebuild`.
         Xcode => "xcode",
+        /// Zig: one local cache for every workspace, and seeds it.
+        Zig => "zig",
+        /// ccache: C and C++ builds through CMake share one compiler cache.
+        Ccache => "ccache",
     }
 );
 
@@ -46,8 +50,10 @@ impl Preset {
             Self::Yarn => Some(&["yarn", "install", "--frozen-lockfile"]),
             Self::Bun => Some(&["bun", "install", "--frozen-lockfile"]),
             Self::Go => Some(&["go", "build", "./..."]),
-            // Building needs a scheme, and Xcode's outputs record their path.
-            Self::Xcode => None,
+            Self::Zig => Some(&["zig", "build"]),
+            // Building needs a scheme, and Xcode's outputs record their path;
+            // C builds have no usual command.
+            Self::Xcode | Self::Ccache => None,
         }
     }
 
@@ -57,13 +63,14 @@ impl Preset {
         match self {
             Self::Cargo => Some("target"),
             Self::Npm | Self::Pnpm | Self::Yarn | Self::Bun => Some("node_modules"),
-            Self::Go | Self::Xcode => None,
+            Self::Go | Self::Xcode | Self::Zig | Self::Ccache => None,
         }
     }
 
     /// Variables the preset sets where `[env]` does not, rendered like
     /// `[env]`. Go's cache keys include a package's directory unless paths
-    /// are trimmed.
+    /// are trimmed; ccache's, the compiler's working directory and paths
+    /// outside its base directory.
     fn environment(self) -> &'static [(&'static str, &'static str)] {
         match self {
             Self::Go => &[("GOFLAGS", "-trimpath")],
@@ -71,13 +78,20 @@ impl Preset {
                 ("XCODE_XCCONFIG_FILE", "{cache.xcode}/shoal.xcconfig"),
                 (crate::env::PATH_PREFIX, "{cache.xcode}/bin"),
             ],
+            Self::Zig => &[("ZIG_LOCAL_CACHE_DIR", "{cache.zig}")],
+            Self::Ccache => &[
+                ("CCACHE_BASEDIR", "{workspace_path}"),
+                ("CCACHE_NOHASHDIR", "true"),
+                ("CMAKE_C_COMPILER_LAUNCHER", "ccache"),
+                ("CMAKE_CXX_COMPILER_LAUNCHER", "ccache"),
+            ],
             _ => &[],
         }
     }
 
     /// The shared cache the preset keeps its files in, named after it.
     fn cache(self) -> Option<&'static str> {
-        matches!(self, Self::Xcode).then_some(self.as_str())
+        matches!(self, Self::Xcode | Self::Zig).then_some(self.as_str())
     }
 }
 
@@ -143,6 +157,19 @@ mod tests {
             environment(&[Preset::Cargo, Preset::Go], BTreeMap::new())["GOFLAGS"],
             "-trimpath"
         );
+    }
+
+    #[test]
+    fn zig_and_ccache_presets_point_their_caches_past_workspace_paths() {
+        let presets = [Preset::Zig, Preset::Ccache];
+        assert_eq!(
+            caches(&presets, BTreeMap::new())["zig"].scope,
+            CacheScope::Shared
+        );
+        let env = environment(&presets, BTreeMap::new());
+        assert_eq!(env["ZIG_LOCAL_CACHE_DIR"], "{cache.zig}");
+        assert_eq!(env["CCACHE_BASEDIR"], "{workspace_path}");
+        assert_eq!(env["CMAKE_CXX_COMPILER_LAUNCHER"], "ccache");
     }
 
     #[test]
