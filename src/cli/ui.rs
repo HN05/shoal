@@ -605,11 +605,26 @@ pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result
     pick(ctx, "Workspace> ", workspace_entries(ctx, workspaces).await)
 }
 
-/// Workspaces the command would act on come first; the rest show why it
-/// would refuse them in place of their status.
+/// The picker entries for `workspaces`, judged against what the command needs.
 async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
     let availability = Availability::load(ctx.need).await;
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
+    availability_entries(
+        workspaces,
+        &availability,
+        &stopped,
+        Palette::stderr(ctx.json),
+    )
+}
+
+/// Workspaces the command would act on come first; the rest show why it
+/// would refuse them in place of their status.
+fn availability_entries(
+    workspaces: Vec<Workspace>,
+    availability: &Availability,
+    stopped: &HashSet<String>,
+    palette: Palette,
+) -> Entries {
     let mut rows = workspaces
         .into_iter()
         .map(|w| (availability.refusal(&w), w))
@@ -625,7 +640,7 @@ async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries
             (status, w)
         })
         .unzip();
-    let labels = rows_with_status(&workspaces, &[], statuses, Palette::stderr(ctx.json));
+    let labels = rows_with_status(&workspaces, &[], statuses, palette);
     workspaces.into_iter().map(|w| w.id).zip(labels).collect()
 }
 
