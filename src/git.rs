@@ -87,6 +87,16 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, St
     }))
 }
 
+/// Whether `remote` itself advertises `branch`, which need not be fetched yet.
+pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Result<bool> {
+    let heads = run_isolated(
+        repo,
+        &["ls-remote", "--heads", "--", remote, &local_ref(branch)],
+    )
+    .await?;
+    Ok(!heads.trim().is_empty())
+}
+
 /// `git -C <repo>` with the caller's normal configuration and hooks. Queries
 /// skip optional locks, so a status that refreshes the index never holds the
 /// lock a concurrent Git command in the same worktree needs.

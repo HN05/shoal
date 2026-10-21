@@ -461,8 +461,9 @@ impl Manager {
         if let Some(profile) = options.git_profile {
             self.config().git.profile(profile)?;
         }
+        // Without a branch yet, the base is checked as a new branch's.
         if let Some(base) = options.base {
-            check_base(&repo, base).await?;
+            check_base(&repo, base, existing.is_none()).await?;
         }
         let name = name.map(|name| derive_workspace_name(&name));
         if let Some(name) = name.clone() {
@@ -928,15 +929,20 @@ async fn recorded_base(
     ))
 }
 
-/// Refuse a base that creation could neither fetch as a remote branch nor
-/// resolve to a commit.
-async fn check_base(repo: &crate::model::Repository, base: &str) -> Result<()> {
-    if git::remote_branch(&repo.path, base).await?.is_some() {
+/// Refuse a base creation could not use: a new branch first fetches a remote
+/// branch base, which the remote must have; otherwise the base must resolve
+/// to a commit here.
+async fn check_base(repo: &crate::model::Repository, base: &str, new_branch: bool) -> Result<()> {
+    if new_branch && let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
+        ensure!(
+            git::remote_has_branch(&repo.path, &remote, &branch).await?,
+            "base {base} is not a branch on {remote}"
+        );
         return Ok(());
     }
     git::resolve_commit(&repo.path, base, git::run_isolated)
         .await
-        .with_context(|| format!("base {base} is not a commit or remote branch"))?;
+        .with_context(|| format!("base {base} is not a commit"))?;
     Ok(())
 }
 

@@ -829,6 +829,53 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
 }
 
 #[tokio::test]
+async fn creation_check_asks_the_remote_for_a_new_branch_base_only() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    git(&author, &["push", "origin", "HEAD:refs/heads/unfetched"]);
+    git(&f.repo, &["branch", "topic"]);
+    let base = |base| NewWorktreeOptions {
+        base: Some(base),
+        ..NewWorktreeOptions::default()
+    };
+    for (branch, existing, options) in [
+        (Some("new"), None, base("origin/unfetched")),
+        (None, None, base("origin/unfetched")),
+        (None, Some("topic"), base("origin/main")),
+    ] {
+        f.manager
+            .check_creation(&f.repo_id, branch, existing, options)
+            .await
+            .unwrap();
+    }
+    for (branch, existing, options, refusal) in [
+        (
+            Some("new"),
+            None,
+            base("origin/missing"),
+            "not a branch on origin",
+        ),
+        // Opening an existing branch compares against the base without fetching it.
+        (
+            None,
+            Some("topic"),
+            base("origin/unfetched"),
+            "not a commit",
+        ),
+    ] {
+        let error = f
+            .manager
+            .check_creation(&f.repo_id, branch, existing, options)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains(refusal),
+            "{refusal}: {error:#}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
     let f = Fixture::new().await;
     let author = f.remote();
