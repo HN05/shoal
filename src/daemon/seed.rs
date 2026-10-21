@@ -2,13 +2,8 @@
 //! new workspaces from it. Seed failures never fail the operation that met
 //! them: a workspace without a seed still builds, only from scratch.
 use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    fs,
-    path::{Path, PathBuf},
-    process::Stdio,
-    sync::Arc,
-    time::Duration,
+    collections::BTreeMap, ffi::OsString, fs, io::Write as _, path::Path, process::Stdio,
+    sync::Arc, time::Duration,
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -31,7 +26,10 @@ use crate::{
     },
     model::{Repository, Workspace},
     protocol::ConfigTarget,
-    seed::{Layout, Snapshot},
+    seed::{
+        Layout, Snapshot,
+        preset::{self, Build, Step},
+    },
     state::WorkspaceState,
 };
 
@@ -43,7 +41,7 @@ const BUILD_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 /// What one repository's seed builds, from its resolved `[seed]` table.
 struct Plan {
     branch: String,
-    command: PathBuf,
+    build: Build,
     paths: Vec<String>,
     environment: BTreeMap<String, OsString>,
     caches: BTreeMap<String, crate::config::repo::Cache>,
@@ -52,9 +50,13 @@ struct Plan {
 impl Plan {
     /// The seed `settings` describe, or `None` when they configure none.
     async fn new(repo: &Repository, layout: &Layout, settings: &Effective) -> Result<Option<Self>> {
-        let (Some(command), false) = (&settings.seed.cmd, settings.seed.paths.is_empty()) else {
+        let paths = preset::outputs(&settings.seed);
+        let Some(build) = Build::of(&settings.seed, &layout.worktree()) else {
             return Ok(None);
         };
+        if paths.is_empty() {
+            return Ok(None);
+        }
         let branch = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         // Builds see the workspaces' [env], so their outputs stay reusable.
         let identity = Workspace::new_record(
@@ -65,8 +67,8 @@ impl Plan {
             WorkspaceState::Ready,
         );
         Ok(Some(Self {
-            command: layout.worktree().join(command),
-            paths: settings.seed.paths.clone(),
+            build,
+            paths,
             environment: crate::env::render_configured_environment(
                 &settings.env,
                 &identity,
@@ -83,7 +85,7 @@ impl Plan {
     /// other settings is rebuilt.
     fn settings(&self) -> Result<String> {
         Ok(serde_json::to_string(&(
-            &self.command,
+            &self.build,
             &self.paths,
             &self.environment,
         ))?)
@@ -424,48 +426,48 @@ impl Drop for SeedStop {
     }
 }
 
-/// Run the seed command in its worktree, writing its output to `log`, until
-/// it exits, times out or `cancel` is set. Whatever it leaves in its process
-/// group is killed before this returns.
+/// Run the seed build's commands in its worktree, in order, writing their
+/// output to `log`, until one fails, the build times out or `cancel` is set.
 async fn run_build(
     plan: &Plan,
     worktree: &Path,
     log: &Path,
     mut cancel: watch::Receiver<bool>,
 ) -> Result<()> {
-    let output = fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
-    let mut command = Command::new(&plan.command);
-    // The daemon's own Shoal variables describe no workspace of the seed's.
-    for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with(crate::env::PREFIX) {
-            command.env_remove(name);
-        }
+    let mut output = fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
+    let deadline = tokio::time::Instant::now() + BUILD_TIMEOUT;
+    for step in plan.build.steps(worktree)? {
+        writeln!(output, "$ {}", step.label)?;
+        run_step(&step, plan, worktree, &output, log, deadline, &mut cancel).await?;
     }
-    for name in crate::env::inherited_secret_exports() {
-        command.env_remove(name);
-    }
-    if let Some(path) = crate::env::path_without_secret_tools() {
-        command.env("PATH", path);
-    }
-    let mut child = command
-        .current_dir(worktree)
-        .envs(&plan.environment)
-        .stdin(Stdio::null())
-        .stdout(output.try_clone()?)
-        .stderr(output)
-        .process_group(0)
-        .kill_on_drop(true)
+    Ok(())
+}
+
+/// Run one command of the seed build until it exits, the build's deadline
+/// passes or `cancel` is set. Whatever it leaves in its process group is
+/// killed before this returns.
+async fn run_step(
+    step: &Step,
+    plan: &Plan,
+    worktree: &Path,
+    output: &fs::File,
+    log: &Path,
+    deadline: tokio::time::Instant,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<()> {
+    let mut child = step_command(step, plan, worktree, output)?
         .spawn()
-        .with_context(|| format!("launch seed.cmd {}", plan.command.display()))?;
+        .with_context(|| format!("launch {}", step.label))?;
     let group = child.id().context("seed build process ID unavailable")? as i32;
     // Dropping the build, as daemon shutdown does, kills its whole group.
     let mut guard = GroupGuard(Some(group));
     let stopped = tokio::select! {
-        exited = tokio::time::timeout(BUILD_TIMEOUT, exited(group)) => match exited {
+        exited = tokio::time::timeout_at(deadline, exited(group)) => match exited {
             Ok(exited) => Ok(exited?),
             Err(_) => Err(format!(
-                "seed.cmd timed out after {} minutes; output is in {}",
+                "the seed build timed out after {} minutes in {}; output is in {}",
                 BUILD_TIMEOUT.as_secs() / 60,
+                step.label,
                 log.display()
             )),
         },
@@ -483,11 +485,41 @@ async fn run_build(
     }
     ensure!(
         status.success(),
-        "seed.cmd exited with {}; output is in {}",
+        "{} exited with {}; output is in {}",
+        step.label,
         crate::execution::exit_code(status),
         log.display()
     );
     Ok(())
+}
+
+/// `step` as its own process group in the seed worktree, with the
+/// repository's `[env]` and none of the daemon's Shoal variables or secrets.
+fn step_command(step: &Step, plan: &Plan, worktree: &Path, output: &fs::File) -> Result<Command> {
+    let (program, args) = step.argv.split_first().context("empty seed command")?;
+    let mut command = Command::new(program);
+    command.args(args);
+    // The daemon's own Shoal variables describe no workspace of the seed's.
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with(crate::env::PREFIX) {
+            command.env_remove(name);
+        }
+    }
+    for name in crate::env::inherited_secret_exports() {
+        command.env_remove(name);
+    }
+    if let Some(path) = crate::env::path_without_secret_tools() {
+        command.env("PATH", path);
+    }
+    command
+        .current_dir(worktree)
+        .envs(&plan.environment)
+        .stdin(Stdio::null())
+        .stdout(output.try_clone()?)
+        .stderr(output.try_clone()?)
+        .process_group(0)
+        .kill_on_drop(true);
+    Ok(command)
 }
 
 /// Kills a seed build's process group when dropped before the build has
@@ -573,7 +605,7 @@ async fn exited(pid: i32) -> Result<()> {
 mod tests {
     use super::*;
     use crate::test_support::{commit, git, manager, repository};
-    use std::os::unix::fs::PermissionsExt as _;
+    use std::{os::unix::fs::PermissionsExt as _, path::PathBuf};
 
     fn modified(path: &Path) -> std::time::SystemTime {
         fs::metadata(path).unwrap().modified().unwrap()
@@ -713,7 +745,10 @@ mod tests {
         assert!(!layout.log().exists(), "the build waits for headroom");
         configure(&manager, NO_PRESSURE).await;
         manager.refresh_seeds().await;
-        assert_eq!(fs::read_to_string(layout.log()).unwrap(), "broken\n");
+        assert_eq!(
+            fs::read_to_string(layout.log()).unwrap(),
+            "$ seed.cmd\nbroken\n"
+        );
         fs::remove_file(layout.log()).unwrap();
         manager.refresh_seeds().await;
         assert!(!layout.log().exists(), "the failed commit is not rebuilt");
@@ -741,6 +776,45 @@ mod tests {
             .unwrap();
         assert!(failure.message.contains("exited with 3"), "{failure:?}");
         assert!(Snapshot::open(&layout).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn a_preset_builds_and_keeps_its_tool_outputs() {
+        let (temp, manager) = manager().await;
+        configure(&manager, NO_PRESSURE).await;
+        let checkout = repository(temp.path(), "repo");
+        fs::write(
+            checkout.join("Cargo.toml"),
+            "[package]\nname = \"seeded\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::create_dir(checkout.join("src")).unwrap();
+        fs::write(checkout.join("src/lib.rs"), "").unwrap();
+        // The runner's own target directory must not take the build.
+        fs::write(
+            checkout.join(".shoal.toml"),
+            "[seed]\npresets = ['cargo']\n[env]\nCARGO_TARGET_DIR = '{workspace_path}/target'\n",
+        )
+        .unwrap();
+        for file in ["Cargo.toml", "src/lib.rs", ".shoal.toml"] {
+            commit(&checkout, file);
+        }
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        manager.refresh_seeds().await;
+        let layout = Layout::of(&repo).unwrap();
+        let log = fs::read_to_string(layout.log()).unwrap();
+        assert!(log.starts_with("$ cargo build --all-targets\n"), "{log}");
+        if Snapshot::open(&layout).unwrap().is_none() {
+            return; // Without copy-on-write cloning the seed is never copied.
+        }
+        let workspace = manager
+            .create_workspace(&repo.id, "feature".into(), None, None, None)
+            .await
+            .unwrap();
+        assert!(workspace.path.join("target/debug").is_dir());
     }
 
     /// A repository whose checkout configures `script` as its seed.

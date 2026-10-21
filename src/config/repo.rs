@@ -121,10 +121,23 @@ pub struct Cache {
     pub scope: CacheScope,
 }
 
+states!(
+    /// A build tool whose usual seed build and outputs Shoal knows.
+    SeedPreset {
+        /// Cargo's `target`.
+        Cargo => "cargo",
+        /// npm's or pnpm's `node_modules`.
+        Npm => "npm",
+    }
+);
+
 /// The default-branch build new workspaces start from.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Seed {
+    /// Tools whose build and outputs the seed uses where `cmd` and `paths`
+    /// are unset.
+    pub presets: Vec<SeedPreset>,
     /// Executable in the seed worktree that builds the default branch.
     pub cmd: Option<String>,
     /// Worktree-relative build outputs cloned into each new workspace.
@@ -133,6 +146,12 @@ pub struct Seed {
 
 impl Seed {
     fn validate(&self) -> Result<()> {
+        for (index, preset) in self.presets.iter().enumerate() {
+            ensure!(
+                !self.presets[..index].contains(preset),
+                "seed.presets names {preset} twice"
+            );
+        }
         // The seed runs unattended from the default branch, so its command
         // is the repository's own file, like its outputs.
         if let Some(command) = &self.cmd {

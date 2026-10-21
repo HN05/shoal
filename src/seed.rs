@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::fsutil::{OWNER_MARKER, clone_tree, create_marked_dir, is_marked_dir};
 
+pub mod preset;
+
 const MANIFEST: &str = "manifest.json";
 const OUTPUTS: &str = "outputs";
 

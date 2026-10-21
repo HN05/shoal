@@ -1302,20 +1302,28 @@ from, so a branch rebuilds only what it changed and shares the rest on disk:
 
 ```toml
 [seed]
-cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
-paths = ["target"]       # Build outputs, relative to the worktree, new workspaces start with
+presets = ["cargo", "npm"]  # Tools whose usual build and outputs the seed uses
+cmd = "scripts/seed.sh"     # Or a build of your own in the worktree; must exit 0
+paths = ["target"]          # Or your build outputs, relative to the worktree
 ```
 
+The `cargo` preset runs `cargo build --all-targets` and keeps `target`; `npm`
+runs `pnpm install --frozen-lockfile` when the commit has a `pnpm-lock.yaml`,
+otherwise `npm ci`, and keeps `node_modules`. `cmd` replaces the presets'
+commands and `paths` their outputs.
+
 The daemon keeps a locked, detached worktree at the local default branch's tip in
-the repository directory's `.seed`, and runs `seed.cmd` there when that branch or
+the repository directory's `.seed`, and runs the build there when that branch or
 the seed's settings change. It checks every minute, one repository at a time, and
 waits while memory or free disk space is past its `[overload.warning]` threshold;
 a build that failed is retried only after such a change or a daemon restart. The
 settings come from the repository's saved config and its registered checkout's
-file. The command is an executable inside the seed worktree, given as a relative
-path and run like `setup_cmd`. It gets the repository's `[env]`, with placeholders
+file. `seed.cmd` is an executable inside the seed worktree, given as a relative
+path and run like `setup_cmd`; preset commands run in the worktree's root. The
+build gets the repository's `[env]`, with placeholders
 rendered for the seed worktree, but no inherited `SHOAL_*` variables or agent secrets. It has a
-two-hour limit, writes its output to `.seed/build.log`, and anything it leaves
+two-hour limit and writes each command's output to `.seed/build.log` after a
+`$` line naming it; anything a command leaves
 running in its process group is stopped when it exits.
 
 A successful build freezes `paths` as a copy-on-write snapshot: APFS clones on

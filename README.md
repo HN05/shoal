@@ -303,7 +303,8 @@ agent exits, removal, and resource acquisition/release, for example to open a tm
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
 A `[seed]` table keeps a build of the default branch that new workspaces clone, so
-they rebuild only what their branch changed; see [seed builds](docs/reference.md#seed-builds).
+they rebuild only what their branch changed; `presets = ["cargo", "npm"]` builds
+and keeps what those tools use. See [seed builds](docs/reference.md#seed-builds).
 
 Use `[env]` to give tracked executions and hooks workspace-specific variables. Values
 substitute `{workspace}`, `{workspace_path}`, `{repo}`, `{branch}`, reserved

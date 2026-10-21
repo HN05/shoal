@@ -385,6 +385,10 @@ on tracked files its commit left unchanged, since mtime-based tools otherwise tr
 every freshly checked-out file as new. Platforms without clones skip the seed
 rather than copy. Seeds are best effort: failures notify and never fail creation,
 and builds wait under host pressure so they never add load an agent would feel.
+Presets name a tool's usual build and outputs, so common stacks need no script.
+They run the default branch's own build code, as `seed.cmd` would, and cover
+Cargo better than a shared compiler cache such as sccache, which needs another
+tool and gives up incremental builds.
 
 Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
 sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
