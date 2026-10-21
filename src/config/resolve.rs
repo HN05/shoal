@@ -807,6 +807,27 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     }
 
     #[test]
+    fn presets_come_from_the_global_config_unless_the_repository_names_its_own() {
+        use crate::presets::Preset;
+        let presets =
+            |global, worktree, saved| stack(global, worktree, saved).resolve().unwrap().presets;
+        assert!(presets("", "", "").is_empty());
+        assert_eq!(presets("presets = ['xcode']\n", "", ""), [Preset::Xcode]);
+        assert_eq!(
+            presets("presets = ['xcode']\n", "presets = ['cargo']\n", ""),
+            [Preset::Cargo]
+        );
+        assert_eq!(
+            presets(
+                "presets = ['xcode']\n",
+                "presets = ['cargo']\n",
+                "presets = ['bun']\n"
+            ),
+            [Preset::Bun]
+        );
+    }
+
+    #[test]
     fn focus_is_unset_by_default_and_layers_per_repository() {
         assert_eq!(stack("", "", "").resolve().unwrap().focus, None);
         assert_eq!(

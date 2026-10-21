@@ -1298,7 +1298,8 @@ following a daemon restart. Use a pre-remove hook when failure must retain owner
 ### Build tool presets
 
 `presets` names the build tools a repository uses, and Shoal sets each one up so
-its workspaces stop repeating the same work:
+its workspaces stop repeating the same work. The global config's list applies to
+every repository that does not name its own:
 
 ```toml
 presets = ["cargo", "bun"]
