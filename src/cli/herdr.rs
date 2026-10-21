@@ -103,16 +103,36 @@ pub(in crate::cli) async fn start_add(
         };
         plan.tab_name = Some(TabName::new(template, repo, issue.or(found.as_ref())));
     }
-    let directive = tempfile::Builder::new()
-        .prefix("shoal-cd.")
-        .tempfile()
-        .context("create the tab's shell directive")?
-        .into_temp_path();
+    let directive = TabDirective::create()?;
     let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
-    // The tab's shell, or its watcher once it closes the tab, removes it now.
-    directive.keep().context("keep the tab's shell directive")?;
+    directive.hand_over()?;
     Ok(true)
+}
+
+/// The file in which the worker leaves the workspace for the tab's shell to
+/// enter. Shoal removes it until the tab runs its worker; then the shell
+/// removes it at its next prompt, or the watcher when it closes the tab.
+struct TabDirective(tempfile::TempPath);
+
+impl TabDirective {
+    fn create() -> Result<Self> {
+        let file = tempfile::Builder::new()
+            .prefix("shoal-cd.")
+            .tempfile()
+            .context("create the tab's shell directive")?;
+        Ok(Self(file.into_temp_path()))
+    }
+
+    /// The tab environment entry naming the file.
+    fn env(&self) -> String {
+        format!("{}={}", env::SHELL_DIRECTIVE, self.0.display())
+    }
+
+    fn hand_over(self) -> Result<()> {
+        self.0.keep().context("keep the tab's shell directive")?;
+        Ok(())
+    }
 }
 
 /// The label `shoal add` gives a workspace's tab: the `tab_name` template,
@@ -245,7 +265,7 @@ async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Worksp
 async fn create_tab(
     ctx: &Context,
     plan: &AddPlan,
-    directive: &Path,
+    directive: &TabDirective,
     focus: bool,
 ) -> Result<CreatedResult> {
     let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
@@ -254,9 +274,7 @@ async fn create_tab(
         env::ADD_PLAN,
         serde_json::to_string(plan)?
     ));
-    create
-        .arg("--env")
-        .arg(format!("{}={}", env::SHELL_DIRECTIVE, directive.display()));
+    create.arg("--env").arg(directive.env());
     created(create).await
 }
 
