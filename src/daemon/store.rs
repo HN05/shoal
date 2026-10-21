@@ -455,15 +455,8 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
 }
 
-/// Check ownership before inserting a workspace or reserving a rename in a transaction.
-/// Names (including pending renames) are global; branches belong to one repository.
-pub fn ensure_name_and_branch_available(
-    db: &Connection,
-    repository_id: &str,
-    name: &str,
-    branch: &str,
-    except_id: Option<&str>,
-) -> Result<()> {
+/// Refuse a workspace name another workspace or an unfinished rename holds.
+pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
     ensure!(
         !exists(
             db,
@@ -476,6 +469,19 @@ pub fn ensure_name_and_branch_available(
         !exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])?,
         "workspace name is reserved by an unfinished rename: {name}"
     );
+    Ok(())
+}
+
+/// Check ownership before inserting a workspace or reserving a rename in a transaction.
+/// Names (including pending renames) are global; branches belong to one repository.
+pub fn ensure_name_and_branch_available(
+    db: &Connection,
+    repository_id: &str,
+    name: &str,
+    branch: &str,
+    except_id: Option<&str>,
+) -> Result<()> {
+    ensure_name_available(db, name, except_id)?;
     let owner: Option<String> = db
         .query_row(
             "SELECT name FROM workspaces WHERE repository_id=?1 AND branch=?2

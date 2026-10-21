@@ -728,6 +728,21 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
             options(None, None, Some(&*f.repo)),
             "overlaps",
         ),
+        // A path that no workspace can use is refused before the branch is known.
+        (
+            &*f.repo_id,
+            None,
+            None,
+            options(None, None, Some(&*f.repo)),
+            "overlaps",
+        ),
+        (
+            &*f.repo_id,
+            Some("owned"),
+            None,
+            options(None, None, Some(&*new_path)),
+            "name already exists",
+        ),
     ] {
         let error = f
             .manager

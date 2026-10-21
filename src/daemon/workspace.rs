@@ -463,15 +463,14 @@ impl Manager {
         if let Some(base) = options.base {
             check_base(&repo, base).await?;
         }
-        // Without a branch, the caller may still choose to reopen a workspace
-        // at its current path.
-        match name {
-            Some(name) => {
-                self.check_new_workspace_path(&repo, &derive_workspace_name(&name), options.path)
-                    .await
-            }
-            None => Ok(()),
+        let name = name.map(|name| derive_workspace_name(&name));
+        if let Some(name) = name.clone() {
+            self.store
+                .run(move |db| store::ensure_name_available(db, &name, None))
+                .await?;
         }
+        self.check_new_workspace_path(&repo, name.as_deref(), options.path)
+            .await
     }
 
     // The caller holds the per-repository Git gate through materialization.

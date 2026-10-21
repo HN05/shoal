@@ -29,16 +29,26 @@ impl Manager {
         Ok(path)
     }
 
-    /// Refuse what [`Self::new_workspace_path`] would refuse without reserving
-    /// the repository's directory, which holds nothing before it is reserved.
+    /// Refuse what [`Self::new_workspace_path`] would refuse for the workspace
+    /// `name` without reserving the repository's directory, which holds
+    /// nothing before it is reserved. Without a name, an explicit path may
+    /// still reopen the workspace already there, so only its location is
+    /// checked.
     pub(super) async fn check_new_workspace_path(
         &self,
         repo: &Repository,
-        name: &str,
+        name: Option<&str>,
         path: Option<&Path>,
     ) -> Result<()> {
-        let path = match (path, &repo.workspaces_dir) {
-            (Some(path), _) => self.workspace_location(repo, path).await?,
+        let explicit = match path {
+            Some(path) => Some(self.workspace_location(repo, path).await?),
+            None => None,
+        };
+        let Some(name) = name else {
+            return Ok(());
+        };
+        let path = match (explicit, &repo.workspaces_dir) {
+            (Some(path), _) => path,
             (None, Some(directory)) => canonical_with_missing_tail(directory)?.join(name),
             (None, None) => return Ok(()),
         };
