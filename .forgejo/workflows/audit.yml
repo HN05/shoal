@@ -67,7 +67,6 @@ jobs:
           audit-timeout-seconds: '900'
           # Reuse a writable shared mount to serialize issue creation across containers.
           audit-lock-dir: /var/lib/review-bot/codex/audit-locks
-          audit-max-subagents: '0'
           codex-model: ${{ vars.AUDIT_CODEX_MODEL || 'gpt-6-astra' }}
           max-turns: '80'
           claude-auth-dir: /var/lib/review-bot/claude
