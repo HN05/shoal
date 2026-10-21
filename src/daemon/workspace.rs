@@ -445,25 +445,25 @@ impl Manager {
     ) -> Result<()> {
         let repo = self.repository(repository).await?;
         self.ensure_repository_available(&repo.id).await?;
-        let name = match (branch, existing) {
+        let (name, opened) = match (branch, existing) {
             (Some(name), _) => {
                 git::check_branch_name(Some(&repo.path), name).await?;
-                Some(name.to_owned())
+                (Some(name.to_owned()), None)
             }
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
                 branches::OpenTarget::Reopen(workspace) => {
                     return self.check_reopen(&workspace, &workspace.branch).await;
                 }
-                branches::OpenTarget::Create(branch) => Some(branch.name),
+                branches::OpenTarget::Create(branch) => (Some(branch.name.clone()), Some(branch)),
             },
-            (None, None) => None,
+            (None, None) => (None, None),
         };
         if let Some(profile) = options.git_profile {
             self.config().git.profile(profile)?;
         }
         // Without a branch yet, the base is checked as a new branch's.
         if let Some(base) = options.base {
-            check_base(&repo, base, existing.is_none()).await?;
+            check_base(&repo, base, opened.as_ref()).await?;
         }
         let name = name.map(|name| derive_workspace_name(&name));
         if let Some(name) = name.clone() {
@@ -929,16 +929,28 @@ async fn recorded_base(
     ))
 }
 
-/// Refuse a base creation could not use: a new branch first fetches a remote
-/// branch base, which the remote must have; otherwise the base must resolve
-/// to a commit here.
-async fn check_base(repo: &crate::model::Repository, base: &str, new_branch: bool) -> Result<()> {
-    if new_branch && let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
-        ensure!(
-            git::remote_has_branch(&repo.path, &remote, &branch).await?,
-            "base {base} is not a branch on {remote}"
-        );
-        return Ok(());
+/// Refuse a base creation could not use. A new branch first fetches a remote
+/// branch base, which the remote must have; opening an existing branch fetches
+/// only that branch, so any other base must resolve to a commit here.
+async fn check_base(
+    repo: &crate::model::Repository,
+    base: &str,
+    opened: Option<&git::existing_branch::Branch>,
+) -> Result<()> {
+    match (opened, git::remote_branch(&repo.path, base).await?) {
+        (None, Some((remote, branch))) => {
+            ensure!(
+                git::remote_has_branch(&repo.path, &remote, &branch).await?,
+                "base {base} is not a branch on {remote}"
+            );
+            return Ok(());
+        }
+        (Some(opened), Some((remote, branch)))
+            if opened.remote.as_deref() == Some(remote.as_str()) && opened.name == branch =>
+        {
+            return Ok(());
+        }
+        _ => {}
     }
     git::resolve_commit(&repo.path, base, git::run_isolated)
         .await
