@@ -1125,14 +1125,11 @@ mod tests {
         let repository_dir = repository(temp.path(), "repo");
         fs::write(repository_dir.join(".gitignore"), "ignored/\n").unwrap();
         commit(&repository_dir, ".gitignore");
-        let config = crate::config::Config::path(&manager.paths);
-        fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::write(
-            config,
+        crate::test_support::configure(
+            &manager,
             "[cleanup]\ngrace_minutes = 0\n[resources.test-lock]\n",
         )
-        .unwrap();
-        manager.reload_config().await.unwrap();
+        .await;
         let repo = manager
             .register_repository(repository_dir.to_str().unwrap().into(), None, None)
             .await

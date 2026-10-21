@@ -1201,14 +1201,11 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
 }
 
 async fn set_recovery(manager: &Manager, enabled: bool) {
-    let config = crate::config::Config::path(&manager.paths);
-    fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(
-        config,
-        format!("[overload.recovery]\nenabled = {enabled}\n"),
+    crate::test_support::configure(
+        manager,
+        &format!("[overload.recovery]\nenabled = {enabled}\n"),
     )
-    .unwrap();
-    manager.reload_config().await.unwrap();
+    .await;
 }
 
 fn publish_recovery(manager: &Manager) {

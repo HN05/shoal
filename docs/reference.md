@@ -1231,7 +1231,7 @@ command, with saved repository config taking precedence over the worktree file.
 `setup_cmd` is repository-only:
 
 ```toml
-copy_ignored = true                   # Copy the checkout's ignored files during setup
+copy_ignored = false                  # Skip copying the checkout's ignored files
 pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
@@ -1252,11 +1252,12 @@ execution checks, with a 60-second limit. It works without a `setup_cmd`.
 Failure marks the workspace failed and skips setup;
 retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
 
-`copy_ignored = true` (default false, also a global default) starts tracked setup
-with Worktrunk's `wt step copy-ignored`, which copies the repository checkout's
-ignored files, such as `.env` or local signing settings, into the workspace before
-`setup_cmd`. It works without a `setup_cmd`, and a failure fails setup. Files the
-workspace already has are kept. Without a `.worktreeinclude` in the checkout every
+Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
+repository checkout's ignored files, such as `.env` or local signing settings,
+into the workspace before `setup_cmd`. It runs without a `setup_cmd`, and a
+failure fails setup. `copy_ignored = false`, also a global default, turns it off.
+Files the workspace already has are kept, including paths cloned from a
+[seed](#seed-builds). Without a `.worktreeinclude` in the checkout every
 ignored file is copied, build caches included; its gitignore-style patterns limit
 the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it further.
 

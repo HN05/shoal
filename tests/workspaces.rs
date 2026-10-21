@@ -249,15 +249,7 @@ impl Fixture {
         if !tools.exists() {
             fs::create_dir(&tools).unwrap();
             for program in ["git", "wt"] {
-                let path = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-                    .map(|dir| dir.join(program))
-                    .find(|path| {
-                        path.metadata().is_ok_and(|meta| {
-                            meta.is_file() && meta.permissions().mode() & 0o111 != 0
-                        })
-                    })
-                    .unwrap_or_else(|| panic!("{program} is not on PATH"));
-                std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
+                link_runner_program(&tools, program);
             }
             install_test_script(tools.join("zmx"), PASSTHROUGH_ZMX);
         }
@@ -267,6 +259,29 @@ impl Fixture {
             tools.display()
         )
     }
+
+    /// `bin`, the runner's Worktrunk, which setup uses to copy ignored files,
+    /// and system directories.
+    fn restricted_path(&self, bin: &Path) -> String {
+        let tools = self.root.path().join("worktrunk-bin");
+        if !tools.exists() {
+            fs::create_dir(&tools).unwrap();
+            link_runner_program(&tools, "wt");
+        }
+        format!("{}:{}:/usr/bin:/bin", bin.display(), tools.display())
+    }
+}
+
+/// Link the runner's `program` into `tools`.
+fn link_runner_program(tools: &Path, program: &str) {
+    let path = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join(program))
+        .find(|path| {
+            path.metadata()
+                .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        })
+        .unwrap_or_else(|| panic!("{program} is not on PATH"));
+    std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
 }
 
 #[test]
@@ -3554,7 +3569,7 @@ exit 7
                 "--",
                 "literal spaces; $(false)",
             ])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
             .env("SHOAL_TEST_STATE", fixture.root.path().join("state"))
             .env("SHOAL_TEST_NAME", name)
@@ -3602,7 +3617,7 @@ exit 7
             "--agent",
             "codex",
         ])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
         .env("SHOAL_TEST_INSPECTION", &inspection)
         .output()
@@ -3623,7 +3638,7 @@ exit 7
                 "--agent",
                 "codex",
             ])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap()
     };
@@ -3684,7 +3699,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
             }
             let output = command
                 .args(["--", "literal spaces; $(false)"])
-                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PATH", fixture.restricted_path(&bin))
                 .output()
                 .unwrap();
             assert_eq!(
@@ -3728,7 +3743,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         .command()
         .current_dir(path)
         .args(["codex", "--", "repo-default"])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
     assert_eq!(
@@ -3741,7 +3756,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         let output = fixture
             .command()
             .args(["codex", mode, "default-mode", "--", "desktop prompt"])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         if mode == "--app" {
@@ -3779,7 +3794,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         }
         let output = command
             .args(["shortcut", "--", "--version", "hello with spaces"])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         assert!(
@@ -3810,7 +3825,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             command.arg(target);
         }
         let output = command
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         assert!(output.status.success());
@@ -3884,7 +3899,7 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
             }
             let output = command
                 .args(["instructions", "--", "user prompt"])
-                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PATH", fixture.restricted_path(&bin))
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
@@ -8518,7 +8533,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
             }
             let output = command
                 .args(["--", "--example", "literal spaces; $(false)"])
-                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PATH", fixture.restricted_path(&bin))
                 .output()
                 .unwrap();
             assert_eq!(
@@ -8546,7 +8561,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
             .command()
             .args(["exec", "desktop", "--", env!("CARGO_BIN_EXE_shoal")])
             .args(args)
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         assert!(!output.status.success());
@@ -9168,7 +9183,8 @@ fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
 
 #[test]
 fn repository_removal_serializes_with_workspace_creation() {
-    let fixture = Fixture::new();
+    // Removal refuses a workspace while setup runs, so this race skips setup.
+    let fixture = Fixture::with_config(Some("copy_ignored = false\n"));
     let repo = fixture.ok(&["repo", "list"])[0].clone();
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
@@ -9312,7 +9328,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
 }
 
 #[test]
-fn copy_ignored_copies_main_checkout_files_before_setup() {
+fn ignored_files_are_copied_before_setup_unless_turned_off() {
     let fixture = Fixture::new();
     fs::write(fixture.repo.join(".gitignore"), ".env\nlocal/\n").unwrap();
     fs::write(
@@ -9325,10 +9341,7 @@ fn copy_ignored_copies_main_checkout_files_before_setup() {
         fs::Permissions::from_mode(0o755),
     )
     .unwrap();
-    commit_resource_config(
-        &fixture.repo,
-        "copy_ignored = true\nsetup_cmd = 'setup.sh'\n",
-    );
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
     fs::create_dir(fixture.repo.join("local")).unwrap();
     fs::write(fixture.repo.join("local/signing"), "team\n").unwrap();
@@ -9344,6 +9357,12 @@ fn copy_ignored_copies_main_checkout_files_before_setup() {
     fs::write(path.join(".env"), "TOKEN=2\n").unwrap();
     assert_eq!(fixture.ok(&["setup", "copied"])["state"], "ready");
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
+
+    commit_resource_config(&fixture.repo, "copy_ignored = false\n");
+    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "uncopied"]);
+    assert_eq!(workspace["state"], "ready");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    assert!(!path.join(".env").exists());
 }
 
 #[test]
@@ -9985,7 +10004,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
                 "--model",
                 "test-model",
             ])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
             .env("AGENT_ARGS", &agent_args)
@@ -10035,7 +10054,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             "--issue",
             "37",
         ])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .env("ISSUE_RESPONSE", &response)
         .env("ISSUE_ARGS", &issue_args)
         .output()
@@ -10134,7 +10153,7 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
                 "--agent",
                 "claude",
             ])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -10244,7 +10263,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             .command()
             .args(&args)
             .current_dir(cwd)
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
             .env("AGENT_ARGS", &agent_args)
@@ -10292,7 +10311,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         }
         let output = command
             .args(["--issue", input, "--base", "HEAD"])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", fixture.restricted_path(&bin))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
             .env("AGENT_ARGS", &agent_args)
@@ -10318,7 +10337,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             "--base",
             "HEAD",
         ])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .env("AGENT_ARGS", &agent_args)
         .output()
         .unwrap();
@@ -10744,21 +10763,14 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     );
     let directive = fixture.root.path().join("destination");
     for _ in 0..2 {
-        let (_master, slave) = pty::open();
-        let output = fixture
-            .command()
-            .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .env("PATH", fixture.interactive_path())
-            .args(["add", fixture.repo.to_str().unwrap()])
-            .stdin(slave.try_clone().unwrap())
-            .stderr(slave)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stdout)
+        let (output, transcript) = fixture.interactive_command(
+            fixture
+                .command()
+                .env("SHOAL_SHELL_DIRECTIVE", &directive)
+                .args(["add", fixture.repo.to_str().unwrap()]),
+            "",
         );
+        assert!(output.status.success(), "{transcript}");
         let workspace = fixture.ok(&["inspect", "coworker-topic"]);
         assert_eq!(
             fs::read_to_string(&directive).unwrap().trim(),
@@ -10794,20 +10806,13 @@ esac
             &picker,
             format!("#!/bin/sh\nawk -F '\\t' '$2 == \"{choice}\" || $2 ~ /^#{item} / {{print}}'\n"),
         );
-        let (mut master, slave) = pty::open();
-        let _drain = slave.try_clone().unwrap();
-        let output = fixture
-            .command()
-            .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .env("PATH", fixture.interactive_path())
-            .args(["add", fixture.repo.to_str().unwrap()])
-            .stdin(slave.try_clone().unwrap())
-            .stderr(slave)
-            .output()
-            .unwrap();
-        let mut transcript = Vec::new();
-        let _ = std::io::Read::read_to_end(&mut master, &mut transcript);
-        (output, String::from_utf8_lossy(&transcript).into_owned())
+        fixture.interactive_command(
+            fixture
+                .command()
+                .env("SHOAL_SHELL_DIRECTIVE", &directive)
+                .args(["add", fixture.repo.to_str().unwrap()]),
+            "",
+        )
     };
     let (output, transcript) = add("Use an issue", "34");
     assert!(output.status.success(), "{output:?} {transcript}");
@@ -12135,7 +12140,7 @@ fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
             "trap 'exit 7' TERM; : > \"$READY\"; while :; do sleep 30; done",
         ])
         // Fail only the wrapper's inventory; the daemon can still verify exit.
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .env("READY", &ready)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -12898,7 +12903,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let agent = fixture
         .command()
         .args(["claude", "waiter"])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
@@ -19150,17 +19155,17 @@ fn add_queues_agents_past_max_agents_until_removed() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !fixture
-        .ok(&["ls"])
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
-    {
-        assert!(Instant::now() < deadline, "the first agent did not start");
-        thread::sleep(Duration::from_millis(10));
-    }
+    // Setup runs first, so an agent has started once its entry leaves the queue.
+    let started = |name: &str| {
+        fixture
+            .ok(&["ls"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == name && workspace["running"] == true)
+            && fixture.ok(&["ls", "--queue"]) == serde_json::json!([])
+    };
+    wait_until("the first agent start", || started("first"));
 
     let queued = fixture.ok(&["add", repo, "second", "--agent", "waiter"]);
     assert_eq!(queued["state"], "queued", "{queued}");
@@ -19192,15 +19197,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    wait_until("the focused agent start", || {
-        fixture
-            .ok(&["ls"])
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|workspace| workspace["name"] == "focused" && workspace["running"] == true)
-    });
-    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+    wait_until("the focused agent start", || started("focused"));
     fixture.ok(&["stop", "focused"]);
     focused.wait().unwrap();
     fixture.ok(&["rm", "focused", "--yes"]);

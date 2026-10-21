@@ -59,11 +59,30 @@ pub fn repository(root: &Path, name: &str) -> PathBuf {
 pub async fn manager() -> (tempfile::TempDir, Arc<Manager>) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let paths = Paths::for_test(root.path());
-    let config = crate::config::Config::path(&paths);
-    fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(&config, "[cleanup]\ngrace_minutes = 0\n").unwrap();
+    write_global_config(&paths, "[cleanup]\ngrace_minutes = 0\n");
     let manager = Manager::open(paths).await.unwrap();
     (root, manager)
+}
+
+/// Replace the global config with `text` and reload it.
+pub async fn configure(manager: &Manager, text: &str) {
+    write_global_config(&manager.paths, text);
+    manager.reload_config().await.unwrap();
+}
+
+/// Global config `text` as a published config, read like [`configure`]'s.
+pub fn global_config(text: &str) -> crate::config::Config {
+    toml::from_str(&format!("{BASE_CONFIG}{text}")).unwrap()
+}
+
+/// Global config always turns off `copy_ignored`: only the CLI runs the
+/// tracked setup it needs, so workspaces created here are ready at once.
+const BASE_CONFIG: &str = "copy_ignored = false\n";
+
+fn write_global_config(paths: &Paths, text: &str) {
+    let config = crate::config::Config::path(paths);
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, format!("{BASE_CONFIG}{text}")).unwrap();
 }
 
 /// Run a test helper as its own wrapper, without the runner's scope or terminal.

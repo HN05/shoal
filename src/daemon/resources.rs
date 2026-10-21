@@ -1225,10 +1225,7 @@ mod tests {
     async fn queued_requests_take_freed_capacity_in_arrival_order() {
         use crate::test_support::{manager, repository};
         let (temp, manager) = manager().await;
-        let config = crate::config::Config::path(&manager.paths);
-        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(config, "[resources.lock]\n").unwrap();
-        manager.reload_config().await.unwrap();
+        crate::test_support::configure(&manager, "[resources.lock]\n").await;
         let repository_dir = repository(temp.path(), "repo");
         let repo = manager
             .register_repository(repository_dir.to_str().unwrap().into(), None, None)

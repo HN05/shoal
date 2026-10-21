@@ -1,9 +1,8 @@
 use super::*;
 use crate::{
-    config::Config,
     daemon::agent_queue::tests::STARTED,
     model::Repository,
-    test_support::{manager, repository},
+    test_support::{global_config, manager, repository},
 };
 
 fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
@@ -131,11 +130,9 @@ async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Re
 
 /// Limit the machine to `limit` agents; host disk must not decide the test.
 fn limit_globally(manager: &Manager, limit: u32) {
-    let config: Config = toml::from_str(&format!(
+    manager.publish_config(global_config(&format!(
         "max_agents = {limit}\n[overload.disk]\nenabled = false"
-    ))
-    .unwrap();
-    manager.publish_config(config);
+    )));
 }
 
 fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
@@ -168,7 +165,7 @@ fn started(id: &str) -> bool {
 async fn launches_without_a_limit_start_untracked() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(toml::from_str("max_agents = 'none'").unwrap());
+    manager.publish_config(global_config("max_agents = 'none'"));
     let admission = add(&manager, &repo, "first").await;
     assert!(admission.start && admission.entry.is_none());
     assert!(manager.queue_entries().await.unwrap().is_empty());
@@ -398,10 +395,9 @@ async fn dynamic_admission_staggers_starts() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     // Host memory and disk must not decide this test.
-    manager.publish_config(
-        toml::from_str("[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false")
-            .unwrap(),
-    );
+    manager.publish_config(global_config(
+        "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false",
+    ));
     // An idle machine starts the first agent whatever its CPU reads.
     assert!(add(&manager, &repo, "first").await.start);
     // The next waits for the stagger even with room.
@@ -416,9 +412,9 @@ async fn low_disk_holds_fixed_limits() {
     let repo = register(&manager, &temp, "repo").await;
     // No disk has this much free space, so the host reads low or critical;
     // either holds every start after the first below the fixed limit.
-    manager.publish_config(
-        toml::from_str("max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576").unwrap(),
-    );
+    manager.publish_config(global_config(
+        "max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576",
+    ));
     add(&manager, &repo, "first").await;
     assert!(!add(&manager, &repo, "second").await.start);
     // Starting now still starts at once.
@@ -822,10 +818,9 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
 async fn dynamic_admission_restores_once_measured_load_has_room() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(
-        toml::from_str("[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false")
-            .unwrap(),
-    );
+    manager.publish_config(global_config(
+        "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false",
+    ));
     let (busy, stopped) = (
         create(&manager, &repo, "busy").await,
         create(&manager, &repo, "stopped").await,

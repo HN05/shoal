@@ -581,10 +581,7 @@ mod tests {
 
     /// Builds wait under host pressure; tests choose the pressure they see.
     async fn configure(manager: &Manager, text: &str) {
-        let config = crate::config::Config::path(&manager.paths);
-        fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::write(&config, text).unwrap();
-        manager.reload_config().await.unwrap();
+        crate::test_support::configure(manager, text).await;
     }
 
     const NO_PRESSURE: &str =

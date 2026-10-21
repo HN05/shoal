@@ -215,14 +215,11 @@ mod tests {
     #[tokio::test]
     async fn recovery_progresses_after_every_protection_is_disabled() {
         let (_root, manager) = crate::test_support::manager().await;
-        let config = crate::config::Config::path(&manager.paths);
-        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(
-            &config,
+        crate::test_support::configure(
+            &manager,
             "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false\n",
         )
-        .unwrap();
-        manager.reload_config().await.unwrap();
+        .await;
         let mut ready = manager.recovery_ready.subscribe();
         tokio::time::pause();
         let monitor = tokio::spawn(run(manager.clone()));

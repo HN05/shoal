@@ -293,7 +293,7 @@ fn built_in() -> RepoConfig {
         codex: config::repo::Codex {
             default_mode: Some(Codex::default().default_mode),
         },
-        copy_ignored: Some(false),
+        copy_ignored: Some(true),
         ports: config::repo::PortDefaults {
             on_conflict: Some(ports.on_conflict),
             start: Some(ports.start),
@@ -659,7 +659,7 @@ mod tests {
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
 issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = true\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\

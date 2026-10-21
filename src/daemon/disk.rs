@@ -491,10 +491,7 @@ mod tests {
 
         // Disabled protection reads nothing and forgets its last reading.
         manager.publish_disk_reading(Some(manager.config_generation.load(Ordering::SeqCst)));
-        let config = crate::config::Config::path(&manager.paths);
-        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(&config, "[overload.disk]\nenabled = false\n").unwrap();
-        manager.reload_config().await.unwrap();
+        crate::test_support::configure(&manager, "[overload.disk]\nenabled = false\n").await;
         Monitor::default()
             .check(&manager, start, |_: &Path| -> io::Result<u64> {
                 panic!("disabled disk protection sampled free space")
