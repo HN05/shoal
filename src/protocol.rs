@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 102;
+pub const VERSION: u32 = 103;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -187,6 +187,17 @@ pub enum Method {
         git_profile: Option<String>,
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
+    },
+    /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
+    /// request, without creating anything.
+    CheckCreation {
+        repository: crate::forge::repository::Selector,
+        /// The new branch; `existing` names a branch to open instead.
+        branch: Option<String>,
+        existing: Option<String>,
+        base: Option<String>,
+        git_profile: Option<String>,
+        path: Option<std::path::PathBuf>,
     },
     AdoptWorkspace {
         repository: crate::forge::repository::Selector,

@@ -27,6 +27,7 @@ mod stack;
 mod status;
 
 pub(crate) use agents::{Pause, Protection};
+pub(crate) use branches::NewWorktreeOptions;
 pub use executions::{ExecutionKind, Save, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use ownership::VerifiedWorktree;
@@ -429,6 +430,57 @@ impl Manager {
             path,
         )
         .await
+    }
+
+    /// Check what creating or opening a workspace would refuse in its request
+    /// without creating anything: the repository, the new `branch` or the
+    /// `existing` one, and the new-worktree options. A missing branch is the
+    /// one the caller has yet to choose.
+    pub async fn check_creation(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        branch: Option<&str>,
+        existing: Option<&str>,
+        options: NewWorktreeOptions<'_>,
+    ) -> Result<()> {
+        let repo = self.repository(repository).await?;
+        let name = match (branch, existing) {
+            (Some(name), _) => {
+                git::check_branch_name(Some(&repo.path), name).await?;
+                Some(name.to_owned())
+            }
+            (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
+                branches::OpenTarget::Reopen(_) => return Ok(()),
+                branches::OpenTarget::Create(branch) => Some(branch.name),
+            },
+            (None, None) => None,
+        };
+        if let Some(profile) = options.git_profile {
+            self.config().git.profile(profile)?;
+        }
+        if let Some(base) = options.base {
+            check_base(&repo, base).await?;
+        }
+        self.check_new_workspace_path(&repo, name.as_deref(), options.path)
+            .await
+    }
+
+    /// Refuse the new worktree's explicit path, or the default one derived
+    /// from `branch` once it is known.
+    async fn check_new_workspace_path(
+        &self,
+        repo: &Repository,
+        branch: Option<&str>,
+        path: Option<&std::path::Path>,
+    ) -> Result<()> {
+        if branch.is_none() && path.is_none() {
+            return Ok(());
+        }
+        // An explicit path ignores the name.
+        let name = derive_workspace_name(branch.unwrap_or_default());
+        self.new_workspace_path(repo, &name, path.map(Into::into))
+            .await?;
+        Ok(())
     }
 
     // The caller holds the per-repository Git gate through materialization.
@@ -887,6 +939,18 @@ async fn recorded_base(
         commit,
         reference.starts_with("refs/").then(|| reference.to_owned()),
     ))
+}
+
+/// Refuse a base that creation could neither fetch as a remote branch nor
+/// resolve to a commit.
+async fn check_base(repo: &crate::model::Repository, base: &str) -> Result<()> {
+    if git::remote_branch(&repo.path, base).await?.is_some() {
+        return Ok(());
+    }
+    git::resolve_commit(&repo.path, base, git::run_isolated)
+        .await
+        .with_context(|| format!("base {base} is not a commit or remote branch"))?;
+    Ok(())
 }
 
 /// Existing worktrees use a live local default ref, or their opening commit.

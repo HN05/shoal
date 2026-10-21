@@ -512,6 +512,24 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.assign_chat(&workspace.id, chat).await?;
             Body::Workspace(manager.workspace(&workspace.id).await?)
         }
+        Method::CheckCreation {
+            repository,
+            branch,
+            existing,
+            base,
+            git_profile,
+            path,
+        } => {
+            let options = workspace::NewWorktreeOptions {
+                git_profile: git_profile.as_deref(),
+                path: path.as_deref(),
+                base: base.as_deref(),
+            };
+            manager
+                .check_creation(&repository, branch.as_deref(), existing.as_deref(), options)
+                .await?;
+            Body::Ok
+        }
         Method::AdoptWorkspace {
             repository,
             path,

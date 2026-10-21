@@ -3,7 +3,7 @@ use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 use crate::{
     daemon::{
         scope,
-        workspace::{ExecutionKind, Manager},
+        workspace::{ExecutionKind, Manager, NewWorktreeOptions},
     },
     paths::Paths,
     protocol::Method,
@@ -659,6 +659,87 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
         git(&f.repo, &["rev-parse", "main"]),
         git(&f.repo, &["rev-parse", "HEAD"])
     );
+}
+
+#[tokio::test]
+async fn creation_check_refuses_what_creation_refuses_without_creating() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "topic"]);
+    f.add("owned").await;
+    let options = |base, git_profile, path| NewWorktreeOptions {
+        git_profile,
+        path,
+        base,
+    };
+    let none = NewWorktreeOptions::default();
+    let new_path = f.root.path().join("elsewhere");
+    for (branch, existing, options) in [
+        (None, None, none),
+        (
+            Some("new"),
+            None,
+            options(Some("main"), None, Some(&*new_path)),
+        ),
+        (None, Some("topic"), options(Some("main"), None, None)),
+        (None, Some("owned"), none),
+    ] {
+        f.manager
+            .check_creation(&f.repo_id, branch, existing, options)
+            .await
+            .unwrap();
+    }
+    for (repository, branch, existing, options, refusal) in [
+        ("missing", None, None, none, "not registered"),
+        (&*f.repo_id, Some("bad..name"), None, none, "branch name"),
+        (
+            &*f.repo_id,
+            None,
+            Some("absent"),
+            none,
+            "missing or ambiguous",
+        ),
+        (
+            &*f.repo_id,
+            None,
+            Some("owned"),
+            options(Some("main"), None, None),
+            "only to new worktrees",
+        ),
+        (
+            &*f.repo_id,
+            None,
+            None,
+            options(Some("absent"), None, None),
+            "not a commit",
+        ),
+        (
+            &*f.repo_id,
+            Some("new"),
+            None,
+            options(None, Some("absent"), None),
+            "git profile absent",
+        ),
+        (
+            &*f.repo_id,
+            Some("new"),
+            None,
+            options(None, None, Some(&*f.repo)),
+            "overlaps",
+        ),
+    ] {
+        let error = f
+            .manager
+            .check_creation(repository, branch, existing, options)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains(refusal),
+            "{refusal}: {error:#}"
+        );
+    }
+    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 1);
+    assert!(!new_path.exists());
+    assert!(git(&f.repo, &["branch", "--list", "new"]).is_empty());
 }
 
 #[tokio::test]
