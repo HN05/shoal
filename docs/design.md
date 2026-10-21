@@ -1073,7 +1073,10 @@ acknowledgements; legacy single-watch records retain their stored and JSON shape
 Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
 polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or
-reviews, completed CI checks, new merge conflicts, closure, reopening or merging. An
+reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
+A conflict belongs to the head and base commits it was seen at, so a push or base
+change that leaves the item conflicting is reported again; that report waits for a
+second poll, because Forgejo shows the previous result until it rechecks. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
 cursor item named by the branch, so work without a PR still learns of conflicts; a
 linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads

@@ -59,6 +59,8 @@ pub(crate) struct Current {
     pub body: String,
     /// The commit a PR's head branch points to.
     pub head_sha: Option<String>,
+    /// The commit a PR's base branch points to, where the forge reports it.
+    pub base_sha: Option<String>,
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,
@@ -157,6 +159,7 @@ impl ForgeRepo {
             head_repository: text(&value["head"]["repo"]["full_name"]),
             body: text(&value["body"]).unwrap_or_default(),
             head_sha: text(&value["head"]["sha"]),
+            base_sha: text(&value["base"]["sha"]),
             conflict,
             reviewers: Vec::new(),
             user_ids: Default::default(),

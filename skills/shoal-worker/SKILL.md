@@ -53,7 +53,8 @@ delivery by reading its items with `shoal view <url>`, then end your turn to
 wait; a delivery replaces a running watch. Other agents, Happy sessions
 included, run `shoal --json watch pr` from the workspace, handle the returned
 `updates` by reading their items with `shoal view <url>`, then wait again. Comments
-and reviews are reported, as is each completed CI check or a merge conflict, but
+and reviews are reported, as is each completed CI check or a merge conflict,
+again after a push or base change that leaves it conflicting, but
 not comments, closing or reopening you did through Shoal;
 respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.

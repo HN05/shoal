@@ -314,6 +314,7 @@ mod tests {
             head_repository: head_repository.map(str::to_owned),
             body: String::new(),
             head_sha: None,
+            base_sha: None,
             conflict: None,
             reviewers: Vec::new(),
             user_ids: Default::default(),

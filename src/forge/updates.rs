@@ -46,6 +46,13 @@ pub(crate) struct Snapshot {
     comments: BTreeMap<String, String>,
     checks: BTreeMap<String, Check>,
     conflict: Option<bool>,
+    /// The head and base commits the conflict observation covers.
+    #[serde(default)]
+    conflict_at: MergeRevision,
+    /// The revision of the last reported conflict, cleared once the item is
+    /// seen mergeable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reported_conflict: Option<MergeRevision>,
     /// Replaces the PR conflict message for a local branch check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     conflict_message: Option<String>,
@@ -54,6 +61,13 @@ pub(crate) struct Snapshot {
     /// Unix seconds when each failing source was last reported.
     #[serde(default)]
     reported: BTreeMap<String, u64>,
+}
+
+/// The commits a merge check compares; empty when the forge does not say.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct MergeRevision {
+    head: String,
+    base: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +85,10 @@ impl Snapshot {
         match check {
             Ok(check) => {
                 snapshot.conflict = Some(check.conflicts);
+                snapshot.conflict_at = MergeRevision {
+                    head: check.head,
+                    base: check.target_commit,
+                };
                 snapshot.conflict_message = check.conflicts.then(|| {
                     let mut files =
                         check.files[..check.files.len().min(MAX_LISTED_FILES)].join(", ");
@@ -130,13 +148,8 @@ impl Snapshot {
                 );
             }
         }
-        if next.conflict == Some(true) && self.conflict != Some(true) {
-            let message = next.conflict_message.as_deref();
-            emit(
-                UpdateKind::MergeConflict,
-                message.unwrap_or("PR has merge conflicts").into(),
-                None,
-            );
+        if let Some(message) = self.new_conflict(next) {
+            emit(UpdateKind::MergeConflict, message, None);
         }
         if next.state != self.state {
             match next.state.as_str() {
@@ -171,10 +184,48 @@ impl Snapshot {
         updates
     }
 
-    pub(super) fn retain_failed_checks(&mut self, previous: &Self) {
+    /// The message for a conflict `next` reports that `self` had not.
+    fn new_conflict(&self, next: &Self) -> Option<String> {
+        let reported = next.reported_conflict.as_ref()?;
+        if self.reported_conflict.as_ref() == Some(reported) {
+            return None;
+        }
+        if let Some(message) = &next.conflict_message {
+            return Some(message.clone());
+        }
+        Some(
+            match &self.reported_conflict {
+                Some(previous) if previous.head != reported.head => {
+                    "PR still has merge conflicts after the push"
+                }
+                Some(_) => "PR has merge conflicts with new commits on its base branch",
+                None => "PR has merge conflicts",
+            }
+            .into(),
+        )
+    }
+
+    /// Takes a conflict as reported at once when none was reported since the
+    /// item was last mergeable. A conflict that persists across a new head or
+    /// base is taken once two polls in a row see it there, since the forge may
+    /// still show its result for the previous one. Unknown mergeability keeps
+    /// the previous observation.
+    pub(super) fn schedule_conflict_reports(&mut self, previous: &Self) {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
+            self.conflict_at = previous.conflict_at.clone();
+            self.reported_conflict = previous.reported_conflict.clone();
+            return;
         }
+        let confirmed = previous.conflict == Some(true) && previous.conflict_at == self.conflict_at;
+        self.reported_conflict = match (&previous.reported_conflict, self.conflict) {
+            (_, Some(false)) => None,
+            (Some(reported), _) if !confirmed => Some(reported.clone()),
+            _ => Some(self.conflict_at.clone()),
+        };
+    }
+
+    pub(super) fn retain_failed_checks(&mut self, previous: &Self) {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
@@ -294,6 +345,7 @@ mod tests {
             .insert("review".into(), check("review", true));
         reviewed.comments.insert("review".into(), "finding".into());
         reviewed.conflict = Some(true);
+        reviewed.schedule_conflict_reports(&pending);
         let updates = pending.changes(&reviewed, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -308,6 +360,50 @@ mod tests {
         let mut closed = reviewed.clone();
         closed.state = "closed".into();
         assert_eq!(reviewed.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
+    }
+
+    #[test]
+    fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
+        let poll = |previous: &Snapshot, head: &str, base: &str, conflict| {
+            let mut next = Snapshot {
+                conflict,
+                conflict_at: MergeRevision {
+                    head: head.into(),
+                    base: base.into(),
+                },
+                ..Default::default()
+            };
+            next.schedule_conflict_reports(previous);
+            let messages = previous
+                .changes(&next, "pr")
+                .into_iter()
+                .map(|update| update.message)
+                .collect::<Vec<_>>();
+            (next, messages)
+        };
+        let (first, messages) = poll(&Snapshot::default(), "a", "m1", Some(true));
+        assert_eq!(messages, ["PR has merge conflicts"]);
+        // Right after a push the forge may still show the old head's result.
+        let (pushed, messages) = poll(&first, "b", "m1", Some(true));
+        assert!(messages.is_empty());
+        let (confirmed, messages) = poll(&pushed, "b", "m1", Some(true));
+        assert_eq!(messages, ["PR still has merge conflicts after the push"]);
+        let (persisting, messages) = poll(&confirmed, "b", "m1", Some(true));
+        assert!(messages.is_empty());
+        let (moved, messages) = poll(&persisting, "b", "m2", Some(true));
+        assert!(messages.is_empty());
+        let (unknown, messages) = poll(&moved, "", "", None);
+        assert!(messages.is_empty());
+        let (_, messages) = poll(&unknown, "b", "m2", Some(true));
+        assert_eq!(
+            messages,
+            ["PR has merge conflicts with new commits on its base branch"]
+        );
+        // A conflict on a mergeable PR is reported at once.
+        let (mergeable, messages) = poll(&moved, "c", "m2", Some(false));
+        assert!(messages.is_empty());
+        let (_, messages) = poll(&mergeable, "c", "m3", Some(true));
+        assert_eq!(messages, ["PR has merge conflicts"]);
     }
 
     #[test]

@@ -492,6 +492,7 @@ mod tests {
             head_repository: Some("team/repo".into()),
             body: String::new(),
             head_sha: None,
+            base_sha: None,
             conflict: None,
             reviewers: Vec::new(),
             user_ids: Default::default(),

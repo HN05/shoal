@@ -444,6 +444,7 @@ impl Manager {
                     if let Some(previous) = previous {
                         let previous: Snapshot = serde_json::from_str(&previous)?;
                         snapshot.retain_failed_checks(&previous);
+                        snapshot.schedule_conflict_reports(&previous);
                         snapshot.schedule_failure_reports(
                             &previous,
                             crate::time::unix_seconds(),
@@ -454,6 +455,7 @@ impl Manager {
                             )?;
                         }
                     } else {
+                        snapshot.schedule_conflict_reports(&Snapshot::default());
                         snapshot.schedule_failure_reports(
                             &Snapshot::default(),
                             crate::time::unix_seconds(),
@@ -581,6 +583,7 @@ impl Manager {
                     continue;
                 }
                 snapshot.retain_failed_checks(&previous.snapshot);
+                snapshot.schedule_conflict_reports(&previous.snapshot);
                 snapshot.schedule_failure_reports(&previous.snapshot, crate::time::unix_seconds());
                 previous.snapshot.adopt_authored(&snapshot, &mut previous.authored);
                 // A poll that started by the agent's own state change may

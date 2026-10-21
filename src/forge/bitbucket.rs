@@ -138,6 +138,7 @@ impl ForgeRepo {
             head_repository: text(&value["source"]["repository"]["full_name"]),
             body: text(body).unwrap_or_default(),
             head_sha: text(&value["source"]["commit"]["hash"]),
+            base_sha: None,
             // Bitbucket does not report whether a pull request conflicts.
             conflict: None,
             reviewers: value["reviewers"]

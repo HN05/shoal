@@ -1,4 +1,4 @@
-use super::{Check, Snapshot};
+use super::{Check, MergeRevision, Snapshot};
 use crate::forge::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
@@ -102,7 +102,7 @@ impl ForgeRepo {
             "--repo",
             &repository,
             "--json",
-            "number,headRefName,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
+            "number,headRefName,headRefOid,baseRefOid,state,comments,reviews,statusCheckRollup,mergeable",
         ];
         let output = gh(account, &args, Query::Pull("")).await?;
         let mut snapshot = github_snapshot(&output, number, branch)?;
@@ -274,6 +274,10 @@ fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snap
             Some("UNKNOWN") | None => None,
             _ => anyhow::bail!("unknown PR mergeability"),
         },
+        conflict_at: MergeRevision {
+            head: pull["headRefOid"].as_str().unwrap_or_default().into(),
+            base: pull["baseRefOid"].as_str().unwrap_or_default().into(),
+        },
         ..Default::default()
     };
     for (field, source) in [("comments", super::DISCUSSION), ("reviews", "reviews")] {
@@ -346,6 +350,10 @@ impl Snapshot {
     /// failed check lookup keeps the previous checks.
     fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
         self.conflict = pull.conflict;
+        self.conflict_at = MergeRevision {
+            head: pull.head_sha.clone().unwrap_or_default(),
+            base: pull.base_sha.clone().unwrap_or_default(),
+        };
         match checks {
             Ok(checks) => {
                 for check in checks {
@@ -445,7 +453,8 @@ mod tests {
         pull["reviews"] = json!([{"id": "PRR_1", "body": "finding"}]);
         pull["mergeable"] = json!("CONFLICTING");
         let before = Snapshot::default();
-        let observed = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
+        let mut observed = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
+        observed.schedule_conflict_reports(&before);
         let updates = before.changes(&observed, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -518,7 +527,7 @@ mod tests {
 
     #[test]
     fn rest_checks_are_distinct_and_wake_when_they_complete() {
-        let snapshot = rest_snapshot(
+        let mut snapshot = rest_snapshot(
             "rev-1",
             true,
             &[
@@ -527,6 +536,7 @@ mod tests {
                 ("deploy", "Skipped"),
             ],
         );
+        snapshot.schedule_conflict_reports(&Snapshot::default());
         let updates = Snapshot::default().changes(&snapshot, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -573,6 +583,7 @@ mod tests {
             .comments
             .insert("discussion:1".into(), "new finding".into());
         failed.retain_failed_checks(&before);
+        failed.schedule_conflict_reports(&before);
         let updates = before.changes(&failed, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -590,8 +601,32 @@ mod tests {
             .insert("discussion:1".into(), "new finding".into());
         assert!(failed.changes(&recovered, "pr").is_empty());
         let mut unknown = Snapshot::default();
-        unknown.retain_failed_checks(&recovered);
+        unknown.schedule_conflict_reports(&recovered);
         assert_eq!(unknown.conflict, Some(true));
+    }
+
+    #[test]
+    fn a_forgejo_conflict_is_reported_again_after_its_base_moves() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let observe = |previous: &Snapshot, head: &str, base: &str| {
+            let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
+                "head": {"ref": "topic", "sha": head}, "base": {"ref": "main", "sha": base}});
+            let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+            let mut snapshot = Snapshot::default();
+            snapshot.record_checks(&pull, Ok(Vec::new()));
+            snapshot.schedule_conflict_reports(previous);
+            let kinds = previous
+                .changes(&snapshot, "pr")
+                .iter()
+                .map(|update| update.kind)
+                .collect::<Vec<_>>();
+            (snapshot, kinds)
+        };
+        let (before, _) = observe(&Snapshot::default(), "rebased", "main-1");
+        let (returned, kinds) = observe(&before, "rebased", "main-2");
+        assert!(kinds.is_empty());
+        let (_, kinds) = observe(&returned, "rebased", "main-2");
+        assert_eq!(kinds, [UpdateKind::MergeConflict]);
     }
 
     #[test]

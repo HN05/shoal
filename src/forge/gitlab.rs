@@ -80,6 +80,7 @@ impl ForgeRepo {
             head_repository: (kind == ItemKind::Pr && same_project).then(|| self.path.clone()),
             body: text(&value["description"]).unwrap_or_default(),
             head_sha: text(&value["sha"]),
+            base_sha: None,
             conflict,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
             user_ids: reviewers.into_iter().collect(),
