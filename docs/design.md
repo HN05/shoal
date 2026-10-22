@@ -1073,8 +1073,9 @@ A decided proposal is deleted, since the message carries the outcome. An issue
 proposal belongs to the repository rather than the workspace, because agents file
 follow-ups just before `done`; it opens through the repository's checkout and agent
 account once the workspace is gone. A PR proposal is bound to the branch and its
-commit like a land request: the push still happens, a newer commit outdates it at
-approval or when the agent proposes again, and a pending one keeps the workspace
+commit like a land request: the push still happens, and a renamed branch or another
+commit, locally or where the push went, outdates it at approval or when the agent
+proposes again, and a pending one keeps the workspace
 from unattended removal. Holding the push back too is #922; other agent writes,
 such as comments, edits and closing, stay direct. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.

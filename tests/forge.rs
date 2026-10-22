@@ -2045,6 +2045,36 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     assert_ne!(second["id"], first["id"]);
     assert_eq!(second["specification"]["commit"], head());
 
+    // A commit pushed past Shoal outdates the request too.
+    let identity = [
+        "-c",
+        "user.name=Shoal Test",
+        "-c",
+        "user.email=shoal@example.invalid",
+    ];
+    let tree = [
+        "commit-tree",
+        "-p",
+        "HEAD",
+        "-m",
+        "elsewhere",
+        "HEAD^{tree}",
+    ];
+    let pushed = git(&path, &[&identity[..], &tree].concat());
+    let target = format!("{}:refs/heads/topic", pushed.trim());
+    git(&path, &["push", "-q", remote.to_str().unwrap(), &target]);
+    let second_id = second["id"].to_string();
+    let stale = fixture.run(&["approve", &second_id]);
+    assert!(
+        String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
+        "{stale:?}"
+    );
+    assert!(writes(&fixture).is_empty());
+    assert!(messages(&fixture)[0].contains("Run shoal pr open again"));
+    git(&path, &["reset", "-q", "--hard", pushed.trim()]);
+    let second = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    assert_eq!(second["specification"]["commit"], head());
+
     let approved = fixture.ok(&["approve", &second["id"].to_string(), "--title", "Fix"]);
     let url = format!("{}/pull/9", fixture.web);
     assert_eq!(approved["url"], url);
@@ -2058,9 +2088,14 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         json!([url])
     );
     assert!(messages(&fixture)[0].ends_with(&format!("{url} was opened and linked.")));
-    // The outdated request stays until the workspace goes, so its number is
-    // not reused for a newer one.
+    // Outdated requests stay until the workspace goes, so their numbers are
+    // not reused for newer ones.
     let listed = fixture.ok(&["approvals"]);
-    assert_eq!(listed[0]["status"], "outdated");
-    assert_eq!(listed.as_array().unwrap().len(), 1);
+    let statuses: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| &r["status"])
+        .collect();
+    assert_eq!(statuses, ["outdated", "outdated"]);
 }

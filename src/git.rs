@@ -139,6 +139,20 @@ pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Resul
     Ok(!heads.trim().is_empty())
 }
 
+/// The commit `remote`'s push destination has for `branch`: what a push from
+/// this repository updated, even where it differs from the fetch URL.
+pub async fn pushed_commit(repo: &Path, remote: &str, branch: &str) -> Result<Option<String>> {
+    let url = run_isolated(repo, &["remote", "get-url", "--push", remote]).await?;
+    let heads = run_isolated(
+        repo,
+        &["ls-remote", "--heads", "--", url.trim(), &local_ref(branch)],
+    )
+    .await?;
+    Ok(heads
+        .split_once('\t')
+        .map(|(commit, _)| commit.trim().to_owned()))
+}
+
 /// `git -C <repo>` with the caller's normal configuration and hooks. Queries
 /// skip optional locks, so a status that refreshes the index never holds the
 /// lock a concurrent Git command in the same worktree needs.

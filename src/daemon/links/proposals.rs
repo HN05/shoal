@@ -49,7 +49,8 @@ pub struct Proposer {
     pub agent: Option<String>,
 }
 
-/// The branch moved past the commit a PR proposal was made for.
+/// The workspace branch was renamed or moved past the commit a PR proposal
+/// was made for, or its pushed commit differs.
 #[derive(Debug)]
 struct Moved(Box<ApprovalRequest>);
 
@@ -57,7 +58,7 @@ impl std::fmt::Display for Moved {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "approval request {} is outdated: the branch has newer commits; the agent was told to propose the PR again",
+            "approval request {} is outdated: the branch or its pushed commit changed; the agent was told to propose the PR again",
             self.0.id
         )
     }
@@ -303,7 +304,7 @@ impl Manager {
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
         );
-        if super::pr::current_head(workspace).await? != proposed.commit {
+        if !pull_current(workspace, proposed).await? {
             return Err(self.outdate_pull(request).await?.into());
         }
         let (forge, account) = self.workspace_forge_account(workspace).await?;
@@ -330,7 +331,7 @@ impl Manager {
     async fn outdate_pull(&self, request: &ApprovalRequest) -> Result<Moved> {
         self.retire_approval(request.clone()).await?;
         let message = format!(
-            "Approval {} to {} is outdated: the branch has newer commits. Run shoal pr open again to propose the PR at the current commit.",
+            "Approval {} to {} is outdated: the branch or its pushed commit changed. Run shoal pr open again to propose the PR at the current commit.",
             request.id,
             request.subject()
         );
@@ -466,6 +467,19 @@ impl Manager {
         let account = self.agent_account_from(&config, &settings)?;
         Ok((ForgeRepo::parse(&remote)?, account))
     }
+}
+
+/// Whether the workspace still has the proposed branch at the proposed
+/// commit, both locally and where `pr open` pushed it, so approval opens
+/// only what the user saw.
+async fn pull_current(workspace: &Workspace, proposed: &PullSpecification) -> Result<bool> {
+    if proposed.pull.head != workspace.branch
+        || super::pr::current_head(workspace).await? != proposed.commit
+    {
+        return Ok(false);
+    }
+    let pushed = crate::git::pushed_commit(&workspace.path, "origin", &workspace.branch).await?;
+    Ok(pushed.as_deref() == Some(proposed.commit.as_str()))
 }
 
 /// A pending request for `workspace` to open what `specification` describes.

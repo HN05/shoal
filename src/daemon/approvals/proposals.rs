@@ -190,13 +190,16 @@ pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Resu
     Ok((insert(tx, request)?, true))
 }
 
-/// Record the workspace's PR proposal. A pending one for the same commit is
-/// returned with the user's edits; one for another commit is outdated.
+/// Record the workspace's PR proposal. A pending one for the same branch and
+/// commit is returned with the user's edits; any other is outdated.
 pub fn propose_pull(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Recorded> {
     store::require_ready(tx, &request.workspace_id)?;
     if let Some(existing) = current(tx, &request.workspace_id, &Target::PrOpen, PR)? {
-        let commit = |r: &ApprovalRequest| r.proposed_pull().map(|p| p.commit.clone());
-        if existing.status == DecisionStatus::Pending && commit(&existing) == commit(&request) {
+        let source = |r: &ApprovalRequest| {
+            r.proposed_pull()
+                .map(|p| (p.pull.head.clone(), p.commit.clone()))
+        };
+        if existing.status == DecisionStatus::Pending && source(&existing) == source(&request) {
             return Ok((existing, false));
         }
         retire(tx, &existing)?;

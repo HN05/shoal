@@ -1899,9 +1899,9 @@ shoal deny 7 --duplicate-of-approval 4
 opened by its workspace and assigned when it was proposed with `--link` and no
 issue is assigned yet; after the workspace is removed, it opens through the
 repository's checkout with the repository's agent account. A PR is linked
-like one `pr open` opened. Approving a PR request whose branch has newer commits
-is refused, the request becomes `outdated`, and the agent is told to run `pr open`
-again. `deny` drops the proposal, with an optional `--reason` for the agent.
+like one `pr open` opened. Approving a PR request whose branch was renamed, or has
+another commit locally or where `pr open` pushed it, is refused, the request
+becomes `outdated`, and the agent is told to run `pr open` again. `deny` drops the proposal, with an optional `--reason` for the agent.
 `--duplicate-of` denies an issue proposal and adds its title and description as a
 comment on that issue; `--duplicate-of-approval` keeps them with another pending
 issue proposal, which adds them as comments when it is approved and drops them
