@@ -6,6 +6,7 @@ mod api;
 pub(crate) mod bitbucket;
 pub mod checks;
 pub mod ci;
+pub mod conventions;
 pub mod create;
 mod gitlab;
 mod glab;

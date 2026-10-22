@@ -119,6 +119,7 @@ pub struct Config {
     pub ready: repo::Ready,
     pub unready: repo::Unready,
     pub pr: repo::Pr,
+    pub issue: repo::Issue,
     pub land: repo::Land,
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
@@ -344,6 +345,14 @@ pub struct Unready {
 #[derive(Debug, Default, Serialize)]
 pub struct Pr {
     pub draft: bool,
+    /// Entries a new PR's labels must each start with.
+    pub required_labels: Vec<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct Issue {
+    /// Entries a new issue's labels must each start with.
+    pub required_labels: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -597,7 +606,8 @@ impl Config {
             review: self.review,
             ready: self.ready,
             unready: self.unready,
-            pr: self.pr,
+            pr: self.pr.clone(),
+            issue: self.issue.clone(),
             land: self.land,
             ..Default::default()
         }

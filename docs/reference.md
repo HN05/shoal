@@ -1648,6 +1648,7 @@ workspace's branch, else the default branch. It is a draft with `--draft` or
 ```toml
 [pr]
 draft = false # Default: false
+required_labels = ["area/", "type/"] # Default: []
 ```
 
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
@@ -1677,6 +1678,17 @@ workspace could record and link the new issue.
 `shoal labels` lists the workspace repository's labels as the forge reports them,
 with each one's description, and `exclusive` for a label that allows no other
 of its scope: Forgejo's exclusive labels and GitLab's `key::value` labels.
+
+`[pr] required_labels` and `[issue] required_labels` name entries that every new
+item's labels must each start with, so `area/` takes any area and `bug` only that
+label. `pr open` and `issue open` refuse a new item missing one before creating
+it, listing the repository's labels that would satisfy it; an empty list in a
+higher layer turns inherited entries off.
+
+```toml
+[issue]
+required_labels = ["type/"] # Default: []
+```
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is

@@ -6,6 +6,7 @@ use super::{
     ForgeRepo,
     account::Account,
     action::{Action, Edit},
+    conventions,
     create::{NewIssue, NewPull, PullOptions},
     item::{Item, ItemState, Opened},
     link::{ItemKind, Relation},
@@ -86,6 +87,13 @@ impl Manager {
             }
         }
         Ok(())
+    }
+
+    async fn workspace_forge_account(&self, workspace: &Workspace) -> Result<(ForgeRepo, Account)> {
+        Ok((
+            workspace_forge(workspace).await?,
+            self.agent_account(workspace).await?,
+        ))
     }
 
     /// Apply `action` and record it as the workspace's own change. The
@@ -191,8 +199,13 @@ impl Manager {
             !link || workspace.links.issue.is_none(),
             "the workspace already has a linked issue; open the issue without --link"
         );
-        let forge = workspace_forge(&workspace).await?;
-        let account = self.agent_account(&workspace).await?;
+        let required = self
+            .workspace_settings(&workspace)
+            .await?
+            .issue
+            .required_labels;
+        let (forge, account) = self.workspace_forge_account(&workspace).await?;
+        conventions::require(&forge, &account, ItemKind::Issue, &required, &issue.labels).await?;
         let item = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
@@ -221,8 +234,8 @@ impl Manager {
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
         );
-        let forge = workspace_forge(&workspace).await?;
-        let account = self.agent_account(&workspace).await?;
+        let settings = self.workspace_settings(&workspace).await?;
+        let (forge, account) = self.workspace_forge_account(&workspace).await?;
         let existing = forge.open_pull_for(&account, &workspace.branch).await?;
         let (item, created) = match existing {
             Some(number) => (
@@ -230,7 +243,10 @@ impl Manager {
                 false,
             ),
             None => {
-                let draft = self.workspace_settings(&workspace).await?.pr.draft;
+                let required = &settings.pr.required_labels;
+                conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
+                    .await?;
+                let draft = settings.pr.draft;
                 let pull = new_pull(&workspace, &forge, &account, options, draft).await?;
                 (forge.create_pull(&account, &pull).await?, true)
             }

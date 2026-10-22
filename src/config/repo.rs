@@ -105,6 +105,7 @@ pub struct RepoConfig {
     pub ready: Ready,
     pub unready: Unready,
     pub pr: Pr,
+    pub issue: Issue,
     pub land: Land,
     pub seed: Seed,
 }
@@ -386,11 +387,22 @@ pub struct Unready {
     pub draft: Option<bool>,
 }
 
-/// Whether `shoal pr open` opens new PRs as drafts.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+/// Whether `shoal pr open` opens new PRs as drafts, and the labels a new PR
+/// needs.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Pr {
     pub draft: Option<bool>,
+    /// An empty list turns inherited entries off.
+    pub required_labels: Option<Vec<String>>,
+}
+
+/// The labels a new issue needs.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Issue {
+    /// An empty list turns inherited entries off.
+    pub required_labels: Option<Vec<String>>,
 }
 
 /// Whether `shoal land` pushes the default branch to its upstream afterwards,
