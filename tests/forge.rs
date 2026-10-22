@@ -1966,3 +1966,84 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
         ]
     );
 }
+
+#[test]
+fn proposed_prs_wait_for_approval_at_their_commit() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let root = fixture.root.path();
+    let remote = root.join("remote.git");
+    git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
+    git(
+        &fixture.repo,
+        &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
+    );
+    fixture.respond(json!({
+        "GET repos/team/project/pulls?state=open&head=team%3Atopic": {"body": []},
+        "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
+        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
+    }));
+    let workspace = fixture.ok(&["inspect", "topic"])["workspace"].clone();
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    let head = || git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // The branch is pushed and the PR waits for approval at that commit.
+    let first = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    assert_eq!(first["target"], "pr_open");
+    assert_eq!(first["specification"]["commit"], head());
+    assert_eq!(first["specification"]["pull"]["head"], "topic");
+    assert_eq!(
+        git(&remote, &["rev-parse", "refs/heads/topic"]).trim(),
+        head()
+    );
+    assert!(writes(&fixture).is_empty());
+    assert_eq!(
+        fixture.ok(&["status", "topic"])["cleanup_reason"]["reason"],
+        "pr_proposal"
+    );
+
+    // A newer commit outdates the request; the agent is told to propose again.
+    git(
+        &path,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "more",
+        ],
+    );
+    let first_id = first["id"].to_string();
+    let stale = fixture.run(&["approve", &first_id]);
+    assert!(
+        String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
+        "{stale:?}"
+    );
+    assert!(writes(&fixture).is_empty());
+    assert!(messages(&fixture)[0].contains("Run shoal pr open again"));
+    let second = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    assert_ne!(second["id"], first["id"]);
+    assert_eq!(second["specification"]["commit"], head());
+
+    let approved = fixture.ok(&["approve", &second["id"].to_string(), "--title", "Fix"]);
+    let url = format!("{}/pull/9", fixture.web);
+    assert_eq!(approved["url"], url);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/pulls",
+            {"title": "Fix", "body": "", "head": "topic", "base": "main", "draft": false}])]
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "topic"])["workspace"]["links"]["prs"],
+        json!([url])
+    );
+    assert!(messages(&fixture)[0].ends_with(&format!("{url} was opened and linked.")));
+    // The outdated request stays until the workspace goes, so its number is
+    // not reused for a newer one.
+    let listed = fixture.ok(&["approvals"]);
+    assert_eq!(listed[0]["status"], "outdated");
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+}

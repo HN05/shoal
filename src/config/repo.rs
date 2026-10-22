@@ -432,6 +432,7 @@ states!(
 #[serde(default, deny_unknown_fields)]
 pub struct Approvals {
     pub issue_open: Option<Opening>,
+    pub pr_open: Option<Opening>,
 }
 
 /// Repository value for the global `[cleanup.pr]`.

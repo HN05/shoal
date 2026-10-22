@@ -293,6 +293,7 @@ impl Effective {
             },
             approvals: Approvals {
                 issue_open: built_in(merged.approvals.issue_open, "approvals.issue_open")?,
+                pr_open: built_in(merged.approvals.pr_open, "approvals.pr_open")?,
             },
             seed: merged.seed,
         })
@@ -380,6 +381,7 @@ fn built_in() -> RepoConfig {
         },
         approvals: config::repo::Approvals {
             issue_open: Some(Approvals::default().issue_open),
+            pr_open: Some(Approvals::default().pr_open),
         },
         ..Default::default()
     }
@@ -685,6 +687,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(land.push),
         scalar!(land.requires_approval),
         scalar!(approvals.issue_open),
+        scalar!(approvals.pr_open),
         scalar!(seed.cmd),
         list!(seed.paths),
     ];
@@ -711,7 +714,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
 [cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\n[land]\npush = true\nrequires_approval = false\n\
-[approvals]\nissue_open = 'propose'\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
+[approvals]\nissue_open = 'propose'\npr_open = 'propose'\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -1050,6 +1053,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             land.push.is_some(),
             land.requires_approval.is_some(),
             approvals.issue_open.is_some(),
+            approvals.pr_open.is_some(),
             seed.cmd.is_some(),
             presets.is_some(),
         ] {

@@ -456,7 +456,7 @@ without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error` and `doctor` reports the error. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
@@ -1665,8 +1665,9 @@ not verify or assert a merge. Completion without cleanup keeps the workspace fro
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
 reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#workspace-holds) it. `done` closes the workspace's open
-[questions](#questions), so completion and PR cleanup wait only while a hold or a
-question asked afterwards remains.
+[questions](#questions), so completion and PR cleanup wait only while a hold, a
+question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)
+remains.
 
 Only `done` completes an assignment; issue closure and merged PRs do not. A
 merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
@@ -1725,7 +1726,7 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions, child workspaces and queued agent launches do; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions, pending PR proposals, child workspaces and queued agent launches do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 Upgrading turns a `shoal continue` from earlier versions into a hold named
@@ -1862,21 +1863,27 @@ the workspace could record and link the new issue.
 
 #### Approval for agent issues and PRs
 
-A repository whose issues other people see can require your approval before an
-agent opens one. `"direct"`, the default, opens at once; `"propose"` makes
-`issue open` in a workspace process record an
+A repository whose issues and PRs other people see can require your approval
+before an agent opens one. `"direct"`, the default, opens at once; `"propose"`
+makes `issue open` or `pr open` in a workspace process record an
 [approval request](#resource-approvals) instead. Unscoped callers always open
 directly.
 
 ```toml
 [approvals]
 issue_open = "propose" # Default: "direct"
+pr_open = "propose" # Default: "direct"
 ```
 
 A proposed `issue open` records every option it was given, with the workspace,
 branch, commit and agent; running it again unchanged returns the same request.
 The request belongs to the repository, so it stays when the workspace is removed.
-The command exits 0 with JSON `proposed`, the request, and the agent continues
+A proposed `pr open` pushes the branch as usual, links the branch's open PR if
+there is one, and otherwise records the PR it would open, with its defaults
+filled in, at the branch's current commit. Running it again at the same commit
+returns that request; at a newer commit it replaces it, and the old one stays
+`outdated`. A pending PR request keeps the workspace from automatic cleanup.
+Both commands exit 0 with JSON `proposed`, the request, and the agent continues
 its work.
 
 ```sh
@@ -1891,13 +1898,16 @@ shoal deny 7 --duplicate-of-approval 4
 `--body` or `--body-file` replacing what was proposed. An issue is recorded as
 opened by its workspace and assigned when it was proposed with `--link` and no
 issue is assigned yet; after the workspace is removed, it opens through the
-repository's checkout with the repository's agent account. `deny` drops the
-proposal, with an optional `--reason` for the agent. `--duplicate-of` denies an
-issue proposal and adds its title and description as a comment on that issue;
-`--duplicate-of-approval` keeps them with another pending issue proposal, which
-adds them as comments when it is approved and drops them when it is denied. A
-decided proposal is no longer listed, and the decision reaches the workspace's
-agent as an [agent message](#agent-messages) naming the opened item.
+repository's checkout with the repository's agent account. A PR is linked
+like one `pr open` opened. Approving a PR request whose branch has newer commits
+is refused, the request becomes `outdated`, and the agent is told to run `pr open`
+again. `deny` drops the proposal, with an optional `--reason` for the agent.
+`--duplicate-of` denies an issue proposal and adds its title and description as a
+comment on that issue; `--duplicate-of-approval` keeps them with another pending
+issue proposal, which adds them as comments when it is approved and drops them
+when it is denied. A decided proposal is no longer listed, and the decision
+reaches the workspace's agent as an [agent message](#agent-messages) naming
+the opened item.
 
 #### Repository conventions
 
@@ -2130,7 +2140,7 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
 it when it expires.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
-simulator leases, permits, holds, open [questions](#questions) and failed checks block cleanup. Pushed means reachable
+simulator leases, permits, holds, open [questions](#questions), pending PR proposals and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, or merged into the default branch as removal
 decides; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
@@ -2694,7 +2704,7 @@ still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
 these requests, land requests from a scoped `shoal land`,
-[proposed issues](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals <workspace>` filters
+[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown
@@ -2726,7 +2736,7 @@ name preserves the request; changing its settings or reason requires release fir
 Release cancels a pending or denied request even without a lease. Changed effective
 settings cannot reuse a grant. Requests survive restart and failed removal and are
 deleted with the workspace, except proposed issues, which belong to the repository;
-they do not prevent idle cleanup.
+only a pending PR proposal prevents idle cleanup.
 
 ### Shared readers and exclusive writers
 

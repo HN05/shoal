@@ -402,15 +402,18 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds, open questions, child workspaces and queued agent launches,
-    /// which keep a workspace from every unattended removal, completion and
-    /// PR cleanup included.
+    /// Holds, open questions, a PR proposal, child workspaces and queued
+    /// agent launches, which keep a workspace from every unattended removal,
+    /// completion and PR cleanup included.
     pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.has_holds(id).await? {
             return Ok(Some(CleanupReason::Held));
         }
         if self.has_open_questions(id).await? {
             return Ok(Some(CleanupReason::Question));
+        }
+        if self.has_pending_pull_proposal(id).await? {
+            return Ok(Some(CleanupReason::PrProposal));
         }
         if !self.workspace(id).await?.child_workspaces.is_empty() {
             return Ok(Some(CleanupReason::Children));
@@ -772,6 +775,12 @@ impl Manager {
             ensure!(
                 !self.has_open_questions(&workspace.id).await?,
                 "a question waits for the user; retaining workspace"
+            );
+            // The reservation refuses new PR proposals, so this covers one
+            // made after the sweep's own check.
+            ensure!(
+                !self.has_pending_pull_proposal(&workspace.id).await?,
+                "a PR proposal waits for approval; retaining workspace"
             );
             ensure!(
                 check.workspace.child_workspaces.is_empty(),

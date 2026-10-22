@@ -42,7 +42,7 @@ pub struct PullOptions {
 }
 
 /// A PR to open from `head` into `base`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewPull {
     pub title: String,
     pub body: String,

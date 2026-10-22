@@ -18,7 +18,7 @@ use crate::{
 
 pub mod proposals;
 
-use proposals::IssueSpecification;
+use proposals::{IssueSpecification, PullSpecification};
 
 states!(
     #[derive(Default)]
@@ -38,7 +38,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `land` or `issue_open`.
+/// `secret/<name>`, `land`, `issue_open` or `pr_open`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -54,6 +54,8 @@ pub enum Target {
     /// Opening an issue a scoped caller proposed; the repository owns the
     /// request, so it outlives the workspace.
     IssueOpen,
+    /// Opening a PR for the workspace branch at one commit.
+    PrOpen,
 }
 
 /// The name of a workspace's single land request.
@@ -68,6 +70,7 @@ impl fmt::Display for Target {
             Self::Secret(name) => write!(f, "secret/{name}"),
             Self::Land => f.write_str("land"),
             Self::IssueOpen => f.write_str("issue_open"),
+            Self::PrOpen => f.write_str("pr_open"),
         }
     }
 }
@@ -80,6 +83,7 @@ impl FromStr for Target {
             "simulator" => return Ok(Self::Simulator),
             "land" => return Ok(Self::Land),
             "issue_open" => return Ok(Self::IssueOpen),
+            "pr_open" => return Ok(Self::PrOpen),
             _ => {}
         }
         if let Some(name) = text.strip_prefix("port/")
@@ -112,7 +116,7 @@ impl Target {
     /// Whether the request proposes a forge write the user may edit before
     /// approving, rather than granting access.
     pub fn is_proposal(&self) -> bool {
-        matches!(self, Self::IssueOpen)
+        matches!(self, Self::IssueOpen | Self::PrOpen)
     }
 }
 
@@ -128,6 +132,7 @@ pub enum Specification {
     Secret(SecretSpecification),
     Land(LandSpecification),
     Issue(IssueSpecification),
+    Pull(PullSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,7 +218,7 @@ pub struct ApprovalRequest {
     /// holds a grant for the same thing; the user decides without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decider: Option<String>,
-    /// The issue an approved proposal opened, or the issue a denied
+    /// The issue or PR an approved proposal opened, or the issue a denied
     /// one duplicates; decided proposals are no longer stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
@@ -389,7 +394,7 @@ impl ApprovalRequest {
     }
 
     /// What the user is asked to decide: the target and lease name, the
-    /// branch and commit to land, or the issue to open.
+    /// branch and commit to land, or the issue or PR to open.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Land, Specification::Land(land)) => {
@@ -398,6 +403,10 @@ impl ApprovalRequest {
             (Target::IssueOpen, Specification::Issue(issue)) => {
                 format!("open issue \"{}\"", issue.issue.title)
             }
+            (Target::PrOpen, Specification::Pull(pull)) => format!(
+                "open PR \"{}\" from {} at {}",
+                pull.pull.title, pull.pull.head, pull.commit
+            ),
             _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
         }
     }
@@ -626,6 +635,14 @@ impl Manager {
             .await
     }
 
+    /// Whether a PR proposal of the workspace waits for the user's decision.
+    pub async fn has_pending_pull_proposal(&self, workspace_id: &str) -> Result<bool> {
+        let id = workspace_id.to_owned();
+        self.store
+            .run(move |db| proposals::pull_pending(db, &id))
+            .await
+    }
+
     /// [`release`] in its own transaction, once the workspace is ready.
     pub async fn release_approval(
         &self,
@@ -708,7 +725,7 @@ impl Manager {
         }
         ensure!(
             details == proposals::ProposalDecision::default(),
-            "only issue proposals take a title, body, reason or duplicate"
+            "only issue and PR proposals take a title, body, reason or duplicate"
         );
         let decision = self.record_decision(request, approve).await?;
         if decision.new {

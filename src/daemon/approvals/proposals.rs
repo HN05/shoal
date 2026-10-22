@@ -5,12 +5,19 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 
-use super::{ApprovalRequest, DecisionStatus, Specification, Target, by_key, record_row};
+use super::{
+    ApprovalRequest, DecisionStatus, Specification, Target, by_key, current, record_row, retire,
+};
 use crate::{
     daemon::store,
-    forge::{items::attach::Attachment, items::create::NewIssue},
+    forge::{
+        items::attach::Attachment,
+        items::create::{NewIssue, NewPull},
+    },
 };
 
+/// The name of a workspace's single PR proposal.
+pub const PR: &str = "branch";
 /// The name every issue proposal shares; the repository holds any number.
 pub const ISSUE: &str = "issue";
 
@@ -39,6 +46,17 @@ pub struct Finding {
     pub body: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<Attachment>,
+}
+
+/// The PR `shoal pr open` would open, bound to the branch commit the user
+/// approves; a newer commit outdates it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PullSpecification {
+    pub pull: NewPull,
+    pub commit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
 }
 
 /// What the user decides about a proposal besides yes or no.
@@ -106,10 +124,19 @@ impl ApprovalRequest {
         }
     }
 
+    /// The proposed PR, for a PR proposal.
+    pub fn proposed_pull(&self) -> Option<&PullSpecification> {
+        match &self.specification {
+            Specification::Pull(pull) => Some(pull),
+            _ => None,
+        }
+    }
+
     /// Apply the user's edits to the proposed title and description.
     pub fn edit(&mut self, decision: &ProposalDecision) {
         let (title, body) = match &mut self.specification {
             Specification::Issue(issue) => (&mut issue.issue.title, &mut issue.issue.body),
+            Specification::Pull(pull) => (&mut pull.pull.title, &mut pull.pull.body),
             _ => return,
         };
         if let Some(edited) = &decision.title {
@@ -145,6 +172,20 @@ pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Resu
         return Ok((existing, false));
     }
     request.repository_id = Some(repository);
+    Ok((insert(tx, request)?, true))
+}
+
+/// Record the workspace's PR proposal. A pending one for the same commit is
+/// returned with the user's edits; one for another commit is outdated.
+pub fn propose_pull(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Recorded> {
+    store::require_ready(tx, &request.workspace_id)?;
+    if let Some(existing) = current(tx, &request.workspace_id, &Target::PrOpen, PR)? {
+        let commit = |r: &ApprovalRequest| r.proposed_pull().map(|p| p.commit.clone());
+        if existing.status == DecisionStatus::Pending && commit(&existing) == commit(&request) {
+            return Ok((existing, false));
+        }
+        retire(tx, &existing)?;
+    }
     Ok((insert(tx, request)?, true))
 }
 
@@ -211,6 +252,13 @@ pub fn remove(tx: &Transaction<'_>, key: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether the workspace's PR proposal waits for the user, which keeps the
+/// workspace from unattended removal.
+pub fn pull_pending(db: &Connection, workspace: &str) -> Result<bool> {
+    Ok(current(db, workspace, &Target::PrOpen, PR)?
+        .is_some_and(|request| request.status == DecisionStatus::Pending))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,10 +275,11 @@ mod tests {
             duplicate_of: Some(Duplicate::Issue("12".into())),
             ..ProposalDecision::default()
         };
-        assert!(edit.validate(&Target::IssueOpen, true).is_ok());
+        assert!(edit.validate(&Target::PrOpen, true).is_ok());
         assert!(edit.validate(&Target::IssueOpen, false).is_err());
         assert!(duplicate.validate(&Target::IssueOpen, false).is_ok());
         assert!(duplicate.validate(&Target::IssueOpen, true).is_err());
+        assert!(duplicate.validate(&Target::PrOpen, false).is_err());
         let blank = ProposalDecision {
             title: Some(" ".into()),
             ..ProposalDecision::default()

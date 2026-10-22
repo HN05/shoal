@@ -9,7 +9,10 @@ use crate::{
     daemon::{
         approvals::{
             ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
-            proposals::{self, Duplicate, Finding, IssueSpecification, ProposalDecision, Recorded},
+            proposals::{
+                self, Duplicate, Finding, IssueSpecification, ProposalDecision, PullSpecification,
+                Recorded,
+            },
         },
         store,
         workspace::Manager,
@@ -18,7 +21,7 @@ use crate::{
         ForgeRepo,
         account::Account,
         items::action::Action,
-        items::create::NewIssue,
+        items::create::{NewIssue, NewPull},
         items::item::{Item, Opened},
         items::link::ItemKind,
     },
@@ -48,6 +51,22 @@ pub struct Proposer {
     pub agent: Option<String>,
 }
 
+/// The branch moved past the commit a PR proposal was made for.
+#[derive(Debug)]
+struct Moved(Box<ApprovalRequest>);
+
+impl std::fmt::Display for Moved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "approval request {} is outdated: the branch has newer commits; the agent was told to propose the PR again",
+            self.0.id
+        )
+    }
+}
+
+impl std::error::Error for Moved {}
+
 impl Manager {
     /// Record `issue` for the user's approval instead of opening it.
     pub(super) async fn propose_issue(
@@ -73,6 +92,25 @@ impl Manager {
             specification,
         );
         self.record_proposal(workspace, request, proposals::propose_issue)
+            .await
+    }
+
+    /// Record `pull` at the branch's `commit` for the user's approval instead
+    /// of opening it.
+    pub(super) async fn propose_pull(
+        &self,
+        workspace: &Workspace,
+        pull: NewPull,
+        commit: String,
+        proposer: Proposer,
+    ) -> Result<Proposed> {
+        let specification = Specification::Pull(PullSpecification {
+            pull,
+            commit,
+            agent: proposer.agent,
+        });
+        let request = proposal(workspace, Target::PrOpen, proposals::PR, specification);
+        self.record_proposal(workspace, request, proposals::propose_pull)
             .await
     }
 
@@ -170,6 +208,10 @@ impl Manager {
         }
         let (item, linked) = match request.target {
             Target::IssueOpen => self.open_proposed_issue(&request, workspace).await?,
+            Target::PrOpen => {
+                let workspace = workspace.context("the workspace that proposed the PR is gone")?;
+                self.open_proposed_pull(&request, workspace).await?
+            }
             _ => bail!("approval request {} is not a proposal", request.id),
         };
         request.status = DecisionStatus::Approved;
@@ -229,6 +271,56 @@ impl Manager {
                 })?;
         }
         Ok((item, linked))
+    }
+
+    /// Open the proposed PR, or link the branch's open PR, as the agent
+    /// account. A branch with newer commits outdates the request instead.
+    async fn open_proposed_pull(
+        &self,
+        request: &ApprovalRequest,
+        workspace: &Workspace,
+    ) -> Result<(Item, bool)> {
+        let proposed = request
+            .proposed_pull()
+            .context("the PR proposal has no PR")?;
+        self.verify_worktree(workspace).await?;
+        ensure!(
+            workspace.state.accepts_links(),
+            "workspace cannot accept a PR in its current state"
+        );
+        if super::pr::current_head(workspace).await? != proposed.commit {
+            return Err(self.outdate_pull(request).await?.into());
+        }
+        let (forge, account) = self.workspace_forge_account(workspace).await?;
+        let item = match forge.open_pull_for(&account, &workspace.branch).await? {
+            Some(number) => {
+                let item = forge.read(&account, ItemKind::Pr, number).await?.item;
+                let watch = super::pr::Action::Watch {
+                    url: item.url.clone(),
+                };
+                self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
+                    .await
+                    .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+                return Ok((item, true));
+            }
+            None => forge.create_pull(&account, &proposed.pull).await?,
+        };
+        let (linked, _) = self
+            .keep_created(workspace, ItemKind::Pr, &item, true)
+            .await?;
+        Ok((item, linked))
+    }
+
+    /// Keep the request as outdated and tell the agent to propose again.
+    async fn outdate_pull(&self, request: &ApprovalRequest) -> Result<Moved> {
+        self.retire_approval(request.clone()).await?;
+        let message = format!(
+            "Approval {} to {} is outdated: the branch has newer commits. Run shoal pr open again to propose the PR at the current commit.",
+            request.id,
+            request.subject()
+        );
+        self.tell_workspace(&request.workspace_id, message).await;
+        Ok(Moved(Box::new(request.clone())))
     }
 
     /// Deny the proposal, adding an issue's finding to what it duplicates.

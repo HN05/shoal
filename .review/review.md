@@ -118,16 +118,16 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds, open questions, child workspaces and queued agent launches block
-  every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
+  and PR cleanup. Holds, open questions, a pending PR proposal, child workspaces and queued agent
+  launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
   is false; approval never skips a landing check and lands only the approved commit.
-  Under `[approvals] issue_open = "propose"`, a scoped `issue open` records a
-  proposal instead of opening; approval opens it as the agent account through the
-  normal open path, and the proposal belongs to the repository and outlives its
-  workspace. This is cooperative,
+  Under `[approvals] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
+  `pr open` records a proposal instead of opening; approval opens it as the agent
+  account through the normal open path, a PR only at its recorded commit, and an
+  issue proposal belongs to the repository and outlives its workspace. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

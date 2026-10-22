@@ -361,6 +361,7 @@ pub struct Issue {
 #[derive(Debug, Default, Serialize)]
 pub struct Approvals {
     pub issue_open: repo::Opening,
+    pub pr_open: repo::Opening,
 }
 
 #[derive(Debug, Serialize)]

@@ -48,13 +48,16 @@ existing issue with `shoal --json issue list <words>` (`--state all`, `--label`,
 opening a duplicate. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
-A repository can require the user's approval for issues you open
-(`[approvals]`). Then `issue open` exits 0 with `proposed`, an approval request,
-instead of the issue. Continue your work and do not open the issue another way.
-The user may edit the title and description, and the decision arrives as a
-message: approval names the opened issue; denial may give a reason or name the
+A repository can require the user's approval for issues and PRs you open
+(`[approvals]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
+approval request, instead of the item; `pr open` still pushes. Continue your
+work and do not open the item another way. The user may edit the title and
+description, and the decision arrives as a message: approval names the opened
+item, which a PR's watch then follows; denial may give a reason or name the
 issue it duplicates. A proposed issue stays when your workspace is removed, so
-proposing follow-ups before `shoal done` is fine.
+proposing follow-ups before `shoal done` is fine. A pending PR proposal keeps
+your workspace; new commits outdate it, so run `pr open` again after pushing
+more work, and when the message says so.
 
 Every link names its relation last: `assigned` for the work you are doing,
 `opened` for an item you created another way, `related` for one the work relates to.

@@ -288,14 +288,20 @@ impl Manager {
 impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
-    /// unlinked.
-    pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<OpenOutcome> {
+    /// unlinked. A `proposer` records a new PR for the user's approval
+    /// instead when `[approvals] pr_open` says so.
+    pub async fn open_pull(
+        &self,
+        selector: &str,
+        options: PullOptions,
+        proposer: Option<Proposer>,
+    ) -> Result<OpenOutcome> {
         // Cleanup holds the gate, so it cannot remove the workspace between
         // opening the PR and linking it.
         let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        super::pr::current_head(&workspace).await?;
+        let head = super::pr::current_head(&workspace).await?;
         anyhow::ensure!(
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
@@ -311,6 +317,12 @@ impl Manager {
                     .await?;
                 let pull =
                     new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?;
+                if let Some(proposer) =
+                    proposer.filter(|_| settings.approvals.pr_open == Opening::Propose)
+                {
+                    let proposed = self.propose_pull(&workspace, pull, head, proposer).await?;
+                    return Ok(OpenOutcome::Proposed(proposed));
+                }
                 (forge.create_pull(&account, &pull).await?, Some(pull.body))
             }
         };
@@ -608,7 +620,7 @@ mod tests {
             "{error:#}"
         );
         let error = manager
-            .open_pull(&workspace.id, PullOptions::default())
+            .open_pull(&workspace.id, PullOptions::default(), None)
             .await
             .unwrap_err();
         assert!(

@@ -226,6 +226,7 @@ post = true
 [land]
 push = false
 
-# Whether issues agents open wait for your approval: "direct" or "propose".
+# Whether issues and PRs agents open wait for your approval: "direct" or "propose".
 [approvals]
 issue_open = "direct"
+pr_open = "direct"

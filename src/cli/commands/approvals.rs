@@ -183,6 +183,8 @@ fn describe(request: &ApprovalRequest) -> String {
 fn details(request: &ApprovalRequest) -> Vec<String> {
     let (labels, body) = if let Some(proposed) = request.proposed_issue() {
         (&proposed.issue.labels, &proposed.issue.body)
+    } else if let Some(proposed) = request.proposed_pull() {
+        (&proposed.pull.labels, &proposed.pull.body)
     } else {
         return vec![request.specification.to_string()];
     };

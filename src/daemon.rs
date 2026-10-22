@@ -596,7 +596,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Workspace(workspace)
         }
         Method::OpenPull { workspace, options } => {
-            Body::Opened(manager.open_pull(&workspace, options).await?)
+            let proposer = manager.proposer(caller).await;
+            Body::Opened(manager.open_pull(&workspace, options, proposer).await?)
         }
         Method::OpenIssue {
             workspace,

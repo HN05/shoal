@@ -71,7 +71,7 @@ when behavior changes, distinguishing decisions from proposals.
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds and open questions keep them. Automatic removal is only for idle,
+  with commits; only holds, open questions and pending PR proposals keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed or merged into the default branch (including
   squash and rebase merges), or deleted worktrees. Unattended removals except for disk
   space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
@@ -121,10 +121,10 @@ when behavior changes, distinguishing decisions from proposals.
   A scoped land
   is a request bound to the branch HEAD unless `[land] requires_approval` is
   false; approval lets the retried land proceed under every landing check.
-  `[approvals] issue_open = "propose"` makes a scoped `issue open` an approval
-  request the user may edit, deny or mark as a duplicate; approval opens it
-  through the normal open path. Issue proposals belong to the repository and
-  outlive the workspace.
+  `[approvals] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
+  `pr open` an approval request the user may edit, deny or mark as a duplicate;
+  approval opens it through the normal open path, a PR only at its recorded
+  commit. Issue proposals belong to the repository and outlive the workspace.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.
