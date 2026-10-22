@@ -52,7 +52,7 @@ impl std::fmt::Display for Update {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct Snapshot {
+pub struct Snapshot {
     comments: BTreeMap<String, String>,
     checks: BTreeMap<String, Check>,
     conflict: Option<bool>,
@@ -90,7 +90,7 @@ struct Check {
 
 /// A local merge of `head` into `base`; `conflict` reports its conflicts
 /// and is empty when it merges cleanly.
-pub(crate) struct MergeCheck {
+pub struct MergeCheck {
     pub head: String,
     pub base: String,
     pub conflict: Option<String>,
@@ -98,7 +98,7 @@ pub(crate) struct MergeCheck {
 
 impl Snapshot {
     /// A local merge check, observed like PR mergeability.
-    pub(crate) fn merge_check(check: Result<MergeCheck>) -> Self {
+    pub fn merge_check(check: Result<MergeCheck>) -> Self {
         let mut snapshot = Self::default();
         match check {
             Ok(check) => {
@@ -118,7 +118,7 @@ impl Snapshot {
         snapshot
     }
 
-    pub(crate) fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
+    pub fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
         let mut updates = Vec::new();
         let mut emit = |kind, message, check| {
             updates.push(Update {
@@ -219,7 +219,7 @@ impl Snapshot {
     /// base is taken once two polls in a row see it there, since the forge may
     /// still show its result for the previous one. Unknown mergeability keeps
     /// the previous observation.
-    pub(crate) fn schedule_conflict_reports(&mut self, previous: &Self) {
+    pub fn schedule_conflict_reports(&mut self, previous: &Self) {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
             self.conflict_at = previous.conflict_at.clone();
@@ -234,7 +234,7 @@ impl Snapshot {
         };
     }
 
-    pub(crate) fn retain_failed_checks(&mut self, previous: &Self) {
+    pub fn retain_failed_checks(&mut self, previous: &Self) {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
@@ -254,7 +254,7 @@ impl Snapshot {
 
     /// Take entries in `authored` that `next` shows new or changed as already
     /// seen, and stop tracking each one taken.
-    pub(crate) fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
+    pub fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
         authored.retain(|key| match next.comments.get(key) {
             Some(comment) if self.comments.get(key) != Some(comment) => {
                 self.comments.insert(key.clone(), comment.clone());
@@ -264,19 +264,19 @@ impl Snapshot {
         });
     }
 
-    pub(crate) fn state(&self) -> &str {
+    pub fn state(&self) -> &str {
         &self.state
     }
 
     /// Take `state` as already seen, even before a first observation, whose
     /// other activity is still reported.
-    pub(crate) fn adopt_state(&mut self, state: &str) {
+    pub fn adopt_state(&mut self, state: &str) {
         state.clone_into(&mut self.state);
     }
 
     /// Keeps each unchanged failure's report time until the interval passes,
     /// so `changes` reports a persisting failure again once per interval.
-    pub(crate) fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
+    pub fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
         self.reported = self
             .errors
             .iter()

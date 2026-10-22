@@ -51,7 +51,7 @@ pub struct Opened {
 
 /// An item with the forge-specific facts some actions need.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Current {
+pub struct Current {
     pub item: Item,
     /// GitHub's GraphQL ID, which its draft mutations take.
     pub node_id: Option<String>,

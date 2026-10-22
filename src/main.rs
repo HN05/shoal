@@ -7,7 +7,6 @@ mod config;
 mod daemon;
 mod env;
 mod execution;
-mod forge;
 mod fsutil;
 mod git;
 mod git_profile;
@@ -35,6 +34,7 @@ mod validate;
 
 use cli::Cli;
 use serde_json::json;
+use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 
 fn main() {

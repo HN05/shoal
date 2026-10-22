@@ -236,10 +236,7 @@ pub(super) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(Stri
                 .iter()
                 .map(|field| ((*field).to_owned(), item[*field].clone()))
                 .collect();
-            Ok((
-                crate::forge::updates::id_text(id),
-                Value::from(fields).to_string(),
-            ))
+            Ok((crate::updates::id_text(id), Value::from(fields).to_string()))
         })
         .collect()
 }
@@ -292,7 +289,7 @@ fn list_item(item: &Value, field: &str) -> Result<list::Item> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::item::{Item, PrSummary};
+    use crate::item::{Item, PrSummary};
     use serde_json::json;
 
     fn pull(head_repository: Option<&str>) -> Current {

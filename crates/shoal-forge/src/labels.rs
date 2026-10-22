@@ -17,7 +17,7 @@ pub struct Label {
 
 impl ForgeRepo {
     /// Every label of the repository, in the forge's order; Bitbucket has none.
-    pub(crate) async fn labels(&self, account: &Account) -> Result<Vec<Label>> {
+    pub async fn labels(&self, account: &Account) -> Result<Vec<Label>> {
         if self.kind == ForgeKind::Bitbucket {
             return Ok(Vec::new());
         }

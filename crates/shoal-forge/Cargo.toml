@@ -1,0 +1,30 @@
+[package]
+name = "shoal-forge"
+version = "0.1.0"
+description = "Issues, PRs, reviews and CI on GitHub, Forgejo, Gitea, GitLab and Bitbucket"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Store typed names in SQLite columns.
+rusqlite = ["dep:rusqlite"]
+# Take typed names as CLI values.
+clap = ["dep:clap"]
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+clap = { workspace = true, optional = true }
+futures-util.workspace = true
+rusqlite = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+shoal-subprocess.workspace = true
+tokio = { workspace = true, features = ["io-util", "process", "sync", "time"] }
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

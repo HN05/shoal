@@ -11,11 +11,11 @@ pub(crate) enum Transport<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct RemoteUrl<'a> {
+pub struct RemoteUrl<'a> {
     source: &'a str,
     pub host: Option<&'a str>,
     pub path: Option<&'a str>,
-    pub transport: Transport<'a>,
+    pub(crate) transport: Transport<'a>,
 }
 
 impl<'a> RemoteUrl<'a> {
@@ -62,7 +62,7 @@ impl<'a> RemoteUrl<'a> {
 }
 
 /// Naming also accepts local paths and retains the historical colon separator.
-pub(crate) fn source_name(source: &str) -> &str {
+pub fn source_name(source: &str) -> &str {
     let source = source.trim_end_matches('/');
     repository_path(source.rsplit(['/', ':']).next().unwrap_or(source))
 }
@@ -75,7 +75,7 @@ fn repository_path(path: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::ForgeRepo;
+    use crate::ForgeRepo;
 
     #[test]
     fn registration_and_forge_policies_share_parsed_syntax() {

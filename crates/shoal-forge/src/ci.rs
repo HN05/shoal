@@ -70,7 +70,7 @@ enum Operation {
 
 /// The repository endpoints to POST to, in order, and the checks they reach.
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct Plan {
+pub struct Plan {
     pub endpoints: Vec<String>,
     pub checks: Vec<String>,
 }
@@ -88,7 +88,7 @@ impl CiAction {
 impl ForgeRepo {
     /// What applying `action` to the named checks on the open PR's head, or to
     /// every CI job it applies to, sends and reaches.
-    pub(crate) async fn plan_ci(
+    pub async fn plan_ci(
         &self,
         account: &Account,
         number: u64,
@@ -112,11 +112,7 @@ impl ForgeRepo {
 
     /// POST to each endpoint in order, stopping at the first failure, and
     /// return how many succeeded with the outcome.
-    pub(crate) async fn post_ci(
-        &self,
-        account: &Account,
-        endpoints: &[String],
-    ) -> (usize, Result<()>) {
+    pub async fn post_ci(&self, account: &Account, endpoints: &[String]) -> (usize, Result<()>) {
         for (sent, endpoint) in endpoints.iter().enumerate() {
             let request = Request::new(HttpMethod::Post, self.repo_endpoint(endpoint), None);
             if let Err(error) = self.send(account, &request).await {

@@ -1,5 +1,5 @@
 use super::{Check, MergeRevision, Snapshot};
-use crate::forge::{
+use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
     gh,
@@ -11,7 +11,7 @@ use crate::forge::{
 use anyhow::{Context, Result, ensure};
 
 impl ForgeRepo {
-    pub(crate) async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
+    pub async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_issue_activity(account, number).await,
             ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
@@ -72,7 +72,7 @@ impl ForgeRepo {
         Ok(snapshot)
     }
 
-    pub(crate) async fn activity(
+    pub async fn activity(
         &self,
         account: &Account,
         number: u64,
@@ -153,7 +153,7 @@ impl ForgeRepo {
 
 impl ForgeRepo {
     /// Each failed lookup is recorded on the result instead of failing it.
-    pub(crate) async fn pr_status(&self, account: &Account, url: &str) -> PrStatus {
+    pub async fn pr_status(&self, account: &Account, url: &str) -> PrStatus {
         let result = async {
             let (number, _) = self.pull(url)?;
             match self.kind {
@@ -377,7 +377,7 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::updates::UpdateKind;
+    use crate::updates::UpdateKind;
     use serde_json::json;
 
     /// An open Forgejo PR at `head` with `conflict` and `checks` recorded.
@@ -511,10 +511,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("deploy", "success"), ("rust", "in_progress")]
         );
-        assert_eq!(
-            status.review,
-            Some(crate::forge::status::ReviewState::Approved)
-        );
+        assert_eq!(status.review, Some(crate::status::ReviewState::Approved));
         assert!(status.errors.is_empty());
 
         pull["reviews"][0]["state"] = json!("LATER");

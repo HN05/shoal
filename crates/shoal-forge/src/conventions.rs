@@ -10,7 +10,7 @@ use super::{ForgeKind, ForgeRepo, account::Account, item::Item, labels::Label, l
 
 /// Refuse a new item of `kind` whose labels leave a required entry unmet,
 /// naming the repository's labels that would meet it.
-pub(crate) async fn require(
+pub async fn require(
     forge: &ForgeRepo,
     account: &Account,
     kind: ItemKind,
@@ -30,7 +30,7 @@ pub(crate) async fn require(
 /// or any label where the repository has some, and with its `body`, the
 /// headings of the forge's templates in `worktree`. A failed lookup leaves
 /// its warning out rather than failing the change that already happened.
-pub(crate) async fn warnings(
+pub async fn warnings(
     forge: &ForgeRepo,
     account: &Account,
     worktree: &Path,
@@ -341,7 +341,7 @@ fn described(label: &Label) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::item::ItemState;
+    use crate::item::ItemState;
 
     fn item(kind: ItemKind) -> Item {
         Item {

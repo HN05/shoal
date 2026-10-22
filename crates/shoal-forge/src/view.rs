@@ -95,7 +95,7 @@ pub struct ReviewComment {
 impl ForgeRepo {
     /// The item at `url` with its discussion when `comments` is set; PRs also
     /// carry the state `shoal status` reports.
-    pub(crate) async fn view(
+    pub async fn view(
         &self,
         account: &Account,
         kind: ItemKind,

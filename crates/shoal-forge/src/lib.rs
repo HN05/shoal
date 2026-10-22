@@ -1,10 +1,11 @@
-//! Forge identity and issue/PR queries using the user's gh/fj login; the one
-//! write retargets stacked PRs, through the REST transport in `api`.
-pub(crate) mod account;
+//! Issues, PRs, review threads and CI on the forge a Git remote names,
+//! through each forge's own CLI login or REST API. Callers choose the
+//! [`account::Account`] a request acts as; this crate never decides who may act.
+pub mod account;
 pub mod action;
 mod api;
 pub mod attach;
-pub(crate) mod bitbucket;
+pub mod bitbucket;
 pub mod checks;
 pub mod ci;
 pub mod conventions;
@@ -19,9 +20,10 @@ pub mod link;
 pub mod list;
 mod locator;
 pub mod programs;
-pub(crate) mod remote_url;
+pub mod remote_url;
 mod rest;
 mod retarget;
+mod state;
 pub mod status;
 mod tea;
 mod thread;
@@ -37,7 +39,7 @@ use remote_url::{RemoteUrl, Transport};
 /// Classify before resolving a repository; validate identity and number at lookup.
 /// In particular, zero and overflowing numbers still use number-based targeting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum IssueInput {
+pub enum IssueInput {
     Number,
     Url,
     Invalid,
@@ -56,7 +58,7 @@ impl IssueInput {
 }
 
 #[derive(Debug)]
-pub(crate) struct ForgeRepo {
+pub struct ForgeRepo {
     pub host: String,
     pub path: String,
     kind: ForgeKind,
@@ -268,7 +270,7 @@ async fn github_issue_details(
 
 /// A PR's branches, for checking it out locally.
 #[derive(Debug, PartialEq)]
-pub(crate) struct PullRequest {
+pub struct PullRequest {
     pub number: u64,
     pub title: String,
     pub url: String,
@@ -378,7 +380,7 @@ async fn gh(account: &account::Account, args: &[&str], query: Query) -> Result<S
         Query::Issue | Query::List | Query::View => 30,
         Query::Pull(_) => 20,
     };
-    let output = crate::subprocess::Run::new(command)
+    let output = shoal_subprocess::Run::new(command)
         .timeout(std::time::Duration::from_secs(seconds))
         .capture()
         .await;
@@ -389,16 +391,16 @@ impl Query {
     fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
         match self {
             Self::Issue => {
-                crate::subprocess::checked_output(tool, output).with_context(|| {
+                shoal_subprocess::checked_output(tool, output).with_context(|| {
                     format!("{tool} issue lookup failed; install it and check `{tool} auth login` and repository access before using --issue")
                 })
             }
-            Self::Pull(hint) => crate::subprocess::checked_output(tool, output)
+            Self::Pull(hint) => shoal_subprocess::checked_output(tool, output)
                 .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
-            Self::List => crate::subprocess::checked_output(tool, output).with_context(|| {
+            Self::List => shoal_subprocess::checked_output(tool, output).with_context(|| {
                 format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
             }),
-            Self::View => crate::subprocess::checked_output(tool, output).with_context(|| {
+            Self::View => shoal_subprocess::checked_output(tool, output).with_context(|| {
                 format!("{tool} lookup failed; install it and check `{tool} auth login` and repository access")
             }),
         }
@@ -447,17 +449,17 @@ mod tests {
             for (query, limit, hint) in [
                 (
                     Query::Issue,
-                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
                     "auth login",
                 ),
                 (
                     Query::Pull(MERGED_HINT),
-                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
                     "shoal done",
                 ),
                 (
                     Query::Pull(""),
-                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
                     "existing login",
                 ),
             ] {

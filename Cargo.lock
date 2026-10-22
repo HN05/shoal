@@ -933,12 +933,30 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shoal-forge",
  "shoal-subprocess",
  "socket2",
  "tempfile",
  "tokio",
  "toml",
  "toml_edit",
+ "uuid",
+]
+
+[[package]]
+name = "shoal-forge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "futures-util",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-subprocess",
+ "tempfile",
+ "tokio",
  "uuid",
 ]
 

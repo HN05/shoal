@@ -70,7 +70,7 @@ impl Selection {
 }
 
 /// The repository and number of an issue or PR URL.
-pub(crate) fn item(kind: ItemKind, url: &str) -> Result<(ForgeRepo, u64)> {
+pub fn item(kind: ItemKind, url: &str) -> Result<(ForgeRepo, u64)> {
     let (repository, (number, _)) = match kind {
         ItemKind::Pr => {
             let repository = ForgeRepo::from_pull_url(url)?;
@@ -86,12 +86,12 @@ pub(crate) fn item(kind: ItemKind, url: &str) -> Result<(ForgeRepo, u64)> {
     Ok((repository, number))
 }
 
-pub(crate) struct Link {
+pub struct Link {
     pub repository: ForgeRepo,
     pub target: LinkTarget,
 }
 
-pub(crate) enum LinkTarget {
+pub enum LinkTarget {
     Issue,
     Pr,
     Branch(String),

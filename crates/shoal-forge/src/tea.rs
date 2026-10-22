@@ -18,7 +18,7 @@ pub(super) async fn login(account: &Account, host: &str) -> Result<Option<TeaLog
     tea.env("NO_COLOR", "1")
         .args(["login", "list", "--output", "json"]);
     account.apply(&mut tea);
-    let output = crate::subprocess::Run::new(tea)
+    let output = shoal_subprocess::Run::new(tea)
         .timeout(super::api::TIMEOUT)
         .output()
         .await?;
@@ -52,7 +52,7 @@ pub(super) async fn send(
     tea.arg(&url);
     account.apply(&mut tea);
     let body = request.body.as_ref().map(ToString::to_string);
-    let output = crate::subprocess::Run::new(tea)
+    let output = shoal_subprocess::Run::new(tea)
         .input(body.unwrap_or_default())
         .timeout(super::api::TIMEOUT)
         .output_limit(limit)
@@ -62,7 +62,7 @@ pub(super) async fn send(
     ensure!(
         output.status.success(),
         "tea failed: {}",
-        crate::subprocess::diagnostic(&output.stderr).trim()
+        shoal_subprocess::diagnostic(&output.stderr).trim()
     );
     // tea reports HTTP failures with exit status zero; --include adds the status.
     let status = status(&String::from_utf8_lossy(&output.stderr))?;

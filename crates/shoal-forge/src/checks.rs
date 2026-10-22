@@ -6,7 +6,7 @@ use serde_json::Value;
 use super::{ForgeKind, ForgeRepo, account::Account, api::Request, link::ItemKind};
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
-pub(crate) const TAIL_BYTES: usize = 8192;
+pub const TAIL_BYTES: usize = 8192;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckLog {
@@ -19,7 +19,7 @@ pub struct CheckLog {
 }
 
 /// Refuse a check name no forge shows, before any lookup.
-pub(crate) fn validate_check_name(name: &str) -> Result<()> {
+pub fn validate_check_name(name: &str) -> Result<()> {
     ensure!(
         !name.trim().is_empty() && name.len() <= 1024,
         "check name must be nonempty and at most 1024 bytes"
@@ -28,11 +28,11 @@ pub(crate) fn validate_check_name(name: &str) -> Result<()> {
 }
 
 impl ForgeRepo {
-    pub(crate) fn supports_check_logs(&self) -> bool {
+    pub fn supports_check_logs(&self) -> bool {
         self.kind == ForgeKind::Forgejo
     }
 
-    pub(crate) async fn failed_check_log(
+    pub async fn failed_check_log(
         &self,
         account: &Account,
         url: &str,

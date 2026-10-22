@@ -13,12 +13,12 @@ use super::{
 };
 /// Starts a forge CLI as someone other than the user, such as through
 /// their wrappers.
-pub(crate) trait Launch: Send + Sync {
+pub trait Launch: Send + Sync {
     fn apply(&self, command: &mut tokio::process::Command);
 }
 
 /// An agent's own logins; the user's stand in for those it leaves unset.
-pub(crate) struct AgentLogins {
+pub struct AgentLogins {
     /// Starts the agent's `gh`, `glab` and `tea`.
     pub launch: Box<dyn Launch>,
     /// The HOME the agent's `fj` runs with, holding its saved logins.
@@ -30,7 +30,7 @@ pub(crate) struct AgentLogins {
 }
 
 #[derive(Default)]
-pub(crate) struct Account {
+pub struct Account {
     /// Starts the agent's CLIs; the user's when absent.
     launch: Option<Box<dyn Launch>>,
     /// The agent's saved fj logins; the user's when absent.

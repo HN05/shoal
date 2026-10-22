@@ -41,7 +41,7 @@ pub struct PullOptions {
 
 /// A PR to open from `head` into `base`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct NewPull {
+pub struct NewPull {
     pub title: String,
     pub body: String,
     pub head: String,
@@ -54,11 +54,7 @@ pub(crate) struct NewPull {
 
 impl ForgeRepo {
     /// The open PR whose head is `branch` in this repository.
-    pub(crate) async fn open_pull_for(
-        &self,
-        account: &Account,
-        branch: &str,
-    ) -> Result<Option<u64>> {
+    pub async fn open_pull_for(&self, account: &Account, branch: &str) -> Result<Option<u64>> {
         let pulls = match self.kind {
             ForgeKind::GitHub => {
                 let owner = self.path.split('/').next().unwrap_or_default();
@@ -117,7 +113,7 @@ impl ForgeRepo {
     }
 
     /// Open the PR and return it as the forge reports it.
-    pub(crate) async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
+    pub async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
         self.ensure_labels(&pull.labels)?;
         let per_item = self.check_uploads(account, &pull.attachments).await?;
         let (body, pending) = self
@@ -181,7 +177,7 @@ impl ForgeRepo {
     }
 
     /// Open the issue and return it as the forge reports it.
-    pub(crate) async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
+    pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
         self.ensure_labels(&issue.labels)?;
         let per_item = self.check_uploads(account, &issue.attachments).await?;
         let (body, pending) = self

@@ -5,7 +5,7 @@ use super::{ForgeKind, ForgeRepo, Query, account::Account, gh, link::ItemKind};
 
 /// An open issue or PR.
 #[derive(Debug, PartialEq, serde::Deserialize)]
-pub(crate) struct Item {
+pub struct Item {
     pub number: u64,
     pub title: String,
 }

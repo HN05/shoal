@@ -65,7 +65,7 @@ impl Credentials {
         };
         let mut command = tokio::process::Command::new(program);
         command.args(args);
-        let token = crate::subprocess::Run::new(command)
+        let token = shoal_subprocess::Run::new(command)
             .timeout(super::api::TIMEOUT)
             .output()
             .await

@@ -138,7 +138,7 @@ impl Action {
 }
 
 /// What an action left on the forge.
-pub(crate) struct Acted {
+pub struct Acted {
     /// The item as the forge reports it afterwards.
     pub item: Item,
     /// The activity key of the comment or review reply the action posted.
@@ -159,7 +159,7 @@ impl ForgeRepo {
     }
 
     /// [`Self::act`], also naming the comment or reply the action posted.
-    pub(crate) async fn apply(
+    pub async fn apply(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -304,12 +304,7 @@ impl ForgeRepo {
         }
     }
 
-    pub(crate) async fn read(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Current> {
+    pub async fn read(&self, account: &Account, kind: ItemKind, number: u64) -> Result<Current> {
         let value = self
             .send(account, &Request::get(self.item_endpoint(kind, number)))
             .await?;
@@ -318,7 +313,7 @@ impl ForgeRepo {
 
     /// Whether `number` names an issue or a PR. Only forges that number both
     /// in one sequence can tell; elsewhere the caller names the kind.
-    pub(crate) async fn item_kind(&self, account: &Account, number: u64) -> Result<ItemKind> {
+    pub async fn item_kind(&self, account: &Account, number: u64) -> Result<ItemKind> {
         ensure!(
             matches!(self.kind, ForgeKind::GitHub | ForgeKind::Forgejo),
             "this forge numbers issues and PRs separately; put issue or pr before #{number}"
@@ -568,7 +563,7 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::item::PrSummary;
+    use crate::item::PrSummary;
     use serde_json::Value;
 
     fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {

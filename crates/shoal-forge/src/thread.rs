@@ -17,14 +17,14 @@ use super::{
 
 /// A review thread, found from any of its comments.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Thread {
+pub struct Thread {
     /// The comment that starts the thread.
     pub first: u64,
     /// The comments after the first.
     pub replies: usize,
     /// Unknown where the forge does not report it.
     pub resolved: Option<bool>,
-    pub target: Target,
+    pub(crate) target: Target,
 }
 
 /// What a forge's reply and resolution requests name besides the first comment.
@@ -50,12 +50,7 @@ pub(crate) enum Target {
 
 impl ForgeRepo {
     /// The thread of `comment` on PR `number`.
-    pub(crate) async fn thread(
-        &self,
-        account: &Account,
-        number: u64,
-        comment: u64,
-    ) -> Result<Thread> {
+    pub async fn thread(&self, account: &Account, number: u64, comment: u64) -> Result<Thread> {
         let pr = self.item_endpoint(ItemKind::Pr, number);
         let thread = match self.kind {
             ForgeKind::GitHub => {
@@ -78,7 +73,7 @@ impl ForgeRepo {
     }
 
     /// Refuse a resolution change the forge's API cannot make.
-    pub(crate) fn ensure_resolves_threads(&self) -> Result<()> {
+    pub fn ensure_resolves_threads(&self) -> Result<()> {
         ensure!(
             self.kind != ForgeKind::Forgejo,
             "Forgejo and Gitea have no API for resolving review threads; reply in the thread instead"

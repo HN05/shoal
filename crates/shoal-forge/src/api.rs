@@ -137,7 +137,7 @@ impl ForgeRepo {
             "-",
             &url,
         ]);
-        let output = crate::subprocess::Run::new(curl)
+        let output = shoal_subprocess::Run::new(curl)
             .input(token.map(authorization).unwrap_or_default())
             .timeout(TIMEOUT)
             // curl appends a newline and a three-digit HTTP status.
@@ -234,7 +234,7 @@ impl ForgeRepo {
             }
         }
         account.apply(&mut cli);
-        let output = crate::subprocess::Run::new(cli)
+        let output = shoal_subprocess::Run::new(cli)
             .input(input)
             .timeout(request.timeout())
             .output_limit(MAX_RESPONSE_BYTES)
@@ -246,7 +246,7 @@ impl ForgeRepo {
             bail!(
                 "{}",
                 error_message(&stdout)
-                    .unwrap_or_else(|| crate::subprocess::diagnostic(&output.stderr))
+                    .unwrap_or_else(|| shoal_subprocess::diagnostic(&output.stderr))
                     .trim()
             );
         }
@@ -313,7 +313,7 @@ impl ForgeRepo {
                 .arg(body.to_string());
         }
         curl.args(["-K", "-", url]);
-        let output = crate::subprocess::Run::new(curl)
+        let output = shoal_subprocess::Run::new(curl)
             .input(authorization.unwrap_or_default())
             .timeout(request.timeout())
             .output()

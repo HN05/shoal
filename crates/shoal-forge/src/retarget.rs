@@ -10,7 +10,7 @@ use super::{
 
 impl ForgeRepo {
     /// Retargeting follows the user's merge, so it uses the user's login.
-    pub(crate) async fn retarget(&self, account: &Account, number: u64, base: &str) -> Result<()> {
+    pub async fn retarget(&self, account: &Account, number: u64, base: &str) -> Result<()> {
         let edit = Action::Edit(Edit {
             base: Some(base.to_owned()),
             ..Edit::default()
