@@ -816,6 +816,42 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
+fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("tabbed");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // The tab's watcher records that the tab closes with the workspace.
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
+    let export = |tab: &str| {
+        fixture
+            .command()
+            .args(["export", "tabbed", "-o", "-"])
+            .env("HERDR_TAB_ID", tab)
+            .output()
+            .unwrap()
+    };
+    let refused = export("tab-7");
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
+        "{refused:?}"
+    );
+    assert!(refused.stdout.is_empty());
+    assert!(path.exists());
+    // Another tab keeps its stream.
+    let exported = export("tab-8");
+    assert!(exported.status.success(), "{exported:?}");
+    assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
+    assert!(!path.exists());
+}
+
+#[test]
 fn export_finishes_when_its_terminal_ends_after_the_removal() {
     // The removal hook holds the daemon between removal and the export, as
     // long as closing a workspace's Herdr tab would take.

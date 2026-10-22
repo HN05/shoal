@@ -177,7 +177,7 @@ async fn export_workspace(
         return request::<ExportedWorkspace>(&ctx.paths, method).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check = check_export(ctx, &workspace, yes, output.destination()).await?;
+    let check = check_export(ctx, &workspace, yes, output).await?;
     let method = method(workspace, UnsavedWork::confirming(&check));
     let exported = super::workspaces::leaving(
         ctx,
@@ -203,13 +203,13 @@ async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
 }
 
 /// What removing the workspace for an export would delete, refusing unsaved
-/// files a checkpoint cannot keep and a destination inside it, after the
-/// user lets its holds go.
+/// files a checkpoint cannot keep and an output the removal would cut off,
+/// after the user lets its holds go.
 async fn check_export(
     ctx: &Context,
     workspace: &str,
     yes: bool,
-    destination: Option<&Path>,
+    output: &Output,
 ) -> Result<RemovalCheck> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
@@ -224,12 +224,16 @@ async fn check_export(
         !check.dirty || check.unsaved_files_archived,
         "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"
     );
-    if let Some(destination) = destination {
-        ensure!(
+    match output.destination() {
+        Some(destination) => ensure!(
             !check.workspace.contains(destination),
             "{} is inside the workspace the export removes; write it elsewhere",
             destination.display()
-        );
+        ),
+        None => ensure!(
+            !crate::cli::herdr::closes_with(&ctx.paths, &check.workspace.id),
+            "this Herdr tab closes when the export removes the workspace, ending the stream; export to a file with -o, or from another tab"
+        ),
     }
     if !yes && !check.workspace.holds.is_empty() {
         confirm_holds(ctx, &check)?;

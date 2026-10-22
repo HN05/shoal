@@ -477,6 +477,7 @@ impl Tab {
 }
 
 pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32> {
+    let _closing = ClosingTab::record(&ctx.paths, &workspace, &tab);
     let tab = Tab {
         id: tab,
         close_when_done: true,
@@ -510,6 +511,47 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
     }
     TabDirective::discard_inherited();
     Ok(0)
+}
+
+/// Kept while a watcher waits to close a tab with its workspace, so commands
+/// run in that tab can tell; the workspace's state goes with its record.
+struct ClosingTab(Option<std::path::PathBuf>);
+
+impl ClosingTab {
+    fn path(paths: &crate::paths::Paths, workspace: &str, tab: &str) -> Option<std::path::PathBuf> {
+        (!tab.is_empty() && !tab.contains('/')).then(|| {
+            paths
+                .workspace_state(workspace)
+                .join(format!("closing-tab-{tab}"))
+        })
+    }
+
+    /// Best effort: without the record, commands in the tab cannot tell.
+    fn record(paths: &crate::paths::Paths, workspace: &str, tab: &str) -> Self {
+        let path = Self::path(paths, workspace, tab).filter(|path| {
+            path.parent()
+                .is_some_and(|parent| std::fs::create_dir_all(parent).is_ok())
+                && std::fs::write(path, "").is_ok()
+        });
+        Self(path)
+    }
+}
+
+impl Drop for ClosingTab {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// Whether this process runs in a Herdr tab that closes once `workspace` is
+/// removed.
+pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
+    std::env::var("HERDR_TAB_ID")
+        .ok()
+        .and_then(|tab| ClosingTab::path(paths, workspace, &tab))
+        .is_some_and(|path| path.exists())
 }
 
 #[derive(Debug, PartialEq)]
@@ -817,5 +859,18 @@ mod tests {
             shell_command(&argv).unwrap(),
             r#"/opt/bin/shoal internal herdr 'a b' 'it'\''s' ''"#
         );
+    }
+
+    #[test]
+    fn a_closing_tab_is_recorded_until_its_watcher_ends() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::Paths::for_test(root.path());
+        let path = ClosingTab::path(&paths, "workspace", "tab-1").unwrap();
+        let closing = ClosingTab::record(&paths, "workspace", "tab-1");
+        assert!(path.exists());
+        drop(closing);
+        assert!(!path.exists());
+        assert_eq!(ClosingTab::path(&paths, "workspace", "a/b"), None);
+        assert_eq!(ClosingTab::path(&paths, "workspace", ""), None);
     }
 }
