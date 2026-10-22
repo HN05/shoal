@@ -197,7 +197,7 @@ impl Manager {
     /// `shoal restore`.
     pub async fn import_workspace(
         &self,
-        selector: &crate::forge::repository::Selector,
+        selector: &crate::repository::Selector,
         bundle: Option<&Path>,
         prerequisite: Option<&str>,
         removed: RemovedWorkspace,

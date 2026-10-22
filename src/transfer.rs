@@ -75,7 +75,7 @@ impl Manifest {
             None => true,
         };
         Ok(Self {
-            remote_url: crate::forge::repository::remote_url_from_source(&repo.source).await?,
+            remote_url: crate::repository::remote_url_from_source(&repo.source).await?,
             prerequisite: if bundle { shared } else { Some(commit) },
             bundle,
             workspace: moved(removed),

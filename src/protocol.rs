@@ -450,7 +450,7 @@ pub enum Method {
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again.
     ImportWorkspace {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         bundle: Option<std::path::PathBuf>,
         prerequisite: Option<String>,
         workspace: Box<crate::model::RemovedWorkspace>,
