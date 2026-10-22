@@ -194,8 +194,8 @@ pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Resu
         .find(|r| {
             r.workspace_id == request.workspace_id
                 && r.status == DecisionStatus::Pending
-                && r.proposed_issue().map(|i| &i.issue)
-                    == request.proposed_issue().map(|i| &i.issue)
+                && r.proposed_issue().map(|i| (&i.issue, i.link))
+                    == request.proposed_issue().map(|i| (&i.issue, i.link))
         });
     if let Some(existing) = existing {
         return Ok((existing, false));

@@ -1857,8 +1857,14 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(proposed["status"], "pending");
     assert_eq!(proposed["specification"]["issue"]["title"], "Flaky");
     assert_eq!(proposed["specification"]["branch"], "topic");
-    // Repeating the command returns the same proposal.
+    // Repeating the command returns the same proposal; asking to link it is
+    // another proposal.
     assert_eq!(scoped(&fixture, &open)["proposed"]["id"], proposed["id"]);
+    let linked = scoped(&fixture, &[&open[..], &["--link"]].concat())["proposed"].clone();
+    assert_ne!(linked["id"], proposed["id"]);
+    assert_eq!(linked["specification"]["link"], true);
+    fixture.ok(&["deny", &linked["id"].to_string()]);
+    messages(&fixture);
     assert!(writes(&fixture).is_empty());
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
