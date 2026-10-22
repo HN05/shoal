@@ -114,8 +114,38 @@ pub(crate) fn delegated(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> 
 }
 
 /// The workspace `id` and those below it whose activity its agent receives,
+/// each as the path of workspaces down to it from the topmost workspace that
+/// receives `id`'s own activity: `id` itself when it has an agent, otherwise
+/// the nearest ancestor that has one, or the root.
+pub(crate) fn receiving_paths(db: &Connection, id: &str) -> Result<Vec<Vec<String>>> {
+    let receivers = receiving_ancestors(db, id)?;
+    Ok(delegation_paths(db, id)?
+        .into_iter()
+        .map(|path| receivers.iter().cloned().chain(path).collect())
+        .collect())
+}
+
+/// The ancestors that receive `id`'s activity, topmost first: each parent
+/// while the workspace below it has no agent of its own.
+fn receiving_ancestors(db: &Connection, id: &str) -> Result<Vec<String>> {
+    Ok(db
+        .prepare(
+            "WITH RECURSIVE up(id, depth) AS (
+                SELECT ?1, 0
+                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
+                    JOIN workspaces ON workspaces.id=up.id
+                    WHERE workspaces.parent_workspace_id IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM workspace_agent_state
+                            WHERE workspace_agent_state.workspace_id=up.id)
+            ) SELECT id FROM up WHERE depth > 0 ORDER BY depth DESC",
+        )?
+        .query_map([id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The workspace `id` and those below it whose activity its agent receives,
 /// each as the path of workspaces from `id` down to it.
-pub(crate) fn delegation_paths(db: &Connection, id: &str) -> Result<Vec<Vec<String>>> {
+fn delegation_paths(db: &Connection, id: &str) -> Result<Vec<Vec<String>>> {
     db.prepare(
         "WITH RECURSIVE delegated(id, depth, path) AS (
                 SELECT ?1, 0, ?1

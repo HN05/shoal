@@ -210,19 +210,41 @@ impl Manager {
         })
     }
 
-    /// The updates queued for the workspace's agent: those on its own cursor
-    /// for an unfiltered watch, then those of the child workspaces it works on.
+    /// The updates queued for the workspace's agent that fit one response:
+    /// those on its own cursor for an unfiltered watch, then those of the
+    /// child workspaces it works on.
     async fn agent_queued_updates(&self, workspace: Workspace) -> Result<Vec<Update>> {
+        let _gate = self.pr_gate.lock().await;
         let id = workspace.id.clone();
-        let mut updates = self.queued_updates(workspace).await?;
-        updates.extend(self.delegated_pending(&id, None).await?);
-        Ok(within_frame(updates))
+        let mut batch = own_batch(&id, self.queued_updates(workspace).await?);
+        batch.extend(self.delegated_pending(&id, None).await?);
+        self.fit_response(batch).await
+    }
+
+    /// The leading updates of `batch` that fit one response. Updates sharing
+    /// a delivery are acknowledged together, so a delivery is cut only when
+    /// it comes first and does not fit alone; its remainder then moves to a
+    /// new delivery and stays pending once the sent part is acknowledged. The
+    /// caller holds `pr_gate`.
+    async fn fit_response(&self, mut batch: Batch) -> Result<Vec<Update>> {
+        match frame_cut(&batch) {
+            Cut::Between(fitting) => batch.truncate(fitting),
+            Cut::Inside(fitting) => {
+                let (workspace, update) = &batch[0];
+                let (workspace, delivery) = (workspace.clone(), update.delivery.clone());
+                self.store
+                    .run(move |db| redeliver_after(db, &workspace, &delivery, fitting))
+                    .await?;
+                batch.truncate(fitting);
+            }
+        }
+        Ok(batch.into_iter().map(|(_, update)| update).collect())
     }
 
     /// The updates queued on the cursors of the child workspaces whose
     /// activity `id`'s agent receives, for their items of `kind` or every
     /// kind, each naming its workspace.
-    async fn delegated_pending(&self, id: &str, kind: Option<ItemKind>) -> Result<Vec<Update>> {
+    async fn delegated_pending(&self, id: &str, kind: Option<ItemKind>) -> Result<Batch> {
         let mut updates = Vec::new();
         for child in self.delegated_workspaces(id).await? {
             let child_id = child.id.clone();
@@ -236,7 +258,7 @@ impl Manager {
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
                 update.workspace = Some(child.name.clone());
-                update
+                (child.id.clone(), update)
             }));
         }
         Ok(updates)
@@ -319,11 +341,11 @@ impl Manager {
         let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
-        let mut pending = self.pending_activity(id, &keys).await?;
+        let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
         if selection.input.is_none() {
-            pending.extend(self.delegated_pending(id, selection.kind).await?);
-            pending = within_frame(pending);
+            batch.extend(self.delegated_pending(id, selection.kind).await?);
         }
+        let mut pending = self.fit_response(batch).await?;
         if !pending.is_empty() {
             drop(guard);
             self.summarize_failed_checks(id, &mut pending).await;
@@ -732,10 +754,10 @@ impl Manager {
                 store::require_ready(&tx, &workspace.id)?;
                 // The agent also received the updates of the child workspaces
                 // it works on.
-                let delivered = crate::daemon::workspace::delegation_paths(&tx, &workspace.id)?;
+                let delivered = crate::daemon::workspace::receiving_paths(&tx, &workspace.id)?;
                 // A delivering wait has ended, so a wait running in one of
-                // these workspaces, or above one, started after it and must
-                // report their updates as well.
+                // these workspaces, or in one receiving their activity above
+                // them, started after it and must report their updates as well.
                 waits.with_unwatched(&delivered, |unwatched| {
                     acknowledge_deliveries(&tx, unwatched, &deliveries)?;
                     Ok(tx.commit()?)
@@ -838,34 +860,100 @@ fn acknowledge_deliveries(
     Ok(())
 }
 
-/// The leading `updates` that fit in one response beside its other fields,
-/// at least the first delivery. Updates sharing a delivery are acknowledged
-/// together, so each delivery goes whole; the rest stay pending.
-fn within_frame(mut updates: Vec<Update>) -> Vec<Update> {
+/// Pending updates for one response, each with the workspace whose cursor
+/// holds it.
+type Batch = Vec<(String, Update)>;
+
+fn own_batch(id: &str, updates: Vec<Update>) -> Batch {
+    updates
+        .into_iter()
+        .map(|update| (id.to_owned(), update))
+        .collect()
+}
+
+/// Where a response ends within a batch.
+#[derive(Debug, PartialEq, Eq)]
+enum Cut {
+    /// After this many updates, between deliveries.
+    Between(usize),
+    /// After this many updates of the first delivery, which does not fit alone.
+    Inside(usize),
+}
+
+/// Where the updates that fit one response beside its other fields end:
+/// after whole deliveries, or inside the first when it alone does not fit.
+fn frame_cut(batch: &Batch) -> Cut {
+    let limit = crate::protocol::MAX_FRAME - 256;
+    let sizes = batch
+        .iter()
+        .map(|(_, update)| serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()) + 1)
+        .collect::<Vec<_>>();
     let mut size = 0_usize;
     let mut fitting = 0;
-    let mut index = 0;
-    while index < updates.len() {
-        let delivery = &updates[index].delivery;
-        let end = index
-            + updates[index..]
+    while fitting < batch.len() {
+        let delivery = &batch[fitting].1.delivery;
+        let end = fitting
+            + batch[fitting..]
                 .iter()
-                .take_while(|update| update.delivery == *delivery)
+                .take_while(|(_, update)| update.delivery == *delivery)
                 .count();
-        size = updates[index..end]
+        let group = sizes[fitting..end]
             .iter()
-            .map(|update| serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()))
-            .fold(size, |size, bytes| {
-                size.saturating_add(bytes).saturating_add(1)
-            });
-        if fitting > 0 && size >= crate::protocol::MAX_FRAME - 256 {
-            break;
+            .fold(0_usize, |size, bytes| size.saturating_add(*bytes));
+        if size.saturating_add(group) >= limit {
+            if fitting > 0 {
+                break;
+            }
+            let mut size = 0_usize;
+            let inside = sizes[..end]
+                .iter()
+                .take_while(|bytes| {
+                    size = size.saturating_add(**bytes);
+                    size < limit
+                })
+                .count();
+            return if inside < end {
+                Cut::Inside(inside.max(1))
+            } else {
+                Cut::Between(end)
+            };
         }
+        size += group;
         fitting = end;
-        index = end;
     }
-    updates.truncate(fitting);
-    updates
+    Cut::Between(fitting)
+}
+
+/// Move the pending updates of `delivery` on the workspace's cursor after the
+/// first `kept` to a new delivery, so acknowledging `delivery` keeps them.
+fn redeliver_after(
+    db: &rusqlite::Connection,
+    workspace: &str,
+    delivery: &str,
+    kept: usize,
+) -> Result<()> {
+    let next = uuid::Uuid::new_v4().to_string();
+    let mut seen = 0;
+    for (id, url, record) in activity_records(db, &[workspace.to_owned()])? {
+        let mut record: ActivityRecord = serde_json::from_str(&record)?;
+        let mut moved = false;
+        for update in &mut record.pending {
+            if update.delivery == delivery {
+                seen += 1;
+                if seen > kept {
+                    update.delivery.clone_from(&next);
+                    moved = true;
+                }
+            }
+        }
+        if moved {
+            db.execute(
+                "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
+                params![serde_json::to_string(&record)?, id, url],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// Whether the workspace, or a child workspace whose activity its agent
@@ -1490,6 +1578,18 @@ mod tests {
             1
         );
         drop(child_wait);
+        // A watch in the child itself, acknowledged while a newer parent
+        // watch runs, leaves the parent's watch the child's updates.
+        let parent_wait = manager.item_waits.start(&parent.id);
+        manager
+            .acknowledge_pr_updates(&child.id, deliveries.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.pending_pr_activity(&child.id).await.unwrap().len(),
+            1
+        );
+        drop(parent_wait);
         manager
             .acknowledge_pr_updates(&parent.id, deliveries)
             .await
@@ -1516,13 +1616,83 @@ mod tests {
 
     #[test]
     fn combined_updates_fit_one_response_in_whole_deliveries() {
+        let batch = |deliveries: fn(usize) -> usize| {
+            (0..63)
+                .map(|n| ("child".to_owned(), large_update(n, deliveries(n))))
+                .collect::<Batch>()
+        };
         // 21 deliveries of three updates each, more than one response holds.
-        let updates = (0..63).map(|n| large_update(n, n / 3)).collect::<Vec<_>>();
-        let fitting = within_frame(updates);
-        assert!(!fitting.is_empty() && fitting.len() < 63);
-        assert_eq!(fitting.len() % 3, 0);
-        assert!(serde_json::to_vec(&fitting).unwrap().len() < crate::protocol::MAX_FRAME - 256);
-        assert!(within_frame(Vec::new()).is_empty());
+        let Cut::Between(fitting) = frame_cut(&batch(|n| n / 3)) else {
+            panic!("whole deliveries fit");
+        };
+        assert!(fitting > 0 && fitting < 63 && fitting % 3 == 0);
+        let sent = batch(|n| n / 3)[..fitting].to_vec();
+        assert!(serde_json::to_vec(&sent).unwrap().len() < crate::protocol::MAX_FRAME);
+        // One delivery larger than a response is cut inside it.
+        let Cut::Inside(fitting) = frame_cut(&batch(|_| 0)) else {
+            panic!("a delivery too large for a response is cut");
+        };
+        assert!(fitting > 0 && fitting < 63);
+        assert_eq!(frame_cut(&Vec::new()), Cut::Between(0));
+    }
+
+    #[tokio::test]
+    async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        register_watch(&manager, &child.id, "child-pr").await;
+        let id = child.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                for n in 0..63 {
+                    queue_update(db, &id, large_update(n, 0))?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let mut received = Vec::new();
+        while received.len() < 63 {
+            let delivered = manager.agent_updates(&parent.id).await.unwrap();
+            assert!(!delivered.updates.is_empty() && delivered.updates.len() < 63);
+            assert!(serde_json::to_vec(&delivered).unwrap().len() < crate::protocol::MAX_FRAME,);
+            manager
+                .acknowledge_pr_updates(
+                    &parent.id,
+                    delivered
+                        .updates
+                        .iter()
+                        .map(|update| update.delivery.clone())
+                        .collect(),
+                )
+                .await
+                .unwrap();
+            received.extend(delivered.updates);
+        }
+        let order: Vec<_> = (0..63).map(|n| n.to_string()).collect();
+        for (update, n) in received.iter().zip(&order) {
+            assert!(update.message.starts_with(&format!("{n}x")), "{n}");
+        }
+        assert!(
+            manager
+                .pending_pr_activity(&child.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
