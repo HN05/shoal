@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::client,
-    config::named_commands,
+    config::{Config, named_commands},
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
@@ -99,9 +99,9 @@ impl Recovery {
     }
 
     /// Ask the restored session to continue, including `handoff` where the
-    /// command accepts a prompt: built-in agents and `{prompt}` in `[agent_resume]`.
-    /// Built-in agents resume `session` when known, otherwise the workspace's
-    /// latest session.
+    /// command accepts a prompt: agents with resume arguments and `{prompt}`
+    /// in `[agent_resume]`. Resume arguments restore `session` when known,
+    /// otherwise the workspace's latest session.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
@@ -113,8 +113,9 @@ impl Recovery {
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
         let name = agent.replace(' ', "-");
         let configured = settings.agent_resume.get(&name);
-        let builtin = matches!(name.as_str(), "codex" | "claude");
-        let automatic = configured.is_some() || builtin;
+        let resume_args =
+            crate::ai::arguments(&Config::load(paths)?.ai, &name).resume_args(session);
+        let automatic = configured.is_some() || resume_args.is_some();
         let mut message = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );
@@ -134,30 +135,29 @@ impl Recovery {
             )
             .await?;
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
-        } else {
-            let mut args: Vec<OsString> = match (name.as_str(), session) {
-                ("codex", Some(session)) => vec!["resume".into(), session.into()],
-                // Codex's worktrees feature widens `--last` to every linked
-                // worktree of the repository; restore this workspace's session.
-                ("codex", None) => ["resume", "--last", "-c", "features.worktrees=false"]
-                    .map(OsString::from)
-                    .into(),
-                ("claude", Some(session)) => vec!["--resume".into(), session.into()],
-                ("claude", None) => vec!["--continue".into()],
-                _ => vec![],
-            };
+        } else if let Some(mut args) = resume_args {
             if let Ok(agent) = name.parse::<crate::agent::BuiltinAgent>() {
                 args.extend(agent.hook_args()?);
             }
-            if builtin {
+            let takes_field = settings
+                .commands
+                .get(&name)
+                .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
+            if !takes_field {
                 args.push(prompt.to_owned());
-                let command =
-                    named_commands::expand(paths, &settings.commands, &name, workspace, args)
-                        .await?;
-                (command, true)
-            } else {
-                (vec![], false)
             }
+            let command = named_commands::expand_with_fields(
+                paths,
+                &settings.commands,
+                &name,
+                workspace,
+                args,
+                &[("{prompt}", prompt)],
+            )
+            .await?;
+            (command, true)
+        } else {
+            (vec![], false)
         };
         Ok(Self {
             agent: name,

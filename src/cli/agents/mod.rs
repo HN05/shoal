@@ -151,6 +151,19 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
     }
 }
 
+/// The arguments that give agent `name` its instructions; an agent without
+/// an instructions template receives none.
+pub(in crate::cli) fn instruction_args(
+    ctx: &Context,
+    name: &str,
+    instructions: &str,
+) -> Result<Vec<OsString>> {
+    let agents = Config::load(&ctx.paths)?.ai;
+    Ok(crate::ai::arguments(&agents, name)
+        .instruction_args(instructions)
+        .unwrap_or_default())
+}
+
 /// `shoal <name>` and `shoal run <name>`: providers launch as agents with
 /// their prompts, other names as plain configured commands.
 pub(super) async fn run_named(

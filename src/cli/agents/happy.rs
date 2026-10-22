@@ -45,7 +45,7 @@ pub(in crate::cli) async fn happy(
             _ => instructions,
         })
     } else {
-        let mut configured = templates::instruction_args(BuiltinAgent::Claude, instructions);
+        let mut configured = super::instruction_args(ctx, agent.as_str(), &instructions)?;
         configured.append(&mut args);
         args = configured;
         prompt

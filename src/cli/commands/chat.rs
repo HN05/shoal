@@ -39,7 +39,7 @@ pub(super) async fn start(
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent, &repo);
-    let command = command(&settings, &repo, agent, args)?;
+    let command = command(ctx, &settings, &repo, agent, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.as_str()).await?;
     run_here(ctx, &repo, &chat, &command)
 }
@@ -172,12 +172,13 @@ async fn start_beside(
 /// The agent's configured launcher with the chat instructions and the hooks
 /// that deliver its messages, run at the checkout.
 fn command(
+    ctx: &Context,
     settings: &Effective,
     repo: &Repository,
     agent: BuiltinAgent,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    let args = templates::instruction_args(agent, instructions(settings, repo))
+    let args = agents::instruction_args(ctx, agent.as_str(), &instructions(settings, repo))?
         .into_iter()
         .chain(agent.chat_hook_args()?)
         .chain(args)

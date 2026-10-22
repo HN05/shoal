@@ -3,7 +3,7 @@ use std::{fs, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 
-use crate::{agent::BuiltinAgent, config::Config, paths::Paths};
+use crate::{config::Config, paths::Paths};
 
 pub use super::placeholders::render;
 
@@ -93,25 +93,6 @@ pub fn instructions(
     )
 }
 
-pub fn instruction_args(agent: BuiltinAgent, instructions: String) -> Vec<std::ffi::OsString> {
-    if instructions.is_empty() {
-        return Vec::new();
-    }
-    match agent {
-        BuiltinAgent::Claude => {
-            vec!["--append-system-prompt".into(), instructions.into()]
-        }
-        BuiltinAgent::Codex => vec![
-            "-c".into(),
-            format!(
-                "developer_instructions={}",
-                toml::Value::String(instructions)
-            )
-            .into(),
-        ],
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,28 +146,5 @@ mod tests {
             "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
         }))
         .unwrap()
-    }
-
-    #[test]
-    fn native_instruction_arguments_preserve_empty_and_literal_text() {
-        for agent in BuiltinAgent::ALL {
-            assert!(instruction_args(*agent, String::new()).is_empty());
-        }
-        let text = "quotes: \" and newlines\n$(false)";
-        assert_eq!(
-            instruction_args(BuiltinAgent::Claude, text.into()),
-            vec![
-                std::ffi::OsString::from("--append-system-prompt"),
-                text.into()
-            ]
-        );
-    }
-
-    #[test]
-    fn codex_instructions_are_a_literal_toml_string() {
-        let text = "quotes: \"'''\\\nUnicode: 日本語 $(false)";
-        let args = instruction_args(BuiltinAgent::Codex, text.into());
-        let value: toml::Value = toml::from_str(args[1].to_str().unwrap()).unwrap();
-        assert_eq!(value["developer_instructions"].as_str(), Some(text));
     }
 }

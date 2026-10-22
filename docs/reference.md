@@ -219,10 +219,12 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-Codex and Claude automatically continue the session their hooks last reported,
-otherwise the latest session in the workspace, by default, without a session picker, with a prompt to continue their unfinished
-assignment on manual or automatic resume. Configured commands receive that
-prompt through `{prompt}`; other agents need an entry in `[agent_resume]`.
+Without one, an AI tool with resume arguments (`resume` and `resume_latest`
+under `[ai.<name>]`, built in for Claude and Codex) continues the session its
+hooks last reported, otherwise the latest session in the workspace, without a
+session picker, with a prompt to continue its unfinished assignment on manual or
+automatic resume. Configured commands receive that prompt through `{prompt}`;
+other agents need an entry in `[agent_resume]`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. After the
@@ -632,6 +634,9 @@ default_agent = "droid"
 [ai.droid]
 command = ["droid", "{args}"]
 skill_dir = "~/.factory/skills" # Optional; see agent skills below
+instructions = ["--system-prompt", "{instructions}"] # Optional
+resume = ["--resume", "{session}"]                    # Optional
+resume_latest = ["--continue"]                        # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
@@ -641,7 +646,11 @@ same name replaces it; defining both in the global file is an error. Names that
 collide with built-in commands are rejected. The picker and completion offer AI
 tools only.
 
-For AI tool launches, `{prompt}` combines the rendered agent guidance and
+`instructions` passes the rendered agent guidance apart from the first message,
+with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
+`resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).
+Each entry replaces the built-in one for Claude, Codex and the other built-in tools.
+Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex keep their specialized launchers; other tools

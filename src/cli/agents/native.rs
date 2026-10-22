@@ -19,7 +19,7 @@ use crate::{
         ui::{self, Fallback},
     },
     config::{
-        Effective, named_commands,
+        Config, Effective, named_commands,
         templates::{self, Delivery},
     },
     execution,
@@ -41,7 +41,7 @@ pub(in crate::cli) async fn claude(
     trust_claude(ctx, &launch.workspace).await;
     // Claude Code's hooks deliver updates and start its next turn with them.
     let instructions = launch.instructions(Delivery::Pushed);
-    let args = templates::instruction_args(BuiltinAgent::Claude, instructions)
+    let args = super::instruction_args(ctx, "claude", &instructions)?
         .into_iter()
         .chain(BuiltinAgent::Claude.hook_args()?)
         .chain(args)
@@ -81,7 +81,7 @@ pub(in crate::cli) async fn codex(
     } else {
         Delivery::Watched
     };
-    let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions(delivery))
+    let args = super::instruction_args(ctx, "codex", &launch.instructions(delivery))?
         .into_iter()
         .chain(BuiltinAgent::Codex.hook_args()?)
         .chain(args)
@@ -103,20 +103,28 @@ pub(super) async fn custom_agent(
         workspace,
         settings,
     };
-    let prompt = [
-        launch.instructions(Delivery::Watched),
-        prompt.unwrap_or_default(),
-    ]
-    .into_iter()
-    .filter(|part| !part.is_empty())
-    .collect::<Vec<_>>()
-    .join("\n\n");
+    // Instructions join the prompt unless the agent takes them apart.
+    let instructions = launch.instructions(Delivery::Watched);
+    let agents = Config::load(&ctx.paths)?.ai;
+    let (instruction_args, prompt) =
+        match crate::ai::arguments(&agents, name).instruction_args(&instructions) {
+            Some(instruction_args) => (instruction_args, prompt.unwrap_or_default()),
+            None => (
+                Vec::new(),
+                [instructions, prompt.unwrap_or_default()]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            ),
+        };
     let commands = &launch.settings.commands;
     ensure_installed(&Agent::Custom(name.into()), commands)?;
     let argv = &commands[name];
     if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
         args.insert(0, prompt.clone().into());
     }
+    let args = instruction_args.into_iter().chain(args).collect();
     launch.run(ctx, name, args, &prompt, replaces).await
 }
 
