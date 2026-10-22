@@ -756,7 +756,11 @@ until its answer is delivered, which makes an interrupted wait safe to rerun.
 Delivery deletes the question: the agent's transcript keeps the exchange, and
 nothing in Shoal reads it again. An open question means an agent is waiting on the
 user, so it keeps the workspace from idle cleanup; questions belong to the
-workspace and go with it.
+workspace and go with it. Marking the assignment done closes its open questions,
+since the finished work waits on no answer and a question it made pointless would
+otherwise keep the workspace until the user answers. Withdrawing completion does
+not reopen them, and a closed question keeps its number until the workspace goes,
+so a late answer is refused instead of reaching a later question.
 
 Questions and approval requests are named by the smallest number no stored one
 holds, because the user types them; their records keep a separate internal key

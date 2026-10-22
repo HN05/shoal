@@ -1100,8 +1100,8 @@ mod tests {
             reason: None,
             choices: vec![],
         };
-        let question = manager.ask_question(&workspace.name, ask).await.unwrap();
         manager.mark_done(&workspace.id, false).await.unwrap();
+        let question = manager.ask_question(&workspace.name, ask).await.unwrap();
         assert_eq!(reason().await, CleanupReason::Held);
         manager
             .release_hold(&workspace.id, "review".into())

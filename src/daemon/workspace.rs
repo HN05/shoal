@@ -141,7 +141,7 @@ pub struct Manager {
     pub(crate) notifications_changed: watch::Sender<i64>,
     /// Counts queued agent messages; wakes watches waiting for them.
     pub(crate) agent_messages_changed: watch::Sender<u64>,
-    /// Counts answered questions; wakes waits for an answer.
+    /// Counts answered and closed questions; wakes waits for an answer.
     pub(crate) questions_changed: watch::Sender<u64>,
     /// Counts background polls that queued item updates; wakes watches.
     pub(crate) item_updates_queued: watch::Sender<u64>,

@@ -1534,8 +1534,9 @@ precedence. Scoped agents may mark only their own workspace done; completion doe
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
 reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
-[hold](#workspace-holds) it. Completion and PR cleanup wait while a hold or an open
-[question](#questions) remains.
+[hold](#workspace-holds) it. `done` closes the workspace's open
+[questions](#questions), so completion and PR cleanup wait only while a hold or a
+question asked afterwards remains.
 
 Only `done` completes an assignment; issue closure and merged PRs do not. A
 merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
@@ -2127,7 +2128,10 @@ interrupted `--wait` can be rerun; the same question with other details is refus
 A listing returns the newest open questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer. Scoped callers ask and list only
 their own workspace's questions. An open question keeps the workspace from idle
-cleanup; removing the workspace deletes its questions.
+cleanup; removing the workspace deletes its questions. `shoal done` closes the
+workspace's open questions: answers to them are refused, waits on them fail, and
+`shoal undone` does not reopen them. A closed question keeps its number until the
+workspace goes.
 
 ### Leases
 

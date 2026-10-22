@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 53;
+const SCHEMA_VERSION: i64 = 54;
 
 #[cfg(test)]
 mod benchmark;
@@ -382,6 +382,8 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (51, CHECKPOINTS, None),
     (52, REMOVAL_CHECKPOINTS, None),
     (53, KEPT_BRANCHES, None),
+    // Unix time `done` closed an unanswered question.
+    (54, "ALTER TABLE questions ADD COLUMN closed_at INTEGER;", None),
 ];
 
 /// When the grace period of an unattended removal ends, and whether the
@@ -1004,6 +1006,9 @@ mod tests {
         }
         if version >= 53 {
             db.execute_batch(KEPT_BRANCHES)?;
+        }
+        if version >= 54 {
+            db.execute_batch("ALTER TABLE questions ADD COLUMN closed_at INTEGER;")?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

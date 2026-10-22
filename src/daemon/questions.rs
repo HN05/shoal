@@ -2,7 +2,9 @@
 //! and the agent's recommendation; only the user answers, and the answer
 //! reaches the agents as a message. Delivering the answer, or removing the
 //! workspace, deletes the question, which frees its number for the next one.
-use anyhow::{Context, Result, bail, ensure};
+//! Marking the assignment done closes its unanswered questions, which keep
+//! their numbers until the workspace goes so that a late answer is refused.
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -48,6 +50,9 @@ pub struct Question {
     /// The agent message carrying the answer; delivering it deletes the question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<i64>,
+    /// Unix seconds `done` closed the unanswered question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_at: Option<i64>,
 }
 
 /// Questions that fit one response, and how many older ones were left out.
@@ -108,7 +113,22 @@ fn validate_answer(answer: &str) -> Result<()> {
 
 impl Question {
     pub fn is_open(&self) -> bool {
-        self.answer.is_none()
+        self.answer.is_none() && self.closed_at.is_none()
+    }
+
+    /// Refuse an answer to a question that is answered or closed.
+    pub fn ensure_open(&self) -> Result<()> {
+        ensure!(
+            self.answer.is_none(),
+            "question {} is already answered",
+            self.id
+        );
+        ensure!(
+            self.closed_at.is_none(),
+            "question {} is closed: its workspace's assignment was marked done",
+            self.id
+        );
+        Ok(())
     }
 
     /// Whether `other` is this question as asked, though it may since be
@@ -158,7 +178,7 @@ fn shorten(mut text: String, max: usize) -> String {
 const SELECT: &str =
     "SELECT q.number,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
     q.reason,q.choices,q.answer,q.answered_at,
-    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
+    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at
     FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
@@ -177,6 +197,7 @@ fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
             answer: row.get(8)?,
             answered_at: row.get(9)?,
             message_id: row.get(10)?,
+            closed_at: row.get(11)?,
         },
         row.get(7)?,
     ))
@@ -242,9 +263,7 @@ fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
 
 fn open_question(tx: &Transaction<'_>, id: i64) -> Result<Question> {
     let question = by_id(tx, id)?.with_context(|| format!("unknown question {id}"))?;
-    if !question.is_open() {
-        bail!("question {id} is already answered");
-    }
+    question.ensure_open()?;
     Ok(question)
 }
 
@@ -285,6 +304,22 @@ fn record_answer(
     let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
     store_answer(tx, &mut question, answer, message_id)?;
     Ok(question)
+}
+
+/// Close the workspace's open questions, which its finished assignment no
+/// longer waits on, and return their numbers.
+pub(crate) fn close_open(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<i64>> {
+    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    let mut numbers = tx
+        .prepare(
+            "UPDATE questions SET closed_at=?2
+                WHERE workspace_id=?1 AND answer IS NULL AND closed_at IS NULL
+                RETURNING number",
+        )?
+        .query_map(params![workspace_id, closed_at], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<i64>>>()?;
+    numbers.sort_unstable();
+    Ok(numbers)
 }
 
 /// Delete the question whose answer `message_id` carried, once the message
@@ -360,7 +395,8 @@ impl Manager {
             .run(move |db| {
                 query(
                     db,
-                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND q.answer IS NULL",
+                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND q.answer IS NULL
+                        AND q.closed_at IS NULL",
                     [owner],
                 )
             })
@@ -381,7 +417,8 @@ impl Manager {
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM questions WHERE workspace_id=?1 AND answer IS NULL",
+                    "SELECT 1 FROM questions
+                        WHERE workspace_id=?1 AND answer IS NULL AND closed_at IS NULL",
                     [id],
                 )
             })
@@ -432,9 +469,11 @@ impl Manager {
                         workspace.name
                     )
                 })?;
-            if !question.is_open() {
+            if question.answer.is_some() {
                 return Ok(question);
             }
+            // A closed question is never answered.
+            question.ensure_open()?;
             // A closed channel only disables its wake; the poll still rechecks.
             tokio::select! {
                 Ok(()) = changed.changed() => {}

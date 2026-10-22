@@ -375,16 +375,24 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
 }
 
 #[tokio::test]
-async fn open_questions_retain_completion_and_pr_cleanup() {
+async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     let (_root, manager, workspace) = fixture().await;
-    let ask = crate::daemon::questions::Ask {
-        question: "Anything else?".into(),
+    let ask = |question: &str| crate::daemon::questions::Ask {
+        question: question.into(),
         recommendation: "No".into(),
         reason: None,
         choices: vec![],
     };
-    let question = manager.ask_question(&workspace.name, ask).await.unwrap();
+    // Done closes the questions asked before it.
+    manager
+        .ask_question(&workspace.name, ask("Anything else?"))
+        .await
+        .unwrap();
     manager.mark_done(&workspace.id, false).await.unwrap();
+    let question = manager
+        .ask_question(&workspace.name, ask("Anything more?"))
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(workspace.path.exists());
     manager

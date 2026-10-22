@@ -111,7 +111,8 @@ instead of the PR delivery guidance below.
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
   and PR cleanup. Holds and open questions block every unattended removal, rechecked
-  after the removal reserves the workspace. A scoped land
+  after the removal reserves the workspace; `done` closes the workspace's open
+  questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
   is false; approval never skips a landing check and lands only the approved commit. This is cooperative,
   not a security boundary, so judge it as such.

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     config::Effective,
-    daemon::{events::EventCause, notifications::NotificationKind, store},
+    daemon::{events::EventCause, notifications::NotificationKind, questions, store},
     hooks::{self, Hook, HookKind},
     model::{Completion, Workspace},
     state::WorkspaceState,
@@ -86,16 +86,12 @@ impl Manager {
             cleanup: cleanup || settings.done.cleanup,
             error: None,
         };
-        self.persist_completion(&workspace.id, &completion).await?;
+        let closed = self.persist_completion(&workspace.id, &completion).await?;
         self.forget_last_session(&workspace.id);
         self.notify(
             Some(&workspace.name),
             NotificationKind::WorkspaceDone,
-            if completion.cleanup {
-                "assignment finished; cleanup requested"
-            } else {
-                "assignment finished; no cleanup requested"
-            },
+            done_notice(&completion, &closed),
         )
         .await;
         if let Some((command, _resources)) = hook {
@@ -105,11 +101,14 @@ impl Manager {
         Ok(completion)
     }
 
-    /// Record `completion` for the workspace.
-    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<()> {
+    /// Record `completion` and close the workspace's open questions, which
+    /// the finished assignment waits on no longer, waking waits on them.
+    /// Returns the closed questions' numbers.
+    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Vec<i64>> {
         let id = id.to_owned();
         let record = serde_json::to_string(completion)?;
-        self.store
+        let closed = self
+            .store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
@@ -124,10 +123,15 @@ impl Manager {
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
                     [&id],
                 )?;
+                let closed = questions::close_open(&tx, &id)?;
                 tx.commit()?;
-                Ok(())
+                Ok(closed)
             })
-            .await
+            .await?;
+        if !closed.is_empty() {
+            self.questions_changed.send_modify(|count| *count += 1);
+        }
+        Ok(closed)
     }
 
     /// The configured `post_done_cmd`, holding off permit and lifecycle changes
@@ -269,6 +273,22 @@ impl Manager {
             })
             .await
     }
+}
+
+/// What the user is told about a completion and the questions it closed.
+fn done_notice(completion: &Completion, closed: &[i64]) -> String {
+    let mut notice = String::from(if completion.cleanup {
+        "assignment finished; cleanup requested"
+    } else {
+        "assignment finished; no cleanup requested"
+    });
+    if let [number] = closed {
+        notice.push_str(&format!("; closed question {number}"));
+    } else if !closed.is_empty() {
+        let numbers: Vec<_> = closed.iter().map(ToString::to_string).collect();
+        notice.push_str(&format!("; closed questions {}", numbers.join(", ")));
+    }
+    notice
 }
 
 #[cfg(test)]

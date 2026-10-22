@@ -92,7 +92,8 @@ Forgejo cannot rerun through its API.
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
 can reopen a removed workspace with `shoal restore`. Cleanup waits while one of
 your questions is open, so ask with `shoal ask` when you need the user before the
-workspace goes. Holds belong to the user and host apps; you can list them with
+workspace goes. `shoal done` closes your open questions, and `shoal undone` does
+not reopen them. Holds belong to the user and host apps; you can list them with
 `shoal hold` but not acquire or release them. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local

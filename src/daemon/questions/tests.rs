@@ -476,3 +476,65 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
     assert!(error.to_string().contains("not ready"), "{error:#}");
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }
+
+#[tokio::test]
+async fn done_closes_open_questions_for_good() {
+    let (_root, manager, workspace) = fixture().await;
+    let answered = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    manager
+        .answer_question(answered.id, "Postgres".into(), None)
+        .await
+        .unwrap();
+    let open = manager
+        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, true).await.unwrap();
+
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
+    assert_ne!(
+        manager.cleanup_reason(&workspace).await,
+        CleanupReason::Question
+    );
+    let notifications = manager.notifications(true, 50).await.unwrap();
+    assert!(
+        notifications
+            .iter()
+            .any(|n| n.kind == NotificationKind::WorkspaceDone
+                && n.message
+                    == format!(
+                        "assignment finished; cleanup requested; closed question {}",
+                        open.id
+                    ))
+    );
+    // The undelivered answer still reaches the agents.
+    let delivered = manager.question(answered.id).await.unwrap();
+    assert_eq!(delivered.answer.as_deref(), Some("Postgres"));
+    assert!(delivered.closed_at.is_none());
+
+    for error in [
+        manager
+            .answer_question(open.id, "Redis".into(), None)
+            .await
+            .unwrap_err(),
+        manager
+            .await_answer(&workspace.name, open.id, &open.ask)
+            .await
+            .unwrap_err(),
+    ] {
+        assert!(error.to_string().contains("is closed"), "{error:#}");
+    }
+
+    // Withdrawing completion leaves it closed, and its number stays taken.
+    manager.undo_done(&workspace.name).await.unwrap();
+    assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
+    let asked_again = manager
+        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .await
+        .unwrap();
+    assert!(asked_again.is_open());
+    assert_ne!(asked_again.id, open.id);
+}
