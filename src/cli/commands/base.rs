@@ -88,7 +88,7 @@ pub(super) fn render(workspace: &Workspace) {
     }
 }
 
-fn describe(workspace: &WorkspaceRef) -> String {
+pub(super) fn describe(workspace: &WorkspaceRef) -> String {
     if workspace.name == workspace.branch {
         workspace.name.clone()
     } else {

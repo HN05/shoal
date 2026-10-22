@@ -111,8 +111,9 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Unattended removals retain a workspace that is held or has an open
-    /// question, whenever it was recorded; a user's request overrides both.
+    /// Unattended removals retain a workspace that is held, has an open
+    /// question or has child workspaces, whenever it was recorded; a user's
+    /// request overrides them.
     fn unattended(self) -> bool {
         matches!(
             self,
@@ -331,8 +332,8 @@ impl Manager {
 
     /// The path and signals of a merged cleanup candidate, or `None` when
     /// it is not one: merged into the default branch and unused, with no Git
-    /// operation under way, no workspace stacked on it, no hold or keep
-    /// choice, and any unsaved files left over from merged work. Assignment
+    /// operation under way, no workspace stacked on it or split from it, no
+    /// hold or keep choice, and any unsaved files left over from merged work. Assignment
     /// state does not keep it.
     pub async fn merged_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
         if self.keep_reason(id).await?.is_some() || self.usage_reason(id).await?.is_some() {
@@ -401,16 +402,17 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds and open questions, which keep a workspace from every unattended
-    /// removal, completion and PR cleanup included.
+    /// Holds, open questions and child workspaces, which keep a workspace
+    /// from every unattended removal, completion and PR cleanup included.
     pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.has_holds(id).await? {
             return Ok(Some(CleanupReason::Held));
         }
-        Ok(self
-            .has_open_questions(id)
-            .await?
-            .then_some(CleanupReason::Question))
+        if self.has_open_questions(id).await? {
+            return Ok(Some(CleanupReason::Question));
+        }
+        Ok((!self.workspace(id).await?.child_workspaces.is_empty())
+            .then_some(CleanupReason::Children))
     }
 
     /// Assignment state whose own cleanup path decides removal.
@@ -764,6 +766,10 @@ impl Manager {
             ensure!(
                 !self.has_open_questions(&workspace.id).await?,
                 "a question waits for the user; retaining workspace"
+            );
+            ensure!(
+                check.workspace.child_workspaces.is_empty(),
+                "workspaces split from it remain; retaining workspace"
             );
         }
         removal.verify(&check, stage)?;

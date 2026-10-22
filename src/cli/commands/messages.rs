@@ -64,7 +64,7 @@ pub(super) async fn hook(ctx: &Context) -> Result<i32> {
 }
 
 async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
-    let workspace = ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?;
+    let workspace = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
     let updates: Updates = request(
         &ctx.paths,
         Method::AgentUpdates {
@@ -125,7 +125,7 @@ async fn agent_exit(agent: u32) {
 /// The workspace's next messages or item activity, or `None` when a newer
 /// delivery takes them.
 async fn next_updates(ctx: &Context) -> Result<Option<(String, Updates)>> {
-    let workspace = ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?;
+    let workspace = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
     let body = super::workspaces::wait_for_items(ctx, &workspace, Default::default(), None).await?;
     let updates = Updates::try_from(body)?;
     if updates.updates.is_empty() && updates.messages.is_empty() {
@@ -148,12 +148,7 @@ pub(super) fn hook_context(updates: &Updates) -> String {
     }
     if !updates.updates.is_empty() {
         lines.push("New activity on this workspace's issues and PRs:".to_owned());
-        lines.extend(
-            updates
-                .updates
-                .iter()
-                .map(|update| format!("- {} [{}]: {}", update.url, update.kind, update.message)),
-        );
+        lines.extend(updates.updates.iter().map(|update| format!("- {update}")));
     }
     lines.join("\n")
 }
@@ -223,6 +218,7 @@ mod tests {
                 message: "Comments or reviews changed".into(),
                 delivery: "one".into(),
                 check: None,
+                workspace: None,
             }],
             messages: vec![AgentMessage {
                 id: 1,

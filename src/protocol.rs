@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 111;
+pub const VERSION: u32 = 112;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -187,6 +187,13 @@ pub enum Method {
         git_profile: Option<String>,
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
+    },
+    /// Create a workspace on a new branch in `workspace`'s repository, split
+    /// from it as its child.
+    SplitWorkspace {
+        workspace: String,
+        name: String,
+        base: Option<String>,
     },
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.

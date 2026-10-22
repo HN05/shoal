@@ -39,6 +39,21 @@ pub struct Update {
     pub delivery: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check: Option<super::pr::state::CheckResult>,
+    /// The child workspace whose item this is, when its parent's agent
+    /// receives the update.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+}
+
+/// One line naming the item, the kind of change and the change, after the
+/// child workspace it belongs to.
+impl std::fmt::Display for Update {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(workspace) = &self.workspace {
+            write!(f, "{workspace}: ")?;
+        }
+        write!(f, "{} [{}]: {}", self.url, self.kind, self.message)
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -119,6 +134,7 @@ impl Snapshot {
                 message,
                 delivery: String::new(),
                 check,
+                workspace: None,
             })
         };
         let added_or_edited = next

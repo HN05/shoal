@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 54;
+const SCHEMA_VERSION: i64 = 55;
 
 #[cfg(test)]
 mod benchmark;
@@ -384,6 +384,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (53, KEPT_BRANCHES, None),
     // Unix time `done` closed an unanswered question.
     (54, "ALTER TABLE questions ADD COLUMN closed_at INTEGER;", None),
+    (55, include_str!("store/workspace_parent.sql"), None),
 ];
 
 /// When the grace period of an unattended removal ends, and whether the
@@ -666,6 +667,8 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         agent_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),
+        parent_workspace: None,
+        child_workspaces: Vec::new(),
         chat: None,
         links: WorkspaceLinks::default(),
         running: false,
@@ -1009,6 +1012,9 @@ mod tests {
         }
         if version >= 54 {
             db.execute_batch("ALTER TABLE questions ADD COLUMN closed_at INTEGER;")?;
+        }
+        if version >= 55 {
+            db.execute_batch(include_str!("store/workspace_parent.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
@@ -1417,7 +1423,7 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
+                "base_workspace": null, "parent_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
                 "chat": null
             }),
         )?;

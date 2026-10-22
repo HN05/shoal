@@ -26,6 +26,8 @@ states!(EventKind {
     ReviewCleared => "review_cleared",
     /// The workspace's base workspace was set, cleared, or removed.
     BaseChanged => "base_changed",
+    /// The workspace's parent workspace was removed and its own parent took its place.
+    ParentChanged => "parent_changed",
     /// A workspace link was added.
     Linked => "linked",
     /// A workspace link was removed.
@@ -59,7 +61,7 @@ states!(EventCause {
     DiskSpace => "disk_space",
     /// The branch merged into the default branch and the workspace stayed idle.
     Merged => "merged",
-    /// The base workspace was removed and its own base took its place.
+    /// The base or parent workspace was removed and its own took its place.
     Removed => "removed",
 });
 
@@ -84,6 +86,13 @@ pub struct EventDetails {
         with = "present_or_null"
     )]
     pub base_workspace: Option<Option<crate::model::WorkspaceRef>>,
+    /// Present on creation and parent changes; null when there is no parent.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "present_or_null"
+    )]
+    pub parent_workspace: Option<Option<crate::model::WorkspaceRef>>,
     /// The issue or PR link changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Box<LinkEvent>>,

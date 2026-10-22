@@ -299,6 +299,27 @@ under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, and adopts the copy on an available branch derived
 from the source branch; failures retain a failed record for normal removal.
 
+A child workspace is split from a parent with `shoal split`, so an agent whose
+work needs another PR gets another branch and worktree instead of switching
+branches or creating worktrees Shoal does not own. Splitting creates a new
+branch in the parent's repository, from the default branch or a `--base` that
+stacks it as usual, records the parent, and links an `--issue`; it is the only
+creation a scoped caller may do. Children form a tree: a scope reaches its
+workspace and every workspace below it, the CLI resolves a scoped command to the
+child whose directory it runs in, and agent hooks always report for the agent's
+own workspace. The parent's agent receives the issue and PR activity of the
+children without an agent of their own, and theirs in turn, each update naming
+its workspace, through the same cursors, deliveries and acknowledgements as its
+own; a child's own agent, as the state its hooks report shows, takes over its
+subtree. A parent stays until its children are removed, through every unattended
+removal like a hold, so one `done` at the top leaves the tree until its PRs
+merge; each child completes on its own. Removing a parent moves its children up
+to its own parent and journals the change. `ls` lists children below their
+parent, and `status` names both. Proposed next (#913): children with their own
+agents, and routing a child's messages, questions, completion and approval
+requests to its parent's agent, which may decide an approval it holds a grant
+for or pass it up to the user.
+
 `shoal rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay
 with the workspace. The default branch, a branch checked out elsewhere, or a
@@ -433,8 +454,9 @@ race a start.
 
 Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
-confines them to their own workspace: status, inspect, execute, setup, and resources.
-Creation, removal, reconciliation, other workspaces, repository
+confines them to their own workspace and the child workspaces split from it:
+status, inspect, execute, setup, and resources.
+Creation other than splitting a child, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. A scoped `land` is an
 approval request bound to the branch and its HEAD unless `[land] requires_approval`
 is off; approval lets the agent's retry land that commit through the normal checks,
@@ -1017,7 +1039,8 @@ active lifecycle operations and hooks. Holds belong to the user and to apps host
 external sessions; scoped callers list their own workspace's holds but cannot change
 them. Removal is reversible through checkpoints, so agents have no way to keep a
 workspace: one that needs the user asks, and an open question, like a hold, keeps the
-workspace from every unattended removal, completion and PR cleanup included.
+workspace from every unattended removal, completion and PR cleanup included. So
+does a child workspace, until the child is removed.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
@@ -1027,7 +1050,7 @@ Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: only holds and open questions keep a workspace.
+defers cleanup: only holds, open questions and child workspaces keep a workspace.
 The daemon runs `post_done_cmd`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
@@ -1141,7 +1164,7 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running or saved for resume, no leases, permits, directory users,
-stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
+stacked or child workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
 minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the

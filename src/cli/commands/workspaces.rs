@@ -965,7 +965,7 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
 
 /// Set up an opened workspace and link its PR, which needs a ready workspace,
 /// before reporting it and, when `navigate`, entering it.
-async fn finish_add_workspace(
+pub(super) async fn finish_add_workspace(
     ctx: &Context,
     opened: OpenedWorkspace,
     pr: Option<String>,
@@ -1466,6 +1466,7 @@ fn render_status(view: &StatusView, json: bool) {
     println!("Path:          {}", workspace.path.display());
     println!("Branch:        {}", workspace.branch);
     super::base::render(workspace);
+    super::split::render(workspace);
     println!(
         "Setup:         {}",
         if status.setup_finished {
@@ -1879,7 +1880,7 @@ pub(super) async fn watch_items(
             println!("Message: {}", message.message);
         }
         for update in &updates.updates {
-            println!("{} [{}]: {}", update.url, update.kind, update.message);
+            println!("{update}");
         }
         if updates.timed_out {
             println!("No item updates before timeout.");

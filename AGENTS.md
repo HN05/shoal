@@ -43,8 +43,10 @@ when behavior changes, distinguishing decisions from proposals.
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands inherit a scope token; CLI refusals also follow process
-  ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
-  in the daemon and deny workspace allocation/removal/recovery and shared
+  ancestry for the same state directory, so a cleared token does not unscope. A scope covers its
+  workspace and the child workspaces split from it, recursively; targets name one of them, and
+  the agent's hooks report for its own. Enforce own-worktree resource access
+  in the daemon and deny workspace allocation/removal/recovery other than splitting a child, and shared
   repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
   acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, opening and changing issues and PRs of the own repository, and rerunning
@@ -74,13 +76,13 @@ when behavior changes, distinguishing decisions from proposals.
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
-  preserves associations and watches but never defers cleanup; only holds and
-  open questions keep a workspace.
+  preserves associations and watches but never defers cleanup; only holds,
+  open questions and child workspaces keep a workspace.
   Completion cleanup without a PR registration requires every commit pushed or
   merged, retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
-  Associated issues suppress idle cleanup, not merged cleanup; holds and open
-  questions suppress every unattended removal. Holds belong to the user and
+  Associated issues suppress idle cleanup, not merged cleanup; holds, open
+  questions and child workspaces suppress every unattended removal. Holds belong to the user and
   host apps; scoped callers only list them.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with

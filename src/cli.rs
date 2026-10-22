@@ -146,6 +146,26 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Create a child workspace on a new branch for work in its own PR.
+    ///
+    /// The parent workspace's agent works on the child and receives its
+    /// issue and PR activity; the parent's cleanup waits until its children
+    /// are removed.
+    Split {
+        /// Git branch name; a portable workspace name is derived from it.
+        #[arg(required_unless_present = "issue")]
+        branch: Option<String>,
+        /// Derive the branch name from a forge issue number or URL and link the issue.
+        #[arg(long, value_parser = item_reference)]
+        issue: Option<String>,
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its
+        /// upstream); the parent's branch stacks the child on it.
+        #[arg(long, value_name = "REF")]
+        base: Option<String>,
+        /// Parent workspace; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Link an issue or PR with a relation: `link 42 assigned`, `link pr 43 related`.
     ///
     /// Assigned items drive completion and cleanup; opened and related items

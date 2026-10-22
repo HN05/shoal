@@ -127,6 +127,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
         message: "read the new review".into(),
         delivery: String::new(),
         check: None,
+        workspace: None,
     };
     crate::daemon::events::record_item_activity(
         &db,
@@ -192,16 +193,20 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_completed_again",
         "workspace_undone",
         "workspace_base_removed",
+        "workspace_parent_removed",
     ] {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migrations 31 to 54 add these columns and tables again when the
+    // Migrations 31 to 55 add these columns and tables again when the
     // emulated database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
     db.execute_batch(
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",
+    )?;
+    db.execute_batch(
+        "DROP INDEX workspaces_parent; ALTER TABLE workspaces DROP COLUMN parent_workspace_id;",
     )?;
     db.execute_batch("ALTER TABLE workspace_issue DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE agent_queue;")?;

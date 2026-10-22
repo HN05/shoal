@@ -27,6 +27,7 @@ mod restore;
 pub(crate) mod review;
 mod stack;
 mod status;
+mod tree;
 mod xcode;
 
 pub(crate) use agents::{Pause, Protection};
@@ -60,7 +61,12 @@ use std::{
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 
 enum WorkspaceSource {
-    New(Option<String>),
+    /// A new branch from an optional base ref, split from an optional parent
+    /// workspace.
+    New {
+        base: Option<String>,
+        parent: Option<String>,
+    },
     /// An existing branch, with an optional base ref overriding the default
     /// branch, and the unsaved files a restore writes into it.
     Existing {
@@ -448,7 +454,7 @@ impl Manager {
             &repo,
             name,
             branch,
-            WorkspaceSource::New(base),
+            WorkspaceSource::New { base, parent: None },
             git_profile,
             path,
         )
@@ -516,10 +522,16 @@ impl Manager {
             self.config().git.profile(name)?;
         }
         let base_branch = match &source {
-            WorkspaceSource::New(base) | WorkspaceSource::Existing { base, .. } => match base {
-                Some(base) => stack::base_branch(&repo.path, base).await?,
-                None => None,
-            },
+            WorkspaceSource::New { base, .. } | WorkspaceSource::Existing { base, .. } => {
+                match base {
+                    Some(base) => stack::base_branch(&repo.path, base).await?,
+                    None => None,
+                }
+            }
+        };
+        let parent = match &source {
+            WorkspaceSource::New { parent, .. } => parent.clone(),
+            WorkspaceSource::Existing { .. } => None,
         };
         let name = derive_workspace_name(&name);
         let path = self.new_workspace_path(repo, &name, path).await?;
@@ -530,7 +542,7 @@ impl Manager {
             branch,
             WorkspaceState::Preparing,
         );
-        self.insert_workspace(workspace.clone(), base_branch)
+        self.insert_workspace(workspace.clone(), base_branch, parent)
             .await?;
         let result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
@@ -556,8 +568,14 @@ impl Manager {
         self.workspace(&workspace.id).await
     }
 
-    /// Record a new workspace, stacked on the workspace that owns `base_branch`.
-    async fn insert_workspace(&self, record: Workspace, base_branch: Option<String>) -> Result<()> {
+    /// Record a new workspace, stacked on the workspace that owns `base_branch`
+    /// and split from `parent`.
+    async fn insert_workspace(
+        &self,
+        record: Workspace,
+        base_branch: Option<String>,
+        parent: Option<String>,
+    ) -> Result<()> {
         let marker = record
             .git_dir
             .as_ref()
@@ -595,8 +613,11 @@ impl Manager {
                     Some(branch) => stack::owner(&tx, &record.repository_id, branch)?,
                     None => None,
                 };
+                if let Some(parent) = &parent {
+                    tree::ensure_parent(&tx, &record.repository_id, parent)?;
+                }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13)",
                     params![
                         record.id,
                         record.repository_id,
@@ -610,6 +631,7 @@ impl Manager {
                         record.base_ref,
                         record.state == WorkspaceState::Ready,
                         base_workspace,
+                        parent,
                     ],
                 )?;
                 tx.execute(
@@ -641,7 +663,7 @@ impl Manager {
             &self.paths.worktrunk_config(),
             &workspace.path,
             &workspace.branch,
-            matches!(&source, WorkspaceSource::New(_)).then_some(commit.as_str()),
+            matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
@@ -673,7 +695,7 @@ impl Manager {
                 self.existing_branch_base(repo, &workspace.branch, base.as_deref())
                     .await
             }
-            WorkspaceSource::New(base) => self.new_branch_base(repo, base.as_deref()).await,
+            WorkspaceSource::New { base, .. } => self.new_branch_base(repo, base.as_deref()).await,
         }
     }
 
@@ -1031,6 +1053,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.review = review::list(db, &workspace.id)?;
     workspace.agent_state = agent_state::get(db, &workspace.id)?;
     stack::load(db, workspace)?;
+    tree::load(db, workspace)?;
     workspace.links = store::workspace_links(db, &workspace.id)?;
     workspace.chat = db.query_row(
         "SELECT chat_id FROM workspaces WHERE id=?1",

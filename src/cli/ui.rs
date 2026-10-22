@@ -419,6 +419,10 @@ pub enum Fallback {
     CurrentDirectory,
     /// Use only the current workspace; never open a picker.
     CurrentDirectoryOnly,
+    /// Use the workspace the caller's scope belongs to, else the current
+    /// workspace; never open a picker. Agent hooks report for the agent's own
+    /// workspace wherever its shell has moved, such as into a child workspace.
+    OwnWorkspace,
 }
 
 #[derive(Debug)]
@@ -579,15 +583,24 @@ async fn resolve_workspace(
     if let Some(selector) = explicit {
         return Ok(Resolution::Workspace(selector));
     }
+    // A scoped caller lists its own workspace first, then the workspaces
+    // split from it, which the current directory selects.
     let workspaces = client::workspaces(&ctx.paths).await?;
     let scoped = crate::env::is_scoped();
-    let cwd = if !scoped { current_directory()? } else { None };
+    let cwd = current_directory()?;
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
+    let order = match fallback {
+        Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
+        Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
+    };
+    if let Some(workspace) = context.resolve(None, scoped, order) {
         return Ok(Resolution::Workspace(workspace.id.clone()));
     }
     ensure!(!scoped, "scoped workspace is unavailable");
-    if matches!(fallback, Fallback::CurrentDirectoryOnly) {
+    if matches!(
+        fallback,
+        Fallback::CurrentDirectoryOnly | Fallback::OwnWorkspace
+    ) {
         return Err(NoCurrentWorkspace.into());
     }
     Ok(Resolution::Picker(workspaces))
@@ -685,7 +698,8 @@ pub fn workspace_rows(
 
 /// `workspace_rows` for workspaces and the running chats that opened some
 /// of them: the user's own workspaces, then each chat followed by its
-/// workspaces, indented. A chat row names the chat, its status and its agent.
+/// workspaces, indented. Child workspaces follow their parent, indented
+/// below it. A chat row names the chat, its status and its agent.
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
@@ -693,20 +707,25 @@ pub fn workspace_tree_rows(
     stopped: &HashSet<String>,
     palette: Palette,
 ) -> Vec<String> {
+    let tree = WorkspaceTree {
+        workspaces,
+        stopped,
+        palette,
+    };
     let opened_by = |w: &Workspace, chat: &Chat| w.chat.as_ref() == Some(&chat.id);
-    let mut rows: Vec<_> = workspaces
+    let roots = tree.roots();
+    let mut rows = Vec::new();
+    for root in roots
         .iter()
         .filter(|w| !chats.iter().any(|chat| opened_by(w, chat)))
-        .map(|w| tree_workspace_row(w, false, stopped, palette))
-        .collect();
+    {
+        tree.push(&mut rows, root, 0);
+    }
     for chat in chats {
         rows.push(chat_row(chat, repositories, palette));
-        rows.extend(
-            workspaces
-                .iter()
-                .filter(|w| opened_by(w, chat))
-                .map(|w| tree_workspace_row(w, true, stopped, palette)),
-        );
+        for root in roots.iter().filter(|w| opened_by(w, chat)) {
+            tree.push(&mut rows, root, 1);
+        }
     }
     let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
     markers
@@ -716,16 +735,53 @@ pub fn workspace_tree_rows(
         .collect()
 }
 
+/// Listed workspaces arranged under their listed parents.
+struct WorkspaceTree<'a> {
+    workspaces: &'a [Workspace],
+    stopped: &'a HashSet<String>,
+    palette: Palette,
+}
+
+impl<'a> WorkspaceTree<'a> {
+    /// The workspaces whose parent is not listed.
+    fn roots(&self) -> Vec<&'a Workspace> {
+        self.workspaces
+            .iter()
+            .filter(|w| {
+                w.parent_workspace
+                    .as_ref()
+                    .is_none_or(|parent| !self.workspaces.iter().any(|p| p.id == parent.id))
+            })
+            .collect()
+    }
+
+    /// The row of `workspace` at `depth`, then those of its children below it.
+    fn push(&self, rows: &mut Vec<(String, [Cell; 4])>, workspace: &Workspace, depth: usize) {
+        rows.push(tree_workspace_row(
+            workspace,
+            depth,
+            self.stopped,
+            self.palette,
+        ));
+        for child in self.workspaces.iter().filter(|w| {
+            w.parent_workspace
+                .as_ref()
+                .is_some_and(|parent| parent.id == workspace.id)
+        }) {
+            self.push(rows, child, depth + 1);
+        }
+    }
+}
+
 fn tree_workspace_row(
     workspace: &Workspace,
-    indented: bool,
+    depth: usize,
     stopped: &HashSet<String>,
     palette: Palette,
 ) -> (String, [Cell; 4]) {
-    let name = if indented {
-        format!("└ {}", workspace.name)
-    } else {
-        workspace.name.clone()
+    let name = match depth {
+        0 => workspace.name.clone(),
+        depth => format!("{}└ {}", "  ".repeat(depth - 1), workspace.name),
     };
     (
         palette.workspace_marker(workspace.state),
@@ -1031,6 +1087,36 @@ mod tests {
             branch.into(),
             state,
         )
+    }
+
+    #[test]
+    fn tree_rows_list_children_below_their_parent() {
+        let plain = Palette::stdout(true);
+        let mut workspaces = vec![
+            workspace("a", "child", "child", WorkspaceState::Ready),
+            workspace("a", "grandchild", "grandchild", WorkspaceState::Ready),
+            workspace("a", "orphan", "orphan", WorkspaceState::Ready),
+            workspace("a", "parent", "parent", WorkspaceState::Ready),
+        ];
+        let reference = |w: &Workspace| crate::model::WorkspaceRef {
+            id: w.id.clone(),
+            name: w.name.clone(),
+            branch: w.branch.clone(),
+        };
+        workspaces[0].parent_workspace = Some(reference(&workspaces[3]));
+        workspaces[1].parent_workspace = Some(reference(&workspaces[0]));
+        // A parent left out of the list leaves its child at the top level.
+        workspaces[2].parent_workspace = Some(crate::model::WorkspaceRef {
+            id: "unlisted".into(),
+            name: "unlisted".into(),
+            branch: "unlisted".into(),
+        });
+        let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain);
+        let expected = ["● orphan ", "● parent ", "● └ child ", "●   └ grandchild "];
+        assert_eq!(rows.len(), expected.len());
+        for (row, start) in rows.iter().zip(expected) {
+            assert!(row.starts_with(start), "{row:?}");
+        }
     }
 
     #[test]

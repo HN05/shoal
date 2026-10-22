@@ -58,7 +58,8 @@ impl Need {
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "rename"
-                | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
+                | "split" | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire"
+                | "release",
                 ..,
             ]
             | ["hold", "acquire"]

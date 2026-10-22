@@ -69,6 +69,12 @@ pub struct Workspace {
     /// Workspaces that record this one as their base.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stacked_workspaces: Vec<WorkspaceRef>,
+    /// The workspace this one was split from.
+    #[serde(default)]
+    pub parent_workspace: Option<WorkspaceRef>,
+    /// Workspaces split from this one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub child_workspaces: Vec<WorkspaceRef>,
     /// The running chat that opened this workspace.
     #[serde(default)]
     pub chat: Option<String>,
@@ -270,6 +276,8 @@ impl Workspace {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            parent_workspace: None,
+            child_workspaces: Vec::new(),
             chat: None,
             links: WorkspaceLinks::default(),
             running: false,
@@ -364,6 +372,8 @@ pub enum CleanupReason {
     },
     Held,
     Question,
+    /// Workspaces split from this one remain.
+    Children,
     PrWatch,
     Completed,
     Issue,
@@ -395,6 +405,7 @@ impl std::fmt::Display for CleanupReason {
             Self::NotReady { state } => write!(f, "Workspace state: {state}"),
             Self::Held => f.write_str("Kept by holds"),
             Self::Question => f.write_str("Open question"),
+            Self::Children => f.write_str("Child workspaces"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::Completed => f.write_str("Done; completion cleanup pending"),
             Self::Issue => f.write_str("Linked issue"),

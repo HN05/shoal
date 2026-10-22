@@ -21,8 +21,9 @@ pub struct ScopedExecution {
     pub kind: ExecutionKind,
 }
 
-/// Resolve `token` and confine `method` to the caller's own workspace. Optional
-/// workspace filters default to it; other targets must already name it.
+/// Resolve `token` and confine `method` to the caller's own workspace and the
+/// workspaces split from it. Optional workspace filters default to the
+/// caller's own; other targets must name one of them.
 pub async fn authorize(
     manager: &Manager,
     token: Option<&str>,
@@ -63,6 +64,7 @@ pub async fn authorize(
         Method::HoldList { workspace }
         | Method::SetBaseWorkspace { workspace, .. }
         | Method::RenameWorkspace { workspace, .. }
+        | Method::SplitWorkspace { workspace, .. }
         | Method::WorkspaceUndone { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SendMessage { workspace, .. }
@@ -157,11 +159,12 @@ pub async fn authorize(
         ),
     };
     if let Some(target) = target {
+        let id = manager.workspace(target).await?.id;
         ensure!(
-            manager.workspace(target).await?.id == *owner,
-            "workspace processes cannot access another worktree"
+            manager.within_subtree(owner, &id).await?,
+            "workspace processes can only access their own workspace and those split from it"
         );
-        *target = owner.clone();
+        *target = id;
     }
     Ok(Some(caller))
 }

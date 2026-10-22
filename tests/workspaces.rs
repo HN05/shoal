@@ -8663,7 +8663,10 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
             .output()
             .unwrap();
         assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("another worktree"));
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("their own workspace and those split from it")
+        );
     }
     // Without a Codex on PATH, the shortcut fails instead of reaching the
     // runner's own installation.
@@ -11491,7 +11494,10 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         "other",
     ]);
     assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("another worktree"));
+    assert!(
+        String::from_utf8_lossy(&denied.stderr)
+            .contains("their own workspace and those split from it")
+    );
     fixture.restart();
     // Completion being disabled does not disable activity waits.
     let path = Path::new(workspace["path"].as_str().unwrap());

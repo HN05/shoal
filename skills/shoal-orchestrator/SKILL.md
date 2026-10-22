@@ -11,8 +11,10 @@ explicitly: outside a workspace, commands without a target open an interactive
 picker. Do an assignment's work in its workspace through its agent, not in your
 own checkout. Change or remove another agent's workspace only when the user asks.
 
-Sessions launched through Shoal are scoped to their own workspace and cannot
-create workspaces or start sessions elsewhere; you and the user do. Unscoped
+Sessions launched through Shoal are scoped to their own workspace and the
+child workspaces they split from it with `shoal split`, which they work on
+themselves; they cannot create other workspaces or start sessions elsewhere;
+you and the user do. Unscoped
 commands also decide approval requests, so act on those only as the user directs.
 
 ## Start work
@@ -30,7 +32,8 @@ an issue becomes the agent's prompt. Happy agents (`happy-codex`, `happy-claude`
 run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
 the current terminal until they exit, so use them only when the user asks. A
 `--base` naming another workspace's branch stacks the new workspace on it; `ls`
-and `status` show the base workspace.
+and `status` show the base workspace. `ls` lists child workspaces below their
+parent, and `status` names a workspace's parent and children.
 
 Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
 session runs detached and `shoal stop` or `shoal rm` ends it. Issue and `--prompt`

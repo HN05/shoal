@@ -35,6 +35,7 @@ mod service;
 mod sessions;
 mod simulators;
 mod skill;
+mod split;
 mod stop;
 mod update;
 mod view;
@@ -325,6 +326,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             copy,
         } => workspaces::adopt(&ctx, path, repository, copy).await,
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
+        Command::Split {
+            branch,
+            issue,
+            base,
+            workspace,
+        } => split::run(&ctx, workspace, branch, issue, base).await,
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls {

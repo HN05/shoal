@@ -104,6 +104,7 @@ impl Manager {
                 message,
                 delivery: uuid::Uuid::new_v4().to_string(),
                 check: None,
+                workspace: None,
             });
         }
         self.ensure_base_unchanged(base, head).await?;

@@ -20,7 +20,7 @@ pub(super) async fn run(
     workspace: Option<String>,
     state: AgentState,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let session = hook_session();
     let status: AgentStatus = request(
         &ctx.paths,

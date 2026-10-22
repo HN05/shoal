@@ -462,6 +462,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.assign_chat(&workspace.id, chat).await?;
             Body::Workspace(manager.workspace(&workspace.id).await?)
         }
+        Method::SplitWorkspace {
+            workspace,
+            name,
+            base,
+        } => Body::Workspace(manager.split_workspace(&workspace, name, base).await?),
         Method::CheckCreation {
             repository,
             branch,
@@ -500,7 +505,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListWorkspaces => {
             let mut workspaces = manager.list_workspaces().await?;
             if let Some(caller) = caller {
-                workspaces.retain(|w| w.id == caller.workspace_id);
+                // The caller's own workspace comes first: scoped commands
+                // without a target act on it.
+                let subtree = manager.subtree(&caller.workspace_id).await?;
+                workspaces.retain(|w| subtree.contains(&w.id));
+                workspaces.sort_by_key(|w| w.id != caller.workspace_id);
             }
             for workspace in &mut workspaces {
                 manager.annotate_review(workspace).await;

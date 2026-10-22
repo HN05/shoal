@@ -16,7 +16,8 @@ and stop on `approval_denied`. Never remove scope to approve your own request.
 Shoal removes your workspace after you run `shoal done`, or once its branch has
 merged and nothing has used it for hours; issue closure and merged PRs do not
 end the assignment. Run `shoal done` as your last command once the
-assignment is finished: every watched PR merged, or no PR needed. Never end a
+assignment is finished: every watched PR merged, or no PR needed, in your
+workspace and in the child workspaces you split from it. Never end a
 session without it.
 
 Open your PR with `shoal --json pr open`: it pushes your branch, then links the
@@ -155,7 +156,8 @@ keeps your workspace from idle cleanup.
 ## Workspace context
 
 Inside Shoal's tracked execution wrapper, commands inherit scope
-and resolve to your own workspace. Agents launched independently in a managed
+and resolve to your own workspace, or to a child workspace you split from it
+when run inside the child's directory. Agents launched independently in a managed
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.
 
@@ -200,6 +202,28 @@ branch into the default branch. Unless the repository sets `[land]
 requires_approval = false`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
 commits. A new commit needs a new request; stop on `approval_denied`.
+
+## Child workspaces
+
+When part of the work belongs in its own PR, such as an unrelated fix you
+found or one part of a large change, split it into a child workspace instead of
+switching branches or creating worktrees yourself:
+
+```sh
+shoal --json split fix-typo                  # New branch from the default branch
+shoal --json split --issue 42                # Named after the issue, which it links
+shoal --json split api-part --base <branch>  # Stacked on your branch
+```
+
+The child gets its own worktree, branch and setup; the result gives its `path`.
+Work there with `cd` or absolute paths: Shoal commands run inside the child's
+directory act on the child, so `shoal pr open`, `shoal ready` and `shoal done`
+there open, mark and complete the child's work. Your hooks keep reporting for
+your own workspace, and the child's issue and PR activity reaches you like your
+own, each update naming the child workspace. Run `shoal done` in each child once
+its work is finished; Shoal cleans up your workspace only after its children are
+removed. You can split children from children; each workspace process reaches
+its own workspace and those below it.
 
 ## Ports
 

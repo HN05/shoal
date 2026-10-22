@@ -193,7 +193,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.agent_messages(&workspace.id).await?;
-        let updates = self.queued_updates(workspace).await?;
+        let updates = self.agent_queued_updates(workspace).await?;
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
@@ -203,6 +203,46 @@ impl Manager {
             timed_out: false,
             superseded: false,
         })
+    }
+
+    /// The updates queued for the workspace's agent: those on its own cursor
+    /// for an unfiltered watch, then those of the child workspaces it works on.
+    async fn agent_queued_updates(&self, workspace: Workspace) -> Result<Vec<Update>> {
+        let id = workspace.id.clone();
+        let mut updates = self.queued_updates(workspace).await?;
+        updates.extend(self.delegated_pending(&id, None).await?);
+        Ok(updates)
+    }
+
+    /// The workspace and the child workspaces whose updates its agent receives.
+    async fn agent_workspaces(&self, id: &str) -> Result<Vec<String>> {
+        let children = self.delegated_workspaces(id).await?;
+        Ok(std::iter::once(id.to_owned())
+            .chain(children.into_iter().map(|child| child.id))
+            .collect())
+    }
+
+    /// The updates queued on the cursors of the child workspaces whose
+    /// activity `id`'s agent receives, for their items of `kind` or every
+    /// kind, each naming its workspace.
+    async fn delegated_pending(&self, id: &str, kind: Option<ItemKind>) -> Result<Vec<Update>> {
+        let mut updates = Vec::new();
+        for child in self.delegated_workspaces(id).await? {
+            let child_id = child.id.clone();
+            let keys = self
+                .store
+                .run(move |db| linked_items(db, &child_id, kind))
+                .await?
+                .into_iter()
+                .map(|(url, _)| url)
+                .collect::<Vec<_>>();
+            let pending = self.pending_activity(&child.id, &keys).await?;
+            updates.extend(pending.into_iter().map(|mut update| {
+                update.workspace = Some(child.name.clone());
+                update
+            }));
+        }
+        Ok(updates)
     }
 
     /// The updates queued on the workspace's cursor for an unfiltered watch.
@@ -253,7 +293,10 @@ impl Manager {
             return Ok(false);
         }
         Ok(!self.agent_messages(&workspace.id).await?.is_empty()
-            || !self.queued_updates(workspace.clone()).await?.is_empty())
+            || !self
+                .agent_queued_updates(workspace.clone())
+                .await?
+                .is_empty())
     }
 
     async fn next_agent_messages(
@@ -280,6 +323,9 @@ impl Manager {
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
         let mut pending = self.pending_activity(id, &keys).await?;
+        if selection.input.is_none() {
+            pending.extend(self.delegated_pending(id, selection.kind).await?);
+        }
         if !pending.is_empty() {
             drop(guard);
             self.summarize_failed_checks(id, &mut pending).await;
@@ -656,20 +702,13 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let _guard = self.pr_gate.lock().await;
         let waits = self.item_waits.clone();
+        let delivered = self.agent_workspaces(&workspace.id).await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
-                let records = {
-                    let mut statement =
-                        tx.prepare("SELECT url, record FROM pr_activity WHERE workspace_id=?1")?;
-                    statement
-                        .query_map([&workspace.id], |row| {
-                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                        })?
-                        .collect::<rusqlite::Result<Vec<_>>>()?
-                };
-                for (url, record) in records {
+                let records = activity_records(&tx, &delivered)?;
+                for (id, url, record) in records {
                     let mut record: ActivityRecord = serde_json::from_str(&record)?;
                     let pending = record.pending.len();
                     // Updates queued after the acknowledged delivery stay pending.
@@ -679,7 +718,7 @@ impl Manager {
                     if record.pending.len() != pending {
                         tx.execute(
                             "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
-                            params![serde_json::to_string(&record)?, workspace.id, url],
+                            params![serde_json::to_string(&record)?, id, url],
                         )?;
                     }
                 }
@@ -759,6 +798,25 @@ pub(super) fn queue_update(
         params![workspace_id, url, serde_json::to_string(&record)?],
     )?;
     Ok(())
+}
+
+/// The activity record of every item of the workspaces `ids`, with its
+/// workspace and URL.
+fn activity_records(
+    db: &rusqlite::Connection,
+    ids: &[String],
+) -> Result<Vec<(String, String, String)>> {
+    let mut statement =
+        db.prepare("SELECT ?1, url, record FROM pr_activity WHERE workspace_id=?1")?;
+    let mut records = Vec::new();
+    for id in ids {
+        records.extend(
+            statement
+                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?,
+        );
+    }
+    Ok(records)
 }
 
 pub(crate) fn linked_items(
@@ -900,6 +958,7 @@ mod tests {
                             message: "review passed".into(),
                             delivery: String::new(),
                             check: None,
+                            workspace: None,
                         }]
                     },
                 )
@@ -948,6 +1007,7 @@ mod tests {
                         message: "queued".into(),
                         delivery: String::new(),
                         check: None,
+                        workspace: None,
                     }]
                 },
             )
@@ -968,6 +1028,7 @@ mod tests {
                     message: "review passed".into(),
                     delivery: String::new(),
                     check: None,
+                    workspace: None,
                 }])
             } else {
                 Ok(Vec::new())
@@ -1152,6 +1213,107 @@ mod tests {
             .unwrap();
         let after = manager.agent_updates(&workspace.id).await.unwrap();
         assert!(after.updates.is_empty() && after.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        let grandchild = manager
+            .split_workspace(&child.id, "grandchild".into(), None)
+            .await
+            .unwrap();
+        for (workspace, url) in [(&child, "child-pr"), (&grandchild, "grandchild-pr")] {
+            register_watch(&manager, &workspace.id, url).await;
+            manager
+                .queue_background_updates(
+                    &workspace.id,
+                    vec![(url.into(), snapshot("first"))],
+                    crate::time::unix_seconds(),
+                )
+                .await
+                .unwrap();
+        }
+        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        let received: Vec<_> = delivered
+            .updates
+            .iter()
+            .map(|update| (update.workspace.as_deref(), update.url.as_str()))
+            .collect();
+        assert_eq!(
+            received,
+            [
+                (Some("child"), "child-pr"),
+                (Some("grandchild"), "grandchild-pr")
+            ]
+        );
+        assert!(
+            delivered.updates[0]
+                .to_string()
+                .starts_with("child: child-pr [comment]:")
+        );
+        // An unfiltered watch of the parent reports them as well.
+        let watched = manager
+            .wait_items(&parent.id, &Selection::default(), Some(1))
+            .await
+            .unwrap();
+        assert_eq!(watched.updates.len(), 2);
+
+        // An agent of the child's own takes over the child's subtree.
+        manager
+            .set_agent_state(&child.id, crate::state::AgentState::Working, None, None)
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .agent_updates(&parent.id)
+                .await
+                .unwrap()
+                .updates
+                .is_empty()
+        );
+        let own = manager.agent_updates(&child.id).await.unwrap();
+        assert_eq!(own.updates.len(), 2);
+        assert_eq!(own.updates[0].workspace, None);
+        assert_eq!(own.updates[1].workspace.as_deref(), Some("grandchild"));
+        manager
+            .acknowledge_pr_updates(
+                &child.id,
+                own.updates
+                    .iter()
+                    .map(|update| update.delivery.clone())
+                    .collect(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .agent_updates(&child.id)
+                .await
+                .unwrap()
+                .updates
+                .is_empty()
+        );
+        assert!(
+            manager
+                .agent_updates(&grandchild.id)
+                .await
+                .unwrap()
+                .updates
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -1467,6 +1629,7 @@ mod tests {
             message: "base merged".into(),
             delivery: "queued".into(),
             check: None,
+            workspace: None,
         };
         let (id, update) = (workspace.id.clone(), queued.clone());
         manager

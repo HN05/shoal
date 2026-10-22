@@ -61,6 +61,8 @@ mod tests {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            parent_workspace: None,
+            child_workspaces: Vec::new(),
             chat: None,
             links: crate::model::WorkspaceLinks::default(),
             running: false,

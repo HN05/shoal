@@ -409,7 +409,10 @@ mod tests {
                     &creating_repo,
                     "racing".into(),
                     "racing".into(),
-                    WorkspaceSource::New(None),
+                    WorkspaceSource::New {
+                        base: None,
+                        parent: None,
+                    },
                     None,
                     None,
                 )
