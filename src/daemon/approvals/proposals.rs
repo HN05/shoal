@@ -132,6 +132,20 @@ impl ApprovalRequest {
         }
     }
 
+    /// The files the proposal attaches, its duplicates' included.
+    pub fn attachments(&self) -> Vec<&Attachment> {
+        match &self.specification {
+            Specification::Issue(issue) => issue
+                .issue
+                .attachments
+                .iter()
+                .chain(issue.duplicates.iter().flat_map(|d| &d.attachments))
+                .collect(),
+            Specification::Pull(pull) => pull.pull.attachments.iter().collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// The findings of duplicates an issue proposal has yet to post.
     pub fn findings(&self) -> &[Finding] {
         self.proposed_issue()

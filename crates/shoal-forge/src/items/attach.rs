@@ -147,6 +147,21 @@ pub fn resolve_references(body: &str, attachments: &[Attachment], dirs: &[&Path]
     })
 }
 
+/// Point the body's references to each of `attachments` at the file in
+/// `copies` at the same position.
+pub fn retarget(body: &str, attachments: &[Attachment], copies: &[Attachment]) -> String {
+    replace_images(body, |image| {
+        let index = attachments
+            .iter()
+            .position(|attachment| Path::new(image.target) == attachment.path)?;
+        Some(format!(
+            "![{}](<{}>)",
+            image.alt,
+            copies[index].path.display()
+        ))
+    })
+}
+
 /// Replace each image reference to an attachment with `embed(index, alt)`, preferring the reference's alt text, and add the attachments the
 /// body does not reference after it.
 pub(crate) fn embed(
@@ -199,7 +214,7 @@ impl ForgeRepo {
     /// them, before anything is posted. Returns whether the forge keeps
     /// uploads with the item or comment that shows them rather than with the
     /// repository.
-    pub(crate) async fn check_uploads(
+    pub async fn check_uploads(
         &self,
         account: &Account,
         attachments: &[Attachment],

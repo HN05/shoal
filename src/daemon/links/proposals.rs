@@ -3,6 +3,7 @@
 //! as duplicates once the user decides.
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
+use std::{collections::BTreeSet, ffi::OsString, path::Path};
 
 use crate::{
     daemon::{
@@ -19,6 +20,7 @@ use crate::{
         ForgeRepo,
         account::Account,
         items::action::Action,
+        items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
         items::item::{Item, Opened},
         items::link::ItemKind,
@@ -71,10 +73,12 @@ impl Manager {
     pub(super) async fn propose_issue(
         &self,
         workspace: &Workspace,
-        issue: NewIssue,
+        mut issue: NewIssue,
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
+        self.keep_attachments(&workspace.id, &mut issue.body, &mut issue.attachments)
+            .await?;
         let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
         let specification = Specification::Issue(IssueSpecification {
             issue,
@@ -99,10 +103,12 @@ impl Manager {
     pub(super) async fn propose_pull(
         &self,
         workspace: &Workspace,
-        pull: NewPull,
+        mut pull: NewPull,
         commit: String,
         proposer: Proposer,
     ) -> Result<Proposed> {
+        self.keep_attachments(&workspace.id, &mut pull.body, &mut pull.attachments)
+            .await?;
         let specification = Specification::Pull(PullSpecification {
             pull,
             commit,
@@ -113,6 +119,57 @@ impl Manager {
             .await
     }
 
+    /// Copy the files a proposal attaches into Shoal's state and point
+    /// `body` at the copies. The directory is named by the proposal's
+    /// content, so proposing it again reuses the copies and finds the same
+    /// request. The caller holds the PR gate, which pruning takes too.
+    async fn keep_attachments(
+        &self,
+        owner: &str,
+        body: &mut String,
+        attachments: &mut Vec<Attachment>,
+    ) -> Result<()> {
+        if attachments.is_empty() {
+            return Ok(());
+        }
+        let directory = self
+            .paths
+            .proposal_files()
+            .join(content_key(owner, body, attachments));
+        let originals = attachments.clone();
+        let copies =
+            tokio::task::spawn_blocking(move || copy_attachments(&directory, &originals)).await??;
+        *body = attach::retarget(body, attachments, &copies);
+        *attachments = copies;
+        Ok(())
+    }
+
+    /// Delete copied files no pending proposal attaches any more. Failure
+    /// only logs. The caller holds the PR gate.
+    async fn prune_proposal_files(&self) {
+        if let Err(error) = self.remove_unattached_files().await {
+            crate::daemon::log::log!("proposal files not pruned: {error:#}");
+        }
+    }
+
+    async fn remove_unattached_files(&self) -> Result<()> {
+        let root = self.paths.proposal_files();
+        let pending: Vec<_> = self
+            .approval_requests(None)
+            .await?
+            .into_iter()
+            .filter(|request| request.status == DecisionStatus::Pending)
+            .collect();
+        let kept: BTreeSet<_> = pending
+            .iter()
+            .flat_map(ApprovalRequest::attachments)
+            .filter_map(|attachment| attachment.path.strip_prefix(&root).ok())
+            .filter_map(|path| path.components().next())
+            .map(|component| component.as_os_str().to_owned())
+            .collect();
+        tokio::task::spawn_blocking(move || remove_unattached(&root, &kept)).await?
+    }
+
     /// Store the proposal with `record` and tell the user about a new one.
     async fn record_proposal(
         &self,
@@ -121,6 +178,7 @@ impl Manager {
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
     ) -> Result<Proposed> {
         let (request, new) = self.store_proposal(request, record).await?;
+        self.prune_proposal_files().await;
         if new {
             self.notify_approval(&workspace.name, &request).await;
         }
@@ -151,6 +209,7 @@ impl Manager {
                 .await?
         };
         self.forget_proposal(request.key.clone()).await?;
+        self.prune_proposal_files().await;
         if let Some(workspace) = workspace {
             self.tell_workspace(&workspace.id, message).await;
         }
@@ -480,6 +539,63 @@ async fn pull_current(workspace: &Workspace, proposed: &PullSpecification) -> Re
     }
     let pushed = crate::git::pushed_commit(&workspace.path, "origin", &workspace.branch).await?;
     Ok(pushed.as_deref() == Some(proposed.commit.as_str()))
+}
+
+/// A name for the files of a proposal with this owner, body and attachments.
+fn content_key(owner: &str, body: &str, attachments: &[Attachment]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    for part in [owner, body] {
+        hasher.update(part.as_bytes());
+        hasher.update([0]);
+    }
+    for attachment in attachments {
+        hasher.update(attachment.path.as_os_str().as_encoded_bytes());
+        hasher.update([0]);
+        hasher.update(attachment.alt.as_deref().unwrap_or_default().as_bytes());
+        hasher.update([0]);
+    }
+    hasher.finalize()[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Copy each attachment into its own directory below `directory`, keeping
+/// its file name, which names the file where it is shown.
+fn copy_attachments(directory: &Path, attachments: &[Attachment]) -> Result<Vec<Attachment>> {
+    let mut copies = Vec::with_capacity(attachments.len());
+    for (index, attachment) in attachments.iter().enumerate() {
+        let name = attachment
+            .path
+            .file_name()
+            .with_context(|| format!("{} names no file", attachment.path.display()))?;
+        let parent = directory.join(index.to_string());
+        std::fs::create_dir_all(&parent).with_context(|| format!("create {}", parent.display()))?;
+        let target = parent.join(name);
+        std::fs::copy(&attachment.path, &target)
+            .with_context(|| format!("copy {}", attachment.path.display()))?;
+        copies.push(Attachment {
+            path: target,
+            alt: attachment.alt.clone(),
+        });
+    }
+    Ok(copies)
+}
+
+/// Remove the directories below `root` whose names `kept` leaves out.
+fn remove_unattached(root: &Path, kept: &BTreeSet<OsString>) -> Result<()> {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Ok(());
+    };
+    for entry in entries {
+        let entry = entry?;
+        if !kept.contains(&entry.file_name()) {
+            std::fs::remove_dir_all(entry.path())
+                .with_context(|| format!("remove {}", entry.path().display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// A pending request for `workspace` to open what `specification` describes.

@@ -2099,3 +2099,62 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         .collect();
     assert_eq!(statuses, ["outdated", "outdated"]);
 }
+
+#[test]
+fn proposed_issues_keep_their_attachments_until_decided() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let [note, image, _] = attachment_files(&fixture);
+    let uploads = "POST https://uploads.github.com/user-attachments/assets";
+    fixture.respond(json!({
+        "GET repos/team/project": {"body": {"id": 42}},
+        format!("{uploads}?name=login.png&content_type=image%2Fpng&repository_id=42"):
+            {"body": {"url": "https://github.com/user-attachments/assets/1"}},
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Login",
+            "state": "open", "labels": []}},
+    }));
+    let open = [
+        "issue",
+        "open",
+        "--title",
+        "Login",
+        "--body-file",
+        &note,
+        "--attach",
+        &image,
+    ];
+    let proposed = scoped(&fixture, &open)["proposed"].clone();
+    // The copies are named by the proposal, so proposing again finds it.
+    assert_eq!(scoped(&fixture, &open)["proposed"]["id"], proposed["id"]);
+    let kept = proposed["specification"]["issue"]["attachments"][0]["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(kept.contains("/state/proposals/"), "{kept}");
+    assert!(
+        proposed["specification"]["issue"]["body"]
+            .as_str()
+            .unwrap()
+            .contains(&kept)
+    );
+
+    // The agent's files are gone by the time the user approves.
+    fs::remove_dir_all(fixture.root.path().join("shots")).unwrap();
+    fixture.ok(&["approve", &proposed["id"].to_string()]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| request[1].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!({"file": "login.png", "type": "image/png", "bytes": 3}),
+            json!({"title": "Login", "labels": [],
+                "body": "Before:\n\n![The error](https://github.com/user-attachments/assets/1)\n"}),
+        ]
+    );
+    let left = fs::read_dir(fixture.root.path().join("state/proposals")).unwrap();
+    assert_eq!(left.count(), 0);
+}

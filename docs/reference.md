@@ -1883,8 +1883,10 @@ there is one, and otherwise records the PR it would open, with its defaults
 filled in, at the branch's current commit. Running it again at the same commit
 returns that request; at a newer commit it replaces it, and the old one stays
 `outdated`. A pending PR request keeps the workspace from automatic cleanup.
-Both commands exit 0 with JSON `proposed`, the request, and the agent continues
-its work.
+Files given with `--attach` are copied into Shoal's state directory, since the
+agent's copies may be gone when you decide, and deleted once no pending proposal
+uses them. Both commands exit 0 with JSON `proposed`, the request, and the agent
+continues its work.
 
 ```sh
 shoal approvals                     # proposals show their labels and description

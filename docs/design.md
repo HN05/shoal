@@ -1062,7 +1062,8 @@ In a shared repository everything an agent opens is seen by other people, so
 `[approvals] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
 propose instead of open (`"direct"` is the default; unscoped callers always open).
 A proposal is an approval request whose record carries the command's options with
-their defaults resolved, the workspace, branch, commit and agent; the command
+their defaults resolved, the workspace, branch, commit and agent, and copies of its
+attachments in the state directory until no pending proposal uses them; the command
 reports it and exits 0, because the agent goes on with its work and hears the
 decision as a message. Approval carries data: the user may replace the title and
 body, and the daemon then opens the item as the agent account through the same path

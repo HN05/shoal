@@ -100,6 +100,12 @@ impl Paths {
             .tempdir_in(&self.state)
     }
 
+    /// Copies of the files proposed issues and PRs attach, kept until the
+    /// user decides, since the agent's copies may be gone by then.
+    pub fn proposal_files(&self) -> PathBuf {
+        self.state.join("proposals")
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

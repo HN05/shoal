@@ -258,6 +258,7 @@ impl Manager {
         if let Some(proposer) =
             proposer.filter(|_| settings.approvals.issue_open == Opening::Propose)
         {
+            forge.check_uploads(&account, &issue.attachments).await?;
             let proposed = self
                 .propose_issue(&workspace, issue, link, proposer)
                 .await?;
@@ -320,6 +321,7 @@ impl Manager {
                 if let Some(proposer) =
                     proposer.filter(|_| settings.approvals.pr_open == Opening::Propose)
                 {
+                    forge.check_uploads(&account, &pull.attachments).await?;
                     let proposed = self.propose_pull(&workspace, pull, head, proposer).await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
