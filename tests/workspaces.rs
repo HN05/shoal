@@ -7651,13 +7651,15 @@ head -n 1 "$HOME/picker-input"
             let args = if scoped {
                 vec!["exec", "menu-worker", "--", env!("CARGO_BIN_EXE_shoal")]
             } else if key == "ctrl-o" {
-                // `shoal work` opens the same picker on a terminal.
+                // `shoal work` opens the same picker when its output is a terminal.
                 vec!["work"]
             } else {
                 vec![]
             };
             fs::remove_file(fixture.root.path().join("picker-input")).ok();
-            let (output, transcript) = fixture.interactive(&args, "");
+            let listing = args == ["work"];
+            let (output, transcript) =
+                fixture.terminal_command(fixture.command().args(&args), "", listing);
             assert!(
                 fixture.root.path().join("picker-input").exists(),
                 "picker did not run: {transcript}"
@@ -7703,13 +7705,17 @@ head -n 1 "$HOME/picker-input"
                 }
                 _ => {
                     assert!(output.status.success(), "{transcript}");
-                    assert!(String::from_utf8_lossy(&output.stdout).contains("menu-worker"));
+                    let shown = String::from_utf8_lossy(&output.stdout) + transcript.as_str();
+                    assert!(shown.contains("menu-worker"), "{shown}");
                 }
             }
         }
     }
-    // `--print` lists on a terminal instead of opening the picker.
+    // `--print` lists on a terminal instead of opening the picker, as a
+    // redirected listing does.
     fs::remove_file(fixture.root.path().join("picker-input")).ok();
+    fixture.interactive(&["work"], "");
+    assert!(!fixture.root.path().join("picker-input").exists());
     let (output, transcript) = fixture.interactive(&["work", "--print"], "");
     assert!(output.status.success(), "{transcript}");
     assert!(!fixture.root.path().join("picker-input").exists());

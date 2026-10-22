@@ -153,6 +153,12 @@ async fn collect_workspace_overviews<T>(
 
 /// Subcommand path of an invocation that opens a menu; without a terminal its
 /// help is printed instead.
+/// Whether a listing opens the picker: on a terminal, unless its output is
+/// redirected to keep the list.
+fn lists_interactively(ctx: &Context) -> bool {
+    ctx.interactive() && std::io::IsTerminal::is_terminal(&std::io::stdout())
+}
+
 fn menu_path(command: Option<&Command>) -> Option<&'static [&'static str]> {
     match command {
         None => Some(&[]),
@@ -226,14 +232,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Some(Command::Inbox {
             repository: None,
             print: false,
-        }) if ctx.interactive() => menu::choose(&ctx, Some(menu::View::Inbox)).await?,
+        }) if lists_interactively(&ctx) => menu::choose(&ctx, Some(menu::View::Inbox)).await?,
         Some(Command::Work {
             queue: false,
             chats: false,
             repository: None,
             ref status,
             print: false,
-        }) if status.is_empty() && ctx.interactive() => {
+        }) if status.is_empty() && lists_interactively(&ctx) => {
             menu::choose(&ctx, Some(menu::View::Work)).await?
         }
         Some(command) => command,
