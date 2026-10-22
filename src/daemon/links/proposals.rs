@@ -180,11 +180,16 @@ impl Manager {
         decision: &ProposalDecision,
     ) -> Result<(ApprovalRequest, String)> {
         if decision.title.is_some() || decision.body.is_some() {
+            ensure!(
+                request.url.is_none(),
+                "approval request {} already opened its issue; approve it again without edits to finish",
+                request.id
+            );
             request.edit(decision);
             self.save_proposal(request.clone()).await?;
         }
         let (item, linked) = match request.target {
-            Target::IssueOpen => self.open_proposed_issue(&request, workspace).await?,
+            Target::IssueOpen => self.open_proposed_issue(&mut request, workspace).await?,
             Target::PrOpen => {
                 let workspace = workspace.context("the workspace that proposed the PR is gone")?;
                 self.open_proposed_pull(&request, workspace).await?
@@ -206,48 +211,81 @@ impl Manager {
 
     /// Open the proposed issue as the agent account, through the workspace
     /// while it exists and otherwise through the repository, and post the
-    /// findings of its duplicates. Returns the issue and whether it was linked.
+    /// findings of its duplicates. The request keeps the issue and the
+    /// findings not yet posted, so approving again after a failure finishes
+    /// the work instead of opening another issue. Returns the issue and
+    /// whether it was linked.
     async fn open_proposed_issue(
         &self,
-        request: &ApprovalRequest,
+        request: &mut ApprovalRequest,
         workspace: Option<&Workspace>,
     ) -> Result<(Item, bool)> {
-        let proposed = request
-            .proposed_issue()
-            .context("the issue proposal has no issue")?;
         let (forge, account) = self.proposal_forge_account(request, workspace).await?;
-        let item = forge.create_issue(&account, &proposed.issue).await?;
-        let linked = match workspace {
-            Some(workspace) => {
-                let link = proposed.link && workspace.links.issue.is_none();
-                // The issue exists, so a failed record or link only logs.
-                match self
-                    .keep_created(workspace, ItemKind::Issue, &item, link)
-                    .await
-                {
-                    Ok((linked, _)) => linked,
-                    Err(error) => {
-                        crate::daemon::log::log!("proposed issue not recorded: {error:#}");
-                        false
-                    }
-                }
+        let (item, linked) = match request.url.clone() {
+            Some(url) => {
+                let (number, _) = forge.issue(&url)?;
+                let item = forge.read(&account, ItemKind::Issue, number).await?.item;
+                (item, false)
             }
-            None => false,
+            None => {
+                let proposed = request
+                    .proposed_issue()
+                    .context("the issue proposal has no issue")?
+                    .clone();
+                let item = forge.create_issue(&account, &proposed.issue).await?;
+                request.url = Some(item.url.clone());
+                self.save_proposal(request.clone())
+                    .await
+                    .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
+                let linked = self
+                    .record_proposed_issue(workspace, proposed.link, &item)
+                    .await;
+                (item, linked)
+            }
         };
         let target = super::actions::Target {
             kind: ItemKind::Issue,
             number: item.number,
             url: item.url.clone(),
         };
-        for finding in &proposed.duplicates {
-            let comment = comment(finding.clone());
-            self.comment_as_proposer(workspace, &forge, &account, &target, comment)
+        while let Some(finding) = request.findings().first().cloned() {
+            self.comment_as_proposer(workspace, &forge, &account, &target, comment(finding))
                 .await
                 .with_context(|| {
-                    format!("{} was opened, but adding a duplicate failed", item.url)
+                    format!(
+                        "{} was opened, but adding a duplicate failed; approve again to retry",
+                        item.url
+                    )
                 })?;
+            request.finding_posted();
+            self.save_proposal(request.clone()).await?;
         }
         Ok((item, linked))
+    }
+
+    /// Record the opened issue as the workspace's and assign it when it was
+    /// proposed with `link` and none is assigned. The issue exists, so a
+    /// failure only logs. Returns whether it was linked.
+    async fn record_proposed_issue(
+        &self,
+        workspace: Option<&Workspace>,
+        link: bool,
+        item: &Item,
+    ) -> bool {
+        let Some(workspace) = workspace else {
+            return false;
+        };
+        let link = link && workspace.links.issue.is_none();
+        match self
+            .keep_created(workspace, ItemKind::Issue, item, link)
+            .await
+        {
+            Ok((linked, _)) => linked,
+            Err(error) => {
+                crate::daemon::log::log!("proposed issue not recorded: {error:#}");
+                false
+            }
+        }
     }
 
     /// Open the proposed PR, or link the branch's open PR, as the agent

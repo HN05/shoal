@@ -1902,13 +1902,16 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspace() {
     let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
     let issue = |number: u64, title: &str| json!({"body": {"number": number, "title": title, "state": "open", "labels": []}});
-    fixture.respond(json!({
+    let mut responses = json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
         "GET repos/team/project/issues/40": issue(40, "Flaky"),
         "GET repos/team/project/issues/12": issue(12, "Known"),
         "POST repos/team/project/issues/12/comments": {"status": 201, "body": {"id": 1}},
-        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 2}},
-    }));
+        // The first attempt to add the duplicate's finding fails.
+        "POST repos/team/project/issues/40/comments": {"status": 500,
+            "body": {"message": "unavailable"}},
+    });
+    fixture.respond(responses.clone());
     let propose = |title: &str, body: &str| {
         let open = ["issue", "open", "--title", title, "--body", body];
         scoped(&fixture, &open)["proposed"]["id"].to_string()
@@ -1955,16 +1958,30 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["id"].to_string(), flaky);
-    let approved = fixture.ok(&["approve", &flaky]);
-    assert_eq!(approved["url"], format!("{}/issues/40", fixture.web));
+    let comment = json!(["POST repos/team/project/issues/40/comments",
+        {"body": finding("Flaky again", "\nAlso on CI\n")}]);
+    let failed = fixture.run(&["approve", &flaky]);
+    assert!(
+        String::from_utf8_lossy(&failed.stderr).contains("approve again to retry"),
+        "{failed:?}"
+    );
     assert_eq!(
         writes(&fixture),
         [
             json!(["POST repos/team/project/issues", {"title": "Flaky", "body": "", "labels": []}]),
-            json!(["POST repos/team/project/issues/40/comments",
-                {"body": finding("Flaky again", "\nAlso on CI\n")}]),
+            comment.clone(),
         ]
     );
+    // The request keeps the opened issue, so approving again only finishes it.
+    let url = format!("{}/issues/40", fixture.web);
+    assert_eq!(fixture.ok(&["approvals"])[0]["url"], url);
+    responses["POST repos/team/project/issues/40/comments"] =
+        json!({"status": 201, "body": {"id": 2}});
+    fixture.respond(responses);
+    let approved = fixture.ok(&["approve", &flaky]);
+    assert_eq!(approved["url"], url);
+    assert_eq!(writes(&fixture), [comment]);
+    assert_eq!(fixture.ok(&["approvals"]), json!([]));
 }
 
 #[test]

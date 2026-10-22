@@ -132,6 +132,21 @@ impl ApprovalRequest {
         }
     }
 
+    /// The findings of duplicates an issue proposal has yet to post.
+    pub fn findings(&self) -> &[Finding] {
+        self.proposed_issue()
+            .map_or(&[], |issue| issue.duplicates.as_slice())
+    }
+
+    /// Forget the first finding once it is posted.
+    pub fn finding_posted(&mut self) {
+        if let Specification::Issue(issue) = &mut self.specification
+            && !issue.duplicates.is_empty()
+        {
+            issue.duplicates.remove(0);
+        }
+    }
+
     /// Apply the user's edits to the proposed title and description.
     pub fn edit(&mut self, decision: &ProposalDecision) {
         let (title, body) = match &mut self.specification {
