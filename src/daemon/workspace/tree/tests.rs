@@ -540,3 +540,73 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
+    use crate::daemon::questions::Ask;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let ask = |question: &str| Ask {
+        question: question.into(),
+        recommendation: "Yes".into(),
+        reason: None,
+        choices: vec![],
+    };
+    let asked = manager
+        .ask_question(&child.id, ask("Use SQLite?"))
+        .await
+        .unwrap();
+    manager
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    let mut answer = Method::AnswerQuestion {
+        id: asked.id,
+        answer: "Yes".into(),
+        shown: None,
+    };
+    crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer)
+        .await
+        .unwrap();
+    let Method::AnswerQuestion { id, answer, shown } = answer else {
+        panic!("authorization keeps the method");
+    };
+    assert!(shown.is_some());
+    // Meanwhile the question is answered and delivered, and the sibling's
+    // next question reuses its number.
+    let answered = manager
+        .answer_question(asked.id, "No".into(), None)
+        .await
+        .unwrap();
+    manager
+        .mark_agent_messages_delivered(&child.id, vec![answered.message_id.unwrap()])
+        .await
+        .unwrap();
+    let reused = manager
+        .ask_question(&sibling.id, ask("Rename it?"))
+        .await
+        .unwrap();
+    assert_eq!(reused.id, asked.id);
+    let error = manager
+        .answer_question(id, answer, shown)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("changed since it was shown"));
+    assert!(manager.question(reused.id).await.unwrap().answer.is_none());
+}

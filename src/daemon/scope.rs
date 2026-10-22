@@ -163,13 +163,24 @@ pub async fn authorize(
         Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
             bail!("holds belong to the user and host apps; workspace processes ask with shoal ask")
         }
-        Method::AnswerQuestion { id, .. } => {
-            // A coordinating agent answers the questions of the workspaces below its own.
-            let asked = manager.question(*id).await?.workspace_id;
+        Method::AnswerQuestion { id, shown, .. } => {
+            // A coordinating agent answers the questions of the workspaces
+            // below its own. The answer binds to the question authorized
+            // here, which the answer refuses once a later question reuses
+            // its number.
+            let question = match shown.take() {
+                Some(shown) => shown,
+                None => manager.question(*id).await?,
+            };
             ensure!(
-                asked != *owner && manager.within_subtree(owner, &asked).await?,
+                question.id == *id
+                    && question.workspace_id != *owner
+                    && manager
+                        .within_subtree(owner, &question.workspace_id)
+                        .await?,
                 "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal ask"
             );
+            *shown = Some(question);
             None
         }
         Method::ItemAction {
