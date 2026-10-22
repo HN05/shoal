@@ -102,9 +102,10 @@ impl Manager {
     }
 
     /// Delete the DerivedData of projects whose worktree directory in the
-    /// repository's directory is gone, returning whether any went. A project
-    /// missing from a live worktree may be regenerating, and an absent
-    /// repository directory, such as an unmounted volume, proves nothing gone. Creating, restoring and
+    /// repository's directory is gone and no workspace record holds,
+    /// returning whether any went. A project missing from a live worktree
+    /// may be regenerating, and an absent repository directory, such as an
+    /// unmounted volume, proves nothing gone. Creating, restoring and
     /// renaming a workspace hold the repository's Git gate, so holding it
     /// keeps a worktree from coming back meanwhile; landing holds it through
     /// a whole build, so a busy gate leaves the deletion to a later pass.
@@ -120,10 +121,32 @@ impl Manager {
             log!("DerivedData of {name} kept: the repository is busy");
             return false;
         };
+        let recorded = match self.recorded_worktrees(repo).await {
+            Ok(recorded) => recorded,
+            Err(error) => {
+                log!("DerivedData of {name} kept: {error:#}");
+                return false;
+            }
+        };
         delete_derived_data(name, location, move |project| {
             worktree_gone(&directory, project)
+                && !recorded
+                    .iter()
+                    .any(|worktree| project.starts_with(worktree))
         })
         .await
+    }
+
+    /// The recorded worktree paths of the repository's workspaces, whether
+    /// or not they exist.
+    async fn recorded_worktrees(&self, repo: &Repository) -> Result<Vec<PathBuf>> {
+        Ok(self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .filter(|workspace| workspace.repository_id == repo.id)
+            .map(|workspace| workspace.path)
+            .collect())
     }
 
     /// Delete the package checkouts in the preset's `cache` that nothing
@@ -272,7 +295,7 @@ mod tests {
     use std::{fs, time::SystemTime};
 
     #[tokio::test]
-    async fn cleanup_skips_a_busy_repository() {
+    async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
         let (root, manager) = manager().await;
         configure(
             &manager,
@@ -284,13 +307,20 @@ mod tests {
             .register_repository(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
-        manager
-            .create_workspace(&repo.id, "removed".into(), None, None, None)
-            .await
-            .unwrap();
+        let mut worktrees = Vec::new();
+        for name in ["removed", "moved"] {
+            let workspace = manager
+                .create_workspace(&repo.id, name.into(), None, None, None)
+                .await
+                .unwrap();
+            worktrees.push(workspace.path);
+        }
+        // A worktree moved outside Shoal keeps its record and DerivedData.
+        fs::rename(&worktrees[1], root.path().join("moved")).unwrap();
         let location = derived_data::location(&manager.paths.home).unwrap();
         let directory = repo.workspaces_dir.clone().unwrap();
         let left = derived_data::folder(&location, "App-gone", &directory.join("gone/App"));
+        let moved = derived_data::folder(&location, "App-moved", &worktrees[1].join("App"));
         let settings = manager.repository_settings(&repo.id).await.unwrap();
         let cache = crate::caches::directories(&repo, &settings.caches).unwrap()
             [presets::XCODE_CACHE]
@@ -312,6 +342,7 @@ mod tests {
         assert!(manager.delete_xcode_leftovers(&repo, |_| true).await);
         assert!(!left.exists());
         assert!(!cache.exists());
+        assert!(moved.exists());
     }
 
     #[tokio::test]
