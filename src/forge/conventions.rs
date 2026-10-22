@@ -107,20 +107,32 @@ fn unlabeled_warning(item: &Item) -> String {
 
 /// The warning for a description that leaves out the headings of the
 /// forge's template for its kind, or of every issue template; none when the
-/// repository has no template or the templates have no headings.
+/// repository has no template or the description follows one.
 fn template_warning(forge: &ForgeRepo, worktree: &Path, item: &Item, body: &str) -> Option<String> {
     let templates = templates(forge.kind, item.kind, worktree);
-    let written = headings(body);
-    let lacking: Vec<(&Template, Vec<&str>)> = templates
+    let unmet = unmet(&templates, &headings(body))?;
+    Some(unmet_warning(item, &unmet))
+}
+
+/// A template and the headings a description leaves out of it.
+type Unmet<'a> = (&'a Template, Vec<&'a str>);
+
+/// Each template with the headings `written` leaves out of it; none when
+/// there is no template or one has all its headings written.
+fn unmet<'a>(templates: &'a [Template], written: &[String]) -> Option<Vec<Unmet<'a>>> {
+    let unmet: Vec<Unmet> = templates
         .iter()
-        .map(|template| (template, template.missing(&written)))
+        .map(|template| (template, template.missing(written)))
         .collect();
-    if lacking.iter().any(|(_, missing)| missing.is_empty()) {
-        return None;
-    }
+    let followed = unmet.iter().any(|(_, missing)| missing.is_empty());
+    (!unmet.is_empty() && !followed).then_some(unmet)
+}
+
+/// Name the missing headings of a single template, or every template the
+/// description could have followed.
+fn unmet_warning(item: &Item, unmet: &[Unmet]) -> String {
     let fix = edit(item, "--body-file");
-    let warning = match lacking.as_slice() {
-        [] => return None,
+    match unmet {
         [(template, missing)] => format!(
             "the description of {} lacks the headings of {}: {}; {fix} rewrites it",
             name(item),
@@ -136,8 +148,7 @@ fn template_warning(forge: &ForgeRepo, worktree: &Path, item: &Item, body: &str)
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-    };
-    Some(warning)
+    }
 }
 
 /// A description template the forge offers, with the headings it asks for.
@@ -162,8 +173,8 @@ impl Template {
 }
 
 /// The templates the forge reads for a new item of `kind`: the first
-/// directory that has one, in the forge's lookup order. Unreadable files and
-/// templates without headings ask for nothing and are left out.
+/// directory that has one, in the forge's lookup order. Unreadable files are
+/// left out; a template without headings asks for nothing.
 fn templates(forge: ForgeKind, kind: ItemKind, worktree: &Path) -> Vec<Template> {
     let candidates: Vec<(&str, Lookup)> = match (forge, kind) {
         (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Pr) => TEMPLATE_DIRS
@@ -258,10 +269,9 @@ fn markdown_files(dir: &Path) -> Vec<String> {
 
 fn template(path: &Path, relative: String) -> Option<Template> {
     let text = std::fs::read_to_string(path).ok()?;
-    let headings = headings(without_front_matter(&text));
-    (!headings.is_empty()).then_some(Template {
+    Some(Template {
         path: relative,
-        headings,
+        headings: headings(without_front_matter(&text)),
     })
 }
 
@@ -438,7 +448,29 @@ mod tests {
             None
         );
 
+        // A freeform choice among headed ones asks for nothing.
+        std::fs::write(issues.join("blank.md"), "Describe it.\n").unwrap();
+        assert_eq!(
+            template_warning(&forgejo, root.path(), &issue, "Broken"),
+            None
+        );
+
         let bitbucket = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
         assert_eq!(template_warning(&bitbucket, root.path(), &pr, ""), None);
+    }
+
+    #[test]
+    fn a_template_without_headings_still_takes_precedence() {
+        let root = tempfile::tempdir().unwrap();
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        for (dir, text) in [
+            (".forgejo", "Say what changed.\n"),
+            (".github", "## Summary\n"),
+        ] {
+            std::fs::create_dir(root.path().join(dir)).unwrap();
+            std::fs::write(root.path().join(dir).join("pull_request_template.md"), text).unwrap();
+        }
+        let pr = item(ItemKind::Pr);
+        assert_eq!(template_warning(&forgejo, root.path(), &pr, "Fix"), None);
     }
 }
