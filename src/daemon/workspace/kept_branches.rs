@@ -31,7 +31,8 @@ enum Status {
     /// Deleted, moved, the default branch or a workspace's: no longer
     /// Shoal's to delete.
     Released,
-    /// Checked out by a worktree Shoal does not manage.
+    /// Checked out by a worktree Shoal does not manage, or the start of a
+    /// rebase or bisect in one.
     CheckedOut,
     /// Still at the kept commit, with this many commits only it has.
     Kept { unkept_commits: u64 },
@@ -295,6 +296,7 @@ async fn kept_status(
     if git::checkout_of(repo, &record.branch, git::run)
         .await?
         .is_some()
+        || git::branch::in_operation(repo, &record.branch).await?
     {
         return Ok(Status::CheckedOut);
     }

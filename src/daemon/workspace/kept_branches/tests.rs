@@ -285,3 +285,41 @@ async fn a_stale_ref_of_another_remote_does_not_approve_deletion() {
         ""
     );
 }
+
+#[tokio::test]
+async fn a_branch_a_bisect_started_from_stays() {
+    let (root, manager, repo, _other) = fixture().await;
+    kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["push", "-q", "origin", "topic"]);
+    let elsewhere = root.path().join("elsewhere");
+    git(
+        &repo.path,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            elsewhere.to_str().unwrap(),
+            "topic",
+        ],
+    );
+    git(&elsewhere, &["bisect", "start"]);
+    // Bisecting moves HEAD off the branch it returns to.
+    git(&elsewhere, &["switch", "-q", "--detach", "main"]);
+
+    manager
+        .delete_kept_branches_kept_elsewhere(&repo.id)
+        .await
+        .unwrap();
+    assert!(branch_exists(&repo, "topic"));
+
+    git(&elsewhere, &["bisect", "reset"]);
+    git(
+        &repo.path,
+        &["worktree", "remove", elsewhere.to_str().unwrap()],
+    );
+    manager
+        .delete_kept_branches_kept_elsewhere(&repo.id)
+        .await
+        .unwrap();
+    assert!(!branch_exists(&repo, "topic"));
+}

@@ -42,6 +42,34 @@ pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> 
     git::run_isolated(repo, &["update-ref", "-d", &git::local_ref(name), commit]).await
 }
 
+/// Whether a rebase or bisect in some worktree started from the branch. Git
+/// shows that worktree's HEAD as detached, but the operation returns to the
+/// branch, so the branch is in use.
+pub async fn in_operation(repo: &Path, name: &str) -> Result<bool> {
+    let common = git::common_dir(repo).await?;
+    let linked = match std::fs::read_dir(common.join("worktrees")) {
+        Ok(entries) => entries
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<std::io::Result<Vec<_>>>()?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(error.into()),
+    };
+    let reference = git::local_ref(name);
+    for dir in std::iter::once(common).chain(linked) {
+        let read = |file: &str| {
+            std::fs::read_to_string(dir.join(file)).map(|text| text.trim_end().to_owned())
+        };
+        // Rebases record the full ref, bisects the branch's short name.
+        if read("rebase-merge/head-name").is_ok_and(|head| head == reference)
+            || read("rebase-apply/head-name").is_ok_and(|head| head == reference)
+            || read("BISECT_START").is_ok_and(|start| start == name)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// When `commit` was made, in Unix seconds, and its subject line.
 pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(u64, String)> {
     let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", commit, "--"]).await?;
