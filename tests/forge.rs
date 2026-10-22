@@ -2171,3 +2171,42 @@ fn proposed_issues_keep_their_attachments_until_decided() {
     let left = fs::read_dir(fixture.root.path().join("state/proposals")).unwrap();
     assert_eq!(left.count(), 0);
 }
+
+#[test]
+fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
+    let fixture = Fixture::new(Forge::Forgejo, "[approvals]\nissue_open = 'propose'\n");
+    let mut responses = json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        // Forgejo labels the issue after opening it; the first attempt fails.
+        "PUT repos/team/project/issues/40/labels": {"status": 500,
+            "body": {"message": "unavailable"}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+    });
+    fixture.respond(responses.clone());
+    let open = ["issue", "open", "--title", "Flaky", "--label", "bug"];
+    let id = scoped(&fixture, &open)["proposed"]["id"].to_string();
+    let failed = fixture.run(&["approve", &id]);
+    assert!(
+        String::from_utf8_lossy(&failed.stderr).contains("approve again to retry"),
+        "{failed:?}"
+    );
+    let url = format!("{}/issues/40", fixture.web);
+    assert_eq!(fixture.ok(&["approvals"])[0]["url"], url);
+    let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
+    assert_eq!(
+        posted,
+        [
+            "POST repos/team/project/issues",
+            "PUT repos/team/project/issues/40/labels"
+        ]
+    );
+
+    responses["PUT repos/team/project/issues/40/labels"] = json!({"body": []});
+    fixture.respond(responses);
+    assert_eq!(fixture.ok(&["approve", &id])["url"], url);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["PUT repos/team/project/issues/40/labels", {"labels": ["bug"]}])]
+    );
+}

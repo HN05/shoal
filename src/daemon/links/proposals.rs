@@ -26,7 +26,7 @@ use crate::{
         items::action::Action,
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
-        items::item::{Item, Opened},
+        items::item::{Item, ItemState, Opened},
         items::link::ItemKind,
     },
     model::Workspace,
@@ -91,6 +91,7 @@ impl Manager {
             commit: commit.trim().to_owned(),
             agent: proposer.agent,
             duplicates: Vec::new(),
+            follow_up: None,
         });
         let request = proposal(
             workspace,
@@ -274,45 +275,107 @@ impl Manager {
 
     /// Open the proposed issue as the agent account, through the workspace
     /// while it exists and otherwise through the repository, and post the
-    /// findings of its duplicates. The request keeps the issue and the
-    /// findings not yet posted, so approving again after a failure finishes
-    /// the work instead of opening another issue. Returns the issue and
-    /// whether it was linked.
+    /// findings of its duplicates. The request keeps the issue once it is
+    /// posted and the work left after it, so approving again after a failure
+    /// finishes that work instead of opening another issue. Returns the issue
+    /// and whether it was linked.
     async fn open_proposed_issue(
         &self,
         request: &mut ApprovalRequest,
         workspace: Option<&Workspace>,
     ) -> Result<(Item, bool)> {
         let (forge, account) = self.proposal_forge_account(request, workspace).await?;
-        let (item, linked) = match request.url.clone() {
-            Some(url) => {
-                let (number, _) = forge.issue(&url)?;
-                let item = forge.read(&account, ItemKind::Issue, number).await?.item;
-                (item, false)
-            }
+        let linked = match request.url {
+            Some(_) => false,
             None => {
-                let proposed = request
-                    .proposed_issue()
-                    .context("the issue proposal has no issue")?
-                    .clone();
-                let item = forge.create_issue(&account, &proposed.issue).await?;
-                request.url = Some(item.url.clone());
-                self.save_proposal(request.clone())
-                    .await
-                    .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
-                let linked = self
-                    .record_proposed_issue(workspace, proposed.link, &item)
-                    .await;
-                (item, linked)
+                self.post_proposed_issue(request, workspace, &forge, &account)
+                    .await?
             }
         };
+        let item = self
+            .finish_proposed_issue(request, &forge, &account)
+            .await?;
+        self.post_findings(request, workspace, &forge, &account, &item)
+            .await?;
+        Ok((item, linked))
+    }
+
+    /// Post the issue, keep its URL and the edit that finishes it on the
+    /// request, and record it as the workspace's. Returns whether it was linked.
+    async fn post_proposed_issue(
+        &self,
+        request: &mut ApprovalRequest,
+        workspace: Option<&Workspace>,
+        forge: &ForgeRepo,
+        account: &Account,
+    ) -> Result<bool> {
+        let proposed = request
+            .proposed_issue()
+            .context("the issue proposal has no issue")?
+            .clone();
+        let (number, follow_up) = forge.post_issue(account, &proposed.issue).await?;
+        let url = forge.item_url(ItemKind::Issue, number)?;
+        request.url = Some(url.clone());
+        request.set_follow_up(Some(follow_up));
+        self.save_proposal(request.clone())
+            .await
+            .with_context(|| format!("{url} was opened, but recording it failed"))?;
+        let item = Item {
+            kind: ItemKind::Issue,
+            number,
+            url,
+            title: proposed.issue.title,
+            state: ItemState::Open,
+            labels: Vec::new(),
+            pr: None,
+        };
+        Ok(self
+            .record_proposed_issue(workspace, proposed.link, &item)
+            .await)
+    }
+
+    /// Apply what posting the issue left, such as Forgejo's labels, and read
+    /// the issue as the forge then reports it.
+    async fn finish_proposed_issue(
+        &self,
+        request: &mut ApprovalRequest,
+        forge: &ForgeRepo,
+        account: &Account,
+    ) -> Result<Item> {
+        let url = request
+            .url
+            .clone()
+            .context("the issue proposal has no opened issue")?;
+        let (number, _) = forge.issue(&url)?;
+        let follow_up = request.follow_up().cloned().unwrap_or_default();
+        let item = forge
+            .finish_issue(account, number, &follow_up)
+            .await
+            .with_context(|| format!("{url}: approve again to retry"))?;
+        if request.follow_up().is_some() {
+            request.set_follow_up(None);
+            self.save_proposal(request.clone()).await?;
+        }
+        Ok(item)
+    }
+
+    /// Comment the findings of the issue's duplicates, forgetting each once
+    /// it is posted.
+    async fn post_findings(
+        &self,
+        request: &mut ApprovalRequest,
+        workspace: Option<&Workspace>,
+        forge: &ForgeRepo,
+        account: &Account,
+        item: &Item,
+    ) -> Result<()> {
         let target = super::actions::Target {
             kind: ItemKind::Issue,
             number: item.number,
             url: item.url.clone(),
         };
         while let Some(finding) = request.findings().first().cloned() {
-            self.comment_as_proposer(workspace, &forge, &account, &target, comment(finding))
+            self.comment_as_proposer(workspace, forge, account, &target, comment(finding))
                 .await
                 .with_context(|| {
                     format!(
@@ -323,7 +386,7 @@ impl Manager {
             request.finding_posted();
             self.save_proposal(request.clone()).await?;
         }
-        Ok((item, linked))
+        Ok(())
     }
 
     /// Record the opened issue as the workspace's and assign it when it was

@@ -104,6 +104,14 @@ impl ForgeRepo {
 
     /// Open the issue and return it as the forge reports it.
     pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
+        let (number, follow_up) = self.post_issue(account, issue).await?;
+        self.finish_issue(account, number, &follow_up).await
+    }
+
+    /// Post the issue and return its number with the edit that finishes it:
+    /// Forgejo's labels, which it takes only by ID on creation, and files the
+    /// forge keeps with the item.
+    pub async fn post_issue(&self, account: &Account, issue: &NewIssue) -> Result<(u64, Edit)> {
         self.ensure_labels(&issue.labels)?;
         let per_item = self.check_uploads(account, &issue.attachments).await?;
         let (body, pending) = self
@@ -127,14 +135,30 @@ impl ForgeRepo {
             add_labels,
             ..pending_edit(pending)
         };
-        if follow_up == Edit::default() {
+        Ok((number, follow_up))
+    }
+
+    /// Apply the edit [`Self::post_issue`] left to the issue `number`, and
+    /// return the issue as the forge then reports it.
+    pub async fn finish_issue(
+        &self,
+        account: &Account,
+        number: u64,
+        follow_up: &Edit,
+    ) -> Result<Item> {
+        if *follow_up == Edit::default() {
             return Ok(self.read(account, ItemKind::Issue, number).await?.item);
         }
-        self.act(account, ItemKind::Issue, number, &Action::Edit(follow_up))
-            .await
-            .with_context(|| {
-                format!("issue #{number} was opened, but labeling it or attaching its files failed")
-            })
+        self.act(
+            account,
+            ItemKind::Issue,
+            number,
+            &Action::Edit(follow_up.clone()),
+        )
+        .await
+        .with_context(|| {
+            format!("issue #{number} was opened, but labeling it or attaching its files failed")
+        })
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {

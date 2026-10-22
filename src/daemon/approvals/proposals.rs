@@ -11,6 +11,7 @@ use super::{
 use crate::{
     daemon::store,
     forge::{
+        items::action::Edit,
         items::attach::Attachment,
         items::create::{NewIssue, NewPull},
     },
@@ -36,6 +37,10 @@ pub struct IssueSpecification {
     /// posted as comments once it is opened.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub duplicates: Vec<Finding>,
+    /// What is left to do to the issue once approval posted it, such as
+    /// Forgejo's labels, until it is done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<Edit>,
 }
 
 /// A duplicate proposal's text and files, which become a comment on what it
@@ -150,6 +155,17 @@ impl ApprovalRequest {
     pub fn findings(&self) -> &[Finding] {
         self.proposed_issue()
             .map_or(&[], |issue| issue.duplicates.as_slice())
+    }
+
+    /// What is left to do to an issue approval posted.
+    pub fn follow_up(&self) -> Option<&Edit> {
+        self.proposed_issue()?.follow_up.as_ref()
+    }
+
+    pub fn set_follow_up(&mut self, follow_up: Option<Edit>) {
+        if let Specification::Issue(issue) = &mut self.specification {
+            issue.follow_up = follow_up;
+        }
     }
 
     /// Forget the first finding once it is posted.

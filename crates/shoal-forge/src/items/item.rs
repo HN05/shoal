@@ -90,7 +90,7 @@ impl ForgeRepo {
     }
 
     /// The URL Shoal records for the item.
-    pub(crate) fn item_url(&self, kind: ItemKind, number: u64) -> Result<String> {
+    pub fn item_url(&self, kind: ItemKind, number: u64) -> Result<String> {
         let number = number.to_string();
         Ok(match kind {
             ItemKind::Issue => self.issue(&number)?.1,

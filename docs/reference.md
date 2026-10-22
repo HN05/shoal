@@ -1907,9 +1907,10 @@ becomes `outdated`, and the agent is told to run `pr open` again. `deny` drops t
 `--duplicate-of` denies an issue proposal and adds its title and description as a
 comment on that issue; `--duplicate-of-approval` keeps them with another pending
 issue proposal, which adds them as comments when it is approved and drops them
-when it is denied. When adding one fails after the issue opened, the request
-keeps the issue and the comments not yet added, so approving it again, without
-edits, finishes them instead of opening another issue. A decided proposal is no longer listed, and the decision
+when it is denied. When anything fails after the issue opened, such as adding its
+labels, its files or a duplicate's comment, the request keeps the issue and the
+work left, so approving it again, without edits, finishes that work instead of
+opening another issue. A decided proposal is no longer listed, and the decision
 reaches the workspace's agent as an [agent message](#agent-messages) naming
 the opened item.
 
