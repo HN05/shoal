@@ -204,9 +204,12 @@ and docs) on an area that rotates by ISO week, or manually with a selected focus
 ref and scope. It opens one issue per new finding, labelled `audit/<focus>`;
 findings are advisory and never a required check. Close an audit issue when it is
 fixed, or explain in a comment or with `audit/wontfix` why it will not be.
-Issues and PRs carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
-creates the scheme. Push the branch and let CI verify instead of running the
-full suite locally first.
+Issues and PRs carry one or more `area/` labels and one `type/` and one
+`complexity/` label; `shoal labels` lists what each means, and
+`.forgejo/scripts/labels.sh` creates the scheme. An issue states the problem or
+goal and what done looks like; a PR description follows
+`.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
+of running the full suite locally first.
 A failed check is a defect even when a rerun passes. Read its log, then fix the
 cause in its own commit or, when it lies outside the change, open an issue with
 the failing test and log excerpt; rerun only after that, never instead of it.
