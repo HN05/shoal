@@ -1063,10 +1063,13 @@ In a shared repository everything an agent opens is seen by other people, so
 (`"direct"` is the default; unscoped callers always open). A proposal is an
 approval request whose record carries the command's options, the workspace,
 branch, commit and agent; the command reports it and exits 0, because the agent
-goes on with its work and hears the decision as a message. On approval the daemon
-opens the item as the agent account through the same path `issue open` uses,
-recording and linking it. A decided proposal is deleted, since the message carries
-the outcome. An issue proposal belongs to the repository rather than the
+goes on with its work and hears the decision as a message. Approval carries data:
+the user may replace the title and body, and the daemon then opens the item as the
+agent account through the same path `issue open` uses, recording and linking it.
+Denial may carry a reason, and an issue proposal may be denied as a duplicate of an
+existing issue, which gets its text as a comment, or of another pending proposal,
+which posts it once opened. A decided proposal is deleted, since the message
+carries the outcome. An issue proposal belongs to the repository rather than the
 workspace, because agents file follow-ups just before `done`; it opens through the
 repository's checkout and agent account once the workspace is gone. Other agent
 writes, such as comments, edits and closing, stay direct. Approving a land

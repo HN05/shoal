@@ -1835,9 +1835,9 @@ fn messages(fixture: &Fixture) -> Vec<String> {
 }
 
 #[test]
-fn proposed_issues_open_on_approval() {
+fn proposed_issues_open_on_approval_with_the_users_edits() {
     let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
-    let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+    let created = json!({"number": 40, "title": "Flaky test", "state": "open", "labels": []});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
         "GET repos/team/project/issues/40": {"body": created},
@@ -1865,53 +1865,88 @@ fn proposed_issues_open_on_approval() {
     assert_eq!(listed[0]["workspace"], "topic");
 
     let id = proposed["id"].to_string();
-    let approved = fixture.ok(&["approve", &id]);
+    let approved = fixture.ok(&["approve", &id, "--title", "Flaky test"]);
     let url = format!("{}/issues/40", fixture.web);
     assert_eq!(approved["status"], "approved");
     assert_eq!(approved["url"], url);
     assert_eq!(
         writes(&fixture),
         [json!(["POST repos/team/project/issues",
-            {"title": "Flaky", "body": "Seen twice", "labels": ["bug"]}])]
+            {"title": "Flaky test", "body": "Seen twice", "labels": ["bug"]}])]
     );
     assert_eq!(fixture.ok(&["approvals"]), json!([]));
     assert_eq!(
         fixture.ok(&["inspect", "topic"])["workspace"]["links"]["opened"],
-        json!([{"kind": "issue", "url": url, "title": "Flaky"}])
+        json!([{"kind": "issue", "url": url, "title": "Flaky test"}])
     );
     assert_eq!(
         messages(&fixture),
         [format!(
-            "Approval {id} to open issue \"Flaky\" was approved: {url} was opened."
+            "Approval {id} to open issue \"Flaky test\" was approved: {url} was opened."
         )]
     );
 
     // The user opens directly whatever the setting says.
-    let direct = fixture.ok(&["issue", "open", "--workspace", "topic", "--title", "Flaky"]);
+    let direct = fixture.ok(&[
+        "issue",
+        "open",
+        "--workspace",
+        "topic",
+        "--title",
+        "Flaky test",
+    ]);
     assert_eq!(direct["created"], true);
 }
 
 #[test]
-fn denied_issue_proposals_reach_the_agent_and_others_outlive_the_workspace() {
+fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspace() {
     let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let issue = |number: u64, title: &str| json!({"body": {"number": number, "title": title, "state": "open", "labels": []}});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
-        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
-            "state": "open", "labels": []}},
+        "GET repos/team/project/issues/40": issue(40, "Flaky"),
+        "GET repos/team/project/issues/12": issue(12, "Known"),
+        "POST repos/team/project/issues/12/comments": {"status": 201, "body": {"id": 1}},
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 2}},
     }));
-    let propose = |title: &str| {
-        let open = ["issue", "open", "--title", title];
+    let propose = |title: &str, body: &str| {
+        let open = ["issue", "open", "--title", title, "--body", body];
         scoped(&fixture, &open)["proposed"]["id"].to_string()
     };
-    let flaky = propose("Flaky");
-    let noise = propose("Noise");
-    fixture.ok(&["deny", &noise]);
+    let flaky = propose("Flaky", "");
+    let again = propose("Flaky again", "Also on CI");
+    let known = propose("Known", "");
+    let noise = propose("Noise", "");
+
+    fixture.ok(&["deny", &noise, "--reason", "Not a bug"]);
+    let denied = fixture.ok(&["deny", &known, "--duplicate-of", "12"]);
+    assert_eq!(denied["url"], format!("{}/issues/12", fixture.web));
+    let finding = |title: &str, body: &str| {
+        format!(
+            "Workspace topic proposed this as a separate issue, which was marked as a duplicate.\n\n### {title}\n{body}"
+        )
+    };
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues/12/comments",
+            {"body": finding("Known", "")}])]
+    );
+    fixture.ok(&["deny", &again, "--duplicate-of-approval", &flaky]);
     assert!(writes(&fixture).is_empty());
     assert_eq!(
         messages(&fixture),
-        [format!(
-            "Approval {noise} to open issue \"Noise\" was denied. Do not open it another way."
-        )]
+        [
+            format!(
+                "Approval {noise} to open issue \"Noise\" was denied. Do not open it another way. Reason: Not a bug"
+            ),
+            format!(
+                "Approval {known} to open issue \"Known\" was denied as a duplicate of {}/issues/12; its text was added there as a comment. Do not open it another way.",
+                fixture.web
+            ),
+            format!(
+                "Approval {again} to open issue \"Flaky again\" was denied as a duplicate of approval {flaky}; its text is added as a comment if that issue is opened. Do not open it another way."
+            ),
+        ]
     );
 
     // The remaining proposal belongs to the repository, so it stays when the
@@ -1924,6 +1959,10 @@ fn denied_issue_proposals_reach_the_agent_and_others_outlive_the_workspace() {
     assert_eq!(approved["url"], format!("{}/issues/40", fixture.web));
     assert_eq!(
         writes(&fixture),
-        [json!(["POST repos/team/project/issues", {"title": "Flaky", "body": "", "labels": []}])]
+        [
+            json!(["POST repos/team/project/issues", {"title": "Flaky", "body": "", "labels": []}]),
+            json!(["POST repos/team/project/issues/40/comments",
+                {"body": finding("Flaky again", "\nAlso on CI\n")}]),
+        ]
     );
 }

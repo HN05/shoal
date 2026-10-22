@@ -722,7 +722,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(granted.id, true, None)
+        .decide_approval(granted.id, true, None, Default::default())
         .await
         .unwrap();
     let requested = manager
@@ -784,6 +784,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         let mut forged = routed.clone();
         forged.decider = Some(workspace.id.clone());
         let mut decide = Method::DecideApproval {
+            details: Default::default(),
             id: requested.id,
             approve: true,
             shown: Some(Box::new(forged)),
@@ -889,7 +890,10 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
             .await
             .unwrap()
             .unwrap();
-        manager.decide_approval(grant.id, true, None).await.unwrap();
+        manager
+            .decide_approval(grant.id, true, None, Default::default())
+            .await
+            .unwrap();
     }
     let requested = manager
         .request_approval(secret(&child, "token"))
@@ -935,7 +939,10 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .await
         .unwrap()
         .unwrap();
-    manager.decide_approval(lease.id, true, None).await.unwrap();
+    manager
+        .decide_approval(lease.id, true, None, Default::default())
+        .await
+        .unwrap();
     let longer = manager
         .request_approval(secret(&child, "lease"))
         .await

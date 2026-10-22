@@ -905,7 +905,12 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.release_secret(&workspace, name).await?;
             Body::Ok
         }
-        Method::DecideApproval { id, approve, shown } => {
+        Method::DecideApproval {
+            id,
+            approve,
+            shown,
+            details,
+        } => {
             let decided = match &caller {
                 // A workspace process decides only what was routed to it.
                 Some(caller) => {
@@ -915,7 +920,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 }
                 None => {
                     manager
-                        .decide_approval(id, approve, shown.map(|shown| *shown))
+                        .decide_approval(id, approve, shown.map(|shown| *shown), details)
                         .await?
                 }
             };

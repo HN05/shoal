@@ -63,6 +63,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
+    daemon::approvals::proposals::{Duplicate, ProposalDecision},
     env,
     forge::items::link::ItemKind,
     model::Workspace,
@@ -564,8 +565,30 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
         Command::Approvals { workspace } => approvals::list(&ctx, workspace).await,
-        Command::Approve { id } => approvals::decide(&ctx, id, true).await,
-        Command::Deny { id } => approvals::decide(&ctx, id, false).await,
+        Command::Approve { id, title, body } => {
+            let details = ProposalDecision {
+                title,
+                body: items::read_body(body)?,
+                ..ProposalDecision::default()
+            };
+            approvals::decide(&ctx, id, true, details).await
+        }
+        Command::Deny {
+            id,
+            reason,
+            duplicate_of,
+            duplicate_of_approval,
+        } => {
+            let duplicate_of = duplicate_of
+                .map(Duplicate::Issue)
+                .or(duplicate_of_approval.map(Duplicate::Approval));
+            let details = ProposalDecision {
+                reason,
+                duplicate_of,
+                ..ProposalDecision::default()
+            };
+            approvals::decide(&ctx, id, false, details).await
+        }
         Command::Escalate { id } => approvals::escalate(&ctx, id).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
         Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,

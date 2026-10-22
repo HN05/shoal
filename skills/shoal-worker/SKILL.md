@@ -51,7 +51,9 @@ the user's: `shoal pr merge` refuses workspace processes.
 A repository can require the user's approval for issues you open
 (`[approvals]`). Then `issue open` exits 0 with `proposed`, an approval request,
 instead of the issue. Continue your work and do not open the issue another way.
-The decision arrives as a message; approval names the opened issue. A proposed issue stays when your workspace is removed, so
+The user may edit the title and description, and the decision arrives as a
+message: approval names the opened issue; denial may give a reason or name the
+issue it duplicates. A proposed issue stays when your workspace is removed, so
 proposing follow-ups before `shoal done` is fine.
 
 Every link names its relation last: `assigned` for the work you are doing,

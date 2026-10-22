@@ -9,7 +9,7 @@ use crate::{
     daemon::{
         approvals::{
             ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
-            proposals::{self, IssueSpecification, Recorded},
+            proposals::{self, Duplicate, Finding, IssueSpecification, ProposalDecision, Recorded},
         },
         store,
         workspace::Manager,
@@ -17,6 +17,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
+        items::action::Action,
         items::create::NewIssue,
         items::item::{Item, Opened},
         items::link::ItemKind,
@@ -63,6 +64,7 @@ impl Manager {
             branch: workspace.branch.clone(),
             commit: commit.trim().to_owned(),
             agent: proposer.agent,
+            duplicates: Vec::new(),
         });
         let request = proposal(
             workspace,
@@ -98,22 +100,26 @@ impl Manager {
         })
     }
 
-    /// Open or deny the proposal the user chose, then forget it and tell the
-    /// proposing workspace's agents.
+    /// Open, deny or merge as a duplicate the proposal the user chose, then
+    /// forget it and tell the proposing workspace's agents.
     pub(crate) async fn decide_proposal(
         &self,
         request: ApprovalRequest,
         approve: bool,
+        decision: ProposalDecision,
     ) -> Result<ApprovalRequest> {
+        decision.validate(&request.target, approve)?;
         // Cleanup holds the gate, so it cannot remove the workspace between
         // opening the item and linking it, and two decisions cannot both open it.
         let _gate = self.pr_gate.lock().await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.existing_workspace(&request.workspace_id).await?;
         let (request, message) = if approve {
-            self.approve_proposal(request, workspace.as_ref()).await?
+            self.approve_proposal(request, workspace.as_ref(), &decision)
+                .await?
         } else {
-            deny_proposal(request)
+            self.deny_proposal(request, workspace.as_ref(), &decision)
+                .await?
         };
         self.forget_proposal(request.key.clone()).await?;
         if let Some(workspace) = workspace {
@@ -151,12 +157,17 @@ impl Manager {
         })
     }
 
-    /// Open the proposal.
+    /// Open the proposal with the user's edits, which are kept when opening fails.
     async fn approve_proposal(
         &self,
         mut request: ApprovalRequest,
         workspace: Option<&Workspace>,
+        decision: &ProposalDecision,
     ) -> Result<(ApprovalRequest, String)> {
+        if decision.title.is_some() || decision.body.is_some() {
+            request.edit(decision);
+            self.save_proposal(request.clone()).await?;
+        }
         let (item, linked) = match request.target {
             Target::IssueOpen => self.open_proposed_issue(&request, workspace).await?,
             _ => bail!("approval request {} is not a proposal", request.id),
@@ -175,8 +186,8 @@ impl Manager {
     }
 
     /// Open the proposed issue as the agent account, through the workspace
-    /// while it exists and otherwise through the repository. Returns the issue
-    /// and whether it was linked.
+    /// while it exists and otherwise through the repository, and post the
+    /// findings of its duplicates. Returns the issue and whether it was linked.
     async fn open_proposed_issue(
         &self,
         request: &ApprovalRequest,
@@ -204,7 +215,125 @@ impl Manager {
             }
             None => false,
         };
+        let target = super::actions::Target {
+            kind: ItemKind::Issue,
+            number: item.number,
+            url: item.url.clone(),
+        };
+        for finding in &proposed.duplicates {
+            let comment = comment(finding.clone());
+            self.comment_as_proposer(workspace, &forge, &account, &target, comment)
+                .await
+                .with_context(|| {
+                    format!("{} was opened, but adding a duplicate failed", item.url)
+                })?;
+        }
         Ok((item, linked))
+    }
+
+    /// Deny the proposal, adding an issue's finding to what it duplicates.
+    async fn deny_proposal(
+        &self,
+        mut request: ApprovalRequest,
+        workspace: Option<&Workspace>,
+        decision: &ProposalDecision,
+    ) -> Result<(ApprovalRequest, String)> {
+        let outcome = match &decision.duplicate_of {
+            Some(Duplicate::Issue(input)) => {
+                let url = self.add_to_issue(&request, workspace, input).await?;
+                request.url = Some(url.clone());
+                format!(" as a duplicate of {url}; its text was added there as a comment")
+            }
+            Some(Duplicate::Approval(number)) => {
+                self.add_to_proposal(&request, *number).await?;
+                format!(
+                    " as a duplicate of approval {number}; its text is added as a comment if that issue is opened"
+                )
+            }
+            None => String::new(),
+        };
+        request.status = DecisionStatus::Denied;
+        request.decided_at = Some(crate::time::unix_seconds());
+        let reason = match &decision.reason {
+            Some(reason) => format!(" Reason: {reason}"),
+            None => String::new(),
+        };
+        let message = format!(
+            "Approval {} to {} was denied{outcome}. Do not open it another way.{reason}",
+            request.id,
+            request.subject(),
+        );
+        Ok((request, message))
+    }
+
+    /// Comment the proposal's finding on the existing issue `input` names,
+    /// returning its URL.
+    async fn add_to_issue(
+        &self,
+        request: &ApprovalRequest,
+        workspace: Option<&Workspace>,
+        input: &str,
+    ) -> Result<String> {
+        let (forge, account) = self.proposal_forge_account(request, workspace).await?;
+        let (number, url) = forge.issue(input)?;
+        let target = super::actions::Target {
+            kind: ItemKind::Issue,
+            number,
+            url: url.clone(),
+        };
+        let comment = comment(finding(request)?);
+        self.comment_as_proposer(workspace, &forge, &account, &target, comment)
+            .await?;
+        Ok(url)
+    }
+
+    /// Keep the proposal's finding with the pending issue proposal `number`,
+    /// which posts it once it is opened.
+    async fn add_to_proposal(&self, request: &ApprovalRequest, number: i64) -> Result<()> {
+        let mut original = self
+            .approval_request(number)
+            .await?
+            .with_context(|| format!("unknown approval request {number}"))?;
+        ensure!(
+            original.key != request.key,
+            "a proposal cannot duplicate itself"
+        );
+        ensure!(
+            original.target == Target::IssueOpen
+                && original.status == DecisionStatus::Pending
+                && original.repository_id == request.repository_id,
+            "approval request {number} is not a pending issue proposal in the same repository"
+        );
+        let finding = finding(request)?;
+        match &mut original.specification {
+            Specification::Issue(issue) => issue.duplicates.push(finding),
+            _ => bail!("approval request {number} has no proposed issue"),
+        }
+        self.save_proposal(original).await
+    }
+
+    /// Post `comment` as the agent account, recorded as the workspace's own
+    /// change while it exists.
+    async fn comment_as_proposer(
+        &self,
+        workspace: Option<&Workspace>,
+        forge: &ForgeRepo,
+        account: &Account,
+        target: &super::actions::Target,
+        comment: Action,
+    ) -> Result<()> {
+        match workspace {
+            Some(workspace) => {
+                self.apply_own(&workspace.id, forge, account, target.clone(), &comment)
+                    .await?;
+            }
+            None => {
+                forge
+                    .apply(account, ItemKind::Issue, target.number, &comment)
+                    .await?;
+            }
+        }
+        Ok(())
     }
 
     /// The forge and agent account a proposal acts through: its workspace's
@@ -249,14 +378,31 @@ fn proposal(
     )
 }
 
-/// The denied proposal and the agent's message about it.
-fn deny_proposal(mut request: ApprovalRequest) -> (ApprovalRequest, String) {
-    request.status = DecisionStatus::Denied;
-    request.decided_at = Some(crate::time::unix_seconds());
-    let message = format!(
-        "Approval {} to {} was denied. Do not open it another way.",
-        request.id,
-        request.subject(),
+/// A duplicate proposal's title, description and attachments, for what it
+/// duplicates.
+fn finding(request: &ApprovalRequest) -> Result<Finding> {
+    let proposed = request
+        .proposed_issue()
+        .context("only an issue proposal can be a duplicate")?;
+    let mut text = format!(
+        "Workspace {} proposed this as a separate issue, which was marked as a duplicate.\n\n### {}\n",
+        request.workspace, proposed.issue.title
     );
-    (request, message)
+    if !proposed.issue.body.trim().is_empty() {
+        text.push('\n');
+        text.push_str(proposed.issue.body.trim_end());
+        text.push('\n');
+    }
+    Ok(Finding {
+        body: text,
+        attachments: proposed.issue.attachments.clone(),
+    })
+}
+
+/// The comment that adds `finding` to what it duplicates.
+fn comment(finding: Finding) -> Action {
+    Action::Comment {
+        body: finding.body,
+        attachments: finding.attachments,
+    }
 }

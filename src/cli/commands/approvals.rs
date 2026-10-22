@@ -5,12 +5,18 @@ use serde_json::json;
 use super::EXIT_BUSY;
 use crate::{
     cli::{client::request, context::Context, output::Style, ui},
-    daemon::approvals::{ApprovalRequest, DecisionStatus},
+    daemon::approvals::{ApprovalRequest, DecisionStatus, proposals::ProposalDecision},
     protocol::Method,
 };
 
-/// Approve or deny a request, choosing among pending ones when no number is given.
-pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Result<i32> {
+/// Approve or deny a request, choosing among pending ones when no number is
+/// given. Only proposals take `details`.
+pub(super) async fn decide(
+    ctx: &Context,
+    id: Option<i64>,
+    approve: bool,
+    details: ProposalDecision,
+) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let (id, shown) = match id {
         Some(id) => (id, None),
@@ -23,7 +29,7 @@ pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Res
             (picked.id, Some(Box::new(picked)))
         }
     };
-    submit(ctx, id, approve, shown).await
+    submit(ctx, id, approve, shown, details).await
 }
 
 /// Approve or deny the pending request `id` created at `created_at`, as a
@@ -51,18 +57,26 @@ pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Re
         .map(|(approve, label)| (*approve, label.as_str()))
         .collect();
     let approve = ui::pick_choice(ctx, "Approval> ", &choices)?;
-    submit(ctx, id, approve, Some(Box::new(request))).await
+    let details = ProposalDecision::default();
+    submit(ctx, id, approve, Some(Box::new(request)), details).await
 }
 
 /// Send the decision on request `id`, which `shown` names when the user
-/// chose it from a list, so a request reusing its number is refused.
+/// chose it from a list, so a request reusing its number is refused. Only
+/// proposals take `details`.
 async fn submit(
     ctx: &Context,
     id: i64,
     approve: bool,
     shown: Option<Box<ApprovalRequest>>,
+    details: ProposalDecision,
 ) -> Result<i32> {
-    let method = Method::DecideApproval { id, approve, shown };
+    let method = Method::DecideApproval {
+        id,
+        approve,
+        shown,
+        details,
+    };
     let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
     let message = match &request.url {
         Some(url) => format!("{}\n  {url}", describe(&request)),

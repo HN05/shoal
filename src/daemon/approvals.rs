@@ -644,6 +644,18 @@ impl Manager {
             .await
     }
 
+    /// [`proposals::save`] in its own transaction.
+    pub(crate) async fn save_proposal(&self, request: ApprovalRequest) -> Result<()> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                proposals::save(&tx, &request)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
     /// [`proposals::remove`] in its own transaction, once it is decided.
     pub(crate) async fn forget_proposal(&self, key: String) -> Result<()> {
         self.store
@@ -675,12 +687,13 @@ impl Manager {
 
     /// Record the decision and tell the requesting workspace's agents about a
     /// new one. With `shown`, the request the user was shown, a later request
-    /// reusing its number is refused.
+    /// reusing its number is refused. Only proposals take `details`.
     pub async fn decide_approval(
         &self,
         id: i64,
         approve: bool,
         shown: Option<ApprovalRequest>,
+        details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
         let request = self
             .approval_request(id)
@@ -691,8 +704,12 @@ impl Manager {
             "approval request {id} changed since it was shown; choose again"
         );
         if request.target.is_proposal() {
-            return self.decide_proposal(request, approve).await;
+            return self.decide_proposal(request, approve, details).await;
         }
+        ensure!(
+            details == proposals::ProposalDecision::default(),
+            "only issue proposals take a title, body, reason or duplicate"
+        );
         let decision = self.record_decision(request, approve).await?;
         if decision.new {
             self.tell_requester(&decision.request).await;
@@ -1088,7 +1105,9 @@ mod tests {
             (1, true, DecisionStatus::Approved),
             (2, false, DecisionStatus::Denied),
         ] {
-            let decision = manager.decide_approval(id, approve, None).await?;
+            let decision = manager
+                .decide_approval(id, approve, None, Default::default())
+                .await?;
             assert_eq!(decision.status, status);
             let messages = manager.agent_messages("worker").await?;
             let ids: Vec<_> = messages.iter().map(|m| m.id).collect();
@@ -1097,20 +1116,27 @@ mod tests {
                 [decision.decision_message()]
             );
             manager.mark_agent_messages_delivered("worker", ids).await?;
-            let retry = manager.decide_approval(id, approve, None).await?;
+            let retry = manager
+                .decide_approval(id, approve, None, Default::default())
+                .await?;
             assert_eq!(
                 serde_json::to_value(retry)?,
                 serde_json::to_value(&decision)?
             );
             // Repeating a decision does not tell the agent again.
             assert!(manager.agent_messages("worker").await?.is_empty());
-            assert!(manager.decide_approval(id, !approve, None).await.is_err());
+            assert!(
+                manager
+                    .decide_approval(id, !approve, None, Default::default())
+                    .await
+                    .is_err()
+            );
         }
         // A decision chosen from a shown request does not reach another
         // request holding its number.
         let shown = manager.approval_requests(Some("worker")).await?;
         let error = manager
-            .decide_approval(1, true, Some(shown[1].clone()))
+            .decide_approval(1, true, Some(shown[1].clone()), Default::default())
             .await
             .unwrap_err();
         assert!(
@@ -1118,7 +1144,7 @@ mod tests {
             "{error:#}"
         );
         manager
-            .decide_approval(1, true, Some(shown[0].clone()))
+            .decide_approval(1, true, Some(shown[0].clone()), Default::default())
             .await?;
         for (id, message) in [
             (4, "unknown approval request 4"),
@@ -1126,7 +1152,7 @@ mod tests {
         ] {
             assert!(
                 manager
-                    .decide_approval(id, true, None)
+                    .decide_approval(id, true, None, Default::default())
                     .await
                     .unwrap_err()
                     .to_string()
@@ -1140,7 +1166,12 @@ mod tests {
                 Ok(())
             })
             .await?;
-        assert!(manager.decide_approval(1, true, None).await.is_err());
+        assert!(
+            manager
+                .decide_approval(1, true, None, Default::default())
+                .await
+                .is_err()
+        );
         Ok(())
     }
 

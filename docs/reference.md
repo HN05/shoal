@@ -1881,16 +1881,23 @@ its work.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
-shoal approve 4
-shoal deny 5
+shoal approve 4 --title "Fix login timeout" --body-file edited.md
+shoal deny 5 --reason "Not a bug"
+shoal deny 6 --duplicate-of 120     # an existing issue's number or URL
+shoal deny 7 --duplicate-of-approval 4
 ```
 
-`approve` opens the item as the workspace's agent account. An issue is recorded
-as opened by its workspace and assigned when it was proposed with `--link` and
-no issue is assigned yet; after the workspace is removed, it opens through the
+`approve` opens the item as the workspace's agent account, with `--title`,
+`--body` or `--body-file` replacing what was proposed. An issue is recorded as
+opened by its workspace and assigned when it was proposed with `--link` and no
+issue is assigned yet; after the workspace is removed, it opens through the
 repository's checkout with the repository's agent account. `deny` drops the
-proposal. A decided proposal is no longer listed, and the decision reaches the
-workspace's agent as an [agent message](#agent-messages) naming the opened item.
+proposal, with an optional `--reason` for the agent. `--duplicate-of` denies an
+issue proposal and adds its title and description as a comment on that issue;
+`--duplicate-of-approval` keeps them with another pending issue proposal, which
+adds them as comments when it is approved and drops them when it is denied. A
+decided proposal is no longer listed, and the decision reaches the workspace's
+agent as an [agent message](#agent-messages) naming the opened item.
 
 #### Repository conventions
 

@@ -1,12 +1,15 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 
-use super::{ApprovalRequest, DecisionStatus, Specification, Target, record_row};
-use crate::{daemon::store, forge::items::create::NewIssue};
+use super::{ApprovalRequest, DecisionStatus, Specification, Target, by_key, record_row};
+use crate::{
+    daemon::store,
+    forge::{items::attach::Attachment, items::create::NewIssue},
+};
 
 /// The name every issue proposal shares; the repository holds any number.
 pub const ISSUE: &str = "issue";
@@ -22,6 +25,76 @@ pub struct IssueSpecification {
     pub commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// Findings of proposals the user marked as duplicates of this one,
+    /// posted as comments once it is opened.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub duplicates: Vec<Finding>,
+}
+
+/// A duplicate proposal's text and files, which become a comment on what it
+/// duplicates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Finding {
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+}
+
+/// What the user decides about a proposal besides yes or no.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProposalDecision {
+    /// Replaces the proposed title on approval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Replaces the proposed description on approval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// Tells the agent why its proposal was denied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Denies an issue proposal as a duplicate and adds its finding there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<Duplicate>,
+}
+
+/// What a denied issue proposal duplicates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Duplicate {
+    /// An issue number or URL in the same repository.
+    Issue(String),
+    /// Another pending issue proposal, by its number.
+    Approval(i64),
+}
+
+impl ProposalDecision {
+    /// Refuse details that do not apply to this decision of `target`.
+    pub fn validate(&self, target: &Target, approve: bool) -> Result<()> {
+        if approve {
+            ensure!(
+                self.reason.is_none() && self.duplicate_of.is_none(),
+                "a reason or duplicate applies only when denying"
+            );
+            ensure!(
+                self.title
+                    .as_ref()
+                    .is_none_or(|title| !title.trim().is_empty()),
+                "the title cannot be empty"
+            );
+        } else {
+            ensure!(
+                self.title.is_none() && self.body.is_none(),
+                "a title or body applies only when approving"
+            );
+        }
+        ensure!(
+            self.duplicate_of.is_none() || *target == Target::IssueOpen,
+            "only an issue proposal can be a duplicate"
+        );
+        crate::validate::reason("denial", self.reason.as_deref())
+    }
 }
 
 impl ApprovalRequest {
@@ -30,6 +103,20 @@ impl ApprovalRequest {
         match &self.specification {
             Specification::Issue(issue) => Some(issue),
             _ => None,
+        }
+    }
+
+    /// Apply the user's edits to the proposed title and description.
+    pub fn edit(&mut self, decision: &ProposalDecision) {
+        let (title, body) = match &mut self.specification {
+            Specification::Issue(issue) => (&mut issue.issue.title, &mut issue.issue.body),
+            _ => return,
+        };
+        if let Some(edited) = &decision.title {
+            edited.clone_into(title);
+        }
+        if let Some(edited) = &decision.body {
+            edited.clone_into(body);
         }
     }
 }
@@ -102,8 +189,52 @@ fn repository_proposals(db: &Connection, repository: &str) -> Result<Vec<Approva
     .collect()
 }
 
+/// Store the pending proposal's changed record, such as the user's edits or
+/// a duplicate's finding.
+pub fn save(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
+    let stored = by_key(tx, &request.key)?;
+    ensure!(
+        stored.is_some_and(|stored| stored.status == DecisionStatus::Pending),
+        "approval request {} is no longer pending",
+        request.id
+    );
+    tx.execute(
+        "UPDATE access_requests SET record=?2 WHERE id=?1",
+        params![request.key, serde_json::to_string(request)?],
+    )?;
+    Ok(())
+}
+
 /// Forget a decided proposal; the agent's message carries the outcome.
 pub fn remove(tx: &Transaction<'_>, key: &str) -> Result<()> {
     tx.execute("DELETE FROM access_requests WHERE id=?1", [key])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decisions_take_only_the_details_that_apply() {
+        let edit = ProposalDecision {
+            title: Some("Fix".into()),
+            body: Some(String::new()),
+            ..ProposalDecision::default()
+        };
+        let duplicate = ProposalDecision {
+            reason: Some("Known".into()),
+            duplicate_of: Some(Duplicate::Issue("12".into())),
+            ..ProposalDecision::default()
+        };
+        assert!(edit.validate(&Target::IssueOpen, true).is_ok());
+        assert!(edit.validate(&Target::IssueOpen, false).is_err());
+        assert!(duplicate.validate(&Target::IssueOpen, false).is_ok());
+        assert!(duplicate.validate(&Target::IssueOpen, true).is_err());
+        let blank = ProposalDecision {
+            title: Some(" ".into()),
+            ..ProposalDecision::default()
+        };
+        assert!(blank.validate(&Target::IssueOpen, true).is_err());
+    }
 }

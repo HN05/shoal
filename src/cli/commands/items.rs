@@ -482,7 +482,7 @@ fn read_content(body: BodyArgs, files: AttachArgs) -> Result<(Option<String>, Ve
     Ok((text, attachments))
 }
 
-fn read_body(body: BodyArgs) -> Result<Option<String>> {
+pub(super) fn read_body(body: BodyArgs) -> Result<Option<String>> {
     match body.body_file {
         Some(path) => std::fs::read_to_string(&path)
             .with_context(|| format!("read {}", path.display()))

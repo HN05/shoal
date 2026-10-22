@@ -654,6 +654,9 @@ pub enum Method {
         approve: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
+        /// Edits, a reason or a duplicate, for proposals only.
+        #[serde(default)]
+        details: crate::daemon::approvals::proposals::ProposalDecision,
     },
     /// Pass a request the coordinating agent of `workspace` decides on to the
     /// next coordinating agent above it that holds a grant, or to the user.
