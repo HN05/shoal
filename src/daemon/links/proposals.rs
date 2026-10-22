@@ -2,7 +2,6 @@
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::TransactionBehavior::Immediate;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,7 +13,6 @@ use crate::{
                 Recorded,
             },
         },
-        store,
         workspace::Manager,
     },
     forge::{
@@ -121,15 +119,7 @@ impl Manager {
         request: ApprovalRequest,
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
     ) -> Result<Proposed> {
-        let (request, new) = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(Immediate)?;
-                let recorded = record(&tx, request)?;
-                tx.commit()?;
-                Ok(recorded)
-            })
-            .await?;
+        let (request, new) = self.store_proposal(request, record).await?;
         if new {
             self.notify_approval(&workspace.name, &request).await;
         }
@@ -151,7 +141,7 @@ impl Manager {
         // opening the item and linking it, and two decisions cannot both open it.
         let _gate = self.pr_gate.lock().await;
         let request = self.pending_proposal(request).await?;
-        let workspace = self.existing_workspace(&request.workspace_id).await?;
+        let workspace = self.find_workspace(&request.workspace_id).await?;
         let (request, message) = if approve {
             self.approve_proposal(request, workspace.as_ref(), &decision)
                 .await?
@@ -180,19 +170,6 @@ impl Manager {
             request.status
         );
         Ok(request)
-    }
-
-    /// The workspace with this ID, unless it was removed.
-    async fn existing_workspace(&self, id: &str) -> Result<Option<Workspace>> {
-        let owned = id.to_owned();
-        let exists = self
-            .store
-            .run(move |db| store::exists(db, "SELECT 1 FROM workspaces WHERE id=?1", [owned]))
-            .await?;
-        Ok(match exists {
-            true => Some(self.workspace(id).await?),
-            false => None,
-        })
     }
 
     /// Open the proposal with the user's edits, which are kept when opening fails.

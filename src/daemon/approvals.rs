@@ -661,6 +661,22 @@ impl Manager {
             .await
     }
 
+    /// Record a proposal with `record` in its own transaction.
+    pub(crate) async fn store_proposal(
+        &self,
+        request: ApprovalRequest,
+        record: fn(&Transaction<'_>, ApprovalRequest) -> Result<proposals::Recorded>,
+    ) -> Result<proposals::Recorded> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let recorded = record(&tx, request)?;
+                tx.commit()?;
+                Ok(recorded)
+            })
+            .await
+    }
+
     /// [`proposals::save`] in its own transaction.
     pub(crate) async fn save_proposal(&self, request: ApprovalRequest) -> Result<()> {
         self.store

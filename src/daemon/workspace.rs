@@ -432,6 +432,19 @@ impl Manager {
             .await
     }
 
+    /// The workspace with this ID, unless it was removed.
+    pub async fn find_workspace(&self, id: &str) -> Result<Option<Workspace>> {
+        let owned = id.to_owned();
+        let exists = self
+            .store
+            .run(move |db| store::exists(db, "SELECT 1 FROM workspaces WHERE id=?1", [owned]))
+            .await?;
+        Ok(match exists {
+            true => Some(self.workspace(id).await?),
+            false => None,
+        })
+    }
+
     /// Resolve an optional selector to a workspace ID filter.
     pub async fn workspace_filter(&self, selector: Option<&str>) -> Result<Option<String>> {
         match selector {
