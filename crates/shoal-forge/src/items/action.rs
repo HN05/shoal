@@ -18,6 +18,23 @@ use crate::{
     transport::api::Request,
 };
 
+/// Marks a failure after an action's first request reached the forge, such
+/// as a comment posted before attaching its files failed, so a caller does
+/// not send it again.
+#[derive(Debug)]
+pub struct Sent;
+
+impl std::fmt::Display for Sent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the change reached the forge, but what followed it failed")
+    }
+}
+
+/// `error`, marked as [`Sent`] when the action's first request was sent.
+pub fn after_send(error: anyhow::Error, sent: bool) -> anyhow::Error {
+    if sent { error.context(Sent) } else { error }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Action {
@@ -176,22 +193,30 @@ impl ForgeRepo {
         let mut authored = None;
         let mut first = None;
         for request in self.requests(account, current, &action).await? {
-            let response = self.send(account, &request).await?;
+            let sent = first.is_some();
+            let response = self
+                .send(account, &request)
+                .await
+                .map_err(|error| after_send(error, sent))?;
             // A comment, or a thread's reply, is the action's first request.
             if first.is_none() {
                 authored = self.posted(&action, &response);
                 first = Some(response);
             }
         }
+        let sent = first.is_some();
         if let (Some(pending), Some(comment)) = (pending, first) {
             self.attach_to_comment(account, &comment, pending)
                 .await
-                .context("the comment was posted, but attaching its files failed")?;
+                .context("the comment was posted, but attaching its files failed")
+                .map_err(|error| after_send(error, true))?;
         }
-        Ok(Acted {
-            item: self.read(account, kind, number).await?.item,
-            authored,
-        })
+        let item = self
+            .read(account, kind, number)
+            .await
+            .map_err(|error| after_send(error, sent))?
+            .item;
+        Ok(Acted { item, authored })
     }
 
     /// `action` with its attachments uploaded and embedded in its body, and

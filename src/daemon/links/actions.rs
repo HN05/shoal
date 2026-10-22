@@ -146,7 +146,8 @@ impl Manager {
         let own = own_state(action).then(|| acted.item.state.as_str());
         let target = Target { kind, number, url };
         self.record_own_action(id, target, action.name(), own, acted.authored)
-            .await?;
+            .await
+            .map_err(|error| crate::forge::items::action::after_send(error, true))?;
         Ok(acted.item)
     }
 

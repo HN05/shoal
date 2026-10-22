@@ -2273,3 +2273,34 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         json!([url])
     );
 }
+
+#[test]
+fn a_finding_that_reached_the_forge_is_not_posted_again() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let issue = json!({"body": {"number": 40, "title": "Flaky", "state": "open", "labels": []}});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        // Approval reads the issue it opened and the comment's item; reading
+        // it after the comment is posted fails.
+        "GET repos/team/project/issues/40": [issue, issue,
+            {"status": 500, "body": {"message": "unavailable"}}],
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"node_id": "C_1"}},
+    }));
+    let propose = |title: &str| {
+        let open = ["issue", "open", "--title", title];
+        scoped(&fixture, &open)["proposed"]["id"].to_string()
+    };
+    let flaky = propose("Flaky");
+    let again = propose("Flaky again");
+    fixture.ok(&["deny", &again, "--duplicate-of-approval", &flaky]);
+    fixture.ok(&["approve", &flaky]);
+    let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
+    assert_eq!(
+        posted,
+        [
+            "POST repos/team/project/issues",
+            "POST repos/team/project/issues/40/comments"
+        ]
+    );
+    assert_eq!(fixture.ok(&["approvals"]), json!([]));
+}

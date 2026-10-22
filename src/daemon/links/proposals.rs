@@ -23,7 +23,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        items::action::{Action, Edit},
+        items::action::{Action, Edit, Sent},
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
         items::item::{Item, ItemState, Opened},
@@ -583,7 +583,8 @@ impl Manager {
     }
 
     /// Post `comment` as the agent account, recorded as the workspace's own
-    /// change while it exists.
+    /// change while it exists. A failure after the comment reached the forge
+    /// only logs, so a finding is never posted twice.
     async fn comment_as_proposer(
         &self,
         workspace: Option<&Workspace>,
@@ -592,18 +593,24 @@ impl Manager {
         target: &super::actions::Target,
         comment: Action,
     ) -> Result<()> {
-        match workspace {
-            Some(workspace) => {
-                self.apply_own(&workspace.id, forge, account, target.clone(), &comment)
-                    .await?;
+        let posted = match workspace {
+            Some(workspace) => self
+                .apply_own(&workspace.id, forge, account, target.clone(), &comment)
+                .await
+                .map(|_| ()),
+            None => forge
+                .apply(account, ItemKind::Issue, target.number, &comment)
+                .await
+                .map(|_| ()),
+        };
+        match posted {
+            // The comment exists, so posting it again would repeat it.
+            Err(error) if error.downcast_ref::<Sent>().is_some() => {
+                crate::daemon::log::log!("{}: {error:#}", target.url);
+                Ok(())
             }
-            None => {
-                forge
-                    .apply(account, ItemKind::Issue, target.number, &comment)
-                    .await?;
-            }
+            posted => posted,
         }
-        Ok(())
     }
 
     /// The forge and agent account a proposal acts through: its workspace's
