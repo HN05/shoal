@@ -371,11 +371,12 @@ shoal stop fix-login                     # Stop agents and commands for shoal re
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
 
-Bare `shoal` opens an fzf list of workspaces, as does `shoal work` on a
-terminal (`shoal --help`, or bare `shoal`
+Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
+otherwise on the list of workspaces; `shoal inbox` and `shoal work` open it on
+their view on a terminal (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
-hidden `shoal internal`).
+hidden `shoal internal`). Workspace processes see only the workspaces.
 Its rows, like `shoal work` and workspace pickers, are aligned and marked ● ready,
 ◌ in progress or ✗ failed. Each names the workspace, its repository when the
 rows span several, its status and the linked issue's title, cut with `…` to fit
@@ -397,12 +398,17 @@ chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`);
 a chat's status is `running`.
-`shoal inbox` lists what needs you, each with its workspace: open questions,
+<a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions,
 pending approval requests, workspaces whose agent needs input, failed
 workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
-marked item. `inbox --repo <repository>` keeps one repository's items; `--json`
-gives each item's `kind` (`question`, `approval`, `needs_input`, `failed` or
-`ready`) with its `question`, `request` or `workspace` and a ready item's `mark`.
+marked item. There Enter answers a question, approves or denies a request after
+asking which, attaches to the agent that needs input, inspects a failed
+workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
+mark on the workspace itself); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
+workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
+`--json` or output that is not a terminal, prints it; `--json` gives each item's
+`kind` (`question`, `approval`, `needs_input`, `failed` or `ready`) with its
+`question`, `request` or `workspace` and a ready item's `mark`.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.

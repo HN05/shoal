@@ -120,9 +120,9 @@ After [adding an AI tool](docs/reference.md#agents), run
 `shoal add my-project fix-api --agent droid` or `shoal add <issue-url>`.
 
 ```sh
-shoal                         # Interactive workspace menu
+shoal                         # Inbox when something needs you, else workspaces
 shoal repo                    # Interactive repository menu
-shoal inbox                   # Questions, approvals, agents needing input, failures, ready work
+shoal inbox                   # Questions, approvals, agents needing input, failures, ready work; --print to list
 shoal work                    # Workspaces, chats and queued agents; --print to list
 shoal work --queue            # Agents waiting for a slot under max_agents
 shoal work --chats            # Running chats

@@ -1,12 +1,15 @@
-//! The bare `shoal` picker, which `shoal work` also opens on a terminal: an
-//! fzf list whose keys act on the selected row, binding only the keys that
-//! mean something in the view shown. A selection plus key becomes an
-//! ordinary [`Command`].
+//! The bare `shoal` picker, which `shoal inbox` and `shoal work` also open
+//! on a terminal: an fzf list per view, each binding only the keys that mean
+//! something there. A selection plus key becomes an ordinary [`Command`].
 use anyhow::{Context as _, Result, ensure};
 
+use super::{
+    inbox::{Inbox, Item},
+    listing::ListFilter,
+};
 use crate::{
     cli::{
-        Command, ConfirmationArgs, WorkspaceScope, agents, client,
+        Command, ConfirmationArgs, ItemArgs, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
         ui::{self, Entries, ViewPicker},
@@ -88,15 +91,17 @@ impl Key {
     }
 }
 
-/// What the picker lists.
+/// What the picker lists: what needs the user, or the work going on.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum View {
+pub(super) enum View {
+    Inbox,
     Work,
 }
 
 impl View {
     fn prompt(self) -> &'static str {
         match self {
+            Self::Inbox => "inbox> ",
             Self::Work => "work> ",
         }
     }
@@ -104,6 +109,7 @@ impl View {
     /// The keys the view binds, in header order.
     fn keys(self) -> &'static [Key] {
         match self {
+            Self::Inbox => &[Key::Enter, Key::Attach, Key::Inspect, Key::Diff, Key::Add],
             Self::Work => &[
                 Key::Enter,
                 Key::Delete,
@@ -119,7 +125,18 @@ impl View {
 
     fn enter_label(self) -> &'static str {
         match self {
+            Self::Inbox => "act",
             Self::Work => "cd",
+        }
+    }
+
+    /// The views a caller with this scope can open; workspace processes
+    /// cannot decide what needs the user.
+    fn available(scoped: bool) -> &'static [Self] {
+        if scoped {
+            &[Self::Work]
+        } else {
+            &[Self::Inbox, Self::Work]
         }
     }
 
@@ -140,52 +157,180 @@ impl View {
     }
 }
 
-/// What a row stands for, by the picker id it is chosen with.
+/// What a row stands for, by the picker id it is chosen with: an inbox
+/// item with its workspace's ID, a workspace, or the entry that adds one.
 enum Row {
+    Question {
+        id: i64,
+        workspace: String,
+    },
+    Approval {
+        id: i64,
+        workspace: String,
+    },
+    NeedsInput(String),
+    Failed(String),
+    Ready {
+        workspace: String,
+        url: Option<String>,
+    },
     Workspace(String),
     Add,
 }
 
 impl Row {
-    fn parse(id: String) -> Self {
+    fn of(item: &Item) -> Self {
+        let workspace = item.workspace_id().to_owned();
+        match item {
+            Item::Question { question } => Self::Question {
+                id: question.id,
+                workspace,
+            },
+            Item::Approval { request } => Self::Approval {
+                id: request.id,
+                workspace,
+            },
+            Item::NeedsInput { .. } => Self::NeedsInput(workspace),
+            Item::Failed { .. } => Self::Failed(workspace),
+            Item::Ready { mark, .. } => Self::Ready {
+                workspace,
+                url: mark.url.clone(),
+            },
+        }
+    }
+
+    /// Its picker id: the kind and its fields, colon-separated, with a URL
+    /// last since it holds colons itself; a workspace row is its ID.
+    fn id(&self) -> String {
+        match self {
+            Self::Question { id, workspace } => format!("question:{workspace}:{id}"),
+            Self::Approval { id, workspace } => format!("approval:{workspace}:{id}"),
+            Self::NeedsInput(workspace) => format!("needs-input:{workspace}"),
+            Self::Failed(workspace) => format!("failed:{workspace}"),
+            Self::Ready { workspace, url } => {
+                format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
+            }
+            Self::Workspace(workspace) => workspace.clone(),
+            Self::Add => ADD_ENTRY.into(),
+        }
+    }
+
+    fn parse(id: String) -> Result<Self> {
         if id == ADD_ENTRY {
-            Self::Add
-        } else {
-            Self::Workspace(id)
+            return Ok(Self::Add);
+        }
+        let Some((kind, rest)) = id.split_once(':') else {
+            return Ok(Self::Workspace(id));
+        };
+        let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
+        let workspace = workspace.to_owned();
+        let number = || detail.parse().context("picker returned an invalid row");
+        Ok(match kind {
+            "question" => Self::Question {
+                id: number()?,
+                workspace,
+            },
+            "approval" => Self::Approval {
+                id: number()?,
+                workspace,
+            },
+            "needs-input" => Self::NeedsInput(workspace),
+            "failed" => Self::Failed(workspace),
+            "ready" => Self::Ready {
+                workspace,
+                url: (!detail.is_empty()).then(|| detail.to_owned()),
+            },
+            _ => anyhow::bail!("picker returned an unknown row"),
+        })
+    }
+
+    fn workspace(&self) -> Option<&str> {
+        match self {
+            Self::Question { workspace, .. }
+            | Self::Approval { workspace, .. }
+            | Self::NeedsInput(workspace)
+            | Self::Failed(workspace)
+            | Self::Ready { workspace, .. }
+            | Self::Workspace(workspace) => Some(workspace),
+            Self::Add => None,
         }
     }
 }
 
-pub(super) async fn choose(ctx: &Context) -> Result<Command> {
+/// Open the picker on `start`, or bare on the inbox unless nothing needs
+/// the user.
+pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command> {
     let scoped = env::is_scoped();
-    let view = View::Work;
+    let views = View::available(scoped);
+    let (view, entries) = first_view(ctx, start, views, scoped).await?;
     let keys = view.bound(scoped);
-    let names: Vec<_> = keys.iter().map(|key| key.name()).collect();
+    let names: Vec<_> = Key::ALL.into_iter().map(Key::name).collect();
+    let unbound: Vec<_> = Key::ALL
+        .into_iter()
+        .filter(|key| !keys.contains(key))
+        .map(Key::name)
+        .collect();
     let picked = ui::pick_in_views(
         ctx,
-        rows(ctx, view, scoped).await?,
+        entries,
         ViewPicker {
             prompt: view.prompt(),
             header: &view.header(&keys),
             keys: &names,
-            unbound: &[],
+            unbound: &unbound,
             next: None,
         },
     )?;
-    command(ctx, Key::parse(&picked.action)?, Row::parse(picked.id)).await
+    command(ctx, Key::parse(&picked.action)?, Row::parse(picked.id)?).await
+}
+
+/// The view to open and its rows: `start`, or the first available view
+/// with rows.
+async fn first_view(
+    ctx: &Context,
+    start: Option<View>,
+    views: &[View],
+    scoped: bool,
+) -> Result<(View, Entries)> {
+    if let Some(view) = start {
+        return Ok((view, rows(ctx, view, scoped).await?));
+    }
+    for &view in &views[..views.len() - 1] {
+        let entries = rows(ctx, view, scoped).await?;
+        if !entries.is_empty() {
+            return Ok((view, entries));
+        }
+    }
+    let last = views[views.len() - 1];
+    Ok((last, rows(ctx, last, scoped).await?))
 }
 
 async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
     match view {
+        View::Inbox => inbox_rows(ctx).await,
         View::Work => work_rows(ctx, scoped).await,
     }
+}
+
+/// One row per item that needs the user.
+async fn inbox_rows(ctx: &Context) -> Result<Entries> {
+    let filter = ListFilter::resolve(ctx, None, Vec::new()).await?;
+    let inbox = Inbox::request(ctx, &filter).await?;
+    let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
+    let labels = inbox.rows(&repos, Palette::picker(), ui::picker_width());
+    Ok(inbox
+        .items
+        .iter()
+        .map(|item| Row::of(item).id())
+        .zip(labels)
+        .collect())
 }
 
 /// Every workspace, then an entry that adds one unless workspace processes ask.
 async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let palette = Palette::stderr(ctx.json);
+    let palette = Palette::picker();
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette, ui::picker_width());
     let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(rows).collect();
@@ -198,17 +343,67 @@ async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     Ok(entries)
 }
 
-/// Add adds wherever it is pressed, and Enter on the add entry adds; other
-/// keys act on the selected row's workspace.
+/// Add adds wherever it is pressed; Enter does what the row asks for, and
+/// other keys act on the row's workspace.
 async fn command(ctx: &Context, key: Key, row: Row) -> Result<Command> {
-    let workspace = match row {
-        _ if key == Key::Add => return Ok(add()),
-        Row::Add if key == Key::Enter => return Ok(add()),
-        Row::Add => None,
-        Row::Workspace(id) => Some(id),
-    };
+    if key == Key::Add {
+        return Ok(add());
+    }
+    if key == Key::Enter {
+        return enter(ctx, row);
+    }
+    let workspace = row.workspace().map(str::to_owned);
     ensure!(workspace.is_some(), "select a workspace for this action");
     workspace_command(ctx, key, workspace).await
+}
+
+/// Answer a question, decide an approval, attach to an agent that needs
+/// input, inspect a failure, view ready work, or enter a workspace.
+fn enter(ctx: &Context, row: Row) -> Result<Command> {
+    Ok(match row {
+        Row::Question { id, .. } => Command::Answer {
+            id: Some(id),
+            answer: None,
+        },
+        Row::Approval { id, .. } => {
+            let choices = [(true, "approve"), (false, "deny")];
+            if ui::pick_choice(ctx, &format!("Approval {id}> "), &choices)? {
+                Command::Approve { id: Some(id) }
+            } else {
+                Command::Deny { id: Some(id) }
+            }
+        }
+        Row::NeedsInput(workspace) => Command::Attach {
+            workspace: Some(workspace),
+            session: None,
+        },
+        Row::Failed(workspace) => Command::Inspect {
+            workspace: Some(workspace),
+        },
+        Row::Ready {
+            workspace,
+            url: Some(url),
+        } => Command::View {
+            items: ItemArgs {
+                kind_or_url: Some(url),
+                item: None,
+                workspace: Some(workspace),
+            },
+            no_comments: false,
+            check: None,
+        },
+        Row::Ready {
+            workspace,
+            url: None,
+        } => Command::Status {
+            workspace: Some(workspace),
+            item: None,
+        },
+        Row::Workspace(workspace) => Command::Cd {
+            workspace: Some(workspace),
+        },
+        Row::Add => add(),
+    })
 }
 
 fn add() -> Command {

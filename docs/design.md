@@ -638,6 +638,17 @@ declining, and noninteractive or JSON calls, fail naming that command. Interacti
 navigation without the shell wrapper reports how to load it without changing
 redirected or JSON output.
 
+Bare `shoal` is the one place to see what needs the user and the work going
+on: a plain fzf picker whose inbox view lists open questions, pending approvals,
+agents that need input, failed workspaces and current ready marks, and whose
+work view lists workspaces. It opens on the inbox when that has rows, and each
+view binds only the keys that act on its rows, with a key meaning the same
+wherever it is bound. Acting on a row
+runs the command that handles its kind. `inbox` and `work` open the same picker
+on their view, and print for scripts with `--print`, filters, JSON or without a
+terminal. Items that only report status stay out of the inbox, including idle
+agents, which may be waiting for PR activity rather than the user.
+
 Completion queries the installed binary per Tab and uses read-only daemon calls
 with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.

@@ -64,6 +64,11 @@ impl Palette {
         Self::detect(io::stderr().is_terminal(), json)
     }
 
+    /// For rows a picker shows on the terminal, wherever they are written.
+    pub fn picker() -> Self {
+        Self::detect(true, false)
+    }
+
     fn detect(terminal: bool, json: bool) -> Self {
         Self::for_environment(
             terminal,

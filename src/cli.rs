@@ -354,6 +354,9 @@ pub enum Command {
         /// List only this registered repository's items.
         #[arg(long = "repo")]
         repository: Option<String>,
+        /// Print the list instead of opening the picker, as filters and JSON do.
+        #[arg(long)]
+        print: bool,
     },
     /// List the work going on: workspaces, chats and queued agents.
     Work {

@@ -7666,26 +7666,30 @@ head -n 1 "$HOME/picker-input"
             let input = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap();
             assert!(input.contains(workspace["id"].as_str().unwrap()));
             assert_eq!(input.contains("Add workspace"), !scoped);
-            let (keys, header) = if scoped {
+            // Every key is bound, and those the view leaves out unbound at start.
+            let (unbound, header) = if scoped {
                 (
-                    &["enter", "ctrl-e", "ctrl-o", "ctrl-f"][..],
+                    Some("ctrl-d,ctrl-a,ctrl-s,ctrl-t"),
                     "enter: cd   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
                 )
             } else {
                 (
-                    &[
-                        "enter", "ctrl-d", "ctrl-e", "ctrl-a", "ctrl-o", "ctrl-s", "ctrl-t",
-                        "ctrl-f",
-                    ][..],
+                    None,
                     "enter: cd   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
                 )
             };
             assert!(args.contains(&format!("--header\n{header}\n")), "{args}");
-            let binds: String = keys
-                .iter()
-                .map(|key| format!("--bind\n{key}:print({key})+accept\n"))
-                .collect();
+            let binds: String = [
+                "enter", "ctrl-d", "ctrl-e", "ctrl-a", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-f",
+            ]
+            .iter()
+            .map(|key| format!("--bind\n{key}:print({key})+accept\n"))
+            .collect();
             assert!(args.contains(&binds), "{args}");
+            assert_eq!(args.contains("start:unbind("), unbound.is_some(), "{args}");
+            if let Some(keys) = unbound {
+                assert!(args.contains(&format!("start:unbind({keys})")), "{args}");
+            }
             match key {
                 "cancel" => {
                     assert!(!output.status.success());
@@ -7711,6 +7715,70 @@ head -n 1 "$HOME/picker-input"
         String::from_utf8_lossy(&output.stdout).contains("menu-worker"),
         "{output:?}"
     );
+}
+
+#[test]
+fn bare_shoal_opens_on_the_inbox_when_something_needs_the_user() {
+    let fixture = Fixture::new();
+    let asker = fixture.add("asker");
+    fixture.add("quiet");
+    // Records its arguments and rows, then chooses the first row whose ID
+    // starts with $PICK, or cancels when it is empty.
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        r#"#!/bin/sh
+printf '%s\n' "$@" > "$HOME/picker-args"
+cat > "$HOME/picker-input"
+[ -n "$PICK" ] || exit 130
+printf '\n'
+awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker-input"
+"#,
+    );
+    let read = |name: &str| fs::read_to_string(fixture.root.path().join(name)).unwrap();
+    let open = |pick: &str, answer: &str| {
+        let (output, transcript) =
+            fixture.interactive_command(fixture.command().env("PICK", pick), answer);
+        (
+            output,
+            transcript,
+            read("picker-args"),
+            read("picker-input"),
+        )
+    };
+
+    // With nothing that needs the user, bare shoal shows the work going on.
+    let (_, _, args, rows) = open("", "");
+    assert!(args.contains("--prompt\nwork> \n"), "{args}");
+    assert!(rows.contains(asker["id"].as_str().unwrap()), "{rows}");
+
+    fixture.ok(&[
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+        "--workspace",
+        "asker",
+    ]);
+    // Now bare shoal opens on the inbox, and Enter answers the question.
+    let (output, transcript, args, rows) = open("question:", "Postgres\n");
+    assert!(output.status.success(), "{transcript}");
+    assert!(args.contains("--prompt\ninbox> \n"), "{args}");
+    assert!(
+        args.contains(
+            "--header\nenter: act   ctrl-t: attach   ctrl-o: inspect   ctrl-f: diff   ctrl-a: add\n"
+        ),
+        "{args}"
+    );
+    assert!(
+        args.contains("--bind\nstart:unbind(ctrl-d,ctrl-e,ctrl-s)\n"),
+        "{args}"
+    );
+    assert!(rows.contains("Which database?"), "{rows}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Answered question 1 from asker"),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
 }
 
 #[test]

@@ -223,15 +223,21 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     ctx.need = cli.need;
     let command = match cli.command {
         Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
+        Some(Command::Inbox {
+            repository: None,
+            print: false,
+        }) if ctx.interactive() => menu::choose(&ctx, Some(menu::View::Inbox)).await?,
         Some(Command::Work {
             queue: false,
             chats: false,
             repository: None,
             ref status,
             print: false,
-        }) if status.is_empty() && ctx.interactive() => menu::choose(&ctx).await?,
+        }) if status.is_empty() && ctx.interactive() => {
+            menu::choose(&ctx, Some(menu::View::Work)).await?
+        }
         Some(command) => command,
-        None => menu::choose(&ctx).await?,
+        None => menu::choose(&ctx, None).await?,
     };
     ensure!(
         !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),
@@ -358,7 +364,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
-        Command::Inbox { repository } => {
+        Command::Inbox {
+            repository,
+            print: _,
+        } => {
             let filter = listing::ListFilter::resolve(&ctx, repository, vec![]).await?;
             inbox::list(&ctx, &filter).await
         }
