@@ -101,6 +101,10 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("restore", "cannot reopen removed workspaces"),
         ("notifications", "cannot read or clear notifications"),
         ("notifications clear", "cannot read or clear notifications"),
+        (
+            "answer 1 yes",
+            "cannot answer questions without their scope token",
+        ),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());

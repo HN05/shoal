@@ -138,6 +138,11 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String>) -> Result<i32> {
+    // A process that cleared the scope token it inherits would answer as the user.
+    ensure!(
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot answer questions without their scope token"
+    );
     let (id, answer, shown) = match (id, answer) {
         (Some(id), Some(answer)) => (id, answer, None),
         // Workspace processes answer only the questions of the workspaces
