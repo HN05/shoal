@@ -162,16 +162,21 @@ impl Manager {
         Ok(pins.iter().map(|pins| xcode::checkouts_key(pins)).collect())
     }
 
-    /// The repository's checkout and the worktrees of its workspaces that exist.
+    /// The repository's checkout and the worktrees of its workspaces that
+    /// exist; one that cannot be inspected stops pruning.
     async fn repository_worktrees(&self, repo: &Repository) -> Result<Vec<PathBuf>> {
-        let workspaces = self.list_workspaces().await?;
-        let worktrees = workspaces
-            .into_iter()
-            .filter(|workspace| workspace.repository_id == repo.id && workspace.path.exists())
-            .map(|workspace| workspace.path);
-        Ok(std::iter::once(repo.path.clone())
-            .chain(worktrees)
-            .collect())
+        let mut worktrees = vec![repo.path.clone()];
+        for workspace in self.list_workspaces().await? {
+            if workspace.repository_id == repo.id
+                && workspace
+                    .path
+                    .try_exists()
+                    .with_context(|| format!("inspect {}", workspace.path.display()))?
+            {
+                worktrees.push(workspace.path);
+            }
+        }
+        Ok(worktrees)
     }
 }
 
