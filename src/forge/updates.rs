@@ -4,8 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::model::ConflictCheck;
-
 mod queries;
 
 /// How long a lookup may keep failing with the same error before it is
@@ -14,9 +12,6 @@ const FAILURE_REPORT_INTERVAL: u64 = 600;
 
 /// The comment source of an item's discussion, where Shoal posts comments.
 pub(super) const DISCUSSION: &str = "discussion";
-
-/// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
-const MAX_LISTED_FILES: usize = 10;
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -93,28 +88,26 @@ struct Check {
     complete: bool,
 }
 
+/// A local merge of `head` into `base`; `conflict` reports its conflicts
+/// and is empty when it merges cleanly.
+pub(crate) struct MergeCheck {
+    pub head: String,
+    pub base: String,
+    pub conflict: Option<String>,
+}
+
 impl Snapshot {
-    /// A workspace branch's local merge check, observed like PR mergeability.
-    pub(crate) fn branch_conflicts(check: Result<ConflictCheck>) -> Self {
+    /// A local merge check, observed like PR mergeability.
+    pub(crate) fn merge_check(check: Result<MergeCheck>) -> Self {
         let mut snapshot = Self::default();
         match check {
             Ok(check) => {
-                snapshot.conflict = Some(check.conflicts);
+                snapshot.conflict = Some(check.conflict.is_some());
                 snapshot.conflict_at = MergeRevision {
                     head: check.head,
-                    base: check.target_commit,
+                    base: check.base,
                 };
-                snapshot.conflict_message = check.conflicts.then(|| {
-                    let mut files =
-                        check.files[..check.files.len().min(MAX_LISTED_FILES)].join(", ");
-                    if check.files.len() > MAX_LISTED_FILES {
-                        files.push_str(&format!(
-                            " and {} more",
-                            check.files.len() - MAX_LISTED_FILES
-                        ));
-                    }
-                    format!("Conflicts with {}: {files}", check.target)
-                });
+                snapshot.conflict_message = check.conflict;
             }
             Err(error) => {
                 snapshot

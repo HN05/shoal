@@ -16,13 +16,16 @@ use crate::{
     forge::{
         ForgeRepo,
         link::{ItemKind, Selection},
-        updates::{Snapshot, Update},
+        updates::{MergeCheck, Snapshot, Update},
     },
-    model::Workspace,
+    model::{ConflictCheck, Workspace},
     repository,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+/// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
+const MAX_LISTED_FILES: usize = 10;
 
 const NO_LINKED_ITEMS: &str = "no linked items of the selected kind; register one with shoal link";
 
@@ -366,7 +369,7 @@ impl Manager {
         let mut observations = Vec::new();
         if let Some(branch) = branch {
             let check = self.check_conflicts(id, None).await;
-            observations.push((branch, Snapshot::branch_conflicts(check)));
+            observations.push((branch, branch_conflicts(check)));
         }
         match items {
             Ok(items) => {
@@ -968,6 +971,27 @@ fn redeliver_after(
         }
     }
     Ok(())
+}
+
+/// A workspace branch's local merge check, observed like PR mergeability.
+fn branch_conflicts(check: Result<ConflictCheck>) -> Snapshot {
+    Snapshot::merge_check(check.map(|check| MergeCheck {
+        conflict: check.conflicts.then(|| conflict_message(&check)),
+        head: check.head,
+        base: check.target_commit,
+    }))
+}
+
+/// The conflict with the check's target, naming the first conflicted paths.
+fn conflict_message(check: &ConflictCheck) -> String {
+    let mut files = check.files[..check.files.len().min(MAX_LISTED_FILES)].join(", ");
+    if check.files.len() > MAX_LISTED_FILES {
+        files.push_str(&format!(
+            " and {} more",
+            check.files.len() - MAX_LISTED_FILES
+        ));
+    }
+    format!("Conflicts with {}: {files}", check.target)
 }
 
 /// Whether the workspace, or a child workspace whose activity its agent
@@ -2293,7 +2317,7 @@ mod tests {
 
         // A linked PR's forge reports conflicts instead.
         register_watch(&manager, &workspace.id, "pr").await;
-        let conflicting = Snapshot::branch_conflicts(Ok(crate::model::ConflictCheck {
+        let conflicting = branch_conflicts(Ok(crate::model::ConflictCheck {
             workspace_id: workspace.id.clone(),
             target: "main".into(),
             target_commit: String::new(),
@@ -2371,7 +2395,7 @@ mod tests {
     }
 
     fn resolved_branch(workspace_id: &str) -> Snapshot {
-        Snapshot::branch_conflicts(Ok(crate::model::ConflictCheck {
+        branch_conflicts(Ok(crate::model::ConflictCheck {
             workspace_id: workspace_id.into(),
             target: "main".into(),
             target_commit: String::new(),
