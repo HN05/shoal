@@ -351,6 +351,37 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
 }
 
 #[tokio::test]
+async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot() {
+    let (_root, manager, workspace) = fixture().await;
+    fs::write(workspace.path.join("draft"), "draft\n").unwrap();
+    let promised = |files_restorable| UnsavedWork::Confirmed {
+        files: true,
+        detached_head: None,
+        files_restorable,
+    };
+    // The files grew past the archive limit after the user confirmed.
+    crate::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n").await;
+
+    let error = manager
+        .remove_workspace(&workspace.id, promised(true), InspectionPolicy::GitOnly)
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("a checkpoint cannot keep the unsaved files"),
+        "{error:#}"
+    );
+    assert!(workspace.path.join("draft").exists());
+
+    manager
+        .remove_workspace(&workspace.id, promised(false), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
 async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() {
     let (_root, manager, workspace) = fixture().await;
     let repo = manager.repository(&workspace.repository_id).await.unwrap();

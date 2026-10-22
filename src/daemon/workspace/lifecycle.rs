@@ -720,11 +720,16 @@ impl Manager {
         let (files, branch) = worktrunk_removal_options(&check, removal.unsaved());
         let record = self.save_removal_record(workspace, removal.cause()).await?;
         let removed = async {
-            let files = if removal.discards_archived_files() && check.dirty {
+            if check.dirty
+                && (removal.discards_archived_files()
+                    || removal.unsaved().promises_restorable_files())
+            {
                 ensure!(
                     !record.checkpoint.files_omitted,
                     "a checkpoint cannot keep the unsaved files; retaining the workspace"
                 );
+            }
+            let files = if removal.discards_archived_files() && check.dirty {
                 FileRemoval::Force
             } else {
                 files

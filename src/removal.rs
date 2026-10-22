@@ -48,9 +48,13 @@ pub struct RemovalCheck {
 pub enum UnsavedWork {
     /// What the caller saw and confirmed: uncommitted and untracked files,
     /// and the commits of a detached HEAD while HEAD is still that commit.
+    /// `files_restorable` records that the caller was told the checkpoint
+    /// keeps the files, so removal refuses when it cannot after all.
     Confirmed {
         files: bool,
         detached_head: Option<String>,
+        #[serde(default)]
+        files_restorable: bool,
     },
     /// Everything, for removals that delete more than the workspace.
     All,
@@ -60,6 +64,7 @@ pub enum UnsavedWork {
 pub static NOTHING: UnsavedWork = UnsavedWork::Confirmed {
     files: false,
     detached_head: None,
+    files_restorable: false,
 };
 
 impl Default for UnsavedWork {
@@ -74,7 +79,19 @@ impl UnsavedWork {
         Self::Confirmed {
             files: check.dirty,
             detached_head: check.head.clone().filter(|_| check.detached_commits() > 0),
+            files_restorable: check.dirty && check.unsaved_files_archived,
         }
+    }
+
+    /// The caller was told the removal's checkpoint keeps the files.
+    pub fn promises_restorable_files(&self) -> bool {
+        matches!(
+            self,
+            Self::Confirmed {
+                files_restorable: true,
+                ..
+            }
+        )
     }
 
     /// The unsaved work in `check` this consent does not cover, as
@@ -85,6 +102,7 @@ impl UnsavedWork {
             Self::Confirmed {
                 files,
                 detached_head,
+                ..
             } => {
                 let commits = if detached_head.is_some() && *detached_head == check.head {
                     0
