@@ -816,6 +816,41 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
+fn export_finishes_when_its_terminal_ends_after_the_removal() {
+    // The removal hook holds the daemon between removal and the export, as
+    // long as closing a workspace's Herdr tab would take.
+    let fixture = Fixture::with_config(Some("post_remove_cmd = 'hold.sh'\n"));
+    install_test_script(
+        fixture.repo.join("hold.sh"),
+        "#!/bin/sh\ntouch removed\ni=0\nwhile [ ! -e go ] && [ $i -lt 50 ]; do sleep 1; i=$((i + 1)); done\n",
+    );
+    let workspace = fixture.add("cut");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(path.join("notes"), "draft\n").unwrap();
+    let file = fixture.root.path().join("cut.shoal");
+    let mut export = fixture
+        .command()
+        .args(["export", "cut", "-o", file.to_str().unwrap()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("workspace removed", || {
+        fixture.repo.join("removed").exists()
+    });
+    export.kill().unwrap();
+    export.wait().unwrap();
+    fs::write(fixture.repo.join("go"), "").unwrap();
+
+    wait_until("export written", || file.exists());
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.ok(&["import", file.to_str().unwrap(), "--repo", repo]);
+    assert_eq!(imported["workspace"]["name"], "cut");
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+}
+
+#[test]
 fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let fixture = Fixture::new();
     let workspace = fixture.add("scratch");

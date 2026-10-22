@@ -14,7 +14,9 @@ use crate::{
         CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, Workspace,
         WorkspaceLinks,
     },
+    removal::{InspectionPolicy, UnsavedWork},
     time::unix_seconds,
+    transfer::ExportedWorkspace,
 };
 
 impl Manager {
@@ -146,6 +148,46 @@ impl Manager {
             opened,
             removed,
             warnings,
+        })
+    }
+
+    /// Write a workspace for another Shoal to the new file `file`: remove it
+    /// first when it exists, otherwise export the latest removal record with
+    /// that name or ID. The daemon writes the file, so closing the caller's
+    /// terminal with the workspace cannot cut the export short.
+    pub async fn export_workspace(
+        &self,
+        selector: &str,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+        file: std::path::PathBuf,
+    ) -> Result<ExportedWorkspace> {
+        let removal = match self.workspace(selector).await {
+            Ok(workspace) => Some((
+                workspace.id.clone(),
+                self.remove_workspace(&workspace.id, unsaved, inspection)
+                    .await?,
+            )),
+            Err(_) => None,
+        };
+        let removed = self
+            .removed_workspaces()
+            .await?
+            .into_iter()
+            .find(|removed| match &removal {
+                Some((id, _)) => &removed.workspace_id == id,
+                None => removed.workspace_id == selector || removed.name == selector,
+            })
+            .with_context(|| format!("no workspace or restorable workspace {selector}"))?;
+        ensure!(
+            !removed.checkpoint.files_omitted,
+            "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
+            removed.name
+        );
+        let repo = self.repository(&removed.repository_id).await?;
+        Ok(ExportedWorkspace {
+            manifest: crate::transfer::export(&repo, removed, file).await?,
+            removal: removal.map(|(_, removal)| removal),
         })
     }
 

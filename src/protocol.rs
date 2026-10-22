@@ -439,6 +439,14 @@ pub enum Method {
     RestoreWorkspace {
         workspace: String,
     },
+    /// Remove a workspace, or take a removed one, and write it for another
+    /// Shoal to the new file `file`.
+    ExportWorkspace {
+        workspace: String,
+        unsaved: UnsavedWork,
+        caller_pid: u32,
+        file: std::path::PathBuf,
+    },
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again.
     ImportWorkspace {
@@ -827,6 +835,7 @@ response_bodies! {
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
+    ExportedWorkspace(crate::transfer::ExportedWorkspace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     Hook(Option<std::path::PathBuf>),

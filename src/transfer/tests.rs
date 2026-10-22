@@ -60,16 +60,32 @@ async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>, Repository
     (root, manager, repo)
 }
 
-/// Remove `workspace` and export its record.
-async fn export_removed(manager: &Manager, repo: &Repository, workspace: &str) -> Vec<u8> {
-    manager
-        .remove_workspace(workspace, UnsavedWork::All, InspectionPolicy::GitOnly)
+/// Export `workspace`, removing it, and read the file back.
+async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("workspace.shoal");
+    let exported = manager
+        .export_workspace(
+            workspace,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            file.clone(),
+        )
         .await
         .unwrap();
-    let removed = manager.removed_workspaces().await.unwrap().remove(0);
-    let mut file = Vec::new();
-    export(repo, removed, &mut file).await.unwrap();
-    file
+    assert!(exported.removal.is_some());
+    // The daemon writes new files only.
+    let error = manager
+        .export_workspace(
+            workspace,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            file.clone(),
+        )
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("write"), "{error:#}");
+    fs::read(file).unwrap()
 }
 
 async fn import(
@@ -116,7 +132,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     )
     .unwrap();
 
-    let file = export_removed(&exporting, &source_repo, &workspace.id).await;
+    let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
     assert_eq!(read.manifest.remote_url.as_deref(), origin.to_str());
     assert!(read.manifest.bundle);
@@ -156,7 +172,7 @@ async fn export_leaves_out_a_checkpoint_the_default_branch_has() {
         .unwrap();
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
 
-    let file = export_removed(&exporting, &source_repo, &workspace.id).await;
+    let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
     assert!(!read.manifest.bundle);
     assert_eq!(read.manifest.prerequisite.as_deref(), Some(head.trim()));

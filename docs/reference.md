@@ -1591,7 +1591,8 @@ shoal export topic -o - | ssh other shoal import -
 
 `shoal export [workspace] -o <file>` removes the workspace as `shoal rm` does and
 writes its removal record and checkpoint to a new file, or to standard output for
-`-`. It refuses before removing anything when the file exists or a checkpoint
+`-`. The daemon writes the file, so it is complete even when the terminal closes
+with the workspace, as its Herdr tab does. It refuses before removing anything when the file exists or a checkpoint
 cannot keep the uncommitted files, and asks before releasing holds unless given
 `--yes`. A workspace already removed is exported from its removal record without
 another removal. The checkpoint travels as a Git bundle without the commits of

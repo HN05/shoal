@@ -2,7 +2,7 @@
 //! record and a Git bundle of its checkpoint, which `shoal import` restores.
 use std::{
     io::{BufRead, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -33,21 +33,32 @@ pub struct Manifest {
     pub workspace: RemovedWorkspace,
 }
 
-/// Write `removed`, a workspace of `repo`, to `out` for `shoal import`.
+/// An export the daemon wrote, and the removal that preceded it when the
+/// workspace still existed.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportedWorkspace {
+    pub manifest: Manifest,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removal: Option<crate::removal::RemovalResult>,
+}
+
+/// Write `removed`, a workspace of `repo`, to the new file `path` for `shoal
+/// import`; a failure leaves no partial file and an existing one is never
+/// replaced.
 pub async fn export(
     repo: &Repository,
     removed: RemovedWorkspace,
-    out: &mut impl Write,
+    path: PathBuf,
 ) -> Result<Manifest> {
     let manifest = Manifest::of(repo, removed).await?;
-    writeln!(out, "{HEADER}")?;
-    serde_json::to_writer(&mut *out, &manifest)?;
-    writeln!(out)?;
-    if manifest.bundle {
-        let commit = &manifest.workspace.checkpoint.commit;
-        write_bundle(&repo.path, commit, manifest.prerequisite.as_deref(), out).await?;
-    }
-    out.flush()?;
+    let bundle = match manifest.bundle {
+        true => Some(Bundle::create(&repo.path, &manifest).await?),
+        false => None,
+    };
+    let written = manifest.clone();
+    tokio::task::spawn_blocking(move || write_new(&path, &written, bundle.as_ref()))
+        .await
+        .context("write the export")??;
     Ok(manifest)
 }
 
@@ -72,19 +83,51 @@ impl Manifest {
     }
 }
 
-/// Write a bundle of checkpoint `commit` without what `exclude` reaches.
-async fn write_bundle(
-    repo: &Path,
-    commit: &str,
-    exclude: Option<&str>,
-    out: &mut impl Write,
-) -> Result<()> {
-    // Git replaces the bundle file, so it goes in a directory of its own.
-    let directory = tempfile::tempdir()?;
-    let bundle = directory.path().join("checkpoint.bundle");
-    let reference = git::checkpoint::reference(commit);
-    git::bundle::create(repo, &bundle, &reference, exclude).await?;
-    std::io::copy(&mut std::fs::File::open(&bundle)?, out)?;
+/// A Git bundle of an export's checkpoint, in a directory of its own because
+/// Git replaces the file.
+struct Bundle {
+    directory: tempfile::TempDir,
+}
+
+impl Bundle {
+    const NAME: &str = "checkpoint.bundle";
+
+    /// Bundle the checkpoint without the prerequisite the importer fetches.
+    async fn create(repo: &Path, manifest: &Manifest) -> Result<Self> {
+        let bundle = Self {
+            directory: tempfile::tempdir()?,
+        };
+        let reference = git::checkpoint::reference(&manifest.workspace.checkpoint.commit);
+        let exclude = manifest.prerequisite.as_deref();
+        git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
+        Ok(bundle)
+    }
+
+    fn path(&self) -> PathBuf {
+        self.directory.path().join(Self::NAME)
+    }
+}
+
+/// Write the header, `manifest` and `bundle` to a temporary file beside
+/// `path`, then move it there unless a file exists.
+fn write_new(path: &Path, manifest: &Manifest, bundle: Option<&Bundle>) -> Result<()> {
+    let directory = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let file = tempfile::NamedTempFile::new_in(directory)
+        .with_context(|| format!("create a file in {}", directory.display()))?;
+    let mut out = std::io::BufWriter::new(file.as_file());
+    writeln!(out, "{HEADER}")?;
+    serde_json::to_writer(&mut out, manifest)?;
+    writeln!(out)?;
+    if let Some(bundle) = bundle {
+        std::io::copy(&mut std::fs::File::open(bundle.path())?, &mut out)?;
+    }
+    out.into_inner().map_err(|error| error.into_error())?;
+    file.as_file().sync_all()?;
+    file.persist_noclobber(path)
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 

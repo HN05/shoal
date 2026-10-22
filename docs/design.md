@@ -1152,7 +1152,8 @@ record. A restore first claims the record, keeping it and its checkpoints from
 expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
 Moving a workspace to another machine is a removal there and a restore here:
-export writes the removal record and a Git bundle of its checkpoint, and import
+export writes the removal record and a Git bundle of its checkpoint from the
+daemon, which outlives a terminal closing with the workspace, and import
 records both as a removal of this repository, the ref before the records, then
 runs the normal restore. Moving rather than copying keeps one workspace per
 branch, so two agents never push it or watch its PRs, and the source's removal

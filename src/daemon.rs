@@ -748,6 +748,16 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
         }
+        Method::ExportWorkspace {
+            workspace,
+            unsaved,
+            caller_pid,
+            file,
+        } => Body::ExportedWorkspace(
+            manager
+                .export_workspace(&workspace, unsaved, removal_inspection(caller_pid), file)
+                .await?,
+        ),
         Method::ImportWorkspace {
             repository,
             bundle,

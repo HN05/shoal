@@ -1,7 +1,7 @@
 //! Moving workspaces to another Shoal: `shoal export` removes a workspace and
 //! writes it to a file, and `shoal import` opens it again from one.
 use std::{
-    io::BufReader,
+    io::{BufReader, Write},
     path::{Path, PathBuf},
 };
 
@@ -14,10 +14,10 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::{RemovedWorkspace, Repository, RestoredWorkspace},
+    model::RestoredWorkspace,
     protocol::Method,
-    removal::RemovalCheck,
-    transfer::{self, Import},
+    removal::{RemovalCheck, UnsavedWork},
+    transfer::{ExportedWorkspace, Import},
 };
 
 /// The file name that reads or writes the standard streams.
@@ -36,24 +36,8 @@ pub(super) async fn export(
         "workspace processes cannot export workspaces; ask the user to run shoal export"
     );
     let output = Output::reserve(&file)?;
-    let removed = removed_for_export(ctx, workspace, yes, output.path()).await?;
-    let repo = client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == removed.repository_id)
-        .context("the workspace's repository is no longer registered")?;
-    let name = removed.name.clone();
-    match output.write(&repo, removed).await? {
-        (None, _) => eprintln!("Exported {name}"),
-        (Some(path), manifest) => ctx.emit(
-            &format!(
-                "Exported {name} to {}; shoal import opens it on another machine",
-                path.display()
-            ),
-            json!({"file": path, "manifest": manifest}),
-        )?,
-    }
-    Ok(0)
+    let exported = export_workspace(ctx, workspace, yes, &output).await?;
+    output.report(ctx, &exported)
 }
 
 /// `shoal import`: open the workspace exported to `file` in the repository
@@ -99,21 +83,20 @@ fn read_import(file: &Path) -> Result<Import> {
     Import::read(&mut BufReader::new(input))
 }
 
-/// Where an export goes: standard output, or a new file whose directory
-/// takes a temporary file before the workspace is removed, so an unwritable
-/// destination fails first and a failed export leaves no partial file.
+/// Where an export goes: a new file whose directory takes a file before
+/// the workspace is removed, so an unwritable destination fails first, or a
+/// temporary file copied to standard output.
 enum Output {
-    Stream,
-    File {
-        path: PathBuf,
-        file: tempfile::NamedTempFile,
-    },
+    Stream { directory: tempfile::TempDir },
+    File { path: PathBuf },
 }
 
 impl Output {
     fn reserve(file: &Path) -> Result<Self> {
         if file.as_os_str() == STANDARD_STREAM {
-            return Ok(Self::Stream);
+            return Ok(Self::Stream {
+                directory: tempfile::tempdir()?,
+            });
         }
         let name = file
             .file_name()
@@ -130,71 +113,86 @@ impl Output {
             "{} exists; choose another file",
             path.display()
         );
-        let file = tempfile::NamedTempFile::new_in(&directory)
+        tempfile::NamedTempFile::new_in(&directory)
             .with_context(|| format!("create a file in {}", directory.display()))?;
-        Ok(Self::File { path, file })
+        Ok(Self::File { path })
     }
 
-    /// The file's canonical path; `None` for standard output.
-    fn path(&self) -> Option<&Path> {
+    /// The file the daemon writes.
+    fn file(&self) -> PathBuf {
         match self {
-            Self::Stream => None,
-            Self::File { path, .. } => Some(path),
+            Self::Stream { directory } => directory.path().join("workspace.shoal"),
+            Self::File { path } => path.clone(),
         }
     }
 
-    /// Export `removed` here, returning the file's path with the manifest.
-    async fn write(
-        self,
-        repo: &Repository,
-        removed: RemovedWorkspace,
-    ) -> Result<(Option<PathBuf>, transfer::Manifest)> {
-        let (path, file) = match self {
-            Self::Stream => {
-                let mut out = std::io::BufWriter::new(std::io::stdout());
-                return Ok((None, transfer::export(repo, removed, &mut out).await?));
-            }
-            Self::File { path, file } => (path, file),
+    /// The file the user named; `None` for standard output.
+    fn destination(&self) -> Option<&Path> {
+        match self {
+            Self::Stream { .. } => None,
+            Self::File { path } => Some(path),
+        }
+    }
+
+    /// Report the export, copying it to standard output when it goes there.
+    fn report(self, ctx: &Context, exported: &ExportedWorkspace) -> Result<i32> {
+        let name = &exported.manifest.workspace.name;
+        let Self::File { path } = &self else {
+            let mut stdout = std::io::stdout().lock();
+            std::io::copy(&mut std::fs::File::open(self.file())?, &mut stdout)?;
+            stdout.flush()?;
+            eprintln!("Exported {name}");
+            return Ok(0);
         };
-        let mut out = std::io::BufWriter::new(file.as_file());
-        let manifest = transfer::export(repo, removed, &mut out).await?;
-        out.into_inner().map_err(|error| error.into_error())?;
-        file.as_file().sync_all()?;
-        file.persist_noclobber(&path)
-            .with_context(|| format!("write {}", path.display()))?;
-        Ok((Some(path), manifest))
+        ctx.emit(
+            &format!(
+                "Exported {name} to {}; shoal import opens it on another machine",
+                path.display()
+            ),
+            json!({"file": path, "manifest": exported.manifest, "removal": exported.removal}),
+        )?;
+        Ok(0)
     }
 }
 
-/// The removal record to export: the workspace's, removed now, when it
-/// exists and does not hold `output`; otherwise the latest of a removed
-/// workspace with that name or ID.
-async fn removed_for_export(
+/// Export the workspace to `output` once its checkpoint can keep every
+/// unsaved file, `output` lies outside it and the user lets its holds go;
+/// a removed workspace with that name or ID is exported from its record.
+async fn export_workspace(
     ctx: &Context,
     workspace: Option<String>,
     yes: bool,
-    output: Option<&Path>,
-) -> Result<RemovedWorkspace> {
+    output: &Output,
+) -> Result<ExportedWorkspace> {
+    let method = |workspace, unsaved| Method::ExportWorkspace {
+        workspace,
+        unsaved,
+        caller_pid: std::process::id(),
+        file: output.file(),
+    };
     if let Some(selector) = &workspace
         && !workspace_exists(ctx, selector).await?
     {
-        return removed_workspace(ctx, |removed| {
-            &removed.workspace_id == selector || &removed.name == selector
-        })
-        .await?
-        .with_context(|| format!("no workspace or restorable workspace {selector}"));
+        let method = method(selector.clone(), UnsavedWork::default());
+        return request::<ExportedWorkspace>(&ctx.paths, method).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let id = remove_for_export(ctx, workspace, yes, output).await?;
-    let removed = removed_workspace(ctx, |removed| removed.workspace_id == id)
-        .await?
-        .context("the removal kept no record to export")?;
-    ensure!(
-        !removed.checkpoint.files_omitted,
-        "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
-        removed.name
-    );
-    Ok(removed)
+    let check = check_export(ctx, &workspace, yes, output.destination()).await?;
+    let method = method(workspace, UnsavedWork::confirming(&check));
+    let exported = super::workspaces::leaving(
+        ctx,
+        &check.workspace,
+        request::<ExportedWorkspace>(&ctx.paths, method),
+    )
+    .await?;
+    if let Some(error) = exported
+        .removal
+        .as_ref()
+        .and_then(|removal| removal.hook_error.as_ref())
+    {
+        eprintln!("warning: {error}");
+    }
+    Ok(exported)
 }
 
 async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
@@ -204,32 +202,19 @@ async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
         .any(|workspace| workspace.id == selector || workspace.name == selector))
 }
 
-/// The newest restorable workspace `matches` accepts.
-async fn removed_workspace(
+/// What removing the workspace for an export would delete, refusing unsaved
+/// files a checkpoint cannot keep and a destination inside it, after the
+/// user lets its holds go.
+async fn check_export(
     ctx: &Context,
-    matches: impl Fn(&RemovedWorkspace) -> bool,
-) -> Result<Option<RemovedWorkspace>> {
-    Ok(
-        request::<Vec<RemovedWorkspace>>(&ctx.paths, Method::RemovedWorkspaces)
-            .await?
-            .into_iter()
-            .find(matches),
-    )
-}
-
-/// Remove the workspace once its checkpoint can keep every unsaved file, it
-/// does not hold `output`, and the user lets its holds go; its ID names the
-/// removal record.
-async fn remove_for_export(
-    ctx: &Context,
-    workspace: String,
+    workspace: &str,
     yes: bool,
-    output: Option<&Path>,
-) -> Result<String> {
+    destination: Option<&Path>,
+) -> Result<RemovalCheck> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
         Method::CheckRemoval {
-            workspace: workspace.clone(),
+            workspace: workspace.to_owned(),
             caller_pid: std::process::id(),
             include_changes: true,
         },
@@ -239,18 +224,17 @@ async fn remove_for_export(
         !check.dirty || check.unsaved_files_archived,
         "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"
     );
-    if let Some(output) = output {
+    if let Some(destination) = destination {
         ensure!(
-            !check.workspace.contains(output),
+            !check.workspace.contains(destination),
             "{} is inside the workspace the export removes; write it elsewhere",
-            output.display()
+            destination.display()
         );
     }
     if !yes && !check.workspace.holds.is_empty() {
         confirm_holds(ctx, &check)?;
     }
-    super::workspaces::remove_checked(ctx, workspace, &check).await?;
-    Ok(check.workspace.id)
+    Ok(check)
 }
 
 /// Ask before releasing the holds external sessions keep on the workspace.

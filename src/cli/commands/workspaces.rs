@@ -1753,33 +1753,43 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
 /// saw: more appearing meanwhile makes the daemon refuse.
-pub(super) async fn remove_checked(
+async fn remove_checked(
     ctx: &Context,
     workspace: String,
     check: &RemovalCheck,
 ) -> Result<RemovalResult> {
-    let unsaved = UnsavedWork::confirming(check);
-    // Leave the directory before it disappears under the shell.
-    let escape = escape_destination(ctx, &check.workspace).await?;
-    let result = request::<RemovalResult>(
-        &ctx.paths,
-        Method::RemoveWorkspace {
-            workspace,
-            unsaved,
-            caller_pid: std::process::id(),
-        },
+    let method = Method::RemoveWorkspace {
+        workspace,
+        unsaved: UnsavedWork::confirming(check),
+        caller_pid: std::process::id(),
+    };
+    let result = leaving(
+        ctx,
+        &check.workspace,
+        request::<RemovalResult>(&ctx.paths, method),
     )
-    .await;
+    .await?;
+    if let Some(error) = &result.hook_error {
+        eprintln!("warning: {error}");
+    }
+    Ok(result)
+}
+
+/// Run `removal`, which removes `workspace`, after finding where the shell
+/// goes when its directory disappears under it, and send it there.
+pub(super) async fn leaving<T>(
+    ctx: &Context,
+    workspace: &Workspace,
+    removal: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
+    let escape = escape_destination(ctx, workspace).await?;
+    let result = removal.await;
     if let Some(destination) = escape
         && (result.is_ok() || !std::env::current_dir().is_ok_and(|cwd| cwd.exists()))
     {
         shell::navigate(&destination, ctx.json)?;
     }
-    let result = result?;
-    if let Some(error) = &result.hook_error {
-        eprintln!("warning: {error}");
-    }
-    Ok(result)
+    result
 }
 
 fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
