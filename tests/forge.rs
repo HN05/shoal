@@ -1870,7 +1870,21 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["workspace"], "topic");
 
+    // A worktree replaced while the proposal waits is refused before
+    // anything is sent, and the proposal stays.
+    let workspace = fixture.ok(&["inspect", "topic"])["workspace"].clone();
+    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
+    let owner = fs::read_to_string(&marker).unwrap();
+    fs::write(&marker, "another-workspace\n").unwrap();
     let id = proposed["id"].to_string();
+    let refused = fixture.run(&["approve", &id]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("another Shoal workspace"),
+        "{refused:?}"
+    );
+    assert!(writes(&fixture).is_empty());
+    fs::write(&marker, owner).unwrap();
+
     let approved = fixture.ok(&["approve", &id, "--title", "Flaky test"]);
     let url = format!("{}/issues/40", fixture.web);
     assert_eq!(approved["status"], "approved");

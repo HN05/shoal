@@ -577,6 +577,8 @@ impl Manager {
         workspace: Option<&Workspace>,
     ) -> Result<(ForgeRepo, Account)> {
         if let Some(workspace) = workspace {
+            // The worktree may have been replaced while the proposal waited.
+            self.verify_worktree(workspace).await?;
             return self.workspace_forge_account(workspace).await;
         }
         let repository = request
