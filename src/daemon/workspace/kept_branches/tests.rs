@@ -181,15 +181,20 @@ async fn a_branch_checked_out_elsewhere_stays_remembered() {
 }
 
 #[tokio::test]
-async fn listing_shows_kept_branches_with_unpushed_commits() {
+async fn listing_shows_every_kept_branch_with_its_unpushed_commits() {
     let (_root, manager, repo, _other) = fixture().await;
     let head = kept(&manager, &repo, "topic").await;
     kept(&manager, &repo, "pushed").await;
     git(&repo.path, &["push", "-q", "origin", "pushed"]);
 
     let listed = manager.list_kept_branches().await.unwrap();
-    assert_eq!(listed.len(), 1);
-    let topic = &listed[0];
+    assert_eq!(listed.len(), 2);
+    let pushed = listed.iter().find(|branch| branch.branch == "pushed");
+    assert_eq!(pushed.map(|branch| branch.unpushed_commits), Some(0));
+    let topic = listed
+        .iter()
+        .find(|branch| branch.branch == "topic")
+        .expect("topic is listed");
     assert_eq!(topic.branch, "topic");
     assert_eq!(topic.repository_id, repo.id);
     assert_eq!(topic.head, head);
@@ -296,6 +301,11 @@ async fn a_ref_outside_the_fetch_mapping_does_not_approve_deletion() {
     assert!(!git(&repo.path, &["rev-parse", "refs/remotes/origin/topic"]).is_empty());
     assert!(branch_exists(&repo, "topic"));
     assert_eq!(remembered(&manager, &repo).await, ["topic"]);
+    // The stale ref hides its commits from the count, not the branch from
+    // shoal branch rm.
+    let listed = manager.list_kept_branches().await.unwrap();
+    let names: Vec<_> = listed.iter().map(|branch| branch.branch.as_str()).collect();
+    assert_eq!(names, ["topic"]);
 }
 
 #[tokio::test]

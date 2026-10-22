@@ -129,7 +129,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Kept branches with commits only they have.
+    /// Every kept branch Shoal could delete, with the commits no
+    /// remote-tracking ref or the default branch has. The count reads refs
+    /// that may be stale, so a branch it shows none for is listed too.
     pub async fn list_kept_branches(&self) -> Result<Vec<KeptBranch>> {
         let mut listed = Vec::new();
         for repository_id in self.kept_branch_repositories().await? {
@@ -142,9 +144,7 @@ impl Manager {
                 .kept_statuses(&repo, default.as_deref(), Evidence::TrackingRefs)
                 .await?;
             for (record, status) in statuses {
-                if let Status::Kept { unkept_commits } = status
-                    && unkept_commits > 0
-                {
+                if let Status::Kept { unkept_commits } = status {
                     listed.push(kept_branch(&repo, record, unkept_commits).await?);
                 }
             }

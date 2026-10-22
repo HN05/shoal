@@ -1460,8 +1460,9 @@ shoal branch rm fix-login --yes      # Delete one kept branch and its unpushed c
 shoal branch rm --all --repo project # Delete every kept branch of a repository
 ```
 
-`shoal branch` lists the branches removal kept whose commits are not all on a
-remote or the default branch, with the count of those commits and the last one.
+`shoal branch` lists the branches removal kept and Shoal has not deleted yet,
+with how many of their commits no remote-tracking ref or the default branch has,
+and their last commit.
 `shoal branch rm` deletes them with those commits after `Are you sure? [y/N]`, or
 with `--yes`; it checks every branch first and deletes none when one has moved
 since it was listed, is checked out or is no longer kept, or when its
