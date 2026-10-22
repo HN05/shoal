@@ -286,7 +286,10 @@ fn edit_fields(edit: EditArgs) -> Result<Edit> {
 
 fn comment(body: BodyArgs) -> Result<Action> {
     let body = read_body(body)?.context("a comment needs --body or --body-file")?;
-    Ok(Action::Comment { body })
+    Ok(Action::Comment {
+        body,
+        attachments: Vec::new(),
+    })
 }
 
 fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>) -> Action {

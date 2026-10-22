@@ -19,6 +19,8 @@ use super::{
 use crate::tools::Tool;
 
 pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
+/// Bounds sending an attached file, which may be a large video.
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
 /// Bitbucket Cloud's API, which is not served from its web host.
@@ -56,6 +58,17 @@ pub(crate) struct Request {
     pub body: Option<Value>,
     /// A response field that must be `true` for the request to have worked.
     pub confirm: Option<&'static str>,
+    /// A file sent as the body instead of JSON.
+    pub upload: Option<Upload>,
+}
+
+/// A file a request sends: as a multipart form's `field`, or as the raw
+/// body without one.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Upload {
+    pub path: PathBuf,
+    pub content_type: &'static str,
+    pub field: Option<&'static str>,
 }
 
 impl Request {
@@ -69,6 +82,23 @@ impl Request {
             endpoint,
             body,
             confirm: None,
+            upload: None,
+        }
+    }
+
+    /// POST the file `upload` names.
+    pub fn upload(endpoint: String, upload: Upload) -> Self {
+        Self {
+            upload: Some(upload),
+            ..Self::new(HttpMethod::Post, endpoint, None)
+        }
+    }
+
+    fn timeout(&self) -> Duration {
+        if self.upload.is_some() {
+            UPLOAD_TIMEOUT
+        } else {
+            TIMEOUT
         }
     }
 
@@ -134,6 +164,10 @@ impl ForgeRepo {
             let body = match self.kind {
                 ForgeKind::GitHub => self.github_send(account, request).await,
                 ForgeKind::Forgejo => self.forgejo_send(account, request).await,
+                // glab cannot send a multipart form.
+                ForgeKind::GitLab if request.upload.is_some() => {
+                    self.gitlab_upload(account, request).await
+                }
                 ForgeKind::GitLab => self.passthrough(Tool::GitLab, account, request).await,
                 ForgeKind::Bitbucket => self.bitbucket_send(account, request).await,
             }?;
@@ -175,14 +209,22 @@ impl ForgeRepo {
                 request.method.as_str(),
                 &request.endpoint,
             ]);
-        if request.body.is_some() {
+        if let Some(upload) = &request.upload {
+            ensure!(
+                upload.field.is_none(),
+                "{program} cannot send a multipart form"
+            );
+            cli.args(["-H", &format!("Content-Type: {}", upload.content_type)])
+                .arg("--input")
+                .arg(&upload.path);
+        } else if request.body.is_some() {
             cli.args(["-H", "Content-Type: application/json", "--input", "-"]);
         }
         account.apply(&mut cli);
         let body = request.body.as_ref().map(Value::to_string);
         let output = crate::subprocess::Run::new(cli)
             .input(body.unwrap_or_default())
-            .timeout(TIMEOUT)
+            .timeout(request.timeout())
             .output_limit(MAX_RESPONSE_BYTES)
             .capture()
             .await
@@ -226,6 +268,17 @@ impl ForgeRepo {
         )
     }
 
+    /// Upload with curl and the token glab saved for the host.
+    async fn gitlab_upload(&self, account: &Account, request: &Request) -> Result<Value> {
+        let token = account.gitlab_token(&self.host).await?;
+        let url = format!(
+            "{}://{}/api/v4/{}",
+            self.web_scheme, self.host, request.endpoint
+        );
+        let header = format!("header = \"PRIVATE-TOKEN: {token}\"\n").into_bytes();
+        self.curl_send(&url, Some(header), request).await
+    }
+
     async fn bitbucket_send(&self, account: &Account, request: &Request) -> Result<Value> {
         let url = format!("{BITBUCKET_API}/{}", request.endpoint);
         let authorization = account.bitbucket_authorization().await?;
@@ -242,26 +295,26 @@ impl ForgeRepo {
     ) -> Result<Value> {
         let mut curl = Command::new(Tool::Curl.program());
         // -q first: a user .curlrc must not trace the token header.
-        curl.args([
-            "-q",
-            "-sS",
-            "--max-time",
-            "30",
-            "-X",
-            request.method.as_str(),
-            "-H",
-            "Accept: application/json",
-            "-w",
-            "\n%{http_code}",
-        ]);
-        if let Some(body) = &request.body {
+        curl.args(["-q", "-sS", "--max-time"])
+            .arg(request.timeout().as_secs().to_string())
+            .args([
+                "-X",
+                request.method.as_str(),
+                "-H",
+                "Accept: application/json",
+                "-w",
+                "\n%{http_code}",
+            ]);
+        if let Some(upload) = &request.upload {
+            curl.args(upload_args(upload)?);
+        } else if let Some(body) = &request.body {
             curl.args(["-H", "Content-Type: application/json", "--data-binary"])
                 .arg(body.to_string());
         }
         curl.args(["-K", "-", url]);
         let output = crate::subprocess::Run::new(curl)
             .input(authorization.unwrap_or_default())
-            .timeout(TIMEOUT)
+            .timeout(request.timeout())
             .output()
             .await
             .context("curl is required for Forgejo, Gitea and Bitbucket API requests")?;
@@ -402,6 +455,30 @@ pub(super) fn http_body(status: u16, body: &str) -> Result<&str> {
         bail!("HTTP {status}: {}", detail.trim());
     }
     Ok(body)
+}
+
+/// curl's arguments that send `upload`: a form field, whose quoted file name
+/// escapes what curl reads specially, or the raw body.
+fn upload_args(upload: &Upload) -> Result<Vec<String>> {
+    let path = upload
+        .path
+        .to_str()
+        .context("the attached file's path is not UTF-8")?;
+    Ok(match upload.field {
+        Some(field) => {
+            let quoted = path.replace('\\', "\\\\").replace('"', "\\\"");
+            vec![
+                "-F".into(),
+                format!("{field}=@\"{quoted}\";type={}", upload.content_type),
+            ]
+        }
+        None => vec![
+            "-H".into(),
+            format!("Content-Type: {}", upload.content_type),
+            "--data-binary".into(),
+            format!("@{path}"),
+        ],
+    })
 }
 
 /// A curl config line, so the token never appears on a command line.

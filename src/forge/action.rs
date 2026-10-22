@@ -1,5 +1,7 @@
 //! Changes to an issue or PR, planned as the REST requests each forge needs
 //! and applied in order, stopping at the first failure.
+use std::borrow::Cow;
+
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -8,6 +10,7 @@ use super::{
     ForgeKind, ForgeRepo,
     account::Account,
     api::{HttpMethod, Request},
+    attach::{self, Attachment, Holder, Pending},
     bitbucket,
     gitlab::gitlab_merge,
     item::{Current, Item, ItemState, draft_prefix},
@@ -21,6 +24,8 @@ pub enum Action {
     Edit(Edit),
     Comment {
         body: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<Attachment>,
     },
     Close,
     Reopen,
@@ -32,7 +37,8 @@ pub enum Action {
 }
 
 /// Fields left empty stay as they are; base, reviewers and draft state are
-/// PR-only.
+/// PR-only. Attachments go into the new description, or after the current
+/// one.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Edit {
@@ -44,6 +50,7 @@ pub struct Edit {
     pub add_reviewers: Vec<String>,
     pub remove_reviewers: Vec<String>,
     pub draft: Option<bool>,
+    pub attachments: Vec<Attachment>,
 }
 
 /// A reply in the review thread of a PR's inline comment, a change to the
@@ -88,7 +95,7 @@ impl Action {
             Self::Edit(edit) => {
                 ensure!(
                     *edit != Edit::default(),
-                    "nothing to change; pass a new title, description, base, label, reviewer or draft state"
+                    "nothing to change; pass a new title, description, attachment, base, label, reviewer or draft state"
                 );
                 if edit.base.is_some() {
                     pr_only("base branch")?;
@@ -100,7 +107,10 @@ impl Action {
                     pr_only("draft state")?;
                 }
             }
-            Self::Comment { body } => ensure!(!body.trim().is_empty(), "the comment is empty"),
+            Self::Comment { body, attachments } => ensure!(
+                !body.trim().is_empty() || !attachments.is_empty(),
+                "the comment is empty"
+            ),
             Self::Merge { .. } => pr_only("merge")?,
             Self::Thread(change) => {
                 pr_only("review threads")?;
@@ -149,18 +159,85 @@ impl ForgeRepo {
     ) -> Result<Acted> {
         action.validate(kind)?;
         let current = self.read(account, kind, number).await?;
+        let (action, pending) = self.upload_attachments(account, &current, action).await?;
         let mut authored = None;
-        for request in self.requests(account, current, action).await? {
+        let mut first = None;
+        for request in self.requests(account, current, &action).await? {
             let response = self.send(account, &request).await?;
             // A comment, or a thread's reply, is the action's first request.
-            if authored.is_none() {
-                authored = self.posted(action, &response);
+            if first.is_none() {
+                authored = self.posted(&action, &response);
+                first = Some(response);
             }
+        }
+        if let (Some(pending), Some(comment)) = (pending, first) {
+            self.attach_to_comment(account, &comment, pending)
+                .await
+                .context("the comment was posted, but attaching its files failed")?;
         }
         Ok(Acted {
             item: self.read(account, kind, number).await?.item,
             authored,
         })
+    }
+
+    /// `action` with its attachments uploaded and embedded in its body, and
+    /// the files of a comment that must exist before the forge takes them.
+    async fn upload_attachments<'a>(
+        &self,
+        account: &Account,
+        current: &Current,
+        action: &'a Action,
+    ) -> Result<(Cow<'a, Action>, Option<Pending>)> {
+        match action {
+            Action::Edit(edit) if !edit.attachments.is_empty() => {
+                attach::check_all(&edit.attachments)?;
+                let holder = if self.uploads_per_item()? {
+                    Holder::Item(current.item.number)
+                } else {
+                    Holder::Repository
+                };
+                let body = edit.body.as_deref().unwrap_or(&current.body);
+                let body = self
+                    .attach(account, holder, body, &edit.attachments)
+                    .await?;
+                let edit = Edit {
+                    body: Some(body),
+                    attachments: Vec::new(),
+                    ..edit.clone()
+                };
+                Ok((Cow::Owned(Action::Edit(edit)), None))
+            }
+            Action::Comment { body, attachments } if !attachments.is_empty() => {
+                let (body, pending) = self.new_body(account, body, attachments).await?;
+                let comment = Action::Comment {
+                    body,
+                    attachments: Vec::new(),
+                };
+                Ok((Cow::Owned(comment), pending))
+            }
+            _ => Ok((Cow::Borrowed(action), None)),
+        }
+    }
+
+    /// Upload a posted comment's files to it and embed them in its body.
+    async fn attach_to_comment(
+        &self,
+        account: &Account,
+        comment: &serde_json::Value,
+        pending: Pending,
+    ) -> Result<()> {
+        let id = comment["id"]
+            .as_u64()
+            .context("the forge did not report the comment's ID")?;
+        let holder = Holder::Comment(id);
+        let body = self
+            .attach(account, holder, &pending.body, &pending.attachments)
+            .await?;
+        let endpoint = self.repo_endpoint(&format!("issues/comments/{id}"));
+        let request = Request::new(HttpMethod::Patch, endpoint, Some(json!({ "body": body })));
+        self.send(account, &request).await?;
+        Ok(())
     }
 
     /// The activity key of what `action` posted, from its response: the
@@ -246,7 +323,7 @@ impl ForgeRepo {
                 ForgeKind::GitLab => self.gitlab_edit(current, edit)?,
                 ForgeKind::Bitbucket => self.bitbucket_edit(current, edit)?,
             },
-            Action::Comment { body } => vec![self.comment_request(item, body)],
+            Action::Comment { body, .. } => vec![self.comment_request(item, body)],
             Action::Close => {
                 ensure!(
                     item.state == ItemState::Open,
@@ -529,7 +606,10 @@ mod tests {
     fn posts_are_keyed_where_each_forge_records_their_activity() {
         let [github, forgejo] = forges();
         let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo.git").unwrap();
-        let comment = Action::Comment { body: "hi".into() };
+        let comment = Action::Comment {
+            body: "hi".into(),
+            attachments: Vec::new(),
+        };
         let reply = |reply: Option<&str>| {
             Action::Thread(ThreadChange {
                 comment: 5,
@@ -659,7 +739,14 @@ mod tests {
         for forge in [&github, &forgejo] {
             let open = pr(forge, false, &[]);
             assert_eq!(
-                requests(forge, &open, Action::Comment { body: "hi".into() }),
+                requests(
+                    forge,
+                    &open,
+                    Action::Comment {
+                        body: "hi".into(),
+                        attachments: Vec::new()
+                    }
+                ),
                 [(
                     "POST".into(),
                     "repos/team/repo/issues/7/comments".into(),
@@ -727,6 +814,7 @@ mod tests {
             add_reviewers: vec!["sam".into()],
             remove_reviewers: vec!["kim".into()],
             draft: Some(true),
+            ..Edit::default()
         });
         assert_eq!(
             requests(&gitlab, &current, edit),
@@ -755,7 +843,14 @@ mod tests {
 
         let open = pr(&gitlab, false, &[]);
         assert_eq!(
-            requests(&gitlab, &open, Action::Comment { body: "hi".into() }),
+            requests(
+                &gitlab,
+                &open,
+                Action::Comment {
+                    body: "hi".into(),
+                    attachments: Vec::new()
+                }
+            ),
             [(
                 "POST".into(),
                 "projects/group%2Fsub%2Frepo/merge_requests/7/notes".into(),
@@ -800,9 +895,12 @@ mod tests {
         };
         assert!(merge.validate(ItemKind::Issue).is_err());
         assert!(
-            Action::Comment { body: " ".into() }
-                .validate(ItemKind::Issue)
-                .is_err()
+            Action::Comment {
+                body: " ".into(),
+                attachments: Vec::new()
+            }
+            .validate(ItemKind::Issue)
+            .is_err()
         );
         let thread = |reply: Option<&str>, resolve| {
             Action::Thread(ThreadChange {

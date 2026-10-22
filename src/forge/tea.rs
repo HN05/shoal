@@ -33,6 +33,10 @@ pub(super) async fn send(
     request: &Request,
     limit: usize,
 ) -> Result<String> {
+    ensure!(
+        request.upload.is_none(),
+        "tea cannot upload files; save an fj login for the host with fj auth login"
+    );
     let url = format!("{}/api/v1/{}", login.url, request.endpoint);
     let mut tea = Command::new(Tool::Tea.program());
     tea.env("NO_COLOR", "1").args([

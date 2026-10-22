@@ -3,6 +3,7 @@
 pub(crate) mod account;
 pub mod action;
 mod api;
+pub mod attach;
 pub(crate) mod bitbucket;
 pub mod checks;
 pub mod ci;
