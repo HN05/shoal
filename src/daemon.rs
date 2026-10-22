@@ -81,6 +81,7 @@ struct Server {
 
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     paths.prepare()?;
+    connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
     manager.store.quarantine_interrupted_operations().await?;
