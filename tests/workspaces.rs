@@ -604,6 +604,12 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
 fn deleted_worktree_with_interrupted_rename_can_be_removed() {
     let fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("original");
+    // A commit of its own keeps the branch from the kept-branch sweep.
+    commit_file(
+        Path::new(workspace["path"].as_str().unwrap()),
+        "original",
+        "work",
+    );
     fixture.ok(&["port", "acquire", "web", "original"]);
     fixture.ok(&["resource", "acquire", "lock", "original"]);
     let id = workspace["id"].as_str().unwrap();
@@ -8168,8 +8174,10 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
 fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\ncapacity = 3\n"));
     let mut paths = Vec::new();
+    // Commits of their own keep the branches from the kept-branch sweep.
     for name in ["directory-only", "git-removed", "moved"] {
         let workspace = fixture.add(name);
+        commit_file(Path::new(workspace["path"].as_str().unwrap()), name, name);
         fixture.ok(&["port", "acquire", "web", name]);
         fixture.ok(&["resource", "acquire", "lock", name]);
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
@@ -8232,6 +8240,11 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     }
     // Explicit removal of a deleted worktree needs no reconciliation first.
     let workspace = fixture.add("explicit");
+    commit_file(
+        Path::new(workspace["path"].as_str().unwrap()),
+        "explicit",
+        "work",
+    );
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
     let result = fixture.ok(&["rm", "explicit"]);
     assert_eq!(result["branch_deleted"], false);
@@ -8239,6 +8252,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
 
     let missing_parent = fixture.add("missing-parent");
     let missing_path = PathBuf::from(missing_parent["path"].as_str().unwrap());
+    commit_file(&missing_path, "missing-parent", "work");
     fixture.ok(&["port", "acquire", "web", "missing-parent"]);
     fixture.ok(&["resource", "acquire", "lock", "missing-parent"]);
     git(
@@ -18288,6 +18302,12 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         0
     );
     let missing = fixture.add("missing-held");
+    // A commit of its own keeps the branch from the kept-branch sweep.
+    commit_file(
+        Path::new(missing["path"].as_str().unwrap()),
+        "missing-held",
+        "work",
+    );
     fixture.ok(&["hold", "acquire", "missing-held", "--name", "app"]);
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
     fixture.restart();

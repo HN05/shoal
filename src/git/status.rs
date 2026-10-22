@@ -38,9 +38,13 @@ pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
     )
 }
 
-/// Commits on HEAD that are reachable from neither a remote nor the given ref.
-pub async fn unretained_commits(repo: &Path, retained_ref: Option<&str>) -> Result<u64> {
-    let mut args = vec!["rev-list", "--count", "HEAD", "--not", "--remotes"];
+/// Commits on `revision` that are reachable from neither a remote nor the given ref.
+pub async fn unretained_commits(
+    repo: &Path,
+    revision: &str,
+    retained_ref: Option<&str>,
+) -> Result<u64> {
+    let mut args = vec!["rev-list", "--count", revision, "--not", "--remotes"];
     args.extend(retained_ref);
     Ok(run(repo, &args).await?.trim().parse()?)
 }
@@ -114,11 +118,18 @@ pub async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
     Ok(refs)
 }
 
-/// Whether any of `references` retains HEAD, by recording its tree or
-/// already having its changes.
-pub async fn retains_head(repo: &Path, references: &[String], head_tree: &str) -> Result<bool> {
+/// Whether any of `references` retains `revision`, whose tree is `tree`, by
+/// recording that tree or already having its changes.
+pub async fn retains(
+    repo: &Path,
+    references: &[String],
+    revision: &str,
+    tree: &str,
+) -> Result<bool> {
     for reference in references {
-        if records_tree(repo, reference, head_tree).await || merged_into(repo, reference).await? {
+        if records_tree(repo, reference, tree).await
+            || merged_into(repo, revision, reference).await?
+        {
             return Ok(true);
         }
     }
@@ -128,32 +139,43 @@ pub async fn retains_head(repo: &Path, references: &[String], head_tree: &str) -
 /// Whether any of the default branch `name`'s refs retains HEAD.
 pub async fn default_branch_retains_head(repo: &Path, name: &str) -> Result<bool> {
     let references = default_refs(repo, name).await?;
-    retains_head(repo, &references, &head_tree(repo).await?).await
+    retains(repo, &references, "HEAD", &head_tree(repo).await?).await
 }
 
-/// Whether `target` already has HEAD's changes: HEAD is its ancestor, a
-/// trial merge of HEAD leaves its tree unchanged (squash merges), or every
+/// Commits of `commit` that neither a remote nor the default branch `default`
+/// keeps; none once the default branch has its changes.
+pub async fn unkept_commits(repo: &Path, commit: &str, default: &str) -> Result<u64> {
+    let references = default_refs(repo, default).await?;
+    let tree = super::revision(repo, &format!("{commit}^{{tree}}"), run).await?;
+    if retains(repo, &references, commit, &tree).await? {
+        return Ok(0);
+    }
+    unretained_commits(repo, commit, references.first().map(String::as_str)).await
+}
+
+/// Whether `target` already has `revision`'s changes: it is an ancestor, a
+/// trial merge of it leaves the target's tree unchanged (squash merges), or every
 /// commit since the fork point, none of them a merge, has an equivalent patch
 /// on it (rebase merges).
 ///
 /// The answer depends only on the two commits, so it is remembered by their
 /// IDs: cleanup asks again on every pass, and `git cherry` reads every commit
 /// since the fork point.
-pub async fn merged_into(repo: &Path, target: &str) -> Result<bool> {
+pub async fn merged_into(repo: &Path, revision: &str, target: &str) -> Result<bool> {
     static ANSWERS: LazyLock<Mutex<HashMap<(String, String), bool>>> =
         LazyLock::new(Mutex::default);
     let commits = run(
         repo,
         &[
             "rev-parse",
-            "HEAD^{commit}",
+            &format!("{revision}^{{commit}}"),
             &format!("{target}^{{commit}}"),
         ],
     )
     .await?;
     let mut commits = commits.lines().map(str::to_owned);
     let key = (
-        commits.next().context("HEAD has no commit")?,
+        commits.next().context("revision has no commit")?,
         commits.next().context("target has no commit")?,
     );
     let answers = || ANSWERS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -244,7 +266,7 @@ mod tests {
             fs::write(repo.join(file), format!("{file}\n")).unwrap();
             commit(&repo, file);
         }
-        let merged = async |target: &str| super::merged_into(&repo, target).await.unwrap();
+        let merged = async |target: &str| super::merged_into(&repo, "HEAD", target).await.unwrap();
         assert!(!merged("main").await);
 
         // Squash: one commit on main with the topic's combined changes,

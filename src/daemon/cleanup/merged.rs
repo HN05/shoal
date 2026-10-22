@@ -30,7 +30,7 @@ const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    fetches: Fetches,
+    pub(super) fetches: Fetches,
     /// Workspaces whose removal failed, and when: retried once they change
     /// or after [`RETRY_AFTER`], so a passing failure does not keep them.
     retained: HashMap<String, (Snapshot, Instant)>,

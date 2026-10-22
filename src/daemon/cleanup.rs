@@ -29,6 +29,7 @@ use crate::{
 };
 
 mod grace;
+mod kept_branches;
 mod merged;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -336,6 +337,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     step(
         "merged cleanup",
         merged::sweep(manager, &mut timers.merged).await,
+    );
+    step(
+        "kept branches",
+        kept_branches::sweep(manager, &mut timers.merged.fetches).await,
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("grace periods", manager.end_unclaimed_grace().await);
@@ -844,7 +849,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deleted_parent_sweep_releases_leases_and_retains_branch() {
+    async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
         use crate::{
             daemon::{ports::PortRequest, resources::ResourceRequest},
             test_support::{git, manager, repository},
@@ -882,6 +887,9 @@ mod tests {
                 )
                 .await
                 .unwrap();
+            // A commit only the branch has keeps it after the sweep.
+            fs::write(workspace.path.join("work"), "work\n").unwrap();
+            crate::test_support::commit(&workspace.path, "work");
             if pending_rename {
                 git(&workspace.path, &["branch", "-m", "new/topic"]);
                 let id = workspace.id.clone();

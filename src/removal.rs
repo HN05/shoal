@@ -206,11 +206,12 @@ pub async fn inspect(
         Some(name) => git::status::default_refs(path, name).await?,
         None => Vec::new(),
     };
-    check.matches_default_branch = git::status::retains_head(path, &default_refs, &tree).await?;
+    check.matches_default_branch = git::status::retains(path, &default_refs, "HEAD", &tree).await?;
     // Merged changes are on the default branch even when their commits are not.
     if !check.matches_default_branch {
         check.unpushed_commits =
-            git::status::unretained_commits(path, default_refs.first().map(String::as_str)).await?;
+            git::status::unretained_commits(path, "HEAD", default_refs.first().map(String::as_str))
+                .await?;
     }
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.load_directory_processes().await?;

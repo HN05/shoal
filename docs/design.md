@@ -1104,6 +1104,12 @@ deleting it loses nothing, and keeps any other: users should not have to decide
 about branches. The default branch, and every branch while the default branch
 cannot be resolved, is retained. Manual removal asks only before deleting
 uncommitted or untracked files or commits on a detached HEAD, which no branch keeps.
+Shoal remembers each branch a removal kept, at the commit removal left it on, and
+the cleanup sweep deletes it once a remote or the default branch has all its
+commits, after fetching the repository's remotes at most every ten minutes and
+without notifying anyone. A kept branch that moved or went away, is the default
+branch or belongs to a workspace again is forgotten; one checked out elsewhere
+waits. Removal records name the branches kept before Shoal remembered them.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Every unattended

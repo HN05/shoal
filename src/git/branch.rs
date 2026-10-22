@@ -35,6 +35,13 @@ pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "--no-track", "--", name, commit]).await
 }
 
+/// Delete a local branch only while it still points at `commit`, so a
+/// branch that moved meanwhile stays. The caller checks that no worktree
+/// has it checked out.
+pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> {
+    git::run_isolated(repo, &["update-ref", "-d", &git::local_ref(name), commit]).await
+}
+
 pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "-m", "--", from, to]).await
 }

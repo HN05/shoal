@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 52;
+const SCHEMA_VERSION: i64 = 53;
 
 #[cfg(test)]
 mod benchmark;
@@ -381,6 +381,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (50, RETIRED_KEEP_REQUESTS, None),
     (51, CHECKPOINTS, None),
     (52, REMOVAL_CHECKPOINTS, None),
+    (53, KEPT_BRANCHES, None),
 ];
 
 /// When the grace period of an unattended removal ends, and whether the
@@ -438,6 +439,26 @@ const REMOVAL_CHECKPOINTS: &str =
             '$.branch', '$.head', '$.snapshot', '$.files_omitted')
         WHERE json_valid(record);
     DELETE FROM removed_workspaces WHERE NOT json_valid(record);";
+
+/// Branches removal kept because only they had some commits, at the commit
+/// removal left them on; cleanup deletes them once those commits are kept
+/// elsewhere. Existing removal records name the branches kept so far.
+const KEPT_BRANCHES: &str = "CREATE TABLE kept_branches (
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    branch TEXT NOT NULL,
+    head TEXT NOT NULL,
+    kept_at INTEGER NOT NULL,
+    PRIMARY KEY(repository_id, branch)
+);
+INSERT OR IGNORE INTO kept_branches(repository_id,branch,head,kept_at)
+    SELECT repository_id, json_extract(record, '$.checkpoint.branch'),
+        json_extract(record, '$.checkpoint.head'),
+        COALESCE(json_extract(record, '$.removed_at'), 0)
+    FROM removed_workspaces
+    WHERE json_valid(record)
+        AND json_extract(record, '$.checkpoint.branch') IS NOT NULL
+        AND json_extract(record, '$.checkpoint.head') IS NOT NULL
+    ORDER BY json_extract(record, '$.removed_at') DESC;";
 
 /// Removal records outlive their workspace, not their repository.
 const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
@@ -981,6 +1002,9 @@ mod tests {
         if version >= 51 {
             db.execute_batch(CHECKPOINTS)?;
         }
+        if version >= 53 {
+            db.execute_batch(KEPT_BRANCHES)?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1267,6 +1291,32 @@ mod tests {
                 ),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn migration_remembers_the_latest_branch_each_removal_record_names() -> Result<()> {
+        let mut db = historical_database(52)?;
+        db.execute_batch(
+            r#"INSERT INTO repositories(id,path,source,last_used) VALUES ('kept','/kept','local',0);
+            INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record) VALUES
+                ('old','kept','old',9,'{"removed_at":1,"checkpoint":{"branch":"topic","head":"aaa"}}'),
+                ('new','kept','new',9,'{"removed_at":2,"checkpoint":{"branch":"topic","head":"bbb"}}'),
+                ('detached','kept','detached',9,'{"removed_at":3,"checkpoint":{"branch":null,"head":"ccc"}}');"#,
+        )?;
+        migrate(&mut db)?;
+        let kept = db
+            .prepare("SELECT repository_id,branch,head,kept_at FROM kept_branches")?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(kept, [("kept".into(), "topic".into(), "bbb".into(), 2)]);
         Ok(())
     }
 

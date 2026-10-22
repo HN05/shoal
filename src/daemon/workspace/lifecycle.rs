@@ -632,6 +632,12 @@ impl Manager {
         post_remove: Option<PostRemoveHook>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
+        if let Err(error) = self.remember_kept_branch(workspace, &outcome).await {
+            crate::daemon::log!(
+                "kept branch of {} not remembered: {error:#}",
+                workspace.name
+            );
+        }
         self.delete_session_logs(&workspace.id);
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;

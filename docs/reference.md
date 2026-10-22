@@ -1433,7 +1433,9 @@ Removal deletes the workspace's branch when a remote-tracking branch or the
 default branch has every one of its commits, including squash and rebase merges
 the default branch's remote-tracking branch knows about. A branch with commits
 only it has stays, and so do the default branch and every branch while the
-default branch is unknown. Removal never asks about the branch.
+default branch is unknown. Removal never asks about the branch. Shoal deletes a
+kept branch later, once a remote or the default branch has all its commits, unless
+it moved, is checked out or belongs to a workspace again.
 Uncommitted changes, untracked files and commits on a detached HEAD are deleted
 only after `Are you sure? [y/N]`, which lists the changes with Git status codes
 first, or with `--yes`. Large previews show an omitted-entry count; use
