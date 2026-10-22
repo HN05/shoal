@@ -7675,7 +7675,7 @@ head -n 1 "$HOME/picker-input"
             } else {
                 (
                     None,
-                    "enter: cd   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
+                    "enter: cd   tab: next view   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
                 )
             };
             assert!(args.contains(&format!("--header\n{header}\n")), "{args}");
@@ -7690,6 +7690,8 @@ head -n 1 "$HOME/picker-input"
             if let Some(keys) = unbound {
                 assert!(args.contains(&format!("start:unbind({keys})")), "{args}");
             }
+            // Workspace processes have no inbox to switch to.
+            assert_eq!(args.contains("tab:transform("), !scoped, "{args}");
             match key {
                 "cancel" => {
                     assert!(!output.status.success());
@@ -7718,7 +7720,7 @@ head -n 1 "$HOME/picker-input"
 }
 
 #[test]
-fn bare_shoal_opens_on_the_inbox_when_something_needs_the_user() {
+fn bare_shoal_opens_on_the_inbox_and_switches_views() {
     let fixture = Fixture::new();
     let asker = fixture.add("asker");
     fixture.add("quiet");
@@ -7759,13 +7761,42 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
         "--workspace",
         "asker",
     ]);
+    let id = asker["id"].as_str().unwrap();
+    let listed = fixture.run(&["internal", "menu-rows", "inbox"]);
+    let listed = String::from_utf8(listed.stdout).unwrap();
+    assert!(listed.starts_with(&format!("question:{id}:")), "{listed}");
+    // Tab names the next view by the prompt fzf shows.
+    let next = |prompt: &str| {
+        let output = fixture
+            .command()
+            .env("FZF_PROMPT", prompt)
+            .args(["internal", "menu-next"])
+            .output()
+            .unwrap();
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let to_work = next("inbox> ");
+    assert!(
+        to_work.contains("change-prompt(work> )")
+            && !to_work.contains("unbind(")
+            && to_work.ends_with("internal menu-rows work\n"),
+        "{to_work}"
+    );
+    let to_inbox = next("work> ");
+    assert!(
+        to_inbox.starts_with("unbind(ctrl-d,ctrl-e,ctrl-s)+")
+            && to_inbox.contains("change-header(enter: act   tab: next view   ")
+            && to_inbox.ends_with("internal menu-rows inbox\n"),
+        "{to_inbox}"
+    );
+
     // Now bare shoal opens on the inbox, and Enter answers the question.
     let (output, transcript, args, rows) = open("question:", "Postgres\n");
     assert!(output.status.success(), "{transcript}");
     assert!(args.contains("--prompt\ninbox> \n"), "{args}");
     assert!(
         args.contains(
-            "--header\nenter: act   ctrl-t: attach   ctrl-o: inspect   ctrl-f: diff   ctrl-a: add\n"
+            "--header\nenter: act   tab: next view   ctrl-t: attach   ctrl-o: inspect   ctrl-f: diff   ctrl-a: add\n"
         ),
         "{args}"
     );
@@ -7773,6 +7804,7 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
         args.contains("--bind\nstart:unbind(ctrl-d,ctrl-e,ctrl-s)\n"),
         "{args}"
     );
+    assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("Answered question 1 from asker"),

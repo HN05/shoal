@@ -1,7 +1,9 @@
 //! The bare `shoal` picker, which `shoal inbox` and `shoal work` also open
-//! on a terminal: an fzf list per view, each binding only the keys that mean
+//! on a terminal: an fzf list per view that Tab cycles, reloading its rows
+//! from `shoal internal menu-rows`. Each view binds only the keys that mean
 //! something there. A selection plus key becomes an ordinary [`Command`].
 use anyhow::{Context as _, Result, ensure};
+use clap::ValueEnum;
 
 use super::{
     inbox::{Inbox, Item},
@@ -92,8 +94,8 @@ impl Key {
 }
 
 /// What the picker lists: what needs the user, or the work going on.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum View {
+#[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
+pub(crate) enum View {
     Inbox,
     Work,
 }
@@ -130,8 +132,8 @@ impl View {
         }
     }
 
-    /// The views a caller with this scope can open; workspace processes
-    /// cannot decide what needs the user.
+    /// The views a caller with this scope can switch between; workspace
+    /// processes cannot decide what needs the user.
     fn available(scoped: bool) -> &'static [Self] {
         if scoped {
             &[Self::Work]
@@ -149,11 +151,40 @@ impl View {
             .collect()
     }
 
-    fn header(self, keys: &[Key]) -> String {
-        keys.iter()
+    /// The bound keys, with Tab after Enter when there is another view.
+    fn header(self, keys: &[Key], switches: bool) -> String {
+        let mut labels: Vec<_> = keys
+            .iter()
             .map(|key| format!("{}: {}", key.name(), key.label(self)))
-            .collect::<Vec<_>>()
-            .join("   ")
+            .collect();
+        if switches {
+            labels.insert(1, "tab: next view".into());
+        }
+        labels.join("   ")
+    }
+
+    /// The fzf actions that switch to this view, reloading its rows with
+    /// `reload`: rebind its keys, unbind the others, and name it.
+    fn switch_to(self, scoped: bool, reload: &str) -> String {
+        let keys = self.bound(scoped);
+        let unbound: Vec<_> = Key::ALL
+            .into_iter()
+            .filter(|key| !keys.contains(key))
+            .map(Key::name)
+            .collect();
+        let bound: Vec<_> = keys.iter().map(|key| key.name()).collect();
+        let mut actions = Vec::new();
+        if !unbound.is_empty() {
+            actions.push(format!("unbind({})", unbound.join(",")));
+        }
+        actions.extend([
+            format!("rebind({})", bound.join(",")),
+            format!("change-prompt({})", self.prompt()),
+            format!("change-header({})", self.header(&keys, true)),
+            // Last, so the command may hold any character.
+            format!("reload:{reload}"),
+        ]);
+        actions.join("+")
     }
 }
 
@@ -270,15 +301,20 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command
         .filter(|key| !keys.contains(key))
         .map(Key::name)
         .collect();
+    let next = if views.len() > 1 {
+        Some(self_command(ctx, &["menu-next"])?)
+    } else {
+        None
+    };
     let picked = ui::pick_in_views(
         ctx,
         entries,
         ViewPicker {
             prompt: view.prompt(),
-            header: &view.header(&keys),
+            header: &view.header(&keys, next.is_some()),
             keys: &names,
             unbound: &unbound,
-            next: None,
+            next,
         },
     )?;
     command(ctx, Key::parse(&picked.action)?, Row::parse(picked.id)?).await
@@ -303,6 +339,45 @@ async fn first_view(
     }
     let last = views[views.len() - 1];
     Ok((last, rows(ctx, last, scoped).await?))
+}
+
+/// Print `view`'s rows for the picker to reload.
+pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
+    for (id, label) in rows(ctx, view, env::is_scoped()).await? {
+        println!("{}", ui::picker_line(&id, &label));
+    }
+    Ok(0)
+}
+
+/// Print the fzf actions that switch from the view fzf shows, named by its
+/// prompt, to the next one.
+pub(super) fn print_next(ctx: &Context) -> Result<i32> {
+    let scoped = env::is_scoped();
+    let views = View::available(scoped);
+    let prompt = std::env::var("FZF_PROMPT").unwrap_or_default();
+    let current = views
+        .iter()
+        .position(|view| view.prompt() == prompt)
+        .unwrap_or(0);
+    let next = views[(current + 1) % views.len()];
+    let name = next.to_possible_value().context("views have names")?;
+    let reload = self_command(ctx, &["menu-rows", name.get_name()])?;
+    println!("{}", next.switch_to(scoped, &reload));
+    Ok(0)
+}
+
+/// This binary's `shoal internal <args>` for the same state directory, as
+/// shell text for fzf to run.
+fn self_command(ctx: &Context, args: &[&str]) -> Result<String> {
+    let exe = std::env::current_exe().context("locate the shoal executable")?;
+    let mut words = vec![
+        exe.to_string_lossy().into_owned(),
+        "--state-dir".into(),
+        ctx.paths.state.to_string_lossy().into_owned(),
+        "internal".into(),
+    ];
+    words.extend(args.iter().map(|arg| (*arg).to_owned()));
+    Ok(crate::shell::quote(&words))
 }
 
 async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {

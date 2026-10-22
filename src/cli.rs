@@ -1330,6 +1330,10 @@ pub enum InternalCommand {
         #[arg(long, value_parser = clap::value_parser!(i64).range(0..))]
         since: Option<i64>,
     },
+    /// Print a view's rows for the bare `shoal` picker to reload.
+    MenuRows { view: commands::menu::View },
+    /// Print the fzf actions that switch the bare `shoal` picker to its next view.
+    MenuNext,
     /// Report the agent's turn state; Shoal's agent hooks call it.
     AgentState {
         state: crate::state::AgentState,

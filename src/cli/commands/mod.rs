@@ -18,7 +18,7 @@ mod labels;
 mod leases;
 mod links;
 mod listing;
-mod menu;
+pub(crate) mod menu;
 mod messages;
 mod notifications;
 mod ports;
@@ -590,6 +590,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
 async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
     match command {
         InternalCommand::Events { follow, since } => events::run(&ctx, follow, since).await,
+        InternalCommand::MenuRows { view } => menu::print_rows(&ctx, view).await,
+        InternalCommand::MenuNext => menu::print_next(&ctx),
         InternalCommand::AgentState { state, workspace } => {
             agent_state::run(&ctx, workspace, state).await
         }
