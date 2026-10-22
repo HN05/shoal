@@ -55,7 +55,7 @@ async fn kept(manager: &Manager, repo: &Repository, name: &str) -> String {
     let removed = manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await

@@ -12,7 +12,9 @@ use crate::{
     },
     hooks::{self, Hook, HookKind},
     model::{CleanupReason, Workspace},
-    removal::{self, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult, UnsavedWork},
+    removal::{
+        self, BranchOutcome, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
+    },
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
@@ -30,7 +32,7 @@ enum Removal<'a> {
     Completed { head: &'a str, cause: EventCause },
     /// A user request; work no branch or remote keeps needs their consent.
     Manual {
-        unsaved: UnsavedWork,
+        unsaved: &'a UnsavedWork,
         inspection: InspectionPolicy,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
@@ -43,7 +45,7 @@ enum Removal<'a> {
     Deleted,
 }
 
-impl Removal<'_> {
+impl<'a> Removal<'a> {
     fn cause(self) -> EventCause {
         match self {
             Self::Manual { .. } => EventCause::Manual,
@@ -54,13 +56,13 @@ impl Removal<'_> {
         }
     }
 
-    fn unsaved(self) -> UnsavedWork {
+    fn unsaved(self) -> &'a UnsavedWork {
         match self {
             Removal::Manual { unsaved, .. } => unsaved,
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Merged { .. }
-            | Removal::Completed { .. } => UnsavedWork::Retain,
+            | Removal::Completed { .. } => &NOTHING,
         }
     }
 
@@ -146,30 +148,18 @@ impl Removal<'_> {
                 "workspace changed {}",
                 stage.change()
             ),
-            (
-                Removal::Manual {
-                    unsaved: UnsavedWork::Retain,
-                    ..
-                },
-                Stage::Initial,
-            ) => ensure!(
-                check.unsaved_work().is_empty(),
+            (Removal::Manual { unsaved, .. }, Stage::Initial) => ensure!(
+                unsaved.uncovered(check).is_empty(),
                 "removal would delete {}; confirm it or pass --yes",
-                check.unsaved_work().join(" and ")
+                unsaved.uncovered(check).join(" and ")
             ),
-            (
-                Removal::Manual {
-                    unsaved: UnsavedWork::Retain,
-                    ..
-                },
-                _,
-            ) => ensure!(
-                check.unsaved_work().is_empty(),
-                "workspace changed {}; removal would delete {}",
+            (Removal::Manual { unsaved, .. }, _) => ensure!(
+                unsaved.uncovered(check).is_empty(),
+                "workspace changed {}; removal would delete {} as well",
                 stage.change(),
-                check.unsaved_work().join(" and ")
+                unsaved.uncovered(check).join(" and ")
             ),
-            (Removal::Manual { .. } | Removal::Deleted, _) => {}
+            (Removal::Deleted, _) => {}
         }
         Ok(())
     }
@@ -248,6 +238,7 @@ impl Manager {
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
+        let unsaved = &unsaved;
         self.remove(
             selector,
             Removal::Manual {
@@ -879,7 +870,7 @@ impl Manager {
 /// removal may discard unsaved work.
 fn worktrunk_removal_options(
     check: &RemovalCheck,
-    unsaved: UnsavedWork,
+    unsaved: &UnsavedWork,
 ) -> (FileRemoval, BranchRemoval) {
     let branch = if check.branch_preserved()
         && check
@@ -891,9 +882,10 @@ fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    let files = match unsaved {
-        UnsavedWork::Retain => FileRemoval::CleanOnly,
-        UnsavedWork::Discard => FileRemoval::Force,
+    let files = if *unsaved == NOTHING {
+        FileRemoval::CleanOnly
+    } else {
+        FileRemoval::Force
     };
     (files, branch)
 }

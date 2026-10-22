@@ -1251,7 +1251,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
             &ctx.paths,
             Method::RemoveWorkspace {
                 workspace: workspace.id.clone(),
-                unsaved: UnsavedWork::Discard,
+                unsaved: UnsavedWork::All,
                 caller_pid: std::process::id(),
             },
         )
@@ -1696,11 +1696,7 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
     }
     // Consent covers only the unsaved work it saw; more appearing meanwhile
     // makes the daemon refuse.
-    let unsaved = if unsaved.is_empty() {
-        UnsavedWork::Retain
-    } else {
-        UnsavedWork::Discard
-    };
+    let unsaved = UnsavedWork::confirming(&check);
     // Leave the directory before it disappears under the shell.
     let escape = escape_destination(ctx, &check.workspace).await?;
     let result = request::<RemovalResult>(

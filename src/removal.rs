@@ -24,6 +24,9 @@ pub struct RemovalCheck {
     /// default branch already has HEAD's changes.
     pub unpushed_commits: u64,
     pub branch: Option<String>,
+    /// HEAD's commit.
+    #[serde(default)]
+    pub head: Option<String>,
     /// The local default branch or its remote-tracking branch records HEAD's
     /// tree or has its changes, merged, squashed or rebased.
     pub matches_default_branch: bool,
@@ -35,14 +38,60 @@ pub struct RemovalCheck {
     pub(crate) default_branch: Option<String>,
 }
 
-/// Whether a manual removal may delete work that neither a branch nor a
-/// remote keeps: uncommitted and untracked files, and commits on a detached
-/// HEAD. The removal's checkpoint keeps them until it expires.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// What a manual removal may delete that neither a branch nor a remote
+/// keeps. The removal's checkpoint keeps it until it expires.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UnsavedWork {
-    Retain,
-    Discard,
+    /// What the caller saw and confirmed: uncommitted and untracked files,
+    /// and the commits of a detached HEAD while HEAD is still that commit.
+    Confirmed {
+        files: bool,
+        detached_head: Option<String>,
+    },
+    /// Everything, for removals that delete more than the workspace.
+    All,
+}
+
+/// Consent to delete nothing.
+pub static NOTHING: UnsavedWork = UnsavedWork::Confirmed {
+    files: false,
+    detached_head: None,
+};
+
+impl Default for UnsavedWork {
+    fn default() -> Self {
+        NOTHING.clone()
+    }
+}
+
+impl UnsavedWork {
+    /// Consent to delete the unsaved work `check` shows.
+    pub fn confirming(check: &RemovalCheck) -> Self {
+        Self::Confirmed {
+            files: check.dirty,
+            detached_head: check.head.clone().filter(|_| check.detached_commits() > 0),
+        }
+    }
+
+    /// The unsaved work in `check` this consent does not cover, as
+    /// [`RemovalCheck::unsaved_work`] describes it.
+    pub fn uncovered(&self, check: &RemovalCheck) -> Vec<String> {
+        match self {
+            Self::All => Vec::new(),
+            Self::Confirmed {
+                files,
+                detached_head,
+            } => {
+                let commits = if detached_head.is_some() && *detached_head == check.head {
+                    0
+                } else {
+                    check.detached_commits()
+                };
+                describe_unsaved(check.dirty && !files, commits)
+            }
+        }
+    }
 }
 
 crate::state::open_enum! {
@@ -114,17 +163,16 @@ impl RemovalCheck {
     /// What removing the worktree would delete that no branch or remote
     /// keeps, one entry per kind; empty when removal loses nothing.
     pub fn unsaved_work(&self) -> Vec<String> {
-        let mut work = Vec::new();
-        if self.dirty {
-            work.push("uncommitted changes or untracked files".into());
+        describe_unsaved(self.dirty, self.detached_commits())
+    }
+
+    /// Commits on a detached HEAD that no branch or remote has.
+    fn detached_commits(&self) -> u64 {
+        if self.branch.is_none() {
+            self.unpushed_commits
+        } else {
+            0
         }
-        if self.branch.is_none() && self.unpushed_commits > 0 {
-            work.push(format!(
-                "{} commit(s) on a detached HEAD that no branch or remote has",
-                self.unpushed_commits
-            ));
-        }
-        work
     }
 
     /// The branch can go with the worktree: a remote or the default branch
@@ -142,6 +190,19 @@ impl RemovalCheck {
     pub fn safe(&self) -> bool {
         self.unused() && !self.dirty && self.unpushed_commits == 0
     }
+}
+
+fn describe_unsaved(files: bool, detached_commits: u64) -> Vec<String> {
+    let mut work = Vec::new();
+    if files {
+        work.push("uncommitted changes or untracked files".into());
+    }
+    if detached_commits > 0 {
+        work.push(format!(
+            "{detached_commits} commit(s) on a detached HEAD that no branch or remote has"
+        ));
+    }
+    work
 }
 
 fn changed_files_preview(status: &str) -> (Vec<String>, usize) {
@@ -189,6 +250,7 @@ pub async fn inspect(
         changed_files_omitted: 0,
         unpushed_commits: 0,
         branch: None,
+        head: None,
         matches_default_branch: false,
         default_branch: default_branch.map(str::to_owned),
     };
@@ -200,6 +262,7 @@ pub async fn inspect(
     let branch = git::current_branch(path).await?;
     let branch = branch.trim_end_matches('\n');
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());
+    check.head = Some(git::resolve_commit(path, "HEAD", git::run).await?);
     let tree = git::status::head_tree(path).await?;
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {

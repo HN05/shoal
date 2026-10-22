@@ -300,11 +300,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
-            &workspace.id,
-            UnsavedWork::Discard,
-            InspectionPolicy::GitOnly,
-        )
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
         .await
         .unwrap();
     assert!(manager.questions(None).await.unwrap().questions.is_empty());

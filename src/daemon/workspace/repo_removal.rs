@@ -200,18 +200,14 @@ impl Manager {
             })
             .await?;
         for workspace in workspaces {
-            self.remove_workspace(
-                &workspace.id,
-                UnsavedWork::Discard,
-                InspectionPolicy::GitOnly,
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "remove workspace {}; repository retained for retry",
-                    workspace.name
-                )
-            })?;
+            self.remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+                .await
+                .with_context(|| {
+                    format!(
+                        "remove workspace {}; repository retained for retry",
+                        workspace.name
+                    )
+                })?;
         }
         verify_directory(&repo.path, identity, false)?;
         if identity.is_some() {

@@ -78,11 +78,7 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
     .expect("workspace process did not start");
 
     manager
-        .remove_workspace(
-            &workspace.id,
-            UnsavedWork::Discard,
-            InspectionPolicy::GitOnly,
-        )
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
         .await
         .unwrap();
 
@@ -129,7 +125,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -269,7 +265,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -347,7 +343,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -412,7 +408,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -589,7 +585,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     let removed = manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await;
@@ -633,7 +629,7 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
     manager
         .remove_workspace(
             &upper.id,
-            UnsavedWork::Discard,
+            UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await

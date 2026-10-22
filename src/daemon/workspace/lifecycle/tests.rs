@@ -222,7 +222,7 @@ branch=$(git symbolic-ref --short HEAD)
 cd /
 git --git-dir="$common" worktree remove --force "$SHOAL_WORKSPACE_PATH"
 git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
-    for unsaved in [None, Some(UnsavedWork::Retain), Some(UnsavedWork::Discard)] {
+    for unsaved in [None, Some(UnsavedWork::default()), Some(UnsavedWork::All)] {
         let (_root, manager, workspace) = fixture_with_removal_hook(script).await;
         let removal = match unsaved {
             None => Removal::Automatic {
@@ -233,7 +233,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                     .unwrap(),
                 cause: EventCause::Idle,
             },
-            Some(unsaved) => Removal::Manual {
+            Some(ref unsaved) => Removal::Manual {
                 unsaved,
                 inspection: InspectionPolicy::GitOnly,
             },
@@ -258,7 +258,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
         manager
             .remove_workspace(
                 &workspace.id,
-                UnsavedWork::Retain,
+                UnsavedWork::default(),
                 InspectionPolicy::GitOnly
             )
             .await
@@ -268,11 +268,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
     assert_eq!(fs::read_to_string(&log).unwrap(), "session output");
 
     manager
-        .remove_workspace(
-            &workspace.id,
-            UnsavedWork::Discard,
-            InspectionPolicy::GitOnly,
-        )
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
         .await
         .unwrap();
     assert!(manager.workspace(&workspace.id).await.is_err());
@@ -290,7 +286,7 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     let error = manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await
@@ -308,15 +304,50 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     );
 
     manager
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(manager.workspace(&workspace.id).await.is_err());
+}
+
+#[tokio::test]
+async fn consent_covers_only_the_unsaved_work_it_saw() {
+    let (_root, manager, workspace) = fixture().await;
+    fs::write(workspace.path.join("draft"), "draft\n").unwrap();
+    let check = manager
+        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    let files_only = UnsavedWork::confirming(&check);
+    // Commits on a detached HEAD appear after the user confirmed.
+    git(&workspace.path, &["switch", "--detach"]);
+    fs::write(workspace.path.join("later"), "later\n").unwrap();
+    crate::test_support::commit(&workspace.path, "later");
+
+    let error = manager
+        .remove_workspace(&workspace.id, files_only, InspectionPolicy::GitOnly)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("1 commit(s) on a detached HEAD"),
+        "{error:#}"
+    );
+    assert!(workspace.path.join("draft").exists());
+
+    let check = manager
+        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Discard,
+            UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,
         )
         .await
         .unwrap();
     assert!(!workspace.path.exists());
-    assert!(manager.workspace(&workspace.id).await.is_err());
 }
 
 #[tokio::test]
@@ -329,7 +360,7 @@ async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() 
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await
@@ -347,14 +378,14 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
     for (removal, scans_directory) in [
         (
             Removal::Manual {
-                unsaved: UnsavedWork::Retain,
+                unsaved: &NOTHING,
                 inspection: InspectionPolicy::GitOnly,
             },
             false,
         ),
         (
             Removal::Manual {
-                unsaved: UnsavedWork::Retain,
+                unsaved: &NOTHING,
                 inspection: InspectionPolicy::IncludeDirectoryProcesses,
             },
             true,
@@ -414,7 +445,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
     for missing in [false, true] {
         for removal in [
             Removal::Manual {
-                unsaved: UnsavedWork::Discard,
+                unsaved: &UnsavedWork::All,
                 inspection: InspectionPolicy::GitOnly,
             },
             Removal::Automatic {
@@ -554,7 +585,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             Removal::Merged { head: head.trim() }
         } else {
             Removal::Manual {
-                unsaved: UnsavedWork::Retain,
+                unsaved: &NOTHING,
                 inspection: InspectionPolicy::GitOnly,
             }
         };
@@ -596,7 +627,7 @@ async fn removal_stops_processes_carrying_the_workspace_identity() {
     manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await
@@ -626,7 +657,7 @@ async fn removal_stops_processes_its_post_remove_hook_leaves() {
     let outcome = manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await
@@ -667,7 +698,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
         let removed = manager
             .remove_workspace(
                 &workspace.id,
-                UnsavedWork::Retain,
+                UnsavedWork::default(),
                 InspectionPolicy::GitOnly,
             )
             .await
@@ -701,7 +732,7 @@ async fn branch_removal_uses_the_inspected_default_branch() {
             &["symbolic-ref", "HEAD", &git::local_ref(later_default)],
         );
 
-        let (_, branch) = worktrunk_removal_options(&check, UnsavedWork::Retain);
+        let (_, branch) = worktrunk_removal_options(&check, &NOTHING);
         assert_eq!(matches!(branch, BranchRemoval::Delete), delete);
     }
 }
@@ -742,7 +773,7 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
     let removed = manager
         .remove_workspace(
             &workspace.id,
-            UnsavedWork::Retain,
+            UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await

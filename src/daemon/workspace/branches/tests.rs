@@ -102,7 +102,7 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     f.manager
         .remove_workspace(
             &workspace.id,
-            crate::removal::UnsavedWork::Retain,
+            crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -481,7 +481,7 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         f.manager
             .remove_workspace(
                 &allocated.id,
-                crate::removal::UnsavedWork::Discard,
+                crate::removal::UnsavedWork::All,
                 InspectionPolicy::IncludeDirectoryProcesses,
             )
             .await
@@ -652,7 +652,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     f.manager
         .remove_workspace(
             &main.workspace.id,
-            crate::removal::UnsavedWork::Retain,
+            crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -1067,7 +1067,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
         .manager
         .remove_workspace(
             &opened.workspace.id,
-            crate::removal::UnsavedWork::Retain,
+            crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -1984,7 +1984,7 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
     f.manager
         .remove_workspace(
             &w.id,
-            crate::removal::UnsavedWork::Retain,
+            crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await

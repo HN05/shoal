@@ -332,7 +332,7 @@ mod tests {
         // Creating a workspace or landing holds the gate.
         let gate = manager.lock_repository_git(&repo.id).await;
         manager
-            .remove_workspace("removed", UnsavedWork::Retain, InspectionPolicy::GitOnly)
+            .remove_workspace("removed", UnsavedWork::default(), InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert!(!manager.delete_xcode_leftovers(&repo, |_| true).await);
@@ -403,11 +403,7 @@ mod tests {
             }
         }
         manager
-            .remove_workspace(
-                "removed",
-                UnsavedWork::Discard,
-                InspectionPolicy::GitOnly,
-            )
+            .remove_workspace("removed", UnsavedWork::All, InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert!(!checkouts("removed").exists());
@@ -443,8 +439,9 @@ mod tests {
                 &project,
             ));
         }
-        let remove =
-            |name| manager.remove_workspace(name, UnsavedWork::Retain, InspectionPolicy::GitOnly);
+        let remove = |name| {
+            manager.remove_workspace(name, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        };
         remove("first").await.unwrap();
         assert!(!folders[0].exists());
         assert!(folders[1].exists());

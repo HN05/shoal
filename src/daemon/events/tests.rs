@@ -197,7 +197,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
                 manager
                     .remove_workspace(
                         &workspace.id,
-                        UnsavedWork::Retain,
+                        UnsavedWork::default(),
                         InspectionPolicy::GitOnly,
                     )
                     .await
