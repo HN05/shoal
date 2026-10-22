@@ -2293,7 +2293,15 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
     let flaky = propose("Flaky");
     let again = propose("Flaky again");
     fixture.ok(&["deny", &again, "--duplicate-of-approval", &flaky]);
-    fixture.ok(&["approve", &flaky]);
+    let approved = fixture.ok(&["approve", &flaky]);
+    // The user hears what the comment's posting could not finish.
+    assert!(
+        approved["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("unavailable"),
+        "{approved}"
+    );
     let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
     assert_eq!(
         posted,

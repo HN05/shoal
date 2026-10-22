@@ -78,6 +78,9 @@ async fn submit(
         details,
     };
     let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    for warning in &request.warnings {
+        eprintln!("{warning}");
+    }
     let message = match &request.url {
         Some(url) => format!("{}\n  {url}", describe(&request)),
         None => describe(&request),

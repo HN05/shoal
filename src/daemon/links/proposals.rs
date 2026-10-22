@@ -398,7 +398,8 @@ impl Manager {
             url: item.url.clone(),
         };
         while let Some(finding) = request.findings().first().cloned() {
-            self.comment_as_proposer(workspace, forge, account, &target, comment(finding))
+            let unfinished = self
+                .comment_as_proposer(workspace, forge, account, &target, comment(finding))
                 .await
                 .with_context(|| {
                     format!(
@@ -406,6 +407,7 @@ impl Manager {
                         item.url
                     )
                 })?;
+            request.warnings.extend(unfinished);
             request.finding_posted();
             self.save_proposal(request.clone()).await?;
         }
@@ -517,7 +519,8 @@ impl Manager {
     ) -> Result<(ApprovalRequest, String)> {
         let outcome = match &decision.duplicate_of {
             Some(Duplicate::Issue(input)) => {
-                let url = self.add_to_issue(&request, workspace, input).await?;
+                let (url, unfinished) = self.add_to_issue(&request, workspace, input).await?;
+                request.warnings.extend(unfinished);
                 request.url = Some(url.clone());
                 format!(" as a duplicate of {url}; its text was added there as a comment")
             }
@@ -550,7 +553,7 @@ impl Manager {
         request: &ApprovalRequest,
         workspace: Option<&Workspace>,
         input: &str,
-    ) -> Result<String> {
+    ) -> Result<(String, Option<String>)> {
         let (forge, account) = self.proposal_forge_account(request, workspace).await?;
         let (number, url) = forge.issue(input)?;
         let target = super::actions::Target {
@@ -559,9 +562,10 @@ impl Manager {
             url: url.clone(),
         };
         let comment = comment(finding(request)?);
-        self.comment_as_proposer(workspace, &forge, &account, &target, comment)
+        let unfinished = self
+            .comment_as_proposer(workspace, &forge, &account, &target, comment)
             .await?;
-        Ok(url)
+        Ok((url, unfinished))
     }
 
     /// Keep the proposal's finding with the pending issue proposal `number`,
@@ -590,8 +594,9 @@ impl Manager {
     }
 
     /// Post `comment` as the agent account, recorded as the workspace's own
-    /// change while it exists. A failure after the comment reached the forge
-    /// only logs, so a finding is never posted twice.
+    /// change while it exists. A failure after the comment reached the forge,
+    /// such as attaching its files, is returned as a warning for the user
+    /// instead, since posting the comment again would repeat it.
     async fn comment_as_proposer(
         &self,
         workspace: Option<&Workspace>,
@@ -599,7 +604,7 @@ impl Manager {
         account: &Account,
         target: &super::actions::Target,
         comment: Action,
-    ) -> Result<()> {
+    ) -> Result<Option<String>> {
         let posted = match workspace {
             Some(workspace) => self
                 .apply_own(&workspace.id, forge, account, target.clone(), &comment)
@@ -611,12 +616,11 @@ impl Manager {
                 .map(|_| ()),
         };
         match posted {
-            // The comment exists, so posting it again would repeat it.
+            Ok(()) => Ok(None),
             Err(error) if error.downcast_ref::<Sent>().is_some() => {
-                crate::daemon::log::log!("{}: {error:#}", target.url);
-                Ok(())
+                Ok(Some(format!("{}: {error:#}", target.url)))
             }
-            posted => posted,
+            Err(error) => Err(error),
         }
     }
 

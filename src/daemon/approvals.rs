@@ -222,6 +222,10 @@ pub struct ApprovalRequest {
     /// one duplicates; decided proposals are no longer stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// What deciding a proposal could not finish, such as attaching the
+    /// files of a duplicate's comment that was posted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 const COLUMNS: &str = "SELECT id,record,active,number FROM access_requests";
@@ -378,6 +382,7 @@ impl ApprovalRequest {
             routed: false,
             decider: None,
             url: None,
+            warnings: Vec::new(),
         }
     }
 

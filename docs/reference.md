@@ -1912,7 +1912,9 @@ issue proposal, which adds them as comments when it is approved and drops them
 when it is denied. When anything fails after the issue opened, such as adding its
 labels, its files or a duplicate's comment, the request keeps the issue and the
 work left, so approving it again, without edits, finishes that work instead of
-opening another issue. A decided proposal is no longer listed, and the decision
+opening another issue. A comment that reached the forge is never posted again:
+when attaching its files or reading the issue afterwards fails, the decision
+finishes and reports the failure in `warnings`. A decided proposal is no longer listed, and the decision
 reaches the workspace's agent as an [agent message](#agent-messages) naming
 the opened item.
 
