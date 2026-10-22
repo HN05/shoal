@@ -12,9 +12,10 @@ use crate::{
 };
 
 pub mod derived_data;
-mod xcode;
+pub mod xcode;
 
-const XCODE_CACHE: &str = "preset.xcode";
+/// The shared cache the `xcode` preset keeps its files in.
+pub const XCODE_CACHE: &str = "preset.xcode";
 
 states!(
     /// A build tool whose usual setup Shoal knows.

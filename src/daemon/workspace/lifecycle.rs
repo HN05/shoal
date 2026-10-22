@@ -624,8 +624,8 @@ impl Manager {
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         self.delete_session_logs(&workspace.id);
-        if xcode.is_some() {
-            self.delete_xcode_data(workspace).await;
+        if let Some(settings) = xcode {
+            self.delete_xcode_data(workspace, &settings).await;
         }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;

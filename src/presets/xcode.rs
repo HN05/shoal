@@ -4,14 +4,25 @@
 //! `xcodebuild` wrapper that shares Swift package checkouts between
 //! workspaces with the same `Package.resolved`, without which package
 //! builds miss the cache.
-use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
+use std::{
+    collections::HashSet,
+    fs,
+    os::unix::fs::PermissionsExt as _,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
 
 /// The xcconfig `XCODE_XCCONFIG_FILE` names, inside the cache directory.
 pub const XCCONFIG: &str = "shoal.xcconfig";
 /// The directory whose `xcodebuild` goes first on workspace processes' PATH.
 pub const BIN: &str = "bin";
+/// The directory of package checkouts, one per set of resolved pins.
+const PACKAGES: &str = "SourcePackages";
+/// The file that records a project's resolved package pins.
+pub const PINS: &str = "Package.resolved";
 
 /// Write the preset's files into `directory`, leaving files whose content
 /// is current untouched, since Xcode rebuilds its build description when
@@ -48,13 +59,54 @@ CLANG_OTHER_PREFIX_MAPPINGS = $(inherited) $(SHOAL_PREFIX_MAPPINGS)
     )
 }
 
+/// The name of the package checkouts for a `Package.resolved` with this
+/// content, as the wrapper computes it.
+pub fn checkouts_key(pins: &[u8]) -> String {
+    Sha256::digest(pins)
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Delete the package checkouts in the cache `directory` whose key is not
+/// in `used` and that no build started since `unused_since`, returning the
+/// deleted checkouts. A build that resolves packages can rewrite its
+/// `Package.resolved` while it runs, so keys alone cannot show a checkout
+/// unused.
+pub fn prune_checkouts(
+    directory: &Path,
+    used: &HashSet<String>,
+    unused_since: SystemTime,
+) -> Result<Vec<PathBuf>> {
+    let packages = directory.join(PACKAGES);
+    let entries = match fs::read_dir(&packages) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        entries => entries.with_context(|| format!("read {}", packages.display()))?,
+    };
+    let mut deleted = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        if used.contains(&*entry.file_name().to_string_lossy())
+            || entry.metadata()?.modified()? >= unused_since
+        {
+            continue;
+        }
+        let checkouts = entry.path();
+        fs::remove_dir_all(&checkouts)
+            .with_context(|| format!("delete {}", checkouts.display()))?;
+        deleted.push(checkouts);
+    }
+    Ok(deleted)
+}
+
 /// Finds the `Package.resolved` of the project or workspace `xcodebuild`
 /// builds, as `xcodebuild` picks it: a named container, or else the
 /// directory's project ahead of its workspace. The checkouts are keyed by
-/// that file's content.
+/// that file's content, and each build marks the ones it uses.
 /// A caller's own `-clonedSourcePackagesDirPath` wins.
 fn wrapper(directory: &Path) -> String {
-    let packages = directory.join("SourcePackages");
+    let packages = directory.join(PACKAGES);
     format!(
         r#"#!/bin/sh
 # Written by Shoal for the xcode preset.
@@ -77,8 +129,9 @@ case $container in
   *) resolved=Package.resolved ;;
 esac
 if [ -f "$resolved" ]; then
-  pins=$(shasum -a 256 < "$resolved" | cut -c1-16)
-  exec /usr/bin/xcodebuild -clonedSourcePackagesDirPath '{packages}'/"$pins" "$@"
+  checkouts='{packages}'/$(shasum -a 256 < "$resolved" | cut -c1-16)
+  mkdir -p "$checkouts" && touch "$checkouts"
+  exec /usr/bin/xcodebuild -clonedSourcePackagesDirPath "$checkouts" "$@"
 fi
 exec /usr/bin/xcodebuild "$@"
 "#,
@@ -149,9 +202,14 @@ mod tests {
         let mut lines = built.lines();
         assert_eq!(lines.next(), Some("-clonedSourcePackagesDirPath"));
         let checkouts = lines.next().unwrap();
+        let key = checkouts_key(b"{}");
+        assert_eq!(
+            checkouts,
+            cache.join(PACKAGES).join(&key).display().to_string()
+        );
         assert!(
-            checkouts.starts_with(&format!("{}/SourcePackages/", cache.display())),
-            "{checkouts}"
+            Path::new(checkouts).is_dir(),
+            "the build marks its checkouts"
         );
         assert_eq!(lines.collect::<Vec<_>>(), ["-scheme", "App", "build"]);
         assert_eq!(
@@ -173,5 +231,26 @@ mod tests {
             run(&["-project", "Other.xcodeproj", "build"]),
             "-project\nOther.xcodeproj\nbuild\n"
         );
+    }
+
+    #[test]
+    fn pruning_keeps_used_and_recent_checkouts() {
+        let cache = tempfile::tempdir().unwrap();
+        let packages = cache.path().join(PACKAGES);
+        for key in ["used", "unused", "recent"] {
+            fs::create_dir_all(packages.join(key).join("checkouts")).unwrap();
+        }
+        let since = SystemTime::now() + std::time::Duration::from_secs(60);
+        let recent = fs::File::open(packages.join("recent")).unwrap();
+        recent
+            .set_modified(since + std::time::Duration::from_secs(1))
+            .unwrap();
+        let used = HashSet::from(["used".to_owned()]);
+        let deleted = prune_checkouts(cache.path(), &used, since).unwrap();
+        assert_eq!(deleted, [packages.join("unused")]);
+        assert!(packages.join("used").exists());
+        assert!(packages.join("recent").exists());
+        let missing = cache.path().join("missing");
+        assert!(prune_checkouts(&missing, &used, since).unwrap().is_empty());
     }
 }

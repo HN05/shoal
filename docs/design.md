@@ -404,6 +404,10 @@ are opt-in. Neither shrinks a workspace's own build directory: Xcode copies
 cached results into each DerivedData. That folder lies outside the worktree,
 keyed by the project's path, so the preset makes removal delete it and disk
 space cleanup delete what earlier removals left; Xcode rebuilds it on demand.
+Package checkouts are shared by pins rather than owned by a worktree, so only
+those nothing pins go, and only after a day unused, since a build that resolves
+packages rewrites its pins while it runs. Xcode trims the compilation cache
+itself, by default to half the space available to it.
 
 Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
 sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`

@@ -409,7 +409,7 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     #[tokio::test]
-    async fn cleanup_deletes_derived_data_of_removed_workspaces_first() {
+    async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
         let (root, manager) = manager().await;
         crate::test_support::configure(
             &manager,
@@ -434,10 +434,19 @@ mod tests {
         let directory = repo.workspaces_dir.as_deref().unwrap();
         let removed = folder("App-removed", &directory.join("gone/App.xcodeproj"));
         let elsewhere = folder("App-elsewhere", Path::new("/nonexistent/App.xcodeproj"));
+        let settings = manager.repository_settings(&repo.id).await.unwrap();
+        let cache = &crate::caches::locate(&repo, &settings.caches)[crate::presets::XCODE_CACHE];
+        let unpinned = cache.join("SourcePackages/unpinned");
+        std::fs::create_dir_all(&unpinned).unwrap();
+        let unused = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 86_400);
+        std::fs::File::open(&unpinned)
+            .unwrap()
+            .set_modified(unused)
+            .unwrap();
         let readings = AtomicUsize::new(0);
         let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
         let available = |_: &Path| {
-            // Deleting the DerivedData frees enough space.
+            // Deleting the Xcode data frees enough space.
             Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
                 low
             } else {
@@ -451,6 +460,7 @@ mod tests {
         assert!(!removed.exists());
         assert!(live.exists());
         assert!(elsewhere.exists());
+        assert!(!unpinned.exists());
         assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
     }
 

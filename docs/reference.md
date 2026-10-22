@@ -130,8 +130,9 @@ Monitoring does not guarantee that the OS will never reach its OOM limit.
 
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
-deletes the DerivedData there of projects whose worktree no longer exists in
-the directory of a repository using the [`xcode` preset](#build-tool-presets),
+deletes the Xcode data there that removing a workspace of a repository using
+the [`xcode` preset](#build-tool-presets) deletes, for every worktree in the
+repository's directory that no longer exists,
 removes the workspaces there that idle cleanup would remove, without waiting for
 their idle delay, then empties [shared caches](#shared-caches) there nothing is
 using, until enough space is available. A repository with idle
@@ -1346,7 +1347,9 @@ still keeps its own DerivedData, since Xcode copies cached results into it.
 Removing a workspace deletes the DerivedData folder of every project inside it,
 found by the `WorkspacePath` its `info.plist` records, in Xcode's custom
 DerivedData location when that is absolute and in
-`~/Library/Developer/Xcode/DerivedData` otherwise.
+`~/Library/Developer/Xcode/DerivedData` otherwise. It also deletes the package
+checkouts that no build used for a day and no `Package.resolved` pins in the
+registered checkout, an existing worktree or the default branch's tip.
 
 ### Seed builds
 

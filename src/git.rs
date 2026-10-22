@@ -6,6 +6,7 @@ pub mod default_branch;
 pub mod diff;
 pub mod existing_branch;
 pub mod fetch;
+pub mod files;
 mod predicates;
 pub use predicates::{is_ancestor, ref_exists};
 mod queries;
