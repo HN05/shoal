@@ -171,6 +171,16 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
             request::<RestoredWorkspace>(&ctx.paths, Method::RestoreWorkspace { workspace }),
         )
         .await?;
+    finish_reopen(ctx, restored, "Restored").await
+}
+
+/// Set up a workspace the daemon opened again from a removal record, and
+/// link its PRs; `action` begins the report.
+pub(super) async fn finish_reopen(
+    ctx: &Context,
+    restored: RestoredWorkspace,
+    action: &str,
+) -> Result<i32> {
     let RestoredWorkspace {
         opened,
         removed,
@@ -209,7 +219,7 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
     };
     ctx.emit(
         &format!(
-            "Restored {} on branch {} at {}{files}{agents}",
+            "{action} {} on branch {} at {}{files}{agents}",
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.branch,
             workspace.path.display()

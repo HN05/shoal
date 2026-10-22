@@ -35,6 +35,8 @@ const GROUPS: &[(&str, &[&str])] = &[
             "branch",
             "checkpoint",
             "restore",
+            "export",
+            "import",
         ],
     ),
     (

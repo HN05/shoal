@@ -1151,6 +1151,19 @@ files are back, one transaction moves the checkpoints to that ID and deletes the
 record. A restore first claims the record, keeping it and its checkpoints from
 expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
+Moving a workspace to another machine is a removal there and a restore here:
+export writes the removal record and a Git bundle of its checkpoint, and import
+records both as a removal of this repository, the ref before the records, then
+runs the normal restore. Moving rather than copying keeps one workspace per
+branch, so two agents never push it or watch its PRs, and the source's removal
+stays restorable when the transfer fails. The bundle leaves out the default
+remote's default branch, which the importer fetches when it lacks the commit the
+bundle builds on, since that branch only advances. Repositories match by origin.
+Agent conversations stay behind: they are the agent tools' private, path-keyed
+files, and Shoal does not store conversations, so moved recovery records drop
+their session, place and wrapper and start a new session told the workspace
+moved. Shoal provides only these operations; deciding when and where to move work
+belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point

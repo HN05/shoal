@@ -657,6 +657,29 @@ pub enum Command {
         #[arg(requires = "workspace")]
         checkpoint: Option<u64>,
     },
+    /// Remove a workspace and write it to a file that shoal import opens on another machine.
+    ///
+    /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
+    /// default branch, and the workspace's base, links and stopped agents. A removed workspace
+    /// is exported without another removal. `-` writes to standard output.
+    Export {
+        workspace: Option<String>,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
+    },
+    /// Open a workspace shoal export wrote, in the repository with the same origin.
+    ///
+    /// Fetches the default branch when the file builds on commits the repository lacks. Stopped
+    /// agents start new sessions with shoal resume, since their sessions stayed on the other
+    /// machine. `-` reads from standard input.
+    Import {
+        file: PathBuf,
+        /// Repository to import into, when it does not share the exported repository's origin.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+    },
     /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,

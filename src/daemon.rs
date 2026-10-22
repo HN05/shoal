@@ -748,6 +748,21 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
         }
+        Method::ImportWorkspace {
+            repository,
+            bundle,
+            prerequisite,
+            workspace,
+        } => Body::RestoredWorkspace(
+            manager
+                .import_workspace(
+                    &repository,
+                    bundle.as_deref(),
+                    prerequisite.as_deref(),
+                    *workspace,
+                )
+                .await?,
+        ),
         Method::Checkpoint { workspace, name } => {
             Body::Checkpoint(manager.take_checkpoint(&workspace, name).await?)
         }

@@ -59,6 +59,31 @@ pub struct Record {
     /// resume by ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// The workspace moved from another machine, where the agent's sessions
+    /// stayed, so the agent starts a new one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub moved: bool,
+}
+
+/// The conversation a restored agent continues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Session<'a> {
+    /// The session its hooks reported.
+    Id(&'a str),
+    /// The workspace's latest session.
+    Latest,
+    /// A new session, since the earlier ones stayed on another machine.
+    New,
+}
+
+impl<'a> Session<'a> {
+    fn of(session: Option<&'a str>, moved: bool) -> Self {
+        match (session, moved) {
+            (_, true) => Self::New,
+            (Some(id), false) => Self::Id(id),
+            (None, false) => Self::Latest,
+        }
+    }
 }
 
 impl Recovery {
@@ -67,7 +92,7 @@ impl Recovery {
             let workspace = client::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
-            Self::resolve(paths, &workspace, agent, None, None).await
+            Self::resolve(paths, &workspace, agent, None, Session::Latest).await
         }
         .await;
         resolved.unwrap_or_else(|error| {
@@ -83,14 +108,13 @@ impl Recovery {
 
     /// Ask the restored session to continue, including `handoff` where the
     /// command accepts a prompt: built-in agents and `{prompt}` in `[agent_resume]`.
-    /// Built-in agents resume `session` when known, otherwise the workspace's
-    /// latest session.
+    /// Built-in agents resume or start the session `session` names.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
         agent: &str,
         handoff: Option<&str>,
-        session: Option<&str>,
+        session: Session<'_>,
     ) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
@@ -98,9 +122,11 @@ impl Recovery {
         let configured = settings.agent_resume.get(&name);
         let builtin = matches!(name.as_str(), "codex" | "claude");
         let automatic = configured.is_some() || builtin;
-        let mut message = String::from(
-            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
-        );
+        let mut message = String::from(if session == Session::New {
+            "Shoal moved this workspace from another machine, where your earlier session stayed. Continue working on the unfinished assignment: read its linked issue and PRs, its commits and its uncommitted changes to see where it stands."
+        } else {
+            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off."
+        });
         if let Some(handoff) = handoff {
             message.push_str("\n\n");
             message.push_str(handoff);
@@ -119,14 +145,16 @@ impl Recovery {
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else {
             let mut args: Vec<OsString> = match (name.as_str(), session) {
-                ("codex", Some(session)) => vec!["resume".into(), session.into()],
+                ("codex", Session::Id(session)) => vec!["resume".into(), session.into()],
                 // Codex's worktrees feature widens `--last` to every linked
                 // worktree of the repository; restore this workspace's session.
-                ("codex", None) => ["resume", "--last", "-c", "features.worktrees=false"]
-                    .map(OsString::from)
-                    .into(),
-                ("claude", Some(session)) => vec!["--resume".into(), session.into()],
-                ("claude", None) => vec!["--continue".into()],
+                ("codex", Session::Latest) => {
+                    ["resume", "--last", "-c", "features.worktrees=false"]
+                        .map(OsString::from)
+                        .into()
+                }
+                ("claude", Session::Id(session)) => vec!["--resume".into(), session.into()],
+                ("claude", Session::Latest) => vec!["--continue".into()],
                 _ => vec![],
             };
             if let Ok(agent) = name.parse::<crate::agent::BuiltinAgent>() {
@@ -164,7 +192,7 @@ impl Recovery {
         let Some(session) = session else {
             return self.command.clone();
         };
-        match Self::resolve(paths, workspace, &self.agent, None, Some(&session)).await {
+        match Self::resolve(paths, workspace, &self.agent, None, Session::Id(&session)).await {
             Ok(recovery) if !recovery.command.is_empty() => recovery.command,
             Ok(_) => self.command.clone(),
             Err(error) => {
@@ -199,6 +227,24 @@ impl Record {
             place,
             waiting: None,
             session: None,
+            moved: false,
+        }
+    }
+
+    /// The conversation restoring this record continues.
+    pub(crate) fn session(&self) -> Session<'_> {
+        Session::of(self.session.as_deref(), self.moved)
+    }
+
+    /// This record for another machine, where neither its sessions nor its
+    /// place exist and no wrapper waits to restore it.
+    pub(crate) fn moved(self) -> Self {
+        Self {
+            place: None,
+            waiting: None,
+            session: None,
+            moved: true,
+            ..self
         }
     }
 
@@ -391,9 +437,26 @@ pub struct LastSession {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// The workspace moved from another machine, where the session stayed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub moved: bool,
 }
 
 impl LastSession {
+    /// The conversation continuing this session resumes.
+    pub(crate) fn session(&self) -> Session<'_> {
+        Session::of(self.session.as_deref(), self.moved)
+    }
+
+    /// This session for another machine, which starts a new one.
+    pub(crate) fn moved(self) -> Self {
+        Self {
+            session: None,
+            moved: true,
+            ..self
+        }
+    }
+
     pub(crate) fn path(paths: &Paths, workspace_id: &str) -> PathBuf {
         paths.workspace_state(workspace_id).join(LAST_SESSION)
     }
@@ -403,6 +466,7 @@ impl LastSession {
         Self {
             agent: agent.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
+            moved: false,
         }
         .write(paths, workspace_id)
     }

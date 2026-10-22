@@ -11,7 +11,8 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, Relation, RemovedWorkspace, RestoredWorkspace, Workspace, WorkspaceLinks,
+        CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, Workspace,
+        WorkspaceLinks,
     },
     time::unix_seconds,
 };
@@ -146,6 +147,93 @@ impl Manager {
             removed,
             warnings,
         })
+    }
+
+    /// Open a workspace another Shoal exported: record it as removed here
+    /// with its checkpoint, fetched from `bundle` or else on the default
+    /// branch, and restore it. A failed restore leaves the record for
+    /// `shoal restore`.
+    pub async fn import_workspace(
+        &self,
+        selector: &crate::forge::repository::Selector,
+        bundle: Option<&Path>,
+        prerequisite: Option<&str>,
+        removed: RemovedWorkspace,
+    ) -> Result<RestoredWorkspace> {
+        let repo = self.repository(selector).await?;
+        ensure!(
+            removed.checkpoint.workspace_id == removed.workspace_id,
+            "the export's checkpoint belongs to another workspace"
+        );
+        if let Some(commit) = prerequisite {
+            self.fetch_missing(&repo, commit).await?;
+        }
+        let removed = self.imported_record(&repo, removed).await?;
+        self.record_import(&repo.path, bundle, removed.clone())
+            .await?;
+        self.restore_workspace(&removed.workspace_id)
+            .await
+            .with_context(|| {
+                format!(
+                    "the imported workspace is recorded as removed; shoal restore {} retries",
+                    removed.name
+                )
+            })
+    }
+
+    /// Fetch the default branch when the repository lacks `commit`, which
+    /// the export builds on.
+    async fn fetch_missing(&self, repo: &Repository, commit: &str) -> Result<()> {
+        if git::has_commit(&repo.path, commit).await? {
+            return Ok(());
+        }
+        self.fetch_default_branch(&repo.id)
+            .await
+            .context("fetch the default branch the export builds on")
+    }
+
+    /// The exported record as this repository's, expiring after its
+    /// retention as a removal here would.
+    async fn imported_record(
+        &self,
+        repo: &Repository,
+        removed: RemovedWorkspace,
+    ) -> Result<RemovedWorkspace> {
+        let retention = self
+            .repository_settings(&repo.id)
+            .await?
+            .cleanup
+            .restore
+            .retention();
+        let expires_at = unix_seconds() + retention.as_secs();
+        let mut removed = RemovedWorkspace {
+            repository_id: repo.id.clone(),
+            expires_at,
+            ..removed
+        };
+        removed.checkpoint.repository_id = repo.id.clone();
+        removed.checkpoint.expires_at = expires_at;
+        Ok(removed)
+    }
+
+    /// Point the checkpoint's ref at its commit, then record the checkpoint
+    /// and the removal in one transaction, as a removal would.
+    async fn record_import(
+        &self,
+        repo: &Path,
+        bundle: Option<&Path>,
+        removed: RemovedWorkspace,
+    ) -> Result<()> {
+        let _refs = self.checkpoint_gate.lock().await;
+        let commit = &removed.checkpoint.commit;
+        let reference = git::checkpoint::reference(commit);
+        match bundle {
+            Some(bundle) => git::bundle::fetch(repo, bundle, &reference).await?,
+            None => git::checkpoint::save(repo, &reference, commit)
+                .await
+                .with_context(|| format!("the default branch has no commit {commit}"))?,
+        }
+        self.store.run(move |db| record_imported(db, removed)).await
     }
 
     /// Link the restored workspace's issue and recorded items again; the
@@ -291,6 +379,16 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
             serde_json::to_string(removed)?,
         ],
     )?;
+    Ok(())
+}
+
+/// Record an imported workspace's checkpoint under its next number and its
+/// removal record naming that number.
+fn record_imported(db: &mut Connection, mut removed: RemovedWorkspace) -> Result<()> {
+    let tx = db.transaction()?;
+    removed.checkpoint.number = super::checkpoints::insert_numbered(&tx, &removed.checkpoint)?;
+    record(&tx, &removed)?;
+    tx.commit()?;
     Ok(())
 }
 

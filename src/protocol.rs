@@ -439,6 +439,14 @@ pub enum Method {
     RestoreWorkspace {
         workspace: String,
     },
+    /// Record a workspace another Shoal exported as removed here, with its
+    /// checkpoint fetched from `bundle`, and open it again.
+    ImportWorkspace {
+        repository: crate::forge::repository::Selector,
+        bundle: Option<std::path::PathBuf>,
+        prerequisite: Option<String>,
+        workspace: Box<crate::model::RemovedWorkspace>,
+    },
     /// Keep the workspace's HEAD and unsaved files in a new checkpoint.
     Checkpoint {
         workspace: String,

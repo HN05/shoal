@@ -103,7 +103,7 @@ pub async fn run(
         workspace,
         &recorded.agent,
         handoff.as_deref(),
-        recorded.session.as_deref(),
+        recorded.session(),
     )
     .await?;
     if !saved.commands.is_empty() && !recovery.handoff_delivered {
@@ -133,14 +133,8 @@ async fn continue_last_session(
         return Ok(0);
     }
     eprintln!("shoal: continuing the last {} session", last.agent);
-    let recovery = Recovery::resolve(
-        &ctx.paths,
-        workspace,
-        &last.agent,
-        None,
-        last.session.as_deref(),
-    )
-    .await?;
+    let recovery =
+        Recovery::resolve(&ctx.paths, workspace, &last.agent, None, last.session()).await?;
     launch(ctx, workspace, recovery, vec![path]).await
 }
 

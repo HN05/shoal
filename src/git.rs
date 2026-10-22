@@ -1,5 +1,6 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
 pub mod branch;
+pub mod bundle;
 pub mod config;
 pub(crate) mod conflicts;
 pub mod default_branch;
@@ -8,7 +9,7 @@ pub mod existing_branch;
 pub mod fetch;
 pub mod files;
 mod predicates;
-pub use predicates::{is_ancestor, ref_exists};
+pub use predicates::{has_commit, is_ancestor, ref_exists};
 mod queries;
 pub use queries::{
     current_branch, git_dir, latest_subject, metadata_path, remote_url, remotes, revision,

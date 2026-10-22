@@ -37,6 +37,7 @@ mod simulators;
 mod skill;
 mod split;
 mod stop;
+mod transfer;
 mod update;
 mod view;
 pub(in crate::cli) mod workspaces;
@@ -468,6 +469,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             checkpoint,
         } => restore::run(&ctx, workspace, checkpoint).await,
+        Command::Export {
+            workspace,
+            output,
+            confirmation,
+        } => transfer::export(&ctx, workspace, output, confirmation.yes).await,
+        Command::Import { file, repository } => transfer::import(&ctx, file, repository).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
         Command::Codex {

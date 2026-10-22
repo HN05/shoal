@@ -686,6 +686,68 @@ fn cleanup_removes_idle_candidates_on_request() {
 }
 
 #[test]
+fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("moving");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(path.join("notes"), "draft\n").unwrap();
+    let file = fixture.root.path().join("moving.shoal");
+    let file = file.to_str().unwrap();
+    let exported = fixture.ok(&["export", "moving", "-o", file]);
+    assert_eq!(exported["manifest"]["workspace"]["name"], "moving");
+    assert!(exported["manifest"]["bundle"].as_bool().unwrap());
+    assert!(!path.exists());
+    let again = fixture.run(&["export", "moving", "-o", file]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("exists; choose another file"));
+    // The repository has no origin to select the importing one by.
+    let unselected = fixture.run(&["import", file]);
+    assert!(!unselected.status.success());
+    assert!(String::from_utf8_lossy(&unselected.stderr).contains("--repo"));
+
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.ok(&["import", file, "--repo", repo]);
+    assert_eq!(imported["workspace"]["name"], "moving");
+    assert_eq!(imported["workspace"]["state"], "ready");
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+
+    let exported = fixture
+        .command()
+        .args(["export", "moving", "-o", "-"])
+        .output()
+        .unwrap();
+    assert!(
+        exported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&exported.stderr)
+    );
+    let mut import = fixture
+        .command()
+        .args(["--json", "import", "-", "--repo", repo])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    import
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&exported.stdout)
+        .unwrap();
+    let imported = import.wait_with_output().unwrap();
+    assert!(
+        imported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&imported.stderr)
+    );
+    let imported: Value = serde_json::from_slice(&imported.stdout).unwrap();
+    assert_eq!(imported["workspace"]["name"], "moving");
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+}
+
+#[test]
 fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let fixture = Fixture::new();
     let workspace = fixture.add("scratch");

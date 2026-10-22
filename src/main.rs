@@ -31,6 +31,7 @@ mod subprocess;
 mod test_support;
 mod time;
 mod tools;
+mod transfer;
 mod validate;
 
 use cli::Cli;

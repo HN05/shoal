@@ -165,6 +165,7 @@ shoal branch rm               # Pick kept branches to delete with their commits
 shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal restore fix-login 3     # Return the workspace to checkpoint 3
+shoal export fix-login -o - | ssh other shoal import - # Move the workspace to another machine
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
@@ -349,7 +350,9 @@ and `shoal restore <workspace>` opens one again with its uncommitted files and l
 `shoal resume` then continues the agents the removal stopped. Removal keeps the
 workspace's HEAD and unsaved files in a checkpoint, as `shoal checkpoint` does and
 Shoal does when an agent exits or is stopped; `shoal restore <workspace> <number>`
-returns an existing workspace to one of them.
+returns an existing workspace to one of them. `shoal export <workspace> -o <file>`
+removes a workspace and writes that checkpoint and record to a file, and `shoal
+import <file>` opens it on another machine; its agents start new sessions there.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

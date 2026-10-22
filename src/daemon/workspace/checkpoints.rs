@@ -416,6 +416,14 @@ fn branch_label(branch: Option<&str>) -> String {
 /// Record a checkpoint under the workspace's next number and return it.
 fn insert(db: &mut Connection, checkpoint: &Checkpoint) -> Result<u64> {
     let tx = db.transaction()?;
+    let number = insert_numbered(&tx, checkpoint)?;
+    tx.commit()?;
+    Ok(number)
+}
+
+/// Record a checkpoint under the workspace's next number, in the caller's
+/// transaction.
+pub(super) fn insert_numbered(tx: &rusqlite::Transaction, checkpoint: &Checkpoint) -> Result<u64> {
     // The sequence outlives expired checkpoints, so a number never names a
     // second one.
     let number: i64 = tx.query_row(
@@ -439,7 +447,6 @@ fn insert(db: &mut Connection, checkpoint: &Checkpoint) -> Result<u64> {
             serde_json::to_string(&record)?,
         ],
     )?;
-    tx.commit()?;
     Ok(record.number)
 }
 

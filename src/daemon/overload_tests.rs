@@ -140,7 +140,7 @@ async fn built_in_restore_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    use crate::execution::recovery::Recovery;
+    use crate::execution::recovery::{Recovery, Session};
     let (_root, manager, workspace, serving) = fixture().await;
     fs::write(
         workspace.path.join(".shoal.toml"),
@@ -164,9 +164,10 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff, None)
-            .await
-            .unwrap();
+        let recovery =
+            Recovery::resolve(&manager.paths, &workspace, agent, handoff, Session::Latest)
+                .await
+                .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages.
@@ -195,15 +196,32 @@ async fn built_in_restore_child() {
         ("codex", &["codex-fixture", "resume", "s1"][..]),
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Some("s1"))
-            .await
-            .unwrap();
+        let recovery =
+            Recovery::resolve(&manager.paths, &workspace, agent, None, Session::Id("s1"))
+                .await
+                .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
         assert!(recovery.command.starts_with(&restore.collect::<Vec<_>>()));
     }
-    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None, None)
-        .await
-        .unwrap();
+    // A workspace moved from another machine starts a new session that
+    // says so.
+    for agent in ["codex", "claude"] {
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Session::New)
+            .await
+            .unwrap();
+        let hooks = agent
+            .parse::<crate::agent::BuiltinAgent>()
+            .unwrap()
+            .hook_args()
+            .unwrap();
+        assert_eq!(recovery.command[1..=hooks.len()], hooks[..]);
+        let prompt = recovery.command.last().unwrap().to_str().unwrap();
+        assert!(prompt.starts_with("Shoal moved this workspace"), "{prompt}");
+    }
+    let unsupported =
+        Recovery::resolve(&manager.paths, &workspace, "custom", None, Session::Latest)
+            .await
+            .unwrap();
     assert!(!unsupported.automatic);
     assert!(unsupported.command.is_empty());
     fs::write(
@@ -211,9 +229,15 @@ async fn built_in_restore_child() {
         "[agent_resume]\ncodex = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
-        .await
-        .unwrap();
+    let overridden = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        "codex",
+        Some("handoff"),
+        Session::Latest,
+    )
+    .await
+    .unwrap();
     assert!(overridden.automatic);
     assert!(!overridden.handoff_delivered);
     assert_eq!(
@@ -225,9 +249,15 @@ async fn built_in_restore_child() {
         "[agent_resume]\ncodex = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
-        .await
-        .unwrap();
+    let prompted = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        "codex",
+        Some("handoff"),
+        Session::Latest,
+    )
+    .await
+    .unwrap();
     assert!(prompted.handoff_delivered);
     assert_eq!(
         prompted.command,
@@ -238,7 +268,7 @@ async fn built_in_restore_child() {
         ]
         .map(std::ffi::OsString::from)
     );
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, None)
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, Session::Latest)
         .await
         .unwrap();
     assert!(!prompted.handoff_delivered);
@@ -741,6 +771,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
         Some(LastSession {
             agent: "fixture".into(),
             session: Some("quit-session".into()),
+            moved: false,
         })
     );
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());

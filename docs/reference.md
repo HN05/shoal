@@ -1581,6 +1581,33 @@ retention_days = 30
 archive_max_mb = 50
 ```
 
+### Move a workspace to another machine
+
+```sh
+shoal export topic -o topic.shoal         # remove topic and write it to a file
+shoal import topic.shoal                  # open it in the repository with the same origin
+shoal export topic -o - | ssh other shoal import -
+```
+
+`shoal export [workspace] -o <file>` removes the workspace as `shoal rm` does and
+writes its removal record and checkpoint to a new file, or to standard output for
+`-`. It refuses before removing anything when the file exists or a checkpoint
+cannot keep the uncommitted files, and asks before releasing holds unless given
+`--yes`. A workspace already removed is exported from its removal record without
+another removal. The checkpoint travels as a Git bundle without the commits of
+the default remote's default branch; a checkpoint that branch already has
+travels without one. Ignored files, leases, permits, approvals, grants and holds
+stay behind; setup rebuilds what the workspace needs.
+
+`shoal import <file>` reads an export, or standard input for `-`, and opens it in
+the registered repository with the exported repository's origin, or the one
+`--repo` names. It fetches the default branch when the repository lacks the
+commit the bundle builds on, records the workspace as removed with its
+checkpoint, then restores it as `shoal restore` does; when that restore fails,
+`shoal restore <workspace>` retries it. Agent sessions stay on the exporting
+machine, so `shoal resume` starts each stopped agent in a new session, telling
+it the workspace moved. Workspace processes can neither export nor import.
+
 ### Assignment completion
 
 `shoal done [workspace]` records that the assignment is finished and notifies the

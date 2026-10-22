@@ -66,7 +66,7 @@ impl Need {
             | ["pr", "open"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
-                "status" | "inspect" | "diff" | "conflicts" | "rm" | "doctor" | "leases"
+                "status" | "inspect" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
                 | "restore" | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr"
                 | "issue" | "ci" | "labels",

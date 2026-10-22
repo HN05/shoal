@@ -95,7 +95,10 @@ remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal hold acquire <workspace> --name review` and release the hold
 afterwards; `shoal restore <workspace>` reopens a removed one, or lists an
 existing one's checkpoints, and `shoal restore <workspace> <number>` returns it
-to a checkpoint. `shoal --json cleanup` removes every workspace automatic
+to a checkpoint. To move a workspace to another machine, run
+`shoal export <workspace> --yes -o - | ssh <host> shoal --json import -`, then
+`shoal resume <workspace>` on that host starts its stopped agents in new
+sessions. `shoal --json cleanup` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `--dry-run` lists
 them and why it keeps each other workspace, as `status` gives in `cleanup_reason`;
 `--caches` also empties shared tool caches nothing is using. When the repository has no remote, `shoal land <workspace>`

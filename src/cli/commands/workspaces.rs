@@ -1744,9 +1744,21 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
     if !yes && (!unsaved.is_empty() || !check.workspace.holds.is_empty()) {
         confirm_removal(ctx, &check)?;
     }
-    // Consent covers only the unsaved work it saw; more appearing meanwhile
-    // makes the daemon refuse.
-    let unsaved = UnsavedWork::confirming(&check);
+    let result = remove_checked(ctx, workspace, &check).await?;
+    let mut output = serde_json::to_value(&result)?;
+    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
+    ctx.emit_styled(Style::Success, &removal_message(&result), &output)?;
+    Ok(0)
+}
+
+/// Remove the workspace `check` inspected, deleting only the unsaved work it
+/// saw: more appearing meanwhile makes the daemon refuse.
+pub(super) async fn remove_checked(
+    ctx: &Context,
+    workspace: String,
+    check: &RemovalCheck,
+) -> Result<RemovalResult> {
+    let unsaved = UnsavedWork::confirming(check);
     // Leave the directory before it disappears under the shell.
     let escape = escape_destination(ctx, &check.workspace).await?;
     let result = request::<RemovalResult>(
@@ -1754,7 +1766,7 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
         Method::RemoveWorkspace {
             workspace,
             unsaved,
-            caller_pid,
+            caller_pid: std::process::id(),
         },
     )
     .await;
@@ -1767,10 +1779,7 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
     if let Some(error) = &result.hook_error {
         eprintln!("warning: {error}");
     }
-    let mut output = serde_json::to_value(&result)?;
-    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
-    ctx.emit_styled(Style::Success, &removal_message(&result), &output)?;
-    Ok(0)
+    Ok(result)
 }
 
 fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
