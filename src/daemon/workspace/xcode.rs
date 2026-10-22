@@ -76,7 +76,9 @@ impl Manager {
     /// is gone, and package checkouts nothing pins any more. A project
     /// missing from a live worktree may be regenerating, and an absent
     /// repository directory, such as an unmounted volume, proves nothing gone.
-    /// Returns whether anything was deleted.
+    /// The DerivedData goes under the repository's Git gate, which creating,
+    /// restoring and renaming a workspace hold, so none of them can put a
+    /// worktree back at a path meanwhile. Returns whether anything was deleted.
     pub(crate) async fn delete_xcode_leftovers(
         &self,
         repo: &Repository,
@@ -97,6 +99,7 @@ impl Manager {
             && let Some(location) = derived_data::location(&self.paths.home)
             && on(&location)
         {
+            let _git = self.lock_repository_git(&repo.id).await;
             deleted |= delete_derived_data(name, location, move |project| {
                 worktree_gone(&directory, project)
             })
@@ -109,9 +112,17 @@ impl Manager {
     }
 
     /// Delete the package checkouts in the preset's `cache` that nothing
-    /// pins and no build used lately, returning whether any went.
+    /// pins and no build used lately, returning whether any went. A workspace
+    /// being created, restored or renamed may be about to use checkouts no
+    /// worktree pins yet; each holds the repository's Git gate, and so does
+    /// repository removal, which may be removing this workspace, so a busy
+    /// gate leaves pruning to a later pass rather than waiting.
     async fn prune_checkouts(&self, repo: &Repository, cache: PathBuf) -> bool {
         let name = crate::forge::repository::name(repo);
+        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+            log!("package checkouts of {name} kept: the repository is busy");
+            return false;
+        };
         let pruned = async {
             let pinned = self.pinned_checkouts(repo).await?;
             let unused_since = SystemTime::now() - CHECKOUTS_UNUSED_FOR;
@@ -236,9 +247,54 @@ mod tests {
     use crate::{
         presets::{self, derived_data, xcode},
         removal::{BranchChoice, InspectionPolicy},
-        test_support::{commit, configure, manager, repository},
+        test_support::{assert_pending, commit, configure, manager, repository},
     };
     use std::{fs, time::SystemTime};
+
+    #[tokio::test]
+    async fn cleanup_waits_for_a_busy_repository_and_pruning_skips_it() {
+        let (root, manager) = manager().await;
+        configure(
+            &manager,
+            "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        )
+        .await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        manager
+            .create_workspace(&repo.id, "removed".into(), None, None, None)
+            .await
+            .unwrap();
+        let location = derived_data::location(&manager.paths.home).unwrap();
+        let directory = repo.workspaces_dir.clone().unwrap();
+        let left = derived_data::folder(&location, "App-gone", &directory.join("gone/App"));
+        let settings = manager.repository_settings(&repo.id).await.unwrap();
+        let cache = crate::caches::directories(&repo, &settings.caches).unwrap()
+            [presets::XCODE_CACHE]
+            .join("SourcePackages/unpinned");
+        fs::create_dir_all(&cache).unwrap();
+        let old = SystemTime::now() - 2 * super::CHECKOUTS_UNUSED_FOR;
+        fs::File::open(&cache).unwrap().set_modified(old).unwrap();
+
+        // Creating a workspace holds the gate.
+        let gate = manager.lock_repository_git(&repo.id).await;
+        manager
+            .remove_workspace("removed", BranchChoice::Auto, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        assert!(cache.exists(), "pruning skips a busy repository");
+        let leftovers = manager.delete_xcode_leftovers(&repo, |_| true);
+        tokio::pin!(leftovers);
+        assert_pending(leftovers.as_mut()).await;
+        assert!(left.exists());
+        drop(gate);
+        assert!(leftovers.await);
+        assert!(!left.exists());
+        assert!(!cache.exists());
+    }
 
     #[tokio::test]
     async fn a_pin_file_that_cannot_be_read_stops_pruning() {

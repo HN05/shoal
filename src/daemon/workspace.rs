@@ -261,6 +261,21 @@ impl Manager {
         gate.lock_owned().await
     }
 
+    /// [`Self::lock_repository_git`] when nothing holds the gate.
+    pub(crate) async fn try_lock_repository_git(
+        &self,
+        repository_id: &str,
+    ) -> Option<OwnedMutexGuard<()>> {
+        let gate = self
+            .git_gates
+            .lock()
+            .await
+            .entry(repository_id.to_owned())
+            .or_default()
+            .clone();
+        gate.try_lock_owned().ok()
+    }
+
     pub(crate) async fn lock_repository(
         &self,
         selector: impl Into<crate::forge::repository::Selector>,
