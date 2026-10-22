@@ -36,10 +36,39 @@ pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
 }
 
 /// Delete a local branch only while it still points at `commit`, so a
-/// branch that moved meanwhile stays. The caller checks that no worktree
-/// has it checked out.
+/// branch that moved meanwhile stays; a symbolic ref goes itself, never its
+/// target. The caller checks that no worktree has it checked out.
 pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> {
-    git::run_isolated(repo, &["update-ref", "-d", &git::local_ref(name), commit]).await
+    git::run_isolated(
+        repo,
+        &[
+            "update-ref",
+            "--no-deref",
+            "-d",
+            &git::local_ref(name),
+            commit,
+        ],
+    )
+    .await
+}
+
+/// Whether the local branch is a symbolic ref to another one.
+pub async fn is_symbolic(repo: &Path, name: &str) -> Result<bool> {
+    let reference = git::local_ref(name);
+    let listing = git::run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(symref)",
+            &reference,
+        ],
+    )
+    .await?;
+    // The pattern also matches branches nested under the name.
+    Ok(listing.lines().any(|line| {
+        line.split_once('\0')
+            .is_some_and(|(name, target)| name == reference && !target.is_empty())
+    }))
 }
 
 /// Whether a rebase or bisect in some worktree started from the branch. Git

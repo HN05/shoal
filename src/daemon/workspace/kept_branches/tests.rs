@@ -323,3 +323,22 @@ async fn a_branch_a_bisect_started_from_stays() {
         .unwrap();
     assert!(!branch_exists(&repo, "topic"));
 }
+
+#[tokio::test]
+async fn a_kept_branch_made_symbolic_is_forgotten_without_touching_its_target() {
+    let (_root, manager, repo, _other) = fixture().await;
+    let head = kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["branch", "side", &head]);
+    git(&repo.path, &["push", "-q", "origin", "side"]);
+    git(
+        &repo.path,
+        &["symbolic-ref", "refs/heads/topic", "refs/heads/side"],
+    );
+
+    manager
+        .delete_kept_branches_kept_elsewhere(&repo.id)
+        .await
+        .unwrap();
+    assert!(remembered(&manager, &repo).await.is_empty());
+    assert!(branch_exists(&repo, "side"));
+}

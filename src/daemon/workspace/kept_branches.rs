@@ -28,8 +28,8 @@ struct Record {
 /// What a kept branch is now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
-    /// Deleted, moved, the default branch or a workspace's: no longer
-    /// Shoal's to delete.
+    /// Deleted, moved, made symbolic, the default branch or a workspace's:
+    /// no longer Shoal's to delete.
     Released,
     /// Checked out by a worktree Shoal does not manage, or the start of a
     /// rebase or bisect in one.
@@ -290,7 +290,9 @@ async fn kept_status(
         return Ok(Status::Released);
     }
     let commit = git::status::local_branch_commit(repo, &record.branch).await?;
-    if commit.as_deref() != Some(record.head.as_str()) {
+    if commit.as_deref() != Some(record.head.as_str())
+        || git::branch::is_symbolic(repo, &record.branch).await?
+    {
         return Ok(Status::Released);
     }
     if git::checkout_of(repo, &record.branch, git::run)
