@@ -151,6 +151,22 @@ impl View {
         }
     }
 
+    /// The view after the one fzf shows with `prompt`, or the first.
+    fn after(prompt: &str, views: &[Self]) -> Self {
+        let shown = views.iter().position(|view| view.prompt() == prompt);
+        views[shown.map_or(0, |shown| (shown + 1) % views.len())]
+    }
+
+    /// The fzf names of the keys a caller with this scope may not use here.
+    fn unbound(self, scoped: bool) -> Vec<&'static str> {
+        let bound = self.bound(scoped);
+        Key::ALL
+            .into_iter()
+            .filter(|key| !bound.contains(key))
+            .map(Key::name)
+            .collect()
+    }
+
     /// The keys a caller with this scope may use here.
     fn bound(self, scoped: bool) -> Vec<Key> {
         self.keys()
@@ -176,11 +192,7 @@ impl View {
     /// `reload`: rebind its keys, unbind the others, and name it.
     fn switch_to(self, scoped: bool, reload: &str) -> String {
         let keys = self.bound(scoped);
-        let unbound: Vec<_> = Key::ALL
-            .into_iter()
-            .filter(|key| !keys.contains(key))
-            .map(Key::name)
-            .collect();
+        let unbound = self.unbound(scoped);
         let bound: Vec<_> = keys.iter().map(|key| key.name()).collect();
         let mut actions = Vec::new();
         if !unbound.is_empty() {
@@ -314,26 +326,17 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command
         None if view == View::Inbox => current_items(ctx, &entries).await?,
         _ => None,
     };
-    let keys = view.bound(scoped);
-    let names: Vec<_> = Key::ALL.into_iter().map(Key::name).collect();
-    let unbound: Vec<_> = Key::ALL
-        .into_iter()
-        .filter(|key| !keys.contains(key))
-        .map(Key::name)
-        .collect();
-    let next = if views.len() > 1 {
-        Some(self_command(ctx, &["menu-next"])?)
-    } else {
-        None
-    };
+    let next = (views.len() > 1)
+        .then(|| self_command(ctx, &["menu-next"]))
+        .transpose()?;
     let picked = ui::pick_in_views(
         ctx,
         entries,
         ViewPicker {
             prompt: view.prompt(),
-            header: &view.header(&keys, next.is_some()),
-            keys: &names,
-            unbound: &unbound,
+            header: &view.header(&view.bound(scoped), next.is_some()),
+            keys: &Key::ALL.map(Key::name),
+            unbound: &view.unbound(scoped),
             next,
             query,
         },
@@ -389,11 +392,7 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     let scoped = env::is_scoped();
     let views = View::available(scoped);
     let prompt = std::env::var("FZF_PROMPT").unwrap_or_default();
-    let current = views
-        .iter()
-        .position(|view| view.prompt() == prompt)
-        .unwrap_or(0);
-    let next = views[(current + 1) % views.len()];
+    let next = View::after(&prompt, views);
     let name = next.to_possible_value().context("views have names")?;
     let reload = self_command(ctx, &["menu-rows", name.get_name()])?;
     println!("{}", next.switch_to(scoped, &reload));
