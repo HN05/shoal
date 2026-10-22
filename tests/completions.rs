@@ -120,7 +120,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::write(
         home.path().join(".config/shoal/config.toml"),
         "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n\
-         [ai.droid]\ncommand = ['droid']\n",
+         [ai.droid]\ncommand = ['droid']\n[happy]\nenabled = true\n",
     )
     .unwrap();
     install_programs(
@@ -182,7 +182,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
 #[test]
 fn agents_without_installed_executables_are_not_completed() {
     let home = tempfile::tempdir().unwrap();
-    install_programs(home.path(), &["claude", "tuicr"]);
+    // Happy is installed but not enabled, so neither it nor its agents complete.
+    install_programs(home.path(), &["claude", "tuicr", "happy"]);
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
