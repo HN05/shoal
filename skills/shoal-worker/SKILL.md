@@ -23,11 +23,16 @@ Open your PR with `shoal --json pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
 A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
-yourself when the PR completes the issue. Change your
-PR or issue through Shoal, which acts as your agent account and records the
-change: `shoal --json pr edit` (`--title`, `--body-file`,
-`--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
---body-file`, `pr close`, and the same `issue` commands. Answer each review
+yourself when the PR completes the issue. Before opening an issue or PR, read the
+repository's contribution rules and forge template for what the description
+needs, and choose labels from `shoal labels`, which lists each with its meaning.
+Opening refuses an item without a label `required_labels` asks for; `pr open`,
+`issue open` and `ready` report `warnings` for missing labels or template
+headings, which you fix with `edit`. Change your PR or issue through Shoal,
+which acts as your agent account and records the change: `shoal --json pr edit`
+(`--title`, `--body-file`, `--add-label`, `--add-reviewer`,
+`--draft`/`--no-draft`), `pr comment --body-file`, `pr close`, and the same
+`issue` commands. Answer each review
 finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread
