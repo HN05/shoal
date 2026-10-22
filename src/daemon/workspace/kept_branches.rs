@@ -25,6 +25,15 @@ struct Record {
     kept_at: u64,
 }
 
+/// Where a kept branch's commits may also be.
+#[derive(Debug, Clone, Copy)]
+enum Evidence<'a> {
+    /// The remote-tracking refs, which may be stale: enough to show a count.
+    TrackingRefs,
+    /// What the remotes advertise now, for deleting without asking.
+    Advertised(&'a [git::RemoteHead]),
+}
+
 /// What a kept branch is now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
@@ -87,10 +96,14 @@ impl Manager {
             .await
     }
 
-    /// Delete the repository's kept branches whose commits a remote or the
-    /// default branch now has. The caller has fetched the remotes those refs
-    /// come from.
-    pub async fn delete_kept_branches_kept_elsewhere(&self, repository_id: &str) -> Result<()> {
+    /// Delete the repository's kept branches whose commits the default branch
+    /// or one of `heads`, which the remotes advertise now, has. The caller has
+    /// fetched the default branch.
+    pub async fn delete_kept_branches_kept_elsewhere(
+        &self,
+        repository_id: &str,
+        heads: &[git::RemoteHead],
+    ) -> Result<()> {
         let repo = self.repository(repository_id).await?;
         // Creation opens branches under the same gate.
         let _git = self.lock_repository_git(&repo.id).await;
@@ -100,7 +113,8 @@ impl Manager {
         else {
             return Ok(());
         };
-        for (record, status) in self.kept_statuses(&repo, Some(&default)).await? {
+        let evidence = Evidence::Advertised(heads);
+        for (record, status) in self.kept_statuses(&repo, Some(&default), evidence).await? {
             if status == (Status::Kept { unkept_commits: 0 }) {
                 git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
                 self.forget_kept_branch(&record).await?;
@@ -122,7 +136,10 @@ impl Manager {
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
-            for (record, status) in self.kept_statuses(&repo, default.as_deref()).await? {
+            let statuses = self
+                .kept_statuses(&repo, default.as_deref(), Evidence::TrackingRefs)
+                .await?;
+            for (record, status) in statuses {
                 if let Status::Kept { unkept_commits } = status
                     && unkept_commits > 0
                 {
@@ -158,7 +175,9 @@ impl Manager {
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .context("the default branch is unknown, and could be any kept branch")?;
-            let statuses = self.kept_statuses(&repo, Some(&default)).await?;
+            let statuses = self
+                .kept_statuses(&repo, Some(&default), Evidence::TrackingRefs)
+                .await?;
             for target in targets.iter().filter(|t| &t.repository_id == repository_id) {
                 let (record, status) = statuses
                     .iter()
@@ -199,11 +218,12 @@ impl Manager {
         &self,
         repo: &Repository,
         default: Option<&str>,
+        evidence: Evidence<'_>,
     ) -> Result<Vec<(Record, Status)>> {
         let workspaces = self.workspace_branches(&repo.id).await?;
         let mut statuses = Vec::new();
         for record in self.kept_records(&repo.id).await? {
-            let status = kept_status(&repo.path, &record, default, &workspaces).await?;
+            let status = kept_status(&repo.path, &record, default, &workspaces, evidence).await?;
             if status == Status::Released {
                 self.forget_kept_branch(&record).await?;
             }
@@ -285,6 +305,7 @@ async fn kept_status(
     record: &Record,
     default: Option<&str>,
     workspaces: &[String],
+    evidence: Evidence<'_>,
 ) -> Result<Status> {
     if default == Some(record.branch.as_str()) || workspaces.contains(&record.branch) {
         return Ok(Status::Released);
@@ -302,9 +323,14 @@ async fn kept_status(
     {
         return Ok(Status::CheckedOut);
     }
-    let unkept_commits = match default {
-        Some(default) => git::status::unkept_commits(repo, &record.head, default).await?,
-        None => git::status::unretained_commits(repo, &record.head, None).await?,
+    let unkept_commits = match (default, evidence) {
+        (Some(default), Evidence::Advertised(heads)) => {
+            git::status::unkept_commits_by(repo, &record.head, default, heads).await?
+        }
+        (Some(default), Evidence::TrackingRefs) => {
+            git::status::unkept_commits(repo, &record.head, default).await?
+        }
+        (None, _) => git::status::unretained_commits(repo, &record.head, None).await?,
     };
     Ok(Status::Kept { unkept_commits })
 }

@@ -88,6 +88,30 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, St
     }))
 }
 
+/// A branch a remote advertises, with its commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteHead {
+    /// The full ref on the remote, such as `refs/heads/main`.
+    pub name: String,
+    pub commit: String,
+}
+
+/// The branches `remote` itself advertises now, whatever the local
+/// remote-tracking refs say.
+pub async fn remote_heads(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> {
+    let listing = run_isolated(repo, &["ls-remote", "--heads", "--", remote]).await?;
+    Ok(listing
+        .lines()
+        .filter_map(|line| {
+            let (commit, name) = line.split_once('\t')?;
+            Some(RemoteHead {
+                name: name.to_owned(),
+                commit: commit.to_owned(),
+            })
+        })
+        .collect())
+}
+
 /// Whether `remote` itself advertises `branch`, which need not be fetched yet.
 pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Result<bool> {
     let heads = run_isolated(

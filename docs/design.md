@@ -1106,10 +1106,12 @@ cannot be resolved, is retained. Manual removal asks only before deleting
 uncommitted or untracked files or commits on a detached HEAD, which no branch keeps.
 Shoal remembers each branch a removal kept, at the commit removal left it on, and
 the cleanup sweep deletes it once a remote or the default branch has all its
-commits, after fetching the repository's remotes at most every ten minutes and
-without notifying anyone. A kept branch that moved or went away, is the default
-branch or belongs to a workspace again is forgotten; one checked out elsewhere
-waits. Removal records name the branches kept before Shoal remembered them.
+commits, without notifying anyone. At most every ten minutes it fetches the
+default branch and asks every remote which branches it has; only those answers
+count, never remote-tracking refs, which a narrowed fetch mapping or a deleted
+remote branch can leave stale. A kept branch that moved or went away, is the
+default branch or belongs to a workspace again is forgotten; one checked out, or
+the start or target of a rebase or bisect elsewhere, waits. Removal records name the branches kept before Shoal remembered them.
 `shoal branch` lists the kept branches with commits only they have, and
 `shoal branch rm` deletes the ones the user picks, several at once, after
 checking each is still at the commit removal left it on and not checked out.

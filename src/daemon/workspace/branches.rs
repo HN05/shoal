@@ -127,18 +127,18 @@ impl Manager {
         Ok(())
     }
 
-    /// Fetch every remote, so each remote-tracking ref a check trusts is
-    /// current and those of deleted branches are gone; local branches stay
-    /// unchanged.
-    pub async fn fetch_all_remotes(&self, repository_id: &str) -> Result<()> {
+    /// The branches every remote of the repository advertises now.
+    pub async fn remote_heads(&self, repository_id: &str) -> Result<Vec<git::RemoteHead>> {
         let repo = self.repository(repository_id).await?;
-        let _guard = self.lock_repository_git(&repo.id).await;
+        let mut heads = Vec::new();
         for remote in git::remotes(&repo.path, git::run_isolated).await?.lines() {
-            fetch::remote(&repo.path, remote)
-                .await
-                .with_context(|| format!("could not fetch {remote}"))?;
+            heads.extend(
+                git::remote_heads(&repo.path, remote)
+                    .await
+                    .with_context(|| format!("could not list the branches of {remote}"))?,
+            );
         }
-        Ok(())
+        Ok(heads)
     }
 
     /// Whether the freshly fetched default branch already has the

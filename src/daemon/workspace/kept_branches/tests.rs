@@ -74,6 +74,15 @@ async fn remembered(manager: &Manager, repo: &Repository) -> Vec<String> {
         .collect()
 }
 
+/// One kept-branch pass with what the remotes advertise now.
+async fn sweep_kept(manager: &Manager, repo: &Repository) {
+    let heads = manager.remote_heads(&repo.id).await.unwrap();
+    manager
+        .delete_kept_branches_kept_elsewhere(&repo.id, &heads)
+        .await
+        .unwrap();
+}
+
 fn branch_exists(repo: &Repository, name: &str) -> bool {
     !git(&repo.path, &["branch", "--list", name])
         .trim()
@@ -86,17 +95,11 @@ async fn a_kept_branch_goes_once_a_remote_has_its_commits() {
     kept(&manager, &repo, "topic").await;
     assert_eq!(remembered(&manager, &repo).await, ["topic"]);
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(branch_exists(&repo, "topic"));
 
     git(&repo.path, &["push", "-q", "-u", "origin", "topic"]);
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(!branch_exists(&repo, "topic"));
     assert!(remembered(&manager, &repo).await.is_empty());
     // A branch created later under the name starts without the old upstream.
@@ -141,10 +144,7 @@ async fn a_moved_reopened_or_deleted_branch_is_forgotten_and_left_alone() {
     // Every remaining one would otherwise be deleted.
     git(&repo.path, &["push", "-q", "origin", "moved", "reopened"]);
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(remembered(&manager, &repo).await.is_empty());
     assert!(branch_exists(&repo, "moved"));
     assert!(branch_exists(&repo, "reopened"));
@@ -168,10 +168,7 @@ async fn a_branch_checked_out_elsewhere_stays_remembered() {
         ],
     );
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(branch_exists(&repo, "topic"));
     assert_eq!(remembered(&manager, &repo).await, ["topic"]);
 
@@ -179,10 +176,7 @@ async fn a_branch_checked_out_elsewhere_stays_remembered() {
         &repo.path,
         &["worktree", "remove", elsewhere.to_str().unwrap()],
     );
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(!branch_exists(&repo, "topic"));
 }
 
@@ -284,10 +278,24 @@ async fn a_stale_ref_of_another_remote_does_not_approve_deletion() {
         .unwrap();
     assert!(branch_exists(&repo, "topic"));
     assert_eq!(remembered(&manager, &repo).await, ["topic"]);
-    assert_eq!(
-        git(&repo.path, &["for-each-ref", "refs/remotes/mirror/"]),
-        ""
-    );
+}
+
+#[tokio::test]
+async fn a_ref_outside_the_fetch_mapping_does_not_approve_deletion() {
+    let (_root, manager, repo, other) = fixture().await;
+    kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["push", "-q", "origin", "topic"]);
+    // Fetching origin no longer refreshes origin/topic, which the remote
+    // then drops.
+    git(&repo.path, &["remote", "set-branches", "origin", "main"]);
+    git(&other, &["push", "-q", "origin", "--delete", "topic"]);
+
+    crate::daemon::cleanup::sweep(&manager, &mut Default::default())
+        .await
+        .unwrap();
+    assert!(!git(&repo.path, &["rev-parse", "refs/remotes/origin/topic"]).is_empty());
+    assert!(branch_exists(&repo, "topic"));
+    assert_eq!(remembered(&manager, &repo).await, ["topic"]);
 }
 
 #[tokio::test]
@@ -310,10 +318,7 @@ async fn a_branch_a_bisect_started_from_stays() {
     // Bisecting moves HEAD off the branch it returns to.
     git(&elsewhere, &["switch", "-q", "--detach", "main"]);
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(branch_exists(&repo, "topic"));
 
     git(&elsewhere, &["bisect", "reset"]);
@@ -321,10 +326,7 @@ async fn a_branch_a_bisect_started_from_stays() {
         &repo.path,
         &["worktree", "remove", elsewhere.to_str().unwrap()],
     );
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(!branch_exists(&repo, "topic"));
 }
 
@@ -339,10 +341,7 @@ async fn a_kept_branch_made_symbolic_is_forgotten_without_touching_its_target() 
         &["symbolic-ref", "refs/heads/topic", "refs/heads/side"],
     );
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(remembered(&manager, &repo).await.is_empty());
     assert!(branch_exists(&repo, "side"));
 }
@@ -378,10 +377,7 @@ async fn a_branch_a_paused_rebase_will_update_stays() {
     let refs = fs::read_to_string(common.join("rebase-merge/update-refs")).unwrap();
     assert!(refs.contains("refs/heads/topic"), "{refs}");
 
-    manager
-        .delete_kept_branches_kept_elsewhere(&repo.id)
-        .await
-        .unwrap();
+    sweep_kept(&manager, &repo).await;
     assert!(branch_exists(&repo, "topic"));
     git(&elsewhere, &["rebase", "--abort"]);
 }

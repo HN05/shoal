@@ -25,7 +25,7 @@ use crate::{
 const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
 
 /// Fetch a repository's default branch at most this often.
-const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
+pub(super) const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
@@ -45,54 +45,31 @@ impl State {
     }
 }
 
-/// The remotes a cleanup rule's decisions read.
-#[derive(Clone, Copy, Default)]
-pub(super) enum FetchScope {
-    /// Those of the default branch, for merge checks.
-    #[default]
-    DefaultBranch,
-    /// Every remote, for checks that trust any remote-tracking ref.
-    AllRemotes,
-}
-
-/// When each repository's remotes in `scope` were last fetched successfully.
+/// When each repository's default branch was last fetched successfully.
 #[derive(Default)]
-pub(super) struct Fetches {
-    scope: FetchScope,
-    at: HashMap<String, Instant>,
-}
+pub(super) struct Fetches(HashMap<String, Instant>);
 
 impl Fetches {
-    pub(super) fn new(scope: FetchScope) -> Self {
-        Self {
-            scope,
-            at: HashMap::new(),
-        }
-    }
-
-    /// Whether the remotes are freshly fetched, fetching them unless that
-    /// succeeded recently. Stale refs may show commits a remote no longer
-    /// has, so after a failed fetch nothing in the repository is decided.
+    /// Whether the default branch is freshly fetched, fetching it unless that
+    /// succeeded recently. Stale refs may show changes the default branch no
+    /// longer has, so after a failed fetch nothing in the repository that
+    /// depends on it is decided.
     pub(super) async fn fresh(&mut self, manager: &Manager, repository_id: &str) -> bool {
         let now = Instant::now();
         if self
-            .at
+            .0
             .get(repository_id)
             .is_some_and(|at| now.duration_since(*at) < FETCH_INTERVAL)
         {
             return true;
         }
-        let fetched = match self.scope {
-            FetchScope::DefaultBranch => manager.fetch_default_branch(repository_id).await,
-            FetchScope::AllRemotes => manager.fetch_all_remotes(repository_id).await,
-        };
-        match fetched {
+        match manager.fetch_default_branch(repository_id).await {
             Ok(()) => {
-                self.at.insert(repository_id.to_owned(), now);
+                self.0.insert(repository_id.to_owned(), now);
                 true
             }
             Err(error) => {
-                log!("cleanup could not fetch: {error:#}");
+                log!("cleanup could not fetch the default branch: {error:#}");
                 false
             }
         }
