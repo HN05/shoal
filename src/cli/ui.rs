@@ -335,6 +335,8 @@ pub struct ViewPicker<'a> {
     pub unbound: &'a [&'a str],
     /// The command whose output, fzf actions, shows the next view.
     pub next: Option<String>,
+    /// The search the picker starts with.
+    pub query: Option<String>,
 }
 
 /// Choose an entry with one of `picker.keys`, returning the key pressed.
@@ -353,6 +355,9 @@ pub fn pick_in_views(
     }
     if let Some(next) = picker.next {
         args.extend(["--bind".into(), format!("tab:transform({next})")]);
+    }
+    if let Some(query) = picker.query {
+        args.extend(["--query".into(), query]);
     }
     run_picker(ctx, picker.prompt, entries, args, true)
 }
@@ -648,6 +653,16 @@ async fn resolve_workspace(
         return Err(NoCurrentWorkspace.into());
     }
     Ok(Resolution::Picker(workspaces))
+}
+
+/// The workspace containing the current directory, for an unscoped caller.
+pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
+    if crate::env::is_scoped() {
+        return Ok(None);
+    }
+    let cwd = current_directory()?;
+    let context = WorkspaceContext::from_directory(workspaces, cwd.as_deref());
+    Ok(context.resolve(None, false, ScopeOrder::BeforeDirectory))
 }
 
 /// Always run the picker, including for scoped callers (whose list is filtered).

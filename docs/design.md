@@ -642,7 +642,8 @@ Bare `shoal` is the one place to see what needs the user and the work going
 on: a plain fzf picker whose inbox view lists open questions, pending approvals,
 agents that need input, failed workspaces and current ready marks, and whose
 work view lists workspaces, followed by a view of recent notifications. It opens
-on the inbox when that has rows; Tab reloads the next view in place, and each view binds only the keys that act on
+on the inbox when that has rows, searching for the current workspace's items
+when it has some; Tab reloads the next view in place, and each view binds only the keys that act on
 its rows, with a key meaning the same wherever it is bound. Acting on a row
 runs the command that handles its kind. `inbox` and `work` open the same picker
 on their view, and print for scripts with `--print`, filters, JSON or without a

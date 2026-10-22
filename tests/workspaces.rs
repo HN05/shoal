@@ -7805,8 +7805,14 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
     );
     assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
 
+    // Inside a workspace with items, it starts searching for them.
+    let path = Path::new(asker["path"].as_str().unwrap());
+    fixture.interactive_command(fixture.command().current_dir(path).env("PICK", ""), "");
+    assert!(read("picker-args").contains("--query\n'asker\n"));
+
     // Now bare shoal opens on the inbox, and Enter answers the question.
     let (output, transcript, args, rows) = open("question:", "Postgres\n");
+    assert!(!args.contains("--query"), "{args}");
     assert!(output.status.success(), "{transcript}");
     assert!(args.contains("--prompt\ninbox> \n"), "{args}");
     assert!(

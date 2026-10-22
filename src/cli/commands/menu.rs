@@ -305,11 +305,15 @@ impl Row {
 }
 
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
-/// the user.
+/// the user, searching for the current workspace's items when it has any.
 pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command> {
     let scoped = env::is_scoped();
     let views = View::available(scoped);
     let (view, entries) = first_view(ctx, start, views, scoped).await?;
+    let query = match start {
+        None if view == View::Inbox => current_items(ctx, &entries).await?,
+        _ => None,
+    };
     let keys = view.bound(scoped);
     let names: Vec<_> = Key::ALL.into_iter().map(Key::name).collect();
     let unbound: Vec<_> = Key::ALL
@@ -331,9 +335,23 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command
             keys: &names,
             unbound: &unbound,
             next,
+            query,
         },
     )?;
     command(ctx, Key::parse(&picked.action)?, Row::parse(picked.id)?).await
+}
+
+/// An exact search for the current workspace's name when `entries` hold
+/// items of it.
+async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String>> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let Some(current) = ui::current_workspace(&workspaces)? else {
+        return Ok(None);
+    };
+    let has_items = entries.iter().any(|(id, _)| {
+        Row::parse(id.clone()).is_ok_and(|row| row.workspace() == Some(current.id.as_str()))
+    });
+    Ok(has_items.then(|| format!("'{}", current.name)))
 }
 
 /// The view to open and its rows: `start`, or the first available view
