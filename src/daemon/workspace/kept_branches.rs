@@ -134,7 +134,8 @@ impl Manager {
 
     /// Delete the targets with the commits only they have, checking every
     /// one before deleting any. A target must be a kept branch still at the
-    /// commit removal left it on, and not checked out.
+    /// commit removal left it on, not checked out, in a repository whose
+    /// default branch resolves.
     pub async fn delete_kept_branches(
         &self,
         targets: Vec<BranchTarget>,
@@ -152,10 +153,11 @@ impl Manager {
         for repository_id in &repository_ids {
             let repo = self.repository(repository_id).await?;
             gates.push(self.lock_repository_git(&repo.id).await);
+            // An unresolved default branch could be any of them.
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
-                .ok();
-            let statuses = self.kept_statuses(&repo, default.as_deref()).await?;
+                .context("the default branch is unknown, and could be any kept branch")?;
+            let statuses = self.kept_statuses(&repo, Some(&default)).await?;
             for target in targets.iter().filter(|t| &t.repository_id == repository_id) {
                 let (record, status) = statuses
                     .iter()

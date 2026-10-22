@@ -1464,7 +1464,8 @@ shoal branch rm --all --repo project # Delete every kept branch of a repository
 remote or the default branch, with the count of those commits and the last one.
 `shoal branch rm` deletes them with those commits after `Are you sure? [y/N]`, or
 with `--yes`; it checks every branch first and deletes none when one has moved,
-is checked out or is no longer kept. Name a branch kept in several repositories
+is checked out or is no longer kept, or when its repository's default branch is
+unknown. Name a branch kept in several repositories
 with `--repo`. The removal's checkpoint still holds the commits until it expires.
 Workspace processes cannot list or delete kept branches.
 
