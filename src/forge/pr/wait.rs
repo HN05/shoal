@@ -71,18 +71,20 @@ impl ActiveWaits {
 }
 
 impl ActiveWaits {
-    /// Run `operation` unless a wait runs in the workspace; no wait can start
-    /// while it runs.
-    fn unless_running(
+    /// Run `operation` with those of `workspaces` no wait runs in; no wait
+    /// can start while it runs.
+    fn with_idle(
         &self,
-        workspace: &str,
-        operation: impl FnOnce() -> Result<()>,
+        workspaces: &[String],
+        operation: impl FnOnce(&[String]) -> Result<()>,
     ) -> Result<()> {
         let waits = self.0.lock().expect("active waits lock");
-        if waits.contains_key(workspace) {
-            return Ok(());
-        }
-        operation()
+        let idle = workspaces
+            .iter()
+            .filter(|workspace| !waits.contains_key(*workspace))
+            .cloned()
+            .collect::<Vec<_>>();
+        operation(&idle)
     }
 }
 
@@ -213,7 +215,7 @@ impl Manager {
         let id = workspace.id.clone();
         let mut updates = self.queued_updates(workspace).await?;
         updates.extend(self.delegated_pending(&id, None).await?);
-        Ok(updates)
+        Ok(within_frame(updates))
     }
 
     /// The workspace and the child workspaces whose updates its agent receives.
@@ -327,6 +329,7 @@ impl Manager {
         let mut pending = self.pending_activity(id, &keys).await?;
         if selection.input.is_none() {
             pending.extend(self.delegated_pending(id, selection.kind).await?);
+            pending = within_frame(pending);
         }
         if !pending.is_empty() {
             drop(guard);
@@ -735,24 +738,13 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
-                let records = activity_records(&tx, &delivered)?;
-                for (id, url, record) in records {
-                    let mut record: ActivityRecord = serde_json::from_str(&record)?;
-                    let pending = record.pending.len();
-                    // Updates queued after the acknowledged delivery stay pending.
-                    record
-                        .pending
-                        .retain(|update| !deliveries.contains(&update.delivery));
-                    if record.pending.len() != pending {
-                        tx.execute(
-                            "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
-                            params![serde_json::to_string(&record)?, id, url],
-                        )?;
-                    }
-                }
-                // A delivering wait has ended, so a running wait started after
-                // it and must report these updates as well.
-                waits.unless_running(&workspace.id, || Ok(tx.commit()?))
+                // A delivering wait has ended, so a wait running in one of
+                // these workspaces started after it and must report their
+                // updates as well.
+                waits.with_idle(&delivered, |idle| {
+                    acknowledge_deliveries(&tx, idle, &deliveries)?;
+                    Ok(tx.commit()?)
+                })
             })
             .await?;
         self.agent_wake_changed.send_modify(|count| *count += 1);
@@ -826,6 +818,44 @@ pub(super) fn queue_update(
         params![workspace_id, url, serde_json::to_string(&record)?],
     )?;
     Ok(())
+}
+
+/// Remove `deliveries` from the pending updates of the workspaces `ids`;
+/// updates queued after them stay pending.
+fn acknowledge_deliveries(
+    db: &rusqlite::Connection,
+    ids: &[String],
+    deliveries: &[String],
+) -> Result<()> {
+    for (id, url, record) in activity_records(db, ids)? {
+        let mut record: ActivityRecord = serde_json::from_str(&record)?;
+        let pending = record.pending.len();
+        record
+            .pending
+            .retain(|update| !deliveries.contains(&update.delivery));
+        if record.pending.len() != pending {
+            db.execute(
+                "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
+                params![serde_json::to_string(&record)?, id, url],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// The leading `updates` that fit in one response beside its other fields,
+/// at least one; the rest stay pending for the next delivery.
+fn within_frame(mut updates: Vec<Update>) -> Vec<Update> {
+    let mut size = 0;
+    let fitting = updates
+        .iter()
+        .take_while(|update| {
+            size += serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()) + 1;
+            size < crate::protocol::MAX_FRAME - 256
+        })
+        .count();
+    updates.truncate(fitting.max(1));
+    updates
 }
 
 /// Whether the workspace, or a child workspace whose activity its agent
@@ -1381,6 +1411,88 @@ mod tests {
                 .updates
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        for (workspace, url) in [(&parent, "parent-pr"), (&child, "child-pr")] {
+            register_watch(&manager, &workspace.id, url).await;
+            manager
+                .queue_background_updates(
+                    &workspace.id,
+                    vec![(url.into(), snapshot("first"))],
+                    crate::time::unix_seconds(),
+                )
+                .await
+                .unwrap();
+        }
+        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        assert_eq!(delivered.updates.len(), 2);
+        let deliveries = delivered
+            .updates
+            .iter()
+            .map(|update| update.delivery.clone())
+            .collect::<Vec<_>>();
+        // A watch in the child starts before the parent acknowledges.
+        let child_wait = manager.item_waits.start(&child.id);
+        manager
+            .acknowledge_pr_updates(&parent.id, deliveries.clone())
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .pending_pr_activity(&parent.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            manager.pending_pr_activity(&child.id).await.unwrap().len(),
+            1
+        );
+        drop(child_wait);
+        manager
+            .acknowledge_pr_updates(&parent.id, deliveries)
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .pending_pr_activity(&child.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn combined_updates_fit_one_response() {
+        let update = |n: usize| Update {
+            url: format!("pr-{n}"),
+            kind: UpdateKind::Comment,
+            message: "x".repeat(4096),
+            delivery: n.to_string(),
+            check: None,
+            workspace: Some("child".into()),
+        };
+        let fitting = within_frame((0..64).map(update).collect());
+        assert!(!fitting.is_empty() && fitting.len() < 64);
+        assert_eq!(fitting[0].url, "pr-0");
+        assert!(serde_json::to_vec(&fitting).unwrap().len() < crate::protocol::MAX_FRAME - 256);
+        assert!(within_frame(Vec::new()).is_empty());
     }
 
     #[tokio::test]
