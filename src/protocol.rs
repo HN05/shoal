@@ -140,39 +140,39 @@ pub enum Method {
     // Repositories.
     ListRepositories,
     RegisterRepository {
-        source: crate::forge::repository::Selector,
+        source: crate::repository::Selector,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
     },
     RenameRepository {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         name: String,
     },
     RepositoryConfig {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
     },
     SetRepositoryConfig {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         toml: Option<String>,
     },
     EditRepositoryConfig {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
     },
     /// Fetch the default branch's remote and fast-forward the local default branch.
     SyncRepository {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
     },
     // Workspaces.
     ListBranches {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
     },
     OpenBranch {
         path: Option<std::path::PathBuf>,
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         branch: String,
         git_profile: Option<String>,
         base: Option<String>,
@@ -181,7 +181,7 @@ pub enum Method {
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
@@ -202,7 +202,7 @@ pub enum Method {
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.
     CheckCreation {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         /// The new branch; `existing` names a branch to open instead.
         branch: Option<String>,
         existing: Option<String>,
@@ -211,7 +211,7 @@ pub enum Method {
         path: Option<std::path::PathBuf>,
     },
     AdoptWorkspace {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         path: std::path::PathBuf,
         copy: bool,
     },
@@ -223,7 +223,7 @@ pub enum Method {
     // Chats in registered checkouts.
     /// Record a chat whose agent replaces process `pid`.
     StartChat {
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         agent: String,
         pid: u32,
     },
@@ -708,7 +708,7 @@ impl Response {
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
     Workspace(String),
-    Repository(crate::forge::repository::Selector),
+    Repository(crate::repository::Selector),
 }
 
 impl<T> Allocation<T> {

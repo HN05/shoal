@@ -19,6 +19,7 @@ mod presets;
 mod process;
 mod protocol;
 mod removal;
+mod repository;
 mod secrets;
 mod seed;
 mod service;

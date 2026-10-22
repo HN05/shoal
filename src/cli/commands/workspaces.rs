@@ -27,7 +27,6 @@ use crate::{
         IssueInput,
         link::Selection,
         pr::{RegistrationKind, state::PrStatus},
-        repository,
     },
     git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
@@ -37,7 +36,7 @@ use crate::{
     },
     protocol::{Body, ConfigTarget, Method},
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
-    shell,
+    repository, shell,
     state::WorkspaceState,
 };
 
@@ -404,7 +403,7 @@ async fn planned_workspace_name(
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(in crate::cli) struct AddPlan {
-    pub repository: crate::forge::repository::Selector,
+    pub repository: crate::repository::Selector,
     pub creation: Creation,
     tab_label: Option<String>,
     #[serde(default)]
@@ -643,7 +642,7 @@ pub(super) async fn link_pull(
 }
 
 struct AddTarget {
-    selector: crate::forge::repository::Selector,
+    selector: crate::repository::Selector,
     repositories: tokio::sync::OnceCell<Vec<Repository>>,
 }
 
@@ -653,7 +652,7 @@ impl AddTarget {
             .repositories
             .get_or_try_init(|| client::repositories(&ctx.paths))
             .await?;
-        crate::forge::repository::select(repos, &self.selector).await
+        crate::repository::select(repos, &self.selector).await
     }
 }
 
@@ -733,7 +732,7 @@ struct ResolvedAddAgent {
 /// The repository's effective settings, loaded on first use.
 struct AddSettings<'a> {
     ctx: &'a Context,
-    repository: &'a crate::forge::repository::Selector,
+    repository: &'a crate::repository::Selector,
     effective: tokio::sync::OnceCell<crate::config::Effective>,
 }
 

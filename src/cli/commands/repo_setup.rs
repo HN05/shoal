@@ -6,10 +6,10 @@ use anyhow::{Context as _, Result};
 use crate::{
     agent::{Agent, CodexMode},
     cli::{agents, client, context::Context},
-    forge::repository,
     git,
     model::{Repository, Workspace},
     protocol::ConfigTarget,
+    repository,
 };
 
 /// The branch the setup agent commits the config on.

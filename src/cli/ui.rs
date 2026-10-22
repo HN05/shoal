@@ -815,7 +815,7 @@ pub fn chat_label(chat: &Chat, repositories: &[Repository]) -> String {
     let repository = repositories
         .iter()
         .find(|repo| repo.id == chat.repository_id)
-        .map_or("unknown repository", crate::forge::repository::name);
+        .map_or("unknown repository", crate::repository::name);
     match chat.number {
         1 => format!("{repository} chat"),
         number => format!("{repository} chat {number}"),
@@ -879,7 +879,7 @@ pub fn queue_rows(
             repositories
                 .iter()
                 .find(|repo| repo.id == entry.repository_id)
-                .map_or("unknown repository", crate::forge::repository::name)
+                .map_or("unknown repository", crate::repository::name)
         })
         .collect();
     let several = names.iter().collect::<HashSet<_>>().len() > 1;
@@ -1018,7 +1018,7 @@ pub fn aligned<const N: usize>(rows: Vec<[Cell; N]>, palette: Palette) -> Vec<St
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {
     format!(
         "{}  {}",
-        palette.paint(Style::Heading, crate::forge::repository::name(repo)),
+        palette.paint(Style::Heading, crate::repository::name(repo)),
         palette.paint(Style::Muted, &repo.source)
     )
 }
@@ -1026,23 +1026,23 @@ pub fn repository_label(repo: &Repository, palette: Palette) -> String {
 /// Picker entries that stay unambiguous when repositories share a name.
 pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
     for repo in &mut repos {
-        if let Some(url) = crate::forge::repository::remote_url_from_source(&repo.source).await? {
+        if let Some(url) = crate::repository::remote_url_from_source(&repo.source).await? {
             repo.source = url;
         }
     }
     let labels: Vec<_> = repos
         .iter()
         .map(|repo| {
-            let name = crate::forge::repository::name(repo);
+            let name = crate::repository::name(repo);
             let shared = repos
                 .iter()
-                .filter(|r| crate::forge::repository::name(r) == name)
+                .filter(|r| crate::repository::name(r) == name)
                 .count()
                 > 1;
             if !shared {
                 return name.to_owned();
             }
-            match crate::forge::repository::host(&repo.source) {
+            match crate::repository::host(&repo.source) {
                 Some(host) => format!("{name} ({host})"),
                 None => format!("{name} (local)"),
             }
@@ -1064,11 +1064,11 @@ pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
 }
 
 /// Preserve the argument and resolve existing paths in the caller's directory.
-pub fn repository_selector(value: String) -> Result<crate::forge::repository::Selector> {
+pub fn repository_selector(value: String) -> Result<crate::repository::Selector> {
     if Path::new(&value).exists() {
         let path = std::fs::canonicalize(&value)?;
         path.to_str().context("repository path is not UTF-8")?;
-        Ok(crate::forge::repository::Selector::Path { value, path })
+        Ok(crate::repository::Selector::Path { value, path })
     } else {
         Ok(value.into())
     }

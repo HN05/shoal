@@ -8,11 +8,11 @@ use crate::{
         account::Account,
         link::{self, ItemKind, Relation},
         pr::{self, wait::linked_items},
-        repository,
         view::{Selected, SelectedItem},
     },
     git,
     model::{DiffSummary, Inspection, IssueStatus, Workspace, WorkspaceStatus, WorkspaceTarget},
+    repository,
 };
 
 impl Manager {

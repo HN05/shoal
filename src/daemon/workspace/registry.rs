@@ -1,6 +1,6 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, paths::canonical_with_missing_tail};
-use crate::{daemon::store, forge::repository, git, model::Repository, validate};
+use crate::{daemon::store, git, model::Repository, repository, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use std::{
@@ -181,7 +181,7 @@ impl Manager {
 
     pub async fn rename_repository(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
         name: String,
     ) -> Result<Repository> {
         validate::name("repository", &name)?;
@@ -216,7 +216,7 @@ impl Manager {
     /// equivalent remote to a registered repository.
     pub(crate) async fn repository(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
     ) -> Result<Repository> {
         Ok(repository::select(&self.repositories().await?, selector)
             .await?

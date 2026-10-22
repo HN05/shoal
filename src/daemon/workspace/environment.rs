@@ -45,7 +45,7 @@ impl Manager {
         let repository = self.repository(&workspace.repository_id).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
         let configured = settings.env;
-        let repository_name = crate::forge::repository::name(&repository).to_owned();
+        let repository_name = crate::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
         let token = Uuid::new_v4().to_string();
         let paths = self.paths.clone();

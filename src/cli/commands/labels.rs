@@ -4,9 +4,10 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::{ForgeRepo, labels::Label, repository},
+    forge::{ForgeRepo, labels::Label},
     model::Workspace,
     protocol::Method,
+    repository,
 };
 
 pub(super) async fn labels(ctx: &Context, workspace: Option<String>) -> Result<i32> {

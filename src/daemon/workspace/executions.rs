@@ -310,7 +310,7 @@ impl Manager {
         let environment = crate::env::render_configured_environment(
             &settings.env,
             &workspace,
-            crate::forge::repository::name(&repository),
+            crate::repository::name(&repository),
             &ports,
             &caches,
         );

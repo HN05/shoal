@@ -14,9 +14,10 @@ use crate::{
         store,
         workspace::Manager,
     },
-    forge::{ForgeRepo, repository},
+    forge::ForgeRepo,
     git,
     model::Workspace,
+    repository,
 };
 
 /// How a new PR watch is checked before it is recorded.

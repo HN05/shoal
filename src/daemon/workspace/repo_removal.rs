@@ -48,7 +48,7 @@ impl Manager {
 
     pub async fn remove_repository(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
     ) -> Result<RepositoryRemoval> {
         // Registration cannot adopt or allocate a path during removal. The Git
         // gate also serializes with workspace creation, branch refresh, and reconciliation.

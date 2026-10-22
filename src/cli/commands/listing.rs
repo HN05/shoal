@@ -24,7 +24,7 @@ impl ListFilter {
                 let repos = client::repositories(&ctx.paths).await?;
                 let selector = ui::repository_selector(selector)?;
                 Some(
-                    crate::forge::repository::select(&repos, selector)
+                    crate::repository::select(&repos, selector)
                         .await?
                         .id
                         .clone(),

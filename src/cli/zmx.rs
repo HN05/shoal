@@ -20,8 +20,8 @@ use super::{
 };
 use crate::{
     env,
-    forge::repository,
     model::{Repository, Workspace},
+    repository,
     subprocess::Run,
     tools::Tool,
 };

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 impl Manager {
     pub async fn adopt_workspace(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         path: &Path,
     ) -> Result<Workspace> {
         self.adopt_workspace_with_mode(repository, path, false)
@@ -23,7 +23,7 @@ impl Manager {
 
     pub async fn copy_workspace(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         path: &Path,
     ) -> Result<Workspace> {
         self.adopt_workspace_with_mode(repository, path, true).await
@@ -31,7 +31,7 @@ impl Manager {
 
     async fn adopt_workspace_with_mode(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         path: &Path,
         copy: bool,
     ) -> Result<Workspace> {

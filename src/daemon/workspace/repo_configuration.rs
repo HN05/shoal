@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 impl Manager {
     pub async fn repository_config(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
     ) -> Result<LocalConfig> {
         let repo = self.repository(selector).await?;
         Ok(LocalConfig {
@@ -27,7 +27,7 @@ impl Manager {
 
     pub async fn set_repository_config(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
         toml: Option<String>,
     ) -> Result<LocalConfig> {
         if let Some(text) = &toml {
@@ -42,7 +42,7 @@ impl Manager {
 
     pub async fn edit_repository_config(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
         changes: &[config::edit::Change],
     ) -> Result<LocalConfig> {
         // Hold the same gate as imports and removal across read/modify/write.
@@ -202,7 +202,7 @@ impl Manager {
         Ok(crate::env::render_configured_environment(
             &settings.env,
             workspace,
-            crate::forge::repository::name(&repository),
+            crate::repository::name(&repository),
             &ports,
             &caches,
         ))

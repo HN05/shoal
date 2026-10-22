@@ -52,7 +52,7 @@ impl Selected {
 
     /// Each item as the forge reports it now, in selection order.
     pub(crate) async fn view(&self, account: &Account, comments: bool) -> Result<Vec<ItemView>> {
-        let remote = super::repository::remote_url_from_path(&self.path)
+        let remote = crate::repository::remote_url_from_path(&self.path)
             .await?
             .context("item lookup needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;

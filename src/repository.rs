@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::{git, model::Repository};
 
-use super::remote_url::{RemoteUrl, source_name};
+use crate::forge::remote_url::{RemoteUrl, source_name};
 
 /// Preserve the caller's argument alongside a path resolved in its directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]

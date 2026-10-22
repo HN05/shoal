@@ -363,7 +363,7 @@ pub(super) async fn add(
             }
         },
     };
-    let repo = crate::forge::repository::select(&repos, &repository).await?;
+    let repo = crate::repository::select(&repos, &repository).await?;
     if issue {
         return workspaces::add(
             ctx,

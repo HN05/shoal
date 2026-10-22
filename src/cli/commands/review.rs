@@ -169,7 +169,7 @@ async fn item_repository(
             .await?
             .into(),
     };
-    Ok(crate::forge::repository::select(&repos, &repository)
+    Ok(crate::repository::select(&repos, &repository)
         .await?
         .clone())
 }
@@ -184,7 +184,7 @@ async fn pull_request(
     post: Option<bool>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let remote = crate::forge::repository::remote_url_from_path(&repo.path)
+    let remote = crate::repository::remote_url_from_path(&repo.path)
         .await?
         .context("PR review needs an origin remote")?;
     let pull = ForgeRepo::parse(&remote)?

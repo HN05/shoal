@@ -68,7 +68,7 @@ impl Plan {
             environment: crate::env::render_configured_environment(
                 &settings.env,
                 &identity,
-                crate::forge::repository::name(repo),
+                crate::repository::name(repo),
                 &[],
                 &crate::caches::locate(repo, &settings.caches),
             ),
@@ -106,7 +106,7 @@ impl Manager {
         };
         for repo in repositories {
             if let Err(error) = self.refresh_seed(&repo).await {
-                let name = crate::forge::repository::name(&repo);
+                let name = crate::repository::name(&repo);
                 self.notify(
                     None,
                     NotificationKind::SeedFailed,

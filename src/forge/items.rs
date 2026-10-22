@@ -11,7 +11,6 @@ use super::{
     item::{Item, ItemState, Opened},
     link::{ItemKind, Relation},
     pr::wait::{OwnChange, record_own_change},
-    repository,
 };
 use crate::{
     config::resolve::Effective,
@@ -479,7 +478,7 @@ fn description(body: Option<String>, issue: Option<u64>) -> String {
 
 /// The forge of the workspace's `origin`.
 pub(super) async fn workspace_forge(workspace: &Workspace) -> Result<ForgeRepo> {
-    let remote = repository::remote_url_from_path(&workspace.path)
+    let remote = crate::repository::remote_url_from_path(&workspace.path)
         .await?
         .context("forge actions need an origin remote")?;
     ForgeRepo::parse(&remote)

@@ -631,7 +631,7 @@ pub struct QueueEntry {
 /// is the CLI's own and stays opaque to the daemon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
-    pub repository: crate::forge::repository::Selector,
+    pub repository: crate::repository::Selector,
     pub name: String,
     pub agent: String,
     pub issue_title: Option<String>,

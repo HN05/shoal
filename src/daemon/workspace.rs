@@ -286,7 +286,7 @@ impl Manager {
 
     pub(crate) async fn lock_repository(
         &self,
-        selector: impl Into<crate::forge::repository::Selector>,
+        selector: impl Into<crate::repository::Selector>,
     ) -> Result<(Repository, OwnedMutexGuard<()>)> {
         let repo = self.repository(selector).await?;
         let guard = self.lock_repository_git(&repo.id).await;
@@ -442,7 +442,7 @@ impl Manager {
 
     pub async fn create_workspace(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         name: String,
         base: Option<String>,
         git_profile: Option<&str>,
@@ -468,7 +468,7 @@ impl Manager {
     /// one the caller has yet to choose.
     pub async fn check_creation(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         branch: Option<&str>,
         existing: Option<&str>,
         options: NewWorktreeOptions<'_>,

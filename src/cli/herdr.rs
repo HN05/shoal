@@ -40,7 +40,7 @@ impl TabName {
     fn new(template: String, repo: &Repository, issue: Option<&Issue>) -> Self {
         Self {
             template,
-            repo: crate::forge::repository::name(repo).to_owned(),
+            repo: crate::repository::name(repo).to_owned(),
             issue_number: issue.map(|issue| issue.number),
             issue_title: issue.map(|issue| issue.title.clone()),
         }
@@ -95,7 +95,7 @@ pub(in crate::cli) async fn start_add(
     }
     if let Some(template) = settings.herdr.tab_name.clone() {
         let repos = client::repositories(&ctx.paths).await?;
-        let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
+        let repo = crate::repository::select(&repos, &plan.repository).await?;
         // A queued start has only the issue's URL; the template may name it.
         let found = match (issue, plan.issue_url()) {
             (None, Some(url)) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),

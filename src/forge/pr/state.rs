@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{Registration, RegistrationKind};
 use crate::{
-    forge::{ForgeRepo, account::Account, repository},
+    forge::{ForgeRepo, account::Account},
     model::Workspace,
+    repository,
 };
 
 crate::state::states!(PrState {

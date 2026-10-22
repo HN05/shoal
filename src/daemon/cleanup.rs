@@ -563,7 +563,7 @@ async fn empty_caches_on_request(manager: &Manager, dry_run: bool) -> Result<Vec
             }
         };
         report.push(CacheCleanup {
-            repository: crate::forge::repository::name(&repo).to_owned(),
+            repository: crate::repository::name(&repo).to_owned(),
             emptying,
         });
     }

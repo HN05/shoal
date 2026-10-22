@@ -86,7 +86,7 @@ impl Manager {
             let Some(root) = &repo.workspaces_dir else {
                 continue;
             };
-            let name = worktrees_check_name(crate::forge::repository::name(&repo));
+            let name = worktrees_check_name(crate::repository::name(&repo));
             // Take the same gate as creation/removal before reading ownership.
             let _guard = self.lock_repository_git(&repo.id).await;
             let tracked: HashSet<PathBuf> = self

@@ -12,9 +12,9 @@ use crate::{
         ui,
     },
     config::repo::LocalConfig,
-    forge::repository,
     model::{Repository, RepositoryRemoval, SyncedRepository},
     protocol::Method,
+    repository,
 };
 
 pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {

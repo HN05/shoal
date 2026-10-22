@@ -278,7 +278,7 @@ async fn empty_caches(
         if !caches_on(&repo, filesystem) {
             continue;
         }
-        let name = crate::forge::repository::name(&repo);
+        let name = crate::repository::name(&repo);
         let emptying = manager.empty_caches(&repo, false).await;
         if let Some((kind, message)) = emptying_notice(name, emptying, filesystem) {
             manager.notify(None, kind, message).await;

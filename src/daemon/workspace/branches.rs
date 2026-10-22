@@ -83,7 +83,7 @@ impl Manager {
     /// then fast-forward the local default branch as workspace creation does.
     pub async fn sync_repository(
         &self,
-        selector: &crate::forge::repository::Selector,
+        selector: &crate::repository::Selector,
     ) -> Result<SyncedRepository> {
         let repo = self.repository(selector).await?;
         let _guard = self.lock_repository_git(&repo.id).await;
@@ -246,7 +246,7 @@ impl Manager {
     /// Query advertised remote heads, including branches never fetched locally.
     pub async fn branches(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
     ) -> Result<Vec<Branch>> {
         let repo = self.repository(repository).await?;
         self.ensure_repository_available(&repo.id).await?;
@@ -255,7 +255,7 @@ impl Manager {
 
     pub async fn open_branch(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         selector: &str,
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,
@@ -269,7 +269,7 @@ impl Manager {
     /// before it can be used; a reopened workspace gets none.
     pub(super) async fn open_branch_with(
         &self,
-        repository: impl Into<crate::forge::repository::Selector>,
+        repository: impl Into<crate::repository::Selector>,
         selector: &str,
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,

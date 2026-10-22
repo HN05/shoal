@@ -11,8 +11,8 @@ use std::{
 use super::{Definition, ResourceLease};
 use crate::{
     daemon::{store, workspace::Manager},
-    forge::repository,
     model::Repository,
+    repository,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

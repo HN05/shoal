@@ -1,7 +1,7 @@
 //! Git remote syntax, separate from registration and forge lookup policy.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Transport<'a> {
+pub(crate) enum Transport<'a> {
     Http,
     Https,
     Ssh,
@@ -11,7 +11,7 @@ pub(super) enum Transport<'a> {
 }
 
 #[derive(Debug)]
-pub(super) struct RemoteUrl<'a> {
+pub(crate) struct RemoteUrl<'a> {
     source: &'a str,
     pub host: Option<&'a str>,
     pub path: Option<&'a str>,
@@ -62,7 +62,7 @@ impl<'a> RemoteUrl<'a> {
 }
 
 /// Naming also accepts local paths and retains the historical colon separator.
-pub(super) fn source_name(source: &str) -> &str {
+pub(crate) fn source_name(source: &str) -> &str {
     let source = source.trim_end_matches('/');
     repository_path(source.rsplit(['/', ':']).next().unwrap_or(source))
 }

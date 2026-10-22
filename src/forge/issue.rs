@@ -3,9 +3,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    ForgeKind, ForgeRepo, Query, account::Account, gh, item::ItemState, link::ItemKind, repository,
-};
+use super::{ForgeKind, ForgeRepo, Query, account::Account, gh, item::ItemState, link::ItemKind};
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -173,7 +171,7 @@ impl Manager {
         workspace: &Workspace,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
-        let remote = repository::remote_url_from_path(&workspace.path)
+        let remote = crate::repository::remote_url_from_path(&workspace.path)
             .await?
             .context("issue lookup needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;

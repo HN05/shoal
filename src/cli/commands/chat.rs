@@ -14,9 +14,9 @@ use crate::{
     agent::{Agent, BuiltinAgent},
     cli::{agents, client, context::Context, output::Palette, terminal, ui},
     config::{Effective, named_commands, templates},
-    forge::repository,
     model::{Chat, Repository},
     protocol::ConfigTarget,
+    repository,
 };
 
 pub(super) async fn start(

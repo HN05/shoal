@@ -16,10 +16,10 @@ use crate::{
     forge::{
         ForgeRepo,
         link::{ItemKind, Selection},
-        repository,
         updates::{Snapshot, Update},
     },
     model::Workspace,
+    repository,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);

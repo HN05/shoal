@@ -3,9 +3,10 @@ use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::{ForgeRepo, account::Account, repository},
+    forge::{ForgeRepo, account::Account},
     git,
     model::Repository,
+    repository,
 };
 
 /// The explicit alternative for commands that accept `--repo` or a forge URL.
@@ -157,7 +158,7 @@ impl Issue {
 
     /// `<repo>#<number>`: short, and unique across repositories sharing a Herdr workspace.
     pub fn tab_label(&self, repo: &Repository) -> String {
-        format!("{}#{}", crate::forge::repository::name(repo), self.number)
+        format!("{}#{}", crate::repository::name(repo), self.number)
     }
 
     pub fn prompt(&self, template: Option<&str>) -> String {

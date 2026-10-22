@@ -31,7 +31,7 @@ impl Manager {
     /// repository's checkout.
     pub async fn start_chat(
         &self,
-        repository: crate::forge::repository::Selector,
+        repository: crate::repository::Selector,
         agent: String,
         pid: u32,
     ) -> Result<Chat> {
