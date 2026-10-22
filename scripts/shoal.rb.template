@@ -32,13 +32,16 @@ class Shoal < Formula
 
   def caveats
     <<~EOS
-      Install the agent skills once (later shoal commands update them after upgrades).
-      This fills existing skill directories; name a tool to create its directory:
+      Start the per-user daemon:
+        shoal install
+
+      Install the agent skills into each tool's existing skill directory:
         shoal skill install
+
+      Install them for one tool, creating its skill directory:
         shoal skill install claude
 
-      Register the per-user daemon:
-        shoal install
+      Later shoal commands keep installed skills current.
     EOS
   end
 
