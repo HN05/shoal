@@ -565,6 +565,13 @@ pub enum Command {
         /// Keep printing new notifications as the daemon records them.
         #[arg(long)]
         follow: bool,
+        /// Show notifications without marking them read.
+        #[arg(long)]
+        keep_unread: bool,
+        /// Continue following after this notification, as the installed
+        /// release does after an upgrade restarted the daemon.
+        #[arg(long, hide = true, requires = "follow")]
+        resume: Option<i64>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
         limit: u32,
     },

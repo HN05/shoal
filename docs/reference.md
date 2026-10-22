@@ -2073,6 +2073,7 @@ starts when the daemon upgrades and does not reconstruct older changes.
 shoal notifications            # Oldest new ones first, then marked read; says how many remain
 shoal notifications --all      # Recent ones including read (--limit, default 50)
 shoal notifications --follow   # Keep printing, and raise terminal notifications
+shoal notifications --keep-unread  # Show without marking read, also with --follow
 shoal notifications clear      # Delete all of them, including unread ones
 shoal notify "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
 ```

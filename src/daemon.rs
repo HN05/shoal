@@ -302,8 +302,16 @@ async fn serve(
             )
             .await;
         }
-        Method::WatchNotifications => {
-            return watch_notifications(stream, request.id, server.manager, operation_guard).await;
+        Method::WatchNotifications { keep_unread, after } => {
+            return watch_notifications(
+                stream,
+                request.id,
+                server.manager,
+                keep_unread,
+                after,
+                operation_guard,
+            )
+            .await;
         }
         Method::QueueHold { entry } => {
             return agent_queue::hold(stream, request.id, server.manager, entry, operation_guard)
@@ -385,7 +393,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::Shutdown
         | Method::Execute { .. }
         | Method::Reattach(_)
-        | Method::WatchNotifications
+        | Method::WatchNotifications { .. }
         | Method::QueueHold { .. }
         | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. }
@@ -895,19 +903,21 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
     })
 }
 
-/// Long-lived notification stream: the unread backlog, then each new
-/// notification as it is recorded, until the client hangs up.
+/// Long-lived notification stream: the unread backlog after `after`, then
+/// each new notification as it is recorded, until the client hangs up.
 async fn watch_notifications(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
+    keep_unread: bool,
+    after: i64,
     startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let mut changed = manager.notifications_changed.subscribe();
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     drop(startup);
     let (mut reader, mut writer) = stream.split();
-    let mut delivered = 0;
+    let mut delivered = after;
     loop {
         let operation = manager.background_operations.read().await;
         let batch = manager.notifications_after(delivered, 100).await?;
@@ -915,7 +925,9 @@ async fn watch_notifications(
             delivered = notification.id;
             let response = Response::new(request_id, Body::Notification(notification));
             protocol::write(&mut writer, &response).await?;
-            manager.mark_notifications_read(vec![delivered]).await?;
+            if !keep_unread {
+                manager.mark_notifications_read(vec![delivered]).await?;
+            }
         }
         drop(operation);
         let mut closed = [0u8; 1];

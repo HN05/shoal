@@ -15148,6 +15148,82 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
 }
 
 #[test]
+fn notifications_kept_unread_stay_new() {
+    let fixture = Fixture::new();
+    fixture.add("sender");
+    for message in ["first", "second"] {
+        let output = scoped_command(&fixture, "sender", &["notify", message]);
+        assert!(output.status.success(), "{output:?}");
+    }
+    let unread = || fixture.ok(&["daemon", "status"])["daemon"]["unread_notifications"].clone();
+    let messages = |notifications: &[Value]| -> Vec<(i64, String)> {
+        notifications
+            .iter()
+            .filter(|notification| notification["kind"] == "agent_message")
+            .map(|notification| {
+                (
+                    notification["id"].as_i64().unwrap(),
+                    notification["message"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    let before = unread();
+    let listed = fixture.ok(&["notifications", "--keep-unread"]);
+    let listed = messages(listed.as_array().unwrap());
+    let texts: Vec<_> = listed.iter().map(|(_, text)| text.as_str()).collect();
+    assert_eq!(texts, ["first", "second"]);
+    assert_eq!(unread(), before);
+    // A limited listing counts what it printed among the ones remaining.
+    let limited = fixture.run(&["notifications", "--keep-unread", "--limit", "1"]);
+    let remaining = before.as_u64().unwrap() - 1;
+    assert_eq!(
+        String::from_utf8_lossy(&limited.stderr),
+        format!(
+            "{remaining} more new notification{}; run shoal notifications again\n",
+            if remaining == 1 { "" } else { "s" }
+        )
+    );
+
+    // A follower resuming after the first sees only the second, and keeps it unread.
+    let mut follower = fixture
+        .command()
+        .args(["--json", "notifications", "--follow", "--keep-unread"])
+        .args(["--resume", &listed[0].0.to_string()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = follower.stdout.take().unwrap();
+    let (sender, lines) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        use std::io::BufRead;
+        for line in std::io::BufReader::new(stdout).lines() {
+            if sender.send(line.unwrap()).is_err() {
+                break;
+            }
+        }
+    });
+    let followed = loop {
+        let line = lines
+            .recv_timeout(Duration::from_secs(60))
+            .expect("followed notification");
+        let notification: Value = serde_json::from_str(&line).unwrap();
+        if let [message] = &messages(&[notification])[..] {
+            break message.clone();
+        }
+    };
+    follower.kill().unwrap();
+    follower.wait().unwrap();
+    assert_eq!(followed, listed[1]);
+    assert_eq!(unread(), before);
+
+    let read = fixture.ok(&["notifications"]);
+    assert_eq!(messages(read.as_array().unwrap()), listed);
+    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+}
+
+#[test]
 fn the_wake_hook_exits_with_its_agent() {
     let fixture = Fixture::new();
     let workspace = fixture.add("waking");

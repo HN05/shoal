@@ -428,10 +428,18 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => notifications::clear(&ctx).await,
         Command::Notifications {
             command: None,
+            follow: true,
+            keep_unread,
+            resume,
+            ..
+        } => notifications::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
+        Command::Notifications {
+            command: None,
             all,
-            follow,
+            keep_unread,
             limit,
-        } => notifications::run(&ctx, all, follow, limit).await,
+            ..
+        } => notifications::list(&ctx, all, keep_unread, limit).await,
         Command::Resume {
             scope,
             execution,

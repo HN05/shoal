@@ -1,7 +1,7 @@
 //! `shoal notifications`: what the daemon saw while the user was away, shown
-//! once and then marked read; `--follow` keeps the terminal on the stream and
-//! raises each entry as a terminal notification. `shoal notify` adds one and
-//! `clear` deletes them all.
+//! once and then marked read unless `--keep-unread`; `--follow` keeps the
+//! terminal on the stream and raises each entry as a terminal notification.
+//! `shoal notify` adds one and `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
 use anyhow::{Context as _, Result, ensure};
@@ -10,7 +10,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        installed::{Executable, arguments},
+        installed::{Executable, arguments_with},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -18,11 +18,8 @@ use crate::{
     protocol::{self, Method, Response},
 };
 
-pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
-    if follow {
-        return follow_stream(ctx).await;
-    }
     let method = Method::ListNotifications {
         unread_only: !all,
         limit,
@@ -38,23 +35,20 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
         }
     })?;
     // Shown once: exactly what this listing printed does not come back as new.
-    if !notifications.is_empty() {
+    if !keep_unread && !notifications.is_empty() {
         let ids = notifications.iter().map(|n| n.id).collect();
         request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
     }
-    if !all
-        && let Some(status) = client::status(&ctx.paths).await?
-        && status.unread_notifications > 0
-    {
-        eprintln!(
-            "{} more new notification{}; run shoal notifications again",
-            status.unread_notifications,
-            if status.unread_notifications == 1 {
-                ""
-            } else {
-                "s"
-            }
-        );
+    if !all && let Some(status) = client::status(&ctx.paths).await? {
+        // A listing kept unread still counts what it printed.
+        let shown = if keep_unread { notifications.len() } else { 0 };
+        let remaining = status.unread_notifications.saturating_sub(shown as u64);
+        if remaining > 0 {
+            eprintln!(
+                "{remaining} more new notification{}; run shoal notifications again",
+                if remaining == 1 { "" } else { "s" }
+            );
+        }
     }
     Ok(0)
 }
@@ -86,12 +80,16 @@ pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: Stri
     Ok(0)
 }
 
-/// The daemon marks each notification read as it delivers it. On a terminal,
-/// each one is also raised as a terminal notification so the emulator can show
-/// it while another window has focus.
-async fn follow_stream(ctx: &Context) -> Result<i32> {
+/// The daemon marks each notification read as it delivers it unless
+/// `keep_unread`; the stream resumes after the last one printed. On a
+/// terminal, each one is also raised as a terminal notification so the
+/// emulator can show it while another window has focus.
+pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Result<i32> {
+    refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
-    let (mut stream, body) = client::open_buffered(&ctx.paths, Method::WatchNotifications).await?;
+    let mut delivered = after;
+    let watch = |after| Method::WatchNotifications { keep_unread, after };
+    let (mut stream, body) = client::open_buffered(&ctx.paths, watch(delivered)).await?;
     <()>::try_from(body)?;
     let palette = Palette::stdout(ctx.json);
     let raise = !ctx.json && std::io::stdout().is_terminal();
@@ -99,11 +97,11 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
         let response: Response = match protocol::read_buffered(&mut stream).await {
             Ok(response) => response,
             Err(error) if client::stream_closed(&error) => {
-                // Delivered notifications are read, so the installed release
-                // continues after them.
-                let (next, body) = client::reconnect(&ctx.paths, || Method::WatchNotifications)
+                let (next, body) = client::reconnect(&ctx.paths, || watch(delivered))
                     .await
-                    .map_err(|error| executable.resume_or(error, arguments))?;
+                    .map_err(|error| {
+                        executable.resume_or(error, || arguments_with("--resume", Some(delivered)))
+                    })?;
                 <()>::try_from(body)?;
                 stream = next;
                 continue;
@@ -111,6 +109,7 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
             Err(error) => return Err(error).context("daemon closed the notification stream"),
         };
         let notification = Notification::try_from(response.body)?;
+        delivered = notification.id;
         ctx.show(&notification, |notification| {
             println!("{}", render(notification, palette));
         })?;

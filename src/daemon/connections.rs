@@ -276,7 +276,11 @@ mod tests {
             reattach: true,
             queue_entry: None,
         };
-        for refused in [execute, Method::WatchNotifications] {
+        let watch = Method::WatchNotifications {
+            keep_unread: false,
+            after: 0,
+        };
+        for refused in [execute, watch] {
             let Body::Error { message, .. } = reply(&mut send(socket, refused).await).await else {
                 panic!("expected a refusal");
             };
