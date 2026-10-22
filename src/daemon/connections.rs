@@ -1,10 +1,94 @@
-//! Accepting client connections and the descriptors they use.
+//! Accepting client connections, the capacity they hold and the descriptors
+//! they use.
 
-use std::{io, time::Duration};
+use std::{io, sync::Arc, time::Duration};
 
-use tokio::net::{UnixListener, UnixStream};
+use anyhow::{Result, anyhow};
+use tokio::{
+    net::{UnixListener, UnixStream},
+    sync::{OwnedSemaphorePermit, Semaphore},
+};
 
 use super::log;
+use crate::protocol::Method;
+
+/// Most connections reading their request or running a request/response
+/// operation at once.
+const MAX_REQUESTS: usize = 128;
+/// Descriptors kept for the daemon's own files and the commands it runs.
+const RESERVED_DESCRIPTORS: usize = 512;
+/// Long-lived connections allowed even when the descriptor limit is low.
+const MIN_LONG_LIVED: usize = 64;
+
+/// Separate limits for requests and for connections that stay open, such as
+/// executions and waits, so those cannot take the capacity of the requests
+/// that end them.
+pub(super) struct Capacity {
+    requests: Arc<Semaphore>,
+    long_lived: Arc<Semaphore>,
+    long_lived_limit: usize,
+}
+
+/// Capacity a connection holds until it closes.
+pub(super) struct Slot {
+    _permit: OwnedSemaphorePermit,
+}
+
+impl Capacity {
+    /// Long-lived connections get what the descriptor limit leaves after
+    /// requests and the daemon's own files.
+    pub(super) fn for_descriptors(limit: u64) -> Self {
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        let long_lived = limit
+            .saturating_sub(MAX_REQUESTS + RESERVED_DESCRIPTORS)
+            .clamp(MIN_LONG_LIVED, Semaphore::MAX_PERMITS);
+        Self::new(MAX_REQUESTS, long_lived)
+    }
+
+    pub(super) fn new(requests: usize, long_lived: usize) -> Self {
+        Self {
+            requests: Arc::new(Semaphore::new(requests)),
+            long_lived: Arc::new(Semaphore::new(long_lived)),
+            long_lived_limit: long_lived,
+        }
+    }
+
+    /// The next client connection, once a request slot is free.
+    pub(super) async fn accept(&self, listener: &UnixListener) -> io::Result<(UnixStream, Slot)> {
+        let permit = self
+            .requests
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("request capacity is never closed");
+        Ok((accept(listener).await?, Slot { _permit: permit }))
+    }
+
+    /// The slot a connection keeps once its request is known. One that stays
+    /// open moves into long-lived capacity, freeing its request slot.
+    pub(super) fn admit(&self, request: Slot, method: &Method) -> Result<Slot> {
+        if !method.holds_connection() {
+            return Ok(request);
+        }
+        let permit = self.long_lived.clone().try_acquire_owned().map_err(|_| {
+            anyhow!(
+                "the daemon already serves its limit of {} long-lived connections",
+                self.long_lived_limit
+            )
+        })?;
+        drop(request);
+        Ok(Slot { _permit: permit })
+    }
+
+    /// A request slot for a connection served without a listener.
+    #[cfg(test)]
+    pub(super) fn request_slot(&self) -> Slot {
+        let permit = self.requests.clone().try_acquire_owned();
+        Slot {
+            _permit: permit.expect("a free request slot"),
+        }
+    }
+}
 
 /// Open files the daemon asks for: room for thousands of connections, within
 /// the per-process limit macOS accepts (`OPEN_MAX`).
@@ -51,7 +135,7 @@ const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(500);
 /// The next client connection. Running out of descriptors or a client that
 /// hung up before acceptance passes, so those failures wait and retry instead
 /// of stopping the daemon.
-pub(super) async fn accept(listener: &UnixListener) -> io::Result<UnixStream> {
+async fn accept(listener: &UnixListener) -> io::Result<UnixStream> {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => return Ok(stream),
@@ -76,7 +160,109 @@ fn transient(error: &io::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
+    use tokio::{io::BufReader, sync::watch};
+
     use super::*;
+    use crate::{
+        daemon::{Server, questions::Ask, serve},
+        protocol::{self, Body, Request, Response},
+        test_support::{manager, repository},
+    };
+
+    /// A hang guard, not the behavior under test.
+    async fn bounded<T>(future: impl Future<Output = T>) -> T {
+        tokio::time::timeout(Duration::from_secs(60), future)
+            .await
+            .expect("connection exchange timed out")
+    }
+
+    async fn send(socket: &std::path::Path, method: Method) -> BufReader<UnixStream> {
+        let mut stream = UnixStream::connect(socket).await.unwrap();
+        let request = Request {
+            protocol: protocol::VERSION,
+            id: 1,
+            method,
+            scope: None,
+        };
+        protocol::write(&mut stream, &request).await.unwrap();
+        BufReader::new(stream)
+    }
+
+    async fn reply(stream: &mut BufReader<UnixStream>) -> Body {
+        let response: Response = bounded(protocol::read_buffered(stream)).await.unwrap();
+        response.body
+    }
+
+    #[tokio::test]
+    async fn requests_are_served_while_long_lived_capacity_is_full() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "asker".into(), None, None, None)
+            .await
+            .unwrap();
+        let ask = Ask {
+            question: "Which database?".into(),
+            recommendation: "SQLite".into(),
+            reason: None,
+            choices: Vec::new(),
+        };
+        let question = manager
+            .ask_question(&workspace.name, ask.clone())
+            .await
+            .unwrap();
+        let socket = &manager.paths.socket.clone();
+        let listener = UnixListener::bind(socket).unwrap();
+        // With one request slot, the next connection is accepted only once
+        // the wait before it has moved into long-lived capacity.
+        let server = Server {
+            manager: manager.clone(),
+            started: Instant::now(),
+            managed: false,
+            shutdown: watch::channel(false).0,
+            capacity: Arc::new(Capacity::new(1, 1)),
+        };
+        let serving = tokio::spawn(async move {
+            loop {
+                let (stream, slot) = server.capacity.accept(&listener).await.unwrap();
+                let server = server.clone();
+                let operation = manager.background_operations.clone().read_owned().await;
+                tokio::spawn(serve(stream, server, slot, operation));
+            }
+        });
+        let await_answer = || Method::AwaitAnswer {
+            workspace: workspace.name.clone(),
+            id: question.id,
+            ask: ask.clone(),
+        };
+        let mut waiting = send(socket, await_answer()).await;
+
+        let Body::Error { message, .. } = reply(&mut send(socket, await_answer()).await).await
+        else {
+            panic!("expected the second wait to be refused");
+        };
+        assert!(message.contains("limit of 1 long-lived"), "{message}");
+        let status = reply(&mut send(socket, Method::Status).await).await;
+        assert!(matches!(status, Body::Status(_)), "{status:?}");
+        let answer = Method::AnswerQuestion {
+            id: question.id,
+            answer: "SQLite".into(),
+            shown: None,
+        };
+        let answered = reply(&mut send(socket, answer).await).await;
+        assert!(matches!(answered, Body::Question(_)), "{answered:?}");
+        let Body::Question(delivered) = reply(&mut waiting).await else {
+            panic!("expected the wait to receive the answer");
+        };
+        assert_eq!(delivered.answer.as_deref(), Some("SQLite"));
+        serving.abort();
+    }
 
     #[test]
     fn the_descriptor_limit_reaches_the_target_or_stays_higher() {

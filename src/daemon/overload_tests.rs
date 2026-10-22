@@ -96,6 +96,7 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
         started: Instant::now(),
         managed: false,
         shutdown: watch::channel(false).0,
+        capacity: Arc::new(connections::Capacity::new(128, 128)),
     };
     tokio::spawn(async move {
         let mut clients = JoinSet::new();
@@ -107,11 +108,11 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
         });
         loop {
             tokio::select! {
-                accepted = listener.accept() => {
-                    let (stream, _) = accepted.unwrap();
+                accepted = server.capacity.accept(&listener) => {
+                    let (stream, slot) = accepted.unwrap();
                     let server = server.clone();
                     let operation = server.manager.background_operations.clone().read_owned().await;
-                    clients.spawn(async move { serve(stream, server, operation).await });
+                    clients.spawn(async move { serve(stream, server, slot, operation).await });
                 }
                 Some(result) = clients.join_next(), if !clients.is_empty() => {
                     if let Err(error) = result.unwrap() {

@@ -63,7 +63,6 @@ use crate::{
     removal::InspectionPolicy,
 };
 
-const MAX_CLIENTS: usize = 128;
 const SIMULATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 const ITEM_ACTIVITY_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// Keeps a background loop that panics at once from spinning.
@@ -77,11 +76,12 @@ struct Server {
     /// Running under the OS service manager, which owns shutdown.
     managed: bool,
     shutdown: watch::Sender<bool>,
+    capacity: Arc<connections::Capacity>,
 }
 
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     paths.prepare()?;
-    connections::raise_descriptor_limit();
+    let descriptors = connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
     manager.store.quarantine_interrupted_operations().await?;
@@ -97,6 +97,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         started: Instant::now(),
         managed,
         shutdown,
+        capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
     log!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
@@ -141,15 +142,15 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                 }
             },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
-            accepted = connections::accept(&listener), if clients.len() < MAX_CLIENTS => {
-                let stream = match accepted {
+            accepted = server.capacity.accept(&listener) => {
+                let (stream, slot) = match accepted {
                     Ok(accepted) => accepted,
                     Err(error) => break Err(error.into()),
                 };
                 let server = server.clone();
                 let operation = server.manager.background_operations.clone().read_owned().await;
                 clients.spawn(async move {
-                    if let Err(error) = serve(stream, server, operation).await {
+                    if let Err(error) = serve(stream, server, slot, operation).await {
                         log!("client connection: {error:#}");
                     }
                 });
@@ -221,6 +222,7 @@ async fn poll_item_activity(manager: Arc<Manager>) {
 async fn serve(
     mut stream: UnixStream,
     server: Server,
+    slot: connections::Slot,
     operation_guard: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let mut request: Request =
@@ -231,6 +233,13 @@ async fn serve(
                 return protocol::write(&mut stream, &response).await;
             }
         };
+    let _slot = match server.capacity.admit(slot, &request.method) {
+        Ok(slot) => slot,
+        Err(error) => {
+            let body = Body::error(ErrorCode::OperationFailed, format!("{error:#}"));
+            return protocol::write(&mut stream, &Response::new(request.id, body)).await;
+        }
+    };
     // Wrappers from any release reattach, and their launch scope does not
     // survive the restart; the record and token they present prove ownership.
     if let Method::Reattach(reattach) = request.method {
@@ -1165,13 +1174,15 @@ mod tests {
         });
         let (client, stream) = UnixStream::pair().unwrap();
         let operation = manager.background_operations.clone().read_owned().await;
+        let capacity = Arc::new(connections::Capacity::new(1, 1));
         let server = Server {
             manager,
             started: Instant::now(),
             managed: false,
             shutdown: watch::channel(false).0,
+            capacity: capacity.clone(),
         };
-        let served = tokio::spawn(serve(stream, server, operation));
+        let served = tokio::spawn(serve(stream, server, capacity.request_slot(), operation));
         let mut client = BufReader::new(client);
         client
             .get_mut()

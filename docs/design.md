@@ -48,6 +48,11 @@ directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
+The daemon raises its open file limit at startup. Connections reading a request
+or running a request/response operation share a fixed limit; executions, waits and
+streams take a separate share of the remaining descriptors and are refused when it
+is full, so neither can block the other. Accept failures that clear on their own,
+such as running out of descriptors, are retried.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 SQLite runs on one dedicated blocking thread with one reusable connection and a

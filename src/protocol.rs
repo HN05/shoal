@@ -636,6 +636,23 @@ impl Method {
     pub fn controls_daemon(&self) -> bool {
         matches!(self, Self::Status | Self::Shutdown | Self::ReloadConfig)
     }
+
+    /// Executions, waits and streams, which keep the connection open after
+    /// the request.
+    pub fn holds_connection(&self) -> bool {
+        matches!(
+            self,
+            Self::Execute { .. }
+                | Self::Reattach(_)
+                | Self::WatchNotifications
+                | Self::QueueHold { .. }
+                | Self::WatchWorkspaceEvents { .. }
+                | Self::PrWait { .. }
+                | Self::AwaitAgentWake { .. }
+                | Self::AwaitAnswer { .. }
+                | Self::WatchItems { .. }
+        )
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
