@@ -1643,7 +1643,8 @@ when no body is supplied for a linked issue; its base is `--base`, else the base
 workspace's branch, else the default branch. It is a draft with `--draft` or
 `[pr] draft = true`, which `--no-draft` overrides. Draft state, repeated
 `--label` and repeated `--reviewer` apply only to a new PR. Its JSON adds
-`created` (false for a PR it found) and `linked`.
+`created` (false for a PR it found), `linked`, and the
+[convention](#repository-conventions) `warnings` it prints on stderr.
 
 ```toml
 [pr]
@@ -1670,8 +1671,9 @@ PR's branch on the forge when it is in the repository, never a local branch.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Its JSON
-adds `created` and `linked`, and `warning` when removal started before the
-workspace could record and link the new issue.
+adds `created` and `linked`, and `warnings`, on stderr too, with the
+[convention](#repository-conventions) warnings and when removal started before
+the workspace could record and link the new issue.
 
 #### Repository conventions
 
@@ -1689,6 +1691,11 @@ higher layer turns inherited entries off.
 [issue]
 required_labels = ["type/"] # Default: []
 ```
+
+Once the item exists, `pr open`, `issue open` and `ready` warn, without failing,
+about an item missing a required label, or about one without labels in a
+repository that has some. A warning names the `edit` command that fixes it, and
+one whose lookup fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is
@@ -1841,7 +1848,9 @@ local. `shoal unready --draft`, or `[unready] draft = true`, returns the open PR
 whose marks it withdraws to draft first; `--no-draft` overrides that setting.
 A failed change reports the forge's error and exits non-zero, keeping the marks
 in both commands so either can be retried. Marks never change issues, and
-unlinking leaves the PR as it is.
+unlinking leaves the PR as it is. `shoal ready` then adds each marked item's
+label [convention warnings](#repository-conventions) to its mark as `warnings`
+and prints them on stderr; they are never stored.
 
 ```toml
 [ready]

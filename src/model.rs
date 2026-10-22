@@ -198,6 +198,10 @@ pub struct ReviewMark {
     /// Whether HEAD has moved since the mark; absent when HEAD was not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stale: Option<bool>,
+    /// What the marked item leaves out of the repository's conventions, as
+    /// `shoal ready` reports it; never stored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// The turn state a workspace's agent last reported, and since when.

@@ -43,9 +43,10 @@ pub struct Opened {
     pub item: Item,
     pub created: bool,
     pub linked: bool,
-    /// Why the item was created without the workspace recording it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub warning: Option<String>,
+    /// Why the item was created without the workspace recording it, and
+    /// what it leaves out of the repository's conventions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// An item with the forge-specific facts some actions need.

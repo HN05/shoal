@@ -793,6 +793,11 @@ unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
 what requests review.
 An explicitly supplied description is preserved verbatim; when no description
 is supplied, a linked issue is referenced with `Closes #<number>`.
+Repository conventions reach agents where they open and mark items, not only in
+instructions read at launch: `shoal labels` serves the forge's label scheme with
+its descriptions, repositories may require label prefixes, which refuse a new item
+before it exists, and missing labels come back as warnings that never fail a
+change that already happened.
 Its options are modeled rather than passed through to a CLI, so they mean the
 same on every forge.
 

@@ -14,8 +14,9 @@ use super::{
     repository,
 };
 use crate::{
+    config::resolve::Effective,
     daemon::{events, workspace::Manager},
-    model::Workspace,
+    model::{ReviewMark, Workspace},
 };
 
 impl Manager {
@@ -87,6 +88,26 @@ impl Manager {
             }
         }
         Ok(())
+    }
+
+    /// Add to each mark what its item leaves out of the repository's
+    /// conventions, read as the workspace's agent account.
+    pub(crate) async fn check_conventions(
+        &self,
+        workspace: &Workspace,
+        settings: &Effective,
+        marks: &mut [ReviewMark],
+    ) {
+        let Ok((forge, account)) = self.workspace_forge_account(workspace).await else {
+            return;
+        };
+        for mark in marks {
+            let Some(item) = marked_item(&forge, &account, mark).await else {
+                continue;
+            };
+            let required = required_labels(settings, item.kind);
+            mark.warnings = conventions::warnings(&forge, &account, &item, required).await;
+        }
     }
 
     async fn workspace_forge_account(&self, workspace: &Workspace) -> Result<(ForgeRepo, Account)> {
@@ -199,22 +220,20 @@ impl Manager {
             !link || workspace.links.issue.is_none(),
             "the workspace already has a linked issue; open the issue without --link"
         );
-        let required = self
-            .workspace_settings(&workspace)
-            .await?
-            .issue
-            .required_labels;
+        let settings = self.workspace_settings(&workspace).await?;
+        let required = &settings.issue.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        conventions::require(&forge, &account, ItemKind::Issue, &required, &issue.labels).await?;
+        conventions::require(&forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         let item = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
+        let checked = conventions::warnings(&forge, &account, &item, required).await;
         Ok(Opened {
             item,
             created: true,
             linked,
-            warning,
+            warnings: warning.into_iter().chain(checked).collect(),
         })
     }
 }
@@ -235,6 +254,7 @@ impl Manager {
             "workspace cannot accept a PR in its current state"
         );
         let settings = self.workspace_settings(&workspace).await?;
+        let required = &settings.pr.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
         let existing = forge.open_pull_for(&account, &workspace.branch).await?;
         let (item, created) = match existing {
@@ -243,11 +263,10 @@ impl Manager {
                 false,
             ),
             None => {
-                let required = &settings.pr.required_labels;
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
-                let draft = settings.pr.draft;
-                let pull = new_pull(&workspace, &forge, &account, options, draft).await?;
+                let pull =
+                    new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?;
                 (forge.create_pull(&account, &pull).await?, true)
             }
         };
@@ -267,11 +286,12 @@ impl Manager {
                 .with_context(|| format!("{} is open, but linking it failed", item.url))?;
             (true, None)
         };
+        let checked = conventions::warnings(&forge, &account, &item, required).await;
         Ok(Opened {
             item,
             created,
             linked,
-            warning,
+            warnings: warning.into_iter().chain(checked).collect(),
         })
     }
 
@@ -351,6 +371,26 @@ fn record_opened(
     }
     tx.commit()?;
     Ok(recorded)
+}
+
+/// The item a mark names as the forge reports it; none for a workspace mark
+/// or a failed read.
+async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {
+    let (kind, url) = (mark.kind?, mark.url.as_deref()?);
+    let (number, _) = match kind {
+        ItemKind::Issue => forge.issue(url),
+        ItemKind::Pr => forge.pull(url),
+    }
+    .ok()?;
+    Some(forge.read(account, kind, number).await.ok()?.item)
+}
+
+/// The labels `[pr]` or `[issue]` requires of an item of `kind`.
+fn required_labels(settings: &Effective, kind: ItemKind) -> &[String] {
+    match kind {
+        ItemKind::Issue => &settings.issue.required_labels,
+        ItemKind::Pr => &settings.pr.required_labels,
+    }
 }
 
 /// The warning for an item created after removal started.

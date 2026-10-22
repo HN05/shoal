@@ -31,6 +31,7 @@ pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
                 head: row.get(2)?,
                 created_at: row.get(3)?,
                 stale: None,
+                warnings: Vec::new(),
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -74,7 +75,7 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let head = current_head(&workspace).await?;
         let explicit = self.explicit_item(&workspace, &selection).await?;
-        let marks = self
+        let mut marks = self
             .record_marks(&workspace.id, selection, explicit, head)
             .await?;
         let undrafted = match settings.ready.undraft {
@@ -85,6 +86,8 @@ impl Manager {
             self.run_post_ready(&workspace, &command, &marks).await;
         }
         undrafted.context("marked ready for review, but a PR is still a draft")?;
+        self.check_conventions(&workspace, &settings, &mut marks)
+            .await;
         Ok(marks)
     }
 
@@ -168,6 +171,7 @@ impl Manager {
                         head: head.clone(),
                         created_at,
                         stale: Some(false),
+                        warnings: Vec::new(),
                     });
                 }
                 tx.commit()?;

@@ -1040,6 +1040,7 @@ mod tests {
             head: "abc".into(),
             created_at: 0,
             stale,
+            warnings: Vec::new(),
         };
         let mut linked = workspace("a", "fix-login", "fix-login", WorkspaceState::Ready);
         linked.review = vec![
@@ -1086,6 +1087,7 @@ mod tests {
             head: "head".into(),
             created_at: 0,
             stale: Some(stale),
+            warnings: Vec::new(),
         };
         workspaces[4].running = true;
         workspaces[4].review = vec![mark(false)];

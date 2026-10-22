@@ -222,6 +222,9 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
         },
     )
     .await?;
+    for warning in marks.iter().flat_map(|mark| &mark.warnings) {
+        eprintln!("{warning}");
+    }
     ctx.emit(
         &format!("Ready for review:\n{}", review_lines(&marks)),
         &marks,

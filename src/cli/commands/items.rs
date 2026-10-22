@@ -208,7 +208,7 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
         },
     )
     .await?;
-    warn_unrecorded(&opened);
+    print_warnings(&opened);
     let outcome = if opened.created {
         "PR opened"
     } else {
@@ -259,7 +259,7 @@ async fn open_issue(
         },
     )
     .await?;
-    warn_unrecorded(&opened);
+    print_warnings(&opened);
     let linked = if opened.linked { " and linked" } else { "" };
     ctx.emit(
         &format!("Issue opened{linked}: {}", opened.item.url),
@@ -268,8 +268,8 @@ async fn open_issue(
     Ok(0)
 }
 
-fn warn_unrecorded(opened: &Opened) {
-    if let Some(warning) = &opened.warning {
+fn print_warnings(opened: &Opened) {
+    for warning in &opened.warnings {
         eprintln!("{warning}");
     }
 }
