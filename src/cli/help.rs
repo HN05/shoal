@@ -107,14 +107,14 @@ pub(super) fn template() -> &'static str {
     })
 }
 
+/// A command this build leaves out, such as an optional integration's, is
+/// skipped; the tests check that every built command is grouped.
 fn render_group(catalog: &clap::Command, heading: &str, names: &[&str]) -> String {
-    let commands = names.iter().enumerate().map(|(order, name)| {
-        catalog
-            .find_subcommand(name)
-            .expect("help group names an existing command")
-            .clone()
-            .display_order(order)
-    });
+    let commands = names
+        .iter()
+        .filter_map(|name| catalog.find_subcommand(name))
+        .enumerate()
+        .map(|(order, command)| command.clone().display_order(order));
     clap::Command::new("shoal")
         .disable_help_flag(true)
         .disable_help_subcommand(true)

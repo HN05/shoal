@@ -165,8 +165,12 @@ pub fn command() -> Command {
 
 /// Keep a launcher whose executable is missing out of completion. Hidden
 /// subcommands still complete as the only match, so the name also changes to
-/// one no typed word can start.
+/// one no typed word can start. A launcher this build leaves out has nothing
+/// to withdraw.
 fn withdraw(command: Command, name: &str) -> Command {
+    if command.find_subcommand(name).is_none() {
+        return command;
+    }
     command.mut_subcommand(name, |subcommand| {
         subcommand.name(format!("\0{name}")).hide(true)
     })
