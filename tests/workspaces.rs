@@ -15383,6 +15383,39 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
 }
 
 #[test]
+fn agent_state_reports_from_an_input_that_never_closes() {
+    let fixture = Fixture::new();
+    fixture.add("reporter");
+    let mut child = fixture
+        .command()
+        .args([
+            "internal",
+            "agent-state",
+            "waiting",
+            "--workspace",
+            "reporter",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Held open and silent, like a pipe or socket a script inherited.
+    let stdin = child.stdin.take();
+    let status = try_wait_for(|| child.try_wait().unwrap());
+    if status.is_none() {
+        let _ = child.kill();
+    }
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    assert!(status.is_some_and(|status| status.success()), "{output:?}");
+    assert_eq!(
+        fixture.ok(&["status", "reporter"])["workspace"]["agent_state"]["state"],
+        "waiting"
+    );
+}
+
+#[test]
 fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let fixture = Fixture::new();
     let added = fixture.add("reviewed");

@@ -1957,7 +1957,10 @@ the hooks with the [message hooks](#agent-messages); Happy sessions do not.
 Neither agent has a hook for an interrupted turn: Claude Code shows `working` until
 it notifies that its prompt is waiting for input, and Codex until its next turn
 ends. Codex has no hook for a permission prompt, so it reports `working`
-instead of `waiting`. Other agents can call the command from their own hooks. `ls` and `status` show
+instead of `waiting`. Other agents can call the command from their own hooks; a JSON event
+on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the session
+to [resume](#overload-protection). The command reads only that first event, and stops waiting after
+two seconds without input. `ls` and `status` show
 `working`, `waiting for input` or `turn finished`; `status`, `inspect` and `ls --json`
 give `agent_state` with `state` and the Unix-seconds `since` it began. A state
 reported from a tracked execution ends with that execution; one reported from
