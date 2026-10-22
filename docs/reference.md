@@ -1860,6 +1860,38 @@ adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings and when removal started before
 the workspace could record and link the new issue.
 
+#### Approval for agent issues and PRs
+
+A repository whose issues other people see can require your approval before an
+agent opens one. `"direct"`, the default, opens at once; `"propose"` makes
+`issue open` in a workspace process record an
+[approval request](#resource-approvals) instead. Unscoped callers always open
+directly.
+
+```toml
+[approvals]
+issue_open = "propose" # Default: "direct"
+```
+
+A proposed `issue open` records every option it was given, with the workspace,
+branch, commit and agent; running it again unchanged returns the same request.
+The request belongs to the repository, so it stays when the workspace is removed.
+The command exits 0 with JSON `proposed`, the request, and the agent continues
+its work.
+
+```sh
+shoal approvals                     # proposals show their labels and description
+shoal approve 4
+shoal deny 5
+```
+
+`approve` opens the item as the workspace's agent account. An issue is recorded
+as opened by its workspace and assigned when it was proposed with `--link` and
+no issue is assigned yet; after the workspace is removed, it opens through the
+repository's checkout with the repository's agent account. `deny` drops the
+proposal. A decided proposal is no longer listed, and the decision reaches the
+workspace's agent as an [agent message](#agent-messages) naming the opened item.
+
 #### Repository conventions
 
 `shoal labels` lists the workspace repository's labels as the forge reports them,
@@ -2654,7 +2686,8 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
-these requests, land requests from a scoped `shoal land`, and retained workspace grants; `shoal approvals <workspace>` filters
+these requests, land requests from a scoped `shoal land`,
+[proposed issues](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approve [number]` or
 `shoal deny [number]`; without a number, they pick among pending requests, shown
@@ -2685,7 +2718,8 @@ An acquisition waiting for a decision returns exit 2 and JSON
 name preserves the request; changing its settings or reason requires release first.
 Release cancels a pending or denied request even without a lease. Changed effective
 settings cannot reuse a grant. Requests survive restart and failed removal and are
-deleted with the workspace; they do not prevent idle cleanup.
+deleted with the workspace, except proposed issues, which belong to the repository;
+they do not prevent idle cleanup.
 
 ### Shared readers and exclusive writers
 

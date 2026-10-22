@@ -122,6 +122,7 @@ pub struct Config {
     pub pr: repo::Pr,
     pub issue: repo::Issue,
     pub land: repo::Land,
+    pub approvals: repo::Approvals,
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
     pub env: BTreeMap<String, String>,
@@ -354,6 +355,12 @@ pub struct Pr {
 pub struct Issue {
     /// Entries a new issue's labels must each start with.
     pub required_labels: Vec<String>,
+}
+
+/// Which agent forge writes wait for the user's approval.
+#[derive(Debug, Default, Serialize)]
+pub struct Approvals {
+    pub issue_open: repo::Opening,
 }
 
 #[derive(Debug, Serialize)]
@@ -611,6 +618,7 @@ impl Config {
             pr: self.pr.clone(),
             issue: self.issue.clone(),
             land: self.land,
+            approvals: self.approvals,
             ..Default::default()
         }
     }

@@ -225,3 +225,7 @@ post = true
 # Push the default branch to its upstream after shoal land; --push and --no-push override it.
 [land]
 push = false
+
+# Whether issues agents open wait for your approval: "direct" or "propose".
+[approvals]
+issue_open = "direct"

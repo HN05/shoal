@@ -62,10 +62,13 @@ async fn submit(
     approve: bool,
     shown: Option<Box<ApprovalRequest>>,
 ) -> Result<i32> {
-    let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve, shown })
-            .await?;
-    ctx.emit(&describe(&request), &request)?;
+    let method = Method::DecideApproval { id, approve, shown };
+    let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    let message = match &request.url {
+        Some(url) => format!("{}\n  {url}", describe(&request)),
+        None => describe(&request),
+    };
+    ctx.emit(&message, &request)?;
     Ok(0)
 }
 
@@ -109,7 +112,9 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     ctx.show(&requests, |requests| {
         for request in requests {
             println!("{}", describe(request));
-            println!("  {}", request.specification);
+            for line in details(request) {
+                println!("  {line}");
+            }
         }
         if requests.is_empty() {
             println!("No approval requests");
@@ -136,20 +141,43 @@ async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
 }
 
 /// One line with what the user needs to decide a request: the description
-/// and the exact settings an approval grants.
+/// and the exact settings an approval grants, or what a proposal opens.
 pub(in crate::cli) fn summary(request: &ApprovalRequest) -> String {
+    if request.target.is_proposal() {
+        return describe(request);
+    }
     format!("{}  {}", describe(request), request.specification)
 }
 
 fn describe(request: &ApprovalRequest) -> String {
+    let reason = match request.reason.as_str() {
+        "" => String::new(),
+        reason => format!(": {reason}"),
+    };
     format!(
-        "{} [{}] {} in workspace {}: {}",
+        "{} [{}] {} in workspace {}{reason}",
         request.id,
         request.status,
         request.subject(),
         request.workspace,
-        request.reason
     )
+}
+
+/// The lines below a request in a listing: a proposal's labels and
+/// description, which the user may edit before approving, or the exact
+/// settings an approval grants.
+fn details(request: &ApprovalRequest) -> Vec<String> {
+    let (labels, body) = if let Some(proposed) = request.proposed_issue() {
+        (&proposed.issue.labels, &proposed.issue.body)
+    } else {
+        return vec![request.specification.to_string()];
+    };
+    let mut lines = Vec::new();
+    if !labels.is_empty() {
+        lines.push(format!("Labels: {}", labels.join(", ")));
+    }
+    lines.extend(body.lines().map(|line| format!("  {line}")));
+    lines
 }
 
 pub(super) fn declined(ctx: &Context, request: &ApprovalRequest) -> Result<i32> {

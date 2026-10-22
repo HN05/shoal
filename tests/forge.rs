@@ -1804,3 +1804,126 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
     );
     assert!(fixture.requests().is_empty());
 }
+
+/// Run a Shoal command inside the workspace, as its agent would.
+fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let output = fixture.run(&[&["exec", "topic", "--", shoal, "--json"][..], args].concat());
+    assert!(output.status.success(), "{args:?}: {output:?}");
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+/// The keys of requests that change something on the forge.
+fn writes(fixture: &Fixture) -> Vec<Value> {
+    fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| json!([request[0], request[1]]))
+        .collect()
+}
+
+/// The workspace's new agent messages.
+fn messages(fixture: &Fixture) -> Vec<String> {
+    fixture
+        .ok(&["messages", "topic"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|message| message["message"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn proposed_issues_open_on_approval() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
+    }));
+    let open = [
+        "issue",
+        "open",
+        "--title",
+        "Flaky",
+        "--body",
+        "Seen twice",
+        "--label",
+        "bug",
+    ];
+    let proposed = scoped(&fixture, &open)["proposed"].clone();
+    assert_eq!(proposed["target"], "issue_open");
+    assert_eq!(proposed["status"], "pending");
+    assert_eq!(proposed["specification"]["issue"]["title"], "Flaky");
+    assert_eq!(proposed["specification"]["branch"], "topic");
+    // Repeating the command returns the same proposal.
+    assert_eq!(scoped(&fixture, &open)["proposed"]["id"], proposed["id"]);
+    assert!(writes(&fixture).is_empty());
+    let listed = fixture.ok(&["approvals"]);
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["workspace"], "topic");
+
+    let id = proposed["id"].to_string();
+    let approved = fixture.ok(&["approve", &id]);
+    let url = format!("{}/issues/40", fixture.web);
+    assert_eq!(approved["status"], "approved");
+    assert_eq!(approved["url"], url);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues",
+            {"title": "Flaky", "body": "Seen twice", "labels": ["bug"]}])]
+    );
+    assert_eq!(fixture.ok(&["approvals"]), json!([]));
+    assert_eq!(
+        fixture.ok(&["inspect", "topic"])["workspace"]["links"]["opened"],
+        json!([{"kind": "issue", "url": url, "title": "Flaky"}])
+    );
+    assert_eq!(
+        messages(&fixture),
+        [format!(
+            "Approval {id} to open issue \"Flaky\" was approved: {url} was opened."
+        )]
+    );
+
+    // The user opens directly whatever the setting says.
+    let direct = fixture.ok(&["issue", "open", "--workspace", "topic", "--title", "Flaky"]);
+    assert_eq!(direct["created"], true);
+}
+
+#[test]
+fn denied_issue_proposals_reach_the_agent_and_others_outlive_the_workspace() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+    }));
+    let propose = |title: &str| {
+        let open = ["issue", "open", "--title", title];
+        scoped(&fixture, &open)["proposed"]["id"].to_string()
+    };
+    let flaky = propose("Flaky");
+    let noise = propose("Noise");
+    fixture.ok(&["deny", &noise]);
+    assert!(writes(&fixture).is_empty());
+    assert_eq!(
+        messages(&fixture),
+        [format!(
+            "Approval {noise} to open issue \"Noise\" was denied. Do not open it another way."
+        )]
+    );
+
+    // The remaining proposal belongs to the repository, so it stays when the
+    // workspace goes and opens through the repository's checkout.
+    fixture.ok(&["rm", "topic", "--yes"]);
+    let listed = fixture.ok(&["approvals"]);
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["id"].to_string(), flaky);
+    let approved = fixture.ok(&["approve", &flaky]);
+    assert_eq!(approved["url"], format!("{}/issues/40", fixture.web));
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues", {"title": "Flaky", "body": "", "labels": []}])]
+    );
+}

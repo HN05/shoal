@@ -2,9 +2,12 @@
 //! scope rules apply and each change reaches the event journal.
 use anyhow::{Context, Result, bail};
 
-use super::wait::{OwnChange, record_own_change};
+use super::{
+    proposals::{OpenOutcome, Proposer},
+    wait::{OwnChange, record_own_change},
+};
 use crate::{
-    config::resolve::Effective,
+    config::{Config, repo::Opening, resolve::Effective},
     daemon::{events, workspace::Manager},
     forge::{
         ForgeRepo,
@@ -115,7 +118,10 @@ impl Manager {
         }
     }
 
-    async fn workspace_forge_account(&self, workspace: &Workspace) -> Result<(ForgeRepo, Account)> {
+    pub(super) async fn workspace_forge_account(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<(ForgeRepo, Account)> {
         Ok((
             workspace_forge(workspace).await?,
             self.agent_account(workspace).await?,
@@ -124,7 +130,7 @@ impl Manager {
 
     /// Apply `action` and record it as the workspace's own change. The
     /// caller holds the PR gate.
-    async fn apply_own(
+    pub(super) async fn apply_own(
         &self,
         id: &str,
         forge: &ForgeRepo,
@@ -174,10 +180,11 @@ impl Manager {
 }
 
 /// The item an action changes.
-struct Target {
-    kind: ItemKind,
-    number: u64,
-    url: String,
+#[derive(Clone)]
+pub(super) struct Target {
+    pub kind: ItemKind,
+    pub number: u64,
+    pub url: String,
 }
 
 /// Whether the state an action leaves is the agent's own change. Merging is
@@ -196,6 +203,16 @@ impl Manager {
         // One snapshot, so a reload cannot pair a profile with another map.
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
+        self.agent_account_from(&config, &settings)
+    }
+
+    /// The agent account `settings` select, with the Git profiles of
+    /// `config`, the snapshot they were resolved from.
+    pub(super) fn agent_account_from(
+        &self,
+        config: &Config,
+        settings: &Effective,
+    ) -> Result<Account> {
         let auth = &settings.agent_auth;
         let logins = AgentLogins {
             launch: Box::new(auth.prepare(&self.paths, &config.git)?),
@@ -209,8 +226,15 @@ impl Manager {
 
 impl Manager {
     /// Open an issue in the workspace's repository as its agent account, and
-    /// link it when `link` is set.
-    pub async fn open_issue(&self, selector: &str, issue: NewIssue, link: bool) -> Result<Opened> {
+    /// link it when `link` is set. A `proposer` records it for the user's
+    /// approval instead when `[approvals] issue_open` says so.
+    pub async fn open_issue(
+        &self,
+        selector: &str,
+        issue: NewIssue,
+        link: bool,
+        proposer: Option<Proposer>,
+    ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
         // Cleanup holds the gate, so it cannot remove the workspace between
         // opening the issue and linking it.
@@ -231,6 +255,14 @@ impl Manager {
         let required = &settings.issue.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
         conventions::require(&forge, &account, ItemKind::Issue, required, &issue.labels).await?;
+        if let Some(proposer) =
+            proposer.filter(|_| settings.approvals.issue_open == Opening::Propose)
+        {
+            let proposed = self
+                .propose_issue(&workspace, issue, link, proposer)
+                .await?;
+            return Ok(OpenOutcome::Proposed(proposed));
+        }
         let item = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
@@ -244,12 +276,12 @@ impl Manager {
             required,
         )
         .await;
-        Ok(Opened {
+        Ok(OpenOutcome::Opened(Opened {
             item,
             created: true,
             linked,
             warnings: warning.into_iter().chain(checked).collect(),
-        })
+        }))
     }
 }
 
@@ -257,7 +289,7 @@ impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
     /// unlinked.
-    pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<Opened> {
+    pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<OpenOutcome> {
         // Cleanup holds the gate, so it cannot remove the workspace between
         // opening the PR and linking it.
         let _gate = self.pr_gate.lock().await;
@@ -308,12 +340,12 @@ impl Manager {
             required,
         )
         .await;
-        Ok(Opened {
+        Ok(OpenOutcome::Opened(Opened {
             item,
             created,
             linked,
             warnings: warning.into_iter().chain(checked).collect(),
-        })
+        }))
     }
 
     /// Record an item the workspace just created as opened and, with `link`,
@@ -321,7 +353,7 @@ impl Manager {
     /// unrecorded or unlinked with a warning, so nothing fails once the item
     /// exists and a retry cannot create a duplicate. Returns whether it was
     /// linked, and the warning.
-    async fn keep_created(
+    pub(super) async fn keep_created(
         &self,
         workspace: &Workspace,
         kind: ItemKind,
@@ -568,7 +600,7 @@ mod tests {
             attachments: Vec::new(),
         };
         let error = manager
-            .open_issue(&workspace.id, issue, false)
+            .open_issue(&workspace.id, issue, false, None)
             .await
             .unwrap_err();
         assert!(

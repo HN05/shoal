@@ -121,6 +121,9 @@ when behavior changes, distinguishing decisions from proposals.
   A scoped land
   is a request bound to the branch HEAD unless `[land] requires_approval` is
   false; approval lets the retried land proceed under every landing check.
+  `[approvals] issue_open = "propose"` makes a scoped `issue open` an approval
+  request; approval opens it through the normal open path. Issue proposals belong to the repository and
+  outlive the workspace.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.

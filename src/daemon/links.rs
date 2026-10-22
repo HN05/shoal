@@ -6,6 +6,7 @@ mod ci;
 pub mod issue;
 mod listing;
 pub mod pr;
+pub mod proposals;
 mod stack;
 pub mod wait;
 

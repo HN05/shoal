@@ -10,6 +10,7 @@ use crate::{
         AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
         client, context::Context, ui,
     },
+    daemon::links::proposals::{OpenOutcome, Proposed},
     forge::{
         ForgeRepo,
         ci::{CiActed, CiAction},
@@ -282,7 +283,7 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
     )
     .await?;
     push(ctx, &workspace).await?;
-    let opened: Opened = client::request(
+    let outcome: OpenOutcome = client::request(
         &ctx.paths,
         Method::OpenPull {
             workspace: workspace.id,
@@ -290,6 +291,10 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
         },
     )
     .await?;
+    let opened = match outcome {
+        OpenOutcome::Opened(opened) => opened,
+        OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "PR", &proposed),
+    };
     print_warnings(&opened);
     let outcome = if opened.created {
         "PR opened"
@@ -332,7 +337,7 @@ async fn open_issue(
     link: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let opened: Opened = client::request(
+    let outcome: OpenOutcome = client::request(
         &ctx.paths,
         Method::OpenIssue {
             workspace,
@@ -341,11 +346,28 @@ async fn open_issue(
         },
     )
     .await?;
+    let opened = match outcome {
+        OpenOutcome::Opened(opened) => opened,
+        OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "Issue", &proposed),
+    };
     print_warnings(&opened);
     let linked = if opened.linked { " and linked" } else { "" };
     ctx.emit(
         &format!("Issue opened{linked}: {}", opened.item.url),
         &opened,
+    )?;
+    Ok(0)
+}
+
+/// The repository requires approval: the agent continues its work and
+/// hears the decision as a message.
+fn report_proposed(ctx: &Context, kind: &str, proposed: &Proposed) -> Result<i32> {
+    ctx.emit(
+        &format!(
+            "{kind} proposed for approval {}: the user decides whether Shoal opens it, and the decision arrives as a message.",
+            proposed.proposed.id
+        ),
+        proposed,
     )?;
     Ok(0)
 }

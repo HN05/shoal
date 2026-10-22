@@ -525,7 +525,8 @@ pub enum Command {
     },
     /// List approval requests and retained grants (scoped callers see their own workspace).
     Approvals { workspace: Option<String> },
-    /// Approve the exact settings recorded in a request; does not allocate capacity.
+    /// Approve the exact settings recorded in a request; does not allocate
+    /// capacity. Approving an issue proposal opens it.
     Approve {
         /// Request number; omit to choose a pending request.
         id: Option<i64>,

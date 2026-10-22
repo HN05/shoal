@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 119;
+pub const VERSION: u32 = 120;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -846,7 +846,7 @@ response_bodies! {
     Inspection(Inspection),
     Item(crate::forge::items::item::Item),
     Items(Vec<crate::forge::items::item::Item>),
-    Opened(crate::forge::items::item::Opened),
+    Opened(crate::daemon::links::proposals::OpenOutcome),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),

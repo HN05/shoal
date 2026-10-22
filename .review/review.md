@@ -123,7 +123,11 @@ instead of the PR delivery guidance below.
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
-  is false; approval never skips a landing check and lands only the approved commit. This is cooperative,
+  is false; approval never skips a landing check and lands only the approved commit.
+  Under `[approvals] issue_open = "propose"`, a scoped `issue open` records a
+  proposal instead of opening; approval opens it as the agent account through the
+  normal open path, and the proposal belongs to the repository and outlives its
+  workspace. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

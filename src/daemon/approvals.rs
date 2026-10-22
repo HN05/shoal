@@ -16,6 +16,10 @@ use crate::{
     state::{states, text_key},
 };
 
+pub mod proposals;
+
+use proposals::IssueSpecification;
+
 states!(
     #[derive(Default)]
     Lifetime {
@@ -34,7 +38,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>` or `land`.
+/// `secret/<name>`, `land` or `issue_open`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -47,6 +51,9 @@ pub enum Target {
     Secret(String),
     /// Landing a workspace branch into the default branch.
     Land,
+    /// Opening an issue a scoped caller proposed; the repository owns the
+    /// request, so it outlives the workspace.
+    IssueOpen,
 }
 
 /// The name of a workspace's single land request.
@@ -60,6 +67,7 @@ impl fmt::Display for Target {
             Self::Simulator => f.write_str("simulator"),
             Self::Secret(name) => write!(f, "secret/{name}"),
             Self::Land => f.write_str("land"),
+            Self::IssueOpen => f.write_str("issue_open"),
         }
     }
 }
@@ -71,6 +79,7 @@ impl FromStr for Target {
         match text {
             "simulator" => return Ok(Self::Simulator),
             "land" => return Ok(Self::Land),
+            "issue_open" => return Ok(Self::IssueOpen),
             _ => {}
         }
         if let Some(name) = text.strip_prefix("port/")
@@ -99,6 +108,14 @@ impl FromStr for Target {
 }
 text_key!(Target);
 
+impl Target {
+    /// Whether the request proposes a forge write the user may edit before
+    /// approving, rather than granting access.
+    pub fn is_proposal(&self) -> bool {
+        matches!(self, Self::IssueOpen)
+    }
+}
+
 /// The effective allocation settings a decision binds; a later request with
 /// different settings cannot reuse the grant. Each kind keeps the JSON shape
 /// its allocator has always recorded.
@@ -110,6 +127,7 @@ pub enum Specification {
     Simulator(SimulatorSpecification),
     Secret(SecretSpecification),
     Land(LandSpecification),
+    Issue(IssueSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -174,6 +192,10 @@ pub struct ApprovalRequest {
     pub workspace_id: String,
     #[serde(default)]
     pub workspace: String,
+    /// The repository that owns a proposed issue, which outlives the
+    /// workspace that proposed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_id: Option<String>,
     pub target: Target,
     pub name: String,
     pub specification: Specification,
@@ -191,6 +213,10 @@ pub struct ApprovalRequest {
     /// holds a grant for the same thing; the user decides without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decider: Option<String>,
+    /// The issue an approved proposal opened, or the issue a denied
+    /// one duplicates; decided proposals are no longer stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 const COLUMNS: &str = "SELECT id,record,active,number FROM access_requests";
@@ -233,9 +259,13 @@ fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_NUMBER, [number])
 }
 
+/// Every request, or those `owner` made, including the issues it proposed
+/// for its repository.
 pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY rowid"
+        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
+            OR (workspace_id IS NULL AND json_extract(record, '$.workspace_id')=?1)
+        ORDER BY rowid"
     ))?
     .query_map([owner], record_row)?
     .map(|row| decode_record(row?))
@@ -330,6 +360,7 @@ impl ApprovalRequest {
             key: String::new(),
             workspace_id: owner.into(),
             workspace: String::new(),
+            repository_id: None,
             target,
             name: name.into(),
             specification,
@@ -341,6 +372,7 @@ impl ApprovalRequest {
             active: true,
             routed: false,
             decider: None,
+            url: None,
         }
     }
 
@@ -356,12 +388,15 @@ impl ApprovalRequest {
             && self.created_at == other.created_at
     }
 
-    /// What the user is asked to decide: the target and lease name, or the
-    /// branch and commit to land.
+    /// What the user is asked to decide: the target and lease name, the
+    /// branch and commit to land, or the issue to open.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Land, Specification::Land(land)) => {
                 format!("land {} at {}", land.branch, land.head)
+            }
+            (Target::IssueOpen, Specification::Issue(issue)) => {
+                format!("open issue \"{}\"", issue.issue.title)
             }
             _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
         }
@@ -609,6 +644,18 @@ impl Manager {
             .await
     }
 
+    /// [`proposals::remove`] in its own transaction, once it is decided.
+    pub(crate) async fn forget_proposal(&self, key: String) -> Result<()> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                proposals::remove(&tx, &key)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
     /// [`retire`] in its own transaction, such as for a stale request.
     pub async fn retire_approval(&self, request: ApprovalRequest) -> Result<()> {
         self.store
@@ -643,6 +690,9 @@ impl Manager {
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
         );
+        if request.target.is_proposal() {
+            return self.decide_proposal(request, approve).await;
+        }
         let decision = self.record_decision(request, approve).await?;
         if decision.new {
             self.tell_requester(&decision.request).await;
@@ -731,10 +781,14 @@ impl Manager {
 
     /// Failure only logs; the decision stands.
     async fn tell_requester(&self, request: &ApprovalRequest) {
-        if let Err(error) = self
-            .queue_agent_message(&request.workspace_id, request.decision_message())
-            .await
-        {
+        self.tell_workspace(&request.workspace_id, request.decision_message())
+            .await;
+    }
+
+    /// Queue `message` for the requesting workspace's agents. Failure only
+    /// logs; the decision stands.
+    pub(crate) async fn tell_workspace(&self, workspace_id: &str, message: String) {
+        if let Err(error) = self.queue_agent_message(workspace_id, message).await {
             log!("approval decision message not queued: {error:#}");
         }
     }
@@ -751,6 +805,12 @@ impl Manager {
     /// routed once; repeating it tells its decider again.
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
         if request.status != DecisionStatus::Pending {
+            return;
+        }
+        // Publishing to a forge others see is the user's review, so proposals
+        // never go to a coordinator.
+        if request.target.is_proposal() {
+            self.ask_user(workspace, request).await;
             return;
         }
         let routed = match request.routed {
@@ -875,14 +935,22 @@ impl Manager {
             Some(workspace),
             crate::daemon::notifications::NotificationKind::ApprovalRequested,
             format!(
-                "approval {}: {}: {}; approve with shoal approve {}",
+                "approval {}: {}{}; approve with shoal approve {}",
                 request.id,
                 request.subject(),
-                request.reason,
+                reason_suffix(request),
                 request.id
             ),
         )
         .await;
+    }
+}
+
+/// `: <reason>` for a request that gives one; proposals give none.
+fn reason_suffix(request: &ApprovalRequest) -> String {
+    match request.reason.as_str() {
+        "" => String::new(),
+        reason => format!(": {reason}"),
     }
 }
 

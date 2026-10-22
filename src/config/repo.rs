@@ -108,6 +108,7 @@ pub struct RepoConfig {
     pub pr: Pr,
     pub issue: Issue,
     pub land: Land,
+    pub approvals: Approvals,
     pub seed: Seed,
 }
 
@@ -413,6 +414,24 @@ pub struct Issue {
 pub struct Land {
     pub push: Option<bool>,
     pub requires_approval: Option<bool>,
+}
+
+states!(
+    #[derive(Default)]
+    /// Whether a scoped caller's forge write happens at once or waits for the
+    /// user's approval.
+    Opening {
+        #[default]
+        Direct => "direct",
+        Propose => "propose",
+    }
+);
+
+/// Which agent forge writes wait for the user's approval.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Approvals {
+    pub issue_open: Option<Opening>,
 }
 
 /// Repository value for the global `[cleanup.pr]`.

@@ -252,8 +252,8 @@ async fn select_held(
     Ok(selected)
 }
 
-/// Release cancels a pending or denied request even without a lease. Keep and
-/// land requests belong to completion and landing, not to a lease.
+/// Release cancels a pending or denied request even without a lease. Land
+/// requests and proposals belong to landing and opening, not to a lease.
 fn requested(request: ApprovalRequest) -> Option<Held> {
     let name = request.name;
     Some(match (request.target, request.specification) {
@@ -266,7 +266,7 @@ fn requested(request: ApprovalRequest) -> Option<Held> {
         }
         (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
         (Target::Secret(_), _) => Held::Secret { name },
-        (Target::Land, _) => return None,
+        (Target::Land | Target::IssueOpen, _) => return None,
     })
 }
 

@@ -489,6 +489,21 @@ impl Manager {
             .collect()
     }
 
+    /// A scoped caller as a proposer, naming the agent whose execution it
+    /// runs in; unscoped callers open directly.
+    pub(crate) async fn proposer(
+        &self,
+        caller: Option<&crate::daemon::scope::Caller>,
+    ) -> Option<crate::daemon::links::proposals::Proposer> {
+        let caller = caller?;
+        let agents = self.agents.lock().await;
+        let agent = caller
+            .execution_id()
+            .and_then(|id| agents.get(id))
+            .map(|agent| agent.name.clone());
+        Some(crate::daemon::links::proposals::Proposer { agent })
+    }
+
     /// Workspaces with a connected agent that is not being stopped.
     pub(crate) async fn running_agent_workspaces(&self) -> Vec<String> {
         let agents = self.agents.lock().await;

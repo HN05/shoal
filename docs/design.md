@@ -1056,7 +1056,20 @@ join again.
 
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: landing
-a branch (see scope) and resource access. Approving a land
+a branch (see scope), resource access, and issues an agent proposed.
+
+In a shared repository everything an agent opens is seen by other people, so
+`[approvals] issue_open` can make a scoped `issue open` propose instead of open
+(`"direct"` is the default; unscoped callers always open). A proposal is an
+approval request whose record carries the command's options, the workspace,
+branch, commit and agent; the command reports it and exits 0, because the agent
+goes on with its work and hears the decision as a message. On approval the daemon
+opens the item as the agent account through the same path `issue open` uses,
+recording and linking it. A decided proposal is deleted, since the message carries
+the outcome. An issue proposal belongs to the repository rather than the
+workspace, because agents file follow-ups just before `done`; it opens through the
+repository's checkout and agent account once the workspace is gone. Other agent
+writes, such as comments, edits and closing, stay direct. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
