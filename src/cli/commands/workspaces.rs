@@ -719,11 +719,32 @@ async fn check_add_creation(ctx: &Context, target: &AddTarget, creation: &Creati
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(from = "StoredAddAgent")]
 struct ResolvedAddAgent {
     agent: Option<Agent>,
     /// Whether the agent runs tracked, never handed to a desktop app.
+    tracked: bool,
+}
+
+/// A plan's agent as queued entries store it, including plans queued before
+/// `tracked`, which recorded Codex's mode instead.
+#[derive(serde::Deserialize)]
+struct StoredAddAgent {
+    agent: Option<Agent>,
     #[serde(default)]
     tracked: bool,
+    #[serde(default)]
+    codex_mode: Option<crate::agent::CodexMode>,
+}
+
+/// Codex's CLI meant a tracked launch.
+impl From<StoredAddAgent> for ResolvedAddAgent {
+    fn from(stored: StoredAddAgent) -> Self {
+        Self {
+            agent: stored.agent,
+            tracked: stored.tracked || stored.codex_mode == Some(crate::agent::CodexMode::Cli),
+        }
+    }
 }
 
 /// The repository's effective settings, loaded on first use.
@@ -2054,6 +2075,15 @@ mod tests {
             super::AddPlan::agent_in(&child, "claude".parse().unwrap(), None, Vec::new());
         creating.creation.branch = Some("new".into());
         assert!(!creating.opens(&child));
+    }
+
+    #[test]
+    fn plans_queued_with_codex_cli_stay_tracked() {
+        let decode = |json: &str| serde_json::from_str::<super::ResolvedAddAgent>(json).unwrap();
+        assert!(decode(r#"{"agent":"codex","codex_mode":"cli"}"#).tracked);
+        assert!(!decode(r#"{"agent":"codex","codex_mode":"app"}"#).tracked);
+        assert!(!decode(r#"{"agent":"claude","codex_mode":null}"#).tracked);
+        assert!(decode(r#"{"agent":"codex","tracked":true}"#).tracked);
     }
     use std::ffi::OsString;
 
