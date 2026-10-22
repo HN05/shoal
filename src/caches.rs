@@ -68,9 +68,15 @@ impl Layout {
     }
 
     /// The directory of the cache `name` when the caches directory is the
-    /// one Shoal created for this repository, so its entries may be deleted.
+    /// one Shoal created for this repository and no symlink leads out of it
+    /// on the way, so its entries may be deleted.
     pub fn owned(&self, name: &str) -> Option<PathBuf> {
-        is_marked_dir(&self.root, &self.owner).then(|| self.root.join(SHARED).join(name))
+        let shared = self.root.join(SHARED);
+        let cache = shared.join(name);
+        let real = |directory: &Path| {
+            fs::symlink_metadata(directory).is_ok_and(|metadata| metadata.is_dir())
+        };
+        (is_marked_dir(&self.root, &self.owner) && real(&shared) && real(&cache)).then_some(cache)
     }
 
     /// Each configured cache's directory, created when missing.
@@ -190,11 +196,16 @@ mod tests {
             .unwrap();
         assert_eq!(layout.owned("go"), None, "another repository's");
         Layout::new(root.path(), "other").remove().unwrap();
+        let outside = root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
         layout.prepare(&configured(&["go"])).unwrap();
-        assert_eq!(
-            layout.owned("go"),
-            Some(root.path().join(".caches/shared/go"))
-        );
+        let shared = root.path().join(".caches/shared");
+        assert_eq!(layout.owned("go"), Some(shared.join("go")));
+        std::os::unix::fs::symlink(&outside, shared.join("linked")).unwrap();
+        assert_eq!(layout.owned("linked"), None, "a symlinked cache");
+        fs::rename(&shared, root.path().join("moved")).unwrap();
+        std::os::unix::fs::symlink(root.path().join("moved"), &shared).unwrap();
+        assert_eq!(layout.owned("go"), None, "a symlinked shared directory");
     }
 
     fn configured(names: &[&str]) -> BTreeMap<String, Cache> {

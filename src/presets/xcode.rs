@@ -12,7 +12,7 @@ use std::{
     time::SystemTime,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 
 /// The xcconfig `XCODE_XCCONFIG_FILE` names, inside the cache directory.
@@ -80,10 +80,18 @@ pub fn prune_checkouts(
     unused_since: SystemTime,
 ) -> Result<Vec<PathBuf>> {
     let packages = directory.join(PACKAGES);
-    let entries = match fs::read_dir(&packages) {
+    match fs::symlink_metadata(&packages) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        entries => entries.with_context(|| format!("read {}", packages.display()))?,
-    };
+        metadata => ensure!(
+            metadata
+                .with_context(|| format!("read {}", packages.display()))?
+                .is_dir(),
+            "{} is not a directory, so its entries lie outside the cache",
+            packages.display()
+        ),
+    }
+    let entries =
+        fs::read_dir(&packages).with_context(|| format!("read {}", packages.display()))?;
     let mut deleted = Vec::new();
     for entry in entries {
         let entry = entry?;
@@ -252,5 +260,13 @@ mod tests {
         assert!(packages.join("recent").exists());
         let missing = cache.path().join("missing");
         assert!(prune_checkouts(&missing, &used, since).unwrap().is_empty());
+
+        // A symlink would lead the deletions outside the cache.
+        let linked = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir(outside.path().join("unused")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), linked.path().join(PACKAGES)).unwrap();
+        assert!(prune_checkouts(linked.path(), &used, since).is_err());
+        assert!(outside.path().join("unused").exists());
     }
 }
