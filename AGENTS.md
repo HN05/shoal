@@ -271,3 +271,18 @@ screenshots. Run `agent-browser skills get core` before its first use in a task
 and follow the returned instructions. Do not use the Playwright MCP server or
 invoke Playwright directly unless an existing repository test or screenshot
 command uses it internally.
+
+## Terminal recordings
+
+A PR that changes what Shoal prints or draws in the terminal, such as a picker,
+menu, listing or message, shows examples of the new interface. Produce them with
+a [VHS](https://github.com/charmbracelet/vhs) tape that runs a development build
+against a temporary `--state-dir` and repository and types the keys a user
+would: `Screenshot` captures a screen, `Output <file>.mp4` records a video, never
+a GIF, and `Output <file>.txt` writes each frame as text. Attach the screenshots
+and video to the PR with `shoal pr comment --attach`, and put text frames in
+code blocks of the description. Pace a video so the viewer can read each screen
+before the next key, about two to three seconds on a screen and longer on a
+dense one, without idle stretches. Look at the screenshots yourself first; VHS
+renders headlessly, so the recording is the only view the user gets. Keep tapes
+and their output out of the repository unless a document uses them.

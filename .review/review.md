@@ -445,7 +445,9 @@ When commit history is available, check that each commit has one coherent
 purpose and keeps its tests and documentation together. Flag avoidable bundles
 of independent changes and suggest concrete boundaries. The size guidance in
 AGENTS.md is a prompt to inspect, not a line-count gate; tightly coupled
-changes are a valid reason for a larger commit. Agents cannot merge PRs;
+changes are a valid reason for a larger commit. Flag a PR that changes what
+Shoal prints or draws in the terminal without examples of the new interface in
+its description or comments. Agents cannot merge PRs;
 leave merging to the user instead of asking for permission to merge.
 
 ## Do not bother with
