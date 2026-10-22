@@ -531,6 +531,32 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "{refused:?}"
     );
     assert!(fixture.requests().is_empty());
+
+    // Without files nothing needs the working directory, which may be gone.
+    let deleted = fixture.root.path().join("deleted");
+    fs::create_dir(&deleted).unwrap();
+    let output = support::isolated(fixture.root.path(), "bash")
+        .args([
+            "--noprofile",
+            "--norc",
+            "-c",
+            "cd -- \"$1\" && rmdir -- \"$1\" || exit; shift; exec \"$@\"",
+            "deleted-cwd-test",
+        ])
+        .arg(&deleted)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .args([
+            "pr",
+            "comment",
+            "8",
+            "--workspace",
+            "topic",
+            "--body",
+            "Done",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
 }
 
 #[test]

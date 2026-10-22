@@ -369,6 +369,10 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
 /// The body and the files to attach, checked before anything is sent, with
 /// the body's references to them pointing at their paths.
 fn read_content(body: BodyArgs, files: AttachArgs) -> Result<(Option<String>, Vec<Attachment>)> {
+    // Only attachments resolve paths, which a deleted working directory cannot.
+    if files.attach.is_empty() {
+        return Ok((read_body(body)?, Vec::new()));
+    }
     let cwd = std::env::current_dir().context("read the working directory")?;
     let attachments: Vec<_> = files
         .attach
