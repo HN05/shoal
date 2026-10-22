@@ -1071,7 +1071,7 @@ impl ResolvedAddAgent {
         } else {
             None
         };
-        agents::launch_agent(ctx, agent, self.codex_mode, workspace, prompt, args).await
+        agents::launch_agent(ctx, agent, self.codex_mode, workspace, prompt, args, vec![]).await
     }
 }
 

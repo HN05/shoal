@@ -476,7 +476,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => transfer::export(&ctx, workspace, output, confirmation.yes).await,
         Command::Import { file, repository } => transfer::import(&ctx, file, repository).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
-        Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
+        Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args, vec![]).await,
         Command::Codex {
             workspace,
             cli,
@@ -490,7 +490,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             } else {
                 None
             };
-            agents::codex(&ctx, mode, workspace, args).await
+            agents::codex(&ctx, mode, workspace, args, vec![]).await
         }
         Command::T3 { workspace, args } => agents::open_app(&ctx, workspace, "t3", args).await,
         Command::Happy {

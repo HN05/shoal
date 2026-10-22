@@ -1,5 +1,8 @@
 //! Terminal agents run through the tracked execution wrapper.
-use std::ffi::{OsStr, OsString};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 
 use anyhow::Result;
 
@@ -24,10 +27,13 @@ use crate::{
     protocol::ConfigTarget,
 };
 
+/// `replaces` names recovery records of stopped agents this one replaces,
+/// which its wrapper consumes once it registers.
 pub(in crate::cli) async fn claude(
     ctx: &Context,
     workspace: Option<String>,
     args: Vec<OsString>,
+    replaces: Vec<PathBuf>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let launch = ResolvedLaunch::inspect(ctx, workspace, None).await?;
@@ -40,23 +46,31 @@ pub(in crate::cli) async fn claude(
         .chain(BuiltinAgent::Claude.hook_args()?)
         .chain(args)
         .collect();
-    launch.run(ctx, "claude", args, "").await
+    launch.run(ctx, "claude", args, "", replaces).await
 }
 
+/// `replaces` as for [`claude`]; a desktop handoff consumes them once it opens.
 pub(in crate::cli) async fn codex(
     ctx: &Context,
     mode: Option<CodexMode>,
     workspace: Option<String>,
     args: Vec<OsString>,
+    replaces: Vec<PathBuf>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     // Explicit desktop handoffs do not consume prompt templates.
     if mode == Some(CodexMode::App) {
-        return open_app(ctx, Some(workspace), "codex", args).await;
+        return started(
+            open_app(ctx, Some(workspace), "codex", args).await,
+            &replaces,
+        );
     }
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     if mode.unwrap_or(settings.codex.default_mode) == CodexMode::App {
-        return open_app(ctx, Some(workspace), "codex", args).await;
+        return started(
+            open_app(ctx, Some(workspace), "codex", args).await,
+            &replaces,
+        );
     }
     let launch = ResolvedLaunch::inspect(ctx, workspace, Some(settings)).await?;
     ensure_installed(&Agent::Codex, &launch.settings.commands)?;
@@ -72,7 +86,7 @@ pub(in crate::cli) async fn codex(
         .chain(BuiltinAgent::Codex.hook_args()?)
         .chain(args)
         .collect();
-    launch.run(ctx, "codex", args, "").await
+    launch.run(ctx, "codex", args, "", replaces).await
 }
 
 pub(super) async fn custom_agent(
@@ -81,6 +95,7 @@ pub(super) async fn custom_agent(
     workspace: Workspace,
     prompt: Option<String>,
     mut args: Vec<OsString>,
+    replaces: Vec<PathBuf>,
 ) -> Result<i32> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
@@ -102,7 +117,17 @@ pub(super) async fn custom_agent(
     if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
         args.insert(0, prompt.clone().into());
     }
-    launch.run(ctx, name, args, &prompt).await
+    launch.run(ctx, name, args, &prompt, replaces).await
+}
+
+/// The result of a launch that returns once its agent has started, after
+/// consuming the recovery records it replaces.
+pub(super) fn started(launched: Result<i32>, replaces: &[PathBuf]) -> Result<i32> {
+    let code = launched?;
+    for record in replaces {
+        crate::execution::recovery::consume(record)?;
+    }
+    Ok(code)
 }
 
 /// Resolved for one terminal launch; settings are never cached across launches.
@@ -145,6 +170,7 @@ impl ResolvedLaunch {
         name: &str,
         args: Vec<OsString>,
         prompt: &str,
+        replaces: Vec<PathBuf>,
     ) -> Result<i32> {
         let command = named_commands::expand_with_fields(
             &ctx.paths,
@@ -155,11 +181,28 @@ impl ResolvedLaunch {
             &[("{prompt}", OsStr::new(prompt))],
         )
         .await?;
-        if let Some(code) =
-            terminal::run_agent(ctx, &self.settings, &self.workspace, name, &[], &command).await?
+        if let Some(code) = terminal::run_agent(
+            ctx,
+            &self.settings,
+            &self.workspace,
+            name,
+            &replaces,
+            &command,
+        )
+        .await?
         {
             return Ok(code);
         }
-        execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await
+        if replaces.is_empty() {
+            return execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await;
+        }
+        execution::run_recovery(
+            &ctx.paths,
+            self.workspace.id,
+            command,
+            name.into(),
+            replaces,
+        )
+        .await
     }
 }

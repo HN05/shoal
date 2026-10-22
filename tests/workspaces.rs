@@ -693,11 +693,20 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let workspace = fixture.add("moving");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    // The agent records its arguments when it starts again after the move.
+    // When the agent starts again after the move, it records its arguments
+    // and the recovery records still saved.
+    let records = fixture
+        .root
+        .path()
+        .join("state/workspaces/*/*.recovery.json");
     fs::write(
         path.join("agent.sh"),
-        "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; exit 0; fi\n\
-         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        format!(
+            "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; \
+             ls {} > records-at-start 2>/dev/null; exit 0; fi\n\
+             touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+            records.display()
+        ),
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
@@ -725,7 +734,9 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(exported["manifest"]["workspace"]["name"], "moving");
     assert!(exported["manifest"]["bundle"].as_bool().unwrap());
-    let agents = exported["manifest"]["workspace"]["agents"].as_array().unwrap();
+    let agents = exported["manifest"]["workspace"]["agents"]
+        .as_array()
+        .unwrap();
     assert_eq!(agents.len(), 1, "{exported}");
     assert_eq!(agents[0]["record"]["moved"], true);
     assert!(!path.exists());
@@ -751,6 +762,11 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(args.contains("--append-system-prompt\n"), "{args}");
     assert!(args.contains("\nShoal moved this workspace"), "{args}");
     assert!(!path.join("resumed").exists());
+    // Its wrapper consumed the moved record once the agent registered.
+    assert_eq!(
+        fs::read_to_string(path.join("records-at-start")).unwrap(),
+        ""
+    );
     let record = fixture
         .root
         .path()

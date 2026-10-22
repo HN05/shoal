@@ -154,8 +154,8 @@ async fn continue_last_session(
 }
 
 /// Start `agent` as a new agent is started, since its sessions stayed on the
-/// machine the workspace moved from, telling it the workspace moved;
-/// `records` are consumed once it has started.
+/// machine the workspace moved from, telling it the workspace moved; it
+/// consumes `records` once it has started.
 async fn start_moved(
     ctx: &Context,
     workspace: &Workspace,
@@ -167,20 +167,16 @@ async fn start_moved(
         .parse()
         .map_err(|()| anyhow::anyhow!("cannot start agent {agent} of the moved workspace"))?;
     eprintln!("shoal: starting a new {agent} session in the moved workspace");
-    let prompt = crate::execution::recovery::moved_prompt(handoff);
-    let code = crate::cli::agents::launch_agent(
+    crate::cli::agents::launch_agent(
         ctx,
         launch,
-        None,
+        Some(crate::agent::CodexMode::Cli),
         workspace.clone(),
-        Some(prompt),
+        Some(crate::execution::recovery::moved_prompt(handoff)),
         vec![],
+        records,
     )
-    .await?;
-    for record in &records {
-        consume(record)?;
-    }
-    Ok(code)
+    .await
 }
 
 /// Start the restore command, consuming `records` once the agent runs.

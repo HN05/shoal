@@ -160,19 +160,21 @@ pub(super) async fn run_named(
     args: Vec<OsString>,
 ) -> Result<i32> {
     match name {
-        "claude" => claude(ctx, workspace, args).await,
-        "codex" => codex(ctx, None, workspace, args).await,
+        "claude" => claude(ctx, workspace, args, vec![]).await,
+        "codex" => codex(ctx, None, workspace, args, vec![]).await,
         _ if crate::ai::providers(&Config::load(&ctx.paths)?.ai).contains(name) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
-            native::custom_agent(ctx, name, workspace, None, args).await
+            native::custom_agent(ctx, name, workspace, None, args, vec![]).await
         }
         _ => named_commands::run(ctx, name, workspace, args).await,
     }
 }
 
 /// Start an agent in a ready workspace, giving it the prompt the way it accepts one.
+/// It replaces the stopped agents whose recovery records `replaces` names,
+/// consumed once it has started.
 pub(super) async fn launch_agent(
     ctx: &Context,
     agent: Agent,
@@ -180,6 +182,7 @@ pub(super) async fn launch_agent(
     workspace: Workspace,
     prompt: Option<String>,
     mut args: Vec<OsString>,
+    replaces: Vec<std::path::PathBuf>,
 ) -> Result<i32> {
     if let Some(prompt) = &prompt
         && !matches!(agent, Agent::Happy(_) | Agent::Custom(_))
@@ -187,10 +190,16 @@ pub(super) async fn launch_agent(
         args.insert(0, prompt.into());
     }
     match agent {
-        Agent::Codex => codex(ctx, codex_mode, Some(workspace.id), args).await,
-        Agent::Claude => claude(ctx, Some(workspace.id), args).await,
-        Agent::Happy(agent) => happy(ctx, agent, Some(workspace.id), prompt, args).await,
-        Agent::Custom(name) => native::custom_agent(ctx, &name, workspace, prompt, args).await,
+        Agent::Codex => codex(ctx, codex_mode, Some(workspace.id), args, replaces).await,
+        Agent::Claude => claude(ctx, Some(workspace.id), args, replaces).await,
+        // Happy returns once its detached launch is recorded.
+        Agent::Happy(agent) => native::started(
+            happy(ctx, agent, Some(workspace.id), prompt, args).await,
+            &replaces,
+        ),
+        Agent::Custom(name) => {
+            native::custom_agent(ctx, &name, workspace, prompt, args, replaces).await
+        }
     }
 }
 

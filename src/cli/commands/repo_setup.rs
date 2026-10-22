@@ -58,6 +58,7 @@ pub(super) async fn start(
         workspace,
         Some(prompt),
         args,
+        vec![],
     )
     .await
 }

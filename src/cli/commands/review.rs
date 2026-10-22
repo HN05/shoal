@@ -423,6 +423,7 @@ async fn run(
                 workspace,
                 Some(prompt),
                 args,
+                vec![],
             )
             .await
         }
