@@ -50,6 +50,35 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
+    /// Queue `text` about the workspace named `name` for the agent of its
+    /// nearest ancestor that has one, which coordinates its work. Returns
+    /// false when no ancestor has an agent, its messages are full, or the
+    /// event comes from an agent and the workspace has none of its own, since
+    /// the coordinator itself or the user acted there; the user then
+    /// receives the event instead.
+    pub(crate) async fn tell_coordinator(&self, name: &str, text: String, source: Source) -> bool {
+        let lookup = name.to_owned();
+        let found = self
+            .store
+            .run(move |db| coordinator(db, &lookup, source))
+            .await;
+        let coordinator = match found {
+            Ok(Some(coordinator)) => coordinator,
+            Ok(None) => return false,
+            Err(error) => {
+                crate::daemon::log!("coordinator of {name}: {error:#}");
+                return false;
+            }
+        };
+        match self.queue_agent_message(&coordinator, text).await {
+            Ok(()) => true,
+            Err(error) => {
+                crate::daemon::log!("message for the coordinator of {name}: {error:#}");
+                false
+            }
+        }
+    }
+
     /// The workspaces below `id` whose activity its agent receives: children
     /// without an agent of their own, and theirs in turn.
     pub(crate) async fn delegated_workspaces(&self, id: &str) -> Result<Vec<WorkspaceRef>> {
@@ -160,6 +189,44 @@ fn delegation_paths(db: &Connection, id: &str) -> Result<Vec<Vec<String>>> {
     .query_map([id], |row| row.get::<_, String>(0))?
     .map(|path| Ok(path?.split(',').map(str::to_owned).collect()))
     .collect()
+}
+
+/// What caused an event a coordinator may receive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// The daemon, about the workspace's agent, such as its exit.
+    Daemon,
+    /// A process acting in the workspace, such as `shoal notify`.
+    Agent,
+}
+
+/// The nearest ancestor with an agent of the workspace named `name`, for an
+/// event from `source`.
+fn coordinator(db: &Connection, name: &str, source: Source) -> Result<Option<String>> {
+    if source == Source::Agent
+        && !crate::daemon::store::exists(
+            db,
+            "SELECT 1 FROM workspace_agent_state JOIN workspaces
+                ON workspaces.id=workspace_agent_state.workspace_id WHERE workspaces.name=?1",
+            [name],
+        )?
+    {
+        return Ok(None);
+    }
+    Ok(db
+        .query_row(
+            "WITH RECURSIVE up(id, depth) AS (
+                SELECT parent_workspace_id, 1 FROM workspaces
+                    WHERE name=?1 AND parent_workspace_id IS NOT NULL
+                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
+                    JOIN workspaces ON workspaces.id=up.id
+                    WHERE workspaces.parent_workspace_id IS NOT NULL
+            ) SELECT id FROM up WHERE EXISTS (SELECT 1 FROM workspace_agent_state
+                WHERE workspace_agent_state.workspace_id=up.id) ORDER BY depth LIMIT 1",
+            [name],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// Fill in the workspace's parent and its children.

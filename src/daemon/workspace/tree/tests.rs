@@ -331,3 +331,155 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         assert_eq!(everywhere.len(), 2, "{target:?}");
     }
 }
+
+#[tokio::test]
+async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user() {
+    use crate::{daemon::notifications::NotificationKind, state::AgentState};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let helper = manager
+        .split_workspace(&parent.id, "helper".into(), None)
+        .await
+        .unwrap();
+    let user = || async {
+        manager
+            .notifications(false, 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|n| n.message)
+            .collect::<Vec<_>>()
+    };
+    let received = || async {
+        manager
+            .agent_messages(&parent.id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|m| m.message)
+            .collect::<Vec<_>>()
+    };
+    manager
+        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    // Without an agent above, the user hears the child's agent.
+    manager
+        .send_message(&child.id, "first".into())
+        .await
+        .unwrap();
+    assert_eq!(user().await, ["first"]);
+
+    manager
+        .set_agent_state(&parent.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    manager
+        .send_message(&child.id, "second".into())
+        .await
+        .unwrap();
+    // A child without an agent of its own is the coordinator's own work.
+    manager
+        .send_message(&helper.id, "from the parent".into())
+        .await
+        .unwrap();
+    // The daemon's events about a child's agent reach the coordinator.
+    manager
+        .notify(
+            Some(&helper.name),
+            NotificationKind::AgentExited,
+            "claude exited",
+        )
+        .await;
+    assert_eq!(received().await, ["child: second", "helper: claude exited"]);
+    assert_eq!(user().await, ["first", "from the parent"]);
+}
+
+#[tokio::test]
+async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
+    use crate::{daemon::questions::Ask, state::AgentState};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let ask = |question: &str| Ask {
+        question: question.into(),
+        recommendation: "Yes".into(),
+        reason: None,
+        choices: vec![],
+    };
+    let below = manager
+        .ask_question(&child.id, ask("Use SQLite?"))
+        .await
+        .unwrap();
+    let own = manager
+        .ask_question(&parent.id, ask("Merge now?"))
+        .await
+        .unwrap();
+    let beside = manager
+        .ask_question(&sibling.id, ask("Rename it?"))
+        .await
+        .unwrap();
+    let messages = manager.agent_messages(&parent.id).await.unwrap();
+    assert!(
+        messages[0]
+            .message
+            .starts_with(&format!("child: question {}", below.id)),
+        "{messages:?}"
+    );
+    manager
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
+        let mut message = Method::SendAgentMessage {
+            workspace: workspace.name.clone(),
+            message: "Rebase onto main".into(),
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some("scope"), &mut message).await;
+        assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
+    }
+    for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
+        let mut answer = Method::AnswerQuestion {
+            id: question.id,
+            answer: "Yes".into(),
+            shown: None,
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer).await;
+        assert_eq!(authorized.is_ok(), allowed, "{}", question.ask.question);
+    }
+}

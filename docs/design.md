@@ -316,10 +316,19 @@ subtree. A parent stays until its children are removed, through every unattended
 removal like a hold, so one `done` at the top leaves the tree until its PRs
 merge; each child completes on its own. Removing a parent moves its children up
 to its own parent and journals the change. `ls` lists children below their
-parent, and `status` names both. Proposed next (#913): children with their own
-agents, and routing a child's messages, questions, completion and approval
-requests to its parent's agent, which may decide an approval it holds a grant
-for or pass it up to the user.
+parent, and `status` names both. `split --agent` gives a child an agent of its
+own through the agent queue; the daemon starts every launch in an existing
+workspace itself, detached, so the agent never inherits the caller's scope, and
+scoped callers may queue only for the workspaces below theirs. The agent of
+the nearest ancestor that has one coordinates a child's work: the events about
+it that notify the user, the child agent's messages, questions and completion
+and its agent's exits and stops, plus its ready marks, become that agent's
+messages instead, falling back to the user without such an ancestor or when its
+messages are full. Events a process causes in a child without an agent of its
+own are the coordinator's own work and reach the user. The coordinator answers
+questions asked below it or passes them up with its own question. Proposed
+next (#913): approval requests go to the coordinator too, which decides one it
+holds a grant for and otherwise passes it up, the user deciding at the top.
 
 `shoal rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay

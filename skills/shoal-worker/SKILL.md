@@ -227,6 +227,21 @@ its work is finished; Shoal cleans up your workspace only after its children are
 removed. You can split children from children; each workspace process reaches
 its own workspace and those below it.
 
+To have another agent do the child's work in parallel, start one there:
+
+```sh
+shoal --json split --issue 43 --agent claude
+shoal --json split api-part --agent codex -- "Move the API client into its own crate"
+```
+
+It starts from the agent queue, detached, as the child's own agent, and its
+issue and PR activity goes to it rather than to you. You coordinate it: its
+messages, questions, completion and ready marks, and its exits, reach you as
+messages naming the child instead of reaching the user. Answer its questions
+with `shoal answer <number> <answer>`, or ask the user yourself with
+`shoal ask` when the decision is theirs. Send it instructions with
+`shoal message <child> "<text>"`.
+
 ## Ports
 
 ```sh

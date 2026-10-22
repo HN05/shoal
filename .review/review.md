@@ -76,7 +76,11 @@ instead of the PR delivery guidance below.
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than `split`, removal, recovery and shared repository/service
-  administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
+  administration stay denied. For the workspaces below their own, scoped callers queue agents,
+  which the daemon starts detached so they never inherit the caller's scope, send agent messages
+  and answer questions; the nearest ancestor with an agent receives a child agent's messages,
+  questions, completion and ready marks and its agent's exits and stops instead of the user,
+  except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, opening and changing issues and PRs
   of the own repository except merging, rerunning or cancelling their CI jobs,
@@ -87,8 +91,8 @@ instead of the PR delivery guidance below.
   workspace removal, without execution tracking or cleanup protection.
   Notifications are read by the unscoped user only and never fail the
   operation they record; an agent message is the operation, so its failure is
-  returned, and it never records completion. Only unscoped callers queue messages
-  for a workspace's agents, and delivery deletes a message. Agent hooks deliver
+  returned, and it never records completion. Only unscoped callers, and the
+  coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
   messages and queued item activity, replacing a running watch, and a Claude Code
   hook wakes the idle agent; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is

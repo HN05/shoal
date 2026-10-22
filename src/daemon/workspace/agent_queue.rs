@@ -135,14 +135,19 @@ const ENTRY_COLUMNS: &str =
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch no limit applies
-    /// to starts untracked; one admitted here starts in the caller.
+    /// to starts untracked; one admitted here starts in the caller, except a
+    /// launch in an existing workspace, which the daemon always starts.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         crate::validate::name("queued workspace", &request.name)?;
         let repository = self.repository(&request.repository).await?;
+        let target = match &request.workspace {
+            Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),
+            None => None,
+        };
         let _gate = self.agent_queue_gate.lock().await;
         // Whether any limit applies does not depend on the slots in use.
         let limits = self.agent_limits(vec![repository.id.clone()], &[]).await?;
-        if !limits.apply_to(&repository.id) {
+        if target.is_none() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,
@@ -150,13 +155,15 @@ impl Manager {
             });
         }
         let id = uuid::Uuid::new_v4().to_string();
-        let state = if request.now {
+        // The daemon admits a launch in an existing workspace like a waiting one.
+        let state = if request.now && target.is_none() {
             QueueState::Starting
         } else {
             QueueState::Queued
         };
         let env = serde_json::to_string(&request.env)?;
         let inserted = id.clone();
+        let opens = target.clone();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -171,8 +178,8 @@ impl Manager {
                 );
                 let now = crate::time::unix_seconds() as i64;
                 tx.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,workspace_id)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                     params![
                         inserted,
                         QueueKind::Launch,
@@ -185,13 +192,19 @@ impl Manager {
                         state,
                         now,
                         (state == QueueState::Starting).then_some(now),
+                        opens,
                     ],
                 )?;
                 tx.commit()?;
                 Ok(())
             })
             .await?;
-        let start = request.now || self.admit_waiting(Some(&id)).await?;
+        let start = if target.is_some() {
+            self.admit_waiting(None).await?;
+            false
+        } else {
+            request.now || self.admit_waiting(Some(&id)).await?
+        };
         let entries = self.queue_entries().await?;
         Ok(QueueAdmission {
             start,
@@ -741,13 +754,34 @@ impl Manager {
             .store
             .run(move |db| {
                 Ok(db.execute(
-                    "UPDATE agent_queue SET workspace_id=?2 WHERE id=?1 AND state=?3",
+                    "UPDATE agent_queue SET workspace_id=?2
+                     WHERE id=?1 AND state=?3 AND (workspace_id IS NULL OR workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?)
             })
             .await?;
-        ensure!(attached == 1, "queue entry is no longer starting");
+        ensure!(
+            attached == 1,
+            "queue entry is no longer starting, or starts its agent in another workspace"
+        );
         Ok(())
+    }
+
+    /// The ID of the ready workspace of `repository_id` a launch opens.
+    async fn launch_target(&self, workspace: &str, repository_id: &str) -> Result<String> {
+        let workspace = self.workspace(workspace).await?;
+        ensure!(
+            workspace.repository_id == repository_id,
+            "workspace {} belongs to another repository",
+            workspace.name
+        );
+        ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace {} is {}; start agents in a ready workspace",
+            workspace.name,
+            workspace.state
+        );
+        Ok(workspace.id)
     }
 
     /// End a starting entry that cannot start its agent and say why.

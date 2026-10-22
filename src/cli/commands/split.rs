@@ -1,39 +1,81 @@
 //! `shoal split`: a child workspace on a new branch, which the parent
-//! workspace's agent works on and receives the activity of.
+//! workspace's agent works on and receives the activity of, or which an agent
+//! of its own works on.
+use std::ffi::OsString;
+
 use anyhow::{Context as _, Result};
+use serde::Serialize;
 
 use crate::{
+    agent::Agent,
     cli::{
         client::{self, request},
         context::Context,
+        output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
     },
-    model::{OpenedWorkspace, Workspace},
+    model::{QueueEntry, Workspace},
     protocol::Method,
+    shell,
+    state::{QueueState, WorkspaceState},
 };
 
-pub(super) async fn run(
-    ctx: &Context,
-    workspace: Option<String>,
-    branch: Option<String>,
-    issue: Option<String>,
-    base: Option<String>,
-) -> Result<i32> {
+use super::{issues::Issue, workspaces::AddPlan};
+
+/// What `shoal split` asks for besides the parent.
+pub(super) struct Split {
+    pub branch: Option<String>,
+    pub issue: Option<String>,
+    pub base: Option<String>,
+    pub agent: Option<Agent>,
+    pub args: Vec<OsString>,
+}
+
+/// The ready child and the queue entry of its agent, when one was started.
+#[derive(Serialize)]
+struct Report<'a> {
+    #[serde(flatten)]
+    workspace: &'a Workspace,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent: Option<&'a QueueEntry>,
+}
+
+pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) -> Result<i32> {
     // A supplied branch fails before the parent picker opens.
-    if let Some(branch) = &branch {
+    if let Some(branch) = &split.branch {
         crate::git::check_branch_name(None, branch).await?;
     }
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let issue = match issue {
-        Some(input) => Some(load_issue(ctx, &parent, &input).await?),
+    let issue = match &split.issue {
+        Some(input) => Some(load_issue(ctx, &parent, input).await?),
         None => None,
     };
-    let name = match (branch, &issue) {
+    let name = match (split.branch, &issue) {
         (Some(branch), _) => branch,
         (None, Some(issue)) => issue.branch_name(),
         (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
     };
+    let child = create_child(ctx, parent, name, split.base, issue.as_ref()).await?;
+    let Some(child) = prepare(ctx, child).await? else {
+        return Ok(1);
+    };
+    let agent = match split.agent {
+        Some(agent) => Some(start_agent(ctx, &child, agent, issue.as_ref(), split.args).await?),
+        None => None,
+    };
+    report(ctx, &child, agent.as_ref())?;
+    Ok(0)
+}
+
+/// Record the child of `parent` on a new branch named `name`, assigned `issue`.
+async fn create_child(
+    ctx: &Context,
+    parent: String,
+    name: String,
+    base: Option<String>,
+    issue: Option<&Issue>,
+) -> Result<Workspace> {
     let child: Workspace = request(
         &ctx.paths,
         Method::SplitWorkspace {
@@ -43,7 +85,7 @@ pub(super) async fn run(
         },
     )
     .await?;
-    if let Some(issue) = &issue {
+    if let Some(issue) = issue {
         request::<()>(
             &ctx.paths,
             Method::SetIssue {
@@ -54,17 +96,71 @@ pub(super) async fn run(
         )
         .await?;
     }
-    let opened = OpenedWorkspace {
-        workspace: child,
-        reused: false,
+    Ok(child)
+}
+
+/// Run the child's setup and post-setup hook; `None` when setup failed.
+async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
+    let child = match child.state {
+        WorkspaceState::Preparing => match super::workspaces::setup_workspace(ctx, &child).await? {
+            Some(ready) => ready,
+            None => return Ok(None),
+        },
+        _ => child,
     };
-    let navigate = terminal::follows_caller(ctx) && !crate::env::is_scoped();
-    let ready = super::workspaces::finish_add_workspace(ctx, opened, None, navigate).await?;
-    Ok(if ready.is_some() { 0 } else { 1 })
+    super::workspaces::run_post_setup(ctx, &child).await?;
+    Ok(Some(child))
+}
+
+/// Queue `agent` in `child`, prompted with `issue` or `args`; the daemon
+/// starts it outside this process, so it gets the child's own scope.
+async fn start_agent(
+    ctx: &Context,
+    child: &Workspace,
+    agent: Agent,
+    issue: Option<&Issue>,
+    args: Vec<OsString>,
+) -> Result<QueueEntry> {
+    let plan = AddPlan::agent_in(child, agent.clone(), issue, args);
+    let title = issue.map(|issue| issue.title.clone());
+    super::agent_queue::queue_in(ctx, &plan, child, String::from(agent), title).await
+}
+
+/// Report the child and its agent, then enter the child when this terminal
+/// follows new workspaces and no agent works there.
+fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Result<()> {
+    let palette = Palette::stdout(ctx.json);
+    let mut text = format!(
+        "Created {} on branch {} at {}",
+        palette.paint(Style::Heading, &child.name),
+        child.branch,
+        child.path.display()
+    );
+    if let Some(entry) = agent {
+        text.push_str(&match entry.state {
+            QueueState::Queued => format!(
+                "\nQueued {} (position {}); it starts when an agent slot is free",
+                entry.agent,
+                entry.position.unwrap_or(1)
+            ),
+            _ => format!("\nStarting {} in {}", entry.agent, child.name),
+        });
+    }
+    ctx.emit(
+        &text,
+        Report {
+            workspace: child,
+            agent,
+        },
+    )?;
+    if agent.is_none() && terminal::follows_caller(ctx) && !crate::env::is_scoped() {
+        shell::navigate(&child.path, ctx.json)?;
+    }
+    Ok(())
 }
 
 /// The issue `input` names in the parent workspace's repository.
-async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<super::issues::Issue> {
+async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
     let workspace = client::workspaces(&ctx.paths)
         .await?
         .into_iter()

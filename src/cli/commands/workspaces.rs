@@ -422,6 +422,45 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
+    /// A launch of `agent` in the existing `workspace`, prompted with the
+    /// issue at `issue` or with `args`. It runs detached, so Codex runs as its CLI.
+    pub(super) fn agent_in(
+        workspace: &Workspace,
+        agent: Agent,
+        issue: Option<&super::issues::Issue>,
+        args: Vec<OsString>,
+    ) -> Self {
+        let codex_mode = matches!(agent, Agent::Codex).then_some(CodexMode::Cli);
+        Self {
+            repository: workspace.repository_id.as_str().into(),
+            creation: Creation {
+                path: None,
+                branch: None,
+                existing: Some(workspace.branch.clone()),
+                base: None,
+                git_profile: None,
+                pr: None,
+            },
+            tab_label: None,
+            tab_name: None,
+            issue: issue.map(|issue| issue.url.clone()),
+            agent: ResolvedAddAgent {
+                agent: Some(agent),
+                codex_mode,
+            },
+            args,
+            queue_entry: None,
+            chat: None,
+        }
+    }
+
+    /// Whether the plan opens `workspace`'s branch without creating anything.
+    pub(super) fn opens(&self, workspace: &Workspace) -> bool {
+        self.creation.branch.is_none()
+            && self.creation.path.is_none()
+            && self.creation.existing.as_deref() == Some(workspace.branch.as_str())
+    }
+
     /// The agent's name, when the addition starts one.
     pub fn agent_name(&self) -> Option<String> {
         self.agent.agent.clone().map(String::from)
@@ -965,7 +1004,7 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
 
 /// Set up an opened workspace and link its PR, which needs a ready workspace,
 /// before reporting it and, when `navigate`, entering it.
-pub(super) async fn finish_add_workspace(
+async fn finish_add_workspace(
     ctx: &Context,
     opened: OpenedWorkspace,
     pr: Option<String>,

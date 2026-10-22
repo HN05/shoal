@@ -144,6 +144,7 @@ fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
         plan: "{}".into(),
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
+        workspace: None,
     }
 }
 
@@ -854,4 +855,87 @@ async fn dynamic_admission_restores_once_measured_load_has_room() {
     // waiter's query runs on the store's thread.
     tokio::time::resume();
     bounded(restoring).await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn launches_in_an_existing_workspace_start_from_the_daemon() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let other = register(&manager, &temp, "other").await;
+    manager.publish_config(global_config("max_agents = 'none'"));
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    // Without a limit the daemon still starts it rather than the caller.
+    let admission = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.name.clone()),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.workspace_id.as_deref(), Some(child.id.as_str()));
+    assert_eq!(entry.state, QueueState::Starting);
+    assert!(started(&entry.id));
+    // Its worker may attach only the workspace it opens.
+    let error = manager
+        .queue_attach(&entry.id, &parent.id)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("another workspace"));
+    manager.queue_attach(&entry.id, &child.id).await.unwrap();
+
+    let foreign = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.name.clone()),
+            ..request(&other, "foreign", false)
+        })
+        .await
+        .unwrap_err();
+    assert!(format!("{foreign:#}").contains("another repository"));
+}
+
+#[tokio::test]
+async fn workspace_processes_start_agents_only_below_their_workspace() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    manager
+        .issue_scope(
+            "scope".into(),
+            crate::daemon::scope::Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    for (workspace, allowed) in [
+        (Some(&child.name), true),
+        (Some(&parent.name), false),
+        (Some(&sibling.name), false),
+        (None, false),
+    ] {
+        let mut method = crate::protocol::Method::QueueAdd {
+            request: QueueRequest {
+                workspace: workspace.cloned(),
+                ..request(&repo, "launch", false)
+            },
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+        assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
+    }
 }

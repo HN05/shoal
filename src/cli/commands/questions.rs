@@ -138,12 +138,13 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String>) -> Result<i32> {
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot answer questions; ask the user with shoal ask"
-    );
     let (id, answer, shown) = match (id, answer) {
         (Some(id), Some(answer)) => (id, answer, None),
+        // Workspace processes answer only the questions of the workspaces
+        // below theirs, by number.
+        _ if crate::env::inherits_scope(&ctx.paths.state) => {
+            anyhow::bail!("workspace processes answer with shoal answer <number> <answer>")
+        }
         (id, _) => {
             let (question, answer) = prompt_answer(ctx, id).await?;
             (question.id, answer, Some(question))

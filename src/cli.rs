@@ -165,6 +165,13 @@ pub enum Command {
         /// Parent workspace; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,
+        /// Start an agent of its own in the child, which reports to the parent's agent;
+        /// it starts detached, from the agent queue.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the agent, such as its prompt.
+        #[arg(last = true, requires = "agent")]
+        args: Vec<OsString>,
     },
     /// Link an issue or PR with a relation: `link 42 assigned`, `link pr 43 related`.
     ///

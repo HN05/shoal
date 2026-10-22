@@ -46,6 +46,7 @@ pub(super) async fn admit(
         plan: serde_json::to_string(plan)?,
         env: terminal::environment(),
         now,
+        workspace: None,
     };
     let admission =
         client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
@@ -66,6 +67,32 @@ pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -
         entry,
     )?;
     Ok(0)
+}
+
+/// Queue `plan`, a launch of `agent` in the existing `workspace`, which the
+/// daemon starts outside this process once a slot is free.
+pub(super) async fn queue_in(
+    ctx: &Context,
+    plan: &AddPlan,
+    workspace: &Workspace,
+    agent: String,
+    issue_title: Option<String>,
+) -> Result<QueueEntry> {
+    let request = QueueRequest {
+        repository: plan.repository.clone(),
+        name: workspace.name.clone(),
+        agent,
+        issue_title,
+        plan: serde_json::to_string(plan)?,
+        env: terminal::environment(),
+        now: false,
+        workspace: Some(workspace.id.clone()),
+    };
+    let admission =
+        client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
+    admission
+        .entry
+        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
 }
 
 /// Record the workspace a starting entry opened.
@@ -159,6 +186,16 @@ async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
 pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
     let started = async {
         let (queued, plan) = plan(ctx, &entry).await?;
+        if let Some(workspace) = &queued.entry.workspace_id {
+            let workspace = client::inspect(&ctx.paths, workspace.clone())
+                .await?
+                .workspace;
+            anyhow::ensure!(
+                plan.opens(&workspace),
+                "the queued launch does not open workspace {}",
+                workspace.name
+            );
+        }
         super::workspaces::start_queued(ctx, plan, &queued.entry.name).await
     }
     .await;

@@ -144,11 +144,33 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::SendAgentMessage { workspace, .. } => {
+            ensure!(
+                manager.workspace(workspace).await?.id != *owner,
+                "workspace processes send agent messages only to the workspaces below theirs"
+            );
+            Some(workspace)
+        }
+        Method::QueueAdd { request } => {
+            let denied =
+                "workspace processes can start agents only in the workspaces split from theirs";
+            let Some(target) = request.workspace.as_mut() else {
+                bail!(denied);
+            };
+            ensure!(manager.workspace(target).await?.id != *owner, denied);
+            Some(target)
+        }
         Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
             bail!("holds belong to the user and host apps; workspace processes ask with shoal ask")
         }
-        Method::AnswerQuestion { .. } => {
-            bail!("answering questions is the user's; workspace processes ask with shoal ask")
+        Method::AnswerQuestion { id, .. } => {
+            // A coordinating agent answers the questions of the workspaces below its own.
+            let asked = manager.question(*id).await?.workspace_id;
+            ensure!(
+                asked != *owner && manager.within_subtree(owner, &asked).await?,
+                "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal ask"
+            );
+            None
         }
         Method::ItemAction {
             action: Action::Merge { .. },

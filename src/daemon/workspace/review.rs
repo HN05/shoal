@@ -85,6 +85,12 @@ impl Manager {
         if let Some(command) = command {
             self.run_post_ready(&workspace, &command, &marks).await;
         }
+        self.tell_coordinator(
+            &workspace.name,
+            ready_notice(&workspace, &marks),
+            super::Source::Agent,
+        )
+        .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
         self.check_conventions(&workspace, &settings, &mut marks)
             .await;
@@ -275,6 +281,16 @@ fn pr_urls(marks: &[ReviewMark]) -> Vec<String> {
         .filter(|mark| mark.kind == Some(ItemKind::Pr))
         .filter_map(|mark| mark.url.clone())
         .collect()
+}
+
+/// What the coordinating agent hears when the workspace marks work ready.
+fn ready_notice(workspace: &Workspace, marks: &[ReviewMark]) -> String {
+    let items = marks
+        .iter()
+        .map(|mark| mark.url.as_deref().unwrap_or("the workspace"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{}: marked ready for review: {items}", workspace.name)
 }
 
 #[cfg(test)]

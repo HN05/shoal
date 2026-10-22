@@ -6,7 +6,10 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::daemon::log;
-use crate::{daemon::workspace::Manager, state::states};
+use crate::{
+    daemon::workspace::{Manager, Source},
+    state::states,
+};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
@@ -51,6 +54,16 @@ states!(NotificationKind {
 });
 
 impl NotificationKind {
+    /// Whether the agent of an ancestor coordinating the workspace's work
+    /// receives this event instead of the user, and from whom.
+    fn coordination(self) -> Option<Source> {
+        match self {
+            Self::AgentExited | Self::AgentStopped => Some(Source::Daemon),
+            Self::AgentMessage | Self::QuestionAsked | Self::WorkspaceDone => Some(Source::Agent),
+            _ => None,
+        }
+    }
+
     /// Polled operations repeat identical events every retry or sweep, and
     /// agents may repeat a message; those collapse into one unread
     /// notification; completed events remain distinct.
@@ -127,6 +140,8 @@ impl Manager {
         .await
     }
 
+    /// Tell the agent coordinating the workspace's work about an event, or
+    /// record it for the user.
     pub(super) async fn record_notification(
         &self,
         workspace: Option<&str>,
@@ -134,6 +149,24 @@ impl Manager {
         message: impl Into<String>,
     ) -> Result<()> {
         let message = message.into();
+        if let (Some(source), Some(name)) = (kind.coordination(), workspace)
+            && self
+                .tell_coordinator(name, format!("{name}: {message}"), source)
+                .await
+        {
+            return Ok(());
+        }
+        self.record_user_notification(workspace, kind, message)
+            .await
+    }
+
+    /// Record an event for the user and wake watchers.
+    async fn record_user_notification(
+        &self,
+        workspace: Option<&str>,
+        kind: NotificationKind,
+        message: String,
+    ) -> Result<()> {
         let workspace = workspace.map(str::to_owned);
         let recorded = self
             .store

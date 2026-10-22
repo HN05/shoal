@@ -331,7 +331,18 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             issue,
             base,
             workspace,
-        } => split::run(&ctx, workspace, branch, issue, base).await,
+            agent,
+            args,
+        } => {
+            let split = split::Split {
+                branch,
+                issue,
+                base,
+                agent,
+                args,
+            };
+            split::run(&ctx, workspace, split).await
+        }
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls {

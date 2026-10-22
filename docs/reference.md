@@ -1028,6 +1028,8 @@ shoal split fix-typo                 # A child of the current workspace, from th
 shoal split --issue 42               # Branch named after the issue, which it links
 shoal split part-two --base fix-api  # Stacked on the parent's branch
 shoal split fix-typo --workspace fix-api
+shoal split --issue 43 --agent claude                  # A child with an agent of its own
+shoal split api-part --agent codex -- "Move the API client into its own crate"
 ```
 
 `shoal split` creates a workspace on a new branch in the parent's repository,
@@ -1049,6 +1051,24 @@ parent moves its children to its own parent, or to none, and records a
 `parent_changed` event. `ls` lists children indented below their parent;
 `status` shows both directions, and `ls --json` and `inspect` give
 `parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
+
+`--agent` starts an agent of its own in the ready child, prompted with the
+issue or the arguments after `--`. It goes through the [agent queue](#agent-queue)
+like any launch, but the daemon always starts it, detached in a background
+Herdr tab or zmx session, so the agent gets the child's own scope rather than
+the caller's; Codex runs as its CLI. `--json` adds the queue entry as `agent`.
+Workspace processes may queue agents only in the workspaces below their own.
+
+The agent of the nearest ancestor that has one coordinates a child's work: it
+receives, as agent messages naming the child, what would otherwise notify the
+user. That covers the child agent's messages from `shoal notify`, its questions,
+its completion, and its ready-for-review marks, which never notify the user
+otherwise. It also covers the daemon's reports that the child's agent exited or
+was stopped. Without such an ancestor, or when its unread messages are full,
+the user receives them as before. A child without an agent of its own is its
+coordinator's own work, so what a process does there reaches the user. The
+coordinating agent answers a question asked below it with
+`shoal answer <number> <answer>`, or passes it up with its own `shoal ask`.
 
 ### Repositories
 
@@ -2148,7 +2168,7 @@ run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
 An identical message that is still unread is not queued again, and a workspace
 holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
-messages but cannot send any. Removing the workspace deletes its messages.
+messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.
 
 ### Questions
 
@@ -2176,8 +2196,10 @@ for a stopped daemon to return. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
 interrupted `--wait` can be rerun; the same question with other details is refused.
 A listing returns the newest open questions that fit one response and counts the older
-ones it leaves out. Only unscoped callers answer. Scoped callers ask and list only
-their own workspace's questions. An open question keeps the workspace from idle
+ones it leaves out. Only unscoped callers answer, except that a workspace process
+answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
+Scoped callers ask and list only their own workspace's questions, or a child's
+with `--workspace`. An open question keeps the workspace from idle
 cleanup; removing the workspace deletes its questions. `shoal done` closes the
 workspace's open questions: answers to them are refused, waits on them fail, and
 `shoal undone` does not reopen them. A closed question keeps its number until the
