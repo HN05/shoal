@@ -3275,6 +3275,24 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 }
 
 #[test]
+fn split_refuses_an_unavailable_agent_before_creating_the_child() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let output = fixture.run(&[
+        "split",
+        "child",
+        "--workspace",
+        "parent",
+        "--agent",
+        "droid",
+    ]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown agent \"droid\""), "{stderr}");
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn split_rejects_an_invalid_branch_before_choosing_a_parent() {
     let fixture = Fixture::new();
     fixture.add("parent");

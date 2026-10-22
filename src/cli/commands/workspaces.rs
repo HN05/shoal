@@ -454,9 +454,11 @@ impl AddPlan {
         }
     }
 
-    /// Whether the plan opens `workspace`'s branch without creating anything.
+    /// Whether the plan opens `workspace`'s branch in its repository without
+    /// creating anything.
     pub(super) fn opens(&self, workspace: &Workspace) -> bool {
-        self.creation.branch.is_none()
+        self.repository.value() == workspace.repository_id
+            && self.creation.branch.is_none()
             && self.creation.path.is_none()
             && self.creation.existing.as_deref() == Some(workspace.branch.as_str())
     }
@@ -2001,6 +2003,30 @@ pub(super) async fn wait_for_items(
 #[cfg(test)]
 mod tests {
     use super::editor;
+
+    #[test]
+    fn a_launch_in_a_workspace_opens_only_that_workspace() {
+        use crate::{model::Workspace, state::WorkspaceState};
+        let workspace = |repository: &str, branch: &str| {
+            Workspace::new_record(
+                repository.into(),
+                branch.into(),
+                format!("/work/{branch}").into(),
+                branch.into(),
+                WorkspaceState::Ready,
+            )
+        };
+        let child = workspace("repo", "child");
+        let plan = super::AddPlan::agent_in(&child, crate::agent::Agent::Claude, None, Vec::new());
+        assert!(plan.opens(&child));
+        // The same branch in another repository, or another branch, is not the target.
+        assert!(!plan.opens(&workspace("other", "child")));
+        assert!(!plan.opens(&workspace("repo", "sibling")));
+        let mut creating =
+            super::AddPlan::agent_in(&child, crate::agent::Agent::Claude, None, Vec::new());
+        creating.creation.branch = Some("new".into());
+        assert!(!creating.opens(&child));
+    }
     use std::ffi::OsString;
 
     #[test]
