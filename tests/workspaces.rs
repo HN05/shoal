@@ -694,19 +694,13 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
     // When the agent starts again after the move, it records its arguments
-    // and the recovery records still saved.
-    let records = fixture
-        .root
-        .path()
-        .join("state/workspaces/*/*.recovery.json");
+    // and runs until the test releases it, or for at most two minutes.
     fs::write(
         path.join("agent.sh"),
-        format!(
-            "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; \
-             ls {} > records-at-start 2>/dev/null; exit 0; fi\n\
-             touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
-            records.display()
-        ),
+        "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; \
+         i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
+         exit 0; fi\n\
+         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
@@ -756,17 +750,6 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
     // The agent starts as a new agent does, told the workspace moved,
     // instead of resuming a session this machine does not have.
-    let resumed = fixture.run(&["resume", "moving"]);
-    assert!(resumed.status.success(), "{resumed:?}");
-    let args = fs::read_to_string(path.join("agent-args")).unwrap();
-    assert!(args.contains("--append-system-prompt\n"), "{args}");
-    assert!(args.contains("\nShoal moved this workspace"), "{args}");
-    assert!(!path.join("resumed").exists());
-    // Its wrapper consumed the moved record once the agent registered.
-    assert_eq!(
-        fs::read_to_string(path.join("records-at-start")).unwrap(),
-        ""
-    );
     let record = fixture
         .root
         .path()
@@ -776,7 +759,26 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
             "{}.recovery.json",
             agents[0]["execution"].as_str().unwrap()
         ));
-    assert!(!record.exists());
+    assert!(record.exists());
+    let resumed = fixture
+        .command()
+        .args(["resume", "moving"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_until("agent started again", || path.join("agent-args").exists());
+    // Its wrapper consumes the moved record once the agent registers, while
+    // the agent still runs.
+    wait_until("moved record consumed", || !record.exists());
+    fs::write(path.join("release"), "").unwrap();
+    let resumed = resumed.wait_with_output().unwrap();
+    assert!(resumed.status.success(), "{resumed:?}");
+    let args = fs::read_to_string(path.join("agent-args")).unwrap();
+    assert!(args.contains("--append-system-prompt\n"), "{args}");
+    assert!(args.contains("\nShoal moved this workspace"), "{args}");
+    assert!(!path.join("resumed").exists());
 
     let exported = fixture
         .command()
