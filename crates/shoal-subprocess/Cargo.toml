@@ -1,0 +1,17 @@
+[package]
+name = "shoal-subprocess"
+version = "0.1.0"
+description = "Run external tools with argument arrays and capture their output"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio = { workspace = true, features = ["io-util", "process", "time"] }
+
+[dev-dependencies]
+libc.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

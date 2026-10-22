@@ -36,5 +36,5 @@ case "$target:$(uname -s)" in
     ;;
 esac
 
-cargo clean -p shoal --release --target "$target"
+cargo clean --workspace --release --target "$target"
 cargo zigbuild --locked --release --target "$target"

@@ -56,7 +56,7 @@ jobs:
           SOURCE: ${{ github.server_url }}/${{ github.repository }}/src/branch/main/.forgejo/workflows/flaky.yml
         run: |
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean -p shoal
+          cargo clean --workspace
           # Findings are published before the run fails on them.
           rc=0
           .forgejo/scripts/flaky-report.sh "$ROUNDS" > report.md || rc=$?

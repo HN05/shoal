@@ -16,9 +16,10 @@
 # Every step that runs cargo in /ci-target (here and in release.yml) first
 # sources .forgejo/scripts/lock-target-dir.sh, which moves CARGO_TARGET_DIR to
 # a free slot directory under it and holds that slot for the rest of the step,
-# and runs `cargo clean -p shoal` before its first build so another branch's
-# build of the crate is never taken as fresh. The directories grow without
-# bound; clear /var/cache/ci/target on the runner host when it gets large.
+# and runs `cargo clean --workspace` before its first build so another branch's
+# build of the workspace's packages is never taken as fresh. The directories
+# grow without bound; clear /var/cache/ci/target on the runner host when it
+# gets large.
 
 name: ci
 
@@ -131,7 +132,7 @@ jobs:
         if: env.DOCS_ONLY != 'true'
         run: |
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean -p shoal
+          cargo clean --workspace
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
           # Exercise the libc used by distributed Linux binaries too: GNU-only
@@ -146,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean -p shoal
+          cargo clean --workspace
           while read -r target _platform _selectors <&3; do
             .forgejo/scripts/cross-build.sh "$target" 3<&-
           done 3< .forgejo/scripts/release-targets.txt

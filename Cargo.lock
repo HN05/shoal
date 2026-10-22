@@ -933,12 +933,23 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shoal-subprocess",
  "socket2",
  "tempfile",
  "tokio",
  "toml",
  "toml_edit",
  "uuid",
+]
+
+[[package]]
+name = "shoal-subprocess"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

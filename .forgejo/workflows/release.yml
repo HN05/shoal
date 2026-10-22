@@ -67,7 +67,7 @@ jobs:
           cd source
           # release.py builds and tests in /ci-target; hold a slot for the whole step.
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean -p shoal
+          cargo clean --workspace
           if [ -n "$REQUESTED_VERSION" ]; then
             python3 scripts/release.py run "$REQUESTED_VERSION"
           else

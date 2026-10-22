@@ -160,7 +160,7 @@ line count.
 
 ## Validation
 
-Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
+Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
 for Rust changes. Test in temporary state directories and repositories, without the
 launching environment's Shoal variables or configuration locations; never install
 persistent OS services or modify real user workspaces as a side effect of tests.
@@ -186,11 +186,11 @@ and the Python release-script tests; a PR whose only `area/` label is
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
 version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
-on the runner host, then updates `package.rust-version` in `Cargo.toml`, the
+on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml`, the
 Containerfile's `ARG RUST`, and the `image:` tag in every workflow. Cargo builds
 share the runner-mounted `/ci-target`; every step that runs cargo there sources
 `.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
-instead of waiting, and runs `cargo clean -p shoal`.
+instead of waiting, and runs `cargo clean --workspace`.
 `.forgejo/workflows/deps.yml` runs weekly (and on `fj actions dispatch deps.yml
 main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a

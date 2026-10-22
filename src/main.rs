@@ -26,7 +26,6 @@ mod service;
 mod shell;
 mod sim;
 mod state;
-mod subprocess;
 #[cfg(test)]
 mod test_support;
 mod time;
@@ -36,6 +35,7 @@ mod validate;
 
 use cli::Cli;
 use serde_json::json;
+use shoal_subprocess as subprocess;
 
 fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)

@@ -57,7 +57,7 @@ class CrossBuildTests(unittest.TestCase):
             result = subprocess.run(["bash", str(script), "custom-target"], env=env,
                                     capture_output=True, text=True, check=True)
             self.assertEqual(result.stdout.splitlines(), [
-                "clean -p shoal --release --target custom-target",
+                "clean --workspace --release --target custom-target",
                 "zigbuild --locked --release --target custom-target",
             ])
             table.write_text("replacement-target replacement-platform linux arm\n")
@@ -128,7 +128,7 @@ class CrossBuildTests(unittest.TestCase):
                         capture_output=True, text=True, check=True,
                     )
                     clean, build = map(json.loads, result.stdout.splitlines())
-                    self.assertEqual(clean["args"], ["clean", "-p", "shoal", "--release", "--target", target])
+                    self.assertEqual(clean["args"], ["clean", "--workspace", "--release", "--target", target])
                     self.assertEqual(build["args"], ["zigbuild", "--locked", "--release", "--target", target])
                     self.assertTrue(os.access(build["wrapper"], os.X_OK))
                     if target.endswith("apple-darwin"):

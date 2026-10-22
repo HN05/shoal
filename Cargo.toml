@@ -1,14 +1,29 @@
+[workspace]
+members = ["crates/*"]
+default-members = [".", "crates/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+
+[workspace.dependencies]
+anyhow = "1"
+libc = "0.2"
+tempfile = "3"
+tokio = "1"
+
 [package]
 name = "shoal"
 version = "0.9.8"
-edition = "2024"
-rust-version = "1.98"
 description = "Local workspaces and resource allocation for coding agents"
-license = "MIT"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 aes-gcm = "0.11"
-anyhow = "1"
+anyhow.workspace = true
 base64 = "0.23"
 clap = { version = "4", features = ["derive", "env", "string"] }
 clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
@@ -16,15 +31,16 @@ crypto_box = { version = "0.9", features = ["std"] }
 crypto_secretbox = { version = "0.1", features = ["std"] }
 fs2 = "0.4"
 futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"] }
-libc = "0.2"
+libc.workspace = true
 plist = "1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
+shoal-subprocess = { path = "crates/shoal-subprocess" }
 socket2 = "0.6"
-tempfile = "3"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time", "process"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time", "process"] }
 toml = "1.1.6"
 toml_edit = "0.25"
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
@@ -33,4 +49,4 @@ uuid = { version = "1.26.1", features = ["v4", "serde"] }
 rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util"] }
