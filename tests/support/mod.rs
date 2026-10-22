@@ -1,11 +1,18 @@
 //! Shared fixtures and process defaults for integration tests. Apply overrides with
-//! `Command::env` / `current_dir` after constructing a command.
+//! `Command::env` / `current_dir` / `stdin` after constructing a command.
 pub mod fake_daemon;
 
 #[allow(dead_code)]
 pub mod wait;
 
-use std::{ffi::OsStr, fs, io::Write, os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{
+    ffi::OsStr,
+    fs,
+    io::Write,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::{Command, Stdio},
+};
 
 /// Install an executable fixture, including any parent directories it needs.
 #[allow(dead_code)] // Integration test binaries use different subsets of support.
@@ -56,6 +63,9 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     ))
     .unwrap();
     command
+        // Whatever stdin the runner has must not reach a test: a command that
+        // reads an open pipe or socket to its end would wait forever.
+        .stdin(Stdio::null())
         .current_dir(root)
         .env("HOME", root)
         .env("ZDOTDIR", root)
