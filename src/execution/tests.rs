@@ -1,6 +1,9 @@
 use super::*;
-use crate::{process::identity::Identity, protocol};
-use tokio::{io::AsyncWriteExt, net::UnixStream};
+use crate::{model::Workspace, process::identity::Identity, protocol};
+use tokio::{
+    io::{AsyncWriteExt, BufReader},
+    net::UnixStream,
+};
 
 #[tokio::test]
 async fn adjacent_controls_survive_start_and_recovery_transitions() {
