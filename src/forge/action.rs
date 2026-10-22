@@ -227,17 +227,21 @@ impl ForgeRepo {
         comment: &serde_json::Value,
         pending: Pending,
     ) -> Result<()> {
-        let id = comment["id"]
-            .as_u64()
-            .context("the forge did not report the comment's ID")?;
+        let id = comment_id(comment)?;
         let holder = Holder::Comment(id);
         let body = self
             .attach(account, holder, &pending.body, &pending.attachments)
             .await?;
-        let endpoint = self.repo_endpoint(&format!("issues/comments/{id}"));
-        let request = Request::new(HttpMethod::Patch, endpoint, Some(json!({ "body": body })));
-        self.send(account, &request).await?;
+        self.send(account, &self.comment_edit_request(id, &body))
+            .await?;
         Ok(())
+    }
+
+    /// Replace the body of the discussion comment `id`, which only Forgejo,
+    /// keeping files with comments, needs.
+    fn comment_edit_request(&self, id: u64, body: &str) -> Request {
+        let endpoint = self.repo_endpoint(&format!("issues/comments/{id}"));
+        Request::new(HttpMethod::Patch, endpoint, Some(json!({ "body": body })))
     }
 
     /// The activity key of what `action` posted, from its response: the
@@ -505,6 +509,13 @@ impl ForgeRepo {
         }
         Ok(requests)
     }
+}
+
+/// The ID of the comment a post's response describes.
+fn comment_id(response: &serde_json::Value) -> Result<u64> {
+    response["id"]
+        .as_u64()
+        .context("the forge did not report the comment's ID")
 }
 
 /// GitHub changes draft state only through GraphQL.
