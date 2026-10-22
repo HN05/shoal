@@ -1,7 +1,7 @@
 use crate::{
     daemon::events::{EventCause, EventItem, EventKind},
     model::WorkspaceRef,
-    removal::{BranchChoice, InspectionPolicy},
+    removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
 };
 
@@ -50,7 +50,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
 
     for (removed, base) in [(&middle, Some(reference(&lower))), (&lower, None)] {
         manager
-            .remove_workspace(&removed.id, BranchChoice::Auto, InspectionPolicy::GitOnly)
+            .remove_workspace(&removed.id, UnsavedWork::Retain, InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert_eq!(

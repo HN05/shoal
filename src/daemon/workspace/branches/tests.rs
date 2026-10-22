@@ -96,10 +96,13 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     assert_eq!(workspace.branch, "feature-5");
     assert_eq!(workspace.path.file_name().unwrap(), "feature");
     assert_eq!(f.add("main").await.branch, "main-2");
+    // Unpushed work keeps the branch, and with it the suffix.
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
     f.manager
         .remove_workspace(
             &workspace.id,
-            crate::removal::BranchChoice::KeepBranch,
+            crate::removal::UnsavedWork::Retain,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -136,7 +139,7 @@ async fn remote_default_controls_creation_diff_and_removal() {
                 .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
                 .await
                 .unwrap()
-                .can_delete_branch()
+                .branch_preserved()
         );
         assert_eq!(
             f.manager.diff_base(&workspace.id).await.unwrap().commit,
@@ -478,7 +481,7 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         f.manager
             .remove_workspace(
                 &allocated.id,
-                crate::removal::BranchChoice::DeleteBranch,
+                crate::removal::UnsavedWork::Discard,
                 InspectionPolicy::IncludeDirectoryProcesses,
             )
             .await
@@ -649,7 +652,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     f.manager
         .remove_workspace(
             &main.workspace.id,
-            crate::removal::BranchChoice::KeepBranch,
+            crate::removal::UnsavedWork::Retain,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -1064,7 +1067,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
         .manager
         .remove_workspace(
             &opened.workspace.id,
-            crate::removal::BranchChoice::Auto,
+            crate::removal::UnsavedWork::Retain,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
@@ -1123,7 +1126,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 0);
-    assert!(check.can_delete_branch());
+    assert!(check.branch_preserved());
     // A conflicting merge is aborted and leaves the default checkout untouched.
     fs::write(f.repo.join("tracked"), "main again\n").unwrap();
     commit(&f.repo, "tracked");
@@ -1145,7 +1148,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 1);
-    assert!(!check.can_delete_branch());
+    assert!(!check.branch_preserved());
 }
 
 #[tokio::test]
@@ -1164,7 +1167,7 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
             .unwrap()
     };
     assert_eq!(check().await.unpushed_commits, 2);
-    assert!(!check().await.can_delete_branch());
+    assert!(!check().await.branch_preserved());
     // The forge squashes the branch onto main, which only the remote-tracking
     // branch has; the workspace's own commits are never pushed.
     git(&author, &["pull", "-q", "--no-rebase", "origin", "main"]);
@@ -1190,7 +1193,7 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     git(&f.repo, &["fetch", "-q", "origin"]);
     let merged = check().await;
     assert_eq!(merged.unpushed_commits, 0);
-    assert!(merged.can_delete_branch());
+    assert!(merged.branch_preserved());
     // A clone may keep only the remote-tracking default branch.
     git(&f.repo, &["remote", "set-head", "origin", "main"]);
     git(&f.repo, &["checkout", "-q", "--detach"]);
@@ -1981,7 +1984,7 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
     f.manager
         .remove_workspace(
             &w.id,
-            crate::removal::BranchChoice::Auto,
+            crate::removal::UnsavedWork::Retain,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await

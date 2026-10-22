@@ -1,4 +1,4 @@
-//! What removing a workspace would discard, and the caller's branch decision.
+//! What removing a workspace would discard, and whether the caller lets it.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,6 @@ pub struct RemovalCheck {
     /// The local default branch or its remote-tracking branch records HEAD's
     /// tree or has its changes, merged, squashed or rebased.
     pub matches_default_branch: bool,
-    pub matches_upstream: bool,
     /// The default branch used by this inspection, when it could be resolved.
     ///
     /// This is daemon state used to keep the removal decision consistent with
@@ -36,15 +35,14 @@ pub struct RemovalCheck {
     pub(crate) default_branch: Option<String>,
 }
 
-/// What happens to the workspace branch when its worktree is removed.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// Whether a manual removal may delete work that neither a branch nor a
+/// remote keeps: uncommitted and untracked files, and commits on a detached
+/// HEAD. The removal's checkpoint keeps them until it expires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum BranchChoice {
-    /// Delete the branch only when it is redundant with the default branch or
-    /// its upstream; otherwise a choice is required.
-    Auto,
-    KeepBranch,
-    DeleteBranch,
+pub enum UnsavedWork {
+    Retain,
+    Discard,
 }
 
 crate::state::open_enum! {
@@ -113,26 +111,26 @@ impl RemovalCheck {
         Ok(())
     }
 
-    pub fn warnings(&self) -> Vec<String> {
-        let mut warnings = Vec::new();
+    /// What removing the worktree would delete that no branch or remote
+    /// keeps, one entry per kind; empty when removal loses nothing.
+    pub fn unsaved_work(&self) -> Vec<String> {
+        let mut work = Vec::new();
         if self.dirty {
-            warnings.push("Uncommitted changes or untracked files will be deleted".into());
+            work.push("uncommitted changes or untracked files".into());
         }
-        if !self.matches_default_branch && !self.matches_upstream {
-            warnings.push(
-                "Branch contents differ from the default branch and upstream (or those refs are unavailable)"
-                    .into(),
-            );
+        if self.branch.is_none() && self.unpushed_commits > 0 {
+            work.push(format!(
+                "{} commit(s) on a detached HEAD that no branch or remote has",
+                self.unpushed_commits
+            ));
         }
-        warnings
+        work
     }
 
-    pub fn can_delete_branch(&self) -> bool {
-        !self.dirty && (self.matches_default_branch || self.matches_upstream)
-    }
-
-    pub fn needs_choice(&self) -> bool {
-        self.workspace.path.exists() && !self.can_delete_branch()
+    /// The branch can go with the worktree: a remote or the default branch
+    /// has every one of its commits.
+    pub fn branch_preserved(&self) -> bool {
+        self.branch.is_some() && self.unpushed_commits == 0
     }
 
     /// No command or process uses the worktree.
@@ -192,7 +190,6 @@ pub async fn inspect(
         unpushed_commits: 0,
         branch: None,
         matches_default_branch: false,
-        matches_upstream: false,
         default_branch: default_branch.map(str::to_owned),
     };
     if !check.workspace.path.exists() {
@@ -215,7 +212,6 @@ pub async fn inspect(
         check.unpushed_commits =
             git::status::unretained_commits(path, default_refs.first().map(String::as_str)).await?;
     }
-    check.matches_upstream = git::status::upstream_records_tree(path, &tree).await;
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.load_directory_processes().await?;
     }

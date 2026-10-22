@@ -691,11 +691,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::RemoveWorkspace {
             workspace,
-            choice,
+            unsaved,
             caller_pid,
         } => Body::RemovalResult(
             manager
-                .remove_workspace(&workspace, choice, removal_inspection(caller_pid))
+                .remove_workspace(&workspace, unsaved, removal_inspection(caller_pid))
                 .await?,
         ),
         Method::Cleanup { dry_run, caches } => {

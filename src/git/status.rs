@@ -202,11 +202,6 @@ async fn trial_merge_tree(repo: &Path, head: &str, target: &str) -> Result<Optio
     Ok(Some(stdout.trim().to_owned()))
 }
 
-/// Whether HEAD's upstream records the tree; a missing upstream does not.
-pub async fn upstream_records_tree(repo: &Path, head_tree: &str) -> bool {
-    records_tree(repo, "@{upstream}", head_tree).await
-}
-
 async fn records_tree(repo: &Path, revision: &str, tree: &str) -> bool {
     super::verify_revision(repo, &format!("{revision}^{{tree}}"), run)
         .await

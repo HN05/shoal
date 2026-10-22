@@ -67,7 +67,8 @@ when behavior changes, distinguishing decisions from proposals.
   squash and rebase merges), or deleted worktrees. Unattended removals except for disk
   space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
   persisted across restarts except where idle timers start over. Keep one removal path for manual and automatic
-  cleanup, retaining the default branch unless explicitly deleted; every removal of
+  cleanup, deleting a branch only when a remote or the default branch has all its
+  commits and never the default branch; every removal of
   an existing worktree keeps an expiring checkpoint of HEAD and unsaved files, and
   restoring a checkpoint first keeps the state it replaces in another. Only explicit
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and

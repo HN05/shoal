@@ -3,7 +3,7 @@ use crate::{
     daemon::scope::{self, Caller},
     model::{CleanupReason, Workspace},
     protocol::Method,
-    removal::{BranchChoice, InspectionPolicy},
+    removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
 };
 use std::sync::Arc;
@@ -302,7 +302,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
     manager
         .remove_workspace(
             &workspace.id,
-            BranchChoice::KeepBranch,
+            UnsavedWork::Discard,
             InspectionPolicy::GitOnly,
         )
         .await

@@ -173,7 +173,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
 async fn removal_causes_and_retained_errors_survive_ownership_and_notification_reads() {
     use crate::{
         forge::pr::Action,
-        removal::{BranchChoice, InspectionPolicy},
+        removal::{InspectionPolicy, UnsavedWork},
     };
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -195,7 +195,11 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         match cause {
             EventCause::Manual => {
                 manager
-                    .remove_workspace(&workspace.id, BranchChoice::Auto, InspectionPolicy::GitOnly)
+                    .remove_workspace(
+                        &workspace.id,
+                        UnsavedWork::Retain,
+                        InspectionPolicy::GitOnly,
+                    )
                     .await
                     .unwrap();
             }

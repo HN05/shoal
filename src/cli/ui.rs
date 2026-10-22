@@ -25,7 +25,6 @@ use crate::{
     forge::link::{self, ItemKind},
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
-    removal::{BranchChoice, RemovalCheck},
     state::{AgentState, QueueKind},
 };
 
@@ -207,39 +206,6 @@ pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
     let value = value.trim_end_matches(['\r', '\n']).to_owned();
     ensure!(!value.is_empty(), "canceled: no value supplied");
     Ok(value)
-}
-
-pub fn choose_removal(ctx: &Context, check: &RemovalCheck) -> Result<BranchChoice> {
-    let warnings = check.warnings();
-    ensure!(
-        ctx.interactive(),
-        "removal requires a branch choice: {}. Pass --yes with --keep-branch or --delete-branch",
-        warnings.join("; ")
-    );
-    eprintln!("Workspace: {}", check.workspace.name);
-    eprintln!("Branch:    {}", check.branch.as_deref().unwrap_or("none"));
-    for warning in warnings {
-        eprintln!(
-            "  - {}",
-            Palette::stderr(ctx.json).paint(Style::Warning, warning)
-        );
-    }
-    pick_choice(
-        ctx,
-        "Branch action> ",
-        &[
-            (None, "Cancel         Keep everything"),
-            (
-                Some(BranchChoice::KeepBranch),
-                "Keep branch    Delete workspace files only",
-            ),
-            (
-                Some(BranchChoice::DeleteBranch),
-                "Delete branch  Delete workspace files and branch",
-            ),
-        ],
-    )?
-    .context("removal canceled")
 }
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.

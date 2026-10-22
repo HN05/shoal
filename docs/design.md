@@ -342,8 +342,8 @@ HEAD, activity and file metadata; sweeps compare HEAD and activity, and walk the
 tree only when the timer starts, when it expires and after removal hooks, since
 change times only move forward and cannot be set. Status reports the first reason
 cleanup keeps a workspace from the checks the sweep runs, so it cannot disagree
-with the sweep and lsof still scans only clean worktrees. Manual removal without a branch choice
-retains changed HEAD.
+with the sweep and lsof still scans only clean worktrees. A HEAD changed by removal
+hooks keeps its branch when only that branch has the new commits.
 Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
 workspace path in the environment. Its command is selected before removal.
@@ -588,10 +588,10 @@ Service installation prints the shell initialization hint only while neither
 startup file contains an active initialization command.
 Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
-explicit flags such as `-y`/`--yes`. Removal's branch choice stays separate from
-its confirmation, which lists uncommitted changes and untracked files with Git
-status codes and reports omitted entries when the preview reaches its size limit;
-explicit branch flags skip the choice only. A failure whose fix is one
+explicit flags such as `-y`/`--yes`. Removal's confirmation names the unsaved
+work it deletes and lists uncommitted changes and untracked files with Git
+status codes, reporting omitted entries when the preview reaches its size limit;
+the daemon refuses unsaved work the confirmation did not cover. A failure whose fix is one
 command asks interactive callers `[y/N]` whether to run it and continue;
 declining, and noninteractive or JSON calls, fail naming that command. Interactive
 navigation without the shell wrapper reports how to load it without changing
@@ -1098,10 +1098,12 @@ allocation, so scoped callers cannot.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point
-(rebase merges); merged commits count as retained. Manual removal deletes a
-redundant branch (tree equal to its upstream, or merged) and otherwise requires
-an explicit keep or delete choice. The default branch, and every branch while the default branch cannot
-be resolved, is retained unless deletion is explicit.
+(rebase merges); merged commits count as retained. Every removal deletes a branch
+whose commits a remote-tracking branch or the default branch all have, since
+deleting it loses nothing, and keeps any other: users should not have to decide
+about branches. The default branch, and every branch while the default branch
+cannot be resolved, is retained. Manual removal asks only before deleting
+uncommitted or untracked files or commits on a detached HEAD, which no branch keeps.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Every unattended

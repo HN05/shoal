@@ -289,7 +289,7 @@ async fn delete_derived_data(
 mod tests {
     use crate::{
         presets::{self, derived_data, xcode},
-        removal::{BranchChoice, InspectionPolicy},
+        removal::{InspectionPolicy, UnsavedWork},
         test_support::{commit, configure, manager, repository},
     };
     use std::{fs, time::SystemTime};
@@ -332,7 +332,7 @@ mod tests {
         // Creating a workspace or landing holds the gate.
         let gate = manager.lock_repository_git(&repo.id).await;
         manager
-            .remove_workspace("removed", BranchChoice::Auto, InspectionPolicy::GitOnly)
+            .remove_workspace("removed", UnsavedWork::Retain, InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert!(!manager.delete_xcode_leftovers(&repo, |_| true).await);
@@ -405,7 +405,7 @@ mod tests {
         manager
             .remove_workspace(
                 "removed",
-                BranchChoice::DeleteBranch,
+                UnsavedWork::Discard,
                 InspectionPolicy::GitOnly,
             )
             .await
@@ -444,7 +444,7 @@ mod tests {
             ));
         }
         let remove =
-            |name| manager.remove_workspace(name, BranchChoice::Auto, InspectionPolicy::GitOnly);
+            |name| manager.remove_workspace(name, UnsavedWork::Retain, InspectionPolicy::GitOnly);
         remove("first").await.unwrap();
         assert!(!folders[0].exists());
         assert!(folders[1].exists());

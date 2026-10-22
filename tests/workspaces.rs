@@ -492,7 +492,7 @@ fn workspace_rename_refuses_collisions_and_recovers_git_failure() {
     assert_eq!(fixture.rename("original", "original")["type"], "workspace");
     assert_eq!(fixture.rename("original", "new-name")["type"], "workspace");
     assert_eq!(fixture.rename("new-name", "new/name")["type"], "workspace");
-    fixture.ok(&["rm", "new-name", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "new-name", "--yes"]);
     assert!(!path.exists());
     assert!(
         git(
@@ -685,7 +685,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let workspace = fixture.add("scratch");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    fixture.ok(&["rm", "scratch", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "scratch", "--yes"]);
     assert!(!path.exists());
     let removed = fixture.ok(&["restore"]);
     assert_eq!(removed[0]["name"], "scratch");
@@ -739,8 +739,8 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.add("kept");
     let path = Path::new(picked["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
-    fixture.ok(&["rm", "picked", "--yes", "--delete-branch"]);
-    fixture.ok(&["rm", "kept", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "picked", "--yes"]);
+    fixture.ok(&["rm", "kept", "--yes"]);
 
     let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
@@ -816,7 +816,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
         "executions did not start"
     );
 
-    fixture.ok(&["rm", "removed", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "removed", "--yes"]);
     let stopped = String::from_utf8(agent.wait_with_output().unwrap().stderr).unwrap();
     assert!(
         stopped.contains("restore with shoal restore removed, then shoal resume removed"),
@@ -2207,7 +2207,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
         fixture.ok(&["inspect", "dirty"])["workspace"]["state"],
         "ready"
     );
-    fixture.ok(&["rm", "dirty", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "dirty", "--yes"]);
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert!(
         !fixture
@@ -2264,7 +2264,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
 }
 
 #[test]
-fn removal_requires_branch_choice_for_differences_but_not_external_processes() {
+fn removal_keeps_an_unpushed_branch_without_asking_and_ignores_external_processes() {
     let fixture = Fixture::new();
     let workspace = fixture.add("unpushed");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -2283,10 +2283,7 @@ fn removal_requires_branch_choice_for_differences_but_not_external_processes() {
             "unpushed",
         ],
     );
-    let output = fixture.run(&["rm", "unpushed"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("branch choice"));
-    fixture.ok(&["rm", "unpushed", "--yes", "--keep-branch"]);
+    assert_eq!(fixture.ok(&["rm", "unpushed"])["branch_deleted"], false);
     git(
         &fixture.repo,
         &[
@@ -2315,7 +2312,7 @@ fn removal_requires_branch_choice_for_differences_but_not_external_processes() {
 }
 
 #[test]
-fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choice() {
+fn branch_removal_deletes_branches_main_or_a_remote_has() {
     let fixture = Fixture::new();
     let commit = |path: &Path| {
         git(path, &["add", "."]);
@@ -2378,12 +2375,8 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
     let path = Path::new(divergent["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "unmerged work").unwrap();
     commit(path);
-    assert!(!fixture.run(&["rm", "divergent"]).status.success());
-    assert!(path.exists());
-    assert_eq!(
-        fixture.ok(&["rm", "divergent", "--yes", "--delete-branch"])["branch_deleted"],
-        true
-    );
+    assert_eq!(fixture.ok(&["rm", "divergent"])["branch_deleted"], false);
+    assert!(!path.exists());
 }
 
 #[test]
@@ -2478,7 +2471,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
             .len(),
         2
     );
-    fixture.ok(&["rm", "first", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "first", "--yes"]);
     assert_eq!(
         fixture.ok(&["port", "--all"])[0]["reserved"],
         serde_json::json!([])
@@ -2634,7 +2627,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
             .stdout,
         b"{diff_base}"
     );
-    fixture.ok(&["rm", "changes", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "changes", "--yes"]);
 }
 
 #[test]
@@ -4225,7 +4218,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     // The removal record keeps the last session for the restored workspace.
-    fixture.ok(&["rm", "quit", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "quit", "--yes"]);
     let removed = fixture.ok(&["restore"]);
     assert_eq!(
         removed[0]["last_session"],
@@ -4507,7 +4500,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         (vec!["--json", "doctor"], false, false),
         (vec!["--json", "doctor", "available"], false, true),
         (vec!["--json", "doctor", "--all"], false, true),
-        (vec!["rm", "--yes", "--keep-branch"], true, true),
+        (vec!["rm", "--yes"], true, true),
     ] {
         let deleted = fixture.root.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
@@ -5003,7 +4996,7 @@ fn execution_scope_limits_management_and_expires() {
             .success()
     );
     for args in [
-        vec!["rm", "worker", "--yes", "--delete-branch"],
+        vec!["rm", "worker", "--yes"],
         vec!["stop", "worker"],
         vec!["inspect", "other"],
         vec!["exec", "other", "--", "true"],
@@ -5397,7 +5390,7 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
     }
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(!events.contains("external"));
-    fixture.ok(&["rm", "worker", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "worker", "--yes"]);
 }
 
 #[test]
@@ -6170,7 +6163,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
             .len(),
         3
     );
-    fixture.ok(&["rm", "worker", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "worker", "--yes"]);
     assert!(
         fixture
             .ok(&["resource", "--all"])
@@ -6339,7 +6332,7 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
         Some(2)
     );
     fixture.ok(&["resource", "release", "lock", "first"]);
-    fixture.ok(&["rm", "second", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "second", "--yes"]);
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
 
     let path = Path::new(first["path"].as_str().unwrap());
@@ -8059,12 +8052,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
             assert!(report[0]["issues"].to_string().contains("identity changed"));
             assert!(!fixture.run(&["exec", name, "--", "true"]).status.success());
-            assert!(
-                !fixture
-                    .run(&["rm", name, "--yes", "--delete-branch"])
-                    .status
-                    .success()
-            );
+            assert!(!fixture.run(&["rm", name, "--yes"]).status.success());
         } else {
             assert_eq!(report[0]["workspace"]["state"], "ready");
             assert_eq!(
@@ -8166,12 +8154,7 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
             .to_string()
             .contains("metadata was replaced")
     );
-    assert!(
-        !fixture
-            .run(&["rm", "original", "--yes", "--delete-branch"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["rm", "original", "--yes"]).status.success());
     assert!(
         !fixture
             .run(&["exec", "original", "--", "true"])
@@ -8916,66 +8899,34 @@ fn repository_removal_ignores_only_missing_prunable_unlocked_worktrees() {
 }
 
 #[test]
-fn removal_picker_keeps_or_deletes_the_selected_branch_and_can_cancel() {
-    let fixture = Fixture::new();
-    let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    let picker = bin.join("fzf");
-    for (name, label) in [
-        ("cancel-choice", "Cancel"),
-        ("keep-choice", "Keep branch"),
-        ("delete-choice", "Delete branch"),
-    ] {
-        let workspace = fixture.add(name);
-        let path = Path::new(workspace["path"].as_str().unwrap());
-        fs::write(path.join("uncommitted"), "requires a branch choice").unwrap();
-        install_test_script(
-            &picker,
-            format!("#!/bin/sh\nawk -F '\\t' '$2 ~ /^{label} / {{ print }}'\n"),
-        );
-        let (output, transcript) = fixture.interactive(&["rm", name], "y\n");
-        assert_eq!(output.status.success(), label != "Cancel", "{transcript}");
-        assert_eq!(path.exists(), label == "Cancel");
-        let branch = git(
-            &fixture.repo,
-            &["branch", "--list", workspace["branch"].as_str().unwrap()],
-        );
-        assert_eq!(!branch.trim().is_empty(), label != "Delete branch");
-        if label == "Cancel" {
-            assert!(transcript.contains("removal canceled"), "{transcript}");
-            assert!(path.join("uncommitted").exists());
-        } else {
-            assert!(transcript.contains("?? uncommitted"), "{transcript}");
-        }
-    }
-}
-
-#[test]
 fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let fixture = Fixture::new();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
-    for flag in ["--keep-branch", "--delete-branch"] {
-        let workspace = fixture.add("worker");
-        let path = Path::new(workspace["path"].as_str().unwrap());
-        fs::write(path.join("uncommitted"), "keep until approved").unwrap();
-        let piped = fixture.run(&["rm", "worker", flag]);
-        assert!(!piped.status.success());
-        assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
-        let (no, prompt) = fixture.interactive(&["rm", "worker", flag], "n\n");
-        assert!(!no.status.success());
-        assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
-        assert!(prompt.contains("?? uncommitted"), "{prompt}");
-        assert!(path.join("uncommitted").exists());
-        let (yes, prompt) = fixture.interactive(&["rm", "worker", flag], "maybe\ny\n");
-        assert!(yes.status.success(), "{prompt}");
-        assert!(prompt.contains("Please enter y or n."), "{prompt}");
-        assert!(!path.exists());
-        let branch_exists = git(
-            &fixture.repo,
-            &["branch", "--list", workspace["branch"].as_str().unwrap()],
-        );
-        assert_eq!(!branch_exists.trim().is_empty(), flag == "--keep-branch");
-    }
+    let workspace = fixture.add("worker");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("uncommitted"), "keep until approved").unwrap();
+    let piped = fixture.run(&["rm", "worker"]);
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
+    let (no, prompt) = fixture.interactive(&["rm", "worker"], "n\n");
+    assert!(!no.status.success());
+    assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
+    assert!(
+        prompt.contains("Deletes: uncommitted changes or untracked files"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("?? uncommitted"), "{prompt}");
+    assert!(path.join("uncommitted").exists());
+    let (yes, prompt) = fixture.interactive(&["rm", "worker"], "maybe\ny\n");
+    assert!(yes.status.success(), "{prompt}");
+    assert!(prompt.contains("Please enter y or n."), "{prompt}");
+    assert!(!path.exists());
+    // The branch had no commits of its own.
+    let branch_exists = git(
+        &fixture.repo,
+        &["branch", "--list", workspace["branch"].as_str().unwrap()],
+    );
+    assert!(branch_exists.trim().is_empty());
     for answer in ["n\n", "\n", "\x04"] {
         let (no, prompt) = fixture.interactive(&["repo", "rm", "project"], answer);
         assert!(!no.status.success(), "{prompt}");
@@ -9084,10 +9035,6 @@ fn removal_confirmation_lists_git_changes_before_asking() {
     let fixture = Fixture::new();
     let workspace = fixture.add("preview");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    let (no, prompt) = fixture.interactive(&["rm", "preview", "--keep-branch"], "n\n");
-    assert!(!no.status.success());
-    assert!(!prompt.contains("(Git status)"), "{prompt}");
-
     for name in ["modified", "deleted"] {
         fs::write(path.join(name), "original\n").unwrap();
     }
@@ -9117,7 +9064,7 @@ fn removal_confirmation_lists_git_changes_before_asking() {
     git(path, &["config", "status.relativePaths", "true"]);
     git(path, &["config", "status.showUntrackedFiles", "no"]);
 
-    let (no, prompt) = fixture.interactive(&["rm", "preview", "--delete-branch"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "preview"], "n\n");
     assert!(!no.status.success(), "{prompt}");
     let confirmation = prompt.find("Are you sure? [y/N]").unwrap();
     for entry in [
@@ -9137,7 +9084,7 @@ fn removal_confirmation_lists_git_changes_before_asking() {
         "changed\n"
     );
     assert!(path.join("new directory/child").exists());
-    let removed = fixture.run(&["rm", "preview", "--keep-branch", "--yes"]);
+    let removed = fixture.run(&["rm", "preview", "--yes"]);
     assert!(removed.status.success());
     assert!(!String::from_utf8_lossy(&removed.stderr).contains("(Git status)"));
     assert!(!path.exists());
@@ -9156,18 +9103,18 @@ fn removal_preview_limits_large_untracked_directories() {
         )
         .unwrap();
     }
-    let (no, prompt) = fixture.interactive(&["rm", "large-preview", "--keep-branch"], "n\n");
+    let (no, prompt) = fixture.interactive(&["rm", "large-preview"], "n\n");
     assert!(!no.status.success(), "{prompt}");
     assert_eq!(prompt.matches("?? untracked/").count(), 50, "{prompt}");
     assert!(prompt.contains("450 more entries omitted"), "{prompt}");
     assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
     assert_eq!(fs::read_dir(path.join("untracked")).unwrap().count(), 500);
-    let piped = fixture.run(&["rm", "large-preview", "--keep-branch"]);
+    let piped = fixture.run(&["rm", "large-preview"]);
     assert!(!piped.status.success());
     let error = String::from_utf8_lossy(&piped.stderr);
     assert!(error.contains("pass --yes"), "{error}");
     assert!(!error.contains("?? untracked/"), "{error}");
-    fixture.ok(&["rm", "large-preview", "--keep-branch", "--yes"]);
+    fixture.ok(&["rm", "large-preview", "--yes"]);
     assert!(!path.exists());
 }
 
@@ -9701,7 +9648,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         "failed"
     );
     assert!(path.join("setup-started").exists());
-    fixture.ok(&["rm", "interrupted", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "interrupted", "--yes"]);
     assert!(!path.exists());
 }
 
@@ -9797,7 +9744,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 
     // The removal hook runs in the daemon before the worktree goes; failure retains it.
     fs::write(path.join("fail-removal"), "busy").unwrap();
-    let output = fixture.run(&["rm", "hooked", "--yes", "--delete-branch"]);
+    let output = fixture.run(&["rm", "hooked", "--yes"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("pre_remove_cmd exited with 3"), "{stderr}");
@@ -9810,7 +9757,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     assert_eq!(retained["workspace"]["state"], "ready");
     assert!(path.join("tracked").exists());
     fs::remove_file(path.join("fail-removal")).unwrap();
-    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "hooked", "--yes"]);
     assert!(!path.exists());
     assert!(
         !fixture
@@ -10461,7 +10408,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             assert!(prompt.contains("Issue context"), "{prompt}");
             fs::remove_file(&agent_args).unwrap();
         }
-        fixture.ok(&["rm", "298-pick-agent", "--yes", "--delete-branch"]);
+        fixture.ok(&["rm", "298-pick-agent", "--yes"]);
     }
 
     // A regular add uses the same picker when no agent was named or configured.
@@ -10689,7 +10636,10 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(branches(&fixture), [branch]);
 
-    fixture.ok(&["rm", branch, "--keep-branch", "--yes"]);
+    // A commit of its own keeps the branch when the workspace goes.
+    let path = Path::new(created["path"].as_str().unwrap());
+    commit_file(path, "work", "work\n");
+    fixture.ok(&["rm", branch, "--yes"]);
     let elsewhere = fixture.root.path().join("elsewhere");
     git(
         &fixture.repo,
@@ -11951,7 +11901,7 @@ fn merged_rechecks_head_after_removal_hooks() {
 }
 
 #[test]
-fn manual_auto_removal_rechecks_safety_after_hooks() {
+fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
     for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
         let fixture = Fixture::new();
         fs::write(
@@ -11963,8 +11913,9 @@ fn manual_auto_removal_rechecks_safety_after_hooks() {
             fixture.repo.join("hook.sh"),
             concat!(
                 "#!/bin/sh\n",
+                "echo work > hook-work && git add hook-work\n",
                 "git -c user.name=Test -c user.email=test@example.invalid ",
-                "commit --allow-empty -m 'hook work'\n",
+                "commit -m 'hook work'\n",
             ),
         );
         git(&fixture.repo, &["add", "."]);
@@ -11984,19 +11935,15 @@ fn manual_auto_removal_rechecks_safety_after_hooks() {
         if key == "pre_resource_release_cmd" {
             fixture.ok(&["resource", "acquire", "signing", "hook"]);
         }
-        let removal = fixture.run(&["rm", "hook", "--yes"]);
-        assert!(!removal.status.success());
-        assert!(String::from_utf8_lossy(&removal.stderr).contains("HEAD changed"));
-        assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
-        if key == "pre_resource_release_cmd" {
-            assert_eq!(
-                fixture.ok(&["resource", "hook"])["leases"]
-                    .as_array()
-                    .unwrap()
-                    .len(),
-                1
-            );
-        }
+        // The final inspection sees the hook's commit, which only the branch has.
+        let removal = fixture.ok(&["rm", "hook", "--yes"]);
+        assert_eq!(removal["branch_deleted"], false);
+        assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
+        let branch = workspace["branch"].as_str().unwrap();
+        assert_eq!(
+            git(&fixture.repo, &["log", "-1", "--format=%s", branch]).trim(),
+            "hook work"
+        );
     }
 }
 
@@ -12059,7 +12006,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         fixture.ok(&["land", "--no-push", "worker"])["updated"],
         false
     );
-    // Landed work needs no branch choice.
+    // Landed work is on the default branch, so its branch goes.
     assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
 }
 
@@ -12651,7 +12598,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
-        fixture.ok(&["rm", &name, "--yes", "--delete-branch"]);
+        fixture.ok(&["rm", &name, "--yes"]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
@@ -14079,7 +14026,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     );
     let ordinary = fixture.add("ordinary");
     assert!(Path::new(ordinary["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
-    fixture.ok(&["rm", "custom-topic", "--keep-branch", "--yes"]);
+    fixture.ok(&["rm", "custom-topic", "--yes"]);
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
@@ -14723,7 +14670,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     fs::write(path.join("pre_resource_release-fails"), "").unwrap();
     for args in [
         vec!["resource", "release", "signing", "hooked"],
-        vec!["rm", "hooked", "--yes", "--delete-branch"],
+        vec!["rm", "hooked", "--yes"],
     ] {
         let output = fixture.run(&args);
         assert!(!output.status.success());
@@ -14740,10 +14687,10 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     .unwrap();
     fixture.ok(&["resource", "release", "signing", "hooked"]);
     fixture.ok(&["resource", "acquire", "signing", "waiter"]);
-    fixture.ok(&["rm", "waiter", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "waiter", "--yes"]);
     let events = fs::read_to_string(fixture.root.path().join("pre_resource_release")).unwrap();
     assert_eq!(events.lines().count(), 4);
-    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "hooked", "--yes"]);
 }
 
 #[test]
@@ -14779,7 +14726,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
         vec!["resource", "acquire", "signing", "hooked"],
         vec!["resource", "release", "signing", "hooked"],
         vec!["setup", "hooked"],
-        vec!["rm", "hooked", "--yes", "--delete-branch"],
+        vec!["rm", "hooked", "--yes"],
     ] {
         let output = fixture.run(&args);
         assert!(!output.status.success());
@@ -14790,7 +14737,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     }
     fs::write(fixture.root.path().join("hook-continue"), "").unwrap();
     assert!(acquire.wait_with_output().unwrap().status.success());
-    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "hooked", "--yes"]);
 }
 
 #[test]
@@ -14896,7 +14843,7 @@ printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
     assert_eq!(workspace["state"], "ready");
     let markers = fixture.root.path().join("hooks");
     assert_eq!(fs::read_to_string(&markers).unwrap(), "post_setup\n");
-    fixture.ok(&["rm", "global-hooks", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "global-hooks", "--yes"]);
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert_eq!(
         fs::read_to_string(&markers).unwrap(),
@@ -14968,8 +14915,8 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         fs::read_to_string(home.join("setup-order")).unwrap(),
         "before\nbefore\nsetup\nbefore\n"
     );
-    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
-    fixture.ok(&["rm", "hook-only", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "hooked", "--yes"]);
+    fixture.ok(&["rm", "hook-only", "--yes"]);
 }
 
 #[test]
@@ -15007,12 +14954,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
         "post_remove_cmd = 'after removal.sh'\npre_remove_cmd = '/usr/bin/false'\n",
     )
     .unwrap();
-    assert!(
-        !fixture
-            .run(&["rm", "hooked", "--yes", "--delete-branch"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["rm", "hooked", "--yes"]).status.success());
     assert!(!fixture.root.path().join("removed").exists());
     fs::write(
         &config,
@@ -15020,7 +14962,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     )
     .unwrap();
     fs::write(fixture.root.path().join("fail-after"), "").unwrap();
-    let result = fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    let result = fixture.ok(&["rm", "hooked", "--yes"]);
     assert_eq!(result["removed"], true);
     assert!(
         result["hook_error"]
@@ -15046,7 +14988,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     fixture.ok(&["resource", "acquire", "signing", "next"]);
     let missing = fixture.add("missing");
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
-    fixture.ok(&["rm", "missing", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "missing", "--yes"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("removed"))
             .unwrap()
@@ -16371,11 +16313,8 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
             "show-ref",
             vec!["add", fixture.repo.to_str().unwrap(), "--existing", "main"],
         ),
-        (
-            "--is-ancestor",
-            vec!["rm", "worker", "--yes", "--delete-branch"],
-        ),
-        ("show-ref", vec!["rm", "worker", "--yes", "--delete-branch"]),
+        ("--is-ancestor", vec!["rm", "worker", "--yes"]),
+        ("show-ref", vec!["rm", "worker", "--yes"]),
     ] {
         fs::write(fixture.root.path().join("git-failure"), failure).unwrap();
         let output = fixture.run(&args);
@@ -16738,7 +16677,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
     );
     for args in [
         vec!["setup", "hooked"],
-        vec!["rm", "hooked", "--yes", "--keep-branch"],
+        vec!["rm", "hooked", "--yes"],
         vec!["resource", "acquire", "device", "hooked"],
     ] {
         let output = fixture.run(&args);
@@ -17684,7 +17623,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
-            fixture.ok(&["rm", "34-fix-api-timeout", "--keep-branch", "--yes"]);
+            fixture.ok(&["rm", "34-fix-api-timeout", "--yes"]);
             wait_for_herdr_close(&fixture);
         }
     }
@@ -17714,7 +17653,8 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
             "project topic #34: Literal {branch} $(touch injected)",
             "project topic-2 #34: Literal {branch} $(touch injected)",
         ),
-        (None, "project topic #: ", "project topic-3 #: "),
+        // Removal deleted the first topic-2, which had no commits.
+        (None, "project topic #: ", "project topic-2 #: "),
     ] {
         fixture.ok(&[
             "config",
@@ -17756,7 +17696,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
-        fixture.ok(&["rm", "topic", "--keep-branch", "--yes"]);
+        fixture.ok(&["rm", "topic", "--yes"]);
         wait_for_herdr_close(&fixture);
     }
 }
@@ -18269,18 +18209,14 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
         "preserve\n",
     )
     .unwrap();
-    assert!(!fixture.run(&["rm", "external", "--yes"]).status.success());
+    assert!(!fixture.run(&["rm", "external"]).status.success());
     assert!(inspect(second_token).status.success());
-    fixture.ok(&["rm", "external", "--yes", "--keep-branch"]);
+    fixture.ok(&["rm", "external", "--yes"]);
     let removed = inspect(second_token);
     assert!(!removed.status.success());
     assert!(String::from_utf8_lossy(&removed.stderr).contains("expired or unknown"));
-    fixture.ok(&[
-        "add",
-        fixture.repo.to_str().unwrap(),
-        "--existing",
-        "external",
-    ]);
+    // The branch had no commits, so removal deleted it too.
+    fixture.ok(&["add", fixture.repo.to_str().unwrap(), "external"]);
     assert!(!inspect(second_token).status.success());
     assert!(fixture.ok(&["env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
 }

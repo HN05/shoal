@@ -572,18 +572,12 @@ pub enum Command {
     },
     /// Remove a workspace and release its resources.
     ///
-    /// Redundant branches are removed; the default branch is retained unless explicitly deleted.
-    /// Differing or dirty work still needs a branch choice when confirmation is skipped.
+    /// The branch goes too when a remote or the default branch has all its commits; otherwise it
+    /// stays. Deleting uncommitted changes or commits on a detached HEAD needs confirmation.
     Rm {
         workspace: Option<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
-        /// Remove the worktree but retain its branch, including when it contains work.
-        #[arg(long, conflicts_with = "delete_branch")]
-        keep_branch: bool,
-        /// Remove both worktree and branch, including uncommitted and differing work.
-        #[arg(long, conflicts_with = "keep_branch")]
-        delete_branch: bool,
     },
     /// Remove every workspace idle or merged cleanup would remove, without waiting for their idle periods.
     ///

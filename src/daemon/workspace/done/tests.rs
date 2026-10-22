@@ -187,9 +187,9 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     reopened.mark_done(&workspace.id, true).await.unwrap();
     reopened.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
-    // A nonredundant branch is retained even when its commits are pushed.
+    // A branch whose commits a remote has goes with the workspace.
     let repo = reopened.repository(&workspace.repository_id).await.unwrap();
-    git(&repo.path, &["show-ref", "--verify", "refs/heads/finished"]);
+    assert_eq!(git(&repo.path, &["branch", "--list", "finished"]), "");
     reopened.store.shutdown().await;
 }
 

@@ -11,7 +11,7 @@ use crate::{
     daemon::{resources::Scope, store},
     git,
     model::{Repository, RepositoryRemoval, Workspace},
-    removal::{BranchChoice, InspectionPolicy},
+    removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
@@ -202,7 +202,7 @@ impl Manager {
         for workspace in workspaces {
             self.remove_workspace(
                 &workspace.id,
-                BranchChoice::DeleteBranch,
+                UnsavedWork::Discard,
                 InspectionPolicy::GitOnly,
             )
             .await

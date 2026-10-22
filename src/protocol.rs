@@ -22,11 +22,11 @@ use crate::{
         WorkspaceStatus,
     },
     process::identity::Identity,
-    removal::{BranchChoice, RemovalCheck, RemovalResult},
+    removal::{RemovalCheck, RemovalResult, UnsavedWork},
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 109;
+pub const VERSION: u32 = 110;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -407,7 +407,7 @@ pub enum Method {
     },
     RemoveWorkspace {
         workspace: String,
-        choice: BranchChoice,
+        unsaved: UnsavedWork,
         caller_pid: u32,
     },
     /// Remove idle cleanup candidates without waiting for their idle delay.

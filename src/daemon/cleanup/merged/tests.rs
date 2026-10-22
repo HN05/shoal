@@ -142,8 +142,8 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
     );
     assert_eq!(
         git(&f.checkout, &["branch", "--list", "topic"]),
-        "  topic\n",
-        "a branch with unsaved work is kept"
+        "",
+        "the checkpoint keeps the unsaved files, so the merged branch goes"
     );
 }
 

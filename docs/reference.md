@@ -1275,7 +1275,7 @@ workspace, and sends setup output to stderr. Then choose explicitly:
 ```sh
 shoal setup fix-login                      # Rerun setup and the post-setup hook
 shoal doctor fix-login --repair             # Ignore the failure after ownership checks
-shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
+shoal rm fix-login --yes                    # Delete this workspace
 ```
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
@@ -1429,22 +1429,21 @@ Removing the repository deletes `.caches`.
 
 ### Remove a workspace
 
-Removal retains the default branch unless `--delete-branch`, and every branch while
-the default branch is unknown; other clean branches
-matching their upstream or merged into the default branch, including squash and
-rebase merges its remote-tracking branch knows about, are deleted. Otherwise fzf
-offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
-changes and untracked files with Git status codes before `Are you sure? [y/N]`.
-Large previews show an omitted-entry count; use `git status` for the full list.
-Both choices discard uncommitted and untracked files from the worktree; every
-removal of an existing worktree first keeps them, with HEAD, in a
-[checkpoint](#checkpoints-and-restore). `--keep-branch`/`--delete-branch`
-skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
+Removal deletes the workspace's branch when a remote-tracking branch or the
+default branch has every one of its commits, including squash and rebase merges
+the default branch's remote-tracking branch knows about. A branch with commits
+only it has stays, and so do the default branch and every branch while the
+default branch is unknown. Removal never asks about the branch.
+Uncommitted changes, untracked files and commits on a detached HEAD are deleted
+only after `Are you sure? [y/N]`, which lists the changes with Git status codes
+first, or with `--yes`. Large previews show an omitted-entry count; use
+`git status` for the full list. Every removal of an existing worktree first keeps
+them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
 Removal stops tracked commands and every verified process that carries the
 workspace's identity, including those hooks and `shoal env` exports started,
-leaving unrelated processes alone. Ownership and removal policy are checked again after removal hooks;
-changed HEAD requires an explicit branch choice. Ignored files go; shared caches
+leaving unrelated processes alone. Ownership and removal policy are checked again after removal hooks,
+and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref

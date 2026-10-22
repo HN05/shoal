@@ -433,18 +433,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Rm {
             workspace,
             confirmation,
-            keep_branch,
-            delete_branch,
-        } => {
-            workspaces::remove(
-                &ctx,
-                workspace,
-                confirmation.yes,
-                keep_branch,
-                delete_branch,
-            )
-            .await
-        }
+        } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
         Command::Cleanup { dry_run, caches } => cleanup::run(&ctx, dry_run, caches).await,
         Command::Checkpoint { workspace, name } => restore::checkpoint(&ctx, workspace, name).await,
         Command::Restore {

@@ -12,7 +12,7 @@ use crate::{
     },
     hooks::{self, Hook, HookKind},
     model::{CleanupReason, Workspace},
-    removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
+    removal::{self, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult, UnsavedWork},
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
@@ -28,9 +28,9 @@ enum Removal<'a> {
     Merged { head: &'a str },
     /// An assignment finished; all commits must already be preserved.
     Completed { head: &'a str, cause: EventCause },
-    /// A user request; dirty or differing work needs an explicit branch choice.
+    /// A user request; work no branch or remote keeps needs their consent.
     Manual {
-        choice: BranchChoice,
+        unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
@@ -54,13 +54,13 @@ impl Removal<'_> {
         }
     }
 
-    fn choice(self) -> BranchChoice {
+    fn unsaved(self) -> UnsavedWork {
         match self {
-            Removal::Manual { choice, .. } => choice,
+            Removal::Manual { unsaved, .. } => unsaved,
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Merged { .. }
-            | Removal::Completed { .. } => BranchChoice::Auto,
+            | Removal::Completed { .. } => UnsavedWork::Retain,
         }
     }
 
@@ -118,8 +118,8 @@ impl Removal<'_> {
         )
     }
 
-    /// Automatic removal needs a safe workspace; manual removal with `Auto`
-    /// needs a workspace that does not require a branch choice.
+    /// Automatic removal needs a safe workspace; manual removal needs consent
+    /// to delete unsaved work.
     fn verify(self, check: &RemovalCheck, stage: Stage) -> Result<()> {
         match (self, stage) {
             (Removal::Completed { .. }, _) => {
@@ -148,25 +148,26 @@ impl Removal<'_> {
             ),
             (
                 Removal::Manual {
-                    choice: BranchChoice::Auto,
+                    unsaved: UnsavedWork::Retain,
                     ..
                 },
                 Stage::Initial,
             ) => ensure!(
-                !check.needs_choice(),
-                "removal requires a branch choice: {}; use --yes with --keep-branch or --delete-branch",
-                check.warnings().join("; ")
+                check.unsaved_work().is_empty(),
+                "removal would delete {}; confirm it or pass --yes",
+                check.unsaved_work().join(" and ")
             ),
             (
                 Removal::Manual {
-                    choice: BranchChoice::Auto,
+                    unsaved: UnsavedWork::Retain,
                     ..
                 },
                 _,
             ) => ensure!(
-                !check.needs_choice(),
-                "workspace changed {}; choose whether to keep or delete the branch",
-                stage.change()
+                check.unsaved_work().is_empty(),
+                "workspace changed {}; removal would delete {}",
+                stage.change(),
+                check.unsaved_work().join(" and ")
             ),
             (Removal::Manual { .. } | Removal::Deleted, _) => {}
         }
@@ -176,22 +177,20 @@ impl Removal<'_> {
 
 /// Recheck safety after operations that can change the worktree.
 #[derive(Clone, Copy)]
-enum Stage<'a> {
+enum Stage {
     Initial,
     AfterStop,
-    /// Hooks run in the worktree; `head` is its HEAD before they ran.
-    AfterHooks {
-        head: &'a str,
-    },
+    /// Hooks run in the worktree.
+    AfterHooks,
 }
 
-impl Stage<'_> {
+impl Stage {
     /// When a change that fails this stage's recheck happened.
     fn change(self) -> &'static str {
         match self {
             Stage::Initial => "before removal",
             Stage::AfterStop => "while stopping commands",
-            Stage::AfterHooks { .. } => "during removal hooks",
+            Stage::AfterHooks => "during removal hooks",
         }
     }
 }
@@ -246,11 +245,17 @@ impl Manager {
     pub async fn remove_workspace(
         &self,
         selector: &str,
-        choice: BranchChoice,
+        unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
-        self.remove(selector, Removal::Manual { choice, inspection })
-            .await
+        self.remove(
+            selector,
+            Removal::Manual {
+                unsaved,
+                inspection,
+            },
+        )
+        .await
     }
 
     /// HEAD and activity of a cleanup candidate, cheap enough to compare on
@@ -687,13 +692,8 @@ impl Manager {
             &super::StopRequest::restorable_removal(),
         )
         .await?;
-        let check = self
-            .recheck_removal(workspace, removal, Stage::AfterStop)
+        self.recheck_removal(workspace, removal, Stage::AfterStop)
             .await?;
-        // Validate explicit choices before hooks, then derive the actual
-        // adapter options again from the final inspection.
-        worktrunk_removal_options(&check, removal.choice())?;
-        let head_before_hooks = crate::git::revision(&workspace.path, "HEAD", git::run).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             let configured_env = self.configured_workspace_environment(workspace).await?;
@@ -717,15 +717,10 @@ impl Manager {
         // and the checkpoint must include.
         self.stop_workspace_processes(&workspace.id).await?;
         let check = self
-            .recheck_removal(
-                workspace,
-                removal,
-                Stage::AfterHooks {
-                    head: &head_before_hooks,
-                },
-            )
+            .recheck_removal(workspace, removal, Stage::AfterHooks)
             .await?;
-        let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
+        // The final inspection decides what goes.
+        let (files, branch) = worktrunk_removal_options(&check, removal.unsaved());
         let record = self.save_removal_record(workspace, removal.cause()).await?;
         let removed = async {
             let files = if removal.discards_archived_files() && check.dirty {
@@ -752,7 +747,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
-        stage: Stage<'_>,
+        stage: Stage,
     ) -> Result<RemovalCheck> {
         let check = self
             .check_removal(&workspace.id, removal.inspection())
@@ -787,22 +782,11 @@ impl Manager {
             ),
             // The tree is compared only after the hooks: change times only
             // move forward, so that also covers changes made before them.
-            (Removal::Automatic { snapshot, .. }, Stage::AfterHooks { .. }) => ensure!(
+            (Removal::Automatic { snapshot, .. }, Stage::AfterHooks) => ensure!(
                 self.automatic_snapshot(&workspace.id, snapshot.rule)
                     .await?
                     == Some(snapshot),
                 "workspace changed {}",
-                stage.change()
-            ),
-            (
-                Removal::Manual {
-                    choice: BranchChoice::Auto,
-                    ..
-                },
-                Stage::AfterHooks { head },
-            ) => ensure!(
-                crate::git::revision(&workspace.path, "HEAD", git::run).await? == head,
-                "HEAD changed {}; choose whether to keep or delete the branch",
                 stage.change()
             ),
             (Removal::Manual { .. } | Removal::Deleted, _) => {}
@@ -883,33 +867,27 @@ impl Manager {
     }
 }
 
+/// Worktrunk's options for the inspected worktree. A branch goes when its
+/// commits are all preserved, except the default branch, which an
+/// unresolved default branch could be; files go by force only once the
+/// removal may discard unsaved work.
 fn worktrunk_removal_options(
     check: &RemovalCheck,
-    choice: BranchChoice,
-) -> Result<(FileRemoval, BranchRemoval)> {
-    // An unresolved default branch could be any branch, so keep it.
-    let branch = match choice {
-        BranchChoice::Auto
-            if check.can_delete_branch()
-                && check
-                    .default_branch
-                    .as_deref()
-                    .is_some_and(|default| check.branch.as_deref() != Some(default)) =>
-        {
-            BranchRemoval::Delete
-        }
-        BranchChoice::Auto | BranchChoice::KeepBranch => BranchRemoval::Keep,
-        BranchChoice::DeleteBranch => BranchRemoval::Delete,
+    unsaved: UnsavedWork,
+) -> (FileRemoval, BranchRemoval) {
+    let branch = if check.branch_preserved()
+        && check
+            .default_branch
+            .as_deref()
+            .is_some_and(|default| check.branch.as_deref() != Some(default))
+    {
+        BranchRemoval::Delete
+    } else {
+        BranchRemoval::Keep
     };
-    let files = match choice {
-        BranchChoice::Auto => FileRemoval::CleanOnly,
-        BranchChoice::KeepBranch | BranchChoice::DeleteBranch => FileRemoval::Force,
+    let files = match unsaved {
+        UnsavedWork::Retain => FileRemoval::CleanOnly,
+        UnsavedWork::Discard => FileRemoval::Force,
     };
-    ensure!(
-        !matches!(choice, BranchChoice::KeepBranch)
-            || check.branch.is_some()
-            || check.unpushed_commits == 0,
-        "detached HEAD has unpushed commits; create a branch before choosing to keep it"
-    );
-    Ok((files, branch))
+    (files, branch)
 }

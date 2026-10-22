@@ -36,7 +36,7 @@ use crate::{
         WorkspaceStatus, WorkspaceTarget,
     },
     protocol::{Body, ConfigTarget, Method},
-    removal::{BranchChoice, RemovalCheck, RemovalResult},
+    removal::{RemovalCheck, RemovalResult, UnsavedWork},
     shell,
     state::WorkspaceState,
 };
@@ -1187,7 +1187,7 @@ pub(super) async fn setup_workspace(
         let name = &workspace.name;
         ensure!(
             ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes`"
         );
         eprintln!(
             "{} for {name}: {error}",
@@ -1240,10 +1240,9 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
     let confirmed = ui::confirm(
         ctx,
         &format!(
-            "Delete workspace {} at {} and its branch {} (including setup changes)?",
+            "Delete workspace {} at {} (including setup changes)?",
             workspace.name,
             workspace.path.display(),
-            workspace.branch
         ),
         "--yes",
     )?;
@@ -1252,7 +1251,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
             &ctx.paths,
             Method::RemoveWorkspace {
                 workspace: workspace.id.clone(),
-                choice: BranchChoice::DeleteBranch,
+                unsaved: UnsavedWork::Discard,
                 caller_pid: std::process::id(),
             },
         )
@@ -1674,13 +1673,7 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
     Ok(0)
 }
 
-pub(super) async fn remove(
-    ctx: &Context,
-    workspace: Option<String>,
-    yes: bool,
-    keep_branch: bool,
-    delete_branch: bool,
-) -> Result<i32> {
+pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) -> Result<i32> {
     if let Some(selector) = &workspace
         && let Some(code) = super::agent_queue::remove(ctx, selector).await?
     {
@@ -1697,34 +1690,24 @@ pub(super) async fn remove(
         },
     )
     .await?;
-    let choice = if keep_branch {
-        BranchChoice::KeepBranch
-    } else if delete_branch {
-        BranchChoice::DeleteBranch
-    } else if !check.needs_choice() {
-        BranchChoice::Auto
-    } else {
-        ensure!(
-            !yes,
-            "choose --keep-branch or --delete-branch with --yes for a dirty or differing workspace"
-        );
-        ui::choose_removal(ctx, &check)?
-    };
-    if !yes
-        && (check.needs_choice()
-            || keep_branch
-            || delete_branch
-            || !check.workspace.holds.is_empty())
-    {
-        confirm_removal(ctx, &check, choice)?;
+    let unsaved = check.unsaved_work();
+    if !yes && (!unsaved.is_empty() || !check.workspace.holds.is_empty()) {
+        confirm_removal(ctx, &check)?;
     }
+    // Consent covers only the unsaved work it saw; more appearing meanwhile
+    // makes the daemon refuse.
+    let unsaved = if unsaved.is_empty() {
+        UnsavedWork::Retain
+    } else {
+        UnsavedWork::Discard
+    };
     // Leave the directory before it disappears under the shell.
     let escape = escape_destination(ctx, &check.workspace).await?;
     let result = request::<RemovalResult>(
         &ctx.paths,
         Method::RemoveWorkspace {
             workspace,
-            choice,
+            unsaved,
             caller_pid,
         },
     )
@@ -1744,17 +1727,14 @@ pub(super) async fn remove(
     Ok(0)
 }
 
-fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) -> Result<()> {
-    let branch_action = match choice {
-        BranchChoice::KeepBranch => "keep",
-        BranchChoice::DeleteBranch => "delete (including unpushed commits)",
-        BranchChoice::Auto => "delete if redundant; retain the default branch",
-    };
-    let mut action = format!(
-        "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
-        check.workspace.name,
-        check.branch.as_deref().unwrap_or("none")
-    );
+fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
+    let mut action = format!("Remove workspace: {}", check.workspace.name);
+    for work in check.unsaved_work() {
+        action.push_str(&format!("\nDeletes: {work}"));
+    }
+    if !check.unsaved_work().is_empty() {
+        action.push_str("\nshoal restore brings them back until the checkpoint expires.");
+    }
     if !check.workspace.holds.is_empty() {
         action.push_str("\nHolds:");
         for hold in &check.workspace.holds {
@@ -1804,13 +1784,11 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
 }
 
 fn removal_message(result: &RemovalResult) -> String {
-    match (&result.branch, result.branch_outcome.is_deleted()) {
-        (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
-        (Some(branch), false) => format!(
-            "Workspace removed; Git branch {branch} retained ({})",
-            result.branch_outcome
-        ),
-        (None, _) => "Workspace removed".into(),
+    match &result.branch {
+        Some(branch) if !result.branch_outcome.is_deleted() => {
+            format!("Workspace removed; kept Git branch {branch}")
+        }
+        _ => "Workspace removed".into(),
     }
 }
 

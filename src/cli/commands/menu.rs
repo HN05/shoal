@@ -98,8 +98,6 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         MenuAction::Delete => Command::Rm {
             workspace,
             confirmation: ConfirmationArgs::default(),
-            keep_branch: false,
-            delete_branch: false,
         },
         MenuAction::Inspect => Command::Inspect { workspace },
         MenuAction::Stop => Command::Stop {
