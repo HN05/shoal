@@ -7731,7 +7731,8 @@ fn bare_shoal_opens_on_the_inbox_and_switches_views() {
     let asker = fixture.add("asker");
     fixture.add("quiet");
     // Records its arguments and rows, then chooses the first row whose ID
-    // starts with $PICK, or cancels when it is empty.
+    // starts with $PICK, or cancels when it is empty. `=ID` chooses a row
+    // that was not in its input, as one a Tab reload brought is.
     install_test_script(
         fixture.root.path().join("bin/fzf"),
         r#"#!/bin/sh
@@ -7739,7 +7740,10 @@ printf '%s\n' "$@" > "$HOME/picker-args"
 cat > "$HOME/picker-input"
 [ -n "$PICK" ] || exit 130
 printf '\n'
-awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker-input"
+case "$PICK" in
+=*) printf '%s\tloaded\n' "${PICK#=}" ;;
+*) awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker-input" ;;
+esac
 "#,
     );
     let read = |name: &str| fs::read_to_string(fixture.root.path().join(name)).unwrap();
@@ -7758,6 +7762,10 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
     let (_, _, args, rows) = open("", "");
     assert!(args.contains("--prompt\nwork> \n"), "{args}");
     assert!(rows.contains(asker["id"].as_str().unwrap()), "{rows}");
+    // An empty inbox still opens, so Tab can reach the other views.
+    fixture.terminal_command(fixture.command().arg("inbox").env("PICK", ""), "", true);
+    assert!(read("picker-args").contains("--prompt\ninbox> \n"));
+    assert_eq!(read("picker-input"), "");
 
     fixture.ok(&[
         "ask",
@@ -7838,6 +7846,14 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
         "{output:?}"
     );
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
+    // A row Tab loaded is chosen like the first view's: Enter on a
+    // notification enters its workspace.
+    let (output, transcript, _, _) = open("=notification:quiet", "");
+    assert!(output.status.success(), "{transcript}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("quiet"),
+        "{output:?}"
+    );
 }
 
 #[test]

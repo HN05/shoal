@@ -340,6 +340,8 @@ pub struct ViewPicker<'a> {
 }
 
 /// Choose an entry with one of `picker.keys`, returning the key pressed.
+/// The first view may be empty, and the entry may come from a view Tab
+/// loaded, so the caller checks the id.
 pub fn pick_in_views(
     ctx: &Context,
     entries: Entries,
@@ -359,7 +361,12 @@ pub fn pick_in_views(
     if let Some(query) = picker.query {
         args.extend(["--query".into(), query]);
     }
-    run_picker(ctx, picker.prompt, entries, args, true)
+    let output = fzf_output(ctx, picker.prompt, &entries, &args)?;
+    let (key, selected) = output.split_once('\n').context("picker omitted action")?;
+    Ok(Picked {
+        action: key.to_owned(),
+        id: entry_id(selected),
+    })
 }
 
 /// The width picker rows should fit: the terminal's, less fzf's pointer
@@ -406,11 +413,16 @@ fn picker_output(
     entries: &Entries,
     extra: &[String],
 ) -> Result<String> {
-    require_interactive(ctx)?;
     ensure!(
         !entries.is_empty(),
         "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
     );
+    fzf_output(ctx, prompt, entries, extra)
+}
+
+/// `picker_output` for any number of entries, none included.
+fn fzf_output(ctx: &Context, prompt: &str, entries: &Entries, extra: &[String]) -> Result<String> {
+    require_interactive(ctx)?;
     let mut command = Command::new(Tool::Fzf.program());
     if current_directory()?.is_none() {
         command.current_dir("/");
