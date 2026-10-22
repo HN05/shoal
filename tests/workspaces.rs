@@ -4391,6 +4391,11 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         messages.contains(&"claude exited with code 0"),
         "{messages:?}"
     );
+    assert!(fixture.ok(&["notifications", "clear"])["cleared"].as_u64() >= Some(1));
+    assert_eq!(
+        fixture.ok(&["notifications", "--all"]),
+        Value::Array(vec![])
+    );
 }
 
 #[test]

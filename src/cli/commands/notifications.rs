@@ -1,6 +1,7 @@
 //! `shoal notifications`: what the daemon saw while the user was away, shown
 //! once and then marked read; `--follow` keeps the terminal on the stream and
-//! raises each entry as a terminal notification. `shoal notify` adds one.
+//! raises each entry as a terminal notification. `shoal notify` adds one and
+//! `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
 use anyhow::{Context as _, Result};
@@ -13,7 +14,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::notifications::Notification,
+    daemon::notifications::{Cleared, Notification},
     protocol::{self, Method, Response},
 };
 
@@ -54,6 +55,15 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
             }
         );
     }
+    Ok(0)
+}
+
+pub(super) async fn clear(ctx: &Context) -> Result<i32> {
+    let cleared = request::<Cleared>(&ctx.paths, Method::ClearNotifications).await?;
+    ctx.show(&cleared, |cleared| match cleared.cleared {
+        0 => println!("No notifications"),
+        n => println!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
+    })?;
     Ok(0)
 }
 

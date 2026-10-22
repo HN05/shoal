@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 107;
+pub const VERSION: u32 = 108;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -490,6 +490,8 @@ pub enum Method {
     MarkNotificationsRead {
         ids: Vec<i64>,
     },
+    /// Deletes every notification, read or not; answers with how many.
+    ClearNotifications,
     /// A message from a workspace process to the user.
     SendMessage {
         workspace: String,
@@ -762,6 +764,7 @@ response_bodies! {
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
+    Cleared(crate::daemon::notifications::Cleared),
     AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
     Question(crate::daemon::questions::Question),
     Questions(crate::daemon::questions::Listing),

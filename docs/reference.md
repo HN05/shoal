@@ -1974,6 +1974,7 @@ starts when the daemon upgrades and does not reconstruct older changes.
 shoal notifications            # Oldest new ones first, then marked read; says how many remain
 shoal notifications --all      # Recent ones including read (--limit, default 50)
 shoal notifications --follow   # Keep printing, and raise terminal notifications
+shoal notifications clear      # Delete all of them, including unread ones
 shoal notify "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
 ```
 
@@ -1992,7 +1993,7 @@ Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 identical conflicts, cleanup failures and messages collapse into one entry until read;
 every agent exit is listed. `shoal ls` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
-Scoped commands cannot read notifications but may notify about their own
+Scoped commands cannot read or clear notifications but may notify about their own
 workspace. Read entries older than the newest
 500 are dropped; unread ones stay.
 

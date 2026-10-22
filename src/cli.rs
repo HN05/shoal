@@ -529,7 +529,10 @@ pub enum Command {
     /// Show detailed workspace and execution records.
     Inspect { workspace: Option<String> },
     /// Show resource conflicts, finished agents, and automatic cleanup.
+    #[command(args_conflicts_with_subcommands = true)]
     Notifications {
+        #[command(subcommand)]
+        command: Option<NotificationsCommand>,
         /// Include notifications already shown.
         #[arg(long, conflicts_with = "follow")]
         all: bool,
@@ -942,6 +945,12 @@ pub struct ItemArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum NotificationsCommand {
+    /// Delete all notifications, including unread ones.
+    Clear,
 }
 
 #[derive(Debug, Subcommand)]

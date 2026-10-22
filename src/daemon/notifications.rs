@@ -94,6 +94,12 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
 
 const COLUMNS: &str = "id,created_at,workspace,kind,message,read";
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Cleared {
+    /// Notifications deleted, read or not.
+    pub cleared: u64,
+}
+
 impl Manager {
     /// Record an event and wake watchers. Failures are logged, never returned:
     /// a notification must not fail the operation it describes.
@@ -234,6 +240,19 @@ impl Manager {
             })
             .await
     }
+
+    /// Delete every notification, read or not. Ids keep increasing, so a
+    /// following stream's cursor still sees later ones.
+    pub async fn clear_notifications(&self) -> Result<Cleared> {
+        self.store
+            .run(|db| {
+                let cleared = db.execute("DELETE FROM notifications", [])?;
+                Ok(Cleared {
+                    cleared: u64::try_from(cleared)?,
+                })
+            })
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -313,6 +332,15 @@ mod tests {
         let after = manager.notifications_after(last, 50).await.unwrap();
         assert_eq!(after.len(), 1);
         assert!(after[0].id > last && !after[0].read);
+        // Clearing deletes read and unread ones; later ids keep increasing.
+        assert_eq!(manager.clear_notifications().await.unwrap().cleared, 7);
+        assert!(manager.notifications(false, 50).await.unwrap().is_empty());
+        assert_eq!(manager.unread_notifications().await.unwrap(), 0);
+        manager
+            .notify(None, NotificationKind::AgentExited, "claude exited")
+            .await;
+        let next = manager.notifications_after(after[0].id, 50).await.unwrap();
+        assert_eq!(next.len(), 1);
     }
 
     #[tokio::test]
@@ -377,15 +405,19 @@ mod tests {
                 allowed
             );
         }
-        let mut method = Method::ListNotifications {
-            unread_only: true,
-            limit: 50,
-        };
-        assert!(
-            scope::authorize(&manager, Some("scope"), &mut method)
-                .await
-                .is_err()
-        );
+        for mut method in [
+            Method::ListNotifications {
+                unread_only: true,
+                limit: 50,
+            },
+            Method::ClearNotifications,
+        ] {
+            assert!(
+                scope::authorize(&manager, Some("scope"), &mut method)
+                    .await
+                    .is_err()
+            );
+        }
     }
 
     #[tokio::test]

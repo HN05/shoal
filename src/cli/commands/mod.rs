@@ -53,7 +53,8 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, InternalCommand, ShellCommand, WorkspaceScope, agents, client,
+        Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand, ShellCommand,
+        WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -411,9 +412,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspaces::environment(&ctx, workspace, revoke).await
         }
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
-        Command::Notifications { all, follow, limit } => {
-            notifications::run(&ctx, all, follow, limit).await
-        }
+        Command::Notifications {
+            command: Some(NotificationsCommand::Clear),
+            ..
+        } => notifications::clear(&ctx).await,
+        Command::Notifications {
+            command: None,
+            all,
+            follow,
+            limit,
+        } => notifications::run(&ctx, all, follow, limit).await,
         Command::Resume {
             scope,
             execution,

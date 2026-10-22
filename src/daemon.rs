@@ -780,6 +780,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.mark_notifications_read(ids).await?;
             Body::Ok
         }
+        Method::ClearNotifications => Body::Cleared(manager.clear_notifications().await?),
         Method::PortAcquire {
             workspace,
             name,
