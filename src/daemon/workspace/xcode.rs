@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
@@ -192,12 +192,14 @@ fn worktree_gone(directory: &Path, project: &Path) -> bool {
 }
 
 /// The content of every `Package.resolved` in the worktree; one deleted
-/// since the listing pins nothing.
+/// since the listing pins nothing, and one that cannot be read stops pruning.
 async fn worktree_pins(worktree: &Path) -> Result<Vec<Vec<u8>>> {
     let mut pins = Vec::new();
     for file in git::files::in_worktree(worktree, xcode::PINS).await? {
-        if let Ok(content) = std::fs::read(&file) {
-            pins.push(content);
+        match std::fs::read(&file) {
+            Ok(content) => pins.push(content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).with_context(|| format!("read {}", file.display())),
         }
     }
     Ok(pins)
@@ -237,6 +239,18 @@ mod tests {
         test_support::{commit, configure, manager, repository},
     };
     use std::{fs, time::SystemTime};
+
+    #[tokio::test]
+    async fn a_pin_file_that_cannot_be_read_stops_pruning() {
+        let root = tempfile::tempdir().unwrap();
+        let worktree = repository(root.path(), "repo");
+        fs::write(worktree.join(xcode::PINS), "pins").unwrap();
+        assert_eq!(super::worktree_pins(&worktree).await.unwrap(), [b"pins"]);
+        // Reading a directory fails even for root.
+        fs::remove_file(worktree.join(xcode::PINS)).unwrap();
+        std::os::unix::fs::symlink(".", worktree.join(xcode::PINS)).unwrap();
+        assert!(super::worktree_pins(&worktree).await.is_err());
+    }
 
     #[tokio::test]
     async fn removal_prunes_package_checkouts_nothing_pins() {
