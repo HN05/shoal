@@ -72,13 +72,9 @@ impl Manager {
     }
 
     /// Delete the Xcode data that removed workspaces of the repository left
-    /// where `on` selects: DerivedData of projects whose worktree directory
-    /// is gone, and package checkouts nothing pins any more. A project
-    /// missing from a live worktree may be regenerating, and an absent
-    /// repository directory, such as an unmounted volume, proves nothing gone.
-    /// The DerivedData goes under the repository's Git gate, which creating,
-    /// restoring and renaming a workspace hold, so none of them can put a
-    /// worktree back at a path meanwhile. Returns whether anything was deleted.
+    /// where `on` selects: DerivedData of projects whose worktree is gone,
+    /// and package checkouts nothing pins any more. Returns whether anything
+    /// was deleted.
     pub(crate) async fn delete_xcode_leftovers(
         &self,
         repo: &Repository,
@@ -94,21 +90,40 @@ impl Manager {
             }
         };
         let mut deleted = false;
-        if let Some(directory) = repo.workspaces_dir.clone()
-            && directory.try_exists().unwrap_or(false)
-            && let Some(location) = derived_data::location(&self.paths.home)
+        if let Some(location) = derived_data::location(&self.paths.home)
             && on(&location)
         {
-            let _git = self.lock_repository_git(&repo.id).await;
-            deleted |= delete_derived_data(name, location, move |project| {
-                worktree_gone(&directory, project)
-            })
-            .await;
+            deleted |= self.delete_left_derived_data(repo, location).await;
         }
         if let Some(cache) = xcode_cache(repo, &settings).filter(|cache| on(cache)) {
             deleted |= self.prune_checkouts(repo, cache).await;
         }
         deleted
+    }
+
+    /// Delete the DerivedData of projects whose worktree directory in the
+    /// repository's directory is gone, returning whether any went. A project
+    /// missing from a live worktree may be regenerating, and an absent
+    /// repository directory, such as an unmounted volume, proves nothing gone. Creating, restoring and
+    /// renaming a workspace hold the repository's Git gate, so holding it
+    /// keeps a worktree from coming back meanwhile; landing holds it through
+    /// a whole build, so a busy gate leaves the deletion to a later pass.
+    async fn delete_left_derived_data(&self, repo: &Repository, location: PathBuf) -> bool {
+        let name = crate::forge::repository::name(repo);
+        let Some(directory) = repo.workspaces_dir.clone() else {
+            return false;
+        };
+        if !directory.try_exists().unwrap_or(false) {
+            return false;
+        }
+        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+            log!("DerivedData of {name} kept: the repository is busy");
+            return false;
+        };
+        delete_derived_data(name, location, move |project| {
+            worktree_gone(&directory, project)
+        })
+        .await
     }
 
     /// Delete the package checkouts in the preset's `cache` that nothing
@@ -252,12 +267,12 @@ mod tests {
     use crate::{
         presets::{self, derived_data, xcode},
         removal::{BranchChoice, InspectionPolicy},
-        test_support::{assert_pending, commit, configure, manager, repository},
+        test_support::{commit, configure, manager, repository},
     };
     use std::{fs, time::SystemTime};
 
     #[tokio::test]
-    async fn cleanup_waits_for_a_busy_repository_and_pruning_skips_it() {
+    async fn cleanup_skips_a_busy_repository() {
         let (root, manager) = manager().await;
         configure(
             &manager,
@@ -284,19 +299,17 @@ mod tests {
         let old = SystemTime::now() - 2 * super::CHECKOUTS_UNUSED_FOR;
         fs::File::open(&cache).unwrap().set_modified(old).unwrap();
 
-        // Creating a workspace holds the gate.
+        // Creating a workspace or landing holds the gate.
         let gate = manager.lock_repository_git(&repo.id).await;
         manager
             .remove_workspace("removed", BranchChoice::Auto, InspectionPolicy::GitOnly)
             .await
             .unwrap();
-        assert!(cache.exists(), "pruning skips a busy repository");
-        let leftovers = manager.delete_xcode_leftovers(&repo, |_| true);
-        tokio::pin!(leftovers);
-        assert_pending(leftovers.as_mut()).await;
+        assert!(!manager.delete_xcode_leftovers(&repo, |_| true).await);
         assert!(left.exists());
+        assert!(cache.exists());
         drop(gate);
-        assert!(leftovers.await);
+        assert!(manager.delete_xcode_leftovers(&repo, |_| true).await);
         assert!(!left.exists());
         assert!(!cache.exists());
     }
