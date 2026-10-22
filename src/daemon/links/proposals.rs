@@ -3,7 +3,11 @@
 //! as duplicates once the user decides.
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, ffi::OsString, path::Path};
+use std::{
+    collections::BTreeSet,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     daemon::{
@@ -121,8 +125,9 @@ impl Manager {
 
     /// Copy the files a proposal attaches into Shoal's state and point
     /// `body` at the copies. The directory is named by the proposal's
-    /// content, so proposing it again reuses the copies and finds the same
-    /// request. The caller holds the PR gate, which pruning takes too.
+    /// content, files included, so proposing it again reuses the copies and
+    /// finds the same request, and copies never change. The caller holds the
+    /// PR gate, which pruning takes too.
     async fn keep_attachments(
         &self,
         owner: &str,
@@ -132,13 +137,11 @@ impl Manager {
         if attachments.is_empty() {
             return Ok(());
         }
-        let directory = self
-            .paths
-            .proposal_files()
-            .join(content_key(owner, body, attachments));
-        let originals = attachments.clone();
+        let root = self.paths.proposal_files();
+        let (owner, text, originals) = (owner.to_owned(), body.clone(), attachments.clone());
         let copies =
-            tokio::task::spawn_blocking(move || copy_attachments(&directory, &originals)).await??;
+            tokio::task::spawn_blocking(move || keep_copies(&root, &owner, &text, &originals))
+                .await??;
         *body = attach::retarget(body, attachments, &copies);
         *attachments = copies;
         Ok(())
@@ -542,8 +545,37 @@ async fn pull_current(workspace: &Workspace, proposed: &PullSpecification) -> Re
     Ok(pushed.as_deref() == Some(proposed.commit.as_str()))
 }
 
-/// A name for the files of a proposal with this owner, body and attachments.
-fn content_key(owner: &str, body: &str, attachments: &[Attachment]) -> String {
+/// The copies of `attachments` below `root`, in a directory named by the
+/// proposal's content. An existing directory is reused unchanged; a new one is
+/// filled under a temporary name first, so a partial copy is never reused.
+fn keep_copies(
+    root: &Path,
+    owner: &str,
+    body: &str,
+    attachments: &[Attachment],
+) -> Result<Vec<Attachment>> {
+    let directory = root.join(content_key(owner, body, attachments)?);
+    if !directory.exists() {
+        let staging = root.join(format!(".copying-{}", uuid::Uuid::new_v4()));
+        copy_attachments(&staging, attachments)?;
+        if let Err(error) = std::fs::rename(&staging, &directory) {
+            std::fs::remove_dir_all(&staging).ok();
+            ensure!(directory.exists(), "keep {}: {error}", directory.display());
+        }
+    }
+    Ok(attachments
+        .iter()
+        .enumerate()
+        .map(|(index, attachment)| Attachment {
+            path: copy_path(&directory, index, attachment),
+            alt: attachment.alt.clone(),
+        })
+        .collect())
+}
+
+/// A name for the files of a proposal with this owner, body and attachments,
+/// their contents included.
+fn content_key(owner: &str, body: &str, attachments: &[Attachment]) -> Result<String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     for part in [owner, body] {
@@ -555,33 +587,35 @@ fn content_key(owner: &str, body: &str, attachments: &[Attachment]) -> String {
         hasher.update([0]);
         hasher.update(attachment.alt.as_deref().unwrap_or_default().as_bytes());
         hasher.update([0]);
+        let contents = std::fs::read(&attachment.path)
+            .with_context(|| format!("read {}", attachment.path.display()))?;
+        hasher.update(Sha256::digest(&contents));
     }
-    hasher.finalize()[..16]
+    Ok(hasher.finalize()[..16]
         .iter()
         .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .collect())
 }
 
-/// Copy each attachment into its own directory below `directory`, keeping
-/// its file name, which names the file where it is shown.
-fn copy_attachments(directory: &Path, attachments: &[Attachment]) -> Result<Vec<Attachment>> {
-    let mut copies = Vec::with_capacity(attachments.len());
+/// Where the attachment at `index` is copied below `directory`: its own
+/// directory, keeping the file name, which names the file where it is shown.
+fn copy_path(directory: &Path, index: usize, attachment: &Attachment) -> PathBuf {
+    let name = attachment.path.file_name().unwrap_or_default();
+    directory.join(index.to_string()).join(name)
+}
+
+/// Copy each attachment to its [`copy_path`] below `directory`.
+fn copy_attachments(directory: &Path, attachments: &[Attachment]) -> Result<()> {
     for (index, attachment) in attachments.iter().enumerate() {
-        let name = attachment
-            .path
-            .file_name()
-            .with_context(|| format!("{} names no file", attachment.path.display()))?;
-        let parent = directory.join(index.to_string());
-        std::fs::create_dir_all(&parent).with_context(|| format!("create {}", parent.display()))?;
-        let target = parent.join(name);
+        let target = copy_path(directory, index, attachment);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("create {}", parent.display()))?;
+        }
         std::fs::copy(&attachment.path, &target)
             .with_context(|| format!("copy {}", attachment.path.display()))?;
-        copies.push(Attachment {
-            path: target,
-            alt: attachment.alt.clone(),
-        });
     }
-    Ok(copies)
+    Ok(())
 }
 
 /// Remove the directories below `root` whose names `kept` leaves out.

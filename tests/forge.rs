@@ -2144,6 +2144,13 @@ fn proposed_issues_keep_their_attachments_until_decided() {
             .contains(&kept)
     );
 
+    // Changing a file proposes anew and leaves the earlier copy alone.
+    fs::write(&image, "png2").unwrap();
+    let changed = scoped(&fixture, &open)["proposed"].clone();
+    assert_ne!(changed["id"], proposed["id"]);
+    assert_eq!(fs::read_to_string(&kept).unwrap(), "png");
+    fixture.ok(&["deny", &changed["id"].to_string()]);
+
     // The agent's files are gone by the time the user approves.
     fs::remove_dir_all(fixture.root.path().join("shots")).unwrap();
     fixture.ok(&["approve", &proposed["id"].to_string()]);
