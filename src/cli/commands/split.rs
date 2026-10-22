@@ -53,7 +53,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
     if let Some(agent) = &split.agent {
         let settings =
             client::settings(&ctx.paths, ConfigTarget::Workspace(parent.clone())).await?;
-        agents::ensure_installed(agent.name(), &settings.commands)?;
+        agents::ensure_available(agent.name(), &settings)?;
         terminal::ensure_background(&settings)?;
     }
     let issue = match &split.issue {

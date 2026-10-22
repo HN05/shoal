@@ -673,6 +673,12 @@ and preserve the launcher's output and exit code. They add no agent flags and
 provide no execution tracking, scope token, or port variables (so automatic
 cleanup cannot see their activity); T3's app must already be running.
 
+Happy sessions are an optional integration: off until `happy.enabled = true` in
+global or repository config, and absent from builds without the default `happy`
+Cargo feature (`cargo build --no-default-features`), which also drops its
+encryption dependencies. While off, pickers and completion leave Happy out and
+launches are refused before any work starts.
+
 `shoal happy claude|codex [workspace]` and `add --agent happy-claude|happy-codex`
 start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
 would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then

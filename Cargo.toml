@@ -30,14 +30,19 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = ["happy"]
+# Detached Happy sessions, which seed prompts through Happy's encrypted server.
+happy = ["dep:aes-gcm", "dep:crypto_box", "dep:crypto_secretbox"]
+
 [dependencies]
-aes-gcm = "0.11"
+aes-gcm = { version = "0.11", optional = true }
 anyhow.workspace = true
 base64.workspace = true
 clap = { workspace = true, features = ["derive", "env", "string"] }
 clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
-crypto_box = { version = "0.9", features = ["std"] }
-crypto_secretbox = { version = "0.1", features = ["std"] }
+crypto_box = { version = "0.9", features = ["std"], optional = true }
+crypto_secretbox = { version = "0.1", features = ["std"], optional = true }
 fs2 = "0.4"
 futures-util.workspace = true
 libc.workspace = true

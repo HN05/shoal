@@ -2,11 +2,12 @@
 //! command with the arguments its provider describes (see [`crate::ai`]); an
 //! [`Integration`] adds what configuration cannot say for a tool Shoal knows,
 //! such as hooks, trust entries or a launch of its own. Adding an agent means
-//! configuration, plus an integration listed in [`INTEGRATIONS`] when the
-//! tool needs one.
+//! configuration, plus an integration listed in [`INTEGRATIONS`] (or in
+//! [`OPTIONAL`] behind its Cargo feature) when the tool needs one.
 mod claude;
 mod codex;
 mod desktop;
+#[cfg(feature = "happy")]
 mod happy;
 mod launch;
 mod trust;
@@ -39,6 +40,7 @@ use crate::{
 
 pub(super) use codex::shortcut as codex;
 pub(super) use desktop::shortcut as open_app;
+#[cfg(feature = "happy")]
 pub(super) use happy::shortcut as happy;
 
 /// What an agent needs beyond its configured command and described
@@ -76,9 +78,10 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
-    /// Whether pickers and completion offer the agent under `settings`.
-    fn offered(&self, _settings: &Effective) -> bool {
-        true
+    /// Why the agent cannot run under `settings`, such as an integration
+    /// turned off in config; pickers and completion leave it out.
+    fn unavailable(&self, _settings: &Effective) -> Option<&'static str> {
+        None
     }
 
     /// Start the agent its own way; `None` leaves it to the tracked terminal
@@ -99,18 +102,26 @@ impl Integration for Configured {}
 
 /// Integrations by the agent name they serve. A name not listed here needs
 /// none.
-const INTEGRATIONS: &[(&str, &dyn Integration)] = &[
-    ("claude", &claude::Claude),
-    ("codex", &codex::Codex),
+const INTEGRATIONS: &[(&str, &dyn Integration)] =
+    &[("claude", &claude::Claude), ("codex", &codex::Codex)];
+
+/// Integrations built only with their Cargo feature.
+#[cfg(feature = "happy")]
+const OPTIONAL: &[(&str, &dyn Integration)] = &[
     ("happy-claude", &happy::CLAUDE),
     ("happy-codex", &happy::CODEX),
 ];
+#[cfg(not(feature = "happy"))]
+const OPTIONAL: &[(&str, &dyn Integration)] = &[];
+
+fn integrations() -> impl Iterator<Item = (&'static str, &'static dyn Integration)> {
+    INTEGRATIONS.iter().chain(OPTIONAL).copied()
+}
 
 fn integration(name: &str) -> &'static dyn Integration {
-    INTEGRATIONS
-        .iter()
+    integrations()
         .find(|(served, _)| *served == name)
-        .map_or(&Configured, |(_, integration)| *integration)
+        .map_or(&Configured, |(_, integration)| integration)
 }
 
 /// One launch of an agent in a ready workspace; settings are never cached
@@ -180,7 +191,7 @@ pub(super) async fn run_named(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let providers = crate::ai::providers(&Config::load(&ctx.paths)?.ai);
-    if !providers.contains(name) && !INTEGRATIONS.iter().any(|(served, _)| *served == name) {
+    if !providers.contains(name) && !integrations().any(|(served, _)| served == name) {
         return named_commands::run(ctx, name, workspace, args).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -205,7 +216,7 @@ pub(super) async fn default_agent(
     let settings = client::settings(&ctx.paths, target).await?;
     match agent.or(settings.default_agent.clone()) {
         Some(agent) => {
-            ensure_installed(agent.name(), &settings.commands)?;
+            ensure_available(agent.name(), &settings)?;
             Ok(Some(agent))
         }
         None => pick_default_agent(ctx, &settings),
@@ -252,12 +263,12 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
         }
     }
     names.extend(
-        INTEGRATIONS
-            .iter()
+        integrations()
             .filter(|(name, integration)| {
-                !names.iter().any(|known| known == name) && integration.offered(settings)
+                !names.iter().any(|known| known == name)
+                    && integration.unavailable(settings).is_none()
             })
-            .map(|(name, _)| (*name).to_owned())
+            .map(|(name, _)| name.to_owned())
             .collect::<Vec<_>>(),
     );
     names
@@ -269,9 +280,9 @@ pub(in crate::cli) fn builtin_names() -> Vec<String> {
         .iter()
         .map(|provider| provider.name.to_owned())
         .collect();
-    for (name, _) in INTEGRATIONS {
+    for (name, _) in integrations() {
         if !names.iter().any(|known| known == name) {
-            names.push((*name).to_owned());
+            names.push(name.to_owned());
         }
     }
     names
@@ -287,8 +298,16 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
     })
 }
 
-/// Refuse an agent whose executables are missing before anything starts.
-pub(in crate::cli) fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
+/// Refuse an agent that cannot run under `settings` before anything starts.
+pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
+    if let Some(reason) = integration(name).unavailable(settings) {
+        anyhow::bail!("cannot start {name}: {reason}");
+    }
+    ensure_installed(name, &settings.commands)
+}
+
+/// Refuse an agent whose executables are missing.
+fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
     let programs = programs(name, commands).with_context(|| {
         format!("unknown agent {name:?}; set [ai.{name}] command in Shoal config")
     })?;
@@ -380,7 +399,7 @@ pub(crate) fn cleanup_repository_trust(
 ) {
     let paths = trust::repository_paths(repository, workspace_paths);
     let mut cleaned: Vec<&trust::TrustFile> = Vec::new();
-    for (_, integration) in INTEGRATIONS {
+    for (_, integration) in integrations() {
         let Some(trust) = integration.trust_file() else {
             continue;
         };
@@ -421,10 +440,13 @@ mod tests {
         assert!(installed("claude"));
         assert!(!installed("codex"));
         // Happy needs both its own CLI and the agent it runs.
-        assert!(!installed("happy-claude"));
-        fs::copy(bin.path().join("claude"), bin.path().join("happy")).unwrap();
-        assert!(installed("happy-claude"));
-        assert!(!installed("happy-codex"));
+        #[cfg(feature = "happy")]
+        {
+            assert!(!installed("happy-claude"));
+            fs::copy(bin.path().join("claude"), bin.path().join("happy")).unwrap();
+            assert!(installed("happy-claude"));
+            assert!(!installed("happy-codex"));
+        }
 
         assert!(installed("probe"));
         assert!(installed("absolute"));

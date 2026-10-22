@@ -10,6 +10,7 @@ mod execution;
 mod fsutil;
 mod git;
 mod git_profile;
+#[cfg(feature = "happy")]
 mod happy;
 mod hooks;
 mod model;

@@ -107,7 +107,7 @@ fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Resu
     };
     match chosen {
         Some(agent) => {
-            agents::ensure_installed(agent.name(), &settings.commands)?;
+            agents::ensure_available(agent.name(), settings)?;
             Ok(agent)
         }
         None => pick_agent(ctx, settings, &agents),

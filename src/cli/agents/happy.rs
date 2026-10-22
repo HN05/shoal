@@ -42,6 +42,12 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
+    fn unavailable(&self, settings: &Effective) -> Option<&'static str> {
+        (!settings.happy.enabled).then_some(
+            "Happy sessions are off; set happy.enabled = true in the repository or global config",
+        )
+    }
+
     fn launch<'a>(
         &'a self,
         ctx: &'a Context,
@@ -85,7 +91,7 @@ async fn start(
     mut args: Vec<OsString>,
 ) -> Result<i32> {
     let agent = happy.0;
-    super::ensure_installed(&format!("happy-{}", agent.as_str()), &settings.commands)?;
+    super::ensure_available(&format!("happy-{}", agent.as_str()), settings)?;
     // Happy sessions run without Shoal's hooks. An agent that takes
     // instructions apart from its prompt gets them as arguments; Happy's
     // Codex mode takes no arguments, so they lead its first message.

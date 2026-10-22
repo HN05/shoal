@@ -32,6 +32,7 @@ pub struct Effective {
     pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: config::Herdr,
+    pub happy: config::Happy,
     pub copy_ignored: bool,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
@@ -188,6 +189,9 @@ impl Effective {
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
                 close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
             },
+            happy: config::Happy {
+                enabled: built_in(merged.happy.enabled, "happy.enabled")?,
+            },
             codex: Codex {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
@@ -299,6 +303,9 @@ fn built_in() -> RepoConfig {
             tab_name: None,
             new_tab: Some(true),
             close_when_done: Some(true),
+        },
+        happy: config::repo::Happy {
+            enabled: Some(false),
         },
         codex: config::repo::Codex {
             default_mode: Some(Codex::default().default_mode),
@@ -621,6 +628,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(herdr.new_tab),
         scalar!(herdr.tab_name),
         scalar!(herdr.close_when_done),
+        scalar!(happy.enabled),
         scalar!(copy_ignored),
     ];
     fields.extend(
@@ -679,7 +687,7 @@ issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
-[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
+[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n[happy]\nenabled = true\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -922,6 +930,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             focus,
             codex,
             herdr,
+            happy,
             copy_ignored,
             setup_cmd,
             pre_setup_cmd,
@@ -987,6 +996,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             herdr.tab_name.is_some(),
             herdr.new_tab.is_some(),
             herdr.close_when_done.is_some(),
+            happy.enabled.is_some(),
             copy_ignored.is_some(),
             setup_cmd.is_some(),
             pre_setup_cmd.is_some(),

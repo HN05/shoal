@@ -108,6 +108,7 @@ pub struct Config {
     pub focus: Option<bool>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
+    pub happy: repo::Happy,
     pub overload: overload::Overload,
     pub cleanup: repo::Cleanup,
     /// Former names of `[cleanup.auto]` and `[cleanup.pr]`; parsing folds them
@@ -575,6 +576,7 @@ impl Config {
             focus: self.focus,
             codex: self.codex,
             herdr: self.herdr.clone(),
+            happy: self.happy.clone(),
             copy_ignored: self.copy_ignored,
             pre_setup_cmd: self.pre_setup_cmd.clone(),
             post_setup_cmd: self.post_setup_cmd.clone(),
@@ -677,6 +679,11 @@ fn default_template() -> &'static str {
 
 /// Named templates shipped in this binary, independent of the source checkout.
 pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
+
+#[derive(Debug, Serialize)]
+pub struct Happy {
+    pub enabled: bool,
+}
 
 #[derive(Debug, Serialize)]
 pub struct Herdr {

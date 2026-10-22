@@ -36,6 +36,7 @@ use crate::{
     process,
     protocol::{Body, Control, ExecutionEvent, Method, Protection, Reattach, timing},
 };
+#[cfg(feature = "happy")]
 pub use detached::launch_detached;
 use link::{Link, Received, Refused};
 

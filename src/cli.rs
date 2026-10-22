@@ -722,6 +722,7 @@ pub enum Command {
         args: Vec<OsString>,
     },
     /// Start a detached agent session in Happy.
+    #[cfg(feature = "happy")]
     Happy {
         #[arg(value_enum)]
         agent: crate::happy::Agent,
@@ -1754,18 +1755,14 @@ mod tests {
             .unwrap()
             .map(|value| value.get_name().to_owned())
             .collect();
-        assert_eq!(
-            names,
-            [
-                "codex",
-                "claude",
-                "opencode",
-                "pi",
-                "grok",
-                "happy-claude",
-                "happy-codex"
-            ]
-        );
+        assert_eq!(names[..5], ["codex", "claude", "opencode", "pi", "grok"]);
+        #[cfg(feature = "happy")]
+        assert_eq!(names[5..], ["happy-claude", "happy-codex"]);
+    }
+
+    #[cfg(feature = "happy")]
+    #[test]
+    fn happy_takes_the_agents_happy_runs() {
         let names: Vec<_> = crate::happy::Agent::value_variants()
             .iter()
             .map(|agent| agent.to_possible_value().unwrap().get_name().to_owned())

@@ -28,6 +28,7 @@ pub enum Worker<'a> {
         plan: &'a str,
         push: bool,
     },
+    #[cfg_attr(not(feature = "happy"), allow(dead_code))]
     Detached {
         workspace: &'a str,
         log: &'a Path,

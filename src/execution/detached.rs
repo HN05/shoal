@@ -1,5 +1,7 @@
 //! Tracked executions that outlive the process starting them, with their
 //! output in a log.
+// Only optional integrations launch detached executions.
+#![cfg_attr(not(feature = "happy"), allow(dead_code))]
 use std::{
     ffi::OsString,
     io::Write,

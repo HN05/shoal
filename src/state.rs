@@ -289,6 +289,7 @@ mod tests {
             (ExecutionKind::Land, "land"),
             (ExecutionKind::Setup, "setup"),
         ]);
+        #[cfg(feature = "happy")]
         assert_spellings(&[
             (crate::happy::Agent::Claude, "claude"),
             (crate::happy::Agent::Codex, "codex"),

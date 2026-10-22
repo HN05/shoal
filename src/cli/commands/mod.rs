@@ -495,6 +495,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agents::codex(&ctx, mode, workspace, args).await
         }
         Command::T3 { workspace, args } => agents::open_app(&ctx, workspace, "t3", args).await,
+        #[cfg(feature = "happy")]
         Command::Happy {
             agent,
             workspace,

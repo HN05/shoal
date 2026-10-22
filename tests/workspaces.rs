@@ -12684,9 +12684,34 @@ fn wait_for_busy(fixture: &Fixture, workspace: &str) {
     });
 }
 
+const HAPPY_ENABLED: &str = "[happy]\nenabled = true\n";
+
+#[test]
+fn happy_agents_are_refused_until_enabled() {
+    let fixture = Fixture::new();
+    let record = install_fake_happy(&fixture);
+    let output = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "happy-off",
+            "--agent",
+            "happy-claude",
+        ])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("happy.enabled = true"), "{stderr}");
+    // The refusal comes before any work is created.
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+}
+
 #[test]
 fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);
     let state_file = fixture.root.path().join(".happy/daemon.state.json");
     for (operation, agent) in [("stop", "codex"), ("rm", "claude")] {
@@ -12835,7 +12860,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
 
 #[test]
 fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(config_dir.join("agent-template.md"), "General {workspace}").unwrap();
@@ -12999,7 +13024,7 @@ impl Drop for FakeHappyServer {
 fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     use base64::Engine;
     let base64 = base64::engine::general_purpose::STANDARD;
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);
     let server = FakeHappyServer::start(&fixture);
     let happy_home = fixture.root.path().join(".happy");
@@ -18415,7 +18440,8 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
 
 #[test]
 fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
-    let mut fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[done]\ncleanup = false\n[happy]\nenabled = true\n"));
     install_fake_herdr(&fixture);
     install_fake_agents(&fixture, &["claude"]);
     install_test_script(

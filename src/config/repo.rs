@@ -67,6 +67,7 @@ pub struct RepoConfig {
     pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: Herdr,
+    pub happy: Happy,
     /// Copy the main checkout's ignored files into the worktree before setup.
     pub copy_ignored: Option<bool>,
     pub setup_cmd: Option<String>,
@@ -584,6 +585,13 @@ mod tests {
             assert_eq!(serde_json::to_value(config).unwrap()[key], "scripts/hook");
         }
     }
+}
+
+/// Happy sessions are an optional integration, off until enabled.
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Happy {
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]

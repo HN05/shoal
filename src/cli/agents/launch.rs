@@ -4,7 +4,7 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{Integration, Launch, ensure_installed};
+use super::{Integration, Launch, ensure_available};
 use crate::{
     cli::{context::Context, terminal},
     config::{Config, named_commands, templates},
@@ -27,7 +27,7 @@ pub(super) async fn tracked(
         tracked: _,
         replaces,
     } = launch;
-    ensure_installed(&name, &settings.commands)?;
+    ensure_available(&name, &settings)?;
     if let Some(trust) = integration.trust_file() {
         trust.trust_workspace(ctx, &workspace).await;
     }

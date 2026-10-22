@@ -772,7 +772,7 @@ async fn choose_add_agent(settings: &AddSettings<'_>, agent: AgentLaunch) -> Res
         }
     };
     if let Some(agent) = &agent {
-        agents::ensure_installed(agent.name(), &settings.get().await?.commands)?;
+        agents::ensure_available(agent.name(), settings.get().await?)?;
     }
     Ok(AgentChoice::Chosen(agent))
 }

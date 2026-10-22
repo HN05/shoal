@@ -723,7 +723,9 @@ creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no
 tracking or scope; external hosts can hold a workspace while their session is open.
-Happy sessions are the phone-driven flow: a console session that
+Happy sessions are an optional integration behind a default Cargo feature and
+the `happy.enabled` setting, off by default, so its encrypted client stays out of
+core. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the

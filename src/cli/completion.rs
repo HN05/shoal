@@ -48,6 +48,8 @@ struct Typed {
 struct Settings {
     commands: Commands,
     providers: BTreeSet<String>,
+    /// Agents pickers offer, installed or not.
+    agents: Vec<String>,
 }
 
 /// Live values an argument can be completed with.
@@ -143,7 +145,15 @@ pub fn command() -> Command {
             "codex",
             launchable("codex") || agents::program_available("codex", &search_path),
         ),
-        ("happy", agents::program_available("happy", &search_path)),
+        (
+            "happy",
+            agents::program_available("happy", &search_path)
+                && typed
+                    .settings()
+                    .agents
+                    .iter()
+                    .any(|name| name.starts_with("happy-")),
+        ),
         ("t3", agents::program_available("t3", &search_path)),
     ] {
         if !available {
@@ -226,11 +236,13 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    agents::builtin_names()
-                        .into_iter()
-                        .chain(typed.settings().providers.iter().cloned())
+                    typed
+                        .settings()
+                        .agents
+                        .iter()
                         .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
                         .filter(|name| typed.launchable(name, &search_path))
+                        .cloned()
                         .collect::<BTreeSet<_>>()
                         .into_iter()
                         .map(CompletionCandidate::new)
@@ -240,21 +252,15 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    crate::happy::Agent::ALL
+                    // `shoal happy <agent>` starts the agent `happy-<agent>` names.
+                    typed
+                        .settings()
+                        .agents
                         .iter()
-                        .filter(|agent| {
-                            agent
-                                .as_str()
-                                .starts_with(current.to_string_lossy().as_ref())
-                        })
-                        .filter(|agent| {
-                            agents::installed(
-                                &format!("happy-{}", agent.as_str()),
-                                typed.commands(),
-                                &search_path,
-                            )
-                        })
-                        .map(|agent| CompletionCandidate::new(agent.as_str()))
+                        .filter(|name| typed.launchable(name, &search_path))
+                        .filter_map(|name| name.strip_prefix("happy-"))
+                        .filter(|agent| agent.starts_with(current.to_string_lossy().as_ref()))
+                        .map(CompletionCandidate::new)
                         .collect::<Vec<_>>()
                 }))
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
@@ -318,6 +324,10 @@ impl Typed {
             return Settings {
                 commands: named_commands::defaults(),
                 providers: crate::ai::providers(&Default::default()),
+                agents: crate::ai::PROVIDERS
+                    .iter()
+                    .map(|provider| provider.name.to_owned())
+                    .collect(),
             };
         };
         let global = Config::load(&paths).unwrap_or_default();
@@ -360,9 +370,15 @@ impl Typed {
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
             .collect();
+        let providers = crate::ai::providers(&global.ai);
+        let agents = global.resolve(&layers).map_or_else(
+            |_| providers.iter().cloned().collect(),
+            |settings| agents::names(&settings),
+        );
         Settings {
             commands,
-            providers: crate::ai::providers(&global.ai),
+            providers,
+            agents,
         }
     }
 
