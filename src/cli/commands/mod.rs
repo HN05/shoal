@@ -350,7 +350,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
-        Command::Ls {
+        Command::Work {
             ready,
             queue,
             chats,

@@ -163,7 +163,7 @@ when run inside the child's directory. Agents launched independently in a manage
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.
 
-When unsure whether your checkout is managed, use `shoal --json ls` and match
+When unsure whether your checkout is managed, use `shoal --json work` and match
 your working directory to a returned workspace `path`. Shoal's resources
 require a managed workspace; do not select another agent's workspace or create
 one just to obtain a lease.

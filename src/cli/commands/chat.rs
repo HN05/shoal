@@ -44,7 +44,7 @@ pub(super) async fn start(
     run_here(ctx, &repo, &chat, &command)
 }
 
-/// `shoal ls --chats`.
+/// `shoal work --chats`.
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let chats = listed(ctx, filter).await?;
     let repositories = repositories(ctx, &chats).await?;

@@ -1,4 +1,4 @@
-//! Which workspaces, chats and queued agents `shoal ls` lists.
+//! Which workspaces, chats and queued agents `shoal work` lists.
 use anyhow::Result;
 
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
     model::{Chat, QueueEntry, Workspace},
 };
 
-/// The `shoal ls` filters, with the repository resolved to its ID. No
+/// The `shoal work` filters, with the repository resolved to its ID. No
 /// statuses keeps every status.
 pub(super) struct ListFilter {
     repository: Option<String>,

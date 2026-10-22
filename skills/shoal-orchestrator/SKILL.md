@@ -31,8 +31,8 @@ shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
 an issue becomes the agent's prompt. Happy agents (`happy-codex`, `happy-claude`)
 run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
 the current terminal until they exit, so use them only when the user asks. A
-`--base` naming another workspace's branch stacks the new workspace on it; `ls`
-and `status` show the base workspace. `ls` lists child workspaces below their
+`--base` naming another workspace's branch stacks the new workspace on it; `work`
+and `status` show the base workspace. `work` lists child workspaces below their
 parent, and `status` names a workspace's parent and children.
 
 Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
@@ -43,14 +43,14 @@ is in `prompt_file` and the user must send it from the app.
 
 With `max_agents` configured (the default starts agents one at a time while measured load allows), `add` may queue the agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
-daemon starts it when a slot frees; `shoal --json ls --queue` lists entries, and
+daemon starts it when a slot frees; `shoal --json work --queue` lists entries, and
 `--now` or `--focus` starts one regardless only when the user asks.
 
 ## Follow progress
 
 ```sh
-shoal --json ls
-shoal ls --ready        # PRs, issues and workspaces agents marked ready for review
+shoal --json work
+shoal work --ready      # PRs, issues and workspaces agents marked ready for review
 shoal --json status fix-login
 shoal --json notifications
 shoal --json internal events --follow --since <id>
@@ -60,8 +60,8 @@ Notifications report agent exits, messages agents sent with `shoal notify`,
 questions they asked, busy resources, pending approval requests and cleanup Shoal did on its own; reading them marks them read. Events stream
 workspace lifecycle changes, including `review_ready` marks agents set with
 `shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their
-hooks report, which `ls` and `status` also show, without consuming notifications; resume from the
-last `id` you handled and resync with `shoal --json ls` after a `gap`.
+hooks report, which `work` and `status` also show, without consuming notifications; resume from the
+last `id` you handled and resync with `shoal --json work` after a `gap`.
 
 ## Approval requests
 

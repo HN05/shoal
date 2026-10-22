@@ -122,12 +122,12 @@ After [adding an AI tool](docs/reference.md#agents), run
 ```sh
 shoal                         # Interactive workspace menu
 shoal repo                    # Interactive repository menu
-shoal ls                      # List workspaces, chats and queued agents
-shoal ls --queue              # Agents waiting for a slot under max_agents
-shoal ls --chats              # Running chats
-shoal ls --ready              # PRs, issues and workspaces marked ready for review
-shoal ls --repo my-project    # Only one repository's workspaces, chats and queued agents
-shoal ls --status waiting-for-input,failed  # Only rows with these statuses
+shoal work                    # List workspaces, chats and queued agents
+shoal work --queue            # Agents waiting for a slot under max_agents
+shoal work --chats            # Running chats
+shoal work --ready            # PRs, issues and workspaces marked ready for review
+shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
+shoal work --status waiting-for-input,failed  # Only rows with these statuses
 shoal status fix-login        # Workspace activity, changes, resources, issue and PR state
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value

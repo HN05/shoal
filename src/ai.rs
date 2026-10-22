@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn provider_launchers_need_reachable_unique_names() {
         for (config, message) in [
-            ("[ai.ls]\ncommand = ['ls']\n", "built-in Shoal command"),
+            ("[ai.work]\ncommand = ['work']\n", "built-in Shoal command"),
             ("[ai.Droid]\ncommand = ['droid']\n", "cannot name an agent"),
             ("[ai.droid]\ncommand = []\n", "nonempty executable"),
             (

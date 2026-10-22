@@ -316,7 +316,7 @@ there, as it tracks custom and Happy agents that report none, takes over its
 subtree. A parent stays until its children are removed, through every unattended
 removal like a hold, so one `done` at the top leaves the tree until its PRs
 merge; each child completes on its own. Removing a parent moves its children up
-to its own parent and journals the change. `ls` lists children below their
+to its own parent and journals the change. `work` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
 own through the agent queue; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
@@ -764,7 +764,7 @@ otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `ls`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); `work`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user

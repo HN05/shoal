@@ -514,7 +514,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(reopened["path"], created["path"]);
     assert_eq!(reopened["branch"], renamed["branch"]);
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -733,7 +733,7 @@ fn cleanup_removes_idle_candidates_on_request() {
     assert_eq!(report["kept"], serde_json::json!([]));
     assert!(!Path::new(clean["path"].as_str().unwrap()).exists());
     let names: Vec<_> = fixture
-        .ok(&["ls"])
+        .ok(&["work"])
         .as_array()
         .unwrap()
         .iter()
@@ -1145,7 +1145,7 @@ fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
         ),
         ""
     );
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     assert_eq!(
         fs::read_to_string(fixture.repo.join("tracked")).unwrap(),
         "uncommitted source\n"
@@ -1238,7 +1238,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
     // The remaining inferred name now resolves, deleting its workspace too.
     fixture.ok(&["repo", "rm", "saldoir-server", "--yes"]);
     assert!(!Path::new(clones[0]["path"].as_str().unwrap()).exists());
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     assert!(fixture.repo.exists());
 }
 
@@ -3102,7 +3102,7 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
         .unwrap()["name"],
         name
     );
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -3471,7 +3471,7 @@ fn concurrent_adds_cannot_claim_the_same_name() {
         let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), second_name]);
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
-        assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
         fixture.ok(&["rm", workspace_name]);
     }
 }
@@ -3558,7 +3558,7 @@ fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("zmx is not installed"), "{stderr}");
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -3576,7 +3576,7 @@ fn split_refuses_an_unavailable_agent_before_creating_the_child() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("unknown agent \"droid\""), "{stderr}");
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -3588,7 +3588,7 @@ fn split_rejects_an_invalid_branch_before_choosing_a_parent() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("invalid Git branch name"), "{stderr}");
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -3628,7 +3628,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
                 .success(),
             "{branch}"
         );
-        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     }
     git(&fixture.repo, &["branch", "-d", "previous"]);
     let existing = fixture.add("feature/topic");
@@ -3637,7 +3637,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("feature-topic"));
     }
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([existing]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([existing]));
     assert_eq!(
         git(
             &fixture.repo,
@@ -4412,7 +4412,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     for mut child in children {
         assert!(!child.wait().unwrap().success());
     }
-    let listed = fixture.run(&["ls"]);
+    let listed = fixture.run(&["work"]);
     let listed = String::from_utf8_lossy(&listed.stdout);
     for line in listed.lines() {
         let unused = line.contains("unused");
@@ -4427,7 +4427,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
         "{resumed}"
     );
     assert!(resumed["agents"].as_array().unwrap().is_empty());
-    let listed = fixture.run(&["ls"]);
+    let listed = fixture.run(&["work"]);
     assert!(!String::from_utf8_lossy(&listed.stdout).contains("stopped"));
     assert!(
         fixture.ok(&["resume", "--all"])["commands"]
@@ -4915,7 +4915,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
                 assert!(stdout.contains("available: ready"), "{stdout}");
             } else {
                 assert!(stdout.contains("Workspace removed"), "{stdout}");
-                assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+                assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
             }
             assert!(!stdout.contains("Could not check workspaces"), "{stdout}");
             assert_eq!(fs::read_to_string(&picked).unwrap().trim(), "/");
@@ -5131,7 +5131,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     )
     .unwrap();
     // The daemon lists by name, so a failure must not short-circuit the query.
-    let workspaces = fixture.ok(&["ls"]);
+    let workspaces = fixture.ok(&["work"]);
     assert_eq!(workspaces[0]["name"], "broken");
     assert_eq!(workspaces[1]["name"], "healthy");
     for (noun, empty_text) in [
@@ -5307,7 +5307,7 @@ fn execution_scope_limits_management_and_expires() {
             .output()
             .unwrap()
     };
-    let output = scoped(&["--json", "ls"]);
+    let output = scoped(&["--json", "work"]);
     assert!(output.status.success());
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
@@ -5423,12 +5423,12 @@ fn execution_scope_limits_management_and_expires() {
     let output = fixture
         .command()
         .env("SHOAL_SCOPE_TOKEN", token)
-        .args(["ls"])
+        .args(["work"])
         .output()
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("expired or unknown"));
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -7799,7 +7799,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
 }
 
 #[test]
-fn ls_lists_only_the_selected_repository() {
+fn work_lists_only_the_selected_repository() {
     let fixture = Fixture::new();
     fixture.add("local");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
@@ -7807,7 +7807,7 @@ fn ls_lists_only_the_selected_repository() {
     fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
     let names = |repository: &str| -> Vec<_> {
         fixture
-            .ok(&["ls", "--repo", repository])
+            .ok(&["work", "--repo", repository])
             .as_array()
             .unwrap()
             .iter()
@@ -7816,18 +7816,18 @@ fn ls_lists_only_the_selected_repository() {
     };
     assert_eq!(names("other"), ["foreign"]);
     assert_eq!(names(fixture.repo.to_str().unwrap()), ["local"]);
-    let unknown = fixture.run(&["ls", "--repo", "missing"]);
+    let unknown = fixture.run(&["work", "--repo", "missing"]);
     assert!(!unknown.status.success());
 }
 
 #[test]
-fn ls_lists_only_the_selected_statuses() {
+fn work_lists_only_the_selected_statuses() {
     let fixture = Fixture::new();
     fixture.add("quiet");
     fixture.add("reviewed");
     fixture.ok(&["ready", "--workspace", "reviewed"]);
     let names = |statuses: &[&str]| -> Vec<_> {
-        let mut args = vec!["ls"];
+        let mut args = vec!["work"];
         for status in statuses {
             args.extend(["--status", status]);
         }
@@ -7844,14 +7844,14 @@ fn ls_lists_only_the_selected_statuses() {
     assert_eq!(names(&["idle,ready-for-review"]), ["quiet", "reviewed"]);
     assert_eq!(names(&["failed", "ready-for-review"]), ["reviewed"]);
     assert!(names(&["working"]).is_empty());
-    let listed = String::from_utf8(fixture.run(&["ls", "--status", "idle"]).stdout).unwrap();
+    let listed = String::from_utf8(fixture.run(&["work", "--status", "idle"]).stdout).unwrap();
     assert!(
         listed.contains("quiet") && !listed.contains("reviewed"),
         "{listed}"
     );
     for args in [
-        &["ls", "--status", "unknown"][..],
-        &["ls", "--ready", "--status", "idle"],
+        &["work", "--status", "unknown"][..],
+        &["work", "--ready", "--status", "idle"],
     ] {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }
@@ -7982,7 +7982,7 @@ fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
             .contains(orphan.to_str().unwrap())
     );
     assert_eq!(fs::read_to_string(orphan.join("dirty")).unwrap(), "keep me");
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 fn repaired_workspaces(fixture: &Fixture, args: &[&str]) -> Value {
@@ -8372,7 +8372,7 @@ fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
     assert!(elsewhere.join("tracked").exists());
     assert!(fixture.run(&["rm", "deleted", "--yes"]).status.success());
     let names: Vec<_> = fixture
-        .ok(&["ls"])
+        .ok(&["work"])
         .as_array()
         .unwrap()
         .iter()
@@ -8573,7 +8573,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     let mut last_names = Vec::new();
     try_wait_for(|| {
         let names: Vec<String> = fixture
-            .ok(&["ls"])
+            .ok(&["work"])
             .as_array()
             .unwrap()
             .iter()
@@ -9177,7 +9177,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!first_path.exists());
     assert!(!Path::new(second["path"].as_str().unwrap()).exists());
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     let claude: Value = serde_json::from_str(
         &fs::read_to_string(fixture.root.path().join(".claude.json")).unwrap(),
     )
@@ -9620,7 +9620,7 @@ fn repository_removal_serializes_with_workspace_creation() {
         );
     }
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     // The emptied repository directory goes with the registration.
     assert!(!Path::new(repo["workspaces_dir"].as_str().unwrap()).exists());
     assert!(!fixture.repo.exists());
@@ -10182,7 +10182,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     assert!(!path.exists());
     assert!(
         !fixture
-            .ok(&["ls"])
+            .ok(&["work"])
             .as_array()
             .unwrap()
             .iter()
@@ -10811,7 +10811,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         if choice == "cancel" {
             assert!(!output.status.success(), "{output:?}");
             assert!(transcript.contains("selection canceled"), "{transcript}");
-            assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+            assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -10871,7 +10871,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         transcript.contains("--repo github.com/team/project"),
         "{transcript}"
     );
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 }
 
 #[test]
@@ -10940,7 +10940,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
             "{output:?}"
         );
-        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     }
     // A found issue still needs an agent before anything is created.
     install_test_script_with_mode(
@@ -11028,7 +11028,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
             "{output:?}"
         );
-        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     }
 }
 
@@ -11045,7 +11045,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     let branch = "34-fix-api-timeout";
     let branches = |fixture: &Fixture| -> Vec<Value> {
         fixture
-            .ok(&["ls"])
+            .ok(&["work"])
             .as_array()
             .unwrap()
             .iter()
@@ -11197,7 +11197,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             workspace["workspace"]["path"].as_str().unwrap()
         );
     }
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -11250,7 +11250,7 @@ esac
             .as_str()
             .unwrap()
     );
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
 
     install_test_script(fixture.root.path().join("bin/gh"), "#!/bin/sh\necho '[]'\n");
     let (output, transcript) = add("Use a pull request", "7");
@@ -11354,7 +11354,7 @@ fn forgejo_pull(number: u64, state: &str, head: &str, sha: &str) -> Value {
 fn wait_removed(fixture: &Fixture, name: &str) {
     try_wait_for(|| {
         (!fixture
-            .ok(&["ls"])
+            .ok(&["work"])
             .as_array()
             .unwrap()
             .iter()
@@ -12781,7 +12781,7 @@ fn happy_agents_are_refused_until_enabled() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("happy.enabled = true"), "{stderr}");
     // The refusal comes before any work is created.
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 }
 
 #[test]
@@ -13363,7 +13363,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 
     let status = fixture.ok(&["daemon", "status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
-    let list = fixture.run(&["ls"]);
+    let list = fixture.run(&["work"]);
     assert!(list.status.success());
     assert_eq!(
         String::from_utf8_lossy(&list.stderr),
@@ -13441,7 +13441,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let all = fixture.ok(&["notifications", "--all", "--limit", "2"]);
     assert_eq!(all.as_array().unwrap().len(), 2);
     assert!(all.as_array().unwrap().iter().all(|n| n["read"] == true));
-    assert_eq!(fixture.run(&["ls"]).stderr, b"");
+    assert_eq!(fixture.run(&["work"]).stderr, b"");
     let text = fixture.run(&["notifications", "--all"]);
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
@@ -13652,7 +13652,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual@example.invalid"
         );
     }
-    let before = fixture.ok(&["ls"]);
+    let before = fixture.ok(&["work"]);
     let output = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -13662,7 +13662,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("git profile unknown is not defined"));
-    assert_eq!(fixture.ok(&["ls"]), before);
+    assert_eq!(fixture.ok(&["work"]), before);
     assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
 }
 
@@ -13765,7 +13765,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
 #[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nls = ['printf', '%s', 'configured ls']\nclaude = ['global-claude']\n",
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\nclaude = ['global-claude']\n",
     ));
     let workspace = fixture.add("run-command");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -13788,14 +13788,14 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         saved.to_str().unwrap(),
     ]);
 
-    let output = fixture.run(&["run", "ls", "run-command"]);
+    let output = fixture.run(&["run", "work", "run-command"]);
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"configured ls");
-    assert!(fixture.ok(&["ls"]).is_array());
+    assert_eq!(output.stdout, b"configured work");
+    assert!(fixture.ok(&["work"]).is_array());
 
     let output = fixture
         .command()
@@ -13814,7 +13814,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     assert_eq!(command("codex")["bare_name"], "built_in");
     assert_eq!(command("claude")["layer"], "global_config");
     assert_eq!(command("global")["bare_name"], "shorthand");
-    assert_eq!(command("ls")["bare_name"], "built_in");
+    assert_eq!(command("work")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
     assert_eq!(command("saved")["layer"], "saved_repository_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
@@ -14511,7 +14511,7 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
         fs::read_to_string(occupied.join("keep")).unwrap(),
         "precious"
     );
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     assert!(!git(&fixture.repo, &["branch", "--list", "rejected"]).contains("rejected"));
 }
 
@@ -14575,7 +14575,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fixture.ok(&["port", "acquire", "test", "adopt-topic"]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -14674,7 +14674,7 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
         fs::read_to_string(occupied.join("tracked")).unwrap(),
         "committed\n"
     );
-    let workspaces = fixture.ok(&["ls"]);
+    let workspaces = fixture.ok(&["work"]);
     assert_eq!(workspaces.as_array().unwrap().len(), 1);
     assert_eq!(workspaces[0]["id"], occupied_workspace["id"]);
     assert_eq!(workspaces[0]["path"], occupied_workspace["path"]);
@@ -14801,7 +14801,7 @@ fn adopt_infers_the_repository_from_the_worktree_remote() {
     );
     let error = adopt("other", "git@github.com:team/other.git");
     assert!(error.contains("pass --repo <repository>"), "{error}");
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -14850,7 +14850,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
                 .success()
         );
     }
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -14964,7 +14964,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap()),
         "Follow custom-add\0user message\0"
     );
-    let before = fixture.ok(&["ls"]);
+    let before = fixture.ok(&["work"]);
     let unknown = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -14974,7 +14974,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     ]);
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
-    assert_eq!(fixture.ok(&["ls"]), before);
+    assert_eq!(fixture.ok(&["work"]), before);
 }
 
 #[test]
@@ -15688,7 +15688,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = fixture
         .command()
         .args(["exec", "reporter", "--", "sh", "-c"])
-        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" ls && "$0" status"#)
+        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" work && "$0" status"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
         .output()
         .unwrap();
@@ -15783,7 +15783,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         );
     }
     let row = |fixture: &Fixture| {
-        let output = fixture.run(&["ls"]);
+        let output = fixture.run(&["work"]);
         String::from_utf8(output.stdout)
             .unwrap()
             .lines()
@@ -15792,11 +15792,11 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .to_owned()
     };
     let ready =
-        |fixture: &Fixture| String::from_utf8(fixture.run(&["ls", "--ready"]).stdout).unwrap();
+        |fixture: &Fixture| String::from_utf8(fixture.run(&["work", "--ready"]).stdout).unwrap();
     assert!(row(&fixture).contains("ready for review"));
     assert!(!row(&fixture).contains("outdated"));
     assert_eq!(ready(&fixture), "reviewed  workspace\n");
-    let listed = fixture.ok(&["ls", "--ready"]);
+    let listed = fixture.ok(&["work", "--ready"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["name"], "reviewed");
 
@@ -15832,7 +15832,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(!row(&fixture).contains("ready for review"));
-    assert_eq!(fixture.ok(&["ls", "--ready"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "--ready"]), serde_json::json!([]));
     assert!(
         fixture.ok(&["inspect", "reviewed"])["workspace"]
             .get("review")
@@ -16890,7 +16890,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
             fs::read_to_string(path.join("tracked")).unwrap(),
             "preserved work\n"
         );
-        assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     }
 }
 
@@ -17733,7 +17733,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
     for tool in ["gh", "fj"] {
         let fixture = issue_fixture(tool);
         write_issue_state(&fixture, tool, "Closed");
-        let before = fixture.ok(&["ls"]);
+        let before = fixture.ok(&["work"]);
         let output = fixture.run(&[
             "add",
             fixture.repo.to_str().unwrap(),
@@ -17745,7 +17745,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
         ]);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("issue is already closed"));
-        assert_eq!(fixture.ok(&["ls"]), before);
+        assert_eq!(fixture.ok(&["work"]), before);
     }
 }
 
@@ -17927,7 +17927,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         "",
     );
     assert!(caller.status.success(), "{caller:?}");
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
     let calls = herdr_calls(&fixture);
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
@@ -18091,7 +18091,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
     assert!(transcript.contains("lookup-failed"), "{transcript}");
     assert!(!transcript.contains("Agent>"), "{transcript}");
     assert!(!fixture.root.path().join("herdr-calls").exists());
-    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -18507,7 +18507,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
     wait_for_herdr_close(&fixture);
     wait_until("done cleanup", || {
-        fixture.ok(&["ls"]).as_array().unwrap().is_empty()
+        fixture.ok(&["work"]).as_array().unwrap().is_empty()
     });
     // The closed tab's shell never reaches a prompt to consume its directive.
     let directive = herdr_tab_directive(&fixture);
@@ -18802,7 +18802,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
             expected
         );
     }
-    assert_eq!(fixture.ok(&["ls"])[0]["holds"], expected);
+    assert_eq!(fixture.ok(&["work"])[0]["holds"], expected);
     assert_eq!(fixture.ok(&["hold", "held"]), expected);
     assert_eq!(fixture.ok(&["hold", "list", "held"]), expected);
     assert_eq!(fixture.ok(&["hold", "--all"])[0]["holds"], expected);
@@ -19031,7 +19031,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         true
     );
     // Chats are not workspace executions.
-    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 
     // Inside a session the agent replaces Shoal in place, and a later chat
     // starts another one instead of reusing it.
@@ -19059,7 +19059,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" ls > \"$HOME/chat-ls\"\n\"$shoal\" --json ls --chats > \"$HOME/chat-chats\"\n\"$shoal\" status chat-worker > \"$HOME/chat-status\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" status chat-worker > \"$HOME/chat-status\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -19092,13 +19092,13 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .unwrap();
     assert_eq!((&changed["name"], &changed["chat"]), (&added["name"], chat));
 
-    // While it runs, `ls` lists the chat with its workspaces under it.
+    // While it runs, `work` lists the chat with its workspaces under it.
     let chats: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     assert_eq!(chats, serde_json::json!([started["chat"]]));
     let name = fs::canonicalize(&fixture.repo).unwrap();
     let name = name.file_name().unwrap().to_str().unwrap();
-    let rows = fs::read_to_string(home.join("chat-ls")).unwrap();
+    let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
         .lines()
         .map(|row| {
@@ -19123,8 +19123,8 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     );
 
     // Once its agent exits the chat ends, and its workspace returns to the user.
-    assert_eq!(fixture.ok(&["ls", "--chats"]), serde_json::json!([]));
-    assert_eq!(fixture.ok(&["ls"])[0]["chat"], Value::Null);
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work"])[0]["chat"], Value::Null);
     let ended = journal(&fixture)
         .into_iter()
         .find(|event| event["kind"] == "chat_ended")
@@ -19766,35 +19766,35 @@ fn add_queues_agents_past_max_agents_until_removed() {
     // Setup runs first, so an agent has started once its entry leaves the queue.
     let started = |name: &str| {
         fixture
-            .ok(&["ls"])
+            .ok(&["work"])
             .as_array()
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == name && workspace["running"] == true)
-            && fixture.ok(&["ls", "--queue"]) == serde_json::json!([])
+            && fixture.ok(&["work", "--queue"]) == serde_json::json!([])
     };
     wait_until("the first agent start", || started("first"));
 
     let queued = fixture.ok(&["add", repo, "second", "--agent", "waiter"]);
     assert_eq!(queued["state"], "queued", "{queued}");
     assert_eq!(queued["position"], 1, "{queued}");
-    let entries = fixture.ok(&["ls", "--queue"]);
+    let entries = fixture.ok(&["work", "--queue"]);
     assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
     assert_eq!(entries[0]["name"], "second");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     assert_eq!(
-        fixture.ok(&["ls", "--queue", "--repo", "other"]),
+        fixture.ok(&["work", "--queue", "--repo", "other"]),
         serde_json::json!([])
     );
-    let listed = String::from_utf8(fixture.run(&["ls"]).stdout).unwrap();
+    let listed = String::from_utf8(fixture.run(&["work"]).stdout).unwrap();
     assert!(listed.contains("queued, position 1"), "{listed}");
     // A queued entry creates nothing until it starts.
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 
     let removed = fixture.ok(&["rm", "second"]);
     assert_eq!(removed["name"], "second", "{removed}");
-    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
 
     // A focused launch is one the user waits for, so it skips the queue.
     let mut focused = fixture
@@ -19820,9 +19820,9 @@ fn add_queues_agents_past_max_agents_until_removed() {
         message.contains("names both a workspace and a queued agent"),
         "{message}"
     );
-    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
-    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
 }

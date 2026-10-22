@@ -375,18 +375,18 @@ Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`).
-Its rows, like `shoal ls` and workspace pickers, are aligned and marked ● ready,
+Its rows, like `shoal work` and workspace pickers, are aligned and marked ● ready,
 ◌ in progress or ✗ failed. Each names the workspace, its repository when the
 rows span several, its status and the linked issue's title. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `waiting for input`, `ready for review`, the other [agent states](#agent-state),
 `running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
-`shoal ls` lists your own workspaces first, then each running [chat](#chats)
-marked ◆ with its agent, followed by the workspaces it opened; `ls --chats`
-lists only the chats. `ls --repo <repository>`, with or without `--ready`,
+`shoal work` lists your own workspaces first, then each running [chat](#chats)
+marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
+lists only the chats. `work --repo <repository>`, with or without `--ready`,
 `--queue` or `--chats`, lists only that registered repository's workspaces,
-chats and queued agents. `ls --status <status>`,
+chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`);
 a chat's status is `running`.
@@ -437,7 +437,7 @@ open questions, child workspaces, queued agent launches and assignment state bef
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
-execution records. Workspace records from `ls --json` and `inspect --json` include
+execution records. Workspace records from `work --json` and `inspect --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
@@ -727,7 +727,7 @@ inside a zmx session or a Herdr pane it runs in place. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
 pressure or resumed. The daemon records each chat while its agent process runs,
-numbering a repository's running chats from 1; `shoal ls` lists it with the
+numbering a repository's running chats from 1; `shoal work` lists it with the
 workspaces it opened, and [workspace events](#workspace-events) report its
 start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
@@ -745,7 +745,7 @@ shoal config set max_agents 2 --repo shoal    # And at most two of them in this 
 shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
-shoal ls --queue                              # Waiting and starting entries
+shoal work --queue                            # Waiting and starting entries
 shoal rm 612-add-queue-cmd                    # Removes a waiting launch
 ```
 
@@ -797,9 +797,9 @@ restore removes the entry and keeps the recovery record. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 
-`shoal ls` lists entries after the workspaces as `queued, position N` or
-`starting`, a restore with its agent; `ls --queue` lists only them (`--json`
-gives the entries with their `kind`, `launch` or `restore`, while `ls --json`
+`shoal work` lists entries after the workspaces as `queued, position N` or
+`starting`, a restore with its agent; `work --queue` lists only them (`--json`
+gives the entries with their `kind`, `launch` or `restore`, while `work --json`
 stays a list of workspaces). `shoal rm` removes a waiting launch by name or ID,
 and only by ID when a workspace has the same name; a starting one belongs to its
 workspace. Scoped callers see no entries.
@@ -1025,7 +1025,7 @@ shoal base set feature-a --workspace feature-b
 The base must be another workspace of the same repository and must not create
 a cycle. Scoped callers may set their own workspace's base. Removing a base
 workspace moves the workspaces stacked on it to its own base workspace, or to
-none. `status` shows both directions; `ls --json` and `inspect` give
+none. `status` shows both directions; `work --json` and `inspect` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
 Once every watched PR of a base workspace has merged, with its HEAD among the
@@ -1067,8 +1067,8 @@ and its subtree's instead. A child keeps its parent from every unattended remova
 completion and PR cleanup included, with `cleanup_reason` `children`, until the
 child is removed; each child completes on its own with `shoal done`. Removing a
 parent moves its children to its own parent, or to none, and records a
-`parent_changed` event. `ls` lists children indented below their parent;
-`status` shows both directions, and `ls --json` and `inspect` give
+`parent_changed` event. `work` lists children indented below their parent;
+`status` shows both directions, and `work --json` and `inspect` give
 `parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
 
 `--agent` starts an agent of its own in the ready child, prompted with the
@@ -1714,7 +1714,7 @@ requires a ready, verified worktree and is excluded while a resource hook runs.
 Release remains available while the workspace record exists. Holds belong to the
 user and to apps hosting external sessions: scoped callers can list their own
 workspace's holds but not acquire or release them. `status`, `inspect`,
-and `ls --json` show holds on the workspace record. `rm` lists holders before
+and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges
@@ -1988,10 +1988,10 @@ Items are selected like `link`, and a selected item must be linked; a kind with
 no linked items is an error. Marking again moves the mark to the current HEAD, and
 marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal notify` to
-ask for attention. New commits make a mark outdated: `ls` shows
-`ready for review (outdated)`, and `status`, `inspect` and `ls --json` list
+ask for attention. New commits make a mark outdated: `work` shows
+`ready for review (outdated)`, and `status`, `inspect` and `work --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
-`shoal ls --ready` lists every mark across repositories, one row per marked
+`shoal work --ready` lists every mark across repositories, one row per marked
 item with its URL and `outdated` when HEAD has moved; with `--json` it lists the
 workspaces that have marks. Unlinking an
 item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
@@ -2037,8 +2037,8 @@ ends. Codex has no hook for a permission prompt, so it reports `working`
 instead of `waiting`. Other agents can call the command from their own hooks; a JSON event
 on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the session
 to [resume](#overload-protection). The command reads only that first event, and stops waiting after
-two seconds without input. `ls` and `status` show
-`working`, `waiting for input` or `turn finished`; `status`, `inspect` and `ls --json`
+two seconds without input. `work` and `status` show
+`working`, `waiting for input` or `turn finished`; `status`, `inspect` and `work --json`
 give `agent_state` with `state` and the Unix-seconds `since` it began. A state
 reported from a tracked execution ends with that execution; one reported from
 outside lasts until the next report or removal. Each change, and each end, is
@@ -2157,7 +2157,7 @@ A `type: "chat"` line records a chat's start or end: its `id`, `created_at`,
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.
-Resync with `shoal ls --json` after a gap or on first connection: the journal
+Resync with `shoal work --json` after a gap or on first connection: the journal
 starts when the daemon upgrades and does not reconstruct older changes.
 
 ### Notifications
@@ -2184,7 +2184,7 @@ marking the assignment done. Each line shows the local time, the workspace, and 
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
-every agent exit is listed. `shoal ls` and `daemon status` mention pending
+every agent exit is listed. `shoal work` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
 workspace. Read entries older than the newest

@@ -349,8 +349,8 @@ pub enum Command {
         command: Option<BaseCommand>,
         workspace: Option<String>,
     },
-    /// List workspaces and queued agents.
-    Ls {
+    /// List the work going on: workspaces, chats and queued agents.
+    Work {
         /// List ready-for-review PRs, issues and workspaces instead.
         #[arg(long, conflicts_with_all = ["queue", "chats"])]
         ready: bool,
