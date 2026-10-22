@@ -117,6 +117,59 @@ pub(crate) fn admit(
     admitted
 }
 
+/// A launch to record in the queue.
+struct Launch {
+    id: String,
+    repository: String,
+    request: QueueRequest,
+    state: QueueState,
+    /// The existing workspace the launch opens.
+    opens: Option<String>,
+}
+
+/// Record `launch` unless its repository already queues the same name. A
+/// launch in an existing workspace needs it ready in the same transaction:
+/// removal reserves the workspace before its final checks, so the launch
+/// either precedes them, which keeps the workspace, or is refused here.
+fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
+    let tx = db.transaction()?;
+    if let Some(workspace) = &launch.opens {
+        crate::daemon::store::require_ready(&tx, workspace)
+            .context("start agents in a ready workspace")?;
+    }
+    let request = &launch.request;
+    ensure!(
+        !crate::daemon::store::exists(
+            &tx,
+            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2 AND kind=?3",
+            params![launch.repository, request.name, QueueKind::Launch],
+        )?,
+        "{} is already in the agent queue",
+        request.name
+    );
+    let now = crate::time::unix_seconds() as i64;
+    tx.execute(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,workspace_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+        params![
+            launch.id,
+            QueueKind::Launch,
+            launch.repository,
+            request.name,
+            request.agent,
+            request.issue_title,
+            request.plan,
+            serde_json::to_string(&request.env)?,
+            launch.state,
+            now,
+            (launch.state == QueueState::Starting).then_some(now),
+            launch.opens,
+        ],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 /// One used slot.
 pub(crate) struct Slot {
     repository: String,
@@ -161,60 +214,29 @@ impl Manager {
         } else {
             QueueState::Queued
         };
-        let env = serde_json::to_string(&request.env)?;
-        let inserted = id.clone();
-        let opens = target.clone();
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                // Removal reserves the workspace before its final checks, so
-                // a launch either precedes them, which keeps the workspace, or
-                // is refused here.
-                if let Some(workspace) = &opens {
-                    crate::daemon::store::require_ready(&tx, workspace)
-                        .context("start agents in a ready workspace")?;
-                }
-                ensure!(
-                    !crate::daemon::store::exists(
-                        &tx,
-                        "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2 AND kind=?3",
-                        params![repository.id, request.name, QueueKind::Launch],
-                    )?,
-                    "{} is already in the agent queue",
-                    request.name
-                );
-                let now = crate::time::unix_seconds() as i64;
-                tx.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,workspace_id)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-                    params![
-                        inserted,
-                        QueueKind::Launch,
-                        repository.id,
-                        request.name,
-                        request.agent,
-                        request.issue_title,
-                        request.plan,
-                        env,
-                        state,
-                        now,
-                        (state == QueueState::Starting).then_some(now),
-                        opens,
-                    ],
-                )?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
-        let start = if target.is_some() {
-            self.admit_waiting(None).await?;
-            false
-        } else {
-            request.now || self.admit_waiting(Some(&id)).await?
+        let start = Start {
+            id: id.clone(),
+            name: request.name.clone(),
+            env: request.env.clone(),
         };
+        let launch = Launch {
+            id: id.clone(),
+            repository: repository.id,
+            request,
+            state,
+            opens: target,
+        };
+        let detached = launch.opens.is_some();
+        let now = launch.request.now && !detached;
+        self.store.run(move |db| insert_launch(db, &launch)).await?;
+        let admitted = now || self.admit_waiting(Some(&id)).await?;
+        // Read the response before a detached worker can take the entry.
         let entries = self.queue_entries().await?;
+        if detached && admitted {
+            self.start_launches(vec![start], None).await?;
+        }
         Ok(QueueAdmission {
-            start,
+            start: admitted && !detached,
             waiting: entries
                 .iter()
                 .filter(|entry| entry.state == QueueState::Queued)
