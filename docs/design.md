@@ -402,8 +402,8 @@ wrapper first on workspace processes' PATH. These presets trade real source
 paths in debug info and stack traces for the shared cache, which is why they
 are opt-in. Neither shrinks a workspace's own build directory: Xcode copies
 cached results into each DerivedData. That folder lies outside the worktree,
-keyed by the project's path, so the preset makes removal delete it; Xcode
-rebuilds it on demand.
+keyed by the project's path, so the preset makes removal delete it and disk
+space cleanup delete what earlier removals left; Xcode rebuilds it on demand.
 
 Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
 sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`

@@ -1,5 +1,6 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
-//! removing workspaces idle cleanup would remove, without their idle delay,
+//! deleting Xcode DerivedData that removed workspaces left, then removing
+//! workspaces idle cleanup would remove, without their idle delay,
 //! then emptying shared caches nothing is using, then stopping tracked
 //! executions when that cannot free enough space.
 use anyhow::Result;
@@ -110,6 +111,7 @@ impl Monitor {
             .is_none_or(|last| now.duration_since(last) >= CLEANUP_INTERVAL)
         {
             for filesystem in &mut low {
+                delete_derived_data(manager, filesystem, &available).await?;
                 free_space(manager, settings, &workspaces, filesystem, &available).await?;
                 empty_caches(manager, settings, filesystem, &available).await?;
             }
@@ -183,6 +185,26 @@ fn sample(
         }
     }
     (filesystems, complete)
+}
+
+/// Delete Xcode DerivedData that removed workspaces left on the filesystem,
+/// which loses nothing, so it goes before any workspace.
+async fn delete_derived_data(
+    manager: &Manager,
+    filesystem: &mut Filesystem,
+    available: impl Fn(&Path) -> io::Result<u64>,
+) -> Result<()> {
+    let Some(location) = crate::presets::derived_data::location(&manager.paths.home) else {
+        return Ok(());
+    };
+    if location.metadata().map(|metadata| metadata.dev()).ok() != Some(filesystem.device) {
+        return Ok(());
+    }
+    for repo in manager.repositories().await? {
+        manager.delete_stale_derived_data(&repo, &location).await;
+    }
+    filesystem.free = available(&filesystem.path)?;
+    Ok(())
 }
 
 /// Remove cleanup candidates on the filesystem until it has enough space.
@@ -383,6 +405,52 @@ mod tests {
     use super::*;
     use crate::test_support::{manager, repository};
     use std::sync::atomic::AtomicUsize;
+
+    #[tokio::test]
+    async fn cleanup_deletes_derived_data_of_removed_workspaces_first() {
+        let (root, manager) = manager().await;
+        crate::test_support::configure(
+            &manager,
+            "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        )
+        .await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let live = manager
+            .create_workspace(&repo.id, "live".into(), None, None, None)
+            .await
+            .unwrap();
+        let project = live.path.join("App.xcodeproj");
+        std::fs::create_dir(&project).unwrap();
+        let location = crate::presets::derived_data::location(&manager.paths.home).unwrap();
+        let folder =
+            |name, project: &Path| crate::presets::derived_data::folder(&location, name, project);
+        let live = folder("App-live", &project);
+        let directory = repo.workspaces_dir.as_deref().unwrap();
+        let removed = folder("App-removed", &directory.join("gone/App.xcodeproj"));
+        let elsewhere = folder("App-elsewhere", Path::new("/nonexistent/App.xcodeproj"));
+        let readings = AtomicUsize::new(0);
+        let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+        let available = |_: &Path| {
+            // Deleting the DerivedData frees enough space.
+            Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
+                low
+            } else {
+                u64::MAX
+            })
+        };
+        Monitor::default()
+            .check(&manager, Instant::now(), &available)
+            .await
+            .unwrap();
+        assert!(!removed.exists());
+        assert!(live.exists());
+        assert!(elsewhere.exists());
+        assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+    }
 
     #[tokio::test]
     async fn cleanup_removes_candidates_until_enough_space_is_free() {

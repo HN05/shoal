@@ -7,7 +7,7 @@ use super::Manager;
 use crate::{
     config::Effective,
     daemon::log,
-    model::Workspace,
+    model::{Repository, Workspace},
     presets::{Preset, derived_data},
 };
 
@@ -56,6 +56,41 @@ impl Manager {
                 }
             }
             Err(error) => log!("DerivedData of {} kept: {error:#}", workspace.name),
+        }
+    }
+
+    /// Delete the DerivedData of projects that lay inside the repository's
+    /// directory and no longer exist, which earlier removals left. An absent
+    /// directory, such as an unmounted volume, proves nothing gone.
+    pub(crate) async fn delete_stale_derived_data(&self, repo: &Repository, location: &Path) {
+        let name = crate::forge::repository::name(repo);
+        let Some(directory) = repo.workspaces_dir.clone() else {
+            return;
+        };
+        if !directory.try_exists().unwrap_or(false) {
+            return;
+        }
+        match self.repository_settings(&repo.id).await {
+            Ok(settings) if uses_xcode(&settings) => {}
+            Ok(_) => return,
+            Err(error) => {
+                log!("DerivedData of {name} kept: settings unreadable: {error:#}");
+                return;
+            }
+        }
+        let stale = move |project: &Path| {
+            project.starts_with(&directory) && matches!(project.try_exists(), Ok(false))
+        };
+        match delete(location.to_owned(), stale).await {
+            Ok(folders) => {
+                for folder in folders {
+                    log!(
+                        "deleted DerivedData {} of a removed {name} workspace",
+                        folder.display()
+                    );
+                }
+            }
+            Err(error) => log!("DerivedData of {name} kept: {error:#}"),
         }
     }
 }
