@@ -1,5 +1,7 @@
-//! The bare `shoal` invocation: an fzf menu over workspaces that turns a
-//! selection plus key binding into an ordinary [`Command`].
+//! The bare `shoal` picker, which `shoal work` also opens on a terminal: an
+//! fzf list whose keys act on the selected row, binding only the keys that
+//! mean something in the view shown. A selection plus key becomes an
+//! ordinary [`Command`].
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -7,7 +9,7 @@ use crate::{
         Command, ConfirmationArgs, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
-        ui::{self, KeyBindings},
+        ui::{self, Entries, ViewPicker},
     },
     env,
     protocol::ConfigTarget,
@@ -15,8 +17,9 @@ use crate::{
 
 const ADD_ENTRY: &str = "add-workspace";
 
+/// A key the picker binds, named by what it does.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum MenuAction {
+enum Key {
     Enter,
     Delete,
     Execute,
@@ -27,18 +30,56 @@ enum MenuAction {
     Diff,
 }
 
-const BINDINGS: &[(&str, &str, MenuAction)] = &[
-    ("enter", "enter", MenuAction::Enter),
-    ("ctrl-d", "delete", MenuAction::Delete),
-    ("ctrl-e", "execute", MenuAction::Execute),
-    ("ctrl-a", "add", MenuAction::Add),
-    ("ctrl-o", "inspect", MenuAction::Inspect),
-    ("ctrl-s", "stop", MenuAction::Stop),
-    ("ctrl-t", "attach", MenuAction::Attach),
-    ("ctrl-f", "diff", MenuAction::Diff),
-];
+impl Key {
+    const ALL: [Self; 8] = [
+        Self::Enter,
+        Self::Delete,
+        Self::Execute,
+        Self::Add,
+        Self::Inspect,
+        Self::Stop,
+        Self::Attach,
+        Self::Diff,
+    ];
 
-impl MenuAction {
+    /// Its fzf name.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Enter => "enter",
+            Self::Delete => "ctrl-d",
+            Self::Execute => "ctrl-e",
+            Self::Add => "ctrl-a",
+            Self::Inspect => "ctrl-o",
+            Self::Stop => "ctrl-s",
+            Self::Attach => "ctrl-t",
+            Self::Diff => "ctrl-f",
+        }
+    }
+
+    /// What it does, for the header; Enter's depends on the view.
+    fn label(self, view: View) -> &'static str {
+        match self {
+            Self::Enter => view.enter_label(),
+            Self::Delete => "delete",
+            Self::Execute => "execute",
+            Self::Add => "add",
+            Self::Inspect => "inspect",
+            Self::Stop => "stop",
+            Self::Attach => "attach",
+            Self::Diff => "diff",
+        }
+    }
+
+    /// The key fzf reports; a picker that prints nothing pressed Enter.
+    fn parse(name: &str) -> Result<Self> {
+        let name = if name.is_empty() { "enter" } else { name };
+        Self::ALL
+            .into_iter()
+            .find(|key| key.name() == name)
+            .context("unknown picker action")
+    }
+
+    /// Workspace processes cannot add, delete, stop or attach.
     fn allowed_scoped(self) -> bool {
         matches!(
             self,
@@ -47,70 +88,169 @@ impl MenuAction {
     }
 }
 
+/// What the picker lists.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    Work,
+}
+
+impl View {
+    fn prompt(self) -> &'static str {
+        match self {
+            Self::Work => "work> ",
+        }
+    }
+
+    /// The keys the view binds, in header order.
+    fn keys(self) -> &'static [Key] {
+        match self {
+            Self::Work => &[
+                Key::Enter,
+                Key::Delete,
+                Key::Execute,
+                Key::Add,
+                Key::Inspect,
+                Key::Stop,
+                Key::Attach,
+                Key::Diff,
+            ],
+        }
+    }
+
+    fn enter_label(self) -> &'static str {
+        match self {
+            Self::Work => "cd",
+        }
+    }
+
+    /// The keys a caller with this scope may use here.
+    fn bound(self, scoped: bool) -> Vec<Key> {
+        self.keys()
+            .iter()
+            .copied()
+            .filter(|key| !scoped || key.allowed_scoped())
+            .collect()
+    }
+
+    fn header(self, keys: &[Key]) -> String {
+        keys.iter()
+            .map(|key| format!("{}: {}", key.name(), key.label(self)))
+            .collect::<Vec<_>>()
+            .join("   ")
+    }
+}
+
+/// What a row stands for, by the picker id it is chosen with.
+enum Row {
+    Workspace(String),
+    Add,
+}
+
+impl Row {
+    fn parse(id: String) -> Self {
+        if id == ADD_ENTRY {
+            Self::Add
+        } else {
+            Self::Workspace(id)
+        }
+    }
+}
+
 pub(super) async fn choose(ctx: &Context) -> Result<Command> {
+    let scoped = env::is_scoped();
+    let view = View::Work;
+    let keys = view.bound(scoped);
+    let names: Vec<_> = keys.iter().map(|key| key.name()).collect();
+    let picked = ui::pick_in_views(
+        ctx,
+        rows(ctx, view, scoped).await?,
+        ViewPicker {
+            prompt: view.prompt(),
+            header: &view.header(&keys),
+            keys: &names,
+            unbound: &[],
+            next: None,
+        },
+    )?;
+    command(ctx, Key::parse(&picked.action)?, Row::parse(picked.id)).await
+}
+
+async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
+    match view {
+        View::Work => work_rows(ctx, scoped).await,
+    }
+}
+
+/// Every workspace, then an entry that adds one unless workspace processes ask.
+async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
     let workspaces = client::workspaces(&ctx.paths).await?;
     let palette = Palette::stderr(ctx.json);
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-    let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette);
-    let mut entries: Vec<_> = workspaces.into_iter().map(|w| w.id).zip(rows).collect();
-    let scoped = env::is_scoped();
+    let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette, ui::picker_width());
+    let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(rows).collect();
     if !scoped {
         entries.push((
             ADD_ENTRY.into(),
             format!("{} Add workspace", palette.paint(Style::Success, "+")),
         ));
     }
-    let bindings: Vec<_> = BINDINGS
-        .iter()
-        .copied()
-        .filter(|(_, _, action)| !scoped || action.allowed_scoped())
-        .collect();
-    let picked = ui::pick_with_keys(ctx, "Shoal> ", entries, KeyBindings(&bindings))?;
-    let action = if picked.action == MenuAction::Enter && picked.id == ADD_ENTRY {
-        MenuAction::Add
-    } else {
-        picked.action
+    Ok(entries)
+}
+
+/// Add adds wherever it is pressed, and Enter on the add entry adds; other
+/// keys act on the selected row's workspace.
+async fn command(ctx: &Context, key: Key, row: Row) -> Result<Command> {
+    let workspace = match row {
+        _ if key == Key::Add => return Ok(add()),
+        Row::Add if key == Key::Enter => return Ok(add()),
+        Row::Add => None,
+        Row::Workspace(id) => Some(id),
     };
-    ensure!(
-        action == MenuAction::Add || picked.id != ADD_ENTRY,
-        "select a workspace for this action"
-    );
-    let workspace = Some(picked.id);
-    Ok(match action {
-        MenuAction::Add => Command::Add {
-            here: false,
-            focus: false,
-            path: None,
-            repository: None,
-            repository_override: None,
-            branch: None,
-            existing: None,
-            issue: None,
-            base: None,
-            git_profile: None,
-            agent: None,
-            now: false,
-            args: vec![],
-        },
-        MenuAction::Enter => Command::Cd { workspace },
-        MenuAction::Delete => Command::Rm {
+    ensure!(workspace.is_some(), "select a workspace for this action");
+    workspace_command(ctx, key, workspace).await
+}
+
+fn add() -> Command {
+    Command::Add {
+        here: false,
+        focus: false,
+        path: None,
+        repository: None,
+        repository_override: None,
+        branch: None,
+        existing: None,
+        issue: None,
+        base: None,
+        git_profile: None,
+        agent: None,
+        now: false,
+        args: vec![],
+    }
+}
+
+/// What `key` does to `workspace`.
+async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -> Result<Command> {
+    Ok(match key {
+        Key::Enter => Command::Cd { workspace },
+        Key::Delete => Command::Rm {
             workspace,
             confirmation: ConfirmationArgs::default(),
         },
-        MenuAction::Inspect => Command::Inspect { workspace },
-        MenuAction::Stop => Command::Stop {
+        Key::Inspect => Command::Inspect { workspace },
+        Key::Stop => Command::Stop {
             scope: WorkspaceScope {
                 workspace,
                 all: false,
             },
         },
-        MenuAction::Attach => Command::Attach {
+        Key::Attach => Command::Attach {
             workspace,
             session: None,
         },
-        MenuAction::Diff => Command::Diff { workspace },
-        MenuAction::Execute => execute_command(ctx, workspace).await?,
+        Key::Diff => Command::Diff { workspace },
+        Key::Execute => execute_command(ctx, workspace).await?,
+        Key::Add => add(),
     })
 }
 

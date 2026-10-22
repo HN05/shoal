@@ -7650,6 +7650,9 @@ head -n 1 "$HOME/picker-input"
             );
             let args = if scoped {
                 vec!["exec", "menu-worker", "--", env!("CARGO_BIN_EXE_shoal")]
+            } else if key == "ctrl-o" {
+                // `shoal work` opens the same picker on a terminal.
+                vec!["work"]
             } else {
                 vec![]
             };
@@ -7665,16 +7668,24 @@ head -n 1 "$HOME/picker-input"
             assert_eq!(input.contains("Add workspace"), !scoped);
             let (keys, header) = if scoped {
                 (
-                    "ctrl-e,ctrl-o,ctrl-f",
-                    "enter: enter   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
+                    &["enter", "ctrl-e", "ctrl-o", "ctrl-f"][..],
+                    "enter: cd   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
                 )
             } else {
                 (
-                    "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-t,ctrl-f",
-                    "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
+                    &[
+                        "enter", "ctrl-d", "ctrl-e", "ctrl-a", "ctrl-o", "ctrl-s", "ctrl-t",
+                        "ctrl-f",
+                    ][..],
+                    "enter: cd   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
                 )
             };
-            assert!(args.contains(&format!("--expect={keys}\n--header\n{header}\n")));
+            assert!(args.contains(&format!("--header\n{header}\n")), "{args}");
+            let binds: String = keys
+                .iter()
+                .map(|key| format!("--bind\n{key}:print({key})+accept\n"))
+                .collect();
+            assert!(args.contains(&binds), "{args}");
             match key {
                 "cancel" => {
                     assert!(!output.status.success());
@@ -7691,6 +7702,15 @@ head -n 1 "$HOME/picker-input"
             }
         }
     }
+    // `--print` lists on a terminal instead of opening the picker.
+    fs::remove_file(fixture.root.path().join("picker-input")).ok();
+    let (output, transcript) = fixture.interactive(&["work", "--print"], "");
+    assert!(output.status.success(), "{transcript}");
+    assert!(!fixture.root.path().join("picker-input").exists());
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("menu-worker"),
+        "{output:?}"
+    );
 }
 
 #[test]

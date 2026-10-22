@@ -371,7 +371,8 @@ shoal stop fix-login                     # Stop agents and commands for shoal re
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
 
-Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
+Bare `shoal` opens an fzf list of workspaces, as does `shoal work` on a
+terminal (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`).
@@ -383,7 +384,12 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `needs input`, `ready`, the other [agent states](#agent-state),
 `running` while an agent or command runs, `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
-`shoal work` lists your own workspaces first, then each running [chat](#chats)
+The header names the keys the list binds. Enter enters the selection; Ctrl-D deletes, Ctrl-E
+runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
+Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
+shell.
+`shoal work --print`, like a filter, `--json` or output that is not a terminal,
+prints the list instead: your own workspaces first, then each running [chat](#chats)
 marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
 lists only the chats. `work --repo <repository>`, with or without
 `--queue` or `--chats`, lists only that registered repository's workspaces,
@@ -397,10 +403,7 @@ workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row pe
 marked item. `inbox --repo <repository>` keeps one repository's items; `--json`
 gives each item's `kind` (`question`, `approval`, `needs_input`, `failed` or
 `ready`) with its `question`, `request` or `workspace` and a ready item's `mark`.
-Enter enters the selection; Ctrl-D deletes, Ctrl-E
-runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
-Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
-shell. Bare `shoal repo` opens the same kind of list over registered repositories
+Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
 `repo rename` asks for an omitted name.

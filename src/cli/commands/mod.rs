@@ -223,6 +223,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     ctx.need = cli.need;
     let command = match cli.command {
         Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
+        Some(Command::Work {
+            queue: false,
+            chats: false,
+            repository: None,
+            ref status,
+            print: false,
+        }) if status.is_empty() && ctx.interactive() => menu::choose(&ctx).await?,
         Some(command) => command,
         None => menu::choose(&ctx).await?,
     };
@@ -360,6 +367,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             chats,
             repository,
             status,
+            print: _,
         } => {
             let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
             if chats {

@@ -249,7 +249,7 @@ impl<T: Clone> KeyBindings<'_, T> {
 }
 
 pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
-    Ok(run_picker(ctx, prompt, entries, None)?.id)
+    Ok(run_picker(ctx, prompt, entries, Vec::new(), false)?.id)
 }
 
 pub fn pick_with_keys<T: Clone>(
@@ -258,12 +258,12 @@ pub fn pick_with_keys<T: Clone>(
     entries: Entries,
     bindings: KeyBindings<'_, T>,
 ) -> Result<Picked<T>> {
-    let picked = run_picker(
-        ctx,
-        prompt,
-        entries,
-        Some((bindings.keys(), bindings.header())),
-    )?;
+    let args = vec![
+        format!("--expect={}", bindings.keys()),
+        "--header".into(),
+        bindings.header(),
+    ];
+    let picked = run_picker(ctx, prompt, entries, args, true)?;
     Ok(Picked {
         action: bindings.action(&picked.action)?,
         id: picked.id,
@@ -324,22 +324,61 @@ pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<St
     Ok(ids)
 }
 
+/// A picker whose keys are bound per view, and which Tab can switch to
+/// another view by running `next`.
+pub struct ViewPicker<'a> {
+    pub prompt: &'a str,
+    pub header: &'a str,
+    /// Every key a view binds, by fzf name, `enter` included.
+    pub keys: &'a [&'a str],
+    /// The keys the first view leaves unbound.
+    pub unbound: &'a [&'a str],
+    /// The command whose output, fzf actions, shows the next view.
+    pub next: Option<String>,
+}
+
+/// Choose an entry with one of `picker.keys`, returning the key pressed.
+pub fn pick_in_views(
+    ctx: &Context,
+    entries: Entries,
+    picker: ViewPicker<'_>,
+) -> Result<Picked<String>> {
+    let mut args = vec!["--header".into(), picker.header.into()];
+    for key in picker.keys {
+        args.extend(["--bind".into(), format!("{key}:print({key})+accept")]);
+    }
+    if !picker.unbound.is_empty() {
+        let keys = picker.unbound.join(",");
+        args.extend(["--bind".into(), format!("start:unbind({keys})")]);
+    }
+    if let Some(next) = picker.next {
+        args.extend(["--bind".into(), format!("tab:transform({next})")]);
+    }
+    run_picker(ctx, picker.prompt, entries, args, true)
+}
+
+/// The width picker rows should fit: the terminal's, less fzf's pointer
+/// and scrollbar columns.
+pub fn picker_width() -> Option<usize> {
+    let terminal = std::fs::File::open("/dev/tty").ok()?;
+    Some(crate::cli::output::terminal_width(terminal)?.saturating_sub(3))
+}
+
+/// One picker input line: the id, a tab, and the label on one line.
+pub fn picker_line(id: &str, label: &str) -> String {
+    format!("{id}\t{}", label.replace(['\n', '\r', '\t'], " "))
+}
+
+/// `keyed` pickers print the key that chose the entry on the line before it.
 fn run_picker(
     ctx: &Context,
     prompt: &str,
     entries: Entries,
-    bindings: Option<(String, String)>,
+    extra: Vec<String>,
+    keyed: bool,
 ) -> Result<Picked<String>> {
-    let extra = match &bindings {
-        Some((keys, header)) => vec![
-            format!("--expect={keys}"),
-            "--header".to_owned(),
-            header.clone(),
-        ],
-        None => Vec::new(),
-    };
     let output = picker_output(ctx, prompt, &entries, &extra)?;
-    let (key, selected) = if bindings.is_some() {
+    let (key, selected) = if keyed {
         output.split_once('\n').context("picker omitted action")?
     } else {
         ("", output.as_str())
@@ -391,9 +430,8 @@ fn picker_output(
         .context("open picker; install fzf or supply an explicit target")?;
     let mut input = picker.stdin.take().context("picker stdin is unavailable")?;
     for (id, label) in entries {
-        let label = label.replace(['\n', '\r', '\t'], " ");
         // fzf may exit before consuming the entire list when canceled.
-        if writeln!(input, "{id}\t{label}").is_err() {
+        if writeln!(input, "{}", picker_line(id, label)).is_err() {
             break;
         }
     }
@@ -511,7 +549,13 @@ fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Op
         .into_iter()
         .map(|(resumable, w)| (resume_status_cell(resumable), w))
         .unzip();
-    let labels = rows_with_status(&workspaces, &[], statuses, Palette::stderr(ctx.json));
+    let labels = rows_with_status(
+        &workspaces,
+        &[],
+        statuses,
+        Palette::stderr(ctx.json),
+        picker_width(),
+    );
     let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(labels).collect();
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     let id = pick(ctx, "Workspace> ", entries)?;
@@ -657,7 +701,7 @@ fn availability_entries(
             (status, w)
         })
         .unzip();
-    let labels = rows_with_status(&workspaces, &[], statuses, palette);
+    let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width());
     workspaces.into_iter().map(|w| w.id).zip(labels).collect()
 }
 
@@ -688,12 +732,13 @@ pub fn workspace_rows(
     repositories: &[(String, String)],
     stopped: &HashSet<String>,
     palette: Palette,
+    width: Option<usize>,
 ) -> Vec<String> {
     let statuses = workspaces
         .iter()
         .map(|w| status_cell(w, stopped.contains(&w.id)))
         .collect();
-    rows_with_status(workspaces, repositories, statuses, palette)
+    rows_with_status(workspaces, repositories, statuses, palette, width)
 }
 
 /// `workspace_rows` for workspaces and the running chats that opened some
@@ -729,14 +774,9 @@ pub fn workspace_tree_rows(
         }
     }
     let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
-    // The title gives way; a marker and its space precede the cells.
-    let limit = width.map(|width| WidthLimit {
-        column: 3,
-        width: width.saturating_sub(2),
-    });
     markers
         .into_iter()
-        .zip(aligned_to(cells, palette, limit))
+        .zip(aligned_to(cells, palette, title_limit(width)))
         .map(|(marker, row)| format!("{marker} {row}"))
         .collect()
 }
@@ -834,6 +874,7 @@ fn rows_with_status(
     repositories: &[(String, String)],
     statuses: Vec<Cell>,
     palette: Palette,
+    width: Option<usize>,
 ) -> Vec<String> {
     let cells: Vec<[Cell; 4]> = workspaces
         .iter()
@@ -850,9 +891,17 @@ fn rows_with_status(
         .collect();
     workspaces
         .iter()
-        .zip(aligned(cells, palette))
+        .zip(aligned_to(cells, palette, title_limit(width)))
         .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
         .collect()
+}
+
+/// Rows of `width` with a state marker before their cells cut the title.
+fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
+    width.map(|width| WidthLimit {
+        column: 3,
+        width: width.saturating_sub(2),
+    })
 }
 
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
@@ -1253,7 +1302,8 @@ mod tests {
                 &workspaces,
                 &[("a".into(), "shoal".into())],
                 &HashSet::from([workspaces[0].id.clone(), workspaces[1].id.clone()]),
-                plain
+                plain,
+                None,
             ),
             [
                 "● fix-login  stopped",
@@ -1273,7 +1323,7 @@ mod tests {
             workspace("b", "y", "y", WorkspaceState::Ready),
         ];
         assert_eq!(
-            workspace_rows(&workspaces, &repositories, &HashSet::new(), plain),
+            workspace_rows(&workspaces, &repositories, &HashSet::new(), plain, None),
             [
                 "● fix-login  shoal  inactive",
                 "● y          app    inactive"

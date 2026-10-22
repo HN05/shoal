@@ -369,6 +369,9 @@ pub enum Command {
         /// List only workspaces, chats and agents with this status; repeat or separate with commas.
         #[arg(long, value_delimiter = ',')]
         status: Vec<list_status::ListStatus>,
+        /// Print the list instead of opening the picker, as filters and JSON do.
+        #[arg(long)]
+        print: bool,
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
     ///
