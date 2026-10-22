@@ -1,4 +1,6 @@
 //! Executable names and the dependencies checked by doctor on every installation.
+use crate::forge::programs;
+
 #[derive(Clone, Copy)]
 pub enum Dependency {
     Required,
@@ -6,7 +8,7 @@ pub enum Dependency {
 }
 
 macro_rules! tools {
-    ($($tool:ident => ($program:literal, $dependency:expr)),+ $(,)?) => {
+    ($($tool:ident => ($program:expr, $dependency:expr)),+ $(,)?) => {
         #[derive(Clone, Copy)]
         pub enum Tool { $($tool),+ }
 
@@ -32,11 +34,11 @@ tools! {
     Fzf => ("fzf", Some(Dependency::Optional("needed for interactive pickers"))),
     // Feature-specific and platform tools are diagnosed when invoked.
     Xcrun => ("xcrun", None),
-    GitHub => ("gh", None),
-    Forgejo => ("fj", None),
-    Tea => ("tea", None),
-    GitLab => ("glab", None),
-    Curl => ("curl", None),
+    GitHub => (programs::GH, None),
+    Forgejo => (programs::FJ, None),
+    Tea => (programs::TEA, None),
+    GitLab => (programs::GLAB, None),
+    Curl => (programs::CURL, None),
     Tar => ("tar", None),
     Diff => ("diff", None),
     Ps => ("ps", None),

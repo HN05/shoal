@@ -18,6 +18,7 @@ pub mod labels;
 pub mod link;
 pub mod list;
 mod locator;
+pub mod programs;
 pub(crate) mod remote_url;
 mod rest;
 mod retarget;
@@ -369,7 +370,7 @@ enum Query {
 
 /// Run `gh` as `account`, the CLI that reads GitHub's items.
 async fn gh(account: &account::Account, args: &[&str], query: Query) -> Result<String> {
-    let tool = crate::tools::Tool::GitHub.program();
+    let tool = programs::GH;
     let mut command = tokio::process::Command::new(tool);
     command.args(args).env("NO_COLOR", "1");
     account.apply(&mut command);

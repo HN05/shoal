@@ -3,8 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use tokio::process::Command;
 
-use super::{account::Account, api::Request};
-use crate::tools::Tool;
+use super::{account::Account, api::Request, programs};
 
 /// A tea login and the root URL of the forge it signs in to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +14,7 @@ pub(super) struct TeaLogin {
 
 /// The tea login, as `account` runs tea, for the forge at `host`.
 pub(super) async fn login(account: &Account, host: &str) -> Result<Option<TeaLogin>> {
-    let mut tea = Command::new(Tool::Tea.program());
+    let mut tea = Command::new(programs::TEA);
     tea.env("NO_COLOR", "1")
         .args(["login", "list", "--output", "json"]);
     account.apply(&mut tea);
@@ -38,7 +37,7 @@ pub(super) async fn send(
         "tea cannot upload files; save an fj login for the host with fj auth login"
     );
     let url = format!("{}/api/v1/{}", login.url, request.endpoint);
-    let mut tea = Command::new(Tool::Tea.program());
+    let mut tea = Command::new(programs::TEA);
     tea.env("NO_COLOR", "1").args([
         "api",
         "--include",

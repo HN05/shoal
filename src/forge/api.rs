@@ -14,9 +14,8 @@ use tokio::process::Command;
 use super::{
     ForgeKind, ForgeRepo,
     account::{Account, ForgejoLogin},
-    tea,
+    programs, tea,
 };
-use crate::tools::Tool;
 
 pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
@@ -122,7 +121,7 @@ impl ForgeRepo {
             ForgejoLogin::Anonymous => None,
         };
         let url = format!("{}://{}/api/v1/{endpoint}", self.web_scheme, self.host);
-        let mut curl = Command::new(Tool::Curl.program());
+        let mut curl = Command::new(programs::CURL);
         curl.args([
             "-q",
             "-sS",
@@ -164,7 +163,7 @@ impl ForgeRepo {
             let body = match self.kind {
                 ForgeKind::GitHub => self.github_send(account, request).await,
                 ForgeKind::Forgejo => self.forgejo_send(account, request).await,
-                ForgeKind::GitLab => self.passthrough(Tool::GitLab, account, request).await,
+                ForgeKind::GitLab => self.passthrough(programs::GLAB, account, request).await,
                 ForgeKind::Bitbucket => self.bitbucket_send(account, request).await,
             }?;
             if let Some(field) = request.confirm {
@@ -183,7 +182,7 @@ impl ForgeRepo {
     }
 
     async fn github_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        let body = self.passthrough(Tool::GitHub, account, request).await?;
+        let body = self.passthrough(programs::GH, account, request).await?;
         // GraphQL reports a failed mutation in a successful response.
         if let Some(errors) = graphql_errors(&body) {
             bail!("{errors}");
@@ -192,8 +191,12 @@ impl ForgeRepo {
     }
 
     /// Send through `gh api` or `glab api`, which own their logins.
-    async fn passthrough(&self, tool: Tool, account: &Account, request: &Request) -> Result<Value> {
-        let program = tool.program();
+    async fn passthrough(
+        &self,
+        program: &'static str,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Value> {
         let mut cli = Command::new(program);
         cli.env("NO_COLOR", "1")
             .env("GH_PROMPT_DISABLED", "1")
@@ -291,7 +294,7 @@ impl ForgeRepo {
         authorization: Option<Vec<u8>>,
         request: &Request,
     ) -> Result<Value> {
-        let mut curl = Command::new(Tool::Curl.program());
+        let mut curl = Command::new(programs::CURL);
         // -q first: a user .curlrc must not trace the token header.
         curl.args(["-q", "-sS", "--max-time"])
             .arg(request.timeout().as_secs().to_string())
@@ -516,7 +519,7 @@ pub(super) fn fj_keys_path() -> Result<PathBuf> {
     let data = std::env::var_os("XDG_DATA_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from);
-    Ok(fj_keys_at(&crate::fsutil::home_dir()?, data))
+    Ok(fj_keys_at(&home_dir()?, data))
 }
 
 /// Where fj run with `home` keeps its logins; `data` is its XDG data
@@ -547,6 +550,13 @@ pub(super) fn fj_token(path: &Path, host: &str) -> Result<String> {
         "fj's login for {host} has an unexpected token format"
     );
     Ok(token.to_owned())
+}
+
+/// The user's home directory, where the CLIs keep their logins.
+pub(super) fn home_dir() -> Result<PathBuf> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .context("HOME is not set")
 }
 
 #[cfg(test)]

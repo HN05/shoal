@@ -22,11 +22,7 @@ fn config_path() -> Option<PathBuf> {
     }
     let config = directory("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| {
-            crate::fsutil::home_dir()
-                .ok()
-                .map(|home| home.join(".config"))
-        })?;
+        .or_else(|| super::api::home_dir().ok().map(|home| home.join(".config")))?;
     Some(config.join("glab-cli/config.yml"))
 }
 
