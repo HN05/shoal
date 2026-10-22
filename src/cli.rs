@@ -736,6 +736,8 @@ pub enum PrCommand {
         title: Option<String>,
         #[command(flatten)]
         body: BodyArgs,
+        #[command(flatten)]
+        files: AttachArgs,
         /// Base branch; defaults to the base workspace's branch, then the default branch.
         #[arg(long)]
         base: Option<String>,
@@ -780,6 +782,8 @@ pub enum PrCommand {
         item: ItemSelector,
         #[command(flatten)]
         body: BodyArgs,
+        #[command(flatten)]
+        files: AttachArgs,
     },
     /// Reply in the thread of a review comment.
     Reply {
@@ -867,6 +871,8 @@ pub enum IssueCommand {
         title: String,
         #[command(flatten)]
         body: BodyArgs,
+        #[command(flatten)]
+        files: AttachArgs,
         /// Add a label; repeat for more.
         #[arg(long = "label", value_name = "LABEL")]
         labels: Vec<String>,
@@ -887,6 +893,8 @@ pub enum IssueCommand {
         item: ItemSelector,
         #[command(flatten)]
         body: BodyArgs,
+        #[command(flatten)]
+        files: AttachArgs,
     },
     /// Close an issue.
     Close {
@@ -919,6 +927,8 @@ pub struct EditArgs {
     pub title: Option<String>,
     #[command(flatten)]
     pub body: BodyArgs,
+    #[command(flatten)]
+    pub files: AttachArgs,
     /// Add a label; repeat for more.
     #[arg(long = "add-label", value_name = "LABEL")]
     pub add_labels: Vec<String>,
@@ -936,6 +946,17 @@ pub struct BodyArgs {
     /// Read the text from a file.
     #[arg(long, value_name = "PATH", conflicts_with = "body")]
     pub body_file: Option<PathBuf>,
+}
+
+/// Image and video files to show in a description or comment.
+#[derive(Debug, Args)]
+pub struct AttachArgs {
+    /// Upload an image or video, as PATH or PATH#ALT_TEXT; repeat for more. It
+    /// replaces the body's image references to the file, such as
+    /// `![alt](shot.png)` relative to the body file or working directory, and
+    /// otherwise follows the body.
+    #[arg(long = "attach", value_name = "FILE")]
+    pub attach: Vec<String>,
 }
 
 /// An optional item selection followed by its relation.

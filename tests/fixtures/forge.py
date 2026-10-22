@@ -6,10 +6,12 @@ Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A list answers successive requests in turn, repeating
 its last entry. Each entry is {"status": 200, "body": ...}. Every request is
-appended to $HOME/forge/requests.jsonl with its body and credentials.
+appended to $HOME/forge/requests.jsonl with its body and credentials; an
+uploaded file's body is {"file": name, "type": content type, "bytes": size}.
 """
 import json
 import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -39,7 +41,18 @@ def gh(args):
     if args[:1] == ["api"]:
         index = args.index("-X")
         method, endpoint = args[index + 1], args[index + 2]
-        body = json.load(sys.stdin) if "--input" in args else None
+        source = args[args.index("--input") + 1] if "--input" in args else None
+        if source in (None, "-"):
+            body = json.load(sys.stdin) if source else None
+        else:
+            header = args[args.index("-H") + 1]
+            with open(source, "rb") as f:
+                data = f.read()
+            body = {
+                "file": os.path.basename(source),
+                "type": header.removeprefix("Content-Type: "),
+                "bytes": len(data),
+            }
         status, answer = respond(f"{method} {endpoint}", body, os.environ.get("AGENT"))
         if answer is not None:
             print(json.dumps(answer))
@@ -53,10 +66,28 @@ def gh(args):
     sys.exit(0 if status < 400 else 1)
 
 
+def form_file(data):
+    """The one file of a multipart form, as its field, name, type and size."""
+    head, _, rest = data.partition(b"\r\n\r\n")
+    boundary = head.split(b"\r\n", 1)[0]
+    content = rest[: rest.rindex(b"\r\n" + boundary)]
+    head = head.decode()
+    return {
+        "field": re.search(r'name="([^"]*)"', head).group(1),
+        "file": re.search(r'filename="([^"]*)"', head).group(1),
+        "type": re.search(r"Content-Type: (\S+)", head).group(1),
+        "bytes": len(content),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def handle_request(self):
         length = int(self.headers.get("Content-Length") or 0)
-        body = json.loads(self.rfile.read(length)) if length else None
+        data = self.rfile.read(length)
+        if self.headers.get("Content-Type", "").startswith("multipart/form-data"):
+            body = form_file(data)
+        else:
+            body = json.loads(data) if length else None
         path = self.path.removeprefix("/api/v1/")
         status, answer = respond(
             f"{self.command} {path}", body, self.headers.get("Authorization")

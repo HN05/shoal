@@ -50,6 +50,18 @@ pub(crate) enum Media {
 }
 
 impl Attachment {
+    /// `<path>[#<alt text>]`, with the path relative to `cwd`.
+    pub fn parse(arg: &str, cwd: &Path) -> Self {
+        let (path, alt) = match arg.split_once('#') {
+            Some((path, alt)) => (path, Some(alt.trim()).filter(|alt| !alt.is_empty())),
+            None => (arg, None),
+        };
+        Self {
+            path: cwd.join(path),
+            alt: alt.map(str::to_owned),
+        }
+    }
+
     pub fn name(&self) -> &str {
         self.path
             .file_name()
@@ -119,6 +131,25 @@ pub fn check_all(attachments: &[Attachment]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Point each image reference in `body` whose target names an attachment,
+/// relative to the first of `dirs` where it exists, at the attachment's path.
+pub fn resolve_references(body: &str, attachments: &[Attachment], dirs: &[&Path]) -> String {
+    let attached = |target: &str| {
+        let candidate = dirs
+            .iter()
+            .map(|dir| dir.join(target))
+            .find(|candidate| candidate.exists())?;
+        let candidate = candidate.canonicalize().ok()?;
+        attachments
+            .iter()
+            .find(|attachment| attachment.path.canonicalize().ok() == Some(candidate.clone()))
+    };
+    replace_images(body, |image| {
+        let attachment = attached(image.target)?;
+        Some(format!("![{}](<{}>)", image.alt, attachment.path.display()))
+    })
 }
 
 /// Replace each image reference to an attachment with `embed(index, alt)`, preferring the reference's alt text, and add the attachments the
@@ -394,6 +425,19 @@ mod tests {
     }
 
     #[test]
+    fn arguments_split_the_alt_text_at_the_first_hash() {
+        let cwd = Path::new("/work");
+        assert_eq!(
+            Attachment::parse("shots/a.png#The login error", cwd),
+            attachment("/work/shots/a.png", Some("The login error"))
+        );
+        assert_eq!(
+            Attachment::parse("/tmp/a.png#", cwd),
+            attachment("/tmp/a.png", None)
+        );
+    }
+
+    #[test]
     fn checks_refuse_other_types_empty_and_oversized_files() {
         let dir = tempfile::tempdir().unwrap();
         let write = |name: &str, len: u64| {
@@ -412,6 +456,29 @@ mod tests {
         assert!(error(attachment("relative.png", None)).contains("absolute"));
         let twice = [write("g.png", 1), write("g.png", 1)];
         assert!(format!("{:#}", check_all(&twice).unwrap_err()).contains("twice"));
+    }
+
+    #[test]
+    fn references_resolve_against_the_first_directory_that_has_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let notes = dir.path().join("notes");
+        std::fs::create_dir(&notes).unwrap();
+        std::fs::write(notes.join("a.png"), "x").unwrap();
+        std::fs::write(dir.path().join("b.mp4"), "x").unwrap();
+        let attachments = [
+            Attachment::parse("notes/a.png", dir.path()),
+            Attachment::parse("b.mp4", dir.path()),
+        ];
+        let body = "See ![login](./a.png) and ![](b.mp4 \"demo\"), not ![c](c.png).";
+        let resolved = resolve_references(body, &attachments, &[&notes, dir.path()]);
+        assert_eq!(
+            resolved,
+            format!(
+                "See ![login](<{}>) and ![](<{}>), not ![c](c.png).",
+                attachments[0].path.display(),
+                attachments[1].path.display()
+            )
+        );
     }
 
     #[test]

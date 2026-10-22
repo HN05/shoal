@@ -168,6 +168,7 @@ shoal restore fix-login 3     # Return the workspace to checkpoint 3
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
+shoal pr comment --attach demo.mp4 # Upload an image or video and show it in a comment
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue close             # Close the linked issue; edit, comment, reopen too

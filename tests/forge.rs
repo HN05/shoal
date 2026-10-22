@@ -455,6 +455,214 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     );
 }
 
+/// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
+/// beside them that references the image.
+fn attachment_files(fixture: &Fixture) -> [String; 3] {
+    let shots = fixture.root.path().join("shots");
+    fs::create_dir_all(&shots).unwrap();
+    fs::write(shots.join("login.png"), "png").unwrap();
+    fs::write(shots.join("demo.mp4"), "video").unwrap();
+    fs::write(
+        shots.join("note.md"),
+        "Before:\n\n![The error](./login.png)\n",
+    )
+    .unwrap();
+    ["note.md", "login.png", "demo.mp4"].map(|name| shots.join(name).to_str().unwrap().to_owned())
+}
+
+#[test]
+fn github_comments_embed_files_uploaded_to_the_repository() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let [note, image, video] = attachment_files(&fixture);
+    let uploads = "POST https://uploads.github.com/user-attachments/assets";
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project": {"body": {"id": 42}},
+        format!("{uploads}?name=login.png&content_type=image%2Fpng&repository_id=42"):
+            {"body": {"url": "https://github.com/user-attachments/assets/1"}},
+        format!("{uploads}?name=demo.mp4&content_type=video%2Fmp4&repository_id=42"):
+            {"body": {"url": "https://github.com/user-attachments/assets/2"}},
+        "POST repos/team/project/issues/8/comments": {"body": {"node_id": "C_1"}},
+    }));
+    let video_arg = format!("{video}#Ignored for videos");
+    fixture.ok(&[
+        "pr",
+        "comment",
+        "8",
+        "--workspace",
+        "topic",
+        "--body-file",
+        &note,
+        "--attach",
+        &image,
+        "--attach",
+        &video_arg,
+    ]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| request[1].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!({"file": "login.png", "type": "image/png", "bytes": 3}),
+            json!({"file": "demo.mp4", "type": "video/mp4", "bytes": 5}),
+            json!({"body": "Before:\n\n![The error](https://github.com/user-attachments/assets/1)\n\n\
+                https://github.com/user-attachments/assets/2"}),
+        ]
+    );
+
+    // Files are checked before anything is sent.
+    let text = fixture.root.path().join("notes.txt");
+    fs::write(&text, "x").unwrap();
+    let refused = fixture.run(&[
+        "pr",
+        "comment",
+        "8",
+        "--workspace",
+        "topic",
+        "--attach",
+        text.to_str().unwrap(),
+    ]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("attach an image or video"),
+        "{refused:?}"
+    );
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let [note, image, video] = attachment_files(&fixture);
+    let host = fixture.web.trim_end_matches("/team/project").to_owned();
+    let url = |id: u64| format!("{host}/attachments/{id}");
+    let comments = "repos/team/project/issues/comments/70";
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
+        format!("POST {comments}/assets?name=login.png"):
+            {"status": 201, "body": {"browser_download_url": url(1)}},
+        format!("POST {comments}/assets?name=demo.mp4"):
+            {"status": 201, "body": {"browser_download_url": url(2)}},
+        format!("PATCH {comments}"): {"body": {}},
+        "GET repos/team/project/issues/3": {"body": {"number": 3, "title": "Bug",
+            "state": "open", "labels": [], "body": "Steps"}},
+        "POST repos/team/project/issues/3/assets?name=login.png":
+            {"status": 201, "body": {"browser_download_url": url(3)}},
+        "PATCH repos/team/project/issues/3": {"body": {}},
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": [], "body": "Seen with `login.png`"}},
+        "POST repos/team/project/issues/40/assets?name=login.png":
+            {"status": 201, "body": {"browser_download_url": url(4)}},
+        "PATCH repos/team/project/issues/40": {"body": {}},
+    }));
+    fixture.ok(&[
+        "pr",
+        "comment",
+        "8",
+        "--workspace",
+        "topic",
+        "--body-file",
+        &note,
+        "--attach",
+        &image,
+        "--attach",
+        &video,
+    ]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| (request[0].clone(), request[1].clone()))
+        .collect();
+    let upload = |name: &str, kind: &str, bytes: u64| json!({"field": "attachment", "file": name, "type": kind, "bytes": bytes});
+    // The comment exists before its files, which the forge keeps with it.
+    assert_eq!(
+        sent,
+        [
+            (
+                json!("POST repos/team/project/issues/8/comments"),
+                json!({"body": "Before:\n\n`login.png`\n\n`demo.mp4`"})
+            ),
+            (
+                json!(format!("POST {comments}/assets?name=login.png")),
+                upload("login.png", "image/png", 3)
+            ),
+            (
+                json!(format!("POST {comments}/assets?name=demo.mp4")),
+                upload("demo.mp4", "video/mp4", 5)
+            ),
+            (
+                json!(format!("PATCH {comments}")),
+                json!({"body": format!(
+                    "Before:\n\n![The error]({})\n\n<video src=\"{}\" controls></video>",
+                    url(1),
+                    url(2)
+                )})
+            ),
+        ]
+    );
+
+    // An edit without a description adds the files after the current one.
+    let alt = format!("{image}#Login screen");
+    fixture.ok(&[
+        "issue",
+        "edit",
+        "3",
+        "--workspace",
+        "topic",
+        "--attach",
+        &alt,
+    ]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| request[1].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            upload("login.png", "image/png", 3),
+            json!({"body": format!("Steps\n\n![Login screen]({})", url(3))}),
+        ]
+    );
+
+    // A new issue opens naming its files, which then go into its description.
+    let body = format!("Seen with ![]({image})");
+    let opened = fixture.ok(&[
+        "issue",
+        "open",
+        "--workspace",
+        "topic",
+        "--title",
+        "Flaky",
+        "--body",
+        &body,
+        "--attach",
+        &image,
+    ]);
+    assert_eq!(opened["created"], true);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| request[1].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!({"title": "Flaky", "body": "Seen with `login.png`"}),
+            upload("login.png", "image/png", 3),
+            json!({"body": format!("Seen with ![login.png]({})", url(4))}),
+        ]
+    );
+}
+
 #[test]
 fn watches_read_every_page_of_a_discussion() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");

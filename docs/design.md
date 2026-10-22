@@ -820,7 +820,11 @@ merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Shoal does not sign in to a
 forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
 endpoint for it. Resolving a thread nobody has answered needs confirmation,
-because the reply tells the reviewer why. Each action
+because the reply tells the reviewer why. Attached images and videos are read
+by the daemon from paths the CLI checked, anywhere on disk: a body file can
+already come from anywhere and scope is cooperative, while recordings kept in the
+worktree would be untracked files that hold up cleanup. GitHub's REST API has no
+upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Each action
 returns the item as the forge reports it afterwards and records an
 `item_changed` event for integrations. A new issue is recorded as opened and
 assigned only on request: a workspace's assigned issue is its work, while an issue

@@ -1685,6 +1685,7 @@ requests. Agents' changes use your Bitbucket credentials.
 shoal pr open --label area/cli      # push, then link the branch's open PR or open one
 shoal pr edit --title "Fix login" --add-label bug --draft
 shoal pr comment --body-file notes.md
+shoal pr comment --body-file notes.md --attach shot.png --attach 'demo.mp4#Login flow'
 shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
 shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr close 12                   # reopen works the same way
@@ -1722,6 +1723,18 @@ takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix.
+`open`, `edit` and `comment` also take repeated `--attach FILE` or
+`--attach 'FILE#ALT TEXT'`: a PNG, JPEG, GIF, WebP or SVG image of at most
+10 MiB, or an MP4, MOV or WebM video of at most 100 MiB, checked before anything
+is sent. Each file is uploaded through the forge and shown in place of the
+body's image references to it, such as `![The error](shot.png)` relative to the
+body file's directory or the working directory, and otherwise after the body;
+`edit` without a new description adds them after the current one. GitHub and
+GitLab keep uploads with the repository. Forgejo and Gitea keep them with the
+item or comment, so a new comment or item is first posted naming the files,
+then updated to show them. GitHub needs write access to the repository, Forgejo
+an fj login, and GitLab a token glab saved in its configuration; Bitbucket has
+no API for attachments and refuses them before sending anything.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review
 thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 `--body` or `--body-file`; `resolve` posts one as a reply first when given.

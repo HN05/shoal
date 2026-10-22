@@ -1,15 +1,18 @@
 //! `shoal pr`, `shoal ci` and `shoal issue`: ask the daemon to open or change
 //! an item of the workspace's repository and report it as the forge now does.
+use std::path::Path;
+
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, PrCommand, client,
+        AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, PrCommand, client,
         context::Context, ui,
     },
     forge::{
         ForgeRepo,
         action::{Action, Edit, ThreadChange},
+        attach::{self, Attachment},
         ci::{CiActed, CiAction},
         create::{NewIssue, PullOptions},
         item::{Item, Opened},
@@ -27,20 +30,22 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             workspace,
             title,
             body,
+            files,
             base,
             draft,
             no_draft,
             labels,
             reviewers,
         } => {
+            let (body, attachments) = read_content(body, files)?;
             let options = PullOptions {
                 title,
-                body: read_body(body)?,
+                body,
                 base,
                 draft: (draft || no_draft).then_some(draft),
                 labels,
                 reviewers,
-                attachments: Vec::new(),
+                attachments,
             };
             return open_pr(ctx, workspace, options).await;
         }
@@ -62,7 +67,9 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             };
             (item, Action::Edit(edit), "PR updated")
         }
-        PrCommand::Comment { item, body } => (item, comment(body)?, "Commented on PR"),
+        PrCommand::Comment { item, body, files } => {
+            (item, comment(body, files)?, "Commented on PR")
+        }
         PrCommand::Reply {
             comment,
             item,
@@ -144,21 +151,25 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
             workspace,
             title,
             body,
+            files,
             labels,
             link,
         } => {
+            let (body, attachments) = read_content(body, files)?;
             let issue = NewIssue {
                 title,
-                body: read_body(body)?.unwrap_or_default(),
+                body: body.unwrap_or_default(),
                 labels,
-                attachments: Vec::new(),
+                attachments,
             };
             return open_issue(ctx, workspace, issue, link).await;
         }
         IssueCommand::Edit { item, edit } => {
             (item, Action::Edit(edit_fields(edit)?), "Issue updated")
         }
-        IssueCommand::Comment { item, body } => (item, comment(body)?, "Commented on issue"),
+        IssueCommand::Comment { item, body, files } => {
+            (item, comment(body, files)?, "Commented on issue")
+        }
         IssueCommand::Close { item } => (item, Action::Close, "Issue closed"),
         IssueCommand::Reopen { item } => (item, Action::Reopen, "Issue reopened"),
     };
@@ -277,20 +288,26 @@ fn print_warnings(opened: &Opened) {
 }
 
 fn edit_fields(edit: EditArgs) -> Result<Edit> {
+    let (body, attachments) = read_content(edit.body, edit.files)?;
     Ok(Edit {
         title: edit.title,
-        body: read_body(edit.body)?,
+        body,
         add_labels: edit.add_labels,
         remove_labels: edit.remove_labels,
+        attachments,
         ..Edit::default()
     })
 }
 
-fn comment(body: BodyArgs) -> Result<Action> {
-    let body = read_body(body)?.context("a comment needs --body or --body-file")?;
+fn comment(body: BodyArgs, files: AttachArgs) -> Result<Action> {
+    let (body, attachments) = read_content(body, files)?;
+    ensure!(
+        body.is_some() || !attachments.is_empty(),
+        "a comment needs --body, --body-file or --attach"
+    );
     Ok(Action::Comment {
-        body,
-        attachments: Vec::new(),
+        body: body.unwrap_or_default(),
+        attachments,
     })
 }
 
@@ -347,6 +364,27 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
         );
     }
     Ok(())
+}
+
+/// The body and the files to attach, checked before anything is sent, with
+/// the body's references to them pointing at their paths.
+fn read_content(body: BodyArgs, files: AttachArgs) -> Result<(Option<String>, Vec<Attachment>)> {
+    let cwd = std::env::current_dir().context("read the working directory")?;
+    let attachments: Vec<_> = files
+        .attach
+        .iter()
+        .map(|arg| Attachment::parse(arg, &cwd))
+        .collect();
+    attach::check_all(&attachments)?;
+    let body_dir = body
+        .body_file
+        .as_ref()
+        .and_then(|path| cwd.join(path).parent().map(Path::to_path_buf));
+    let text = read_body(body)?.map(|text| {
+        let dirs: Vec<&Path> = body_dir.as_deref().into_iter().chain([&*cwd]).collect();
+        attach::resolve_references(&text, &attachments, &dirs)
+    });
+    Ok((text, attachments))
 }
 
 fn read_body(body: BodyArgs) -> Result<Option<String>> {
