@@ -149,6 +149,13 @@ impl Manager {
         Ok(())
     }
 
+    /// [`Self::prune_proposal_files`] for the cleanup sweep, which also
+    /// catches proposals removed with their workspace or repository.
+    pub(crate) async fn sweep_proposal_files(&self) -> Result<()> {
+        let _gate = self.pr_gate.lock().await;
+        self.remove_unattached_files().await
+    }
+
     /// Delete copied files no pending proposal attaches any more. Failure
     /// only logs. The caller holds the PR gate.
     async fn prune_proposal_files(&self) {
@@ -785,5 +792,65 @@ fn comment(finding: Finding) -> Action {
     Action::Comment {
         body: finding.body,
         attachments: finding.attachments,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        daemon::approvals::proposals::PR,
+        test_support::{manager, repository},
+    };
+
+    #[tokio::test]
+    async fn the_sweep_keeps_only_files_pending_proposals_attach() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "topic".into(), None, None, None)
+            .await
+            .unwrap();
+        let files = manager.paths.proposal_files();
+        let kept = files.join("kept/0/shot.png");
+        std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        std::fs::write(&kept, "png").unwrap();
+        std::fs::create_dir_all(files.join("stale/0")).unwrap();
+        let pull = NewPull {
+            attachments: vec![Attachment {
+                path: kept.clone(),
+                alt: None,
+            }],
+            ..NewPull::default()
+        };
+        let specification = Specification::Pull(PullSpecification {
+            pull,
+            commit: "head".into(),
+            agent: None,
+            follow_up: None,
+        });
+        let request = proposal(&workspace, Target::PrOpen, PR, specification);
+        manager
+            .store_proposal(request, proposals::propose_pull)
+            .await
+            .unwrap();
+
+        manager.sweep_proposal_files().await.unwrap();
+        assert!(kept.exists());
+        assert!(!files.join("stale").exists());
+
+        // Removing the workspace takes its PR proposal, and the next sweep
+        // its files.
+        manager
+            .store
+            .run(|db| Ok(db.execute("DELETE FROM workspaces", [])?))
+            .await
+            .unwrap();
+        manager.sweep_proposal_files().await.unwrap();
+        assert!(!files.join("kept").exists());
     }
 }
