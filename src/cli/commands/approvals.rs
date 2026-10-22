@@ -23,6 +23,45 @@ pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Res
             (picked.id, Some(Box::new(picked)))
         }
     };
+    submit(ctx, id, approve, shown).await
+}
+
+/// Approve or deny the pending request `id` created at `created_at`, as a
+/// list showed it: refuse one that replaced it, and ask which with what it
+/// grants in view.
+pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
+    ensure_scope_token(ctx)?;
+    let request =
+        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
+            .await?
+            .into_iter()
+            .find(|request| {
+                request.id == id
+                    && request.created_at == created_at
+                    && request.status == DecisionStatus::Pending
+            })
+            .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    let shown = summary(&request);
+    let choices = [
+        (true, format!("approve  {shown}")),
+        (false, format!("deny     {shown}")),
+    ];
+    let choices: Vec<_> = choices
+        .iter()
+        .map(|(approve, label)| (*approve, label.as_str()))
+        .collect();
+    let approve = ui::pick_choice(ctx, "Approval> ", &choices)?;
+    submit(ctx, id, approve, Some(Box::new(request))).await
+}
+
+/// Send the decision on request `id`, which `shown` names when the user
+/// chose it from a list, so a request reusing its number is refused.
+async fn submit(
+    ctx: &Context,
+    id: i64,
+    approve: bool,
+    shown: Option<Box<ApprovalRequest>>,
+) -> Result<i32> {
     let request =
         request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve, shown })
             .await?;

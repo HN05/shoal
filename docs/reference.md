@@ -405,7 +405,7 @@ a chat's status is `running`.
 pending approval requests, workspaces whose agent needs input, failed
 workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item. There Enter answers a question, approves or denies a request after
-asking which, attaches to the agent that needs input, inspects a failed
+asking which, refusing one that replaced the request listed, attaches to the agent that needs input, inspects a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,

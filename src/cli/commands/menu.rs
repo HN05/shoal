@@ -216,8 +216,11 @@ enum Row {
         id: i64,
         workspace: String,
     },
+    /// A request by its number and when it was made, since a later request
+    /// may reuse the number.
     Approval {
         id: i64,
+        created_at: u64,
         workspace: String,
     },
     NeedsInput(String),
@@ -242,6 +245,7 @@ impl Row {
             },
             Item::Approval { request } => Self::Approval {
                 id: request.id,
+                created_at: request.created_at,
                 workspace,
             },
             Item::NeedsInput { .. } => Self::NeedsInput(workspace),
@@ -258,7 +262,11 @@ impl Row {
     fn id(&self) -> String {
         match self {
             Self::Question { id, workspace } => format!("question:{workspace}:{id}"),
-            Self::Approval { id, workspace } => format!("approval:{workspace}:{id}"),
+            Self::Approval {
+                id,
+                created_at,
+                workspace,
+            } => format!("approval:{workspace}:{id}:{created_at}"),
             Self::NeedsInput(workspace) => format!("needs-input:{workspace}"),
             Self::Failed(workspace) => format!("failed:{workspace}"),
             Self::Ready { workspace, url } => {
@@ -288,10 +296,15 @@ impl Row {
                 id: number()?,
                 workspace,
             },
-            "approval" => Self::Approval {
-                id: number()?,
-                workspace,
-            },
+            "approval" => {
+                let (id, created_at) = detail.split_once(':').unwrap_or((detail, ""));
+                let invalid = || anyhow::anyhow!("picker returned an invalid row");
+                Self::Approval {
+                    id: id.parse().map_err(|_| invalid())?,
+                    created_at: created_at.parse().map_err(|_| invalid())?,
+                    workspace,
+                }
+            }
             "needs-input" => Self::NeedsInput(workspace),
             "failed" => Self::Failed(workspace),
             "ready" => Self::Ready {
@@ -318,7 +331,7 @@ impl Row {
 
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
 /// the user, searching for the current workspace's items when it has any.
-pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Command> {
+pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice> {
     let scoped = env::is_scoped();
     let views = View::available(scoped);
     let (view, entries) = first_view(ctx, start, views, scoped).await?;
@@ -510,35 +523,42 @@ async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     Ok(entries)
 }
 
+/// What the picker chose: a command to run, or the exit code of an action
+/// it finished itself.
+pub(super) enum Choice {
+    Run(Box<Command>),
+    Done(i32),
+}
+
 /// Add adds wherever it is pressed; Enter does what the row asks for, and
 /// other keys act on the row's workspace.
-async fn command(ctx: &Context, key: Key, row: Row) -> Result<Command> {
+async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
     if key == Key::Add {
-        return Ok(add());
+        return Ok(Choice::Run(Box::new(add())));
     }
     if key == Key::Enter {
-        return enter(ctx, row);
+        return enter(ctx, row).await;
     }
     let workspace = row.workspace().map(str::to_owned);
     ensure!(workspace.is_some(), "select a workspace for this action");
-    workspace_command(ctx, key, workspace).await
+    Ok(Choice::Run(Box::new(
+        workspace_command(ctx, key, workspace).await?,
+    )))
 }
 
-/// Answer a question, decide an approval, attach to an agent that needs
-/// input, inspect a failure, view ready work, or enter a workspace.
-fn enter(ctx: &Context, row: Row) -> Result<Command> {
-    Ok(match row {
+/// Answer a question, decide an approval as it was listed, attach to an
+/// agent that needs input, inspect a failure, view ready work, or enter a
+/// workspace.
+async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
+    Ok(Choice::Run(Box::new(match row {
         Row::Question { id, .. } => Command::Answer {
             id: Some(id),
             answer: None,
         },
-        Row::Approval { id, .. } => {
-            let choices = [(true, "approve"), (false, "deny")];
-            if ui::pick_choice(ctx, &format!("Approval {id}> "), &choices)? {
-                Command::Approve { id: Some(id) }
-            } else {
-                Command::Deny { id: Some(id) }
-            }
+        Row::Approval { id, created_at, .. } => {
+            return Ok(Choice::Done(
+                super::approvals::decide_listed(ctx, id, created_at).await?,
+            ));
         }
         Row::NeedsInput(workspace) => Command::Attach {
             workspace: Some(workspace),
@@ -576,7 +596,7 @@ fn enter(ctx: &Context, row: Row) -> Result<Command> {
             }
         }
         Row::Add => add(),
-    })
+    })))
 }
 
 fn add() -> Command {

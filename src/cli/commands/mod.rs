@@ -153,6 +153,26 @@ async fn collect_workspace_overviews<T>(
 
 /// Subcommand path of an invocation that opens a menu; without a terminal its
 /// help is printed instead.
+/// The view the picker opens on for `command`: bare `shoal` lets it choose,
+/// and a listing names its own unless it prints. `None` runs the command.
+fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu::View>> {
+    match command {
+        None => Some(None),
+        Some(Command::Inbox {
+            repository: None,
+            print: false,
+        }) if lists_interactively(ctx) => Some(Some(menu::View::Inbox)),
+        Some(Command::Work {
+            queue: false,
+            chats: false,
+            repository: None,
+            status,
+            print: false,
+        }) if status.is_empty() && lists_interactively(ctx) => Some(Some(menu::View::Work)),
+        _ => None,
+    }
+}
+
 /// Whether a listing opens the picker: on a terminal, unless its output is
 /// redirected to keep the list.
 fn lists_interactively(ctx: &Context) -> bool {
@@ -227,23 +247,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     }
     let mut ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
     ctx.need = cli.need;
-    let command = match cli.command {
-        Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
-        Some(Command::Inbox {
-            repository: None,
-            print: false,
-        }) if lists_interactively(&ctx) => menu::choose(&ctx, Some(menu::View::Inbox)).await?,
-        Some(Command::Work {
-            queue: false,
-            chats: false,
-            repository: None,
-            ref status,
-            print: false,
-        }) if status.is_empty() && lists_interactively(&ctx) => {
-            menu::choose(&ctx, Some(menu::View::Work)).await?
-        }
-        Some(command) => command,
-        None => menu::choose(&ctx, None).await?,
+    let command = match picker_start(&ctx, cli.command.as_ref()) {
+        Some(start) => match menu::choose(&ctx, start).await? {
+            menu::Choice::Run(command) => *command,
+            menu::Choice::Done(code) => return Ok(code),
+        },
+        None => match cli.command {
+            Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
+            Some(command) => command,
+            None => unreachable!("bare shoal opens the picker"),
+        },
     };
     ensure!(
         !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),

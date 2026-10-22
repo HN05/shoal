@@ -7857,6 +7857,55 @@ esac
 }
 
 #[test]
+fn inbox_decides_approvals_as_they_were_listed() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    let agent = fixture.add("agent");
+    let pending = pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    // Chooses the row $PICK names, `=ID` as given, and approves when asked.
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        r#"#!/bin/sh
+cat > "$HOME/picker-input"
+case "$*" in
+*"Approval> "*) grep '^0' "$HOME/picker-input"; exit ;;
+esac
+printf '\n'
+case "$PICK" in
+=*) printf '%s\tloaded\n' "${PICK#=}" ;;
+*) awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker-input" ;;
+esac
+"#,
+    );
+    let decide = |pick: &str| {
+        let mut command = fixture.command();
+        command.arg("inbox").env("PICK", pick);
+        fixture.terminal_command(&mut command, "", true)
+    };
+    let id = pending["id"].as_u64().unwrap();
+    let workspace = agent["id"].as_str().unwrap();
+    // A request listed with another creation time is not the one shown.
+    let (output, transcript) = decide(&format!("=approval:{workspace}:{id}:1"));
+    assert!(!output.status.success(), "{output:?} {transcript}");
+    assert!(
+        transcript.contains("changed since it was listed"),
+        "{transcript}"
+    );
+    let (output, transcript) = decide("approval:");
+    assert!(output.status.success(), "{transcript}");
+    assert!(read_to_string_lossy(&fixture, "picker-input").contains("serve preview"));
+    assert_eq!(fixture.ok(&["approvals"])[0]["status"], "approved");
+}
+
+fn read_to_string_lossy(fixture: &Fixture, name: &str) -> String {
+    fs::read_to_string(fixture.root.path().join(name)).unwrap_or_default()
+}
+
+#[test]
 fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     let fixture = Fixture::new();
     fixture.add("first");
