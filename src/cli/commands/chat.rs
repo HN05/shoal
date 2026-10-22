@@ -12,7 +12,12 @@ use anyhow::{Context as _, Result, ensure};
 use super::listing::ListFilter;
 use crate::{
     agent::Agent,
-    cli::{agents, client, context::Context, output::Palette, terminal, ui},
+    cli::{
+        agents, client,
+        context::Context,
+        output::{self, Palette},
+        terminal, ui,
+    },
     config::{Effective, named_commands, templates},
     model::{Chat, Repository},
     protocol::ConfigTarget,
@@ -54,6 +59,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
         &repositories,
         &Default::default(),
         Palette::stdout(ctx.json),
+        output::stdout_width(ctx.json),
     );
     ctx.show(&chats, |_| {
         for row in rows {

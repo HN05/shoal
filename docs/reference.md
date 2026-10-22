@@ -377,7 +377,8 @@ commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`).
 Its rows, like `shoal work` and workspace pickers, are aligned and marked ● ready,
 ◌ in progress or ✗ failed. Each names the workspace, its repository when the
-rows span several, its status and the linked issue's title. The status is the
+rows span several, its status and the linked issue's title, cut with `…` to fit
+a terminal's width. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `needs input`, `ready`, the other [agent states](#agent-state),

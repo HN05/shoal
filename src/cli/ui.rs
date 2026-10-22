@@ -706,6 +706,7 @@ pub fn workspace_tree_rows(
     repositories: &[Repository],
     stopped: &HashSet<String>,
     palette: Palette,
+    width: Option<usize>,
 ) -> Vec<String> {
     let tree = WorkspaceTree {
         workspaces,
@@ -728,9 +729,14 @@ pub fn workspace_tree_rows(
         }
     }
     let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+    // The title gives way; a marker and its space precede the cells.
+    let limit = width.map(|width| WidthLimit {
+        column: 3,
+        width: width.saturating_sub(2),
+    });
     markers
         .into_iter()
-        .zip(aligned(cells, palette))
+        .zip(aligned_to(cells, palette, limit))
         .map(|(marker, row)| format!("{marker} {row}"))
         .collect()
 }
@@ -959,7 +965,28 @@ pub type Cell = (String, Option<Style>);
 /// Rows padded into columns two spaces apart. Columns empty in every row are
 /// dropped, and each row ends at its last non-empty cell.
 pub fn aligned<const N: usize>(rows: Vec<[Cell; N]>, palette: Palette) -> Vec<String> {
-    let widths: Vec<usize> = (0..N)
+    aligned_to(rows, palette, None)
+}
+
+/// The rows' width limit, met by cutting the cells of one column, usually
+/// free text, so the columns after it stay aligned and visible.
+#[derive(Clone, Copy)]
+pub struct WidthLimit {
+    pub column: usize,
+    pub width: usize,
+}
+
+/// A fitted column keeps this many characters however narrow the limit.
+const MIN_FITTED: usize = 12;
+
+/// `aligned`, cutting `limit`'s column with an ellipsis where rows would
+/// exceed its width.
+pub fn aligned_to<const N: usize>(
+    rows: Vec<[Cell; N]>,
+    palette: Palette,
+    limit: Option<WidthLimit>,
+) -> Vec<String> {
+    let mut widths: Vec<usize> = (0..N)
         .map(|column| {
             rows.iter()
                 .map(|row| row[column].0.chars().count())
@@ -967,32 +994,63 @@ pub fn aligned<const N: usize>(rows: Vec<[Cell; N]>, palette: Palette) -> Vec<St
                 .unwrap_or(0)
         })
         .collect();
-    rows.into_iter()
-        .map(|row| {
-            let last = row.iter().rposition(|(text, _)| !text.is_empty());
-            let mut line = String::new();
-            let mut first = true;
-            for (column, (text, style)) in row.into_iter().enumerate() {
-                if widths[column] == 0 || Some(column) > last {
-                    continue;
-                }
-                if !std::mem::take(&mut first) {
-                    line.push_str("  ");
-                }
-                let padding = if Some(column) == last {
-                    0
-                } else {
-                    widths[column] - text.chars().count()
-                };
-                line.push_str(&match style {
-                    Some(style) if !text.is_empty() => palette.paint(style, text),
-                    _ => text,
-                });
-                line.push_str(&" ".repeat(padding));
-            }
-            line
+    if let Some(limit) = limit {
+        narrow(&mut widths, limit);
+    }
+    let rows = rows.into_iter().map(|row| {
+        let mut column = 0;
+        row.map(|(text, style)| {
+            let cell = (truncated(text, widths[column]), style);
+            column += 1;
+            cell
         })
-        .collect()
+    });
+    rows.map(|row| {
+        let last = row.iter().rposition(|(text, _)| !text.is_empty());
+        let mut line = String::new();
+        let mut first = true;
+        for (column, (text, style)) in row.into_iter().enumerate() {
+            if widths[column] == 0 || Some(column) > last {
+                continue;
+            }
+            if !std::mem::take(&mut first) {
+                line.push_str("  ");
+            }
+            let padding = if Some(column) == last {
+                0
+            } else {
+                widths[column] - text.chars().count()
+            };
+            line.push_str(&match style {
+                Some(style) if !text.is_empty() => palette.paint(style, text),
+                _ => text,
+            });
+            line.push_str(&" ".repeat(padding));
+        }
+        line
+    })
+    .collect()
+}
+
+/// Narrow `limit.column` by what the row width exceeds `limit.width` by.
+fn narrow(widths: &mut [usize], limit: WidthLimit) {
+    let shown = widths.iter().filter(|width| **width > 0).count();
+    let total = widths.iter().sum::<usize>() + 2 * shown.saturating_sub(1);
+    let Some(excess) = total.checked_sub(limit.width) else {
+        return;
+    };
+    let column = &mut widths[limit.column];
+    *column = column.saturating_sub(excess).max(MIN_FITTED.min(*column));
+}
+
+/// `text` cut to `width` characters, ending in an ellipsis when cut.
+fn truncated(text: String, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text;
+    }
+    let mut cut: String = text.chars().take(width.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
 }
 
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {
@@ -1091,12 +1149,46 @@ mod tests {
             name: "unlisted".into(),
             branch: "unlisted".into(),
         });
-        let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain);
+        let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain, None);
         let expected = ["● orphan ", "● parent ", "● └ child ", "●   └ grandchild "];
         assert_eq!(rows.len(), expected.len());
         for (row, start) in rows.iter().zip(expected) {
             assert!(row.starts_with(start), "{row:?}");
         }
+    }
+
+    #[test]
+    fn width_limits_cut_one_column_and_keep_the_rest_aligned() {
+        let plain = Palette::stdout(true);
+        let cell = |text: &str| (text.to_owned(), None);
+        let rows = || {
+            vec![
+                [
+                    cell("question"),
+                    cell("Which database should the cache use?"),
+                    cell("SQLite"),
+                ],
+                [cell("ready"), cell("PR #12"), cell("")],
+            ]
+        };
+        let limit = |width| Some(WidthLimit { column: 1, width });
+        assert_eq!(
+            aligned_to(rows(), plain, limit(60)),
+            aligned(rows(), plain),
+            "rows that fit stay whole"
+        );
+        assert_eq!(
+            aligned_to(rows(), plain, limit(40)),
+            [
+                "question  Which database should…  SQLite",
+                "ready     PR #12",
+            ]
+        );
+        // However narrow the limit, the column keeps a few characters.
+        assert_eq!(
+            aligned_to(rows(), plain, limit(10))[0],
+            "question  Which datab…  SQLite"
+        );
     }
 
     #[test]

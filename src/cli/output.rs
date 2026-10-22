@@ -4,6 +4,7 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     io::{self, IsTerminal},
+    os::fd::{AsFd, AsRawFd},
 };
 
 use crate::{
@@ -11,6 +12,34 @@ use crate::{
     sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };
+
+/// The columns of the terminal `fd` writes to, or `None` when it is not one.
+pub fn terminal_width(fd: impl AsFd) -> Option<usize> {
+    let mut size = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    // SAFETY: TIOCGWINSZ writes one winsize into `size` for an open descriptor.
+    let status = unsafe {
+        libc::ioctl(
+            fd.as_fd().as_raw_fd(),
+            libc::TIOCGWINSZ as _,
+            &mut size as *mut libc::winsize,
+        )
+    };
+    (status == 0 && size.ws_col > 0).then_some(usize::from(size.ws_col))
+}
+
+/// The width text rows printed to stdout should fit: the terminal's, and
+/// none for JSON or output that is not a terminal.
+pub fn stdout_width(json: bool) -> Option<usize> {
+    if json {
+        return None;
+    }
+    terminal_width(io::stdout())
+}
 
 #[derive(Clone, Copy)]
 pub enum Style {

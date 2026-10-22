@@ -12,8 +12,8 @@ use crate::{
         client::{self, request},
         context::Context,
         list_status::ListStatus,
-        output::{Palette, Style},
-        ui::{self, Cell},
+        output::{self, Palette, Style},
+        ui::{self, Cell, WidthLimit},
     },
     daemon::{
         approvals::{ApprovalRequest, DecisionStatus},
@@ -61,7 +61,11 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     } else {
         ui::repository_choices(client::repositories(&ctx.paths).await?).await?
     };
-    let rows = inbox.rows(&repositories, Palette::stdout(ctx.json));
+    let rows = inbox.rows(
+        &repositories,
+        Palette::stdout(ctx.json),
+        output::stdout_width(ctx.json),
+    );
     ctx.show(&inbox.items, |_| {
         for row in &rows {
             println!("{row}");
@@ -93,11 +97,13 @@ impl Inbox {
     }
 
     /// One aligned row per item: its kind, workspace, the workspace's
-    /// repository when the rows span several, what it is about, and a note.
+    /// repository when the rows span several, what it is about, cut to fit
+    /// `width`, and a note.
     pub(in crate::cli) fn rows(
         &self,
         repositories: &[(String, String)],
         palette: Palette,
+        width: Option<usize>,
     ) -> Vec<String> {
         let repository = |item: &Item| {
             self.workspaces
@@ -122,7 +128,8 @@ impl Inbox {
                 ]
             })
             .collect();
-        ui::aligned(cells, palette)
+        let limit = width.map(|width| WidthLimit { column: 3, width });
+        ui::aligned_to(cells, palette, limit)
     }
 }
 

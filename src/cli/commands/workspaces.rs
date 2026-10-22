@@ -15,7 +15,7 @@ use crate::{
         agents,
         client::{self, request},
         context::Context,
-        output::{Palette, Style},
+        output::{self, Palette, Style},
         terminal,
         ui::{self, Fallback},
     },
@@ -1378,6 +1378,7 @@ pub(super) async fn list(
         &repositories,
         &stopped,
         Palette::stdout(ctx.json),
+        output::stdout_width(ctx.json),
     );
     ctx.show(&workspaces, |_| {
         for row in rows.into_iter().chain(queued) {
