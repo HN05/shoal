@@ -112,6 +112,22 @@ pub async fn remote_heads(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> 
         .collect())
 }
 
+/// The heads whose commits this repository has, in one Git process.
+pub async fn present_heads(repo: &Path, heads: &[RemoteHead]) -> Result<Vec<RemoteHead>> {
+    if heads.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args = vec!["rev-list", "--no-walk", "--ignore-missing"];
+    args.extend(heads.iter().map(|head| head.commit.as_str()));
+    let present = run_isolated(repo, &args).await?;
+    let present: Vec<&str> = present.lines().collect();
+    Ok(heads
+        .iter()
+        .filter(|head| present.contains(&head.commit.as_str()))
+        .cloned()
+        .collect())
+}
+
 /// Whether `remote` itself advertises `branch`, which need not be fetched yet.
 pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Result<bool> {
     let heads = run_isolated(

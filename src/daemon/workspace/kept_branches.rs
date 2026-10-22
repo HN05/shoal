@@ -30,7 +30,8 @@ struct Record {
 enum Evidence<'a> {
     /// The remote-tracking refs, which may be stale: enough to show a count.
     TrackingRefs,
-    /// What the remotes advertise now, for deleting without asking.
+    /// What the remotes advertise now and this repository has, for deleting
+    /// without asking.
     Advertised(&'a [git::RemoteHead]),
 }
 
@@ -113,7 +114,8 @@ impl Manager {
         else {
             return Ok(());
         };
-        let evidence = Evidence::Advertised(heads);
+        let present = git::present_heads(&repo.path, heads).await?;
+        let evidence = Evidence::Advertised(&present);
         for (record, status) in self.kept_statuses(&repo, Some(&default), evidence).await? {
             if status == (Status::Kept { unkept_commits: 0 }) {
                 git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;

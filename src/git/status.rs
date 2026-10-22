@@ -153,29 +153,17 @@ pub async fn unkept_commits(repo: &Path, commit: &str, default: &str) -> Result<
     unretained_commits(repo, commit, references.first().map(String::as_str)).await
 }
 
-/// Commits of `commit` that neither a branch in `heads` nor the default branch
-/// `default` keeps; none once the default branch has its changes. Only
-/// advertised heads whose commits are here count, so no stale or unmapped
-/// remote-tracking ref can vouch for a commit a remote no longer has.
+/// Commits of `commit` that neither a branch in `present` nor the default
+/// branch `default` keeps; none once the default branch has its changes.
+/// `present` holds advertised heads whose commits are here, so no stale or
+/// unmapped remote-tracking ref can vouch for a commit a remote no longer has.
 pub async fn unkept_commits_by(
     repo: &Path,
     commit: &str,
     default: &str,
-    heads: &[super::RemoteHead],
+    present: &[super::RemoteHead],
 ) -> Result<u64> {
     let default_name = super::local_ref(default);
-    let mut present = Vec::new();
-    for head in heads {
-        if run(
-            repo,
-            &["cat-file", "-e", &format!("{}^{{commit}}", head.commit)],
-        )
-        .await
-        .is_ok()
-        {
-            present.push(head);
-        }
-    }
     let mut defaults: Vec<String> = local_branch(repo, default).await?.into_iter().collect();
     defaults.extend(
         present
