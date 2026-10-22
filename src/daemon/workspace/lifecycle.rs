@@ -550,7 +550,7 @@ impl Manager {
             } else {
                 None
             };
-            let derived_data = self.derived_data_location(&workspace, present).await;
+            let xcode = self.xcode_settings(&workspace, present).await;
             let outcome = match removal {
                 Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
@@ -565,12 +565,12 @@ impl Manager {
                 },
             )
             .await?;
-            Ok((outcome, post_remove, derived_data))
+            Ok((outcome, post_remove, xcode))
         }
         .await;
         match result {
-            Ok((outcome, post_remove, derived_data)) => Ok(self
-                .complete_workspace_removal(&workspace, outcome, post_remove, derived_data)
+            Ok((outcome, post_remove, xcode)) => Ok(self
+                .complete_workspace_removal(&workspace, outcome, post_remove, xcode)
                 .await),
             Err(error) => {
                 // A deleted directory can no longer be ready.
@@ -620,12 +620,12 @@ impl Manager {
         workspace: &Workspace,
         mut outcome: RemovalResult,
         post_remove: Option<PostRemoveHook>,
-        derived_data: Option<PathBuf>,
+        xcode: Option<crate::config::Effective>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         self.delete_session_logs(&workspace.id);
-        if let Some(location) = derived_data {
-            self.delete_derived_data(workspace, location).await;
+        if xcode.is_some() {
+            self.delete_xcode_data(workspace).await;
         }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;

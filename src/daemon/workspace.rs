@@ -7,7 +7,6 @@ mod branches;
 pub(crate) mod capacity;
 mod checkpoints;
 mod conflicts;
-mod derived_data;
 mod diff;
 mod done;
 mod environment;
@@ -27,6 +26,7 @@ mod restore;
 pub(crate) mod review;
 mod stack;
 mod status;
+mod xcode;
 
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;

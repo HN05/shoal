@@ -1,5 +1,5 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
-//! deleting Xcode DerivedData that removed workspaces left, then removing
+//! deleting Xcode data that removed workspaces left, then removing
 //! workspaces idle cleanup would remove, without their idle delay,
 //! then emptying shared caches nothing is using, then stopping tracked
 //! executions when that cannot free enough space.
@@ -39,6 +39,11 @@ struct Filesystem {
 }
 
 impl Filesystem {
+    /// Whether `path` exists on this filesystem.
+    fn holds(&self, path: &Path) -> bool {
+        path.metadata().map(|metadata| metadata.dev()).ok() == Some(self.device)
+    }
+
     fn describe(&self) -> String {
         format!(
             "{:.1} GiB available at {}",
@@ -111,7 +116,7 @@ impl Monitor {
             .is_none_or(|last| now.duration_since(last) >= CLEANUP_INTERVAL)
         {
             for filesystem in &mut low {
-                delete_derived_data(manager, filesystem, &available).await?;
+                delete_xcode_leftovers(manager, filesystem, &available).await?;
                 free_space(manager, settings, &workspaces, filesystem, &available).await?;
                 empty_caches(manager, settings, filesystem, &available).await?;
             }
@@ -187,23 +192,22 @@ fn sample(
     (filesystems, complete)
 }
 
-/// Delete Xcode DerivedData that removed workspaces left on the filesystem,
+/// Delete the Xcode data that removed workspaces left on the filesystem,
 /// which loses nothing, so it goes before any workspace.
-async fn delete_derived_data(
+async fn delete_xcode_leftovers(
     manager: &Manager,
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
-    let Some(location) = crate::presets::derived_data::location(&manager.paths.home) else {
-        return Ok(());
-    };
-    if location.metadata().map(|metadata| metadata.dev()).ok() != Some(filesystem.device) {
-        return Ok(());
-    }
+    let mut deleted = false;
     for repo in manager.repositories().await? {
-        manager.delete_stale_derived_data(&repo, &location).await;
+        deleted |= manager
+            .delete_xcode_leftovers(&repo, |path| filesystem.holds(path))
+            .await;
     }
-    filesystem.free = available(&filesystem.path)?;
+    if deleted {
+        filesystem.free = available(&filesystem.path)?;
+    }
     Ok(())
 }
 
@@ -287,9 +291,7 @@ async fn empty_caches(
 
 /// Whether the repository keeps its shared caches on the filesystem.
 fn caches_on(repo: &Repository, filesystem: &Filesystem) -> bool {
-    Layout::of(repo).is_some_and(|layout| {
-        layout.root().metadata().map(|metadata| metadata.dev()).ok() == Some(filesystem.device)
-    })
+    Layout::of(repo).is_some_and(|layout| filesystem.holds(layout.root()))
 }
 
 /// The notification for emptying a repository's caches, if it did anything
