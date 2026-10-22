@@ -556,6 +556,11 @@ impl Manager {
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
                 _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
+            // While the record still reserves the path: a workspace created
+            // there gets the same DerivedData.
+            if let Some(settings) = xcode {
+                self.delete_xcode_data(&workspace, &settings).await;
+            }
             self.commit_workspace_removal(
                 &workspace.id,
                 if present {
@@ -565,12 +570,12 @@ impl Manager {
                 },
             )
             .await?;
-            Ok((outcome, post_remove, xcode))
+            Ok((outcome, post_remove))
         }
         .await;
         match result {
-            Ok((outcome, post_remove, xcode)) => Ok(self
-                .complete_workspace_removal(&workspace, outcome, post_remove, xcode)
+            Ok((outcome, post_remove)) => Ok(self
+                .complete_workspace_removal(&workspace, outcome, post_remove)
                 .await),
             Err(error) => {
                 // A deleted directory can no longer be ready.
@@ -620,13 +625,9 @@ impl Manager {
         workspace: &Workspace,
         mut outcome: RemovalResult,
         post_remove: Option<PostRemoveHook>,
-        xcode: Option<crate::config::Effective>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         self.delete_session_logs(&workspace.id);
-        if let Some(settings) = xcode {
-            self.delete_xcode_data(workspace, &settings).await;
-        }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             // The hook runs with the workspace identity after removal's sweep.
