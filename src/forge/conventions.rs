@@ -56,7 +56,7 @@ pub(crate) async fn warnings(
 }
 
 /// The required entries none of `labels` satisfies; a label satisfies an
-/// entry it starts with, so `area/` takes any area and `bug` only itself.
+/// entry it starts with, so `area/` takes any area label.
 fn missing<'a>(required: &'a [String], labels: &[String]) -> Vec<&'a str> {
     required
         .iter()

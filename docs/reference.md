@@ -1682,10 +1682,10 @@ with each one's description, and `exclusive` for a label that allows no other
 of its scope: Forgejo's exclusive labels and GitLab's `key::value` labels.
 
 `[pr] required_labels` and `[issue] required_labels` name entries that every new
-item's labels must each start with, so `area/` takes any area and `bug` only that
-label. `pr open` and `issue open` refuse a new item missing one before creating
-it, listing the repository's labels that would satisfy it; an empty list in a
-higher layer turns inherited entries off.
+item's labels must each start with, so `area/` takes any area label. `pr open`
+and `issue open` refuse a new item missing one before creating it, listing the
+repository's labels that would satisfy it; an empty list in a higher layer turns
+inherited entries off.
 
 ```toml
 [issue]
