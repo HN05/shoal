@@ -4,7 +4,7 @@
 //! `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> Result<i32> {
+    refuse_workspace_processes(ctx)?;
     if follow {
         return follow_stream(ctx).await;
     }
@@ -59,12 +60,23 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
 }
 
 pub(super) async fn clear(ctx: &Context) -> Result<i32> {
+    refuse_workspace_processes(ctx)?;
     let cleared = request::<Cleared>(&ctx.paths, Method::ClearNotifications).await?;
     ctx.show(&cleared, |cleared| match cleared.cleared {
         0 => println!("No notifications"),
         n => println!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
     })?;
     Ok(0)
+}
+
+/// The daemon refuses scoped requests; this also refuses a descendant that
+/// cleared its scope token.
+fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot read or clear notifications; send one with shoal notify"
+    );
+    Ok(())
 }
 
 pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {

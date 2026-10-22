@@ -99,6 +99,8 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("skill install", "cannot install user-level skills"),
         ("shell recover /", "cannot navigate outside their worktree"),
         ("restore", "cannot reopen removed workspaces"),
+        ("notifications", "cannot read or clear notifications"),
+        ("notifications clear", "cannot read or clear notifications"),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());
