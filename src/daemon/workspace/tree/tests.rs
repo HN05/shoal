@@ -221,3 +221,38 @@ async fn a_parent_must_be_a_workspace_of_the_same_repository() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("not a workspace of this repository"));
 }
+
+#[tokio::test]
+async fn a_parent_reserved_for_removal_refuses_splits() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .reserve_lifecycle(&parent.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let error = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("parent workspace is removing"),
+        "{error:#}"
+    );
+    assert!(manager.workspace("child").await.is_err());
+    assert!(
+        manager
+            .workspace(&parent.id)
+            .await
+            .unwrap()
+            .child_workspaces
+            .is_empty()
+    );
+}

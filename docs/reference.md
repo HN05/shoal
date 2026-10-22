@@ -406,7 +406,10 @@ when none is left. Workspaces the command would refuse for their state, or for
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
-remain confined to their own workspace. Another omitted required argument that
+remain confined to their own workspace and the [child workspaces](#child-workspaces)
+split from it: without a target, a scoped command acts on the child whose
+directory it runs in, otherwise on the caller's own workspace, and agent hooks
+always report for the caller's own. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
 noninteractive rule. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. A command that accepts
@@ -427,8 +430,8 @@ approval or change request. A failed lookup reports its error on that item
 without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error` and `doctor` reports the error. Status also
-names the first condition that keeps the workspace from automatic cleanup, holds
-and assignment state before commands, leases and Git state, or the idle delay
+names the first condition that keeps the workspace from automatic cleanup, holds,
+open questions, child workspaces and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
@@ -439,7 +442,7 @@ recorded as opened or related in `links.opened` and `links.related`, each with
 `links.prs` empty. `status` lists opened and related items too. An issue or PR URL, `pr` or `issue` with a number or URL, or
 `resource` with a pool or member name shows every workspace that links or holds
 it instead, as a JSON array; a number must be linked in only one repository.
-Scoped callers find only their own workspace.
+Scoped callers find only their own workspace and its child workspaces.
 
 ### Configured commands
 
@@ -1018,6 +1021,35 @@ the token fj saved for that host, read for the request and passed on stdin, or
 `tea api` with tea's login for the host. A missing login or failed request is
 reported in the update.
 
+### Child workspaces
+
+```sh
+shoal split fix-typo                 # A child of the current workspace, from the default branch
+shoal split --issue 42               # Branch named after the issue, which it links
+shoal split part-two --base fix-api  # Stacked on the parent's branch
+shoal split fix-typo --workspace fix-api
+```
+
+`shoal split` creates a workspace on a new branch in the parent's repository,
+runs its setup, and records the parent, so work that needs its own PR gets its
+own branch and worktree. The parent must be ready. `--base` works as for
+`shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
+child on it. Children can be split from children. Workspace processes may split
+from their own workspace and act on every workspace below it, which is the only
+workspace creation scope allows; other creation and removal stay with the user.
+
+The parent's agent receives the issue and PR activity of its children that have
+no agent of their own, and of their children in turn, through its hooks and an
+unfiltered or kind-filtered `watch`; each such update names its workspace in
+`workspace`. A child whose own agent reports its state receives its own activity
+and its subtree's instead. A child keeps its parent from every unattended removal,
+completion and PR cleanup included, with `cleanup_reason` `children`, until the
+child is removed; each child completes on its own with `shoal done`. Removing a
+parent moves its children to its own parent, or to none, and records a
+`parent_changed` event. `ls` lists children indented below their parent;
+`status` shows both directions, and `ls --json` and `inspect` give
+`parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
+
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each
@@ -1530,7 +1562,7 @@ archive_max_mb = 50
 `shoal done [workspace]` records that the assignment is finished and notifies the
 user. `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
 false. The setting follows normal repository and worktree configuration
-precedence. Scoped agents may mark only their own workspace done; completion does
+precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
 reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
@@ -1548,7 +1580,7 @@ cleanup = true    # Default: true
 ```
 
 `shoal undone [workspace]` withdraws a recorded completion; `--json` returns
-`{"withdrawn": <completion>}`, with null when none was recorded. Scoped agents may mark only their own workspace undone.
+`{"withdrawn": <completion>}`, with null when none was recorded. Scoped agents may mark only their own workspace or a child workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.
 
@@ -1595,7 +1627,7 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions and child workspaces do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 Upgrading turns a `shoal continue` from earlier versions into a hold named
@@ -1828,8 +1860,9 @@ unbounded. Expiration returns an empty array and `timed_out: true`. A newer watc
 in the same workspace
 supersedes a running one, which returns an empty array and `superseded: true`
 without taking updates; updates acknowledged while a newer watch runs stay pending
-for it. Scoped callers can watch only in their own
-workspace. Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
+for it. Scoped callers can watch only in their own workspace and its child
+workspaces; a watch also reports the activity its agent receives from
+[child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results are the commit statuses of the
 PR's head commit, read with fj's login for the host when it has one.

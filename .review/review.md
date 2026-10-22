@@ -71,8 +71,11 @@ instead of the PR delivery guidance below.
 - Doctor reports current issues before falling back to the recorded
   failure and repair guidance; repair remains an explicit choice.
 - Scope: tracked executions and externally launched processes with exported
-  environments carry a scope token and get own-worktree access
-  only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
+  environments carry a scope token and get access to their own worktree and the
+  child workspaces split from it, recursively, only (CLI refusals also follow ancestry
+  for the same state directory); without a target a scoped command acts on the child
+  whose directory it runs in, while agent hooks always report for the own workspace.
+  Workspace allocation other than `split`, removal, recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, opening and changing issues and PRs
@@ -110,8 +113,9 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds and open questions block every unattended removal, rechecked
-  after the removal reserves the workspace; `done` closes the workspace's open
+  and PR cleanup. Holds, open questions and child workspaces block every unattended
+  removal, rechecked after the removal reserves the workspace; a split needs a ready
+  parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
   is false; approval never skips a landing check and lands only the approved commit. This is cooperative,
@@ -224,7 +228,7 @@ instead of the PR delivery guidance below.
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
-  cleanup; only holds and open questions keep a workspace.
+  cleanup; only holds, open questions and child workspaces keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches and completion but never holds, open

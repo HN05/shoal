@@ -24,6 +24,8 @@ use crate::{
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
+const NO_LINKED_ITEMS: &str = "no linked items of the selected kind; register one with shoal link";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Updates {
     pub updates: Vec<Update>,
@@ -318,7 +320,7 @@ impl Manager {
         let workspace = self.workspace(id).await?;
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
-        let items = self.selected_items(&workspace, selection).await?;
+        let items = self.watched_items(&workspace, selection).await?;
         let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
@@ -546,20 +548,46 @@ impl Manager {
         workspace: &Workspace,
         selection: &Selection,
     ) -> Result<Vec<(String, ItemKind)>> {
+        let items = self.selection_items(workspace, selection).await?;
+        ensure!(
+            !items.is_empty() || selection.kind.is_none(),
+            "{NO_LINKED_ITEMS}"
+        );
+        Ok(items)
+    }
+
+    /// The workspace's own items a watch selects. A kind it links none of is
+    /// still watched when a child workspace whose activity its agent receives
+    /// links one.
+    async fn watched_items(
+        &self,
+        workspace: &Workspace,
+        selection: &Selection,
+    ) -> Result<Vec<(String, ItemKind)>> {
+        let items = self.selection_items(workspace, selection).await?;
+        if items.is_empty() && selection.input.is_none() {
+            let (id, kind) = (workspace.id.clone(), selection.kind);
+            ensure!(
+                self.store.run(move |db| links_kind(db, &id, kind)).await?,
+                "{NO_LINKED_ITEMS}"
+            );
+        }
+        Ok(items)
+    }
+
+    /// The explicitly selected item, or the workspace's linked items of the
+    /// selected kind.
+    async fn selection_items(
+        &self,
+        workspace: &Workspace,
+        selection: &Selection,
+    ) -> Result<Vec<(String, ItemKind)>> {
         if let Some(item) = self.explicit_item(workspace, selection).await? {
             return Ok(vec![item]);
         }
         let id = workspace.id.clone();
         let kind = selection.kind;
-        let items = self
-            .store
-            .run(move |db| linked_items(db, &id, kind))
-            .await?;
-        ensure!(
-            !items.is_empty() || kind.is_none(),
-            "no linked items of the selected kind; register one with shoal link"
-        );
-        Ok(items)
+        self.store.run(move |db| linked_items(db, &id, kind)).await
     }
 
     #[cfg(test)]
@@ -605,8 +633,8 @@ impl Manager {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
             let items = linked_items(&tx, &id, selection.kind)?;
-            if selection.input.is_none() {
-                ensure!(!items.is_empty() || selection.kind.is_none(), "no linked items of the selected kind; register one with shoal link");
+            if selection.input.is_none() && items.is_empty() {
+                ensure!(links_kind(&tx, &id, selection.kind)?, "{NO_LINKED_ITEMS}");
             }
             // A PR linked since the poll takes over conflict reports from the branch.
             let branch = if watches_branch(&selection, &items) {
@@ -798,6 +826,20 @@ pub(super) fn queue_update(
         params![workspace_id, url, serde_json::to_string(&record)?],
     )?;
     Ok(())
+}
+
+/// Whether the workspace, or a child workspace whose activity its agent
+/// receives, links an item of `kind`; every workspace has items of no kind.
+fn links_kind(db: &rusqlite::Connection, id: &str, kind: Option<ItemKind>) -> Result<bool> {
+    if kind.is_none() || !linked_items(db, id, kind)?.is_empty() {
+        return Ok(true);
+    }
+    for child in crate::daemon::workspace::delegated(db, id)? {
+        if !linked_items(db, &child.id, kind)?.is_empty() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The activity record of every item of the workspaces `ids`, with its
@@ -1235,8 +1277,18 @@ mod tests {
             .split_workspace(&child.id, "grandchild".into(), None)
             .await
             .unwrap();
-        for (workspace, url) in [(&child, "child-pr"), (&grandchild, "grandchild-pr")] {
+        let watched = [(&child, "child-pr"), (&grandchild, "grandchild-pr")];
+        for (workspace, url) in watched {
             register_watch(&manager, &workspace.id, url).await;
+        }
+        // The parent links no PR, but its children do.
+        let prs = Selection {
+            kind: Some(ItemKind::Pr),
+            input: None,
+        };
+        let quiet = manager.wait_items(&parent.id, &prs, Some(1)).await.unwrap();
+        assert!(quiet.timed_out && quiet.updates.is_empty());
+        for (workspace, url) in watched {
             manager
                 .queue_background_updates(
                     &workspace.id,
@@ -1265,11 +1317,13 @@ mod tests {
                 .starts_with("child: child-pr [comment]:")
         );
         // An unfiltered watch of the parent reports them as well.
-        let watched = manager
+        let unfiltered = manager
             .wait_items(&parent.id, &Selection::default(), Some(1))
             .await
             .unwrap();
-        assert_eq!(watched.updates.len(), 2);
+        assert_eq!(unfiltered.updates.len(), 2);
+        let filtered = manager.wait_items(&parent.id, &prs, Some(1)).await.unwrap();
+        assert_eq!(filtered.updates.len(), 2);
 
         // An agent of the child's own takes over the child's subtree.
         manager
@@ -1284,6 +1338,8 @@ mod tests {
                 .updates
                 .is_empty()
         );
+        let refused = manager.wait_items(&parent.id, &prs, Some(1)).await;
+        assert!(format!("{:#}", refused.unwrap_err()).contains("no linked items"));
         let own = manager.agent_updates(&child.id).await.unwrap();
         assert_eq!(own.updates.len(), 2);
         assert_eq!(own.updates[0].workspace, None);

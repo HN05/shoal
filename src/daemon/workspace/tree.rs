@@ -1,10 +1,13 @@
 //! Child workspaces: workspaces split from a parent, whose agent works on them
 //! or coordinates their agents. Children form a tree within one repository.
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 use super::Manager;
-use crate::model::{Workspace, WorkspaceRef};
+use crate::{
+    model::{Workspace, WorkspaceRef},
+    state::WorkspaceState,
+};
 
 impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
@@ -55,18 +58,27 @@ impl Manager {
     }
 }
 
-/// Check that `parent` is a workspace of `repository_id` before recording it.
+/// Check that `parent` is a ready workspace of `repository_id` before
+/// recording it. Removal reserves the parent first and rechecks its children
+/// afterwards, so a split either precedes that recheck or is refused here.
 pub(super) fn ensure_parent(db: &Connection, repository_id: &str, parent: &str) -> Result<()> {
-    let repository: Option<String> = db
+    let recorded: Option<(String, WorkspaceState)> = db
         .query_row(
-            "SELECT repository_id FROM workspaces WHERE id=?1",
+            "SELECT repository_id,state FROM workspaces WHERE id=?1",
             [parent],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
+    let Some((repository, state)) = recorded else {
+        bail!("parent workspace {parent} no longer exists");
+    };
     ensure!(
-        repository.as_deref() == Some(repository_id),
+        repository == repository_id,
         "parent workspace {parent} is not a workspace of this repository"
+    );
+    ensure!(
+        state == WorkspaceState::Ready,
+        "parent workspace is {state}; split from a ready workspace"
     );
     Ok(())
 }
@@ -84,7 +96,8 @@ fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-fn delegated(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> {
+/// The workspaces below `id` whose activity its agent receives.
+pub(crate) fn delegated(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> {
     Ok(db
         .prepare(
             "WITH RECURSIVE delegated(id, depth) AS (
