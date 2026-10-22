@@ -653,6 +653,20 @@ impl Method {
                 | Self::WatchItems { .. }
         )
     }
+
+    /// Long-lived requests whose clients send them again when the daemon
+    /// closes the connection unanswered, as across a restart.
+    pub fn retries_when_closed(&self) -> bool {
+        matches!(
+            self,
+            Self::Reattach(_)
+                | Self::QueueHold { .. }
+                | Self::PrWait { .. }
+                | Self::AwaitAgentWake { .. }
+                | Self::AwaitAnswer { .. }
+                | Self::WatchItems { .. }
+        )
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

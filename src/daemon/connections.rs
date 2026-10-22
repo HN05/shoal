@@ -276,10 +276,12 @@ mod tests {
             reattach: true,
             queue_entry: None,
         };
-        let Body::Error { message, .. } = reply(&mut send(socket, execute).await).await else {
-            panic!("expected the new execution to be refused");
-        };
-        assert!(message.contains("limit of 1 long-lived"), "{message}");
+        for refused in [execute, Method::WatchNotifications] {
+            let Body::Error { message, .. } = reply(&mut send(socket, refused).await).await else {
+                panic!("expected a refusal");
+            };
+            assert!(message.contains("limit of 1 long-lived"), "{message}");
+        }
         let reattach = Method::Reattach(protocol::Reattach {
             execution: "running".into(),
             wrapper,
