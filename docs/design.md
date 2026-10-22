@@ -796,8 +796,9 @@ is supplied, a linked issue is referenced with `Closes #<number>`.
 Repository conventions reach agents where they open and mark items, not only in
 instructions read at launch: `shoal labels` serves the forge's label scheme with
 its descriptions, repositories may require label prefixes, which refuse a new item
-before it exists, and missing labels come back as warnings that never fail a
-change that already happened.
+before it exists, and missing labels or template headings come back as warnings
+that never fail a change that already happened. Shoal never fills a template in,
+because an unfilled template says less than a closing reference.
 Its options are modeled rather than passed through to a CLI, so they mean the
 same on every forge.
 

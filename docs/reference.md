@@ -1694,8 +1694,16 @@ required_labels = ["type/"] # Default: []
 
 Once the item exists, `pr open`, `issue open` and `ready` warn, without failing,
 about an item missing a required label, or about one without labels in a
-repository that has some. A warning names the `edit` command that fixes it, and
-one whose lookup fails is left out.
+repository that has some. `pr open` and `issue open` also warn when a
+description they sent lacks a heading of the forge's description template in the
+worktree: for PRs `pull_request_template.md` in `.forgejo`, `.gitea`, `.github`,
+the root or `docs`, or GitLab's `.gitlab/merge_request_templates/Default.md`; for
+issues the Markdown files of the first `ISSUE_TEMPLATE` directory or
+`issue_template.md` there, or GitLab's `.gitlab/issue_templates`, where a
+description that has every heading of any template passes. Names match without
+regard to case, front matter is skipped, and a template without headings asks for
+nothing. A warning names the `edit` command that fixes it, and one whose lookup
+fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is

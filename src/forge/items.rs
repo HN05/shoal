@@ -91,7 +91,8 @@ impl Manager {
     }
 
     /// Add to each mark what its item leaves out of the repository's
-    /// conventions, read as the workspace's agent account.
+    /// conventions, read as the workspace's agent account. Its description
+    /// was checked when Shoal opened it, so only its labels are.
     pub(crate) async fn check_conventions(
         &self,
         workspace: &Workspace,
@@ -106,7 +107,9 @@ impl Manager {
                 continue;
             };
             let required = required_labels(settings, item.kind);
-            mark.warnings = conventions::warnings(&forge, &account, &item, required).await;
+            mark.warnings =
+                conventions::warnings(&forge, &account, &workspace.path, &item, None, required)
+                    .await;
         }
     }
 
@@ -228,7 +231,15 @@ impl Manager {
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
-        let checked = conventions::warnings(&forge, &account, &item, required).await;
+        let checked = conventions::warnings(
+            &forge,
+            &account,
+            &workspace.path,
+            &item,
+            Some(&issue.body),
+            required,
+        )
+        .await;
         Ok(Opened {
             item,
             created: true,
@@ -257,19 +268,17 @@ impl Manager {
         let required = &settings.pr.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
         let existing = forge.open_pull_for(&account, &workspace.branch).await?;
-        let (item, created) = match existing {
-            Some(number) => (
-                forge.read(&account, ItemKind::Pr, number).await?.item,
-                false,
-            ),
+        let (item, body) = match existing {
+            Some(number) => (forge.read(&account, ItemKind::Pr, number).await?.item, None),
             None => {
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
                 let pull =
                     new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?;
-                (forge.create_pull(&account, &pull).await?, true)
+                (forge.create_pull(&account, &pull).await?, Some(pull.body))
             }
         };
+        let created = body.is_some();
         anyhow::ensure!(
             item.pr
                 .as_ref()
@@ -286,7 +295,15 @@ impl Manager {
                 .with_context(|| format!("{} is open, but linking it failed", item.url))?;
             (true, None)
         };
-        let checked = conventions::warnings(&forge, &account, &item, required).await;
+        let checked = conventions::warnings(
+            &forge,
+            &account,
+            &workspace.path,
+            &item,
+            body.as_deref(),
+            required,
+        )
+        .await;
         Ok(Opened {
             item,
             created,
