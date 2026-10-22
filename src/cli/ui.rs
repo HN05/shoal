@@ -306,12 +306,62 @@ pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)])
         .context("picker returned an unknown choice")
 }
 
+/// Choose any number of entries, with Tab selecting each, returning their
+/// ids in list order.
+pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
+    let extra = [
+        "--multi".to_owned(),
+        "--header".to_owned(),
+        "Tab: select   Enter: confirm".to_owned(),
+    ];
+    let output = picker_output(ctx, prompt, &entries, &extra)?;
+    let ids: Vec<String> = output.lines().map(entry_id).collect();
+    ensure!(
+        ids.iter()
+            .all(|id| entries.iter().any(|entry| &entry.0 == id)),
+        "picker returned an unknown item"
+    );
+    Ok(ids)
+}
+
 fn run_picker(
     ctx: &Context,
     prompt: &str,
     entries: Entries,
     bindings: Option<(String, String)>,
 ) -> Result<Picked<String>> {
+    let extra = match &bindings {
+        Some((keys, header)) => vec![
+            format!("--expect={keys}"),
+            "--header".to_owned(),
+            header.clone(),
+        ],
+        None => Vec::new(),
+    };
+    let output = picker_output(ctx, prompt, &entries, &extra)?;
+    let (key, selected) = if bindings.is_some() {
+        output.split_once('\n').context("picker omitted action")?
+    } else {
+        ("", output.as_str())
+    };
+    let id = entry_id(selected);
+    ensure!(
+        entries.iter().any(|entry| entry.0 == id),
+        "picker returned an unknown item"
+    );
+    Ok(Picked {
+        action: key.to_owned(),
+        id,
+    })
+}
+
+/// Run fzf over the entries with `extra` arguments and return what it printed.
+fn picker_output(
+    ctx: &Context,
+    prompt: &str,
+    entries: &Entries,
+    extra: &[String],
+) -> Result<String> {
     require_interactive(ctx)?;
     ensure!(
         !entries.is_empty(),
@@ -330,21 +380,17 @@ fn run_picker(
             "--prompt",
             prompt,
         ])
+        .args(extra)
         .env_remove("FZF_DEFAULT_OPTS")
         .env_remove("FZF_DEFAULT_OPTS_FILE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    if let Some((keys, header)) = &bindings {
-        command
-            .arg(format!("--expect={keys}"))
-            .args(["--header", header]);
-    }
     let mut picker = command
         .spawn()
         .context("open picker; install fzf or supply an explicit target")?;
     let mut input = picker.stdin.take().context("picker stdin is unavailable")?;
-    for (id, label) in &entries {
+    for (id, label) in entries {
         let label = label.replace(['\n', '\r', '\t'], " ");
         // fzf may exit before consuming the entire list when canceled.
         if writeln!(input, "{id}\t{label}").is_err() {
@@ -354,26 +400,16 @@ fn run_picker(
     drop(input);
     let output = picker.wait_with_output()?;
     ensure!(output.status.success(), "selection canceled");
-    let output = String::from_utf8(output.stdout)?;
-    let (key, selected) = if bindings.is_some() {
-        output.split_once('\n').context("picker omitted action")?
-    } else {
-        ("", output.as_str())
-    };
-    let id = selected
-        .split('\t')
+    Ok(String::from_utf8(output.stdout)?)
+}
+
+/// The id field of a line fzf printed.
+fn entry_id(line: &str) -> String {
+    line.split('\t')
         .next()
         .unwrap_or_default()
         .trim()
-        .to_owned();
-    ensure!(
-        entries.iter().any(|entry| entry.0 == id),
-        "picker returned an unknown item"
-    );
-    Ok(Picked {
-        action: key.to_owned(),
-        id,
-    })
+        .to_owned()
 }
 
 /// How to choose a workspace when the command line names none.

@@ -159,6 +159,8 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
+shoal branch                  # List branches removal kept for unpushed commits
+shoal branch rm               # Pick kept branches to delete with their commits
 shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal restore fix-login 3     # Return the workspace to checkpoint 3
@@ -329,8 +331,11 @@ tools such as `agent-browser`, values fetched from your secret store; see
 
 ## Cleanup
 
-`shoal rm` removes a workspace and its resources, prompting when needed about
-its branch and uncommitted work. `shoal stop` keeps the workspace.
+`shoal rm` removes a workspace and its resources, prompting only before it deletes
+uncommitted work. It deletes the branch too unless the branch has commits that are
+on no remote and not on the default branch; Shoal deletes such a kept branch once
+they are, and `shoal branch rm` deletes kept branches, several at a time, with
+their commits. `shoal stop` keeps the workspace.
 
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,

@@ -591,6 +591,14 @@ pub enum Command {
         #[arg(long)]
         caches: bool,
     },
+    /// List or delete the branches Shoal kept when it removed their workspaces.
+    ///
+    /// Removal keeps a branch only while some of its commits are on no remote and not on the
+    /// default branch, and deletes it once they are. Without a subcommand, lists them.
+    Branch {
+        #[command(subcommand)]
+        command: Option<BranchCommand>,
+    },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
     Checkpoint {
         workspace: Option<String>,
@@ -1123,6 +1131,26 @@ pub enum SkillCommand {
         /// Replace skills changed since Shoal installed them without asking.
         #[arg(long)]
         force: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BranchCommand {
+    /// List kept branches and how many commits only they have.
+    Ls,
+    /// Delete kept branches and the commits only they have.
+    ///
+    /// Without branch names, choose them in a picker, where Tab selects several.
+    Rm {
+        branches: Vec<String>,
+        /// Delete every kept branch.
+        #[arg(long, conflicts_with = "branches")]
+        all: bool,
+        /// Only branches of this repository, by name or ID.
+        #[arg(long)]
+        repo: Option<String>,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
     },
 }
 

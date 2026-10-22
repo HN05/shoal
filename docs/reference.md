@@ -1451,6 +1451,23 @@ Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
+### Kept branches
+
+```sh
+shoal branch                         # List kept branches and their unpushed commits
+shoal branch rm                      # Pick kept branches to delete; Tab selects several
+shoal branch rm fix-login --yes      # Delete one kept branch and its unpushed commits
+shoal branch rm --all --repo project # Delete every kept branch of a repository
+```
+
+`shoal branch` lists the branches removal kept whose commits are not all on a
+remote or the default branch, with the count of those commits and the last one.
+`shoal branch rm` deletes them with those commits after `Are you sure? [y/N]`, or
+with `--yes`; it checks every branch first and deletes none when one has moved,
+is checked out or is no longer kept. Name a branch kept in several repositories
+with `--repo`. The removal's checkpoint still holds the commits until it expires.
+Workspace processes cannot list or delete kept branches.
+
 ### Checkpoints and restore
 
 ```sh

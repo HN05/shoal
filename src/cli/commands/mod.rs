@@ -5,6 +5,7 @@ mod agent_queue;
 mod agent_state;
 mod approvals;
 mod base;
+mod branches;
 mod chat;
 mod cleanup;
 mod configuration;
@@ -435,6 +436,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             confirmation,
         } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
         Command::Cleanup { dry_run, caches } => cleanup::run(&ctx, dry_run, caches).await,
+        Command::Branch { command } => branches::run(&ctx, command).await,
         Command::Checkpoint { workspace, name } => restore::checkpoint(&ctx, workspace, name).await,
         Command::Restore {
             workspace,

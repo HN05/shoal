@@ -1110,6 +1110,10 @@ commits, after fetching the repository's remotes at most every ten minutes and
 without notifying anyone. A kept branch that moved or went away, is the default
 branch or belongs to a workspace again is forgotten; one checked out elsewhere
 waits. Removal records name the branches kept before Shoal remembered them.
+`shoal branch` lists the kept branches with commits only they have, and
+`shoal branch rm` deletes the ones the user picks, several at once, after
+checking each is still at the commit removal left it on and not checked out.
+It is repository administration, unavailable to scoped callers.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Every unattended

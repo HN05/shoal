@@ -152,6 +152,30 @@ pub struct RestoredCheckpoint {
     pub replaced: Checkpoint,
 }
 
+/// A branch removal kept because only it has some commits: none of them is on
+/// a remote or the default branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptBranch {
+    pub repository_id: String,
+    /// The repository's name, or its path when it has none.
+    pub repository: String,
+    pub branch: String,
+    /// The commit removal left the branch on.
+    pub head: String,
+    pub kept_at: u64,
+    /// Commits only this branch has.
+    pub unpushed_commits: u64,
+    pub committed_at: u64,
+    pub subject: String,
+}
+
+/// A kept branch to delete.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BranchTarget {
+    pub repository_id: String,
+    pub branch: String,
+}
+
 /// What `shoal restore` recreates of a removed workspace until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {

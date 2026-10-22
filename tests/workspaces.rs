@@ -2318,6 +2318,58 @@ fn removal_keeps_an_unpushed_branch_without_asking_and_ignores_external_processe
 }
 
 #[test]
+fn kept_branches_are_listed_and_deleted_on_request() {
+    let fixture = Fixture::new();
+    for name in ["first", "second", "third"] {
+        let workspace = fixture.add(name);
+        commit_file(Path::new(workspace["path"].as_str().unwrap()), name, name);
+        assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], false);
+    }
+    let names = |listed: &Value| -> Vec<String> {
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|branch| branch["branch"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(
+        names(&fixture.ok(&["branch"])),
+        ["first", "second", "third"]
+    );
+    let branch_exists = |name: &str| {
+        !git(&fixture.repo, &["branch", "--list", name])
+            .trim()
+            .is_empty()
+    };
+
+    let piped = fixture.run(&["branch", "rm", "first"]);
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
+    let missing = fixture.run(&["branch", "rm", "missing", "--yes"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("not a kept branch"));
+    assert!(branch_exists("first"));
+
+    // The picker selects several branches at once.
+    let picker = fixture.root.path().join("bin/fzf");
+    install_test_script(
+        &picker,
+        "#!/bin/sh\nawk -F '\\t' '$2 ~ /(first|second) /'\n",
+    );
+    let (output, transcript) = fixture.interactive(&["branch", "rm"], "y\n");
+    assert!(output.status.success(), "{transcript}");
+    assert!(transcript.contains("1 unpushed commit"), "{transcript}");
+    assert!(!branch_exists("first") && !branch_exists("second"));
+    assert!(branch_exists("third"));
+
+    let deleted = fixture.ok(&["branch", "rm", "--all", "--yes"]);
+    assert_eq!(names(&deleted), ["third"]);
+    assert!(!branch_exists("third"));
+    assert!(names(&fixture.ok(&["branch"])).is_empty());
+}
+
+#[test]
 fn branch_removal_deletes_branches_main_or_a_remote_has() {
     let fixture = Fixture::new();
     let commit = |path: &Path| {

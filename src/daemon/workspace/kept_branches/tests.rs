@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use super::*;
 use crate::{
-    model::Repository,
+    model::{BranchTarget, Repository},
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{commit, git, manager, repository},
 };
@@ -66,7 +66,7 @@ async fn kept(manager: &Manager, repo: &Repository, name: &str) -> String {
 
 async fn remembered(manager: &Manager, repo: &Repository) -> Vec<String> {
     manager
-        .kept_branches(&repo.id)
+        .kept_records(&repo.id)
         .await
         .unwrap()
         .into_iter()
@@ -180,4 +180,63 @@ async fn a_branch_checked_out_elsewhere_stays_remembered() {
         .await
         .unwrap();
     assert!(!branch_exists(&repo, "topic"));
+}
+
+#[tokio::test]
+async fn listing_shows_kept_branches_with_unpushed_commits() {
+    let (_root, manager, repo, _other) = fixture().await;
+    let head = kept(&manager, &repo, "topic").await;
+    kept(&manager, &repo, "pushed").await;
+    git(&repo.path, &["push", "-q", "origin", "pushed"]);
+
+    let listed = manager.list_kept_branches().await.unwrap();
+    assert_eq!(listed.len(), 1);
+    let topic = &listed[0];
+    assert_eq!(topic.branch, "topic");
+    assert_eq!(topic.repository_id, repo.id);
+    assert_eq!(topic.head, head);
+    assert_eq!(topic.unpushed_commits, 1);
+    assert_eq!(topic.subject, "topic");
+}
+
+#[tokio::test]
+async fn deletion_checks_every_branch_before_deleting_any() {
+    let (root, manager, repo, _other) = fixture().await;
+    for name in ["first", "second", "busy"] {
+        kept(&manager, &repo, name).await;
+    }
+    let target = |branch: &str| BranchTarget {
+        repository_id: repo.id.clone(),
+        branch: branch.into(),
+    };
+    let elsewhere = root.path().join("elsewhere");
+    git(
+        &repo.path,
+        &["worktree", "add", "-q", elsewhere.to_str().unwrap(), "busy"],
+    );
+
+    for (targets, error) in [
+        (
+            vec![target("first"), target("missing")],
+            "missing is not a branch Shoal kept",
+        ),
+        (vec![target("first"), target("busy")], "busy is checked out"),
+    ] {
+        let failed = manager.delete_kept_branches(targets).await.unwrap_err();
+        assert!(format!("{failed:#}").contains(error), "{failed:#}");
+        assert!(branch_exists(&repo, "first"));
+    }
+
+    let deleted = manager
+        .delete_kept_branches(vec![target("first"), target("second")])
+        .await
+        .unwrap();
+    let names: Vec<_> = deleted
+        .iter()
+        .map(|branch| branch.branch.as_str())
+        .collect();
+    assert_eq!(names, ["first", "second"]);
+    assert!(!branch_exists(&repo, "first"));
+    assert!(!branch_exists(&repo, "second"));
+    assert_eq!(remembered(&manager, &repo).await, ["busy"]);
 }

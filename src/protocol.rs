@@ -418,6 +418,12 @@ pub enum Method {
     },
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,
+    /// Branches removal kept because only they have some commits.
+    KeptBranches,
+    /// Delete kept branches with the commits only they have; all or none.
+    DeleteKeptBranches {
+        branches: Vec<crate::model::BranchTarget>,
+    },
     /// Open a removed workspace again from its removal record.
     RestoreWorkspace {
         workspace: String,
@@ -749,6 +755,7 @@ response_bodies! {
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
+    KeptBranches(Vec<crate::model::KeptBranch>),
     RestoredWorkspace(crate::model::RestoredWorkspace),
     Checkpoint(crate::model::Checkpoint),
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),

@@ -1,7 +1,7 @@
 //! Branch names, renaming and checkout fast-forwards.
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::git;
 
@@ -40,6 +40,16 @@ pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
 /// has it checked out.
 pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> {
     git::run_isolated(repo, &["update-ref", "-d", &git::local_ref(name), commit]).await
+}
+
+/// When `commit` was made, in Unix seconds, and its subject line.
+pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(u64, String)> {
+    let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", commit, "--"]).await?;
+    let (time, subject) = output
+        .trim_end_matches('\n')
+        .split_once('\0')
+        .context("git log printed no commit summary")?;
+    Ok((time.parse()?, subject.to_owned()))
 }
 
 pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {

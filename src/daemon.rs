@@ -702,6 +702,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Cleanup(cleanup::on_request(manager, dry_run, caches).await?)
         }
         Method::RemovedWorkspaces => Body::RemovedWorkspaces(manager.removed_workspaces().await?),
+        Method::KeptBranches => Body::KeptBranches(manager.list_kept_branches().await?),
+        Method::DeleteKeptBranches { branches } => {
+            Body::KeptBranches(manager.delete_kept_branches(branches).await?)
+        }
         Method::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
         }
