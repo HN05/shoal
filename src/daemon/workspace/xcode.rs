@@ -258,7 +258,13 @@ mod tests {
                 .create_workspace(&repo.id, name.into(), None, None, None)
                 .await
                 .unwrap();
-            fs::write(workspace.path.join(xcode::PINS), name).unwrap();
+            // A generated project is often ignored, with its pins.
+            let generated = workspace
+                .path
+                .join("App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm");
+            fs::create_dir_all(&generated).unwrap();
+            fs::write(generated.join(xcode::PINS), name).unwrap();
+            fs::write(workspace.path.join(".gitignore"), "App.xcodeproj/\n").unwrap();
         }
         let settings = manager.repository_settings(&repo.id).await.unwrap();
         let cache = crate::caches::directories(&repo, &settings.caches).unwrap()

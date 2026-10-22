@@ -5,7 +5,8 @@ use anyhow::Result;
 
 use super::run;
 
-/// Every tracked or unignored untracked file named `name` in the worktree.
+/// Every file named `name` in the worktree, tracked, untracked or ignored,
+/// since generated files are often ignored.
 pub async fn in_worktree(worktree: &Path, name: &str) -> Result<Vec<PathBuf>> {
     let listing = run(
         worktree,
@@ -14,7 +15,6 @@ pub async fn in_worktree(worktree: &Path, name: &str) -> Result<Vec<PathBuf>> {
             "-z",
             "--cached",
             "--others",
-            "--exclude-standard",
             "--",
             &pathspec(name),
         ],
@@ -74,6 +74,7 @@ mod tests {
             [
                 repo.join("Package.resolved"),
                 repo.join("app/App.xcodeproj/Package.resolved"),
+                repo.join("ignored/Package.resolved"),
                 repo.join("new/Package.resolved"),
             ]
         );
