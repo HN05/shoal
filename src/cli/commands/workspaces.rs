@@ -500,7 +500,7 @@ async fn execute_add_with_target(
     let Some(entry) = plan.queue_entry.clone() else {
         return add_planned(ctx, plan, target, issue).await;
     };
-    let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry);
+    let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry).await;
     let result = add_planned(ctx, plan, target, issue).await;
     if let Err(error) = &result {
         super::agent_queue::fail(ctx, &entry, error).await;

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use tokio::io::AsyncReadExt as _;
+use tokio::{io::AsyncReadExt as _, sync::oneshot};
 
 use super::{listing::ListFilter, workspaces::AddPlan};
 use crate::{
@@ -101,28 +101,38 @@ pub(super) async fn fail(ctx: &Context, entry: &str, error: &anyhow::Error) {
 pub(super) struct Hold(tokio::task::JoinHandle<()>);
 
 impl Hold {
-    pub fn start(paths: &Paths, entry: &str) -> Self {
-        let (paths, entry) = (paths.clone(), entry.to_owned());
-        Self(tokio::spawn(async move {
-            loop {
-                if let Ok((mut stream, body)) = client::open(
-                    &paths,
-                    Method::QueueHold {
-                        entry: entry.clone(),
-                    },
-                )
-                .await
-                {
-                    // A refusal means the agent took the slot over or the entry ended.
-                    if body.into_result().is_err() {
-                        return;
-                    }
-                    let mut closed = [0u8; 1];
-                    let _ = stream.read(&mut closed).await;
-                }
-                tokio::time::sleep(HOLD_RETRY).await;
+    /// Returns once the daemon holds the slot, ends the entry or cannot be
+    /// reached. A daemon at its connection limit closes the hold unanswered,
+    /// so preparation waits instead of outliving the reservation.
+    pub async fn start(paths: &Paths, entry: &str) -> Self {
+        let (settled, held) = oneshot::channel();
+        let hold = Self(tokio::spawn(keep(paths.clone(), entry.to_owned(), settled)));
+        let _ = held.await;
+        hold
+    }
+}
+
+async fn keep(paths: Paths, entry: String, settled: oneshot::Sender<()>) {
+    let mut settled = Some(settled);
+    loop {
+        let method = Method::QueueHold {
+            entry: entry.clone(),
+        };
+        let opened = client::open(&paths, method).await;
+        if !matches!(&opened, Err(error) if client::stream_closed(error))
+            && let Some(settled) = settled.take()
+        {
+            let _ = settled.send(());
+        }
+        if let Ok((mut stream, body)) = opened {
+            // A refusal means the agent took the slot over or the entry ended.
+            if body.into_result().is_err() {
+                return;
             }
-        }))
+            let mut closed = [0u8; 1];
+            let _ = stream.read(&mut closed).await;
+        }
+        tokio::time::sleep(HOLD_RETRY).await;
     }
 }
 
@@ -229,4 +239,41 @@ pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>>
         &entry,
     )?;
     Ok(Some(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::net::UnixListener;
+
+    use super::*;
+    use crate::protocol::{self, Body, Request, Response};
+
+    /// A hang guard, not the behavior under test.
+    async fn bounded<T>(future: impl Future<Output = T>) -> T {
+        tokio::time::timeout(Duration::from_secs(60), future)
+            .await
+            .expect("hold exchange timed out")
+    }
+
+    #[tokio::test]
+    async fn starting_waits_for_a_hold_the_daemon_closed_unanswered() -> Result<()> {
+        let temp = tempfile::tempdir_in("/tmp")?;
+        let paths = Paths::for_test(temp.path());
+        paths.prepare()?;
+        let listener = UnixListener::bind(&paths.socket)?;
+        let starting = tokio::spawn({
+            let paths = paths.clone();
+            async move { Hold::start(&paths, "entry").await }
+        });
+        let (mut stream, _) = bounded(listener.accept()).await?;
+        let _: Request = protocol::read(&mut stream).await?;
+        drop(stream);
+        // The hold asks again only after it has seen the closed connection.
+        let (mut stream, _) = bounded(listener.accept()).await?;
+        assert!(!starting.is_finished());
+        let request: Request = protocol::read(&mut stream).await?;
+        protocol::write(&mut stream, &Response::new(request.id, Body::Ok)).await?;
+        let _hold = bounded(starting).await?;
+        Ok(())
+    }
 }

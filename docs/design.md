@@ -550,7 +550,7 @@ waiting entry costs no worktree and branches from the default branch current
 when it starts. A
 starting entry keeps its slot through setup while the launching CLI holds a
 connection open, with a short grace period for Herdr handoffs and daemon
-restarts, until its agent registers; a dead launch cannot hold a slot, and setup
+restarts, until its agent registers; setup begins once the daemon holds the slot; a dead launch cannot hold a slot, and setup
 time stays unbounded. The daemon starts admitted entries through a detached CLI
 worker carrying the queuing terminal's Herdr variables, since terminal launch
 logic stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
