@@ -623,8 +623,7 @@ impl Manager {
         derived_data: Option<PathBuf>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
-        // Session logs are run data owned by the record just deleted.
-        let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
+        self.delete_session_logs(&workspace.id);
         if let Some(location) = derived_data {
             self.delete_derived_data(workspace, location).await;
         }
@@ -639,6 +638,11 @@ impl Manager {
             }
         }
         outcome
+    }
+
+    /// Session logs are run data owned by the record just deleted.
+    fn delete_session_logs(&self, id: &str) {
+        let _ = std::fs::remove_dir_all(self.paths.workspace_state(id));
     }
 
     /// Run the post-remove hook, notifying and returning its failure.
