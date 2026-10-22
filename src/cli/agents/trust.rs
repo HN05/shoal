@@ -1,22 +1,102 @@
-//! Best-effort trust configuration shared by the launch adapters.
+//! Best-effort trust entries in the config files of the tools Shoal launches.
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use anyhow::{Context as _, Result};
 use serde_json::json;
 
 use crate::{
-    agent::BuiltinAgent,
     cli::{client, context::Context},
     env,
     model::{Repository, Workspace},
 };
 
-/// Remove trust entries for a repository after its deletion succeeds.
-/// Config cleanup is best effort and never makes repository removal fail.
-pub(crate) fn cleanup_repository_trust(
-    ctx: &Context,
+/// A tool's config file that records the directories it trusts, so a
+/// launch never stops at the tool's trust dialog. Updates are best effort and
+/// only warn.
+pub(in crate::cli) struct TrustFile {
+    /// The tool's name in warnings.
+    tool: &'static str,
+    config: fn(&Context) -> Result<std::path::PathBuf>,
+    add: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
+    remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
+}
+
+pub(super) static CLAUDE_CODE: TrustFile = TrustFile {
+    tool: "Claude Code",
+    config: claude_config,
+    add: trust_claude_workspace,
+    remove: remove_claude_trust,
+};
+
+pub(super) static CODEX: TrustFile = TrustFile {
+    tool: "Codex",
+    config: codex_config,
+    add: trust_codex_workspace,
+    remove: remove_codex_trust,
+};
+
+impl TrustFile {
+    /// Trust the workspace's repository directories.
+    pub(super) async fn trust_workspace(&self, ctx: &Context, workspace: &Workspace) {
+        let paths = workspace_trust_paths(ctx, workspace, self.tool).await;
+        self.trust(ctx, &paths);
+    }
+
+    /// Trust a repository's checkout for a chat as workspace launches trust
+    /// theirs; repository removal clears the entries.
+    pub(super) fn trust_checkout(&self, ctx: &Context, repository: &Repository) {
+        self.trust(ctx, &repository_trust_paths(repository, &repository.path));
+    }
+
+    fn trust(&self, ctx: &Context, paths: &[std::path::PathBuf]) {
+        let config = match (self.config)(ctx) {
+            Ok(config) => config,
+            Err(error) => {
+                eprintln!(
+                    "warning: could not mark directories as trusted for {}: {error:#}",
+                    self.tool
+                );
+                return;
+            }
+        };
+        for path in paths {
+            if let Err(error) = (self.add)(&config, path) {
+                eprintln!(
+                    "warning: could not mark {} as trusted for {}: {error:#}",
+                    path.display(),
+                    self.tool
+                );
+            }
+        }
+    }
+
+    /// Remove the entries for `paths` while preserving other project settings.
+    pub(super) fn forget(&self, ctx: &Context, paths: &[std::path::PathBuf]) {
+        let config = match (self.config)(ctx) {
+            Ok(config) => config,
+            Err(error) => {
+                eprintln!(
+                    "warning: could not clean {} trust config: {error:#}",
+                    self.tool
+                );
+                return;
+            }
+        };
+        if let Err(error) = (self.remove)(&config, paths) {
+            eprintln!(
+                "warning: could not clean {} trust config {}: {error:#}",
+                self.tool,
+                config.display()
+            );
+        }
+    }
+}
+
+/// The directories a repository's removal stops trusting: its checkout, its
+/// workspaces directory and its workspaces.
+pub(super) fn repository_paths(
     repository: &Repository,
     workspace_paths: &[std::path::PathBuf],
-) {
+) -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
     for path in std::iter::once(&repository.path)
         .chain(repository.workspaces_dir.iter())
@@ -27,68 +107,7 @@ pub(crate) fn cleanup_repository_trust(
             paths.push(path);
         }
     }
-    cleanup_config(
-        claude_config(ctx),
-        &paths,
-        "Claude Code",
-        remove_claude_trust,
-    );
-    cleanup_config(codex_config(ctx), &paths, "Codex", remove_codex_trust);
-}
-
-fn cleanup_config(
-    config: Result<std::path::PathBuf>,
-    paths: &[std::path::PathBuf],
-    agent: &str,
-    remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
-) {
-    let config = match config {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("warning: could not clean {agent} trust config: {error:#}");
-            return;
-        }
-    };
-    if let Err(error) = remove(&config, paths) {
-        eprintln!(
-            "warning: could not clean {agent} trust config {}: {error:#}",
-            config.display()
-        );
-    }
-}
-
-/// Mark the workspace trusted in Claude Code's config so a launch, attached or
-/// detached, never stops at the trust dialog. Failure only warns.
-pub(super) async fn trust_claude(ctx: &Context, workspace: &Workspace) {
-    let paths = workspace_trust_paths(ctx, workspace, "Claude Code").await;
-    mark_trusted(
-        claude_config(ctx),
-        "Claude Code",
-        trust_claude_workspace,
-        &paths,
-    );
-}
-
-pub(super) async fn trust_codex(ctx: &Context, workspace: &Workspace) {
-    let paths = workspace_trust_paths(ctx, workspace, "Codex").await;
-    mark_trusted(codex_config(ctx), "Codex", trust_codex_workspace, &paths);
-}
-
-/// Trust a repository's checkout for a chat as workspace launches trust
-/// theirs; repository removal clears the entries. Failure only warns.
-pub(in crate::cli) fn trust_checkout(ctx: &Context, agent: BuiltinAgent, repository: &Repository) {
-    let paths = repository_trust_paths(repository, &repository.path);
-    match agent {
-        BuiltinAgent::Claude => mark_trusted(
-            claude_config(ctx),
-            "Claude Code",
-            trust_claude_workspace,
-            &paths,
-        ),
-        BuiltinAgent::Codex => {
-            mark_trusted(codex_config(ctx), "Codex", trust_codex_workspace, &paths)
-        }
-    }
+    paths
 }
 
 fn claude_config(ctx: &Context) -> Result<std::path::PathBuf> {
@@ -122,29 +141,6 @@ async fn workspace_trust_paths(
         Err(error) => {
             eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");
             vec![workspace.path.clone()]
-        }
-    }
-}
-
-fn mark_trusted(
-    config: Result<std::path::PathBuf>,
-    agent: &str,
-    update: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
-    paths: &[std::path::PathBuf],
-) {
-    let config = match config {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("warning: could not mark directories as trusted for {agent}: {error:#}");
-            return;
-        }
-    };
-    for path in paths {
-        if let Err(error) = update(&config, path) {
-            eprintln!(
-                "warning: could not mark {} as trusted for {agent}: {error:#}",
-                path.display()
-            );
         }
     }
 }

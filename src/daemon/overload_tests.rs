@@ -170,11 +170,7 @@ async fn built_in_restore_child() {
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages.
-        let hooks = agent
-            .parse::<crate::agent::BuiltinAgent>()
-            .unwrap()
-            .hook_args()
-            .unwrap();
+        let hooks = crate::cli::agents::hook_args(agent).unwrap();
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );

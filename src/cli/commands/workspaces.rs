@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    agent::{Agent, CodexMode},
+    agent::Agent,
     cli::{
         agents,
         client::{self, request},
@@ -309,7 +309,7 @@ pub(super) async fn add(
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation).await?;
-    let agent = resolve_add_agent(ctx, &settings, agent, issue.is_some()).await?;
+    let agent = resolve_add_agent(ctx, &settings, agent).await?;
     let tab_label = match &issue {
         Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
         None => None,
@@ -422,14 +422,13 @@ pub(in crate::cli) struct AddPlan {
 
 impl AddPlan {
     /// A launch of `agent` in the existing `workspace`, prompted with the
-    /// issue at `issue` or with `args`. It runs detached, so Codex runs as its CLI.
+    /// issue at `issue` or with `args`. It runs detached, so it stays tracked.
     pub(super) fn agent_in(
         workspace: &Workspace,
         agent: Agent,
         issue: Option<&super::issues::Issue>,
         args: Vec<OsString>,
     ) -> Self {
-        let codex_mode = matches!(agent, Agent::Codex).then_some(CodexMode::Cli);
         Self {
             repository: workspace.repository_id.as_str().into(),
             creation: Creation {
@@ -445,7 +444,7 @@ impl AddPlan {
             issue: issue.map(|issue| issue.url.clone()),
             agent: ResolvedAddAgent {
                 agent: Some(agent),
-                codex_mode,
+                tracked: true,
             },
             args,
             queue_entry: None,
@@ -722,7 +721,9 @@ async fn check_add_creation(ctx: &Context, target: &AddTarget, creation: &Creati
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ResolvedAddAgent {
     agent: Option<Agent>,
-    codex_mode: Option<CodexMode>,
+    /// Whether the agent runs tracked, never handed to a desktop app.
+    #[serde(default)]
+    tracked: bool,
 }
 
 /// The repository's effective settings, loaded on first use.
@@ -771,7 +772,7 @@ async fn choose_add_agent(settings: &AddSettings<'_>, agent: AgentLaunch) -> Res
         }
     };
     if let Some(agent) = &agent {
-        agents::ensure_installed(agent, &settings.get().await?.commands)?;
+        agents::ensure_installed(agent.name(), &settings.get().await?.commands)?;
     }
     Ok(AgentChoice::Chosen(agent))
 }
@@ -780,7 +781,6 @@ async fn resolve_add_agent(
     ctx: &Context,
     settings: &AddSettings<'_>,
     agent: AgentChoice,
-    has_issue: bool,
 ) -> Result<ResolvedAddAgent> {
     let agent = match agent {
         AgentChoice::Chosen(agent) => agent,
@@ -790,12 +790,10 @@ async fn resolve_add_agent(
         }
         AgentChoice::PickerIfInteractive => None,
     };
-    let codex_mode = match &agent {
-        Some(Agent::Codex) if has_issue => Some(CodexMode::Cli),
-        Some(Agent::Codex) => Some(settings.get().await?.codex.default_mode),
-        _ => None,
-    };
-    Ok(ResolvedAddAgent { agent, codex_mode })
+    Ok(ResolvedAddAgent {
+        agent,
+        tracked: false,
+    })
 }
 
 /// Ask what an interactive addition starts from when no option says. Branch
@@ -1070,7 +1068,11 @@ impl ResolvedAddAgent {
         } else {
             None
         };
-        agents::launch_agent(ctx, agent, self.codex_mode, workspace, prompt, args, vec![]).await
+        let options = agents::LaunchOptions {
+            tracked: self.tracked,
+            ..Default::default()
+        };
+        agents::launch_agent(ctx, agent, workspace, prompt, args, options).await
     }
 }
 
@@ -2043,13 +2045,13 @@ mod tests {
             )
         };
         let child = workspace("repo", "child");
-        let plan = super::AddPlan::agent_in(&child, crate::agent::Agent::Claude, None, Vec::new());
+        let plan = super::AddPlan::agent_in(&child, "claude".parse().unwrap(), None, Vec::new());
         assert!(plan.opens(&child));
         // The same branch in another repository, or another branch, is not the target.
         assert!(!plan.opens(&workspace("other", "child")));
         assert!(!plan.opens(&workspace("repo", "sibling")));
         let mut creating =
-            super::AddPlan::agent_in(&child, crate::agent::Agent::Claude, None, Vec::new());
+            super::AddPlan::agent_in(&child, "claude".parse().unwrap(), None, Vec::new());
         creating.creation.branch = Some("new".into());
         assert!(!creating.opens(&child));
     }

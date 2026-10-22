@@ -264,7 +264,7 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
 fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),
-        "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_' without a happy- prefix"
+        "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_'"
     );
     let built_in_provider = PROVIDERS.iter().any(|provider| provider.name == name);
     ensure!(
@@ -419,7 +419,6 @@ mod tests {
     fn provider_launchers_need_reachable_unique_names() {
         for (config, message) in [
             ("[ai.ls]\ncommand = ['ls']\n", "built-in Shoal command"),
-            ("[ai.happy-x]\ncommand = ['x']\n", "cannot name an agent"),
             ("[ai.Droid]\ncommand = ['droid']\n", "cannot name an agent"),
             ("[ai.droid]\ncommand = []\n", "nonempty executable"),
             (

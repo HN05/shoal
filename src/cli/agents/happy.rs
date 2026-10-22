@@ -2,57 +2,113 @@
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
+use futures_util::future::BoxFuture;
 use serde_json::json;
 
-use super::trust::{trust_claude, trust_codex};
+use super::{Integration, Launch, trust::TrustFile};
 use crate::{
-    agent::{Agent, BuiltinAgent},
     cli::{
         client,
         context::Context,
         ui::{self, Fallback},
     },
-    config::templates,
-    execution, happy,
+    config::{Effective, templates},
+    execution,
+    happy::{self, Agent},
+    model::Workspace,
     protocol::ConfigTarget,
 };
 
-/// Start a Happy session the way Happy's own daemon does, so it registers with
-/// that daemon and appears in the app, but detached from this terminal and
-/// tracked like any other workspace command. The CLI returns once the launch
-/// is recorded; the session's output goes to a log under Shoal's state.
-pub(in crate::cli) async fn happy(
+/// `happy-<agent>`: the agent in a detached Happy session.
+pub(super) struct Happy(Agent);
+
+pub(super) const CLAUDE: Happy = Happy(Agent::Claude);
+pub(super) const CODEX: Happy = Happy(Agent::Codex);
+
+impl Happy {
+    /// The integration of the agent Happy runs.
+    fn inner(&self) -> &'static dyn Integration {
+        super::integration(self.0.as_str())
+    }
+}
+
+impl Integration for Happy {
+    /// Happy needs both its own CLI and the agent it runs.
+    fn programs(&self) -> Option<Vec<&'static str>> {
+        Some(vec!["happy", self.0.as_str()])
+    }
+
+    fn trust_file(&self) -> Option<&'static TrustFile> {
+        self.inner().trust_file()
+    }
+
+    fn launch<'a>(
+        &'a self,
+        ctx: &'a Context,
+        launch: &'a mut Launch,
+    ) -> BoxFuture<'a, Result<Option<i32>>> {
+        Box::pin(async move {
+            let prompt = launch.prompt.take();
+            let args = std::mem::take(&mut launch.args);
+            start(ctx, self, &launch.workspace, &launch.settings, prompt, args)
+                .await
+                .map(Some)
+        })
+    }
+}
+
+/// `shoal happy <agent>`.
+pub(in crate::cli) async fn shortcut(
     ctx: &Context,
-    agent: BuiltinAgent,
+    agent: Agent,
     workspace: Option<String>,
     prompt: Option<String>,
-    mut args: Vec<OsString>,
+    args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    super::ensure_installed(&Agent::Happy(agent), &settings.commands)?;
-    // Happy sessions run without Shoal's hooks.
+    start(ctx, &Happy(agent), &workspace, &settings, prompt, args).await
+}
+
+/// Start a Happy session the way Happy's own daemon does, so it registers with
+/// that daemon and appears in the app, but detached from this terminal and
+/// tracked like any other workspace command. The CLI returns once the launch
+/// is recorded; the session's output goes to a log under Shoal's state.
+async fn start(
+    ctx: &Context,
+    happy: &Happy,
+    workspace: &Workspace,
+    settings: &Effective,
+    prompt: Option<String>,
+    mut args: Vec<OsString>,
+) -> Result<i32> {
+    let agent = happy.0;
+    super::ensure_installed(&format!("happy-{}", agent.as_str()), &settings.commands)?;
+    // Happy sessions run without Shoal's hooks. An agent that takes
+    // instructions apart from its prompt gets them as arguments; Happy's
+    // Codex mode takes no arguments, so they lead its first message.
     let instructions = templates::instructions(
         settings.agent_template.as_deref(),
-        &workspace,
+        workspace,
         templates::Delivery::Watched,
     );
-    let prompt = if agent == BuiltinAgent::Codex {
-        Some(match prompt {
+    let instruction_args = super::instruction_args(ctx, agent.as_str(), &instructions)?
+        .filter(|_| happy::accepts_prompt(agent));
+    let prompt = match instruction_args {
+        Some(mut configured) => {
+            configured.append(&mut args);
+            args = configured;
+            prompt
+        }
+        None => Some(match prompt {
             Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
             _ => instructions,
-        })
-    } else {
-        let mut configured = super::instruction_args(ctx, agent.as_str(), &instructions)?;
-        configured.append(&mut args);
-        args = configured;
-        prompt
+        }),
     };
-    match agent {
-        BuiltinAgent::Claude => trust_claude(ctx, &workspace).await,
-        BuiltinAgent::Codex => trust_codex(ctx, &workspace).await,
+    if let Some(trust) = happy.trust_file() {
+        trust.trust_workspace(ctx, workspace).await;
     }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();
@@ -82,7 +138,7 @@ pub(in crate::cli) async fn happy(
         std::fs::create_dir_all(&state_dir)
             .with_context(|| format!("create {}", state_dir.display()))?;
         std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
-        match happy::client::seed(&ctx.paths, &workspace, agent).await {
+        match happy::client::seed(&ctx.paths, workspace, agent).await {
             Ok(session) => {
                 env = session.session.env();
                 seeded = Some(session);
@@ -97,7 +153,7 @@ pub(in crate::cli) async fn happy(
     let command = happy::command(agent, prompt.as_deref(), args);
     let launch = match execution::launch_detached(
         &ctx.paths,
-        &workspace,
+        workspace,
         log,
         command,
         &happy::client::RECONNECT_ENV,

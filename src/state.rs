@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn migrated_enums_preserve_spellings_and_defaults() {
         use crate::{
-            agent::{BuiltinAgent, CodexMode},
+            agent::CodexMode,
             config::repo::ConflictPolicy,
             daemon::{
                 approvals::{DecisionStatus, Lifetime},
@@ -290,8 +290,8 @@ mod tests {
             (ExecutionKind::Setup, "setup"),
         ]);
         assert_spellings(&[
-            (BuiltinAgent::Claude, "claude"),
-            (BuiltinAgent::Codex, "codex"),
+            (crate::happy::Agent::Claude, "claude"),
+            (crate::happy::Agent::Codex, "codex"),
         ]);
         assert_eq!(Lifetime::default(), Lifetime::Lease);
         assert_eq!(ResourceKind::default(), ResourceKind::Semaphore);

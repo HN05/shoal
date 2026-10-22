@@ -165,16 +165,20 @@ async fn start_moved(
 ) -> Result<i32> {
     let launch: crate::agent::Agent = agent
         .parse()
-        .map_err(|()| anyhow::anyhow!("cannot start agent {agent} of the moved workspace"))?;
+        .with_context(|| format!("cannot start agent {agent} of the moved workspace"))?;
     eprintln!("shoal: starting a new {agent} session in the moved workspace");
+    // The prompt keeps it out of desktop apps, which cannot take one.
+    let options = crate::cli::agents::LaunchOptions {
+        tracked: true,
+        replaces: records,
+    };
     crate::cli::agents::launch_agent(
         ctx,
         launch,
-        Some(crate::agent::CodexMode::Cli),
         workspace.clone(),
         Some(crate::execution::recovery::moved_prompt(handoff)),
         vec![],
-        records,
+        options,
     )
     .await
 }

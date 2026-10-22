@@ -12,7 +12,6 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    agent::{Agent, BuiltinAgent},
     cli::{
         agents,
         availability::{Availability, Fit, Need},
@@ -137,12 +136,12 @@ pub fn command() -> Command {
                 .arg(clap::Arg::new("args").last(true).num_args(0..)),
         );
     }
-    let launchable = |agent: Agent| agents::installed(&agent, commands, &search_path);
+    let launchable = |name: &str| agents::installed(name, commands, &search_path);
     for (name, available) in [
-        ("claude", launchable(Agent::Claude)),
+        ("claude", launchable("claude")),
         (
             "codex",
-            launchable(Agent::Codex) || agents::program_available("codex", &search_path),
+            launchable("codex") || agents::program_available("codex", &search_path),
         ),
         ("happy", agents::program_available("happy", &search_path)),
         ("t3", agents::program_available("t3", &search_path)),
@@ -227,7 +226,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    Agent::possible_values()
+                    agents::builtin_names()
                         .into_iter()
                         .chain(typed.settings().providers.iter().cloned())
                         .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
@@ -241,7 +240,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    BuiltinAgent::ALL
+                    crate::happy::Agent::ALL
                         .iter()
                         .filter(|agent| {
                             agent
@@ -250,7 +249,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                         })
                         .filter(|agent| {
                             agents::installed(
-                                &Agent::Happy(**agent),
+                                &format!("happy-{}", agent.as_str()),
                                 typed.commands(),
                                 &search_path,
                             )
@@ -303,8 +302,7 @@ impl Typed {
 
     /// Whether `name` is an agent whose programs are on `search_path`.
     fn launchable(&self, name: &str, search_path: &OsStr) -> bool {
-        name.parse::<Agent>()
-            .is_ok_and(|agent| agents::installed(&agent, self.commands(), search_path))
+        agents::installed(name, self.commands(), search_path)
     }
 
     fn settings(&self) -> &Settings {

@@ -1,4 +1,4 @@
-mod agents;
+pub(crate) mod agents;
 pub mod availability;
 pub mod client;
 pub mod commands;
@@ -18,11 +18,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::{
-    agent::{Agent, BuiltinAgent},
-    forge::IssueInput,
-    model::Relation,
-};
+use crate::{agent::Agent, forge::IssueInput, model::Relation};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -718,7 +714,7 @@ pub enum Command {
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Agent to start, claude or codex; defaults to default_agent, otherwise a picker.
+        /// Agent to start, one with an instructions template such as claude or codex; defaults to default_agent, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.
@@ -728,7 +724,7 @@ pub enum Command {
     /// Start a detached agent session in Happy.
     Happy {
         #[arg(value_enum)]
-        agent: BuiltinAgent,
+        agent: crate::happy::Agent,
         workspace: Option<String>,
         /// First message for the session; delivered through Happy's server when the agent takes no prompt argument.
         #[arg(long)]
@@ -1134,16 +1130,6 @@ impl Command {
     }
 }
 
-impl ValueEnum for BuiltinAgent {
-    fn value_variants<'a>() -> &'a [Self] {
-        Self::ALL
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(clap::builder::PossibleValue::new(self.as_str()))
-    }
-}
-
 /// An issue or PR argument, where `#42` means `42`.
 fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
     Ok(match input.strip_prefix('#') {
@@ -1168,7 +1154,7 @@ impl clap::builder::TypedValueParser for AgentParser {
         let value = value
             .to_str()
             .ok_or_else(|| clap::Error::new(clap::error::ErrorKind::InvalidUtf8).with_cmd(cmd))?;
-        value.parse().map_err(|()| {
+        value.parse().map_err(|_| {
             let mut error = clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd);
             if let Some(arg) = arg {
                 error.insert(
@@ -1182,7 +1168,7 @@ impl clap::builder::TypedValueParser for AgentParser {
             );
             error.insert(
                 clap::error::ContextKind::ValidValue,
-                clap::error::ContextValue::Strings(Agent::possible_values()),
+                clap::error::ContextValue::Strings(agents::builtin_names()),
             );
             error
         })
@@ -1192,7 +1178,7 @@ impl clap::builder::TypedValueParser for AgentParser {
         &self,
     ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
         Some(Box::new(
-            Agent::possible_values()
+            agents::builtin_names()
                 .into_iter()
                 .map(clap::builder::PossibleValue::new),
         ))
@@ -1681,14 +1667,16 @@ mod tests {
 
     #[test]
     fn agent_cli_and_config_spellings_remain_compatible() {
-        for (spelling, expected) in [
-            ("codex", Agent::Codex),
-            ("claude", Agent::Claude),
-            ("happy-claude", Agent::Happy(BuiltinAgent::Claude)),
-            ("happy-codex", Agent::Happy(BuiltinAgent::Codex)),
-            ("my-agent_2", Agent::Custom("my-agent_2".into())),
-            ("t3", Agent::Custom("t3".into())),
+        for spelling in [
+            "codex",
+            "claude",
+            "happy-claude",
+            "happy-codex",
+            "my-agent_2",
+            "t3",
         ] {
+            let expected: Agent = spelling.parse().unwrap();
+            assert_eq!(expected.name(), spelling);
             let parsed = Cli::try_parse_from(["shoal", "add", "--agent", spelling]).unwrap();
             let Some(Command::Add { agent, .. }) = parsed.command else {
                 panic!("wrong command")
@@ -1705,15 +1693,7 @@ mod tests {
                 expected
             );
         }
-        for invalid in [
-            "happy",
-            "happy-other",
-            "happy-",
-            "Codex",
-            "happy-Codex",
-            "",
-            "two words",
-        ] {
+        for invalid in ["Codex", "happy-Codex", "", "two words", "-agent"] {
             assert!(Cli::try_parse_from(["shoal", "add", "--agent", invalid]).is_err());
             let text = format!("default_agent = {invalid:?}");
             assert!(toml::from_str::<crate::config::Config>(&text).is_err());
@@ -1774,15 +1754,26 @@ mod tests {
             .unwrap()
             .map(|value| value.get_name().to_owned())
             .collect();
-        assert_eq!(names, ["codex", "claude", "happy-claude", "happy-codex"]);
-        let names: Vec<_> = BuiltinAgent::value_variants()
+        assert_eq!(
+            names,
+            [
+                "codex",
+                "claude",
+                "opencode",
+                "pi",
+                "grok",
+                "happy-claude",
+                "happy-codex"
+            ]
+        );
+        let names: Vec<_> = crate::happy::Agent::value_variants()
             .iter()
             .map(|agent| agent.to_possible_value().unwrap().get_name().to_owned())
             .collect();
         assert_eq!(names, ["claude", "codex"]);
         for (name, expected) in [
-            ("claude", BuiltinAgent::Claude),
-            ("codex", BuiltinAgent::Codex),
+            ("claude", crate::happy::Agent::Claude),
+            ("codex", crate::happy::Agent::Codex),
         ] {
             let parsed = Cli::try_parse_from(["shoal", "happy", name]).unwrap();
             assert!(
@@ -1843,10 +1834,10 @@ mod tests {
             Some(Command::Repo {
                 command: Some(RepoCommand::Setup {
                     repository: Some(repository),
-                    agent: Some(Agent::Codex),
+                    agent: Some(agent),
                     args,
                 })
-            }) if repository == "project" && args == ["--model", "fast"]
+            }) if repository == "project" && agent.name() == "codex" && args == ["--model", "fast"]
         ));
     }
 
@@ -1954,7 +1945,7 @@ mod tests {
     fn review_selects_a_workspace_or_a_pr() {
         let review = Cli::try_parse_from(["shoal", "review", "--pr", "7", "--agent", "claude"]);
         assert!(matches!(review.unwrap().command,
-            Some(Command::Review { workspace: None, pr: Some(pr), agent: Some(Agent::Claude), .. }) if pr == "7"));
+            Some(Command::Review { workspace: None, pr: Some(pr), agent: Some(agent), .. }) if pr == "7" && agent.name() == "claude"));
         for args in [
             vec![
                 "shoal", "review", "--pr", "7", "--manual", "--agent", "claude",

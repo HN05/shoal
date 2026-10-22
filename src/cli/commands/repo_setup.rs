@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result};
 
 use crate::{
-    agent::{Agent, CodexMode},
+    agent::Agent,
     cli::{agents, client, context::Context},
     git,
     model::{Repository, Workspace},
@@ -54,11 +54,10 @@ pub(super) async fn start(
     agents::launch_agent(
         ctx,
         agent,
-        Some(CodexMode::Cli),
         workspace,
         Some(prompt),
         args,
-        vec![],
+        agents::LaunchOptions::default(),
     )
     .await
 }

@@ -485,7 +485,7 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 
 Override their `[commands]` entries to change the executable or flags; prompt
 templates, trust setup, and agent exit notifications still apply.
-Claude and Codex shortcuts, including Happy, trust the repository's shared Shoal
+Claude and Codex launches, including Happy's, trust the repository's shared Shoal
 workspaces directory before launch, creating the agent's user config if needed and
 preserving other settings. An explicitly placed workspace outside that directory
 gets its own trust entry.
@@ -653,8 +653,8 @@ Each entry replaces the built-in one for Claude, Codex and the other built-in to
 Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
-remain literal. Claude and Codex keep their specialized launchers; other tools
-receive no tool-specific flags or trust setup. `--agent` and `default_agent` also
+remain literal. Claude and Codex also get Shoal's hooks and trust entries, which
+other tools do without. `--agent` and `default_agent` also
 accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool
 remains a plain command invocation without agent prompts or exit notifications,
 expanding `{prompt}` to an empty string.
@@ -701,13 +701,14 @@ and leaves it there for you to send from the app.
 ### Chats
 
 `shoal chat [repository] [--agent NAME] [--here] [-- ARGS]` starts a new chat
-with Claude Code or Codex CLI about a repository, to discuss it, its issues and
-plans, or to coordinate work, without changing code. The repository is the named
-one, else the current checkout's or workspace's, else a picker. The agent is
-`--agent`, which must be `claude` or `codex`, else `default_agent` when it is
-one of them, else a picker of the installed ones. The agent's configured launcher
-runs in the registered checkout with the rendered
-[chat template](#prompt-templates) as native instructions, so it waits for your
+with an agent about a repository, to discuss it, its issues and plans, or to
+coordinate work, without changing code. The repository is the named one, else the
+current checkout's or workspace's, else a picker. The agent is `--agent`, else
+`default_agent`, else a picker of the installed ones; it must take instructions
+apart from its first message (an `instructions` template, built in for Claude
+Code and Codex CLI). The agent's configured launcher runs in the registered
+checkout with the rendered [chat template](#prompt-templates) as those
+instructions, so it waits for your
 first message. The template substitutes `{repo}` and `{path}`; in the launcher,
 `{path}` is the checkout and other workspace placeholders stay literal. The checkout is trusted in the agent's
 config as workspace launches trust theirs.

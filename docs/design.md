@@ -682,8 +682,11 @@ names select any named command through the same configuration layers. Agents run
 as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
-and inserted prompt text remain literal. Claude and Codex retain
-their specialized launchers; other names add no tool-specific flags or trust setup.
+and inserted prompt text remain literal. A provider's instruction and resume
+arguments are configuration, built in for the tools Shoal ships; an integration
+keyed by agent name adds only what configuration cannot express, such as hooks,
+trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
+sessions), so commands never name a tool. Other names add no tool-specific setup.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings. Both trust the repository's shared
@@ -912,8 +915,8 @@ A chat passes a question up by asking the user, who attends it. Holding no
 grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
 one and focuses it, numbered by the lowest free number among the repository's
-running chats. Only Claude and Codex run chats, because they take instructions
-apart from the first message.
+running chats. Only agents that take instructions apart from the first message
+run chats, so the chat waits for the user to speak first.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither

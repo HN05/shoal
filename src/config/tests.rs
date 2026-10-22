@@ -152,7 +152,10 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         })
         .collect();
     let config = Config::parse(&enabled, &paths).unwrap();
-    assert_eq!(config.default_agent, Some(crate::agent::Agent::Codex));
+    assert_eq!(
+        config.default_agent,
+        "codex".parse::<crate::agent::Agent>().ok()
+    );
     assert!(config.simulators.profiles.contains_key("phone"));
     assert!(config.resource_pools.contains_key("devices"));
 }
@@ -171,7 +174,7 @@ fn install_writes_the_template_once_and_keeps_edits() {
     let text = fs::read_to_string(&path).unwrap();
     assert_eq!(
         Config::parse(&text, &paths).unwrap().default_agent,
-        Some(crate::agent::Agent::Claude)
+        "claude".parse::<crate::agent::Agent>().ok()
     );
     // Reset keeps the edited file as a backup and restores the template.
     let (same, backup) = Config::replace_at(expected.clone(), default_template()).unwrap();
@@ -191,25 +194,32 @@ fn install_writes_the_template_once_and_keeps_edits() {
 
 #[test]
 fn default_agent_accepts_agent_spellings_only() {
-    use crate::agent::{Agent, BuiltinAgent};
-
     assert_eq!(toml::from_str::<Config>("").unwrap().default_agent, None);
     for (text, agent) in [
-        ("default_agent = 'codex'", Agent::Codex),
-        ("default_agent = 'claude'", Agent::Claude),
-        ("default_agent = 'pi'", Agent::Custom("pi".into())),
+        (
+            "default_agent = 'codex'",
+            "codex".parse::<crate::agent::Agent>().unwrap(),
+        ),
+        (
+            "default_agent = 'claude'",
+            "claude".parse::<crate::agent::Agent>().unwrap(),
+        ),
+        (
+            "default_agent = 'pi'",
+            "pi".parse::<crate::agent::Agent>().unwrap(),
+        ),
         (
             "default_agent = 'happy-codex'",
-            Agent::Happy(BuiltinAgent::Codex),
+            "happy-codex".parse::<crate::agent::Agent>().unwrap(),
         ),
     ] {
         let config: Config = toml::from_str(text).unwrap();
         assert_eq!(config.default_agent, Some(agent));
     }
-    let error = toml::from_str::<Config>("default_agent = 'happy'")
+    let error = toml::from_str::<Config>("default_agent = 'two words'")
         .unwrap_err()
         .to_string();
-    assert!(error.contains("happy-claude"), "{error}");
+    assert!(error.contains("lowercase"), "{error}");
 }
 
 #[test]
@@ -312,17 +322,23 @@ fn repository_values_win_over_global_cleanup_policy() {
 
 #[test]
 fn agent_defaults_come_from_the_repository_before_the_global_config() {
-    use crate::agent::{Agent, CodexMode};
+    use crate::agent::CodexMode;
 
     let global: Config =
         toml::from_str("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
     let repo = repo::parse("default_agent = 'codex'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
-    assert_eq!(effective.default_agent, Some(Agent::Codex));
+    assert_eq!(
+        effective.default_agent,
+        "codex".parse::<crate::agent::Agent>().ok()
+    );
     assert_eq!(effective.codex.default_mode, CodexMode::App);
     let repo = repo::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
-    assert_eq!(effective.default_agent, Some(Agent::Claude));
+    assert_eq!(
+        effective.default_agent,
+        "claude".parse::<crate::agent::Agent>().ok()
+    );
     assert_eq!(effective.codex.default_mode, CodexMode::Cli);
     let effective = Config::default().effective(&repo).unwrap();
     assert_eq!(effective.default_agent, None);

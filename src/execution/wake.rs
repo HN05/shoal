@@ -7,7 +7,6 @@ use std::time::Duration;
 use anyhow::Result;
 
 use crate::{
-    agent::Agent,
     cli::{client, terminal::PromptSession},
     paths::Paths,
     protocol::Method,
@@ -28,8 +27,8 @@ impl Drop for Waker {
 /// The session to wake `agent` in: Codex on the terminal of a session. A
 /// detached launch has no terminal, though it may inherit a session's name.
 pub(super) fn session(agent: Option<&str>, mode: &super::Mode) -> Option<PromptSession> {
-    let codex = agent.and_then(|agent| agent.parse::<Agent>().ok()) == Some(Agent::Codex);
-    (codex && !matches!(mode, super::Mode::Detached { .. }))
+    let prompted = agent.is_some_and(crate::cli::agents::wakes_by_prompt);
+    (prompted && !matches!(mode, super::Mode::Detached { .. }))
         .then(PromptSession::current)
         .flatten()
 }

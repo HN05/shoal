@@ -19223,7 +19223,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     );
     assert!(!output.status.success());
     assert!(
-        transcript.contains("chat runs claude or codex"),
+        transcript.contains("happy-claude cannot chat"),
         "{transcript}"
     );
     let output = fixture.run(&["chat", repo, "--agent", "claude"]);

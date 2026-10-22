@@ -464,7 +464,10 @@ mod tests {
         )
         .unwrap();
         let config = local.over(base);
-        assert_eq!(config.default_agent, Some(Agent::Claude));
+        assert_eq!(
+            config.default_agent,
+            "claude".parse::<crate::agent::Agent>().ok()
+        );
         assert_eq!(config.codex.default_mode, Some(CodexMode::App));
         assert_eq!(config.setup_cmd.as_deref(), Some("local/setup"));
         assert_eq!(config.post_setup_cmd.as_deref(), Some("base/attach"));
@@ -496,7 +499,7 @@ mod tests {
                 .cleanup,
             Some(false)
         );
-        assert!(parse("default_agent = 'happy'\n").is_err());
+        assert!(parse("default_agent = 'Happy'\n").is_err());
         assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
     }
 
@@ -553,7 +556,7 @@ mod tests {
         let back: RepoConfig = serde_json::from_value(json).unwrap();
         assert_eq!(
             back.default_agent,
-            Some(Agent::Happy(crate::agent::BuiltinAgent::Codex))
+            Some("happy-codex".parse::<crate::agent::Agent>().unwrap())
         );
         assert_eq!(back.ports.definitions["web"].port, Some(1));
         assert!(

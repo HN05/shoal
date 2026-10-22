@@ -3,7 +3,6 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    agent::{Agent, BuiltinAgent, CodexMode},
     cli::{
         Command, ConfirmationArgs, WorkspaceScope, agents, client,
         context::Context,
@@ -117,14 +116,15 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
 
 #[derive(Clone)]
 enum ExecuteChoice {
-    Claude,
-    Codex(CodexMode),
-    Happy(BuiltinAgent),
-    T3,
-    /// A configured AI tool without a dedicated command.
-    Provider(String),
+    /// An agent, run as `shoal run <name>`.
+    Agent(String),
+    /// A desktop app that opens the workspace.
+    App(&'static str),
     Shell,
 }
+
+/// Desktop handoffs the menu offers beside agents.
+const APPS: [(&str, &str); 2] = [("codex app", "codex"), ("t3", "t3")];
 
 async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
     let target = workspace
@@ -132,77 +132,36 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
         .context("select a workspace to execute in")?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
     let search_path = std::env::var_os("PATH").unwrap_or_default();
-    let installed = |choice: &ExecuteChoice| match choice {
-        ExecuteChoice::Claude => {
-            agents::installed(&Agent::Claude, &settings.commands, &search_path)
-        }
-        ExecuteChoice::Codex(CodexMode::Cli) => {
-            agents::installed(&Agent::Codex, &settings.commands, &search_path)
-        }
-        ExecuteChoice::Codex(CodexMode::App) => agents::program_available("codex", &search_path),
-        ExecuteChoice::Happy(agent) => {
-            agents::installed(&Agent::Happy(*agent), &settings.commands, &search_path)
-        }
-        ExecuteChoice::T3 => agents::program_available("t3", &search_path),
-        ExecuteChoice::Provider(name) => agents::installed(
-            &Agent::Custom(name.clone()),
-            &settings.commands,
-            &search_path,
-        ),
-        ExecuteChoice::Shell => true,
-    };
-    let providers = settings
-        .providers
-        .iter()
-        .filter(|name| matches!(name.parse(), Ok(Agent::Custom(_))))
-        .map(|name| (ExecuteChoice::Provider(name.clone()), name.clone()));
-    let choices: Vec<_> = [
-        (ExecuteChoice::Claude, "claude".to_owned()),
-        (ExecuteChoice::Codex(CodexMode::Cli), "codex cli".into()),
-        (ExecuteChoice::Codex(CodexMode::App), "codex app".into()),
-        (
-            ExecuteChoice::Happy(BuiltinAgent::Claude),
-            "happy claude".into(),
-        ),
-        (
-            ExecuteChoice::Happy(BuiltinAgent::Codex),
-            "happy codex".into(),
-        ),
-        (ExecuteChoice::T3, "t3".into()),
-    ]
-    .into_iter()
-    .chain(providers)
-    .chain([(ExecuteChoice::Shell, "custom shell command".into())])
-    .filter(|(choice, _)| installed(choice))
-    .collect();
+    let agents = agents::names(&settings)
+        .into_iter()
+        .filter(|name| agents::installed(name, &settings.commands, &search_path))
+        .map(|name| (ExecuteChoice::Agent(name.clone()), name));
+    let apps = APPS
+        .into_iter()
+        .filter(|(_, program)| agents::program_available(program, &search_path))
+        .map(|(label, program)| (ExecuteChoice::App(program), label.to_owned()));
+    let choices: Vec<_> = agents
+        .chain(apps)
+        .chain([(ExecuteChoice::Shell, "custom shell command".into())])
+        .collect();
     let choices: Vec<_> = choices
         .iter()
         .map(|(choice, label)| (choice.clone(), label.as_str()))
         .collect();
     let choice = ui::pick_choice(ctx, "Execute> ", &choices)?;
     Ok(match choice {
-        ExecuteChoice::Claude => Command::Claude {
-            workspace,
-            args: vec![],
-        },
-        ExecuteChoice::Codex(mode) => Command::Codex {
-            workspace,
-            cli: mode == CodexMode::Cli,
-            app: mode == CodexMode::App,
-            args: vec![],
-        },
-        ExecuteChoice::Happy(agent) => Command::Happy {
-            agent,
-            workspace,
-            prompt: None,
-            args: vec![],
-        },
-        ExecuteChoice::T3 => Command::T3 {
-            workspace,
-            args: vec![],
-        },
-        ExecuteChoice::Provider(name) => Command::Run {
+        ExecuteChoice::Agent(name) => Command::Run {
             name: Some(name),
+            workspace,
+            args: vec![],
+        },
+        ExecuteChoice::App("codex") => Command::Codex {
+            workspace,
+            cli: false,
+            app: true,
+            args: vec![],
+        },
+        ExecuteChoice::App(_) => Command::T3 {
             workspace,
             args: vec![],
         },

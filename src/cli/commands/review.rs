@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
-    agent::{Agent, CodexMode},
+    agent::Agent,
     cli::{
         client,
         commands::issues::Issue,
@@ -415,15 +415,13 @@ async fn run(
             let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
             let post = post.unwrap_or(settings.review.post);
             let prompt = prompt(&workspace, &subject, post);
-            // Desktop apps cannot receive the prompt.
             crate::cli::agents::launch_agent(
                 ctx,
                 agent,
-                Some(CodexMode::Cli),
                 workspace,
                 Some(prompt),
                 args,
-                vec![],
+                crate::cli::agents::LaunchOptions::default(),
             )
             .await
         }
