@@ -30,7 +30,7 @@ const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    pub(super) fetches: Fetches,
+    fetches: Fetches,
     /// Workspaces whose removal failed, and when: retried once they change
     /// or after [`RETRY_AFTER`], so a passing failure does not keep them.
     retained: HashMap<String, (Snapshot, Instant)>,
@@ -45,31 +45,54 @@ impl State {
     }
 }
 
-/// When each repository's default branch was last fetched successfully.
+/// The remotes a cleanup rule's decisions read.
+#[derive(Clone, Copy, Default)]
+pub(super) enum FetchScope {
+    /// Those of the default branch, for merge checks.
+    #[default]
+    DefaultBranch,
+    /// Every remote, for checks that trust any remote-tracking ref.
+    AllRemotes,
+}
+
+/// When each repository's remotes in `scope` were last fetched successfully.
 #[derive(Default)]
-pub(super) struct Fetches(HashMap<String, Instant>);
+pub(super) struct Fetches {
+    scope: FetchScope,
+    at: HashMap<String, Instant>,
+}
 
 impl Fetches {
-    /// Whether the default branch is freshly fetched, fetching it unless that
-    /// succeeded recently. Stale refs may show changes the default branch no
-    /// longer has, so after a failed fetch no workspace of the repository is
-    /// a merged candidate.
+    pub(super) fn new(scope: FetchScope) -> Self {
+        Self {
+            scope,
+            at: HashMap::new(),
+        }
+    }
+
+    /// Whether the remotes are freshly fetched, fetching them unless that
+    /// succeeded recently. Stale refs may show commits a remote no longer
+    /// has, so after a failed fetch nothing in the repository is decided.
     pub(super) async fn fresh(&mut self, manager: &Manager, repository_id: &str) -> bool {
         let now = Instant::now();
         if self
-            .0
+            .at
             .get(repository_id)
             .is_some_and(|at| now.duration_since(*at) < FETCH_INTERVAL)
         {
             return true;
         }
-        match manager.fetch_default_branch(repository_id).await {
+        let fetched = match self.scope {
+            FetchScope::DefaultBranch => manager.fetch_default_branch(repository_id).await,
+            FetchScope::AllRemotes => manager.fetch_all_remotes(repository_id).await,
+        };
+        match fetched {
             Ok(()) => {
-                self.0.insert(repository_id.to_owned(), now);
+                self.at.insert(repository_id.to_owned(), now);
                 true
             }
             Err(error) => {
-                log!("merged cleanup could not fetch the default branch: {error:#}");
+                log!("cleanup could not fetch: {error:#}");
                 false
             }
         }

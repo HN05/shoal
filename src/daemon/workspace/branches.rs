@@ -127,6 +127,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Fetch every remote, so each remote-tracking ref a check trusts is
+    /// current and those of deleted branches are gone; local branches stay
+    /// unchanged.
+    pub async fn fetch_all_remotes(&self, repository_id: &str) -> Result<()> {
+        let repo = self.repository(repository_id).await?;
+        let _guard = self.lock_repository_git(&repo.id).await;
+        for remote in git::remotes(&repo.path, git::run_isolated).await?.lines() {
+            fetch::remote(&repo.path, remote)
+                .await
+                .with_context(|| format!("could not fetch {remote}"))?;
+        }
+        Ok(())
+    }
+
     /// Whether the freshly fetched default branch already has the
     /// workspace's HEAD changes, whatever commits carry them.
     pub(crate) async fn default_branch_has_head(&self, workspace: &Workspace) -> Result<bool> {

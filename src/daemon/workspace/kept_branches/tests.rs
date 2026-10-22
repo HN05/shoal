@@ -240,3 +240,38 @@ async fn deletion_checks_every_branch_before_deleting_any() {
     assert!(!branch_exists(&repo, "second"));
     assert_eq!(remembered(&manager, &repo).await, ["busy"]);
 }
+
+#[tokio::test]
+async fn a_stale_ref_of_another_remote_does_not_approve_deletion() {
+    let (root, manager, repo, _other) = fixture().await;
+    kept(&manager, &repo, "topic").await;
+    let mirror = root.path().join("mirror.git");
+    git(
+        root.path(),
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            mirror.to_str().unwrap(),
+        ],
+    );
+    git(
+        &repo.path,
+        &["remote", "add", "mirror", mirror.to_str().unwrap()],
+    );
+    git(&repo.path, &["push", "-q", "mirror", "topic"]);
+    // The mirror drops the branch; only the local ref still says otherwise.
+    git(&mirror, &["branch", "-D", "topic"]);
+
+    crate::daemon::cleanup::sweep(&manager, &mut Default::default())
+        .await
+        .unwrap();
+    assert!(branch_exists(&repo, "topic"));
+    assert_eq!(remembered(&manager, &repo).await, ["topic"]);
+    assert_eq!(
+        git(&repo.path, &["for-each-ref", "refs/remotes/mirror/"]),
+        ""
+    );
+}

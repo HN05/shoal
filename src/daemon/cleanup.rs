@@ -251,6 +251,7 @@ struct Idle {
 pub struct Timers {
     idle: HashMap<String, Idle>,
     merged: merged::State,
+    kept_branches: kept_branches::State,
 }
 
 impl Timers {
@@ -340,7 +341,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     );
     step(
         "kept branches",
-        kept_branches::sweep(manager, &mut timers.merged.fetches).await,
+        kept_branches::sweep(manager, &mut timers.kept_branches).await,
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("grace periods", manager.end_unclaimed_grace().await);
