@@ -1629,6 +1629,7 @@ shoal pr close 12                   # reopen works the same way
 shoal pr merge --method rebase --delete-branch
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
+shoal labels                        # the repository's labels with their descriptions
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
@@ -1670,6 +1671,12 @@ the new issue is recorded as opened, and assigned only with `--link`, which fail
 while another issue is assigned. A workspace being removed refuses it. Its JSON
 adds `created` and `linked`, and `warning` when removal started before the
 workspace could record and link the new issue.
+
+#### Repository conventions
+
+`shoal labels` lists the workspace repository's labels as the forge reports them,
+with each one's description, and `exclusive` for a label that allows no other
+of its scope: Forgejo's exclusive labels and GitLab's `key::value` labels.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is

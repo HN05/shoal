@@ -169,6 +169,7 @@ shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
+shoal labels                  # The repository's labels and what each one means
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to

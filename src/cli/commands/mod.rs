@@ -12,6 +12,7 @@ mod events;
 mod holds;
 pub(super) mod issues;
 mod items;
+mod labels;
 mod leases;
 mod links;
 mod listing;
@@ -310,6 +311,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             check,
         } => view::view(&ctx, items, no_comments, check).await,
         Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
+        Command::Labels { workspace } => labels::labels(&ctx, workspace).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready {
             items,

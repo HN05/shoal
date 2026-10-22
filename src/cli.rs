@@ -179,6 +179,12 @@ pub enum Command {
         #[arg(long, value_name = "NAME")]
         check: Option<String>,
     },
+    /// List the repository's labels with their descriptions.
+    Labels {
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]

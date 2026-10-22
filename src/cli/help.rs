@@ -52,6 +52,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "pr",
             "ci",
             "issue",
+            "labels",
             "link",
             "unlink",
             "view",

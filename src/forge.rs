@@ -13,6 +13,7 @@ pub mod issue;
 pub mod item;
 mod items;
 mod kind;
+pub mod labels;
 pub mod link;
 pub mod list;
 mod locator;
