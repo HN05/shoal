@@ -11,6 +11,7 @@ mod cleanup;
 mod configuration;
 mod events;
 mod holds;
+mod inbox;
 pub(super) mod issues;
 mod items;
 mod labels;
@@ -350,8 +351,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
+        Command::Inbox { repository } => {
+            let filter = listing::ListFilter::resolve(&ctx, repository, vec![]).await?;
+            inbox::list(&ctx, &filter).await
+        }
         Command::Work {
-            ready,
             queue,
             chats,
             repository,
@@ -361,7 +365,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             if chats {
                 return chat::list(&ctx, &filter).await;
             }
-            workspaces::list(&ctx, ready, queue, &filter).await
+            workspaces::list(&ctx, queue, &filter).await
         }
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
         Command::Base { command, workspace } => base::run(&ctx, command, workspace).await,

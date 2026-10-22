@@ -9,6 +9,7 @@ const GROUPS: &[(&str, &[&str])] = &[
         &[
             "add",
             "split",
+            "inbox",
             "work",
             "hold",
             "cd",

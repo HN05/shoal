@@ -908,39 +908,9 @@ pub fn queue_rows(
         .collect()
 }
 
-/// One aligned row per ready-for-review mark: the workspace, its repository
-/// when the rows span several, the marked PR or issue (or the workspace
-/// itself), its URL, and whether new commits made the mark outdated.
-pub fn review_rows(
-    workspaces: &[Workspace],
-    repositories: &[(String, String)],
-    palette: Palette,
-) -> Vec<String> {
-    let cells: Vec<[Cell; 5]> = workspaces
-        .iter()
-        .zip(repository_column(workspaces, repositories))
-        .flat_map(|(w, repository)| {
-            w.review.iter().map(move |mark| {
-                [
-                    (w.name.clone(), Some(Style::Heading)),
-                    (repository.clone(), None),
-                    (mark_label(mark), None),
-                    (mark.url.clone().unwrap_or_default(), None),
-                    if mark.stale == Some(true) {
-                        ("outdated".into(), Some(Style::Warning))
-                    } else {
-                        (String::new(), None)
-                    },
-                ]
-            })
-        })
-        .collect();
-    aligned(cells, palette)
-}
-
 /// `PR #12` or `issue #3` for a linked item, `workspace` for a mark made
 /// while nothing was linked.
-fn mark_label(mark: &ReviewMark) -> String {
+pub fn mark_label(mark: &ReviewMark) -> String {
     let (Some(kind), Some(url)) = (mark.kind, &mark.url) else {
         return "workspace".into();
     };
@@ -957,12 +927,22 @@ fn mark_label(mark: &ReviewMark) -> String {
 /// Each workspace's repository name, or empty cells when all share one.
 /// Repositories are `(id, name)` pairs.
 fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]) -> Vec<String> {
-    let names: Vec<&str> = workspaces
-        .iter()
-        .map(|workspace| {
+    repository_cells(
+        workspaces.iter().map(|w| w.repository_id.as_str()),
+        repositories,
+    )
+}
+
+/// The name of each repository ID, or empty cells when all name one.
+pub fn repository_cells<'a>(
+    ids: impl Iterator<Item = &'a str>,
+    repositories: &[(String, String)],
+) -> Vec<String> {
+    let names: Vec<&str> = ids
+        .map(|repository| {
             repositories
                 .iter()
-                .find(|(id, _)| id == &workspace.repository_id)
+                .find(|(id, _)| id == repository)
                 .map_or("unknown repository", |(_, name)| name.as_str())
         })
         .collect();
@@ -1120,40 +1100,23 @@ mod tests {
     }
 
     #[test]
-    fn review_rows_list_each_mark_with_its_item_and_staleness() {
-        let plain = Palette::stdout(true);
-        let mark = |kind, url: Option<&str>, stale| ReviewMark {
+    fn mark_labels_name_the_marked_item() {
+        let mark = |kind, url: Option<&str>| ReviewMark {
             kind,
             url: url.map(Into::into),
             head: "abc".into(),
             created_at: 0,
-            stale,
+            stale: None,
             warnings: Vec::new(),
         };
-        let mut linked = workspace("a", "fix-login", "fix-login", WorkspaceState::Ready);
-        linked.review = vec![
-            mark(
-                Some(ItemKind::Pr),
-                Some("https://example.com/o/r/pulls/12"),
-                Some(true),
-            ),
-            mark(
-                Some(ItemKind::Issue),
-                Some("https://example.com/o/r/issues/3"),
-                Some(false),
-            ),
-        ];
-        let mut unlinked = workspace("b", "docs", "docs", WorkspaceState::Ready);
-        unlinked.review = vec![mark(None, None, None)];
-        let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
-        assert_eq!(
-            review_rows(&[linked, unlinked], &repositories, plain),
-            [
-                "fix-login  shoal  PR #12     https://example.com/o/r/pulls/12  outdated",
-                "fix-login  shoal  issue #3   https://example.com/o/r/issues/3",
-                "docs       app    workspace",
-            ]
+        let pr = mark(Some(ItemKind::Pr), Some("https://example.com/o/r/pulls/12"));
+        let issue = mark(
+            Some(ItemKind::Issue),
+            Some("https://example.com/o/r/issues/3"),
         );
+        assert_eq!(mark_label(&pr), "PR #12");
+        assert_eq!(mark_label(&issue), "issue #3");
+        assert_eq!(mark_label(&mark(None, None)), "workspace");
     }
 
     #[test]

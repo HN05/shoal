@@ -384,12 +384,18 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
 `shoal work` lists your own workspaces first, then each running [chat](#chats)
 marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
-lists only the chats. `work --repo <repository>`, with or without `--ready`,
+lists only the chats. `work --repo <repository>`, with or without
 `--queue` or `--chats`, lists only that registered repository's workspaces,
 chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`);
 a chat's status is `running`.
+`shoal inbox` lists what needs you, each with its workspace: open questions,
+pending approval requests, workspaces whose agent waits for input, failed
+workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
+marked item. `inbox --repo <repository>` keeps one repository's items; `--json`
+gives each item's `kind` (`question`, `approval`, `needs_input`, `failed` or
+`ready`) with its `question`, `request` or `workspace` and a ready item's `mark`.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
@@ -1991,9 +1997,7 @@ Marks never notify, record completion, or affect cleanup; use `shoal notify` to
 ask for attention. New commits make a mark outdated: `work` shows
 `ready for review (outdated)`, and `status`, `inspect` and `work --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
-`shoal work --ready` lists every mark across repositories, one row per marked
-item with its URL and `outdated` when HEAD has moved; with `--json` it lists the
-workspaces that have marks. Unlinking an
+`shoal inbox` lists every current mark across repositories. Unlinking an
 item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--workspace` selects another one for unscoped callers.

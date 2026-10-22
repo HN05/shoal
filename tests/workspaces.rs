@@ -7849,12 +7849,99 @@ fn work_lists_only_the_selected_statuses() {
         listed.contains("quiet") && !listed.contains("reviewed"),
         "{listed}"
     );
-    for args in [
-        &["work", "--status", "unknown"][..],
-        &["work", "--ready", "--status", "idle"],
-    ] {
-        assert!(!fixture.run(args).status.success(), "{args:?}");
+    assert!(
+        !fixture
+            .run(&["work", "--status", "unknown"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn inbox_lists_what_needs_the_user_by_kind() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    for name in ["reviewed", "waiter", "agent", "asker", "quiet"] {
+        fixture.add(name);
     }
+    assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
+    assert_eq!(
+        String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap(),
+        "Nothing needs you\n"
+    );
+    fixture.ok(&["ready", "--workspace", "reviewed"]);
+    // The agent's state lasts while its execution runs, until `release`
+    // exists; the loop's bound only keeps a failed test from leaving it behind.
+    let release = fixture.root.path().join("release");
+    let waiter_log = fixture.root.path().join("waiter.log");
+    let mut waiter = fixture
+        .command()
+        .args(["exec", "waiter", "--", "sh", "-c"])
+        .arg(concat!(
+            r#""$0" internal agent-state waiting && i=0 && "#,
+            r#"until [ -e "$1" ] || [ $i -ge 3000 ]; do sleep 0.1; i=$((i + 1)); done"#
+        ))
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(&release)
+        .stdout(Stdio::null())
+        .stderr(fs::File::create(&waiter_log).unwrap())
+        .spawn()
+        .unwrap();
+    let mut last = Value::Null;
+    let waiting = try_wait_for(|| {
+        last = fixture.ok(&["inbox"]);
+        (last.as_array().unwrap().len() == 2).then_some(())
+    });
+    if waiting.is_none() {
+        let status = waiter.try_wait();
+        let log = fs::read_to_string(&waiter_log).unwrap_or_default();
+        panic!("timed out waiting for the waiting agent: waiter {status:?} {log}, inbox {last}");
+    }
+    pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    fixture.ok(&[
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+        "--workspace",
+        "asker",
+    ]);
+
+    let items = fixture.ok(&["inbox"]);
+    let listed: Vec<_> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(listed, ["question", "approval", "needs_input", "ready"]);
+    assert_eq!(items[0]["question"]["workspace"], "asker");
+    assert_eq!(items[1]["request"]["workspace"], "agent");
+    assert_eq!(items[2]["workspace"]["name"], "waiter");
+    let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
+    let rows: Vec<_> = text.lines().collect();
+    assert_eq!(rows.len(), 4, "{text}");
+    assert!(
+        rows[0].starts_with("question     asker ")
+            && rows[0].contains("Which database?")
+            && rows[0].ends_with("recommends SQLite"),
+        "{text}"
+    );
+    assert!(rows[1].starts_with("approval     agent ") && rows[1].contains("serve preview"));
+    assert_eq!(rows[2].trim_end(), "needs input  waiter");
+    assert_eq!(rows[3].trim_end(), "ready        reviewed", "{text}");
+    assert!(
+        !fixture
+            .run(&["inbox", "--repo", "missing"])
+            .status
+            .success()
+    );
+    fs::write(&release, "").unwrap();
+    assert!(waiter.wait().unwrap().success());
 }
 
 #[test]
@@ -15791,14 +15878,14 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .unwrap()
             .to_owned()
     };
-    let ready =
-        |fixture: &Fixture| String::from_utf8(fixture.run(&["work", "--ready"]).stdout).unwrap();
+    let inbox = |fixture: &Fixture| String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
     assert!(row(&fixture).contains("ready for review"));
     assert!(!row(&fixture).contains("outdated"));
-    assert_eq!(ready(&fixture), "reviewed  workspace\n");
-    let listed = fixture.ok(&["work", "--ready"]);
+    assert_eq!(inbox(&fixture), "ready  reviewed\n");
+    let listed = fixture.ok(&["inbox"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
-    assert_eq!(listed[0]["name"], "reviewed");
+    assert_eq!(listed[0]["kind"], "ready");
+    assert_eq!(listed[0]["workspace"]["name"], "reviewed");
 
     fs::write(path.join("later"), "later\n").unwrap();
     git(path, &["add", "later"]);
@@ -15814,8 +15901,9 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             "later",
         ],
     );
+    // An outdated mark no longer needs the user.
     assert!(row(&fixture).contains("ready for review (outdated)"));
-    assert_eq!(ready(&fixture), "reviewed  workspace  outdated\n");
+    assert_eq!(inbox(&fixture), "Nothing needs you\n");
     assert_eq!(
         fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
         true
@@ -15832,7 +15920,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(!row(&fixture).contains("ready for review"));
-    assert_eq!(fixture.ok(&["work", "--ready"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert!(
         fixture.ok(&["inspect", "reviewed"])["workspace"]
             .get("review")

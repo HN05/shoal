@@ -1357,7 +1357,6 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
 
 pub(super) async fn list(
     ctx: &Context,
-    ready: bool,
     queue: bool,
     filter: &super::listing::ListFilter,
 ) -> Result<i32> {
@@ -1370,30 +1369,16 @@ pub(super) async fn list(
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     workspaces
         .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));
-    let queued = if ready {
-        Vec::new()
-    } else {
-        super::agent_queue::rows(ctx, &super::agent_queue::listed(ctx, filter).await?).await?
-    };
-    let rows = if ready {
-        workspaces.retain(|workspace| !workspace.review.is_empty());
-        // Only text rows name repositories, which reads each checkout's remote.
-        let repositories = if ctx.json {
-            Vec::new()
-        } else {
-            ui::repository_choices(client::repositories(&ctx.paths).await?).await?
-        };
-        ui::review_rows(&workspaces, &repositories, Palette::stdout(ctx.json))
-    } else {
-        let repositories = super::chat::repositories(ctx, &chats).await?;
-        ui::workspace_tree_rows(
-            &workspaces,
-            &chats,
-            &repositories,
-            &stopped,
-            Palette::stdout(ctx.json),
-        )
-    };
+    let queued =
+        super::agent_queue::rows(ctx, &super::agent_queue::listed(ctx, filter).await?).await?;
+    let repositories = super::chat::repositories(ctx, &chats).await?;
+    let rows = ui::workspace_tree_rows(
+        &workspaces,
+        &chats,
+        &repositories,
+        &stopped,
+        Palette::stdout(ctx.json),
+    );
     ctx.show(&workspaces, |_| {
         for row in rows.into_iter().chain(queued) {
             println!("{row}");

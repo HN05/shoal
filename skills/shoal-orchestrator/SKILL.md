@@ -50,7 +50,7 @@ daemon starts it when a slot frees; `shoal --json work --queue` lists entries, a
 
 ```sh
 shoal --json work
-shoal work --ready      # PRs, issues and workspaces agents marked ready for review
+shoal --json inbox      # Questions, approvals, waiting or failed workspaces, ready marks
 shoal --json status fix-login
 shoal --json notifications
 shoal --json internal events --follow --since <id>

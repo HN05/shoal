@@ -349,11 +349,14 @@ pub enum Command {
         command: Option<BaseCommand>,
         workspace: Option<String>,
     },
+    /// List what needs you: questions, approvals, agents needing input, failures and ready work.
+    Inbox {
+        /// List only this registered repository's items.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+    },
     /// List the work going on: workspaces, chats and queued agents.
     Work {
-        /// List ready-for-review PRs, issues and workspaces instead.
-        #[arg(long, conflicts_with_all = ["queue", "chats"])]
-        ready: bool,
         /// List only the agents waiting for a slot under max_agents.
         #[arg(long, conflicts_with = "chats")]
         queue: bool,
@@ -364,7 +367,7 @@ pub enum Command {
         #[arg(long = "repo")]
         repository: Option<String>,
         /// List only workspaces, chats and agents with this status; repeat or separate with commas.
-        #[arg(long, value_delimiter = ',', conflicts_with = "ready")]
+        #[arg(long, value_delimiter = ',')]
         status: Vec<list_status::ListStatus>,
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
