@@ -737,7 +737,8 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
     };
     assert_eq!(user().await, 0);
 
-    // Only the decider decides it, bound to the request it was shown.
+    // Only the stored decider decides it; a shown request claiming another
+    // decider changes nothing.
     for (workspace, allowed) in [(&parent, false), (&root, true)] {
         manager
             .issue_scope(
@@ -748,10 +749,12 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
                 },
             )
             .await;
+        let mut forged = routed.clone();
+        forged.decider = Some(workspace.id.clone());
         let mut decide = Method::DecideApproval {
             id: requested.id,
             approve: true,
-            shown: None,
+            shown: Some(Box::new(forged)),
         };
         let authorized = crate::daemon::scope::authorize(
             &manager,
@@ -760,13 +763,12 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         )
         .await;
         assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
-        if allowed {
-            assert!(matches!(
-                decide,
-                Method::DecideApproval { shown: Some(_), .. }
-            ));
-        }
     }
+    let refused = manager
+        .decide_routed_approval(&parent.id, requested.id, true)
+        .await
+        .unwrap_err();
+    assert!(format!("{refused:#}").contains("not routed to this workspace"));
 
     // Passed up by the root, it reaches the user; repeating the request
     // does not route it again.
@@ -789,4 +791,119 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         .unwrap()
         .unwrap();
     assert_eq!(again.decider, None);
+}
+
+#[tokio::test]
+async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_user() {
+    use crate::{
+        daemon::{
+            approvals::{
+                ApprovalRequest, DecisionStatus, Lifetime, SecretSpecification, Specification,
+                Target,
+            },
+            notifications::NotificationKind,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let secret = |workspace: &Workspace, name: &str| {
+        ApprovalRequest::new(
+            &workspace.id,
+            Target::Secret(name.into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        )
+    };
+    let user_requests = || async {
+        manager
+            .notifications(false, 20)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+            .count()
+    };
+    for name in ["token", "other"] {
+        let grant = manager
+            .request_approval(secret(&parent, name))
+            .await
+            .unwrap()
+            .unwrap();
+        manager.decide_approval(grant.id, true, None).await.unwrap();
+    }
+    let requested = manager
+        .request_approval(secret(&child, "token"))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &requested).await;
+    // The grant ends before the parent decides, so the request passes up.
+    let parent_id = parent.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "DELETE FROM access_requests WHERE workspace_id=?1 AND target_key='secret/token'",
+                [&parent_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = manager
+        .decide_routed_approval(&parent.id, requested.id, true)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("passed up"));
+    let passed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (passed.decider, passed.status),
+        (None, DecisionStatus::Pending)
+    );
+    assert_eq!(user_requests().await, 1);
+
+    // A coordinator whose messages are full cannot be told; the user decides.
+    let mut n = 0;
+    while manager
+        .send_agent_message(&parent.id, format!("note {n}"))
+        .await
+        .is_ok()
+    {
+        n += 1;
+    }
+    let other = manager
+        .request_approval(secret(&child, "other"))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &other).await;
+    assert_eq!(user_requests().await, 2);
 }

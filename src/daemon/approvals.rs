@@ -627,6 +627,65 @@ impl Manager {
         Ok(decision.request)
     }
 
+    /// Record the decision of the coordinating agent of `coordinator` on a
+    /// request routed to it, rechecking with the decision that the request is
+    /// still its to decide and that it still holds a grant for the same thing.
+    /// Once the grant ended, the request passes up instead.
+    pub async fn decide_routed_approval(
+        &self,
+        coordinator: &str,
+        id: i64,
+        approve: bool,
+    ) -> Result<ApprovalRequest> {
+        let request = self
+            .approval_request(id)
+            .await?
+            .with_context(|| format!("unknown approval request {id}"))?;
+        let decided = self
+            .record_routed_decision(coordinator, &request, approve)
+            .await?;
+        if let Some(decision) = decided {
+            if decision.new {
+                self.tell_requester(&decision.request).await;
+            }
+            return Ok(decision.request);
+        }
+        let routed = self.route_approval(&request, Some(coordinator)).await?;
+        self.announce_approval(&request.workspace, &routed).await;
+        bail!(
+            "approval {id}: the grant for {} has ended, so the request passed up",
+            request.subject()
+        )
+    }
+
+    /// Decide `request` for `coordinator` in one transaction with the checks
+    /// that it decides it; `None` when its grant has ended.
+    async fn record_routed_decision(
+        &self,
+        coordinator: &str,
+        request: &ApprovalRequest,
+        approve: bool,
+    ) -> Result<Option<Decision>> {
+        let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
+        let _guard = self.simulator_gate.lock().await;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let stored = by_key(&tx, &key)?.context("the approval request no longer exists")?;
+                ensure!(
+                    stored.decider.as_deref() == Some(coordinator.as_str()),
+                    "approval request {id} is not routed to this workspace"
+                );
+                if !holds_grant(&tx, &coordinator, &stored)? {
+                    return Ok(None);
+                }
+                let decision = decide(&tx, &key, approve)?;
+                tx.commit()?;
+                Ok(Some(decision))
+            })
+            .await
+    }
+
     /// Decide the stored `request` the user chose; later requests reusing its
     /// number are not affected.
     async fn record_decision(&self, request: ApprovalRequest, approve: bool) -> Result<Decision> {
@@ -758,7 +817,7 @@ impl Manager {
             )
             .await;
         }
-        match &request.decider {
+        let told = match &request.decider {
             Some(decider) => {
                 self.tell_agent(
                     decider,
@@ -767,15 +826,24 @@ impl Manager {
                         id = request.id
                     ),
                 )
-                .await;
+                .await
             }
-            None => self.ask_user(workspace, request).await,
+            None => false,
+        };
+        // The user decides what no coordinator could be told about.
+        if !told {
+            self.ask_user(workspace, request).await;
         }
     }
 
-    async fn tell_agent(&self, workspace: &str, message: String) {
-        if let Err(error) = self.queue_agent_message(workspace, message).await {
-            log!("approval message not queued: {error:#}");
+    /// Queue `message` for the workspace's agent; false when it cannot be.
+    async fn tell_agent(&self, workspace: &str, message: String) -> bool {
+        match self.queue_agent_message(workspace, message).await {
+            Ok(()) => true,
+            Err(error) => {
+                log!("approval message not queued: {error:#}");
+                false
+            }
         }
     }
 

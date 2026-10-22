@@ -857,11 +857,22 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.release_secret(&workspace, name).await?;
             Body::Ok
         }
-        Method::DecideApproval { id, approve, shown } => Body::ApprovalRequest(Box::new(
-            manager
-                .decide_approval(id, approve, shown.map(|shown| *shown))
-                .await?,
-        )),
+        Method::DecideApproval { id, approve, shown } => {
+            let decided = match &caller {
+                // A workspace process decides only what was routed to it.
+                Some(caller) => {
+                    manager
+                        .decide_routed_approval(&caller.workspace_id, id, approve)
+                        .await?
+                }
+                None => {
+                    manager
+                        .decide_approval(id, approve, shown.map(|shown| *shown))
+                        .await?
+                }
+            };
+            Body::ApprovalRequest(Box::new(decided))
+        }
         Method::EscalateApproval {
             workspace,
             id,
