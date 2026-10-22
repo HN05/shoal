@@ -40,6 +40,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
                 draft: (draft || no_draft).then_some(draft),
                 labels,
                 reviewers,
+                attachments: Vec::new(),
             };
             return open_pr(ctx, workspace, options).await;
         }
@@ -150,6 +151,7 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
                 title,
                 body: read_body(body)?.unwrap_or_default(),
                 labels,
+                attachments: Vec::new(),
             };
             return open_issue(ctx, workspace, issue, link).await;
         }

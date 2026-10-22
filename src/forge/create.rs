@@ -9,6 +9,7 @@ use super::{
     account::Account,
     action::{Action, Edit, draft_title},
     api::{HttpMethod, Request, encode},
+    attach::{Attachment, Pending},
     gitlab,
     item::Item,
     link::ItemKind,
@@ -19,6 +20,8 @@ pub struct NewIssue {
     pub title: String,
     pub body: String,
     pub labels: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 
 /// What `shoal pr open` was told about a new PR; unset fields take defaults
@@ -33,6 +36,7 @@ pub struct PullOptions {
     pub draft: Option<bool>,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
+    pub attachments: Vec<Attachment>,
 }
 
 /// A PR to open from `head` into `base`.
@@ -45,6 +49,7 @@ pub(crate) struct NewPull {
     pub draft: bool,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
+    pub attachments: Vec<Attachment>,
 }
 
 impl ForgeRepo {
@@ -114,23 +119,32 @@ impl ForgeRepo {
     /// Open the PR and return it as the forge reports it.
     pub(crate) async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
         self.ensure_labels(&pull.labels)?;
+        let (body, pending) = self
+            .new_body(account, &pull.body, &pull.attachments)
+            .await?;
+        let pull = NewPull {
+            body,
+            ..pull.clone()
+        };
         let created = self
-            .send(account, &self.create_pull_request(pull))
+            .send(account, &self.create_pull_request(&pull))
             .await
             .context("could not open the PR")?;
         let number = self.created_number(&created)?;
-        if pull.labels.is_empty() && pull.reviewers.is_empty() {
+        let follow_up = Edit {
+            add_labels: pull.labels,
+            add_reviewers: pull.reviewers,
+            ..pending_edit(pending)
+        };
+        if follow_up == Edit::default() {
             return Ok(self.read(account, ItemKind::Pr, number).await?.item);
         }
-        let follow_up = Action::Edit(Edit {
-            add_labels: pull.labels.clone(),
-            add_reviewers: pull.reviewers.clone(),
-            ..Edit::default()
-        });
-        self.act(account, ItemKind::Pr, number, &follow_up)
+        self.act(account, ItemKind::Pr, number, &Action::Edit(follow_up))
             .await
             .with_context(|| {
-                format!("PR #{number} was opened, but labeling it or requesting reviews failed")
+                format!(
+                    "PR #{number} was opened, but labeling it, requesting reviews or attaching its files failed"
+                )
             })
     }
 
@@ -168,23 +182,35 @@ impl ForgeRepo {
     /// Open the issue and return it as the forge reports it.
     pub(crate) async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
         self.ensure_labels(&issue.labels)?;
+        let (body, pending) = self
+            .new_body(account, &issue.body, &issue.attachments)
+            .await?;
+        let issue = NewIssue {
+            body,
+            ..issue.clone()
+        };
         let created = self
-            .send(account, &self.issue_request(issue))
+            .send(account, &self.issue_request(&issue))
             .await
             .context("could not open the issue")?;
         let number = self.created_number(&created)?;
         // Forgejo takes only label IDs on creation; the label set takes names.
-        if self.kind == ForgeKind::Forgejo && !issue.labels.is_empty() {
-            let labels = Action::Edit(Edit {
-                add_labels: issue.labels.clone(),
-                ..Edit::default()
-            });
-            return self
-                .act(account, ItemKind::Issue, number, &labels)
-                .await
-                .with_context(|| format!("issue #{number} was opened, but labeling it failed"));
+        let add_labels = match self.kind {
+            ForgeKind::Forgejo => issue.labels,
+            _ => Vec::new(),
+        };
+        let follow_up = Edit {
+            add_labels,
+            ..pending_edit(pending)
+        };
+        if follow_up == Edit::default() {
+            return Ok(self.read(account, ItemKind::Issue, number).await?.item);
         }
-        Ok(self.read(account, ItemKind::Issue, number).await?.item)
+        self.act(account, ItemKind::Issue, number, &Action::Edit(follow_up))
+            .await
+            .with_context(|| {
+                format!("issue #{number} was opened, but labeling it or attaching its files failed")
+            })
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {
@@ -219,6 +245,18 @@ impl ForgeRepo {
     }
 }
 
+/// The edit that attaches the files of a new item once it exists.
+fn pending_edit(pending: Option<Pending>) -> Edit {
+    match pending {
+        Some(pending) => Edit {
+            body: Some(pending.body),
+            attachments: pending.attachments,
+            ..Edit::default()
+        },
+        None => Edit::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +267,7 @@ mod tests {
             title: "Flaky".into(),
             body: "Seen twice".into(),
             labels: vec!["bug".into()],
+            attachments: Vec::new(),
         };
         let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
         assert_eq!(
@@ -271,6 +310,7 @@ mod tests {
             title: "Flaky".into(),
             body: "Seen twice".into(),
             labels: vec!["bug".into(), "ci".into()],
+            attachments: Vec::new(),
         };
         assert_eq!(
             gitlab.issue_request(&issue).body,
@@ -315,6 +355,7 @@ mod tests {
             title: "Flaky".into(),
             body: "Seen twice".into(),
             labels: Vec::new(),
+            attachments: Vec::new(),
         };
         assert_eq!(
             bitbucket.issue_request(&issue).body,

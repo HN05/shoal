@@ -464,6 +464,7 @@ async fn new_pull(
         draft: options.draft.unwrap_or(default_draft),
         labels: options.labels,
         reviewers: options.reviewers,
+        attachments: options.attachments,
     })
 }
 
@@ -560,6 +561,7 @@ mod tests {
             title: "Follow-up".into(),
             body: String::new(),
             labels: Vec::new(),
+            attachments: Vec::new(),
         };
         let error = manager
             .open_issue(&workspace.id, issue, false)
