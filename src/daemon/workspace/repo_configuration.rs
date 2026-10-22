@@ -182,6 +182,15 @@ impl Manager {
         config.resolve(&self.workspace_layers(workspace).await?)
     }
 
+    /// The repository's settings after every layer, with the file in its
+    /// registered checkout.
+    pub(crate) async fn repository_settings(&self, selector: &str) -> Result<Effective> {
+        let layers = self
+            .config_layers_for(ConfigTarget::Repository(selector.to_owned().into()))
+            .await?;
+        self.config().resolve(&layers)
+    }
+
     pub(crate) async fn configured_workspace_environment(
         &self,
         workspace: &Workspace,

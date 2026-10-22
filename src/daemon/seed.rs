@@ -25,7 +25,6 @@ use crate::{
         default_branch::{self, DefaultBranchLookup},
     },
     model::{Repository, Workspace},
-    protocol::ConfigTarget,
     seed::{
         Layout, Snapshot,
         build::{self, Build, Step},
@@ -142,10 +141,7 @@ impl Manager {
 
     /// The repository's seed settings, or `None` when it configures no seed.
     async fn seed_plan(&self, repo: &Repository, layout: &Layout) -> Result<Option<Plan>> {
-        let layers = self
-            .config_layers_for(ConfigTarget::Repository(repo.id.clone().into()))
-            .await?;
-        let settings = self.config().resolve(&layers)?;
+        let settings = self.repository_settings(&repo.id).await?;
         Plan::new(repo, layout, &settings).await
     }
 
