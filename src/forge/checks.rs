@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use super::{ForgeKind, ForgeRepo, account::Account, api::Request, link::ItemKind};
 
-/// Small enough for one protocol frame even when JSON escapes every byte.
-const TAIL_BYTES: usize = 8192;
+/// The most of a log's end a [`CheckLog`] keeps, in bytes.
+pub(crate) const TAIL_BYTES: usize = 8192;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckLog {
@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn tails_fit_the_protocol_and_retain_step_before_long_output() {
+    fn tails_are_bounded_and_retain_step_before_long_output() {
         let text = format!(
             "⭐ Run Main Test\n{}\n⚙️ [runner]: exitcode '1': failure\nJob failed\n",
             "🦀".repeat(TAIL_BYTES)
@@ -240,9 +240,8 @@ mod tests {
         assert!(log.text.len() <= TAIL_BYTES);
         assert_eq!(log.failed_step.as_deref(), Some("Main Test"));
         assert!(log.text.ends_with("Job failed\n"));
-        assert!(serde_json::to_vec(&log).unwrap().len() < crate::protocol::MAX_FRAME);
         assert!(!CheckLog::from_text("pr", "rust", "short").truncated);
-        let escaped = CheckLog::from_text("pr", "rust", &"\0".repeat(TAIL_BYTES * 2));
-        assert!(serde_json::to_vec(&escaped).unwrap().len() < crate::protocol::MAX_FRAME);
+        let long = CheckLog::from_text("pr", "rust", &"\0".repeat(TAIL_BYTES * 2));
+        assert_eq!(long.text.len(), TAIL_BYTES);
     }
 }

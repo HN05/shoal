@@ -77,3 +77,20 @@ impl Manager {
         forge.failed_check_log(&account, url, name).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::forge::checks::{CheckLog, TAIL_BYTES};
+
+    #[test]
+    fn the_longest_log_tail_fits_one_protocol_frame_even_when_escaped() {
+        let log = CheckLog {
+            url: "pr".into(),
+            name: "rust".into(),
+            text: "\0".repeat(TAIL_BYTES),
+            truncated: true,
+            failed_step: Some("\0".repeat(256)),
+        };
+        assert!(serde_json::to_vec(&log).unwrap().len() < crate::protocol::MAX_FRAME);
+    }
+}
