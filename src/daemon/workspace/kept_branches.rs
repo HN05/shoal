@@ -62,17 +62,13 @@ impl Manager {
         let Some(head) = git::status::local_branch_commit(&repo.path, &branch).await? else {
             return Ok(());
         };
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO kept_branches(repository_id,branch,head,kept_at) VALUES (?1,?2,?3,?4)
-                        ON CONFLICT(repository_id,branch) DO UPDATE
-                        SET head=excluded.head, kept_at=excluded.kept_at",
-                    params![repo.id, branch, head, unix_seconds() as i64],
-                )?;
-                Ok(())
-            })
-            .await
+        self.save_kept_branch(Record {
+            repository_id: repo.id,
+            branch,
+            head,
+            kept_at: unix_seconds(),
+        })
+        .await
     }
 
     /// Repositories with kept branches, in a stable order.
@@ -206,6 +202,26 @@ impl Manager {
             statuses.push((record, status));
         }
         Ok(statuses)
+    }
+
+    /// Store the record, replacing an earlier one of the same branch.
+    async fn save_kept_branch(&self, record: Record) -> Result<()> {
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO kept_branches(repository_id,branch,head,kept_at) VALUES (?1,?2,?3,?4)
+                        ON CONFLICT(repository_id,branch) DO UPDATE
+                        SET head=excluded.head, kept_at=excluded.kept_at",
+                    params![
+                        record.repository_id,
+                        record.branch,
+                        record.head,
+                        record.kept_at as i64
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     async fn kept_records(&self, repository_id: &str) -> Result<Vec<Record>> {
