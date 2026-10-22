@@ -733,6 +733,50 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 }
 
 #[test]
+fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoint() {
+    let fixture = Fixture::new();
+    let picked = fixture.add("picked");
+    fixture.add("kept");
+    let path = Path::new(picked["path"].as_str().unwrap()).to_owned();
+    fs::write(path.join("notes"), "draft\n").unwrap();
+    fixture.ok(&["rm", "picked", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "kept", "--yes", "--delete-branch"]);
+
+    let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows[1].starts_with(&format!(
+            "{}\tpicked  picked  removed ",
+            picked["id"].as_str().unwrap()
+        )),
+        "{rows:?}"
+    );
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+    let removed = fixture.ok(&["restore"]);
+    let names: Vec<_> = removed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| &w["name"])
+        .collect();
+    assert_eq!(names, ["kept"]);
+
+    fixture.ok(&["checkpoint", "picked", "--name", "draft"]);
+    fs::write(path.join("notes"), "rewritten\n").unwrap();
+    let (output, rows) = fixture.pick(&["restore", "picked"], "2", "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows[1].starts_with("2\t2  ") && rows[1].ends_with("picked  draft"),
+        "{rows:?}"
+    );
+    assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+}
+
+#[test]
 fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",

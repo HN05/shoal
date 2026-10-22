@@ -1,6 +1,6 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -43,8 +43,9 @@ pub(super) async fn checkpoint(
     Ok(0)
 }
 
-/// `shoal restore`: return an existing workspace to a checkpoint or list its
-/// checkpoints, open a removed workspace again, or list the removed ones.
+/// `shoal restore`: return an existing workspace to a checkpoint or choose
+/// one, open a removed workspace again, or choose a removed one. Without a
+/// terminal, the choices are listed instead.
 pub(super) async fn run(
     ctx: &Context,
     workspace: Option<String>,
@@ -56,23 +57,58 @@ pub(super) async fn run(
             !scoped,
             "workspace processes cannot reopen removed workspaces; shoal restore <workspace> lists your workspace's checkpoints"
         );
-        let removed =
-            request::<Vec<RemovedWorkspace>>(&ctx.paths, Method::RemovedWorkspaces).await?;
-        ctx.show(&removed, |removed| print_removed(removed))?;
-        return Ok(0);
+        return choose_removed(ctx).await;
     };
     if let Some(checkpoint) = checkpoint {
         return restore_checkpoint(ctx, workspace, checkpoint).await;
     }
     if let Some(checkpoints) = checkpoints(ctx, &workspace).await? {
-        ctx.show(&checkpoints, |checkpoints| print_checkpoints(checkpoints))?;
-        return Ok(0);
+        return choose_checkpoint(ctx, workspace, checkpoints).await;
     }
     ensure!(
         !scoped,
         "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
     );
     reopen(ctx, workspace).await
+}
+
+/// Reopen the removed workspace the user picks, or list the removed
+/// workspaces when there is no terminal or none to pick.
+async fn choose_removed(ctx: &Context) -> Result<i32> {
+    let removed = request::<Vec<RemovedWorkspace>>(&ctx.paths, Method::RemovedWorkspaces).await?;
+    if removed.is_empty() || !ctx.interactive() {
+        ctx.show(&removed, |removed| print_removed(removed))?;
+        return Ok(0);
+    }
+    let entries = removed
+        .iter()
+        .map(|workspace| workspace.workspace_id.clone())
+        .zip(removed_lines(&removed))
+        .collect();
+    let workspace = ui::pick(ctx, "Removed workspace> ", entries)?;
+    reopen(ctx, workspace).await
+}
+
+/// Return the workspace to the checkpoint the user picks, or list its
+/// checkpoints when there is no terminal or none to pick.
+async fn choose_checkpoint(
+    ctx: &Context,
+    workspace: String,
+    checkpoints: Vec<Checkpoint>,
+) -> Result<i32> {
+    if checkpoints.is_empty() || !ctx.interactive() {
+        ctx.show(&checkpoints, |checkpoints| print_checkpoints(checkpoints))?;
+        return Ok(0);
+    }
+    let entries = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.number.to_string())
+        .zip(checkpoint_lines(&checkpoints))
+        .collect();
+    let checkpoint = ui::pick(ctx, "Checkpoint> ", entries)?
+        .parse()
+        .context("picker returned an invalid checkpoint")?;
+    restore_checkpoint(ctx, workspace, checkpoint).await
 }
 
 /// Every checkpoint of an existing workspace, requested page by page;
@@ -190,52 +226,71 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
 fn print_removed(removed: &[RemovedWorkspace]) {
     if removed.is_empty() {
         println!("No removed workspaces to restore");
-        return;
     }
+    for line in removed_lines(removed) {
+        println!("{line}");
+    }
+}
+
+/// One aligned line per removed workspace: its name, branch, and when and
+/// why it was removed.
+fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
     let width = removed
         .iter()
         .map(|workspace| workspace.name.chars().count())
         .max()
         .unwrap_or(0);
-    for workspace in removed {
-        let branch = branch_label(workspace.checkpoint.branch.as_deref());
-        println!(
-            "{:width$}  {branch}  removed {} ({}), restorable until {}",
-            workspace.name,
-            local_seconds(workspace.removed_at as i64),
-            workspace.cause,
-            local_seconds(workspace.expires_at as i64),
-        );
-    }
+    removed
+        .iter()
+        .map(|workspace| {
+            let branch = branch_label(workspace.checkpoint.branch.as_deref());
+            format!(
+                "{:width$}  {branch}  removed {} ({}), restorable until {}",
+                workspace.name,
+                local_seconds(workspace.removed_at as i64),
+                workspace.cause,
+                local_seconds(workspace.expires_at as i64),
+            )
+        })
+        .collect()
 }
 
 fn print_checkpoints(checkpoints: &[Checkpoint]) {
     if checkpoints.is_empty() {
         println!("No checkpoints");
-        return;
     }
+    for line in checkpoint_lines(checkpoints) {
+        println!("{line}");
+    }
+}
+
+/// One aligned line per checkpoint: its number, time, cause, branch and name.
+fn checkpoint_lines(checkpoints: &[Checkpoint]) -> Vec<String> {
     let width = checkpoints
         .last()
         .map_or(1, |checkpoint| checkpoint.number.to_string().len());
-    for checkpoint in checkpoints {
-        let name = checkpoint
-            .name
-            .as_deref()
-            .map(|name| format!("  {name}"))
-            .unwrap_or_default();
-        let files = if checkpoint.files_omitted {
-            "  (unsaved files not kept)"
-        } else {
-            ""
-        };
-        println!(
-            "{:>width$}  {}  {}  {}{name}{files}",
-            checkpoint.number,
-            local_seconds(checkpoint.created_at as i64),
-            cause_label(checkpoint.cause),
-            branch_label(checkpoint.branch.as_deref()),
-        );
-    }
+    checkpoints
+        .iter()
+        .map(|checkpoint| {
+            let name = checkpoint
+                .name
+                .as_deref()
+                .map(|name| format!("  {name}"))
+                .unwrap_or_default();
+            let files = if checkpoint.files_omitted {
+                "  (unsaved files not kept)"
+            } else {
+                ""
+            };
+            format!(
+                "{:>width$}  {}  {}  {}{name}{files}",
+                checkpoint.number,
+                local_seconds(checkpoint.created_at as i64),
+                cause_label(checkpoint.cause),
+                branch_label(checkpoint.branch.as_deref()),
+            )
+        })
+        .collect()
 }
 
 fn cause_label(cause: CheckpointCause) -> &'static str {

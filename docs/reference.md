@@ -1445,9 +1445,9 @@ is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
 ```sh
 shoal checkpoint --name "before migration"  # keep the current workspace's state
-shoal restore topic    # list topic's checkpoints, or open removed topic again
+shoal restore topic    # pick one of topic's checkpoints, or open removed topic again
 shoal restore topic 3  # return topic to checkpoint 3
-shoal restore          # list removed workspaces that can be restored
+shoal restore          # pick a removed workspace to open again
 ```
 
 A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
@@ -1471,8 +1471,10 @@ inside or around an ignored file, which it would delete or overwrite and no
 checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
-`shoal restore <workspace>` lists an existing workspace's checkpoints. For a
-removed one it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
+`shoal restore` and `shoal restore <workspace>` open a picker of the removed
+workspaces or of an existing workspace's checkpoints and restore the one picked;
+without a terminal, or with `--json`, they list them instead. When
+`<workspace>` names a removed one, it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it

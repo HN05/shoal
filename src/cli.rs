@@ -597,9 +597,9 @@ pub enum Command {
     },
     /// Return a workspace to a checkpoint, or open a removed workspace again with its unsaved files and links.
     ///
-    /// Without a workspace, lists the removed workspaces that can be restored. With an existing
-    /// workspace, lists its checkpoints; with a checkpoint number as well, returns to it after
-    /// keeping the current state in a new checkpoint.
+    /// Without a workspace, picks a removed workspace to open again. With an existing workspace,
+    /// picks one of its checkpoints; with a checkpoint number as well, returns to it after
+    /// keeping the current state in a new checkpoint. Without a terminal, the choices are listed.
     Restore {
         workspace: Option<String>,
         #[arg(requires = "workspace")]
