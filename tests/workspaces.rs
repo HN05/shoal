@@ -3275,6 +3275,18 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 }
 
 #[test]
+fn split_rejects_an_invalid_branch_before_choosing_a_parent() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    // Without a current workspace a parent would need a picker or a target.
+    let output = fixture.run(&["split", "bad..name"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid Git branch name"), "{stderr}");
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() {
     let fixture = Fixture::new();
     git(&fixture.repo, &["switch", "-c", "previous"]);

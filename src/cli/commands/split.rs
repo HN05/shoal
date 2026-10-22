@@ -20,6 +20,10 @@ pub(super) async fn run(
     issue: Option<String>,
     base: Option<String>,
 ) -> Result<i32> {
+    // A supplied branch fails before the parent picker opens.
+    if let Some(branch) = &branch {
+        crate::git::check_branch_name(None, branch).await?;
+    }
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let issue = match issue {
         Some(input) => Some(load_issue(ctx, &parent, &input).await?),

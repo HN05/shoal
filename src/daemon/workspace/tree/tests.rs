@@ -256,3 +256,78 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
+    let (temp, manager) = manager().await;
+    crate::test_support::configure(&manager, "[resources.lock]\ncapacity = 2\n").await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let sibling = manager
+        .create_workspace(&repo.id, "sibling".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let issue = "https://github.com/owner/repo/issues/7";
+    for workspace in [&child, &sibling] {
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO workspace_items(workspace_id,relation,kind,url)
+                     VALUES (?1,'related','issue',?2)",
+                    [&id, issue],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        manager
+            .acquire_resource(
+                &workspace.id,
+                crate::daemon::resources::ResourceRequest {
+                    mode: None,
+                    kind: None,
+                    pool: "lock".into(),
+                    name: workspace.name.clone(),
+                    resource: None,
+                    reason: None,
+                    queue: false,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let targets = [
+        crate::model::WorkspaceTarget::Item {
+            kind: crate::forge::link::ItemKind::Issue,
+            input: "7".into(),
+        },
+        crate::model::WorkspaceTarget::Resource {
+            name: "lock".into(),
+        },
+    ];
+    let subtree = manager.subtree(&parent.id).await.unwrap();
+    for target in &targets {
+        let found = manager
+            .find_workspaces(target, Some(subtree.clone()))
+            .await
+            .unwrap();
+        let names: Vec<_> = found.iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["child"], "{target:?}");
+        let everywhere = manager.find_workspaces(target, None).await.unwrap();
+        assert_eq!(everywhere.len(), 2, "{target:?}");
+    }
+}

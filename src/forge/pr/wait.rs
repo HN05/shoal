@@ -1286,8 +1286,22 @@ mod tests {
             kind: Some(ItemKind::Pr),
             input: None,
         };
-        let quiet = manager.wait_items(&parent.id, &prs, Some(1)).await.unwrap();
-        assert!(quiet.timed_out && quiet.updates.is_empty());
+        // A poll records the parent's own observations without refusing the kind.
+        let quiet = manager.poll_item_activity(&parent.id, &prs).await.unwrap();
+        assert!(quiet.is_empty());
+        // Queued updates end a wait at once; the timeout only guards a hang.
+        let watch = |selection: Selection| {
+            let manager = &manager;
+            let id = parent.id.clone();
+            async move {
+                tokio::time::timeout(
+                    Duration::from_secs(60),
+                    manager.wait_items(&id, &selection, None),
+                )
+                .await
+                .expect("watch ended")
+            }
+        };
         for (workspace, url) in watched {
             manager
                 .queue_background_updates(
@@ -1317,12 +1331,9 @@ mod tests {
                 .starts_with("child: child-pr [comment]:")
         );
         // An unfiltered watch of the parent reports them as well.
-        let unfiltered = manager
-            .wait_items(&parent.id, &Selection::default(), Some(1))
-            .await
-            .unwrap();
+        let unfiltered = watch(Selection::default()).await.unwrap();
         assert_eq!(unfiltered.updates.len(), 2);
-        let filtered = manager.wait_items(&parent.id, &prs, Some(1)).await.unwrap();
+        let filtered = watch(prs.clone()).await.unwrap();
         assert_eq!(filtered.updates.len(), 2);
 
         // An agent of the child's own takes over the child's subtree.
@@ -1338,7 +1349,7 @@ mod tests {
                 .updates
                 .is_empty()
         );
-        let refused = manager.wait_items(&parent.id, &prs, Some(1)).await;
+        let refused = watch(prs.clone()).await;
         assert!(format!("{:#}", refused.unwrap_err()).contains("no linked items"));
         let own = manager.agent_updates(&child.id).await.unwrap();
         assert_eq!(own.updates.len(), 2);

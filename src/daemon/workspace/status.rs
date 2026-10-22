@@ -111,9 +111,8 @@ impl Manager {
     pub async fn find_workspaces(
         &self,
         target: &WorkspaceTarget,
-        within: Option<&str>,
+        within: Option<Vec<String>>,
     ) -> Result<Vec<Workspace>> {
-        let within = within.map(str::to_owned);
         let ids = match target {
             WorkspaceTarget::Item { kind, input } => {
                 self.linking_workspaces(*kind, input, within).await?
@@ -129,7 +128,7 @@ impl Manager {
         &self,
         kind: ItemKind,
         input: &str,
-        within: Option<String>,
+        within: Option<Vec<String>>,
     ) -> Result<Vec<String>> {
         let label = match kind {
             ItemKind::Pr => "PR",
@@ -152,11 +151,11 @@ impl Manager {
             .store
             .run(move |db| {
                 let ids = db
-                    .prepare("SELECT id FROM workspaces WHERE ?1 IS NULL OR id=?1")?
-                    .query_map([within], |row| row.get::<_, String>(0))?
+                    .prepare("SELECT id FROM workspaces")?
+                    .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();
-                for id in ids {
+                for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
                     for (url, _) in linked_items(db, &id, Some(kind))? {
                         links.push((id.clone(), url));
                     }
@@ -194,26 +193,36 @@ impl Manager {
         Ok(matches.into_iter().map(|(id, _)| id).collect())
     }
 
-    async fn holding_workspaces(&self, name: &str, within: Option<String>) -> Result<Vec<String>> {
+    async fn holding_workspaces(
+        &self,
+        name: &str,
+        within: Option<Vec<String>>,
+    ) -> Result<Vec<String>> {
         let name = name.to_owned();
         let label = name.clone();
-        let ids = self
+        let mut ids = self
             .store
             .run(move |db| {
                 Ok(db
                     .prepare(
                         "SELECT DISTINCT workspace_id FROM resource_leases
-                         WHERE (pool=?1 OR resource=?1) AND (?2 IS NULL OR workspace_id=?2)",
+                         WHERE pool=?1 OR resource=?1",
                     )?
-                    .query_map(rusqlite::params![name, within], |row| {
-                        row.get::<_, String>(0)
-                    })?
+                    .query_map([name], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await?;
+        ids.retain(|id| within_ids(&within, id));
         ensure!(!ids.is_empty(), "no workspace holds resource {label}");
         Ok(ids)
     }
+}
+
+/// Whether a lookup confined to the workspaces `within`, or to none, covers `id`.
+fn within_ids(within: &Option<Vec<String>>, id: &str) -> bool {
+    within
+        .as_ref()
+        .is_none_or(|within| within.iter().any(|within| within == id))
 }
 
 fn parse_numstat(output: &str) -> Result<DiffSummary> {

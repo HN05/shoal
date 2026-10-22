@@ -610,11 +610,14 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             action,
             checks,
         } => Body::CiActed(manager.ci_action(&workspace, item, action, checks).await?),
-        Method::FindWorkspaces { target } => Body::Workspaces(
-            manager
-                .find_workspaces(&target, caller.map(|c| c.workspace_id.as_str()))
-                .await?,
-        ),
+        Method::FindWorkspaces { target } => {
+            // Scoped callers find workspaces in their subtree only.
+            let within = match caller {
+                Some(caller) => Some(manager.subtree(&caller.workspace_id).await?),
+                None => None,
+            };
+            Body::Workspaces(manager.find_workspaces(&target, within).await?)
+        }
         Method::WorkspaceUndone { workspace } => {
             Body::WithdrawnCompletion(manager.undo_done(&workspace).await?)
         }
