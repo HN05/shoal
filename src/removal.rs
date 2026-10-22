@@ -19,6 +19,9 @@ pub struct RemovalCheck {
     pub changed_files: Vec<String>,
     #[serde(default)]
     pub changed_files_omitted: usize,
+    /// A checkpoint would keep the unsaved files, when requested with them.
+    #[serde(default)]
+    pub unsaved_files_archived: bool,
     /// Commits reachable from neither a remote-tracking branch nor the local
     /// default branch, so removing the worktree could lose them; zero when the
     /// default branch already has HEAD's changes.
@@ -248,6 +251,7 @@ pub async fn inspect(
         dirty: false,
         changed_files: vec![],
         changed_files_omitted: 0,
+        unsaved_files_archived: false,
         unpushed_commits: 0,
         branch: None,
         head: None,

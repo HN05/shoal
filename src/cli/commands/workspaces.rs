@@ -1729,7 +1729,11 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
         action.push_str(&format!("\nDeletes: {work}"));
     }
     if !check.unsaved_work().is_empty() {
-        action.push_str("\nshoal restore brings them back until the checkpoint expires.");
+        action.push_str(if !check.dirty || check.unsaved_files_archived {
+            "\nshoal restore brings them back until the checkpoint expires."
+        } else {
+            "\nThe checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored."
+        });
     }
     if !check.workspace.holds.is_empty() {
         action.push_str("\nHolds:");

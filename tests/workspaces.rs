@@ -8965,6 +8965,22 @@ fn repository_removal_ignores_only_missing_prunable_unlocked_worktrees() {
 }
 
 #[test]
+fn removal_confirmation_says_when_the_checkpoint_cannot_keep_the_files() {
+    let fixture = Fixture::with_config(Some("[cleanup.restore]\narchive_max_mb = 0\n"));
+    let workspace = fixture.add("large");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("uncommitted"), "too large to archive").unwrap();
+    let (no, prompt) = fixture.interactive(&["rm", "large"], "n\n");
+    assert!(!no.status.success());
+    assert!(prompt.contains("so they cannot be restored"), "{prompt}");
+    assert!(
+        !prompt.contains("shoal restore brings them back"),
+        "{prompt}"
+    );
+    assert!(path.join("uncommitted").exists());
+}
+
+#[test]
 fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let fixture = Fixture::new();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
@@ -8979,6 +8995,10 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
     assert!(
         prompt.contains("Deletes: uncommitted changes or untracked files"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("shoal restore brings them back"),
         "{prompt}"
     );
     assert!(prompt.contains("?? uncommitted"), "{prompt}");

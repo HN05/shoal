@@ -686,6 +686,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?;
             if include_changes && check.dirty {
                 check.load_changed_files().await?;
+                check.unsaved_files_archived =
+                    manager.archives_unsaved_files(&check.workspace).await?;
             }
             Body::RemovalCheck(check)
         }
