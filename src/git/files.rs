@@ -6,21 +6,30 @@ use anyhow::Result;
 use super::run;
 
 /// Every file named `name` in the worktree, tracked, untracked or ignored,
-/// since generated files are often ignored.
+/// since generated files are often ignored, and tracked in its submodules.
 pub async fn in_worktree(worktree: &Path, name: &str) -> Result<Vec<PathBuf>> {
-    let listing = run(
+    let pathspec = pathspec(name);
+    let worktree_files = run(
+        worktree,
+        &["ls-files", "-z", "--cached", "--others", "--", &pathspec],
+    )
+    .await?;
+    // Recursing into submodules lists only tracked files.
+    let submodule_files = run(
         worktree,
         &[
             "ls-files",
             "-z",
             "--cached",
-            "--others",
+            "--recurse-submodules",
             "--",
-            &pathspec(name),
+            &pathspec,
         ],
     )
     .await?;
-    Ok(paths(&listing).map(|path| worktree.join(path)).collect())
+    Ok(paths(&[worktree_files, submodule_files].concat())
+        .map(|path| worktree.join(path))
+        .collect())
 }
 
 /// The content of every file named `name` at `revision`.
@@ -49,7 +58,7 @@ fn paths(listing: &str) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{commit, repository};
+    use crate::test_support::{commit, git, repository};
     use std::fs;
 
     #[tokio::test]
@@ -67,6 +76,22 @@ mod tests {
         fs::create_dir(repo.join("ignored")).unwrap();
         fs::write(repo.join("ignored/Package.resolved"), "ignored").unwrap();
 
+        let module = repository(root.path(), "module");
+        fs::write(module.join("Package.resolved"), "module").unwrap();
+        commit(&module, "Package.resolved");
+        git(
+            &repo,
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "--quiet",
+                module.to_str().unwrap(),
+                "module",
+            ],
+        );
+
         let mut found = in_worktree(&repo, "Package.resolved").await.unwrap();
         found.sort();
         assert_eq!(
@@ -75,6 +100,7 @@ mod tests {
                 repo.join("Package.resolved"),
                 repo.join("app/App.xcodeproj/Package.resolved"),
                 repo.join("ignored/Package.resolved"),
+                repo.join("module/Package.resolved"),
                 repo.join("new/Package.resolved"),
             ]
         );
