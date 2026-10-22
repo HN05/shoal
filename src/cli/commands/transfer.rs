@@ -1,7 +1,7 @@
 //! Moving workspaces to another Shoal: `shoal export` removes a workspace and
 //! writes it to a file, and `shoal import` opens it again from one.
 use std::{
-    io::{BufReader, Write},
+    io::BufReader,
     path::{Path, PathBuf},
 };
 
@@ -14,7 +14,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::{RemovedWorkspace, RestoredWorkspace},
+    model::{RemovedWorkspace, Repository, RestoredWorkspace},
     protocol::Method,
     removal::RemovalCheck,
     transfer::{self, Import},
@@ -35,36 +35,24 @@ pub(super) async fn export(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot export workspaces; ask the user to run shoal export"
     );
-    let stream = file.as_os_str() == STANDARD_STREAM;
-    ensure!(
-        stream || !file.exists(),
-        "{} exists; choose another file",
-        file.display()
-    );
-    let removed = removed_for_export(ctx, workspace, yes).await?;
+    let output = Output::reserve(&file)?;
+    let removed = removed_for_export(ctx, workspace, yes, output.path()).await?;
     let repo = client::repositories(&ctx.paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == removed.repository_id)
         .context("the workspace's repository is no longer registered")?;
     let name = removed.name.clone();
-    if stream {
-        let mut out = std::io::BufWriter::new(std::io::stdout());
-        transfer::export(&repo, removed, &mut out).await?;
-        eprintln!("Exported {name}");
-        return Ok(0);
+    match output.write(&repo, removed).await? {
+        (None, _) => eprintln!("Exported {name}"),
+        (Some(path), manifest) => ctx.emit(
+            &format!(
+                "Exported {name} to {}; shoal import opens it on another machine",
+                path.display()
+            ),
+            json!({"file": path, "manifest": manifest}),
+        )?,
     }
-    let manifest = write_new(&file, async |out| {
-        transfer::export(&repo, removed, out).await
-    })
-    .await?;
-    ctx.emit(
-        &format!(
-            "Exported {name} to {}; shoal import opens it on another machine",
-            file.display()
-        ),
-        json!({"file": file, "manifest": manifest}),
-    )?;
     Ok(0)
 }
 
@@ -79,13 +67,7 @@ pub(super) async fn import(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot import workspaces; ask the user to run shoal import"
     );
-    let import = if file.as_os_str() == STANDARD_STREAM {
-        Import::read(&mut std::io::stdin().lock())?
-    } else {
-        let input =
-            std::fs::File::open(&file).with_context(|| format!("open {}", file.display()))?;
-        Import::read(&mut BufReader::new(input))?
-    };
+    let import = read_import(&file)?;
     let repository = repository
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
@@ -108,12 +90,90 @@ pub(super) async fn import(
     super::restore::finish_reopen(ctx, restored, "Imported").await
 }
 
+/// Read the export in `file`, or on standard input for `-`.
+fn read_import(file: &Path) -> Result<Import> {
+    if file.as_os_str() == STANDARD_STREAM {
+        return Import::read(&mut std::io::stdin().lock());
+    }
+    let input = std::fs::File::open(file).with_context(|| format!("open {}", file.display()))?;
+    Import::read(&mut BufReader::new(input))
+}
+
+/// Where an export goes: standard output, or a new file whose directory
+/// takes a temporary file before the workspace is removed, so an unwritable
+/// destination fails first and a failed export leaves no partial file.
+enum Output {
+    Stream,
+    File {
+        path: PathBuf,
+        file: tempfile::NamedTempFile,
+    },
+}
+
+impl Output {
+    fn reserve(file: &Path) -> Result<Self> {
+        if file.as_os_str() == STANDARD_STREAM {
+            return Ok(Self::Stream);
+        }
+        let name = file
+            .file_name()
+            .with_context(|| format!("{} names no file", file.display()))?;
+        let directory = match file.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        let directory = std::fs::canonicalize(directory)
+            .with_context(|| format!("find the directory {}", directory.display()))?;
+        let path = directory.join(name);
+        ensure!(
+            !path.exists(),
+            "{} exists; choose another file",
+            path.display()
+        );
+        let file = tempfile::NamedTempFile::new_in(&directory)
+            .with_context(|| format!("create a file in {}", directory.display()))?;
+        Ok(Self::File { path, file })
+    }
+
+    /// The file's canonical path; `None` for standard output.
+    fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Stream => None,
+            Self::File { path, .. } => Some(path),
+        }
+    }
+
+    /// Export `removed` here, returning the file's path with the manifest.
+    async fn write(
+        self,
+        repo: &Repository,
+        removed: RemovedWorkspace,
+    ) -> Result<(Option<PathBuf>, transfer::Manifest)> {
+        let (path, file) = match self {
+            Self::Stream => {
+                let mut out = std::io::BufWriter::new(std::io::stdout());
+                return Ok((None, transfer::export(repo, removed, &mut out).await?));
+            }
+            Self::File { path, file } => (path, file),
+        };
+        let mut out = std::io::BufWriter::new(file.as_file());
+        let manifest = transfer::export(repo, removed, &mut out).await?;
+        out.into_inner().map_err(|error| error.into_error())?;
+        file.as_file().sync_all()?;
+        file.persist_noclobber(&path)
+            .with_context(|| format!("write {}", path.display()))?;
+        Ok((Some(path), manifest))
+    }
+}
+
 /// The removal record to export: the workspace's, removed now, when it
-/// exists; otherwise the latest of a removed workspace with that name or ID.
+/// exists and does not hold `output`; otherwise the latest of a removed
+/// workspace with that name or ID.
 async fn removed_for_export(
     ctx: &Context,
     workspace: Option<String>,
     yes: bool,
+    output: Option<&Path>,
 ) -> Result<RemovedWorkspace> {
     if let Some(selector) = &workspace
         && !workspace_exists(ctx, selector).await?
@@ -125,7 +185,7 @@ async fn removed_for_export(
         .with_context(|| format!("no workspace or restorable workspace {selector}"));
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let id = remove_for_export(ctx, workspace, yes).await?;
+    let id = remove_for_export(ctx, workspace, yes, output).await?;
     let removed = removed_workspace(ctx, |removed| removed.workspace_id == id)
         .await?
         .context("the removal kept no record to export")?;
@@ -157,9 +217,15 @@ async fn removed_workspace(
     )
 }
 
-/// Remove the workspace once its checkpoint can keep every unsaved file and
-/// the user lets its holds go; its ID names the removal record.
-async fn remove_for_export(ctx: &Context, workspace: String, yes: bool) -> Result<String> {
+/// Remove the workspace once its checkpoint can keep every unsaved file, it
+/// does not hold `output`, and the user lets its holds go; its ID names the
+/// removal record.
+async fn remove_for_export(
+    ctx: &Context,
+    workspace: String,
+    yes: bool,
+    output: Option<&Path>,
+) -> Result<String> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
         Method::CheckRemoval {
@@ -173,6 +239,13 @@ async fn remove_for_export(ctx: &Context, workspace: String, yes: bool) -> Resul
         !check.dirty || check.unsaved_files_archived,
         "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"
     );
+    if let Some(output) = output {
+        ensure!(
+            !check.workspace.contains(output),
+            "{} is inside the workspace the export removes; write it elsewhere",
+            output.display()
+        );
+    }
     if !yes && !check.workspace.holds.is_empty() {
         confirm_holds(ctx, &check)?;
     }
@@ -198,26 +271,4 @@ fn confirm_holds(ctx: &Context, check: &RemovalCheck) -> Result<()> {
         "workspace export canceled"
     );
     Ok(())
-}
-
-/// Write a new file at `path` with `write`, so a failure leaves no partial
-/// file and an existing one is never replaced.
-async fn write_new<T>(
-    path: &Path,
-    write: impl AsyncFnOnce(&mut std::io::BufWriter<&std::fs::File>) -> Result<T>,
-) -> Result<T> {
-    let directory = match path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
-    };
-    let file = tempfile::NamedTempFile::new_in(directory)
-        .with_context(|| format!("create a file in {}", directory.display()))?;
-    let mut out = std::io::BufWriter::new(file.as_file());
-    let value = write(&mut out).await?;
-    out.flush()?;
-    drop(out);
-    file.as_file().sync_all()?;
-    file.persist_noclobber(path)
-        .with_context(|| format!("write {}", path.display()))?;
-    Ok(value)
 }

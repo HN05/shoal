@@ -3,7 +3,7 @@ use std::{fs, path::Path, sync::Arc};
 use super::*;
 use crate::{
     daemon::workspace::Manager,
-    execution::recovery::{self, Record, Session},
+    execution::recovery::{self, Record},
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{commit, git, manager, repository},
 };
@@ -142,7 +142,8 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     assert_eq!(saved.agents.len(), 1);
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
     assert_eq!(record.agent, "claude");
-    assert_eq!(record.session(), Session::New);
+    assert!(record.moved);
+    assert_eq!(record.session, None);
 }
 
 #[tokio::test]
@@ -184,8 +185,11 @@ fn moved_records_keep_no_session_place_or_wrapper() {
         "place": "tab",
     }))
     .unwrap();
-    assert_eq!(record.session(), Session::Id("s1"));
+    assert!(!record.moved);
     let moved = record.moved();
-    assert_eq!(moved.session(), Session::New);
-    assert_eq!((moved.place, moved.waiting), (None, None));
+    assert!(moved.moved);
+    assert_eq!(
+        (moved.session, moved.place, moved.waiting),
+        (None, None, None)
+    );
 }

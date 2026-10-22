@@ -687,15 +687,47 @@ fn cleanup_removes_idle_candidates_on_request() {
 
 #[test]
 fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+    ));
     let workspace = fixture.add("moving");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(path.join("notes"), "draft\n").unwrap();
+    // The agent records its arguments when it starts again after the move.
+    fs::write(
+        path.join("agent.sh"),
+        "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; exit 0; fi\n\
+         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
+    let agent = fixture
+        .command()
+        .args(["claude", "moving"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("agent started", || path.join("agent-started").exists());
+
+    let inside = path.join("moving.shoal");
+    let refused = fixture.run(&["export", "moving", "-o", inside.to_str().unwrap()]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("inside the workspace"),
+        "{refused:?}"
+    );
+    assert!(path.exists() && !inside.exists());
     let file = fixture.root.path().join("moving.shoal");
     let file = file.to_str().unwrap();
     let exported = fixture.ok(&["export", "moving", "-o", file]);
+    assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(exported["manifest"]["workspace"]["name"], "moving");
     assert!(exported["manifest"]["bundle"].as_bool().unwrap());
+    let agents = exported["manifest"]["workspace"]["agents"].as_array().unwrap();
+    assert_eq!(agents.len(), 1, "{exported}");
+    assert_eq!(agents[0]["record"]["moved"], true);
     assert!(!path.exists());
     let again = fixture.run(&["export", "moving", "-o", file]);
     assert!(!again.status.success());
@@ -711,6 +743,24 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(imported["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    // The agent starts as a new agent does, told the workspace moved,
+    // instead of resuming a session this machine does not have.
+    let resumed = fixture.run(&["resume", "moving"]);
+    assert!(resumed.status.success(), "{resumed:?}");
+    let args = fs::read_to_string(path.join("agent-args")).unwrap();
+    assert!(args.contains("--append-system-prompt\n"), "{args}");
+    assert!(args.contains("\nShoal moved this workspace"), "{args}");
+    assert!(!path.join("resumed").exists());
+    let record = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(imported["workspace"]["id"].as_str().unwrap())
+        .join(format!(
+            "{}.recovery.json",
+            agents[0]["execution"].as_str().unwrap()
+        ));
+    assert!(!record.exists());
 
     let exported = fixture
         .command()

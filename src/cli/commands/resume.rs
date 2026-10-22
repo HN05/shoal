@@ -98,12 +98,18 @@ pub async fn run(
         eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
     }
     let handoff = handoff(&saved.commands);
+    if recorded.moved {
+        let records = std::iter::once(selected)
+            .chain(saved.commands.into_iter().map(|command| command.path))
+            .collect();
+        return start_moved(ctx, workspace, &recorded.agent, handoff.as_deref(), records).await;
+    }
     let recovery = Recovery::resolve(
         &ctx.paths,
         workspace,
         &recorded.agent,
         handoff.as_deref(),
-        recorded.session(),
+        recorded.session.as_deref(),
     )
     .await?;
     if !saved.commands.is_empty() && !recovery.handoff_delivered {
@@ -132,10 +138,49 @@ async fn continue_last_session(
         )?;
         return Ok(0);
     }
+    if last.moved {
+        return start_moved(ctx, workspace, &last.agent, None, vec![path]).await;
+    }
     eprintln!("shoal: continuing the last {} session", last.agent);
-    let recovery =
-        Recovery::resolve(&ctx.paths, workspace, &last.agent, None, last.session()).await?;
+    let recovery = Recovery::resolve(
+        &ctx.paths,
+        workspace,
+        &last.agent,
+        None,
+        last.session.as_deref(),
+    )
+    .await?;
     launch(ctx, workspace, recovery, vec![path]).await
+}
+
+/// Start `agent` as a new agent is started, since its sessions stayed on the
+/// machine the workspace moved from, telling it the workspace moved;
+/// `records` are consumed once it has started.
+async fn start_moved(
+    ctx: &Context,
+    workspace: &Workspace,
+    agent: &str,
+    handoff: Option<&str>,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    let launch: crate::agent::Agent = agent
+        .parse()
+        .map_err(|()| anyhow::anyhow!("cannot start agent {agent} of the moved workspace"))?;
+    eprintln!("shoal: starting a new {agent} session in the moved workspace");
+    let prompt = crate::execution::recovery::moved_prompt(handoff);
+    let code = crate::cli::agents::launch_agent(
+        ctx,
+        launch,
+        None,
+        workspace.clone(),
+        Some(prompt),
+        vec![],
+    )
+    .await?;
+    for record in &records {
+        consume(record)?;
+    }
+    Ok(code)
 }
 
 /// Start the restore command, consuming `records` once the agent runs.

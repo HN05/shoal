@@ -1161,8 +1161,8 @@ remote's default branch, which the importer fetches when it lacks the commit the
 bundle builds on, since that branch only advances. Repositories match by origin.
 Agent conversations stay behind: they are the agent tools' private, path-keyed
 files, and Shoal does not store conversations, so moved recovery records drop
-their session, place and wrapper and start a new session told the workspace
-moved. Shoal provides only these operations; deciding when and where to move work
+their session, place and wrapper, and `shoal resume` starts them through the
+fresh-agent launch, with its trust setup and guidance, told the workspace moved. Shoal provides only these operations; deciding when and where to move work
 belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree

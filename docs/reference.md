@@ -1605,8 +1605,9 @@ the registered repository with the exported repository's origin, or the one
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal restore` does; when that restore fails,
 `shoal restore <workspace>` retries it. Agent sessions stay on the exporting
-machine, so `shoal resume` starts each stopped agent in a new session, telling
-it the workspace moved. Workspace processes can neither export nor import.
+machine, so `shoal resume` starts each stopped agent as `shoal claude` or
+`shoal codex` starts a new one, telling it the workspace moved, instead of
+running `[agent_resume]`. Workspace processes can neither export nor import.
 
 ### Assignment completion
 
