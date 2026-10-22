@@ -198,7 +198,9 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.agent_messages(&workspace.id).await?;
-        let updates = self.agent_queued_updates(workspace).await?;
+        // The messages share the response with the updates.
+        let reserved = serde_json::to_vec(&messages)?.len();
+        let updates = self.agent_queued_updates(workspace, reserved).await?;
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
@@ -210,24 +212,30 @@ impl Manager {
         })
     }
 
-    /// The updates queued for the workspace's agent that fit one response:
-    /// those on its own cursor for an unfiltered watch, then those of the
-    /// child workspaces it works on.
-    async fn agent_queued_updates(&self, workspace: Workspace) -> Result<Vec<Update>> {
+    /// The updates queued for the workspace's agent that fit one response
+    /// beside `reserved` bytes of its other content: those on its own cursor
+    /// for an unfiltered watch, then those of the child workspaces it works on.
+    async fn agent_queued_updates(
+        &self,
+        workspace: Workspace,
+        reserved: usize,
+    ) -> Result<Vec<Update>> {
         let _gate = self.pr_gate.lock().await;
         let id = workspace.id.clone();
         let mut batch = own_batch(&id, self.queued_updates(workspace).await?);
         batch.extend(self.delegated_pending(&id, None).await?);
-        self.fit_response(batch).await
+        self.fit_response(batch, reserved).await
     }
 
-    /// The leading updates of `batch` that fit one response. Updates sharing
+    /// The leading updates of `batch` that fit one response beside `reserved`
+    /// bytes of its other content. Updates sharing
     /// a delivery are acknowledged together, so a delivery is cut only when
     /// it comes first and does not fit alone; its remainder then moves to a
     /// new delivery and stays pending once the sent part is acknowledged. The
     /// caller holds `pr_gate`.
-    async fn fit_response(&self, mut batch: Batch) -> Result<Vec<Update>> {
-        match frame_cut(&batch) {
+    async fn fit_response(&self, mut batch: Batch, reserved: usize) -> Result<Vec<Update>> {
+        let limit = (crate::protocol::MAX_FRAME - 256).saturating_sub(reserved);
+        match frame_cut(&batch, limit) {
             Cut::Between(fitting) => batch.truncate(fitting),
             Cut::Inside(fitting) => {
                 let (workspace, update) = &batch[0];
@@ -313,7 +321,7 @@ impl Manager {
         }
         Ok(!self.agent_messages(&workspace.id).await?.is_empty()
             || !self
-                .agent_queued_updates(workspace.clone())
+                .agent_queued_updates(workspace.clone(), 0)
                 .await?
                 .is_empty())
     }
@@ -345,7 +353,8 @@ impl Manager {
         if selection.input.is_none() {
             batch.extend(self.delegated_pending(id, selection.kind).await?);
         }
-        let mut pending = self.fit_response(batch).await?;
+        // A wait returns messages on their own, without updates.
+        let mut pending = self.fit_response(batch, 0).await?;
         if !pending.is_empty() {
             drop(guard);
             self.summarize_failed_checks(id, &mut pending).await;
@@ -880,10 +889,9 @@ enum Cut {
     Inside(usize),
 }
 
-/// Where the updates that fit one response beside its other fields end:
-/// after whole deliveries, or inside the first when it alone does not fit.
-fn frame_cut(batch: &Batch) -> Cut {
-    let limit = crate::protocol::MAX_FRAME - 256;
+/// Where the updates that fit in `limit` bytes end: after whole deliveries,
+/// or inside the first when it alone does not fit.
+fn frame_cut(batch: &Batch, limit: usize) -> Cut {
     let sizes = batch
         .iter()
         .map(|(_, update)| serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()) + 1)
@@ -1616,24 +1624,68 @@ mod tests {
 
     #[test]
     fn combined_updates_fit_one_response_in_whole_deliveries() {
+        const LIMIT: usize = crate::protocol::MAX_FRAME - 256;
         let batch = |deliveries: fn(usize) -> usize| {
             (0..63)
                 .map(|n| ("child".to_owned(), large_update(n, deliveries(n))))
                 .collect::<Batch>()
         };
         // 21 deliveries of three updates each, more than one response holds.
-        let Cut::Between(fitting) = frame_cut(&batch(|n| n / 3)) else {
+        let Cut::Between(fitting) = frame_cut(&batch(|n| n / 3), LIMIT) else {
             panic!("whole deliveries fit");
         };
         assert!(fitting > 0 && fitting < 63 && fitting % 3 == 0);
         let sent = batch(|n| n / 3)[..fitting].to_vec();
         assert!(serde_json::to_vec(&sent).unwrap().len() < crate::protocol::MAX_FRAME);
         // One delivery larger than a response is cut inside it.
-        let Cut::Inside(fitting) = frame_cut(&batch(|_| 0)) else {
+        let Cut::Inside(fitting) = frame_cut(&batch(|_| 0), LIMIT) else {
             panic!("a delivery too large for a response is cut");
         };
         assert!(fitting > 0 && fitting < 63);
-        assert_eq!(frame_cut(&Vec::new()), Cut::Between(0));
+        assert_eq!(frame_cut(&Vec::new(), LIMIT), Cut::Between(0));
+    }
+
+    #[tokio::test]
+    async fn hook_responses_fit_messages_and_updates_together() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        register_watch(&manager, &child.id, "child-pr").await;
+        let id = child.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                for n in 0..63 {
+                    queue_update(db, &id, large_update(n, n))?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+        // As many unread messages as a workspace holds.
+        for n in 0..50 {
+            manager
+                .send_agent_message(&parent.id, format!("{n:02}{}", "m".repeat(498)))
+                .await
+                .unwrap();
+        }
+        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        assert_eq!(delivered.messages.len(), 50);
+        assert!(!delivered.updates.is_empty());
+        let response =
+            crate::protocol::Response::new(1, crate::protocol::Body::PrUpdates(delivered));
+        assert!(serde_json::to_vec(&response).unwrap().len() < crate::protocol::MAX_FRAME);
     }
 
     #[tokio::test]
