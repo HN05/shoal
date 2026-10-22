@@ -162,7 +162,10 @@ fn transient(error: &io::Error) -> bool {
 mod tests {
     use std::time::Instant;
 
-    use tokio::{io::BufReader, sync::watch};
+    use tokio::{
+        io::{AsyncReadExt, BufReader},
+        sync::watch,
+    };
 
     use super::*;
     use crate::{
@@ -248,6 +251,28 @@ mod tests {
             panic!("expected the second wait to be refused");
         };
         assert!(message.contains("limit of 1 long-lived"), "{message}");
+        let reattach = Method::Reattach(protocol::Reattach {
+            execution: "running".into(),
+            wrapper: crate::process::identity::capture(std::process::id())
+                .unwrap()
+                .unwrap(),
+            child: None,
+            group_id: std::process::id(),
+            scope_token: "token".into(),
+            agent: None,
+            recover: false,
+            running_ms: 0,
+            awaiting_restore: None,
+        });
+        let mut unanswered = Vec::new();
+        bounded(send(socket, reattach).await.read_to_end(&mut unanswered))
+            .await
+            .unwrap();
+        assert!(
+            unanswered.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&unanswered)
+        );
         let status = reply(&mut send(socket, Method::Status).await).await;
         assert!(matches!(status, Body::Status(_)), "{status:?}");
         let answer = Method::AnswerQuestion {

@@ -235,6 +235,9 @@ async fn serve(
         };
     let _slot = match server.capacity.admit(slot, &request.method) {
         Ok(slot) => slot,
+        // A wrapper takes any reply to its reattachment as the verdict on its
+        // execution, but retries a connection closed unanswered.
+        Err(_) if matches!(request.method, Method::Reattach(_)) => return Ok(()),
         Err(error) => {
             let body = Body::error(ErrorCode::OperationFailed, format!("{error:#}"));
             return protocol::write(&mut stream, &Response::new(request.id, body)).await;
