@@ -1031,6 +1031,7 @@ impl Command {
         matches!(
             self,
             Command::Doctor { .. }
+                | Command::Branch { .. }
                 | Command::Install { .. }
                 | Command::Update
                 | Command::Config {
@@ -1893,6 +1894,18 @@ mod tests {
         assert!(!show.command.unwrap().is_administrative());
         let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
         assert!(reset.command.unwrap().is_administrative());
+    }
+
+    #[test]
+    fn kept_branch_commands_are_administrative() {
+        for args in [
+            vec!["shoal", "branch"],
+            vec!["shoal", "branch", "ls"],
+            vec!["shoal", "branch", "rm", "--all", "--yes"],
+        ] {
+            let command = Cli::try_parse_from(args).unwrap().command.unwrap();
+            assert!(command.is_administrative());
+        }
     }
 
     #[test]
