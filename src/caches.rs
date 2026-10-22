@@ -67,6 +67,12 @@ impl Layout {
             .collect()
     }
 
+    /// The directory of the cache `name` when the caches directory is the
+    /// one Shoal created for this repository, so its entries may be deleted.
+    pub fn owned(&self, name: &str) -> Option<PathBuf> {
+        is_marked_dir(&self.root, &self.owner).then(|| self.root.join(SHARED).join(name))
+    }
+
     /// Each configured cache's directory, created when missing.
     pub fn prepare(&self, caches: &BTreeMap<String, Cache>) -> Result<BTreeMap<String, PathBuf>> {
         if caches.is_empty() {
@@ -170,6 +176,26 @@ fn remove_dir(directory: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use crate::config::repo::CacheScope;
+
+    #[test]
+    fn only_a_cache_directory_marked_for_the_repository_is_owned() {
+        let root = tempfile::tempdir().unwrap();
+        let layout = Layout::new(root.path(), "repo");
+        fs::create_dir(layout.root()).unwrap();
+        assert_eq!(layout.owned("go"), None, "unmarked");
+        layout.remove().unwrap();
+        fs::remove_dir(layout.root()).unwrap();
+        Layout::new(root.path(), "other")
+            .prepare(&configured(&["go"]))
+            .unwrap();
+        assert_eq!(layout.owned("go"), None, "another repository's");
+        Layout::new(root.path(), "other").remove().unwrap();
+        layout.prepare(&configured(&["go"])).unwrap();
+        assert_eq!(
+            layout.owned("go"),
+            Some(root.path().join(".caches/shared/go"))
+        );
+    }
 
     fn configured(names: &[&str]) -> BTreeMap<String, Cache> {
         names

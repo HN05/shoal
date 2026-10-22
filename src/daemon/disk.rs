@@ -435,7 +435,8 @@ mod tests {
         let removed = folder("App-removed", &directory.join("gone/App.xcodeproj"));
         let elsewhere = folder("App-elsewhere", Path::new("/nonexistent/App.xcodeproj"));
         let settings = manager.repository_settings(&repo.id).await.unwrap();
-        let cache = &crate::caches::locate(&repo, &settings.caches)[crate::presets::XCODE_CACHE];
+        let cache = &crate::caches::directories(&repo, &settings.caches).unwrap()
+            [crate::presets::XCODE_CACHE];
         let unpinned = cache.join("SourcePackages/unpinned");
         std::fs::create_dir_all(&unpinned).unwrap();
         let unused = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 86_400);

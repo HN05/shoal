@@ -172,9 +172,13 @@ fn uses_xcode(settings: &Effective) -> bool {
         .contains(&Preset::Xcode)
 }
 
-/// The preset's shared cache directory, without creating it.
+/// The preset's shared cache directory, when the preset configures it and
+/// the repository owns the caches directory.
 fn xcode_cache(repo: &Repository, settings: &Effective) -> Option<PathBuf> {
-    crate::caches::locate(repo, &settings.caches).remove(presets::XCODE_CACHE)
+    if !settings.caches.contains_key(presets::XCODE_CACHE) {
+        return None;
+    }
+    crate::caches::Layout::of(repo)?.owned(presets::XCODE_CACHE)
 }
 
 /// Whether the worktree directory holding `project` in the repository's
@@ -257,7 +261,9 @@ mod tests {
             fs::write(workspace.path.join(xcode::PINS), name).unwrap();
         }
         let settings = manager.repository_settings(&repo.id).await.unwrap();
-        let cache = crate::caches::locate(&repo, &settings.caches)[presets::XCODE_CACHE].clone();
+        let cache = crate::caches::directories(&repo, &settings.caches).unwrap()
+            [presets::XCODE_CACHE]
+            .clone();
         let checkouts = |pins: &str| {
             cache
                 .join("SourcePackages")
