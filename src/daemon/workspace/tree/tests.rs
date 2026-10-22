@@ -785,6 +785,10 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("not root's to decide"));
     manager.notify_approval(&child.name, &escalated).await;
+    // A snapshot from before the routing, as a concurrent acquisition holds,
+    // does not route it again either.
+    assert!(!requested.routed);
+    manager.notify_approval(&child.name, &requested).await;
     let again = manager
         .approval_request(requested.id)
         .await
@@ -890,6 +894,33 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
     );
     assert_eq!(user_requests().await, 1);
 
+    // A grant for another lifetime does not cover the request.
+    let lease = manager
+        .request_approval(ApprovalRequest {
+            lifetime: Lifetime::Lease,
+            ..secret(&parent, "lease")
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    manager.decide_approval(lease.id, true, None).await.unwrap();
+    let longer = manager
+        .request_approval(secret(&child, "lease"))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &longer).await;
+    assert_eq!(
+        manager
+            .approval_request(longer.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .decider,
+        None
+    );
+    assert_eq!(user_requests().await, 2);
+
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
@@ -905,5 +936,5 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap()
         .unwrap();
     manager.notify_approval(&child.name, &other).await;
-    assert_eq!(user_requests().await, 2);
+    assert_eq!(user_requests().await, 3);
 }

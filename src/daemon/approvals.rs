@@ -392,7 +392,9 @@ fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> R
         .map(|row| decode_record(row?))
         .collect::<Result<Vec<_>>>()?;
     Ok(candidates.iter().any(|grant| {
-        grant.status == DecisionStatus::Approved && grant.specification == request.specification
+        grant.status == DecisionStatus::Approved
+            && grant.specification == request.specification
+            && grant.lifetime == request.lifetime
     }))
 }
 
@@ -404,14 +406,35 @@ pub struct Routed {
 }
 
 /// Give the pending request stored under `key` to the first of `candidates`
-/// that holds a grant for it, or to the user.
-fn route(tx: &Transaction<'_>, key: &str, candidates: &[String]) -> Result<Routed> {
+/// that holds a grant for it, or to the user. Without `from` this is its
+/// first routing, which a routed request keeps; with `from`, the coordinator
+/// that decides it passes it on.
+fn route(
+    tx: &Transaction<'_>,
+    key: &str,
+    candidates: &[String],
+    from: Option<&str>,
+) -> Result<Routed> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
     ensure!(
         request.status == DecisionStatus::Pending,
         "approval request {} is already decided",
         request.id
     );
+    match from {
+        None if request.routed => {
+            return Ok(Routed {
+                request,
+                passed: Vec::new(),
+            });
+        }
+        None => {}
+        Some(from) => ensure!(
+            request.decider.as_deref() == Some(from),
+            "approval request {} is no longer this workspace's to decide",
+            request.id
+        ),
+    }
     // Without coordinators the request stays the user's, as recorded.
     if candidates.is_empty() && !request.routed {
         return Ok(Routed {
@@ -793,7 +816,7 @@ impl Manager {
                     }
                     None => crate::daemon::workspace::coordinators(&tx, &workspace, &agents)?,
                 };
-                let routed = route(&tx, &key, &candidates)?;
+                let routed = route(&tx, &key, &candidates, above.as_deref())?;
                 tx.commit()?;
                 Ok(routed)
             })
