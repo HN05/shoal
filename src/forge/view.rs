@@ -1,7 +1,5 @@
 //! An issue's or PR's content, status and discussion, read on request so
 //! callers need not know whether the forge is GitHub or Forgejo.
-use std::path::PathBuf;
-
 use anyhow::{Context, Result, ensure};
 use futures_util::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -16,54 +14,6 @@ use super::{
     status::{CheckResult, PrStatus, ReviewState},
     thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
 };
-
-/// The items a view selects and the worktree whose origin and forge login
-/// look them up. Lookups run in the CLI: discussion can exceed a protocol frame.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Selected {
-    pub path: PathBuf,
-    pub items: Vec<SelectedItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SelectedItem {
-    pub url: String,
-    pub kind: ItemKind,
-}
-
-impl Selected {
-    /// The kind of the item numbered `number`, when one is selected; an issue
-    /// and a PR that share the number are ambiguous.
-    pub(crate) fn kind_of(&self, number: u64) -> Result<Option<ItemKind>> {
-        let mut kinds = self
-            .items
-            .iter()
-            .filter(|item| {
-                super::link::item(item.kind, &item.url).is_ok_and(|(_, item)| item == number)
-            })
-            .map(|item| item.kind);
-        let kind = kinds.next();
-        ensure!(
-            kinds.all(|other| Some(other) == kind),
-            "an issue and a PR #{number} are both linked; put issue or pr before the number"
-        );
-        Ok(kind)
-    }
-
-    /// Each item as the forge reports it now, in selection order.
-    pub(crate) async fn view(&self, account: &Account, comments: bool) -> Result<Vec<ItemView>> {
-        let remote = crate::repository::remote_url_from_path(&self.path)
-            .await?
-            .context("item lookup needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
-        Ok(futures_util::future::join_all(
-            self.items
-                .iter()
-                .map(|item| forge.view(account, item.kind, &item.url, comments)),
-        )
-        .await)
-    }
-}
 
 /// A failed lookup leaves `details` empty, or the discussion it would have
 /// filled, and records its error instead of failing the request.
@@ -619,32 +569,6 @@ fn labels(labels: &Value) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn selected_numbers_name_one_kind() {
-        let item = |kind, url: &str| SelectedItem {
-            kind,
-            url: url.into(),
-        };
-        let mut selected = Selected {
-            path: PathBuf::new(),
-            items: vec![
-                item(ItemKind::Issue, "https://gitlab.com/team/repo/-/issues/5"),
-                item(
-                    ItemKind::Pr,
-                    "https://gitlab.com/team/repo/-/merge_requests/6",
-                ),
-            ],
-        };
-        assert_eq!(selected.kind_of(5).unwrap(), Some(ItemKind::Issue));
-        assert_eq!(selected.kind_of(6).unwrap(), Some(ItemKind::Pr));
-        assert_eq!(selected.kind_of(7).unwrap(), None);
-        selected.items.push(item(
-            ItemKind::Pr,
-            "https://gitlab.com/team/repo/-/merge_requests/5",
-        ));
-        assert!(selected.kind_of(5).is_err());
-    }
 
     #[test]
     fn github_issue_and_pr_details_read_content_and_comments() {

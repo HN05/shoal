@@ -10,10 +10,9 @@ use crate::{
     forge::{
         ForgeRepo, IssueInput, PullRequest,
         link::{ItemKind, Link, LinkTarget, Relation, Selection},
-        view::{Selected, SelectedItem},
     },
     git,
-    model::{Repository, ReviewMark, Workspace},
+    model::{Repository, ReviewMark, Selected, SelectedItem, Workspace},
     protocol::Method,
 };
 

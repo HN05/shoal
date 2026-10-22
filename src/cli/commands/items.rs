@@ -17,10 +17,9 @@ use crate::{
         create::{NewIssue, PullOptions},
         item::{Item, Opened},
         link::{ItemKind, Selection},
-        view::Selected,
     },
     git,
-    model::Workspace,
+    model::{Selected, Workspace},
     protocol::Method,
 };
 

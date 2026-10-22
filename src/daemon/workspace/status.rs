@@ -10,10 +10,12 @@ use crate::{
         ForgeRepo, IssueInput,
         account::Account,
         link::{self, ItemKind, Relation},
-        view::{Selected, SelectedItem},
     },
     git,
-    model::{DiffSummary, Inspection, IssueStatus, Workspace, WorkspaceStatus, WorkspaceTarget},
+    model::{
+        DiffSummary, Inspection, IssueStatus, Selected, SelectedItem, Workspace, WorkspaceStatus,
+        WorkspaceTarget,
+    },
     repository,
 };
 

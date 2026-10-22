@@ -663,3 +663,72 @@ pub struct QueuedPlan {
     pub entry: QueueEntry,
     pub plan: String,
 }
+
+/// The items a view selects and the worktree whose origin and forge login
+/// look them up. Lookups run in the CLI: discussion can exceed a protocol frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Selected {
+    pub path: PathBuf,
+    pub items: Vec<SelectedItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectedItem {
+    pub url: String,
+    pub kind: crate::forge::link::ItemKind,
+}
+
+impl Selected {
+    /// The kind of the item numbered `number`, when one is selected; an issue
+    /// and a PR that share the number are ambiguous.
+    pub(crate) fn kind_of(
+        &self,
+        number: u64,
+    ) -> anyhow::Result<Option<crate::forge::link::ItemKind>> {
+        let mut kinds = self
+            .items
+            .iter()
+            .filter(|item| {
+                crate::forge::link::item(item.kind, &item.url).is_ok_and(|(_, item)| item == number)
+            })
+            .map(|item| item.kind);
+        let kind = kinds.next();
+        anyhow::ensure!(
+            kinds.all(|other| Some(other) == kind),
+            "an issue and a PR #{number} are both linked; put issue or pr before the number"
+        );
+        Ok(kind)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::forge::link::ItemKind;
+
+    #[test]
+    fn selected_numbers_name_one_kind() {
+        let item = |kind, url: &str| SelectedItem {
+            kind,
+            url: url.into(),
+        };
+        let mut selected = Selected {
+            path: PathBuf::new(),
+            items: vec![
+                item(ItemKind::Issue, "https://gitlab.com/team/repo/-/issues/5"),
+                item(
+                    ItemKind::Pr,
+                    "https://gitlab.com/team/repo/-/merge_requests/6",
+                ),
+            ],
+        };
+        assert_eq!(selected.kind_of(5).unwrap(), Some(ItemKind::Issue));
+        assert_eq!(selected.kind_of(6).unwrap(), Some(ItemKind::Pr));
+        assert_eq!(selected.kind_of(7).unwrap(), None);
+        selected.items.push(item(
+            ItemKind::Pr,
+            "https://gitlab.com/team/repo/-/merge_requests/5",
+        ));
+        assert!(selected.kind_of(5).is_err());
+    }
+}

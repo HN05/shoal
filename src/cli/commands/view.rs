@@ -1,5 +1,5 @@
 //! Show issues and PRs as the forge reports them, without gh or fj.
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
@@ -9,11 +9,14 @@ use crate::{
     },
     forge::{
         ForgeRepo,
+        account::Account,
         checks::CheckLog,
         link::{ItemKind, Selection},
-        view::{Details, ItemView, PrDetails, Review, Selected},
+        view::{Details, ItemView, PrDetails, Review},
     },
+    model::Selected,
     protocol::Method,
+    repository,
 };
 
 /// Exits 1 when an item could not be read; its error is in the output.
@@ -51,7 +54,7 @@ pub(super) async fn view(
     .await?;
     let views = ctx
         .progress("Reading items", async {
-            let mut views = selected.view(&ctx.forge_account()?, !no_comments).await?;
+            let mut views = read(&selected, &ctx.forge_account()?, !no_comments).await?;
             read_failed_logs(ctx, &workspace, &mut views).await;
             Ok::<_, anyhow::Error>(views)
         })
@@ -66,6 +69,21 @@ pub(super) async fn view(
         }
     })?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+}
+
+/// Each item as the forge reports it now, in selection order.
+async fn read(selected: &Selected, account: &Account, comments: bool) -> Result<Vec<ItemView>> {
+    let remote = repository::remote_url_from_path(&selected.path)
+        .await?
+        .context("item lookup needs an origin remote")?;
+    let forge = ForgeRepo::parse(&remote)?;
+    Ok(futures_util::future::join_all(
+        selected
+            .items
+            .iter()
+            .map(|item| forge.view(account, item.kind, &item.url, comments)),
+    )
+    .await)
 }
 
 async fn read_failed_logs(ctx: &Context, workspace: &str, views: &mut [ItemView]) {

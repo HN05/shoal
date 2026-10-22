@@ -795,7 +795,7 @@ response_bodies! {
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),
-    SelectedItems(crate::forge::view::Selected),
+    SelectedItems(crate::model::Selected),
     CheckLog(crate::forge::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
