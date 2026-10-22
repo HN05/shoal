@@ -181,7 +181,7 @@ async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
         return pick_open(ctx).await;
     };
     let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
-    ensure!(question.is_open(), "question {id} is already answered");
+    question.ensure_open()?;
     Ok(question)
 }
 
@@ -220,7 +220,9 @@ pub(in crate::cli) fn summary(question: &Question) -> String {
 }
 
 fn render(question: &Question, palette: Palette) -> String {
-    let status = if question.is_open() {
+    let status = if question.closed_at.is_some() {
+        "closed"
+    } else if question.is_open() {
         "open"
     } else {
         "answered"
