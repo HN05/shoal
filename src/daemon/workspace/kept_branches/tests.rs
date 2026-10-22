@@ -342,3 +342,47 @@ async fn a_kept_branch_made_symbolic_is_forgotten_without_touching_its_target() 
     assert!(remembered(&manager, &repo).await.is_empty());
     assert!(branch_exists(&repo, "side"));
 }
+
+#[tokio::test]
+async fn a_branch_a_paused_rebase_will_update_stays() {
+    let (root, manager, repo, _other) = fixture().await;
+    let head = kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["push", "-q", "origin", "topic"]);
+    let elsewhere = root.path().join("elsewhere");
+    git(
+        &repo.path,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "stack",
+            elsewhere.to_str().unwrap(),
+            &head,
+        ],
+    );
+    commit_on(&elsewhere, "stacked");
+    // The failing exec pauses the rebase after it reserved topic.
+    let paused = std::process::Command::new("git")
+        .current_dir(&elsewhere)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .args(["rebase", "--update-refs", "--exec", "false", "main"])
+        .output()
+        .unwrap();
+    assert!(!paused.status.success());
+    let common = repo.path.join(".git/worktrees/elsewhere");
+    let refs = fs::read_to_string(common.join("rebase-merge/update-refs")).unwrap();
+    assert!(refs.contains("refs/heads/topic"), "{refs}");
+
+    manager
+        .delete_kept_branches_kept_elsewhere(&repo.id)
+        .await
+        .unwrap();
+    assert!(branch_exists(&repo, "topic"));
+    git(&elsewhere, &["rebase", "--abort"]);
+}
+
+fn commit_on(path: &std::path::Path, name: &str) {
+    fs::write(path.join(name), name).unwrap();
+    commit(path, name);
+}

@@ -71,9 +71,9 @@ pub async fn is_symbolic(repo: &Path, name: &str) -> Result<bool> {
     }))
 }
 
-/// Whether a rebase or bisect in some worktree started from the branch. Git
-/// shows that worktree's HEAD as detached, but the operation returns to the
-/// branch, so the branch is in use.
+/// Whether a rebase or bisect in some worktree started from the branch, or a
+/// rebase will update it. Git shows that worktree's HEAD as detached, but the
+/// operation returns to or rewrites the branch, so the branch is in use.
 pub async fn in_operation(repo: &Path, name: &str) -> Result<bool> {
     let common = git::common_dir(repo).await?;
     let linked = match std::fs::read_dir(common.join("worktrees")) {
@@ -88,9 +88,12 @@ pub async fn in_operation(repo: &Path, name: &str) -> Result<bool> {
         let read = |file: &str| {
             std::fs::read_to_string(dir.join(file)).map(|text| text.trim_end().to_owned())
         };
-        // Rebases record the full ref, bisects the branch's short name.
+        // Rebases record full refs, `--update-refs` one per line among the
+        // commits; bisects record the branch's short name.
         if read("rebase-merge/head-name").is_ok_and(|head| head == reference)
             || read("rebase-apply/head-name").is_ok_and(|head| head == reference)
+            || read("rebase-merge/update-refs")
+                .is_ok_and(|refs| refs.lines().any(|line| line == reference))
             || read("BISECT_START").is_ok_and(|start| start == name)
         {
             return Ok(true);
