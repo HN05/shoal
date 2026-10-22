@@ -1144,7 +1144,7 @@ mod tests {
         workspaces[4].review = vec![mark(false)];
         workspaces[5].review = vec![mark(true)];
         let agent = |state| Some(crate::model::AgentStatus { state, since: 0 });
-        // Waiting for input outranks a current mark; other turn states do not.
+        // Needing input outranks a current mark; other turn states do not.
         workspaces.extend([
             workspace("a", "asking", "asking", WorkspaceState::Ready),
             workspace("a", "marked", "marked", WorkspaceState::Ready),
@@ -1167,12 +1167,12 @@ mod tests {
                 "● fix-login  stopped",
                 "✗ x          failed",
                 "◌ new        preparing",
-                "● busy       running                      Refine the list view",
-                "● review     ready for review",
-                "● quiet      ready for review (outdated)",
-                "● asking     waiting for input",
-                "● marked     ready for review",
-                "● agent      turn finished",
+                "● busy       running           Refine the list view",
+                "● review     ready",
+                "● quiet      ready (outdated)",
+                "● asking     needs input",
+                "● marked     ready",
+                "● agent      waiting",
             ]
         );
         let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
@@ -1182,7 +1182,10 @@ mod tests {
         ];
         assert_eq!(
             workspace_rows(&workspaces, &repositories, &HashSet::new(), plain),
-            ["● fix-login  shoal  idle", "● y          app    idle"]
+            [
+                "● fix-login  shoal  inactive",
+                "● y          app    inactive"
+            ]
         );
     }
 

@@ -16,21 +16,21 @@ pub enum ListStatus {
     Restoring,
     Failed,
     Stopped,
-    WaitingForInput,
-    ReadyForReview,
+    NeedsInput,
+    Ready,
     Working,
-    TurnFinished,
+    Waiting,
     Running,
-    ReadyForReviewOutdated,
-    Idle,
+    ReadyOutdated,
+    Inactive,
     Queued,
     Starting,
 }
 
 impl ListStatus {
     /// The workspace's state unless ready, then stopped work, an agent
-    /// waiting for input, a current ready-for-review mark, the agent's other
-    /// turn states, a running agent or command, an outdated mark, or idle.
+    /// that needs input, a current ready mark, the agent's other turn
+    /// states, a running agent or command, an outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
@@ -42,15 +42,13 @@ impl ListStatus {
             WorkspaceState::Restoring => Self::Restoring,
             WorkspaceState::Failed => Self::Failed,
             WorkspaceState::Ready if stopped => Self::Stopped,
-            WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::WaitingForInput,
-            WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => {
-                Self::ReadyForReview
-            }
+            WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
+            WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::agent(state),
                 None if workspace.running => Self::Running,
-                None if outdated => Self::ReadyForReviewOutdated,
-                None => Self::Idle,
+                None if outdated => Self::ReadyOutdated,
+                None => Self::Inactive,
             },
         }
     }
@@ -65,12 +63,13 @@ impl ListStatus {
     pub fn agent(state: AgentState) -> Self {
         match state {
             AgentState::Working => Self::Working,
-            AgentState::Waiting => Self::WaitingForInput,
-            AgentState::Idle => Self::TurnFinished,
+            AgentState::Waiting => Self::NeedsInput,
+            AgentState::Idle => Self::Waiting,
         }
     }
 
-    /// A finished turn is not called idle, which in lists means nothing runs.
+    /// An agent whose turn finished is waiting, for the user or for PR
+    /// activity that wakes it; inactive means nothing runs.
     pub fn label(self) -> &'static str {
         match self {
             Self::Preparing => "preparing",
@@ -80,13 +79,13 @@ impl ListStatus {
             Self::Restoring => "restoring",
             Self::Failed => "failed",
             Self::Stopped => "stopped",
-            Self::WaitingForInput => "waiting for input",
-            Self::ReadyForReview => "ready for review",
+            Self::NeedsInput => "needs input",
+            Self::Ready => "ready",
             Self::Working => "working",
-            Self::TurnFinished => "turn finished",
+            Self::Waiting => "waiting",
             Self::Running => "running",
-            Self::ReadyForReviewOutdated => "ready for review (outdated)",
-            Self::Idle => "idle",
+            Self::ReadyOutdated => "ready (outdated)",
+            Self::Inactive => "inactive",
             Self::Queued => "queued",
             Self::Starting => "starting",
         }
@@ -95,17 +94,17 @@ impl ListStatus {
     pub fn style(self) -> Style {
         match self {
             Self::Failed => Style::Error,
-            Self::ReadyForReview => Style::Success,
-            Self::Working | Self::TurnFinished | Self::Running => Style::Heading,
-            Self::Idle | Self::Queued => Style::Muted,
+            Self::Ready => Style::Success,
+            Self::Working | Self::Waiting | Self::Running => Style::Heading,
+            Self::Inactive | Self::Queued => Style::Muted,
             Self::Preparing
             | Self::Stopping
             | Self::Removing
             | Self::Reconciling
             | Self::Restoring
             | Self::Stopped
-            | Self::WaitingForInput
-            | Self::ReadyForReviewOutdated
+            | Self::NeedsInput
+            | Self::ReadyOutdated
             | Self::Starting => Style::Warning,
         }
     }

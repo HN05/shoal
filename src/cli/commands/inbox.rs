@@ -150,7 +150,7 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<I
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
         .iter()
-        .filter(|w| status(w) == ListStatus::WaitingForInput)
+        .filter(|w| status(w) == ListStatus::NeedsInput)
         .map(|w| Item::NeedsInput {
             workspace: w.clone(),
         });

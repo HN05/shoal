@@ -4417,7 +4417,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     for line in listed.lines() {
         let unused = line.contains("unused");
         assert_eq!(line.contains("stopped"), !unused, "{listed}");
-        assert_eq!(line.contains("idle"), unused, "{listed}");
+        assert_eq!(line.contains("inactive"), unused, "{listed}");
     }
     // Without agents, every workspace's commands are reported once.
     let resumed = fixture.ok(&["resume", "--all"]);
@@ -7839,12 +7839,12 @@ fn work_lists_only_the_selected_statuses() {
             .map(|w| w["name"].clone())
             .collect()
     };
-    assert_eq!(names(&["idle"]), ["quiet"]);
-    assert_eq!(names(&["ready-for-review"]), ["reviewed"]);
-    assert_eq!(names(&["idle,ready-for-review"]), ["quiet", "reviewed"]);
-    assert_eq!(names(&["failed", "ready-for-review"]), ["reviewed"]);
+    assert_eq!(names(&["inactive"]), ["quiet"]);
+    assert_eq!(names(&["ready"]), ["reviewed"]);
+    assert_eq!(names(&["inactive,ready"]), ["quiet", "reviewed"]);
+    assert_eq!(names(&["failed", "ready"]), ["reviewed"]);
     assert!(names(&["working"]).is_empty());
-    let listed = String::from_utf8(fixture.run(&["work", "--status", "idle"]).stdout).unwrap();
+    let listed = String::from_utf8(fixture.run(&["work", "--status", "inactive"]).stdout).unwrap();
     assert!(
         listed.contains("quiet") && !listed.contains("reviewed"),
         "{listed}"
@@ -15784,13 +15784,10 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     assert!(
         shown
             .lines()
-            .any(|line| line.contains("reporter") && line.contains("waiting for input")),
+            .any(|line| line.contains("reporter") && line.contains("needs input")),
         "{shown}"
     );
-    assert!(
-        shown.contains("Agent state:   waiting for input"),
-        "{shown}"
-    );
+    assert!(shown.contains("Agent state:   needs input"), "{shown}");
     assert!(
         fixture.ok(&["status", "reporter"])["workspace"]
             .get("agent_state")
@@ -15879,7 +15876,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .to_owned()
     };
     let inbox = |fixture: &Fixture| String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
-    assert!(row(&fixture).contains("ready for review"));
+    assert!(row(&fixture).contains("ready"));
     assert!(!row(&fixture).contains("outdated"));
     assert_eq!(inbox(&fixture), "ready  reviewed\n");
     let listed = fixture.ok(&["inbox"]);
@@ -15902,7 +15899,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         ],
     );
     // An outdated mark no longer needs the user.
-    assert!(row(&fixture).contains("ready for review (outdated)"));
+    assert!(row(&fixture).contains("ready (outdated)"));
     assert_eq!(inbox(&fixture), "Nothing needs you\n");
     assert_eq!(
         fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
@@ -15919,7 +15916,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .len(),
         1
     );
-    assert!(!row(&fixture).contains("ready for review"));
+    assert!(!row(&fixture).contains("ready"));
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert!(
         fixture.ok(&["inspect", "reviewed"])["workspace"]
@@ -19200,7 +19197,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         rows,
         [
             vec![format!("◆ {name} chat").as_str(), "running", "claude"],
-            vec!["● └ chat-worker", "idle"],
+            vec!["● └ chat-worker", "inactive"],
         ]
     );
 

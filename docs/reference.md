@@ -380,18 +380,18 @@ Its rows, like `shoal work` and workspace pickers, are aligned and marked ● re
 rows span several, its status and the linked issue's title. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
-`waiting for input`, `ready for review`, the other [agent states](#agent-state),
-`running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
+`needs input`, `ready`, the other [agent states](#agent-state),
+`running` while an agent or command runs, `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 `shoal work` lists your own workspaces first, then each running [chat](#chats)
 marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
 lists only the chats. `work --repo <repository>`, with or without
 `--queue` or `--chats`, lists only that registered repository's workspaces,
 chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
-in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`);
+in kebab case (`needs-input`, `ready-outdated`, `queued`);
 a chat's status is `running`.
 `shoal inbox` lists what needs you, each with its workspace: open questions,
-pending approval requests, workspaces whose agent waits for input, failed
+pending approval requests, workspaces whose agent needs input, failed
 workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item. `inbox --repo <repository>` keeps one repository's items; `--json`
 gives each item's `kind` (`question`, `approval`, `needs_input`, `failed` or
@@ -1995,7 +1995,7 @@ no linked items is an error. Marking again moves the mark to the current HEAD, a
 marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal notify` to
 ask for attention. New commits make a mark outdated: `work` shows
-`ready for review (outdated)`, and `status`, `inspect` and `work --json` list
+`ready (outdated)`, and `status`, `inspect` and `work --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
 `shoal inbox` lists every current mark across repositories. Unlinking an
 item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
@@ -2042,8 +2042,10 @@ instead of `waiting`. Other agents can call the command from their own hooks; a 
 on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the session
 to [resume](#overload-protection). The command reads only that first event, and stops waiting after
 two seconds without input. `work` and `status` show
-`working`, `waiting for input` or `turn finished`; `status`, `inspect` and `work --json`
-give `agent_state` with `state` and the Unix-seconds `since` it began. A state
+`working`, `needs input` for `waiting`, or `waiting` for `idle`, since an idle
+agent waits for the user or for activity that [wakes it](#agent-messages); `status`,
+`inspect` and `work --json` give `agent_state` with `state` and the Unix-seconds
+`since` it began. A state
 reported from a tracked execution ends with that execution; one reported from
 outside lasts until the next report or removal. Each change, and each end, is
 a [workspace event](#workspace-events); repeating the current state is not a

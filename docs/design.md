@@ -886,7 +886,10 @@ A failed forge change fails the command with the marks kept, so the agent can
 retry it.
 
 Agent state is the turn state a workspace's agent reports from its hooks:
-`working`, `waiting` for the user mid-turn, or `idle` after its turn. Like
+`working`, `waiting` for the user mid-turn, or `idle` after its turn. Lists
+name them by what the user does: `working`, `needs input`, and `waiting`, since
+an idle agent waits for the user or for activity that wakes it; a ready
+workspace where nothing runs is `inactive`, and a current ready mark `ready`. Like
 ready marks it is a status signal for integrations that never notifies,
 completes, or affects idle cleanup and overload decisions. A workspace keeps the
 latest report; a report from a tracked execution ends with that execution's
