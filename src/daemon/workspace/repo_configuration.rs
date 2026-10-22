@@ -185,10 +185,21 @@ impl Manager {
     /// The repository's settings after every layer, with the file in its
     /// registered checkout.
     pub(crate) async fn repository_settings(&self, selector: &str) -> Result<Effective> {
+        self.repository_settings_from(&self.config(), selector)
+            .await
+    }
+
+    /// [`Self::repository_settings`] over a global snapshot the caller also
+    /// reads, so one operation never combines two versions.
+    pub(crate) async fn repository_settings_from(
+        &self,
+        config: &Config,
+        selector: &str,
+    ) -> Result<Effective> {
         let layers = self
             .config_layers_for(ConfigTarget::Repository(selector.to_owned().into()))
             .await?;
-        self.config().resolve(&layers)
+        config.resolve(&layers)
     }
 
     pub(crate) async fn configured_workspace_environment(
