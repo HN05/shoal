@@ -16,7 +16,6 @@ use crate::{
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
-        zmx,
     },
     daemon::{
         approvals::Undecided,
@@ -404,7 +403,7 @@ pub(in crate::cli) struct AddPlan {
     pub creation: Creation,
     tab_label: Option<String>,
     #[serde(default)]
-    pub tab_name: Option<crate::cli::herdr::TabName>,
+    pub tab_name: Option<crate::cli::terminal::PlaceName>,
     /// The found issue's URL; its body can exceed what a Herdr tab's
     /// environment carries, so the worker looks it up again.
     issue: Option<String>,
@@ -1422,12 +1421,12 @@ pub(super) async fn status(
     Ok(0)
 }
 
-/// The daemon's workspace status with the zmx sessions the CLI finds.
+/// The daemon's workspace status with the agent sessions the CLI finds.
 #[derive(serde::Serialize)]
 struct StatusView {
     #[serde(flatten)]
     status: WorkspaceStatus,
-    sessions: Vec<zmx::Session>,
+    sessions: Vec<terminal::Session>,
     /// Why sessions could not be listed; status still reports the rest.
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions_error: Option<String>,
@@ -1443,11 +1442,11 @@ impl StatusView {
         let status =
             request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
         let chat = chat_name(ctx, &chats, &status.inspection.workspace).await?;
-        let (sessions, sessions_error) = match zmx::sessions(&status.inspection.workspace.id).await
-        {
-            Ok(sessions) => (sessions, None),
-            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-        };
+        let (sessions, sessions_error) =
+            match terminal::sessions(&status.inspection.workspace.id).await {
+                Ok(sessions) => (sessions, None),
+                Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+            };
         Ok(Self {
             status,
             sessions,

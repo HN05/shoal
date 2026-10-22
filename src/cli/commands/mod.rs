@@ -569,9 +569,9 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         InternalCommand::Herdr {
             close_when_done,
             plan,
-        } => super::herdr::worker(ctx, close_when_done, &plan).await,
+        } => super::terminal::herdr_worker(ctx, close_when_done, &plan).await,
         InternalCommand::HerdrWatch { workspace, tab } => {
-            super::herdr::watch(&ctx, workspace, tab).await
+            super::terminal::watch_herdr_tab(&ctx, workspace, tab).await
         }
         InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         InternalCommand::CopyIgnored { setup_cmd } => {
@@ -591,7 +591,7 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
-        InternalCommand::Add { plan } => super::zmx::worker(ctx, &plan).await,
+        InternalCommand::Add { plan } => super::terminal::session_worker(ctx, &plan).await,
         InternalCommand::Session {
             workspace,
             agent,

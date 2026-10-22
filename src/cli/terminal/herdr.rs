@@ -2,10 +2,13 @@
 use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result, bail};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{
+use futures_util::future::BoxFuture;
+
+use super::{Host, Place, PlaceName, Placement};
+use crate::cli::{
     client,
     commands::{
         issues::{self, Issue},
@@ -13,7 +16,6 @@ use super::{
     },
     context::Context,
     internal,
-    terminal::{Place, Placement},
 };
 use crate::{
     config::{Config, Effective},
@@ -23,51 +25,104 @@ use crate::{
     subprocess::Run,
 };
 
-pub struct Tab {
+pub(super) struct Tab {
     id: String,
     close_when_done: bool,
 }
 
-#[derive(Serialize, Deserialize)]
-pub(in crate::cli) struct TabName {
-    template: String,
-    repo: String,
-    issue_number: Option<u64>,
-    issue_title: Option<String>,
-}
+/// Herdr opens tabs beside the caller's pane and reads agent state from the
+/// pane's process, so agents in its panes run in place.
+pub(super) struct Herdr;
 
-impl TabName {
-    fn new(template: String, repo: &Repository, issue: Option<&Issue>) -> Self {
-        Self {
-            template,
-            repo: crate::repository::name(repo).to_owned(),
-            issue_number: issue.map(|issue| issue.number),
-            issue_title: issue.map(|issue| issue.title.clone()),
-        }
+impl Host for Herdr {
+    fn name(&self) -> &'static str {
+        "herdr"
     }
 
-    pub fn render(&self, branch: &str) -> String {
-        crate::config::templates::render(
-            &self.template,
-            &[
-                ("{repo}", &self.repo),
-                ("{branch}", branch),
-                (
-                    "{issue_number}",
-                    &self.issue_number.map(|n| n.to_string()).unwrap_or_default(),
-                ),
-                (
-                    "{issue_title}",
-                    self.issue_title.as_deref().unwrap_or_default(),
-                ),
-            ],
-        )
+    /// A Herdr pane, unless `herdr.enabled` turns the integration off.
+    fn serves(&self, _ctx: &Context, settings: &Effective) -> bool {
+        in_herdr() && settings.herdr.enabled
+    }
+
+    /// A tab where Herdr may open one, from the Herdr variables the daemon
+    /// gave the worker.
+    fn takes_queued(&self, settings: &Effective) -> bool {
+        in_herdr() && settings.herdr.enabled && settings.herdr.new_tab
+    }
+
+    fn start_add<'a>(
+        &'a self,
+        ctx: &'a Context,
+        settings: &'a Effective,
+        plan: &'a mut AddPlan,
+        issue: Option<&'a Issue>,
+        _name: &'a str,
+        placement: Placement,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(start_add(ctx, settings, plan, issue, placement))
+    }
+
+    fn run_in_background<'a>(
+        &'a self,
+        ctx: &'a Context,
+        settings: &'a Effective,
+        workspace: &'a Workspace,
+        args: &'a [OsString],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(run_in_background(ctx, settings, workspace, args))
+    }
+
+    fn rerun_where_stopped<'a>(
+        &'a self,
+        ctx: &'a Context,
+        record: &'a Path,
+        args: &'a [OsString],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(rerun_in_recorded_pane(ctx, record, args))
+    }
+
+    fn start_chat<'a>(
+        &'a self,
+        ctx: &'a Context,
+        settings: &'a Effective,
+        repository: &'a Repository,
+        _agent: &'a str,
+        label: &'a str,
+        args: &'a [OsString],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            if !settings.herdr.new_tab {
+                return Ok(false);
+            }
+            run_in_tab(ctx, &repository.path, label, args, true).await?;
+            Ok(true)
+        })
+    }
+
+    fn background_places(&self) -> &'static str {
+        "Herdr tabs"
+    }
+
+    fn background_note(&self, name: &str) -> String {
+        format!("Started {name} in a background Herdr tab")
+    }
+
+    fn environment(&self) -> BTreeMap<String, String> {
+        environment()
+    }
+
+    fn current_place(&self) -> Option<String> {
+        current_pane()
+    }
+
+    fn closes_with(&self, paths: &crate::paths::Paths, workspace: &str) -> bool {
+        closes_with(paths, workspace)
     }
 }
 
 /// Herdr's variables, so a later start opens its tab in the same Herdr
 /// workspace; the launching pane and tab are left out.
-pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
+fn environment() -> BTreeMap<String, String> {
     std::env::vars()
         .filter(|(name, _)| {
             name.starts_with("HERDR_") && !matches!(name.as_str(), "HERDR_PANE_ID" | "HERDR_TAB_ID")
@@ -76,14 +131,14 @@ pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
 }
 
 /// Whether this process runs in Herdr, so new tabs can open beside it.
-pub(in crate::cli) fn in_herdr() -> bool {
+fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
 }
 
 /// Run `plan` in a new tab that takes focus as `placement` asks, unless
 /// `herdr.new_tab` is off. Without `issue`, a tab name template that names it
 /// looks it up.
-pub(in crate::cli) async fn start_add(
+async fn start_add(
     ctx: &Context,
     settings: &Effective,
     plan: &mut AddPlan,
@@ -101,7 +156,7 @@ pub(in crate::cli) async fn start_add(
             (None, Some(url)) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),
             _ => None,
         };
-        plan.tab_name = Some(TabName::new(template, repo, issue.or(found.as_ref())));
+        plan.tab_name = Some(PlaceName::new(template, repo, issue.or(found.as_ref())));
     }
     let directive = TabDirective::create()?;
     let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
@@ -145,14 +200,14 @@ impl TabDirective {
 
 /// The label `shoal add` gives a workspace's tab: the `tab_name` template,
 /// `<repo>#<number>` for an issue, or the branch.
-pub(in crate::cli) fn tab_label(
+fn tab_label(
     template: Option<String>,
     repo: &Repository,
     issue: Option<&Issue>,
     branch: &str,
 ) -> String {
     match template {
-        Some(template) => TabName::new(template, repo, issue).render(branch),
+        Some(template) => PlaceName::new(template, repo, issue).render(branch),
         None => issue.map_or_else(|| branch.to_owned(), |issue| issue.tab_label(repo)),
     }
 }
@@ -160,11 +215,7 @@ pub(in crate::cli) fn tab_label(
 /// Run Shoal with `args` in the pane the agent of `record` stopped in, once
 /// that pane is back at its shell prompt, as it is after the wrapper exits.
 /// This terminal's own pane is never reused. Returns whether it ran.
-pub(in crate::cli) async fn rerun_in_recorded_pane(
-    ctx: &Context,
-    record: &Path,
-    args: &[OsString],
-) -> Result<bool> {
+async fn rerun_in_recorded_pane(ctx: &Context, record: &Path, args: &[OsString]) -> Result<bool> {
     let pane = std::fs::read(record)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
@@ -198,7 +249,7 @@ async fn at_prompt(pane: &str) -> bool {
 }
 
 /// The Herdr pane this process runs in.
-pub(in crate::cli) fn current_pane() -> Option<String> {
+fn current_pane() -> Option<String> {
     if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
         return None;
     }
@@ -207,13 +258,8 @@ pub(in crate::cli) fn current_pane() -> Option<String> {
         .filter(|pane| !pane.is_empty())
 }
 
-/// Whether this terminal can hand Shoal work to new Herdr tabs.
-pub(in crate::cli) fn available(ctx: &Context) -> bool {
-    ctx.place.is_none() && ctx.interactive() && in_herdr()
-}
-
 /// Run Shoal with `args` in a new tab at `cwd`, focused when `focus` is set.
-pub(in crate::cli) async fn run_in_tab(
+async fn run_in_tab(
     ctx: &Context,
     cwd: &Path,
     label: &str,
@@ -228,7 +274,7 @@ pub(in crate::cli) async fn run_in_tab(
 
 /// Run Shoal with `args` in a new background tab in `workspace`, labelled
 /// as `shoal add` labels it, unless `herdr.new_tab` is off.
-pub(in crate::cli) async fn run_in_background(
+async fn run_in_background(
     ctx: &Context,
     settings: &Effective,
     workspace: &Workspace,
@@ -390,15 +436,32 @@ pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> R
         .ok()
         .filter(|id| !id.is_empty())
         .context("Herdr did not provide HERDR_TAB_ID")?;
-    ctx.place = Some(Place::Tab(Tab {
+    ctx.place = Some(Box::new(Tab {
         id,
         close_when_done,
     }));
     execute_add(&ctx, plan).await
 }
 
+/// A tab takes the workspace's label and closes with the workspace.
+impl Place for Tab {
+    fn host_workspace<'a>(
+        &'a self,
+        ctx: &'a Context,
+        workspace: &'a Workspace,
+        _agent: Option<&'a str>,
+        label: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            self.watch_workspace(ctx, &workspace.id)?;
+            self.rename(label).await;
+            Ok(())
+        })
+    }
+}
+
 impl Tab {
-    pub async fn rename(&self, branch: &str) {
+    async fn rename(&self, branch: &str) {
         let mut rename = Command::new("herdr");
         rename.args(["tab", "rename"]).arg(&self.id).arg(branch);
         if let Err(error) = Run::new(rename).checked().await {
@@ -406,7 +469,7 @@ impl Tab {
         }
     }
 
-    pub async fn close(&self) {
+    async fn close(&self) {
         if !self.close_when_done {
             return;
         }
@@ -441,7 +504,7 @@ impl Tab {
     /// Observe lifecycle separately so returning from an agent leaves the tab
     /// open. The watcher inherits the tab's shell directive to remove it with
     /// the tab, whose shell may close before a prompt consumes it.
-    pub fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
+    fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
         if !self.close_when_done {
             return Ok(());
         }
@@ -482,7 +545,7 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
         id: tab,
         close_when_done: true,
     };
-    let executable = super::installed::Executable::current();
+    let executable = crate::cli::installed::Executable::current();
     // A missing daemon or a failed query does not prove completion or removal.
     // Retain the observer across daemon restarts, but not deletion of its state.
     // A closed tab leaves nothing to close, whatever the daemon reports; a
@@ -501,7 +564,7 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
             }
             Ok(_) => {}
             Err(error) if error.is::<client::ProtocolMismatch>() => {
-                if let Some(failure) = executable.take_over(super::installed::arguments) {
+                if let Some(failure) = executable.take_over(crate::cli::installed::arguments) {
                     return Err(failure);
                 }
             }
@@ -547,7 +610,7 @@ impl Drop for ClosingTab {
 
 /// Whether this process runs in a Herdr tab that closes once `workspace` is
 /// removed.
-pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
+fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
     std::env::var("HERDR_TAB_ID")
         .ok()
         .and_then(|tab| ClosingTab::path(paths, workspace, &tab))

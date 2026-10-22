@@ -4,21 +4,29 @@
 //! labels it with the workspace ID so `shoal attach` can find it. Repository
 //! chats are labelled with the repository ID instead.
 use std::{
-    collections::HashSet, ffi::OsString, io::IsTerminal, path::PathBuf, process::ExitStatus,
+    collections::HashSet,
+    ffi::{OsStr, OsString},
+    io::IsTerminal,
+    path::PathBuf,
+    process::ExitStatus,
 };
 
 use anyhow::{Context as _, Result, bail};
-use serde::Serialize;
+use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{
-    agents::ensure_program,
-    commands::workspaces::{AddPlan, execute_add},
-    context::Context,
-    internal::{self, Worker, internal_command},
-    terminal::Place,
-};
+use super::{Host, Place, Placement, Session};
 use crate::{
+    cli::{
+        agents::ensure_program,
+        commands::{
+            issues::Issue,
+            workspaces::{AddPlan, execute_add},
+        },
+        context::Context,
+        internal::{self, Worker, internal_command},
+    },
+    config::Effective,
     env,
     model::{Repository, Workspace},
     repository,
@@ -34,30 +42,165 @@ const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
 const MAX_NAME_LEN: usize = 32;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Session {
-    pub name: String,
-    pub agent: Option<String>,
-    /// Terminals attached to the session.
-    pub clients: u32,
+const NAME: &str = "zmx";
+
+/// zmx keeps agents in sessions that outlive the caller's terminal, outside
+/// Herdr panes.
+pub(super) struct Zmx;
+
+impl Host for Zmx {
+    fn name(&self) -> &'static str {
+        NAME
+    }
+
+    fn serves(&self, _ctx: &Context, _settings: &Effective) -> bool {
+        on_terminal()
+    }
+
+    fn ensure_installed(&self) -> Result<()> {
+        ensure_program("background launch", Tool::Zmx.program())
+    }
+
+    /// A detached session needs no terminal, so it takes any queued start.
+    fn takes_queued(&self, _settings: &Effective) -> bool {
+        true
+    }
+
+    /// A focused start stays here, where its agent runs in a session this
+    /// terminal attaches to.
+    fn start_add<'a>(
+        &'a self,
+        ctx: &'a Context,
+        _settings: &'a Effective,
+        plan: &'a mut AddPlan,
+        _issue: Option<&'a Issue>,
+        name: &'a str,
+        placement: Placement,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            if placement == Placement::Focus {
+                return Ok(false);
+            }
+            start_add(ctx, plan, name).await?;
+            Ok(true)
+        })
+    }
+
+    fn run_in_background<'a>(
+        &'a self,
+        ctx: &'a Context,
+        _settings: &'a Effective,
+        workspace: &'a Workspace,
+        args: &'a [OsString],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            run_in_background(ctx, workspace, args).await?;
+            Ok(true)
+        })
+    }
+
+    fn run_agent<'a>(
+        &'a self,
+        ctx: &'a Context,
+        workspace: &'a Workspace,
+        agent: &'a str,
+        records: &'a [PathBuf],
+        command: &'a [OsString],
+    ) -> BoxFuture<'a, Result<Option<i32>>> {
+        Box::pin(async move { run(ctx, workspace, agent, records, command).await.map(Some) })
+    }
+
+    fn start_chat<'a>(
+        &'a self,
+        ctx: &'a Context,
+        _settings: &'a Effective,
+        repository: &'a Repository,
+        agent: &'a str,
+        _label: &'a str,
+        args: &'a [OsString],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            run_chat(ctx, repository, agent, args).await?;
+            Ok(true)
+        })
+    }
+
+    fn background_places(&self) -> &'static str {
+        "detached zmx sessions"
+    }
+
+    fn background_note(&self, name: &str) -> String {
+        format!("Started {name} in a detached zmx session; attach with `shoal attach {name}`")
+    }
+
+    fn prompt_session(&self) -> Option<OsString> {
+        std::env::var_os(SESSION_VAR)
+    }
+
+    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(submit_prompt(session, text))
+    }
+
+    fn label_current<'a>(
+        &'a self,
+        workspace_id: &'a str,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(label_current(workspace_id, agent))
+    }
+
+    fn keeps_agents_in_sessions(&self) -> bool {
+        on_terminal()
+    }
+
+    fn launcher_program(&self) -> Option<&'static str> {
+        on_terminal().then(|| Tool::Zmx.program())
+    }
+
+    fn sessions<'a>(&'a self, workspace_id: &'a str) -> BoxFuture<'a, Result<Vec<Session>>> {
+        Box::pin(sessions(workspace_id))
+    }
+
+    fn session_workspaces(&self) -> BoxFuture<'_, Result<HashSet<String>>> {
+        Box::pin(session_workspaces())
+    }
+
+    fn attach<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        session: &'a str,
+    ) -> BoxFuture<'a, Result<i32>> {
+        Box::pin(attach(workspace, session))
+    }
 }
 
-impl Session {
-    /// The name, agent, and whether a terminal is attached.
-    pub fn label(&self) -> String {
-        let mut label = self.name.clone();
-        if let Some(agent) = &self.agent {
-            label.push_str(&format!("  {agent}"));
-        }
-        if self.clients > 0 {
-            label.push_str("  attached");
-        }
-        label
+/// The detached session the zmx worker runs in: it adds the workspace there
+/// in place of the caller's shell, and ends with its agent, leaving no shell.
+struct DetachedSession;
+
+impl Place for DetachedSession {
+    fn host_workspace<'a>(
+        &'a self,
+        _ctx: &'a Context,
+        workspace: &'a Workspace,
+        agent: Option<&'a str>,
+        _label: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            if let Err(error) = label_current(&workspace.id, agent.unwrap_or_default()).await {
+                eprintln!("warning: {error:#}");
+            }
+            Ok(())
+        })
+    }
+
+    fn keeps_shell(&self) -> bool {
+        false
     }
 }
 
 /// Whether this process could attach a new session: a terminal outside zmx.
-pub(in crate::cli) fn on_terminal() -> bool {
+fn on_terminal() -> bool {
     std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal()
         && std::env::var_os(SESSION_VAR).is_none()
@@ -66,7 +209,7 @@ pub(in crate::cli) fn on_terminal() -> bool {
 /// Start `command` as `agent`'s tracked execution in a new session and attach
 /// this terminal to it. zmx does not report the agent's exit status, so a
 /// session that ends or detaches returns 0; the daemon still records the exit.
-pub(in crate::cli) async fn run(
+async fn run(
     ctx: &Context,
     workspace: &Workspace,
     agent: &str,
@@ -104,7 +247,7 @@ pub(in crate::cli) async fn run(
 /// Run Shoal with `args` for a chat in a new session at the repository's
 /// checkout and attach this terminal to it. The session's Shoal records the
 /// chat and becomes its agent, as it would in place.
-pub(in crate::cli) async fn run_chat(
+async fn run_chat(
     ctx: &Context,
     repository: &Repository,
     agent: &str,
@@ -139,14 +282,14 @@ pub(in crate::cli) async fn run_chat(
 /// the session in place of the caller's shell.
 pub async fn worker(mut ctx: Context, payload: &str) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
-    ctx.place = Some(Place::Session);
+    ctx.place = Some(Box::new(DetachedSession));
     execute_add(&ctx, plan).await
 }
 
 /// Run `plan` in a new detached session named after its planned workspace
 /// `name`. The session's worker reads the plan from its environment, as a
 /// Herdr tab's does.
-pub(in crate::cli) async fn start_add(ctx: &Context, plan: &AddPlan, name: &str) -> Result<()> {
+async fn start_add(ctx: &Context, plan: &AddPlan, name: &str) -> Result<()> {
     let argv = internal_command(&ctx.paths, false, Worker::Add)?;
     let plan = serde_json::to_string(plan)?;
     start_detached(name, &argv, &[(env::ADD_PLAN, &plan)]).await
@@ -154,11 +297,7 @@ pub(in crate::cli) async fn start_add(ctx: &Context, plan: &AddPlan, name: &str)
 
 /// Run Shoal with `args` for `workspace` in a new detached session named
 /// after it.
-pub(in crate::cli) async fn run_in_background(
-    ctx: &Context,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<()> {
+async fn run_in_background(ctx: &Context, workspace: &Workspace, args: &[OsString]) -> Result<()> {
     let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     start_detached(&workspace.name, &argv, &[]).await
@@ -199,15 +338,10 @@ async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> 
     Ok(())
 }
 
-/// The zmx session this process runs in, if any.
-pub(crate) fn current_session() -> Option<OsString> {
-    std::env::var_os(SESSION_VAR)
-}
-
 /// Submit `text` as a prompt in `session`, as if pasted and sent: bracketed
 /// paste keeps it one prompt, and Enter in the same write submits it rather
 /// than ending the paste.
-pub(crate) async fn submit_prompt(session: &std::ffi::OsStr, text: &str) -> Result<()> {
+async fn submit_prompt(session: &OsStr, text: &str) -> Result<()> {
     let mut send = Command::new(Tool::Zmx.program());
     send.arg("send")
         .arg(session)
@@ -222,7 +356,7 @@ pub(crate) async fn submit_prompt(session: &std::ffi::OsStr, text: &str) -> Resu
 
 /// Label the zmx session this process runs in, when it runs in one, so
 /// `shoal attach` finds the workspace's agent there.
-pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
+async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
     let Some(session) = std::env::var_os(SESSION_VAR) else {
         return Ok(());
     };
@@ -238,7 +372,7 @@ pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Re
 }
 
 /// Attach this terminal to `session`, reporting a detach as `run` does.
-pub(in crate::cli) async fn attach(workspace: &Workspace, session: &str) -> Result<i32> {
+async fn attach(workspace: &Workspace, session: &str) -> Result<i32> {
     ensure_program("attach", Tool::Zmx.program())?;
     let status = Command::new(Tool::Zmx.program())
         .args(["attach", session])
@@ -267,7 +401,7 @@ async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result
 }
 
 /// The workspace's running sessions, oldest name first.
-pub async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
+async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
     let mut sessions: Vec<_> = list()
         .await?
         .into_iter()
@@ -278,6 +412,7 @@ pub async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
                 .and_then(|clients| clients.parse().ok())
                 .unwrap_or(0),
             name,
+            host: NAME,
         })
         .collect();
     sessions.sort_by(|a, b| a.name.cmp(&b.name));
@@ -285,7 +420,7 @@ pub async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
 }
 
 /// The IDs of workspaces with at least one agent session.
-pub async fn session_workspaces() -> Result<HashSet<String>> {
+async fn session_workspaces() -> Result<HashSet<String>> {
     Ok(list()
         .await?
         .into_iter()

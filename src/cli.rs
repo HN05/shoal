@@ -5,7 +5,6 @@ pub mod commands;
 pub mod completion;
 pub mod context;
 mod help;
-pub(crate) mod herdr;
 mod installed;
 pub mod internal;
 pub mod list_status;
@@ -14,7 +13,6 @@ mod progress;
 pub(crate) mod terminal;
 pub mod ui;
 pub mod workspace_context;
-mod zmx;
 
 use std::{ffi::OsString, path::PathBuf};
 

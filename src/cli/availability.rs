@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    cli::{client, internal, list_status::ListStatus, zmx},
+    cli::{client, internal, list_status::ListStatus, terminal},
     model::Workspace,
     paths::Paths,
     state::WorkspaceState,
@@ -126,7 +126,7 @@ pub struct Availability {
 impl Availability {
     pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Self {
         let sessions = if need == Need::Session {
-            zmx::session_workspaces().await.unwrap_or_default()
+            terminal::session_workspaces().await.unwrap_or_default()
         } else {
             HashSet::new()
         };

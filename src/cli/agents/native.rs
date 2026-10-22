@@ -76,7 +76,7 @@ pub(in crate::cli) async fn codex(
     ensure_installed(&Agent::Codex, &launch.settings.commands)?;
     trust_codex(ctx, &launch.workspace).await;
     // Its wrapper starts an idle Codex's next turn only in a zmx session.
-    let delivery = if terminal::agents_can_be_prompted(&launch.settings) {
+    let delivery = if terminal::agents_can_be_prompted(ctx, &launch.settings) {
         Delivery::Pushed
     } else {
         Delivery::Watched

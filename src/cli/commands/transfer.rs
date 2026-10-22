@@ -231,8 +231,8 @@ async fn check_export(
             destination.display()
         ),
         None => ensure!(
-            !crate::cli::herdr::closes_with(&ctx.paths, &check.workspace.id),
-            "this Herdr tab closes when the export removes the workspace, ending the stream; export to a file with -o, or from another tab"
+            !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
+            "this tab closes when the export removes the workspace, ending the stream; export to a file with -o, or from another tab"
         ),
     }
     if !yes && !check.workspace.holds.is_empty() {

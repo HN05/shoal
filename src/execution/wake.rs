@@ -1,12 +1,17 @@
 //! Waking an idle Codex, which has no hook that can start its turn: while it
 //! is idle with undelivered updates, the wrapper types a fixed prompt into the
-//! zmx session it runs in, and the prompt's `UserPromptSubmit` hook delivers
-//! them. Claude Code wakes itself through its own hook.
-use std::{ffi::OsString, time::Duration};
+//! terminal session it runs in, and the prompt's `UserPromptSubmit` hook
+//! delivers them. Claude Code wakes itself through its own hook.
+use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::{agent::Agent, cli::client, paths::Paths, protocol::Method};
+use crate::{
+    agent::Agent,
+    cli::{client, terminal::PromptSession},
+    paths::Paths,
+    protocol::Method,
+};
 
 /// The prompt that starts the turn; the hook supplies the updates.
 const PROMPT: &str = "Shoal: new messages or activity on this workspace's issues and PRs.";
@@ -20,22 +25,22 @@ impl Drop for Waker {
     }
 }
 
-/// The session to wake `agent` in: Codex on the terminal of a zmx session. A
+/// The session to wake `agent` in: Codex on the terminal of a session. A
 /// detached launch has no terminal, though it may inherit a session's name.
-pub(super) fn session(agent: Option<&str>, mode: &super::Mode) -> Option<OsString> {
+pub(super) fn session(agent: Option<&str>, mode: &super::Mode) -> Option<PromptSession> {
     let codex = agent.and_then(|agent| agent.parse::<Agent>().ok()) == Some(Agent::Codex);
     (codex && !matches!(mode, super::Mode::Detached { .. }))
-        .then(crate::cli::terminal::prompt_session)
+        .then(PromptSession::current)
         .flatten()
 }
 
-pub(super) fn start(paths: &Paths, workspace: &str, session: OsString) -> Waker {
+pub(super) fn start(paths: &Paths, workspace: &str, session: PromptSession) -> Waker {
     let paths = paths.clone();
     let workspace = workspace.to_owned();
     Waker(tokio::spawn(async move {
         prompt_when_due(
             |due| await_wake(&paths, &workspace, due),
-            || crate::cli::terminal::submit_prompt(&session, PROMPT),
+            || session.submit(PROMPT),
         )
         .await
     }))
