@@ -12,15 +12,20 @@ use super::{
 use crate::{
     cli::{
         Command, ConfirmationArgs, ItemArgs, WorkspaceScope, agents, client,
+        client::request,
         context::Context,
         output::{Palette, Style},
-        ui::{self, Entries, ViewPicker},
+        ui::{self, Entries, ViewPicker, WidthLimit},
     },
+    daemon::notifications::Notification,
     env,
-    protocol::ConfigTarget,
+    protocol::{ConfigTarget, Method},
 };
 
 const ADD_ENTRY: &str = "add-workspace";
+
+/// How many recent notifications the notifications view lists.
+const NOTIFICATIONS_SHOWN: u32 = 50;
 
 /// A key the picker binds, named by what it does.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -93,11 +98,13 @@ impl Key {
     }
 }
 
-/// What the picker lists: what needs the user, or the work going on.
+/// What the picker lists: what needs the user, the work going on, or what
+/// the daemon saw.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
 pub(crate) enum View {
     Inbox,
     Work,
+    Notifications,
 }
 
 impl View {
@@ -105,6 +112,7 @@ impl View {
         match self {
             Self::Inbox => "inbox> ",
             Self::Work => "work> ",
+            Self::Notifications => "notifications> ",
         }
     }
 
@@ -112,6 +120,7 @@ impl View {
     fn keys(self) -> &'static [Key] {
         match self {
             Self::Inbox => &[Key::Enter, Key::Attach, Key::Inspect, Key::Diff, Key::Add],
+            Self::Notifications => &[Key::Enter, Key::Inspect, Key::Add],
             Self::Work => &[
                 Key::Enter,
                 Key::Delete,
@@ -128,17 +137,17 @@ impl View {
     fn enter_label(self) -> &'static str {
         match self {
             Self::Inbox => "act",
-            Self::Work => "cd",
+            Self::Work | Self::Notifications => "cd",
         }
     }
 
     /// The views a caller with this scope can switch between; workspace
-    /// processes cannot decide what needs the user.
+    /// processes cannot decide what needs the user or read notifications.
     fn available(scoped: bool) -> &'static [Self] {
         if scoped {
             &[Self::Work]
         } else {
-            &[Self::Inbox, Self::Work]
+            &[Self::Inbox, Self::Work, Self::Notifications]
         }
     }
 
@@ -206,6 +215,8 @@ enum Row {
         url: Option<String>,
     },
     Workspace(String),
+    /// A notification, by the name its workspace had, if any.
+    Notification(String),
     Add,
 }
 
@@ -242,6 +253,7 @@ impl Row {
                 format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
             }
             Self::Workspace(workspace) => workspace.clone(),
+            Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
         }
     }
@@ -253,6 +265,9 @@ impl Row {
         let Some((kind, rest)) = id.split_once(':') else {
             return Ok(Self::Workspace(id));
         };
+        if kind == "notification" {
+            return Ok(Self::Notification(rest.to_owned()));
+        }
         let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let workspace = workspace.to_owned();
         let number = || detail.parse().context("picker returned an invalid row");
@@ -283,6 +298,7 @@ impl Row {
             | Self::Failed(workspace)
             | Self::Ready { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
+            Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
             Self::Add => None,
         }
     }
@@ -384,7 +400,66 @@ async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
     match view {
         View::Inbox => inbox_rows(ctx).await,
         View::Work => work_rows(ctx, scoped).await,
+        View::Notifications => notification_rows(ctx).await,
     }
+}
+
+/// Recent notifications, newest first; showing the unread ones marks them
+/// read, as `shoal notifications` does.
+async fn notification_rows(ctx: &Context) -> Result<Entries> {
+    let method = Method::ListNotifications {
+        unread_only: false,
+        limit: NOTIFICATIONS_SHOWN,
+    };
+    let notifications = request::<Vec<Notification>>(&ctx.paths, method).await?;
+    let labels = notification_labels(&notifications);
+    mark_read(ctx, &notifications).await?;
+    Ok(notifications
+        .iter()
+        .map(|notification| {
+            Row::Notification(notification.workspace.clone().unwrap_or_default()).id()
+        })
+        .zip(labels)
+        .collect())
+}
+
+/// One aligned row per notification: when, its workspace, and the message,
+/// dimmed once read and cut to fit the picker.
+fn notification_labels(notifications: &[Notification]) -> Vec<String> {
+    let cells = notifications
+        .iter()
+        .map(|notification| {
+            [
+                (
+                    crate::time::local_minutes(notification.created_at),
+                    Some(Style::Muted),
+                ),
+                (
+                    notification.workspace.clone().unwrap_or_else(|| "-".into()),
+                    Some(Style::Heading),
+                ),
+                (
+                    notification.message.clone(),
+                    notification.read.then_some(Style::Muted),
+                ),
+            ]
+        })
+        .collect();
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 2, width });
+    ui::aligned_to(cells, Palette::picker(), limit)
+}
+
+/// Mark the unread ones of `notifications` read.
+async fn mark_read(ctx: &Context, notifications: &[Notification]) -> Result<()> {
+    let unread: Vec<_> = notifications
+        .iter()
+        .filter(|notification| !notification.read)
+        .map(|notification| notification.id)
+        .collect();
+    if unread.is_empty() {
+        return Ok(());
+    }
+    request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids: unread }).await
 }
 
 /// One row per item that needs the user.
@@ -477,6 +552,12 @@ fn enter(ctx: &Context, row: Row) -> Result<Command> {
         Row::Workspace(workspace) => Command::Cd {
             workspace: Some(workspace),
         },
+        Row::Notification(name) => {
+            ensure!(!name.is_empty(), "the notification names no workspace");
+            Command::Cd {
+                workspace: Some(name),
+            }
+        }
         Row::Add => add(),
     })
 }

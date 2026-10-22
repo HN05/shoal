@@ -7782,13 +7782,28 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
             && to_work.ends_with("internal menu-rows work\n"),
         "{to_work}"
     );
-    let to_inbox = next("work> ");
+    let to_notifications = next("work> ");
+    assert!(
+        to_notifications.starts_with("unbind(ctrl-d,ctrl-e,ctrl-s,ctrl-t,ctrl-f)+")
+            && to_notifications.ends_with("internal menu-rows notifications\n"),
+        "{to_notifications}"
+    );
+    let to_inbox = next("notifications> ");
     assert!(
         to_inbox.starts_with("unbind(ctrl-d,ctrl-e,ctrl-s)+")
             && to_inbox.contains("change-header(enter: act   tab: next view   ")
             && to_inbox.ends_with("internal menu-rows inbox\n"),
         "{to_inbox}"
     );
+    // Notifications name their workspace, and showing them marks them read.
+    fixture.ok(&["notify", "build finished", "--workspace", "asker"]);
+    let shown = fixture.run(&["internal", "menu-rows", "notifications"]);
+    let shown = String::from_utf8(shown.stdout).unwrap();
+    assert!(
+        shown.starts_with("notification:asker\t") && shown.contains("build finished"),
+        "{shown}"
+    );
+    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
 
     // Now bare shoal opens on the inbox, and Enter answers the question.
     let (output, transcript, args, rows) = open("question:", "Postgres\n");

@@ -373,7 +373,9 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
 otherwise on the list of workspaces; `shoal inbox` and `shoal work` open it on
-their view on a terminal, and Tab switches between them (`shoal --help`, or bare `shoal`
+their view on a terminal. Tab cycles the inbox, the workspaces and recent
+notifications, which it marks read as `shoal notifications` does; there
+Enter enters the notification's workspace (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`). Workspace processes see only the workspaces.
