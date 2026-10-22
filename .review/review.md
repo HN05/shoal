@@ -58,7 +58,8 @@ instead of the PR delivery guidance below.
   checks, with a timeout; failure gates readiness even without a setup command.
   Lifecycle and permit changes are excluded while the hook runs. Removal rechecks
   ownership and policy after hooks before selecting branch deletion; idle cleanup
-  requires unchanged HEAD and activity, and manual Auto removal requires unchanged HEAD.
+  requires unchanged HEAD and activity, and manual removal refuses unsaved work its
+  confirmation did not cover.
   Post-remove runs from the repository checkout after ownership is released; failure is a
   warning and notification, never restored ownership. Already-missing worktrees
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
@@ -193,7 +194,8 @@ instead of the PR delivery guidance below.
 - Existing branches, including an issue's derived local branch, use unsuffixed
   worktrees; reopen verified owned workspaces, require explicit adoption for other
   linked checkouts, never adopt the main checkout,
-  and keep the default branch on removal unless deletion was explicit. Adoption records
+  and on removal delete a branch only when a remote or the default branch has all its
+  commits, never the default branch. Adoption records
   identity and readiness atomically without setup, hooks, or Git setting changes;
   it takes normal cleanup ownership and cannot repair moved managed worktrees.
   Idle cleanup accepts commits on remote-tracking branches and commits merged into
