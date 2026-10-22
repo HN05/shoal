@@ -8,6 +8,7 @@ mod auto_update;
 pub(crate) mod caches;
 mod chats;
 pub mod cleanup;
+mod connections;
 pub(crate) mod cpu_usage;
 mod disk;
 pub mod doctor;
@@ -139,8 +140,8 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                 }
             },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
-            accepted = listener.accept(), if clients.len() < MAX_CLIENTS => {
-                let (stream, _) = match accepted {
+            accepted = connections::accept(&listener), if clients.len() < MAX_CLIENTS => {
+                let stream = match accepted {
                     Ok(accepted) => accepted,
                     Err(error) => break Err(error.into()),
                 };
