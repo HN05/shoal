@@ -133,7 +133,8 @@ impl Inbox {
     }
 }
 
-/// Open questions, then pending approval requests, of `workspaces`.
+/// Open questions, then the pending approval requests the user decides, of
+/// `workspaces`; a coordinating agent decides the others.
 fn decision_items(
     questions: Vec<Question>,
     requests: Vec<ApprovalRequest>,
@@ -146,7 +147,11 @@ fn decision_items(
         .map(|question| Item::Question { question });
     let requests = requests
         .into_iter()
-        .filter(|request| request.status == DecisionStatus::Pending && kept(&request.workspace_id))
+        .filter(|request| {
+            request.status == DecisionStatus::Pending
+                && request.decider.is_none()
+                && kept(&request.workspace_id)
+        })
         .map(|request| Item::Approval { request });
     questions.chain(requests).collect()
 }
