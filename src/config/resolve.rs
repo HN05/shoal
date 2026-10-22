@@ -21,6 +21,9 @@ pub struct Effective {
     pub commands: named_commands::Commands,
     /// AI tools that run as agents; machine config, so no layer overrides it.
     pub providers: std::collections::BTreeSet<String>,
+    /// Each AI tool's launcher arguments, machine config like `providers`.
+    #[serde(skip)]
+    pub arguments: BTreeMap<String, crate::ai::Arguments>,
     pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
@@ -158,6 +161,12 @@ impl RepoConfig {
 }
 
 impl Effective {
+    /// Agent `name`'s launcher arguments; an agent no AI tool describes takes
+    /// none.
+    pub fn arguments(&self, name: &str) -> crate::ai::Arguments {
+        self.arguments.get(name).cloned().unwrap_or_default()
+    }
+
     fn from_merged(merged: RepoConfig) -> Result<Self> {
         fn built_in<T>(value: Option<T>, key: &str) -> Result<T> {
             value.with_context(|| format!("{key} has no built-in default"))
@@ -174,6 +183,7 @@ impl Effective {
         Ok(Self {
             commands: merged.commands,
             providers: Default::default(),
+            arguments: Default::default(),
             agent_resume: merged.agent_resume,
             issue_template: merged.issue_template,
             agent_template: merged.agent_template,

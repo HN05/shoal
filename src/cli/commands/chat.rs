@@ -39,7 +39,7 @@ pub(super) async fn start(
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent.name(), &repo);
-    let command = command(ctx, &settings, &repo, &agent, args)?;
+    let command = command(&settings, &repo, &agent, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(ctx, &repo, &chat, &command)
 }
@@ -93,8 +93,7 @@ async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository>
 /// `--agent`, else `default_agent` when it can chat, else a picker of the
 /// installed agents that can.
 fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
-    let agents = crate::config::Config::load(&ctx.paths)?.ai;
-    let chats = |agent: &Agent| can_chat(&agents, agent.name());
+    let chats = |agent: &Agent| can_chat(settings, agent.name());
     let chosen = match agent {
         Some(agent) => {
             ensure!(
@@ -110,21 +109,21 @@ fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Resu
             agents::ensure_available(agent.name(), settings)?;
             Ok(agent)
         }
-        None => pick_agent(ctx, settings, &agents),
+        None => pick_agent(ctx, settings),
     }
 }
 
 /// Chats wait for the user to speak first, so the agent must take its
 /// instructions apart from the first message.
-fn can_chat(agents: &crate::ai::Agents, name: &str) -> bool {
-    crate::ai::arguments(agents, name).instructions.is_some()
+fn can_chat(settings: &Effective, name: &str) -> bool {
+    settings.arguments(name).instructions.is_some()
 }
 
-fn pick_agent(ctx: &Context, settings: &Effective, agents: &crate::ai::Agents) -> Result<Agent> {
+fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let names: Vec<_> = agents::names(settings)
         .into_iter()
-        .filter(|name| can_chat(agents, name))
+        .filter(|name| can_chat(settings, name))
         .filter(|name| agents::installed(name, &settings.commands, &search_path))
         .collect();
     ensure!(!names.is_empty(), "no installed agent can chat");
@@ -163,13 +162,14 @@ async fn start_beside(
 /// The agent's configured launcher with the chat instructions and the hooks
 /// that deliver its messages, run at the checkout.
 fn command(
-    ctx: &Context,
     settings: &Effective,
     repo: &Repository,
     agent: &Agent,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    let args = agents::instruction_args(ctx, agent.name(), &instructions(settings, repo))?
+    let args = settings
+        .arguments(agent.name())
+        .instruction_args(&instructions(settings, repo))
         .unwrap_or_default()
         .into_iter()
         .chain(agents::chat_hook_args(agent.name())?)

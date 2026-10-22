@@ -7,7 +7,7 @@ use anyhow::Result;
 use super::{Integration, Launch, ensure_available};
 use crate::{
     cli::{context::Context, terminal},
-    config::{Config, named_commands, templates},
+    config::{Effective, named_commands, templates},
     execution,
 };
 
@@ -18,43 +18,18 @@ pub(super) async fn tracked(
     integration: &dyn Integration,
     launch: Launch,
 ) -> Result<i32> {
+    ensure_available(&launch.name, &launch.settings)?;
+    if let Some(trust) = integration.trust_file() {
+        trust.trust_workspace(ctx, &launch.workspace).await;
+    }
+    let command = command(ctx, integration, &launch).await?;
     let Launch {
         name,
         workspace,
         settings,
-        prompt,
-        mut args,
-        tracked: _,
         replaces,
+        ..
     } = launch;
-    ensure_available(&name, &settings)?;
-    if let Some(trust) = integration.trust_file() {
-        trust.trust_workspace(ctx, &workspace).await;
-    }
-    let instructions = templates::instructions(
-        settings.agent_template.as_deref(),
-        &workspace,
-        integration.delivery(ctx, &settings),
-    );
-    let (instruction_args, prompt) = separate_instructions(ctx, &name, instructions, prompt)?;
-    let argv = &settings.commands[&name];
-    if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
-        args.insert(0, prompt.clone().into());
-    }
-    let args = instruction_args
-        .into_iter()
-        .chain(integration.hook_args()?)
-        .chain(args)
-        .collect();
-    let command = named_commands::expand_with_fields(
-        &ctx.paths,
-        &settings.commands,
-        &name,
-        &workspace,
-        args,
-        &[("{prompt}", OsStr::new(&prompt))],
-    )
-    .await?;
     if let Some(code) =
         terminal::run_agent(ctx, &settings, &workspace, &name, &replaces, &command).await?
     {
@@ -66,27 +41,67 @@ pub(super) async fn tracked(
     execution::run_recovery(&ctx.paths, workspace.id, command, name, replaces).await
 }
 
+/// The agent's configured command with Shoal's instructions, its hooks, the
+/// prompt and the forwarded arguments.
+async fn command(
+    ctx: &Context,
+    integration: &dyn Integration,
+    launch: &Launch,
+) -> Result<Vec<OsString>> {
+    let Launch {
+        name,
+        workspace,
+        settings,
+        prompt,
+        args,
+        ..
+    } = launch;
+    let instructions = templates::instructions(
+        settings.agent_template.as_deref(),
+        workspace,
+        integration.delivery(ctx, settings),
+    );
+    let (instruction_args, prompt) =
+        separate_instructions(settings, name, instructions, prompt.clone());
+    let mut args = args.clone();
+    let argv = &settings.commands[name];
+    if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
+        args.insert(0, prompt.clone().into());
+    }
+    let args = instruction_args
+        .into_iter()
+        .chain(integration.hook_args()?)
+        .chain(args)
+        .collect();
+    named_commands::expand_with_fields(
+        &ctx.paths,
+        &settings.commands,
+        name,
+        workspace,
+        args,
+        &[("{prompt}", OsStr::new(&prompt))],
+    )
+    .await
+}
+
 /// The arguments carrying `instructions` and the prompt left to send: an
 /// agent without an instructions template gets them ahead of its prompt.
 fn separate_instructions(
-    ctx: &Context,
+    settings: &Effective,
     name: &str,
     instructions: String,
     prompt: Option<String>,
-) -> Result<(Vec<OsString>, String)> {
-    let agents = Config::load(&ctx.paths)?.ai;
+) -> (Vec<OsString>, String) {
     let prompt = prompt.unwrap_or_default();
-    Ok(
-        match crate::ai::arguments(&agents, name).instruction_args(&instructions) {
-            Some(instruction_args) => (instruction_args, prompt),
-            None => (
-                Vec::new(),
-                [instructions, prompt]
-                    .into_iter()
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>()
-                    .join("\n\n"),
-            ),
-        },
-    )
+    match settings.arguments(name).instruction_args(&instructions) {
+        Some(instruction_args) => (instruction_args, prompt),
+        None => (
+            Vec::new(),
+            [instructions, prompt]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+        ),
+    }
 }

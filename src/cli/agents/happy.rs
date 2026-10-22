@@ -100,7 +100,9 @@ async fn start(
         workspace,
         templates::Delivery::Watched,
     );
-    let instruction_args = super::instruction_args(ctx, agent.as_str(), &instructions)?
+    let instruction_args = settings
+        .arguments(agent.as_str())
+        .instruction_args(&instructions)
         .filter(|_| happy::accepts_prompt(agent));
     let prompt = match instruction_args {
         Some(mut configured) => {

@@ -135,6 +135,16 @@ pub fn providers(agents: &Agents) -> BTreeSet<String> {
         .collect()
 }
 
+/// The launcher arguments of every built-in or configured AI tool.
+pub fn all_arguments(agents: &Agents) -> BTreeMap<String, Arguments> {
+    PROVIDERS
+        .iter()
+        .map(|provider| provider.name)
+        .chain(agents.keys().map(String::as_str))
+        .map(|name| (name.to_owned(), arguments(agents, name)))
+        .collect()
+}
+
 /// The arguments `name`'s launcher takes: each configured entry, else the
 /// built-in provider's.
 pub fn arguments(agents: &Agents, name: &str) -> Arguments {

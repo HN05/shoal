@@ -356,17 +356,6 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
     }
 }
 
-/// The arguments that give agent `name` its instructions; `None` when it
-/// takes them only in its first message.
-pub(in crate::cli) fn instruction_args(
-    ctx: &Context,
-    name: &str,
-    instructions: &str,
-) -> Result<Option<Vec<OsString>>> {
-    let agents = Config::load(&ctx.paths)?.ai;
-    Ok(crate::ai::arguments(&agents, name).instruction_args(instructions))
-}
-
 /// Arguments that register Shoal's hooks for agent `name`'s session.
 pub(crate) fn hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
     integration(name).hook_args()

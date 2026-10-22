@@ -665,6 +665,7 @@ impl Config {
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
         let mut effective = resolve::Stack::new(self, layers).resolve()?;
         effective.providers = crate::ai::providers(&self.ai);
+        effective.arguments = crate::ai::all_arguments(&self.ai);
         Ok(effective)
     }
 }
