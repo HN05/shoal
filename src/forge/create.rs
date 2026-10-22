@@ -119,8 +119,9 @@ impl ForgeRepo {
     /// Open the PR and return it as the forge reports it.
     pub(crate) async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
         self.ensure_labels(&pull.labels)?;
+        let per_item = self.check_uploads(account, &pull.attachments).await?;
         let (body, pending) = self
-            .new_body(account, &pull.body, &pull.attachments)
+            .new_body(account, &pull.body, &pull.attachments, per_item)
             .await?;
         let pull = NewPull {
             body,
@@ -182,8 +183,9 @@ impl ForgeRepo {
     /// Open the issue and return it as the forge reports it.
     pub(crate) async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
         self.ensure_labels(&issue.labels)?;
+        let per_item = self.check_uploads(account, &issue.attachments).await?;
         let (body, pending) = self
-            .new_body(account, &issue.body, &issue.attachments)
+            .new_body(account, &issue.body, &issue.attachments, per_item)
             .await?;
         let issue = NewIssue {
             body,

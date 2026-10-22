@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use super::{
     ForgeKind, ForgeRepo,
-    account::Account,
+    account::{Account, ForgejoLogin},
     api::{Request, Upload, encode},
 };
 
@@ -200,30 +200,48 @@ pub(crate) struct Pending {
 }
 
 impl ForgeRepo {
-    /// Whether this forge keeps uploads with the item or comment that shows
-    /// them, rather than with the repository; refuses forges without uploads.
-    pub(crate) fn uploads_per_item(&self) -> Result<bool> {
+    /// Check `attachments`, and that this forge and `account` can upload
+    /// them, before anything is posted. Returns whether the forge keeps
+    /// uploads with the item or comment that shows them rather than with the
+    /// repository.
+    pub(crate) async fn check_uploads(
+        &self,
+        account: &Account,
+        attachments: &[Attachment],
+    ) -> Result<bool> {
+        if attachments.is_empty() {
+            return Ok(false);
+        }
+        check_all(attachments)?;
         match self.kind {
             ForgeKind::GitHub | ForgeKind::GitLab => Ok(false),
-            ForgeKind::Forgejo => Ok(true),
+            ForgeKind::Forgejo => {
+                let login = account.forgejo_login(&self.host).await?;
+                ensure!(
+                    !matches!(login, ForgejoLogin::Tea(_)),
+                    "tea cannot upload files; save an fj login for {} with fj auth login",
+                    self.host
+                );
+                Ok(true)
+            }
             ForgeKind::Bitbucket => bail!("Bitbucket has no API for attaching files"),
         }
     }
 
-    /// The body to post `body` with, its files uploaded to the repository;
-    /// where the forge keeps files per item or comment, a body naming them,
-    /// and the files to attach once that exists.
+    /// The body to post `body` with, its checked files uploaded to the
+    /// repository; where the forge keeps files `per_item` or comment, a body
+    /// naming them, and the files to attach once that exists.
     pub(crate) async fn new_body(
         &self,
         account: &Account,
         body: &str,
         attachments: &[Attachment],
+        per_item: bool,
     ) -> Result<(String, Option<Pending>)> {
         if attachments.is_empty() {
             return Ok((body.to_owned(), None));
         }
-        check_all(attachments)?;
-        if !self.uploads_per_item()? {
+        if !per_item {
             let body = self
                 .attach(account, Holder::Repository, body, attachments)
                 .await?;
@@ -239,7 +257,7 @@ impl ForgeRepo {
         Ok((named, Some(pending)))
     }
 
-    /// Upload `attachments` to `holder` and embed them in `body`.
+    /// Upload the checked `attachments` to `holder` and embed them in `body`.
     pub(crate) async fn attach(
         &self,
         account: &Account,
@@ -247,7 +265,6 @@ impl ForgeRepo {
         body: &str,
         attachments: &[Attachment],
     ) -> Result<String> {
-        check_all(attachments)?;
         let repository = match self.kind {
             ForgeKind::GitHub => Some(self.repository_id(account).await?),
             _ => None,
@@ -505,7 +522,6 @@ mod tests {
         let png = attachment("/t/a b.png", None);
         let video = attachment("/t/c.mp4", None);
         let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
-        assert!(!gitlab.uploads_per_item().unwrap());
         let request = gitlab
             .upload_request(Holder::Repository, &png, None)
             .unwrap();
@@ -533,15 +549,25 @@ mod tests {
         assert_eq!(github.markup(&png, "a [b]", "u"), "![a b](u)");
 
         let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
-        assert!(forgejo.uploads_per_item().unwrap());
         assert!(
             forgejo
                 .upload_request(Holder::Repository, &png, None)
                 .is_err()
         );
+    }
 
+    #[tokio::test]
+    async fn uploads_are_checked_where_the_forge_keeps_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.png");
+        std::fs::write(&path, "png").unwrap();
+        let files = [Attachment { path, alt: None }];
+        let account = Account::default();
+        let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
+        assert!(!gitlab.check_uploads(&account, &files).await.unwrap());
         let bitbucket = ForgeRepo::parse("git@bitbucket.org:team/repo.git").unwrap();
-        let error = bitbucket.uploads_per_item().unwrap_err();
+        assert!(!bitbucket.check_uploads(&account, &[]).await.unwrap());
+        let error = bitbucket.check_uploads(&account, &files).await.unwrap_err();
         assert!(format!("{error:#}").contains("no API for attaching files"));
     }
 

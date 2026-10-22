@@ -747,6 +747,29 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
 }
 
 #[test]
+fn forgejo_refuses_attachments_with_a_tea_login_before_posting() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\ntea = '~/agent-tea'\n");
+    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+    let logins = json!([{"name": "agent", "url": format!("http://{host}")}]);
+    support::install_test_script(
+        fixture.root.path().join("agent-tea"),
+        format!("#!/bin/sh\necho '{logins}'\n"),
+    );
+    let [_, image, _] = attachment_files(&fixture);
+    for args in [
+        &["pr", "comment", "8", "--body", "Seen"][..],
+        &["issue", "open", "--title", "Flaky"],
+    ] {
+        let refused = fixture.run(&[args, &["--workspace", "topic", "--attach", &image]].concat());
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("tea cannot upload files"),
+            "{refused:?}"
+        );
+        assert!(fixture.requests().is_empty());
+    }
+}
+
+#[test]
 fn watches_read_every_page_of_a_discussion() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = json!({"body": {"number": 8, "title": "Issue", "state": "open", "body": "",

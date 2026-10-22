@@ -10,7 +10,7 @@ use super::{
     ForgeKind, ForgeRepo,
     account::Account,
     api::{HttpMethod, Request},
-    attach::{self, Attachment, Holder, Pending},
+    attach::{Attachment, Holder, Pending},
     bitbucket,
     gitlab::gitlab_merge,
     item::{Current, Item, ItemState, draft_prefix},
@@ -82,6 +82,15 @@ impl Action {
                 Some(false) => "unresolve",
                 None => "reply",
             },
+        }
+    }
+
+    /// The files the action attaches.
+    pub fn attachments(&self) -> &[Attachment] {
+        match self {
+            Self::Edit(edit) => &edit.attachments,
+            Self::Comment { attachments, .. } => attachments,
+            _ => &[],
         }
     }
 
@@ -158,8 +167,12 @@ impl ForgeRepo {
         action: &Action,
     ) -> Result<Acted> {
         action.validate(kind)?;
+        // Refused before anything is read or posted.
+        let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
-        let (action, pending) = self.upload_attachments(account, &current, action).await?;
+        let (action, pending) = self
+            .upload_attachments(account, &current, action, per_item)
+            .await?;
         let mut authored = None;
         let mut first = None;
         for request in self.requests(account, current, &action).await? {
@@ -182,17 +195,18 @@ impl ForgeRepo {
     }
 
     /// `action` with its attachments uploaded and embedded in its body, and
-    /// the files of a comment that must exist before the forge takes them.
+    /// the files of a comment that must exist before the forge takes them;
+    /// `per_item` is whether the forge keeps them with an item or comment.
     async fn upload_attachments<'a>(
         &self,
         account: &Account,
         current: &Current,
         action: &'a Action,
+        per_item: bool,
     ) -> Result<(Cow<'a, Action>, Option<Pending>)> {
         match action {
             Action::Edit(edit) if !edit.attachments.is_empty() => {
-                attach::check_all(&edit.attachments)?;
-                let holder = if self.uploads_per_item()? {
+                let holder = if per_item {
                     Holder::Item(current.item.number)
                 } else {
                     Holder::Repository
@@ -209,7 +223,7 @@ impl ForgeRepo {
                 Ok((Cow::Owned(Action::Edit(edit)), None))
             }
             Action::Comment { body, attachments } if !attachments.is_empty() => {
-                let (body, pending) = self.new_body(account, body, attachments).await?;
+                let (body, pending) = self.new_body(account, body, attachments, per_item).await?;
                 let comment = Action::Comment {
                     body,
                     attachments: Vec::new(),
