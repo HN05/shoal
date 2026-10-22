@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 57;
+const SCHEMA_VERSION: i64 = 58;
 
 #[cfg(test)]
 mod benchmark;
@@ -388,6 +388,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (55, include_str!("store/workspace_parent.sql"), None),
     (56, QUEUE_TARGETS, None),
     (57, include_str!("store/chat_messages.sql"), None),
+    (58, include_str!("store/repository_approvals.sql"), None),
 ];
 
 /// The existing workspace a queued launch opens, apart from the workspace a
@@ -1031,6 +1032,9 @@ mod tests {
         if version >= 57 {
             db.execute_batch(include_str!("store/chat_messages.sql"))?;
         }
+        if version >= 58 {
+            db.execute_batch(include_str!("store/repository_approvals.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1609,7 +1613,7 @@ mod tests {
         assert_eq!(migrated.run(operation_snapshot).await.unwrap(), before);
         migrated.run(|db| {
             assert_eq!(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?, SCHEMA_VERSION);
-            db.execute("INSERT INTO access_requests VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
             db.execute_batch("DROP TRIGGER fail_quarantine;")?;
             Ok(())
         }).await.unwrap();
@@ -1636,10 +1640,10 @@ mod tests {
         }).await.unwrap();
         let migrated = Store::open(path.clone()).await.unwrap();
         migrated.run(|db| {
-            db.execute("INSERT INTO access_requests VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
-            assert!(db.execute("INSERT INTO access_requests VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
+            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
             Ok(())
         }).await.unwrap();
         Store::open(path)

@@ -198,7 +198,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migrations 31 to 55 add these columns and tables again when the
+    // Migrations 31 to 58 add these columns and tables again when the
     // emulated database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
@@ -217,7 +217,16 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch(
         "DROP INDEX questions_number; ALTER TABLE questions DROP COLUMN number;
          ALTER TABLE questions DROP COLUMN closed_at;
-         DROP INDEX access_request_number; ALTER TABLE access_requests DROP COLUMN number;",
+         DROP TABLE access_requests;
+         CREATE TABLE access_requests (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            target_key TEXT NOT NULL, name TEXT NOT NULL,
+            record TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+         );
+         CREATE UNIQUE INDEX access_request_name
+            ON access_requests(workspace_id,target_key,name) WHERE active=1;
+         CREATE INDEX access_request_target ON access_requests(workspace_id,target_key);",
     )?;
     db.execute_batch("DROP TABLE workspace_items;")?;
     db.execute_batch("DROP TABLE checkpoints; DROP TABLE checkpoint_numbers;")?;

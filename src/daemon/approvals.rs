@@ -983,7 +983,7 @@ mod tests {
                 save(db, &request)?;
                 assert_eq!(current(db, owner, &target, "default")?.unwrap().key, id);
             }
-            db.execute("INSERT INTO access_requests VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
             assert!(list(db, Some("owner")).is_err());
             assert_eq!(current(db, "owner", &target, "default")?.unwrap().key, "wanted");
             assert!(current(db, "owner", &target, "absent")?.is_none());
@@ -1013,7 +1013,7 @@ mod tests {
                 request.name = key.into();
                 save(db, &request)?;
             }
-            db.execute("INSERT INTO access_requests VALUES ('broken','other','simulator','default','invalid',0,3)", [])?;
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('broken','other','simulator','default','invalid',0,3)", [])?;
             Ok(())
         }).await?;
         for (id, approve, status) in [
@@ -1162,7 +1162,7 @@ mod tests {
             db.execute("INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,mode)
                 VALUES ('lease','owner','global','lock','default','lock',1,'read')", [])?;
             // Unrelated port history cannot block release, even without configured definitions.
-            db.execute("INSERT INTO access_requests VALUES ('port','owner','port/web','default','invalid',1,100)", [])?;
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('port','owner','port/web','default','invalid',1,100)", [])?;
             db.execute("UPDATE access_requests SET record=json_set(record,'$.status','unknown') WHERE id='repo'", [])?;
             Ok(())
         }).await?;
@@ -1200,7 +1200,7 @@ mod tests {
     fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
         db.execute(
             "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?1)
-            INSERT INTO access_requests
+            INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
             SELECT 'history-'||x, CASE WHEN x%2=0 THEN 'owner' ELSE 'other' END,
                 CASE WHEN x%2=0 THEN 'port/other' ELSE 'resource/global/lock' END,
                 'default', 'invalid', 0, 100000+x FROM n",
