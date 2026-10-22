@@ -37,8 +37,10 @@ pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
 
 /// Delete a local branch only while it still points at `commit`, so a
 /// branch that moved meanwhile stays; a symbolic ref goes itself, never its
-/// target. The caller checks that no worktree has it checked out.
-pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> {
+/// target. Its configuration goes too, as `git branch -D` removes it, so a
+/// branch created later under the name does not inherit its upstream. The
+/// caller checks that no worktree has it checked out.
+pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<()> {
     git::run_isolated(
         repo,
         &[
@@ -49,7 +51,24 @@ pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<String> 
             commit,
         ],
     )
-    .await
+    .await?;
+    remove_config(repo, name).await
+}
+
+/// Remove the branch's configuration section, when it has one.
+async fn remove_config(repo: &Path, name: &str) -> Result<()> {
+    let prefix = format!("branch.{name}.");
+    let keys = git::run_isolated(repo, &["config", "--local", "--list", "--name-only"]).await?;
+    // A longer branch name with this one as a dotted prefix has its own section.
+    let configured = keys.lines().any(|key| {
+        key.strip_prefix(&prefix)
+            .is_some_and(|variable| !variable.contains('.'))
+    });
+    if configured {
+        let section = format!("branch.{name}");
+        git::run_isolated(repo, &["config", "--local", "--remove-section", &section]).await?;
+    }
+    Ok(())
 }
 
 /// Whether the local branch is a symbolic ref to another one.

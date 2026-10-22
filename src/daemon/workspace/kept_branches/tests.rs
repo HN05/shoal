@@ -92,13 +92,17 @@ async fn a_kept_branch_goes_once_a_remote_has_its_commits() {
         .unwrap();
     assert!(branch_exists(&repo, "topic"));
 
-    git(&repo.path, &["push", "-q", "origin", "topic"]);
+    git(&repo.path, &["push", "-q", "-u", "origin", "topic"]);
     manager
         .delete_kept_branches_kept_elsewhere(&repo.id)
         .await
         .unwrap();
     assert!(!branch_exists(&repo, "topic"));
     assert!(remembered(&manager, &repo).await.is_empty());
+    // A branch created later under the name starts without the old upstream.
+    let config = git(&repo.path, &["config", "--local", "--list", "--name-only"]);
+    assert!(!config.contains("branch.topic."), "{config}");
+    assert!(config.contains("branch.main."), "{config}");
 }
 
 #[tokio::test]
