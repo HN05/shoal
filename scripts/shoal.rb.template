@@ -34,15 +34,11 @@ class Shoal < Formula
     <<~EOS
       Install the agent skills once (later shoal commands update them after upgrades).
       This fills existing skill directories; name a tool to create its directory:
-        #{opt_bin}/shoal skill install
-        #{opt_bin}/shoal skill install claude
+        shoal skill install
+        shoal skill install claude
 
       Register the per-user daemon:
         shoal install
-
-      The managed daemon applies upgrades when its clients and operations are idle.
-      To apply an upgrade immediately, restart the daemon:
-        #{opt_bin}/shoal daemon restart
     EOS
   end
 
