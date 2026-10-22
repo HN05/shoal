@@ -594,8 +594,11 @@ impl Manager {
         let items = self.selection_items(workspace, selection).await?;
         if items.is_empty() && selection.input.is_none() {
             let (id, kind) = (workspace.id.clone(), selection.kind);
+            let agents = self.tracked_agents().await;
             ensure!(
-                self.store.run(move |db| links_kind(db, &id, kind)).await?,
+                self.store
+                    .run(move |db| links_kind(db, &id, kind, &agents))
+                    .await?,
                 "{NO_LINKED_ITEMS}"
             );
         }
@@ -656,12 +659,13 @@ impl Manager {
         let selection = selection.clone();
         let _guard = self.pr_gate.lock().await;
         let id = id.to_owned();
+        let agents = self.tracked_agents().await;
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
             let items = linked_items(&tx, &id, selection.kind)?;
             if selection.input.is_none() && items.is_empty() {
-                ensure!(links_kind(&tx, &id, selection.kind)?, "{NO_LINKED_ITEMS}");
+                ensure!(links_kind(&tx, &id, selection.kind, &agents)?, "{NO_LINKED_ITEMS}");
             }
             // A PR linked since the poll takes over conflict reports from the branch.
             let branch = if watches_branch(&selection, &items) {
@@ -757,13 +761,15 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let _guard = self.pr_gate.lock().await;
         let waits = self.item_waits.clone();
+        let agents = self.tracked_agents().await;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
                 // The agent also received the updates of the child workspaces
                 // it works on.
-                let delivered = crate::daemon::workspace::receiving_paths(&tx, &workspace.id)?;
+                let delivered =
+                    crate::daemon::workspace::receiving_paths(&tx, &workspace.id, &agents)?;
                 // A delivering wait has ended, so a wait running in one of
                 // these workspaces, or in one receiving their activity above
                 // them, started after it and must report their updates as well.
@@ -966,11 +972,16 @@ fn redeliver_after(
 
 /// Whether the workspace, or a child workspace whose activity its agent
 /// receives, links an item of `kind`; every workspace has items of no kind.
-fn links_kind(db: &rusqlite::Connection, id: &str, kind: Option<ItemKind>) -> Result<bool> {
+fn links_kind(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: Option<ItemKind>,
+    agents: &crate::daemon::workspace::TrackedAgents,
+) -> Result<bool> {
     if kind.is_none() || !linked_items(db, id, kind)?.is_empty() {
         return Ok(true);
     }
-    for child in crate::daemon::workspace::delegated(db, id)? {
+    for child in crate::daemon::workspace::delegated(db, id, agents)? {
         if !linked_items(db, &child.id, kind)?.is_empty() {
             return Ok(true);
         }

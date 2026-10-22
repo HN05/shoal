@@ -1043,7 +1043,8 @@ workspace creation scope allows; other creation and removal stay with the user.
 The parent's agent receives the issue and PR activity of its children that have
 no agent of their own, and of their children in turn, through its hooks and an
 unfiltered or kind-filtered `watch`; each such update names its workspace in
-`workspace`. A child whose own agent reports its state receives its own activity
+`workspace`. A child with an agent of its own, one that reports its turn state or
+any agent Shoal tracks there, receives its own activity
 and its subtree's instead. A child keeps its parent from every unattended removal,
 completion and PR cleanup included, with `cleanup_reason` `children`, until the
 child is removed; each child completes on its own with `shoal done`. Removing a

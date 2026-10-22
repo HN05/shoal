@@ -37,7 +37,7 @@ pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
-pub(crate) use tree::{Source, delegated, receiving_paths};
+pub(crate) use tree::{Source, TrackedAgents, delegated, receiving_paths};
 
 use crate::{
     config::Config,

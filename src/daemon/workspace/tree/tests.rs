@@ -483,3 +483,60 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         assert_eq!(authorized.is_ok(), allowed, "{}", question.ask.question);
     }
 }
+
+#[tokio::test]
+async fn tracked_agents_without_turn_states_coordinate_and_report() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    // Custom and Happy agents report no turn state; the daemon tracks them.
+    let mut connections = Vec::new();
+    for workspace in [&parent, &child] {
+        let started = manager
+            .begin_execution(
+                &workspace.id,
+                None,
+                super::super::ExecutionKind::Command,
+                None,
+            )
+            .await
+            .unwrap();
+        manager
+            .track_agent(
+                &started.plan.id,
+                "droid",
+                &workspace.id,
+                &workspace.name,
+                false,
+                std::time::Duration::ZERO,
+            )
+            .await;
+        connections.push(started.stop);
+    }
+    manager
+        .send_message(&child.id, "done with the API".into())
+        .await
+        .unwrap();
+    let received = manager.agent_messages(&parent.id).await.unwrap();
+    assert_eq!(received[0].message, "child: done with the API");
+    assert!(manager.notifications(false, 10).await.unwrap().is_empty());
+    // The child's own agent receives its activity instead of the parent's.
+    assert!(
+        manager
+            .delegated_workspaces(&parent.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

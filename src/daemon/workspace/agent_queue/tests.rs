@@ -944,3 +944,28 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
     }
 }
+
+#[tokio::test]
+async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    // Removal reserves the workspace before its final checks; the queue
+    // insertion then refuses the launch in the same transaction.
+    manager
+        .reserve_lifecycle(&child.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let error = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.id.clone()),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("not ready"), "{error:#}");
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+}

@@ -167,6 +167,13 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                // Removal reserves the workspace before its final checks, so
+                // a launch either precedes them, which keeps the workspace, or
+                // is refused here.
+                if let Some(workspace) = &opens {
+                    crate::daemon::store::require_ready(&tx, workspace)
+                        .context("start agents in a ready workspace")?;
+                }
                 ensure!(
                     !crate::daemon::store::exists(
                         &tx,
@@ -781,19 +788,14 @@ impl Manager {
             .await
     }
 
-    /// The ID of the ready workspace of `repository_id` a launch opens.
+    /// The ID of the workspace of `repository_id` a launch opens; the
+    /// insertion requires it ready.
     async fn launch_target(&self, workspace: &str, repository_id: &str) -> Result<String> {
         let workspace = self.workspace(workspace).await?;
         ensure!(
             workspace.repository_id == repository_id,
             "workspace {} belongs to another repository",
             workspace.name
-        );
-        ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
-            "workspace {} is {}; start agents in a ready workspace",
-            workspace.name,
-            workspace.state
         );
         Ok(workspace.id)
     }

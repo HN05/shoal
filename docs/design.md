@@ -311,7 +311,8 @@ child whose directory it runs in, and agent hooks always report for the agent's
 own workspace. The parent's agent receives the issue and PR activity of the
 children without an agent of their own, and theirs in turn, each update naming
 its workspace, through the same cursors, deliveries and acknowledgements as its
-own; a child's own agent, as the state its hooks report shows, takes over its
+own; a child's own agent, which reports its turn state or which Shoal tracks
+there, as it tracks custom and Happy agents that report none, takes over its
 subtree. A parent stays until its children are removed, through every unattended
 removal like a hold, so one `done` at the top leaves the tree until its PRs
 merge; each child completes on its own. Removing a parent moves its children up
