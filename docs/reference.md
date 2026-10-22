@@ -130,8 +130,8 @@ Monitoring does not guarantee that the OS will never reach its OOM limit.
 
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
-deletes the DerivedData there of projects that lay in the directory of a
-repository using the [`xcode` preset](#build-tool-presets) and no longer exist,
+deletes the DerivedData there of projects whose worktree no longer exists in
+the directory of a repository using the [`xcode` preset](#build-tool-presets),
 removes the workspaces there that idle cleanup would remove, without waiting for
 their idle delay, then empties [shared caches](#shared-caches) there nothing is
 using, until enough space is available. A repository with idle

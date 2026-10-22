@@ -423,8 +423,8 @@ mod tests {
             .create_workspace(&repo.id, "live".into(), None, None, None)
             .await
             .unwrap();
+        // A live worktree's project may be missing while it regenerates.
         let project = live.path.join("App.xcodeproj");
-        std::fs::create_dir(&project).unwrap();
         let location = crate::presets::derived_data::location(&manager.paths.home).unwrap();
         let folder =
             |name, project: &Path| crate::presets::derived_data::folder(&location, name, project);

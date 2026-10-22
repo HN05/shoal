@@ -59,9 +59,10 @@ impl Manager {
         }
     }
 
-    /// Delete the DerivedData of projects that lay inside the repository's
-    /// directory and no longer exist, which earlier removals left. An absent
-    /// directory, such as an unmounted volume, proves nothing gone.
+    /// Delete the DerivedData of projects whose worktree directory in the
+    /// repository's directory no longer exists, which earlier removals left.
+    /// A project missing from a live worktree may be regenerating. An absent
+    /// repository directory, such as an unmounted volume, proves nothing gone.
     pub(crate) async fn delete_stale_derived_data(&self, repo: &Repository, location: &Path) {
         let name = crate::forge::repository::name(repo);
         let Some(directory) = repo.workspaces_dir.clone() else {
@@ -79,7 +80,11 @@ impl Manager {
             }
         }
         let stale = move |project: &Path| {
-            project.starts_with(&directory) && matches!(project.try_exists(), Ok(false))
+            project
+                .strip_prefix(&directory)
+                .ok()
+                .and_then(|relative| relative.components().next())
+                .is_some_and(|worktree| matches!(directory.join(worktree).try_exists(), Ok(false)))
         };
         match delete(location.to_owned(), stale).await {
             Ok(folders) => {
