@@ -372,6 +372,8 @@ daemon validates and refreshes, and the CLI worker merges.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
 Refresh fetches use private temporary refs; landing merges run in the tracked wrapper.
+A fetch of a whole remote also deletes the tracking refs of branches the remote no
+longer has, since cleanup counts commits on a stale ref as pushed.
 
 A repository's `[seed]` keeps one build of its local default branch that new
 worktrees start from, instead of sharing build directories between live

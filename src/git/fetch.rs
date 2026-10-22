@@ -41,9 +41,15 @@ pub async fn fetch_commit(
     resolve_commit(repo, destination, run).await
 }
 
-/// Refresh the configured tracking refs of a remote.
+/// Refresh the configured tracking refs of a remote, deleting those whose
+/// branch the remote no longer has: a stale ref would count commits as pushed
+/// that exist only locally.
 pub async fn remote(repo: &Path, remote: &str) -> Result<String> {
-    super::run_isolated(repo, &[FETCH_SAFE_ARGS, &["--", remote]].concat()).await
+    super::run_isolated(
+        repo,
+        &[FETCH_SAFE_ARGS, &["--prune", "--", remote]].concat(),
+    )
+    .await
 }
 
 /// Refresh a branch using the remote's configured tracking-ref mapping.
@@ -164,6 +170,31 @@ mod tests {
             fs::remove_file(lock.unwrap()).unwrap();
             git(&repo, &["update-ref", "-d", &reference]);
         }
+    }
+
+    #[tokio::test]
+    async fn remote_fetch_deletes_tracking_refs_of_deleted_branches() {
+        let root = tempfile::tempdir().unwrap();
+        let origin = repository(root.path(), "origin");
+        git(&origin, &["branch", "gone"]);
+        git(&origin, &["branch", "kept"]);
+        let clone = root.path().join("clone");
+        git(
+            root.path(),
+            &["clone", "--quiet", origin.to_str().unwrap(), "clone"],
+        );
+        git(&origin, &["branch", "-D", "gone"]);
+        remote(&clone, "origin").await.unwrap();
+        let refs = git(
+            &clone,
+            &[
+                "for-each-ref",
+                "--format=%(refname)",
+                "refs/remotes/origin/",
+            ],
+        );
+        assert!(refs.contains("refs/remotes/origin/kept"), "{refs}");
+        assert!(!refs.contains("refs/remotes/origin/gone"), "{refs}");
     }
 
     #[tokio::test]
