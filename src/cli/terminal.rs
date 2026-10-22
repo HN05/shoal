@@ -61,6 +61,17 @@ pub(in crate::cli) async fn start_queued(
     Ok(())
 }
 
+/// Refuse a background start that the daemon's worker could not run from
+/// this terminal under `settings`: one outside a Herdr that opens tabs needs zmx.
+pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
+    match Backend::queued(settings) {
+        Backend::Herdr => Ok(()),
+        Backend::Zmx => {
+            super::agents::ensure_program("background launch", crate::tools::Tool::Zmx.program())
+        }
+    }
+}
+
 /// The variables a later start needs to reach this terminal's backend, such
 /// as a queued start the daemon runs without a terminal.
 pub(in crate::cli) fn environment() -> BTreeMap<String, String> {

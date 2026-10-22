@@ -188,6 +188,10 @@ pub enum Method {
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
     },
+    /// Reopen the existing `workspace` for a launch in it, never creating one.
+    ReopenWorkspace {
+        workspace: String,
+    },
     /// Create a workspace on a new branch in `workspace`'s repository, split
     /// from it as its child.
     SplitWorkspace {

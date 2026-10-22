@@ -329,6 +329,7 @@ pub(super) async fn add(
         args,
         queue_entry: None,
         chat: env::chat(),
+        workspace: None,
     };
     if let Some(agent) = plan.agent_name() {
         let title = issue.as_ref().map(|issue| issue.title.clone());
@@ -419,6 +420,9 @@ pub(in crate::cli) struct AddPlan {
     /// The chat that planned the addition, which the workspace belongs to.
     #[serde(default)]
     chat: Option<String>,
+    /// The existing workspace a launch in it reopens; it never creates one.
+    #[serde(default)]
+    workspace: Option<String>,
 }
 
 impl AddPlan {
@@ -451,13 +455,15 @@ impl AddPlan {
             args,
             queue_entry: None,
             chat: None,
+            workspace: Some(workspace.id.clone()),
         }
     }
 
     /// Whether the plan opens `workspace`'s branch in its repository without
     /// creating anything.
     pub(super) fn opens(&self, workspace: &Workspace) -> bool {
-        self.repository.value() == workspace.repository_id
+        self.workspace.as_deref() == Some(workspace.id.as_str())
+            && self.repository.value() == workspace.repository_id
             && self.creation.branch.is_none()
             && self.creation.path.is_none()
             && self.creation.existing.as_deref() == Some(workspace.branch.as_str())
@@ -565,9 +571,15 @@ async fn add_planned(
         args,
         queue_entry,
         chat,
+        workspace,
     } = plan;
     let pr = creation.pr.clone();
-    let opened = open_add_workspace(ctx, &target, creation, chat).await?;
+    let opened = match workspace {
+        Some(workspace) => {
+            request::<OpenedWorkspace>(&ctx.paths, Method::ReopenWorkspace { workspace }).await?
+        }
+        None => open_add_workspace(ctx, &target, creation, chat).await?,
+    };
     if let Some(entry) = &queue_entry {
         super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }

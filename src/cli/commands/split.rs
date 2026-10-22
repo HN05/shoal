@@ -48,11 +48,13 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         crate::git::check_branch_name(None, branch).await?;
     }
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    // An agent that cannot start fails before any work is created.
+    // An agent that cannot start, or its detached launcher, fails before
+    // any work is created.
     if let Some(agent) = &split.agent {
         let settings =
             client::settings(&ctx.paths, ConfigTarget::Workspace(parent.clone())).await?;
         agents::ensure_installed(agent, &settings.commands)?;
+        terminal::ensure_background(&settings)?;
     }
     let issue = match &split.issue {
         Some(input) => Some(load_issue(ctx, &parent, input).await?),

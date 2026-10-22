@@ -1057,7 +1057,10 @@ parent moves its children to its own parent, or to none, and records a
 issue or the arguments after `--`. It goes through the [agent queue](#agent-queue)
 like any launch, but the daemon always starts it, detached in a background
 Herdr tab or zmx session, so the agent gets the child's own scope rather than
-the caller's; Codex runs as its CLI. `--json` adds the queue entry as `agent`.
+the caller's; Codex runs as its CLI. The agent and that launcher, zmx outside a
+Herdr that opens tabs, are checked before the child is created, and the launch
+reopens only the child, failing if it was removed meanwhile. `--json` adds the
+queue entry as `agent`.
 Workspace processes may queue agents only in the workspaces below their own.
 
 The agent of the nearest ancestor that has one coordinates a child's work: it

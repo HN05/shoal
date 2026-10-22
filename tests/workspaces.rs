@@ -3275,6 +3275,32 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 }
 
 #[test]
+fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
+    let fixture = Fixture::with_config(Some("[ai.droid]\ncommand = ['fake-droid', '{args}']\n"));
+    let bin = fixture.root.path().join("bin");
+    install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
+    fixture.add("parent");
+    // Outside Herdr the daemon starts the agent in a detached zmx session.
+    let output = fixture
+        .command()
+        .args([
+            "split",
+            "child",
+            "--workspace",
+            "parent",
+            "--agent",
+            "droid",
+        ])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("zmx is not installed"), "{stderr}");
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn split_refuses_an_unavailable_agent_before_creating_the_child() {
     let fixture = Fixture::new();
     fixture.add("parent");

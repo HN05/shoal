@@ -57,6 +57,21 @@ pub(crate) struct VerifiedWorktree {
 
 impl Manager {
     /// Validate and reactivate an owned workspace being reopened by branch or path.
+    /// Reopen the recorded workspace `selector` for a launch in it; a removed
+    /// workspace fails rather than being created again.
+    pub async fn reopen_workspace(&self, selector: &str) -> Result<crate::model::OpenedWorkspace> {
+        let workspace = self.workspace(selector).await?;
+        let (_repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
+        // The workspace may have gone while waiting for the repository.
+        let workspace = self.workspace(&workspace.id).await?;
+        self.reopen_owned_workspace(&workspace, &workspace.branch)
+            .await?;
+        Ok(crate::model::OpenedWorkspace {
+            workspace,
+            reused: true,
+        })
+    }
+
     pub(crate) async fn reopen_owned_workspace(
         &self,
         workspace: &Workspace,

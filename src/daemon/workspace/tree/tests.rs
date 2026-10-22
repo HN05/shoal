@@ -610,3 +610,30 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     assert!(format!("{error:#}").contains("changed since it was shown"));
     assert!(manager.question(reused.id).await.unwrap().answer.is_none());
 }
+
+#[tokio::test]
+async fn a_launch_reopens_only_its_recorded_workspace() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let opened = manager.reopen_workspace(&child.id).await.unwrap();
+    assert!(opened.reused && opened.workspace.id == child.id);
+    // Removed during the handoff, the child is not created again from its branch.
+    manager
+        .remove_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert!(manager.reopen_workspace(&child.id).await.is_err());
+    assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+}

@@ -470,6 +470,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.assign_chat(&workspace.id, chat).await?;
             Body::Workspace(manager.workspace(&workspace.id).await?)
         }
+        Method::ReopenWorkspace { workspace } => {
+            Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
+        }
         Method::SplitWorkspace {
             workspace,
             name,
