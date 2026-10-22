@@ -202,12 +202,18 @@ async fn listing_shows_kept_branches_with_unpushed_commits() {
 #[tokio::test]
 async fn deletion_checks_every_branch_before_deleting_any() {
     let (root, manager, repo, _other) = fixture().await;
+    let mut heads = std::collections::HashMap::new();
     for name in ["first", "second", "busy"] {
-        kept(&manager, &repo, name).await;
+        heads.insert(name, kept(&manager, &repo, name).await);
     }
     let target = |branch: &str| BranchTarget {
         repository_id: repo.id.clone(),
         branch: branch.into(),
+        head: heads.get(branch).cloned().unwrap_or_default(),
+    };
+    let listed_earlier = BranchTarget {
+        head: heads["first"].clone() + "0",
+        ..target("second")
     };
     let elsewhere = root.path().join("elsewhere");
     git(
@@ -221,6 +227,10 @@ async fn deletion_checks_every_branch_before_deleting_any() {
             "missing is not a branch Shoal kept",
         ),
         (vec![target("first"), target("busy")], "busy is checked out"),
+        (
+            vec![target("first"), listed_earlier.clone()],
+            "second changed since it was listed",
+        ),
     ] {
         let failed = manager.delete_kept_branches(targets).await.unwrap_err();
         assert!(format!("{failed:#}").contains(error), "{failed:#}");

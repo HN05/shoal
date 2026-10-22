@@ -71,6 +71,7 @@ async fn remove(
         .map(|branch| BranchTarget {
             repository_id: branch.repository_id.clone(),
             branch: branch.branch.clone(),
+            head: branch.head.clone(),
         })
         .collect();
     let deleted =

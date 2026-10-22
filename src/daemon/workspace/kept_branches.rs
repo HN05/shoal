@@ -4,7 +4,7 @@
 //! to a workspace again is forgotten.
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 
 use super::Manager;
@@ -134,8 +134,8 @@ impl Manager {
 
     /// Delete the targets with the commits only they have, checking every
     /// one before deleting any. A target must be a kept branch still at the
-    /// commit removal left it on, not checked out, in a repository whose
-    /// default branch resolves.
+    /// commit removal left it on and the user saw, not checked out, in a
+    /// repository whose default branch resolves.
     pub async fn delete_kept_branches(
         &self,
         targets: Vec<BranchTarget>,
@@ -163,6 +163,11 @@ impl Manager {
                     .iter()
                     .find(|(record, _)| record.branch == target.branch)
                     .with_context(|| format!("{} is not a branch Shoal kept", target.branch))?;
+                ensure!(
+                    record.head == target.head,
+                    "{} changed since it was listed; list kept branches again",
+                    target.branch
+                );
                 let unkept_commits = match status {
                     Status::Kept { unkept_commits } => *unkept_commits,
                     Status::CheckedOut => bail!(

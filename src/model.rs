@@ -169,11 +169,12 @@ pub struct KeptBranch {
     pub subject: String,
 }
 
-/// A kept branch to delete.
+/// A kept branch to delete, at the commit the user saw.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BranchTarget {
     pub repository_id: String,
     pub branch: String,
+    pub head: String,
 }
 
 /// What `shoal restore` recreates of a removed workspace until `expires_at`.
