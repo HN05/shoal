@@ -1732,9 +1732,9 @@ body file's directory or the working directory, and otherwise after the body;
 `edit` without a new description adds them after the current one. GitHub and
 GitLab keep uploads with the repository. Forgejo and Gitea keep them with the
 item or comment, so a new comment or item is first posted naming the files,
-then updated to show them. GitHub needs write access to the repository, Forgejo
-an fj login, and GitLab a token glab saved in its configuration; Bitbucket has
-no API for attachments and refuses them before sending anything.
+then updated to show them. GitHub needs write access to the repository and Forgejo
+an fj login; Bitbucket has no API for attachments and refuses them before
+sending anything.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review
 thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 `--body` or `--body-file`; `resolve` posts one as a reply first when given.

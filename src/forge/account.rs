@@ -125,29 +125,6 @@ impl Account {
     }
 
     /// The curl config line that signs a Bitbucket request in, if any.
-    /// The token glab saved for the GitLab `host`, as this account runs glab.
-    pub(super) async fn gitlab_token(&self, host: &str) -> Result<String> {
-        let mut glab = tokio::process::Command::new(crate::tools::Tool::GitLab.program());
-        glab.env("NO_COLOR", "1")
-            .args(["config", "get", "token", "--host", host]);
-        self.apply(&mut glab);
-        let output = crate::subprocess::Run::new(glab)
-            .timeout(super::api::TIMEOUT)
-            .output()
-            .await
-            .context("run glab; is it installed?")?;
-        let token = output.trim();
-        // The token goes into a curl config line; anything but a plain token is refused.
-        ensure!(
-            !token.is_empty()
-                && token
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')),
-            "glab has no token saved for {host} that Shoal can send; run glab auth login"
-        );
-        Ok(token.to_owned())
-    }
-
     pub(super) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
         self.bitbucket_authorization
             .get_or_try_init(|| self.bitbucket.authorization())

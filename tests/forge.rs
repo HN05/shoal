@@ -1,5 +1,5 @@
-//! Issue and PR actions against a scripted forge: `gh` on GitHub, an HTTP
-//! server on Forgejo, both from `fixtures/forge.py`.
+//! Issue and PR actions against a scripted forge: `gh` on GitHub, `glab` on
+//! GitLab, an HTTP server on Forgejo, all from `fixtures/forge.py`.
 // These tests never restart the daemon.
 #[allow(dead_code)]
 #[path = "support/daemon.rs"]
@@ -531,6 +531,63 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "{refused:?}"
     );
     assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn gitlab_uploads_send_a_form_through_the_agents_glab() {
+    // The scripted gh answers as glab on a GitLab remote too.
+    let fixture = Fixture::new(Forge::GitHub, "[agent_auth]\nglab = '~/agent-glab'\n");
+    let root = fixture.root.path();
+    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@gitlab.com:team/project.git",
+        ],
+    );
+    let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
+    support::install_test_script(fixture.root.path().join("agent-glab"), wrapper);
+    let [_, image, _] = attachment_files(&fixture);
+    let project = "projects/team%2Fproject";
+    fixture.respond(json!({
+        format!("GET {project}/merge_requests/8"): {"body": {"iid": 8, "title": "Fix",
+            "state": "opened", "description": "", "labels": [], "source_branch": "topic",
+            "target_branch": "main", "draft": false, "sha": "abc",
+            "source_project_id": 1, "target_project_id": 1}},
+        format!("POST {project}/uploads"): {"status": 201, "body": {"url": "/uploads/1/login.png"}},
+        format!("POST {project}/merge_requests/8/notes"): {"status": 201, "body": {"id": 5}},
+    }));
+    fixture.ok(&[
+        "pr",
+        "comment",
+        "8",
+        "--workspace",
+        "topic",
+        "--attach",
+        &image,
+    ]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| (request[1].clone(), request[2].clone()))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            (
+                json!({"field": "file", "file": "login.png", "type": "image/png", "bytes": 3}),
+                json!("agent")
+            ),
+            (
+                json!({"body": "![login.png](/uploads/1/login.png)"}),
+                json!("agent")
+            ),
+        ]
+    );
 }
 
 #[test]

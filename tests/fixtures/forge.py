@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""A scripted forge for tests: `gh` when installed under that name, or a
-Forgejo API server with `serve <port-file>`.
+"""A scripted forge for tests: `gh` or `glab` when installed under that name,
+or a Forgejo API server with `serve <port-file>`.
 
 Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
@@ -42,10 +42,12 @@ def gh(args):
         index = args.index("-X")
         method, endpoint = args[index + 1], args[index + 2]
         source = args[args.index("--input") + 1] if "--input" in args else None
-        if source in (None, "-"):
+        header = args[args.index("-H") + 1] if "-H" in args else ""
+        if source == "-" and "multipart/form-data" in header:
+            body = form_file(sys.stdin.buffer.read())
+        elif source in (None, "-"):
             body = json.load(sys.stdin) if source else None
         else:
-            header = args[args.index("-H") + 1]
             with open(source, "rb") as f:
                 data = f.read()
             body = {

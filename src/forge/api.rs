@@ -164,10 +164,6 @@ impl ForgeRepo {
             let body = match self.kind {
                 ForgeKind::GitHub => self.github_send(account, request).await,
                 ForgeKind::Forgejo => self.forgejo_send(account, request).await,
-                // glab cannot send a multipart form.
-                ForgeKind::GitLab if request.upload.is_some() => {
-                    self.gitlab_upload(account, request).await
-                }
                 ForgeKind::GitLab => self.passthrough(Tool::GitLab, account, request).await,
                 ForgeKind::Bitbucket => self.bitbucket_send(account, request).await,
             }?;
@@ -209,21 +205,34 @@ impl ForgeRepo {
                 request.method.as_str(),
                 &request.endpoint,
             ]);
-        if let Some(upload) = &request.upload {
-            ensure!(
-                upload.field.is_none(),
-                "{program} cannot send a multipart form"
-            );
-            cli.args(["-H", &format!("Content-Type: {}", upload.content_type)])
-                .arg("--input")
-                .arg(&upload.path);
-        } else if request.body.is_some() {
-            cli.args(["-H", "Content-Type: application/json", "--input", "-"]);
+        let mut input = Vec::new();
+        match &request.upload {
+            // The CLIs cannot build a form, so its body is sent as given.
+            Some(upload @ Upload { field: Some(_), .. }) => {
+                let (content_type, form) = multipart(upload).await?;
+                cli.args([
+                    "-H",
+                    &format!("Content-Type: {content_type}"),
+                    "--input",
+                    "-",
+                ]);
+                input = form;
+            }
+            Some(upload) => {
+                cli.args(["-H", &format!("Content-Type: {}", upload.content_type)])
+                    .arg("--input")
+                    .arg(&upload.path);
+            }
+            None => {
+                if let Some(body) = &request.body {
+                    cli.args(["-H", "Content-Type: application/json", "--input", "-"]);
+                    input = body.to_string().into_bytes();
+                }
+            }
         }
         account.apply(&mut cli);
-        let body = request.body.as_ref().map(Value::to_string);
         let output = crate::subprocess::Run::new(cli)
-            .input(body.unwrap_or_default())
+            .input(input)
             .timeout(request.timeout())
             .output_limit(MAX_RESPONSE_BYTES)
             .capture()
@@ -266,17 +275,6 @@ impl ForgeRepo {
             "{}://{}/api/v1/{}",
             self.web_scheme, self.host, request.endpoint
         )
-    }
-
-    /// Upload with curl and the token glab saved for the host.
-    async fn gitlab_upload(&self, account: &Account, request: &Request) -> Result<Value> {
-        let token = account.gitlab_token(&self.host).await?;
-        let url = format!(
-            "{}://{}/api/v4/{}",
-            self.web_scheme, self.host, request.endpoint
-        );
-        let header = format!("header = \"PRIVATE-TOKEN: {token}\"\n").into_bytes();
-        self.curl_send(&url, Some(header), request).await
     }
 
     async fn bitbucket_send(&self, account: &Account, request: &Request) -> Result<Value> {
@@ -457,6 +455,33 @@ pub(super) fn http_body(status: u16, body: &str) -> Result<&str> {
     Ok(body)
 }
 
+/// A multipart form with `upload` as its one field, and its content type.
+async fn multipart(upload: &Upload) -> Result<(String, Vec<u8>)> {
+    let field = upload.field.context("a form upload names its field")?;
+    let path = upload.path.clone();
+    let content = tokio::task::spawn_blocking(move || std::fs::read(path))
+        .await?
+        .with_context(|| format!("read {}", upload.path.display()))?;
+    let name: String = upload
+        .path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !matches!(c, '"' | '\\' | '\r' | '\n'))
+        .collect();
+    let boundary = format!("shoal-{}", uuid::Uuid::new_v4().simple());
+    let mut form = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{name}\"\r\n\
+         Content-Type: {}\r\n\r\n",
+        upload.content_type
+    )
+    .into_bytes();
+    form.extend(content);
+    form.extend(format!("\r\n--{boundary}--\r\n").into_bytes());
+    Ok((format!("multipart/form-data; boundary={boundary}"), form))
+}
+
 /// curl's arguments that send `upload`: a form field, whose quoted file name
 /// escapes what curl reads specially, or the raw body.
 fn upload_args(upload: &Upload) -> Result<Vec<String>> {
@@ -601,6 +626,29 @@ mod tests {
             error_message(r#"{"type":"error","error":{"message":"Repository not found"}}"#)
                 .unwrap(),
             "Repository not found"
+        );
+    }
+
+    #[tokio::test]
+    async fn forms_carry_the_file_under_its_field_and_a_plain_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a\"b.png");
+        std::fs::write(&path, "png").unwrap();
+        let upload = Upload {
+            path,
+            content_type: "image/png",
+            field: Some("file"),
+        };
+        let (content_type, form) = multipart(&upload).await.unwrap();
+        let boundary = content_type
+            .strip_prefix("multipart/form-data; boundary=")
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(form).unwrap(),
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"ab.png\"\r\n\
+                 Content-Type: image/png\r\n\r\npng\r\n--{boundary}--\r\n"
+            )
         );
     }
 
