@@ -1065,7 +1065,9 @@ A proposal is an approval request whose record carries the command's options wit
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
 attachments in the state directory until no pending proposal uses them; the command
 reports it and exits 0, because the agent goes on with its work and hears the
-decision as a message. Approval carries data: the user may replace the title and
+decision as a message. Only the user decides a proposal: publishing to a forge
+other people see is the review the setting asks for, so proposals are never routed
+to a coordinating agent. Approval carries data: the user may replace the title and
 body, and the daemon then opens the item as the agent account through the same path
 `issue open` and `pr open` use, recording and linking it. Denial may carry a reason,
 and an issue proposal may be denied as a duplicate of an existing issue, which gets

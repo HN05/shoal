@@ -1886,7 +1886,8 @@ returns that request; at a newer commit it replaces it, and the old one stays
 Files given with `--attach` are copied into Shoal's state directory, since the
 agent's copies may be gone when you decide, and deleted once no pending proposal
 uses them, by the next decision or proposal or by the cleanup sweep. Both commands exit 0 with JSON `proposed`, the request, and the agent
-continues its work.
+continues its work. Only you decide proposals; they are never routed to a
+coordinating agent, even in a child workspace.
 
 ```sh
 shoal approvals                     # proposals show their labels and description

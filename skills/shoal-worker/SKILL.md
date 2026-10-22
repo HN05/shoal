@@ -50,8 +50,9 @@ the user's: `shoal pr merge` refuses workspace processes.
 
 A repository can require the user's approval for issues and PRs you open
 (`[approvals]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
-approval request, instead of the item; `pr open` still pushes. Continue your
-work and do not open the item another way. The user may edit the title and
+approval request, instead of the item; `pr open` still pushes. Only the user decides
+proposals, never a coordinating agent. Continue your work and do not open the
+item another way. The user may edit the title and
 description, and the decision arrives as a message: approval names the opened
 item, which a PR's watch then follows; denial may give a reason or name the
 issue it duplicates. A proposed issue stays when your workspace is removed, so
