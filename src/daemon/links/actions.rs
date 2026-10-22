@@ -8,13 +8,14 @@ use crate::{
     daemon::{events, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
+        account::{Account, AgentLogins},
         action::{Action, Edit},
         conventions,
         create::{NewIssue, NewPull, PullOptions},
         item::{Item, ItemState, Opened},
         link::{ItemKind, Relation},
     },
+    fsutil::expand_home,
     model::{ReviewMark, Workspace},
 };
 
@@ -193,12 +194,14 @@ impl Manager {
         // One snapshot, so a reload cannot pair a profile with another map.
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
-        Account::agent(
-            &settings.agent_auth,
-            &self.paths,
-            &config.git,
-            &config.bitbucket,
-        )
+        let auth = &settings.agent_auth;
+        let logins = AgentLogins {
+            launch: Box::new(auth.prepare(&self.paths, &config.git)?),
+            fj_home: (auth.fj_home.as_ref()).map(|home| expand_home(home, &self.paths.home)),
+            fj: auth.fj.is_some(),
+            tea: auth.tea.is_some(),
+        };
+        Ok(Account::agent(logins, &config.bitbucket))
     }
 }
 

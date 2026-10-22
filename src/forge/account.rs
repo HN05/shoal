@@ -1,5 +1,5 @@
-//! Whose credentials a forge request uses: the user's own logins, or a
-//! workspace's `[agent_auth]` account.
+//! Whose credentials a forge request uses: the user's own logins, or an
+//! agent's, which the caller chooses and describes.
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -11,12 +11,28 @@ use super::{
     bitbucket::Credentials,
     tea::{self, TeaLogin},
 };
-use crate::{agent_auth, git_profile, paths::Paths};
+/// Starts a forge CLI as someone other than the user, such as through
+/// their wrappers.
+pub(crate) trait Launch: Send + Sync {
+    fn apply(&self, command: &mut tokio::process::Command);
+}
+
+/// An agent's own logins; the user's stand in for those it leaves unset.
+pub(crate) struct AgentLogins {
+    /// Starts the agent's `gh`, `glab` and `tea`.
+    pub launch: Box<dyn Launch>,
+    /// The HOME the agent's `fj` runs with, holding its saved logins.
+    pub fj_home: Option<PathBuf>,
+    /// The agent has an `fj` wrapper.
+    pub fj: bool,
+    /// The agent has a `tea` wrapper.
+    pub tea: bool,
+}
 
 #[derive(Default)]
 pub(crate) struct Account {
-    /// The agent's `gh` wrapper and Git profile; the user's when absent.
-    launch: Option<agent_auth::Launch>,
+    /// Starts the agent's CLIs; the user's when absent.
+    launch: Option<Box<dyn Launch>>,
     /// The agent's saved fj logins; the user's when absent.
     fj_keys: Option<PathBuf>,
     /// The agent has an `fj` wrapper but no `fj_home`, so its Forgejo login
@@ -50,30 +66,21 @@ impl Account {
         }
     }
 
-    /// The workspace's agent account; options it leaves unset use the user's
-    /// logins, as the agent itself would.
-    pub fn agent(
-        config: &agent_auth::Config,
-        paths: &Paths,
-        git: &git_profile::Git,
-        bitbucket: &Credentials,
-    ) -> Result<Self> {
-        let launch = config.prepare(paths, git)?;
-        let fj_keys = config
-            .fj_home
-            .as_ref()
-            .map(|home| fj_keys_at(&crate::fsutil::expand_home(home, &paths.home), None));
-        Ok(Self {
-            launch: Some(launch),
-            fj_home_missing: config.fj.is_some() && fj_keys.is_none(),
+    /// An agent's account; logins it leaves unset use the user's, as the
+    /// agent itself would.
+    pub fn agent(logins: AgentLogins, bitbucket: &Credentials) -> Self {
+        let fj_keys = logins.fj_home.map(|home| fj_keys_at(&home, None));
+        Self {
+            launch: Some(logins.launch),
+            fj_home_missing: logins.fj && fj_keys.is_none(),
             fj_keys,
-            tea: config.tea.is_some(),
+            tea: logins.tea,
             bitbucket: bitbucket.clone(),
             bitbucket_authorization: OnceCell::new(),
-        })
+        }
     }
 
-    /// Select this account's `gh` for a request.
+    /// Select this account's CLI for a request.
     pub(super) fn apply(&self, command: &mut tokio::process::Command) {
         if let Some(launch) = &self.launch {
             launch.apply(command);
@@ -141,8 +148,6 @@ mod tests {
     /// An agent with `fj_home`, whose fj has a login for `fj.example` only,
     /// and a `tea` wrapper with a login for `tea.example` only.
     fn agent(root: &std::path::Path) -> Account {
-        let paths = Paths::for_test(root);
-        paths.prepare().unwrap();
         let home = root.join("fj-home");
         let keys = fj_keys_at(&home, None);
         std::fs::create_dir_all(keys.parent().unwrap()).unwrap();
@@ -151,19 +156,31 @@ mod tests {
             r#"{"hosts":{"fj.example":{"type":"Application","token":"fj-token"}}}"#,
         )
         .unwrap();
-        let tea = root.join("tea-agent");
+        let bin = root.join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let tea = bin.join("tea");
         std::fs::write(
             &tea,
             "#!/bin/sh\necho '[{\"name\":\"agent\",\"url\":\"https://tea.example\"}]'\n",
         )
         .unwrap();
         std::fs::set_permissions(&tea, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let config = agent_auth::Config {
+        let logins = AgentLogins {
+            launch: Box::new(Bin(bin)),
             fj_home: Some(home),
-            tea: Some(tea),
-            ..Default::default()
+            fj: false,
+            tea: true,
         };
-        Account::agent(&config, &paths, &Default::default(), &Default::default()).unwrap()
+        Account::agent(logins, &Default::default())
+    }
+
+    /// Finds the CLIs only in one directory.
+    struct Bin(std::path::PathBuf);
+
+    impl Launch for Bin {
+        fn apply(&self, command: &mut tokio::process::Command) {
+            command.env("PATH", &self.0);
+        }
     }
 
     #[tokio::test]

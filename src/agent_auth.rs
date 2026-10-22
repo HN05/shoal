@@ -102,6 +102,12 @@ struct Wrappers {
     directory: tempfile::TempDir,
 }
 
+impl crate::forge::account::Launch for Launch {
+    fn apply(&self, command: &mut tokio::process::Command) {
+        Launch::apply(self, command);
+    }
+}
+
 impl Launch {
     /// Profile settings follow inherited `GIT_CONFIG_*` entries and take
     /// precedence over every Git config file. Inherited author and committer
