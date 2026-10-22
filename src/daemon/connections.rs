@@ -1,7 +1,14 @@
 //! Accepting client connections, the capacity they hold and the descriptors
 //! they use.
 
-use std::{io, sync::Arc, time::Duration};
+use std::{
+    io,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow};
 use tokio::{
@@ -27,6 +34,9 @@ pub(super) struct Capacity {
     requests: Arc<Semaphore>,
     long_lived: Arc<Semaphore>,
     long_lived_limit: usize,
+    /// Set from the first refusal until a long-lived connection is admitted
+    /// again, so retrying clients log the limit once.
+    long_lived_full: AtomicBool,
 }
 
 /// Capacity a connection holds until it closes.
@@ -50,6 +60,7 @@ impl Capacity {
             requests: Arc::new(Semaphore::new(requests)),
             long_lived: Arc::new(Semaphore::new(long_lived)),
             long_lived_limit: long_lived,
+            long_lived_full: AtomicBool::new(false),
         }
     }
 
@@ -70,12 +81,19 @@ impl Capacity {
         if !method.holds_connection() {
             return Ok(request);
         }
-        let permit = self.long_lived.clone().try_acquire_owned().map_err(|_| {
-            anyhow!(
+        let Ok(permit) = self.long_lived.clone().try_acquire_owned() else {
+            if !self.long_lived_full.swap(true, Ordering::Relaxed) {
+                log!(
+                    "refusing long-lived connections at the limit of {}",
+                    self.long_lived_limit
+                );
+            }
+            return Err(anyhow!(
                 "the daemon already serves its limit of {} long-lived connections",
                 self.long_lived_limit
-            )
-        })?;
+            ));
+        };
+        self.long_lived_full.store(false, Ordering::Relaxed);
         drop(request);
         Ok(Slot { _permit: permit })
     }
@@ -246,16 +264,25 @@ mod tests {
         };
         let mut waiting = send(socket, await_answer()).await;
 
-        let Body::Error { message, .. } = reply(&mut send(socket, await_answer()).await).await
-        else {
-            panic!("expected the second wait to be refused");
+        let wrapper = crate::process::identity::capture(std::process::id())
+            .unwrap()
+            .unwrap();
+        let execute = Method::Execute {
+            workspace: workspace.name.clone(),
+            wrapper: wrapper.clone(),
+            kind: crate::daemon::workspace::ExecutionKind::Command,
+            agent: None,
+            recover: false,
+            reattach: true,
+            queue_entry: None,
+        };
+        let Body::Error { message, .. } = reply(&mut send(socket, execute).await).await else {
+            panic!("expected the new execution to be refused");
         };
         assert!(message.contains("limit of 1 long-lived"), "{message}");
         let reattach = Method::Reattach(protocol::Reattach {
             execution: "running".into(),
-            wrapper: crate::process::identity::capture(std::process::id())
-                .unwrap()
-                .unwrap(),
+            wrapper,
             child: None,
             group_id: std::process::id(),
             scope_token: "token".into(),
@@ -264,15 +291,18 @@ mod tests {
             running_ms: 0,
             awaiting_restore: None,
         });
-        let mut unanswered = Vec::new();
-        bounded(send(socket, reattach).await.read_to_end(&mut unanswered))
-            .await
-            .unwrap();
-        assert!(
-            unanswered.is_empty(),
-            "{}",
-            String::from_utf8_lossy(&unanswered)
-        );
+        // Clients that retry a connection closed unanswered keep waiting.
+        for retried in [await_answer(), reattach] {
+            let mut unanswered = Vec::new();
+            bounded(send(socket, retried).await.read_to_end(&mut unanswered))
+                .await
+                .unwrap();
+            assert!(
+                unanswered.is_empty(),
+                "{}",
+                String::from_utf8_lossy(&unanswered)
+            );
+        }
         let status = reply(&mut send(socket, Method::Status).await).await;
         assert!(matches!(status, Body::Status(_)), "{status:?}");
         let answer = Method::AnswerQuestion {

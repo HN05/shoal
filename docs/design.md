@@ -51,8 +51,9 @@ features; the manifest and CI toolchain advance together, with locked dependenci
 The daemon raises its open file limit at startup. Connections reading a request
 or running a request/response operation share a fixed limit; executions, waits and
 streams take a separate share of the remaining descriptors, so neither can block the
-other. When that share is full, a new one is refused and a reattaching wrapper's
-connection closes unanswered, so the wrapper retries. Accept failures that clear on their own,
+other. When that share is full, a new execution is refused, and any other
+connection that would stay open closes unanswered, so its client retries as it does
+across a restart. Accept failures that clear on their own,
 such as running out of descriptors, are retried.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.

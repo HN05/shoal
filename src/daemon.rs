@@ -235,13 +235,13 @@ async fn serve(
         };
     let _slot = match server.capacity.admit(slot, &request.method) {
         Ok(slot) => slot,
-        // A wrapper takes any reply to its reattachment as the verdict on its
-        // execution, but retries a connection closed unanswered.
-        Err(_) if matches!(request.method, Method::Reattach(_)) => return Ok(()),
-        Err(error) => {
+        Err(error) if matches!(request.method, Method::Execute { .. }) => {
             let body = Body::error(ErrorCode::OperationFailed, format!("{error:#}"));
             return protocol::write(&mut stream, &Response::new(request.id, body)).await;
         }
+        // Waits, holds and reattaching wrappers take a reply as final but
+        // retry a connection closed unanswered, as across a restart.
+        Err(_) => return Ok(()),
     };
     // Wrappers from any release reattach, and their launch scope does not
     // survive the restart; the record and token they present prove ownership.
