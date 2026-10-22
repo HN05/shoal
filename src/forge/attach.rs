@@ -379,18 +379,99 @@ fn replace_images(body: &str, mut replace: impl FnMut(&Image) -> Option<String>)
     out
 }
 
-/// The inline images of `body`, each on one line.
+/// The inline images of `body` outside code, each on one line.
 fn images(body: &str) -> Vec<Image<'_>> {
+    let code = code_ranges(body);
     let mut found = Vec::new();
     let mut from = 0;
     while let Some(start) = body[from..].find("![").map(|offset| from + offset) {
         from = start + 2;
+        if let Some(range) = code.iter().find(|range| range.contains(&start)) {
+            from = range.end;
+            continue;
+        }
         if let Some(image) = image_at(body, start) {
             from = image.range.end;
             found.push(image);
         }
     }
     found
+}
+
+/// The byte ranges of `body` that Markdown shows literally: fenced code
+/// blocks, and code spans between equal runs of backticks.
+fn code_ranges(body: &str) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut fence: Option<(char, usize, usize)> = None;
+    let mut prose = 0;
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        let end = offset + line.len();
+        let marker = fence_marker(line);
+        match (fence, marker) {
+            (None, Some((c, len))) => {
+                ranges.extend(code_spans(body, prose..offset));
+                fence = Some((c, len, offset));
+            }
+            (Some((c, len, start)), Some((closing, closing_len)))
+                if closing == c
+                    && closing_len >= len
+                    && line.trim()[closing_len..].trim().is_empty() =>
+            {
+                ranges.push(start..end);
+                fence = None;
+                prose = end;
+            }
+            _ => {}
+        }
+        offset = end;
+    }
+    match fence {
+        Some((_, _, start)) => ranges.push(start..body.len()),
+        None => ranges.extend(code_spans(body, prose..body.len())),
+    }
+    ranges
+}
+
+/// The character and length of the fence a line opens or closes with.
+fn fence_marker(line: &str) -> Option<(char, usize)> {
+    let trimmed = line.trim_start_matches(' ');
+    if line.len() - trimmed.len() > 3 {
+        return None;
+    }
+    let c = trimmed.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let len = trimmed.chars().take_while(|&next| next == c).count();
+    (len >= 3).then_some((c, len))
+}
+
+/// The code spans within `within` of `body`.
+fn code_spans(body: &str, within: Range<usize>) -> Vec<Range<usize>> {
+    let text = &body[within.clone()];
+    let mut spans = Vec::new();
+    let mut from = 0;
+    while let Some(start) = text[from..].find('`').map(|offset| from + offset) {
+        let len = text[start..].chars().take_while(|&c| c == '`').count();
+        let mut search = start + len;
+        let close = loop {
+            let Some(next) = text[search..].find('`').map(|offset| search + offset) else {
+                break None;
+            };
+            let run = text[next..].chars().take_while(|&c| c == '`').count();
+            if run == len {
+                break Some(next + run);
+            }
+            search = next + run;
+        };
+        match close {
+            Some(end) => {
+                spans.push(within.start + start..within.start + end);
+                from = end;
+            }
+            // An unmatched run is literal backticks.
+            None => from = start + len,
+        }
+    }
+    spans
 }
 
 fn image_at(body: &str, start: usize) -> Option<Image<'_>> {
@@ -587,5 +668,28 @@ mod tests {
         assert!(targets("![a] (x.png)").is_empty());
         assert!(targets("![a](x.png trailing)").is_empty());
         assert_eq!(targets("![[nested]](x.png) ![b](y.png)"), ["y.png"]);
+    }
+
+    #[test]
+    fn images_in_code_are_text() {
+        let targets = |body| -> Vec<String> {
+            images(body)
+                .iter()
+                .map(|image| image.target.to_owned())
+                .collect()
+        };
+        assert_eq!(
+            targets("`![a](x.png)` ``a ` ![b](y.png)`` ![c](z.png)"),
+            ["z.png"]
+        );
+        let fenced = "```md\n![a](x.png)\n````\n~~~\n![b](y.png)\n~~~\n![c](z.png)\n";
+        assert_eq!(targets(fenced), ["z.png"]);
+        assert!(targets("```\n![a](x.png)\n").is_empty());
+        assert_eq!(targets("a ` b ![c](z.png)"), ["z.png"]);
+        let attachments = [attachment("/t/a.png", None)];
+        let embedded = embed("Use `![](/t/a.png)`.", &attachments, |_, alt| {
+            alt.to_owned()
+        });
+        assert_eq!(embedded, "Use `![](/t/a.png)`.\n\na.png");
     }
 }
