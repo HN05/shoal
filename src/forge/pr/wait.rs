@@ -71,20 +71,21 @@ impl ActiveWaits {
 }
 
 impl ActiveWaits {
-    /// Run `operation` with those of `workspaces` no wait runs in; no wait
-    /// can start while it runs.
-    fn with_idle(
+    /// Run `operation` with the workspace at the end of each of `paths` that
+    /// no wait runs in anywhere along its path, since a wait there receives
+    /// its updates too; no wait can start while it runs.
+    fn with_unwatched(
         &self,
-        workspaces: &[String],
+        paths: &[Vec<String>],
         operation: impl FnOnce(&[String]) -> Result<()>,
     ) -> Result<()> {
         let waits = self.0.lock().expect("active waits lock");
-        let idle = workspaces
+        let unwatched = paths
             .iter()
-            .filter(|workspace| !waits.contains_key(*workspace))
-            .cloned()
+            .filter(|path| !path.iter().any(|workspace| waits.contains_key(workspace)))
+            .filter_map(|path| path.last().cloned())
             .collect::<Vec<_>>();
-        operation(&idle)
+        operation(&unwatched)
     }
 }
 
@@ -216,14 +217,6 @@ impl Manager {
         let mut updates = self.queued_updates(workspace).await?;
         updates.extend(self.delegated_pending(&id, None).await?);
         Ok(within_frame(updates))
-    }
-
-    /// The workspace and the child workspaces whose updates its agent receives.
-    async fn agent_workspaces(&self, id: &str) -> Result<Vec<String>> {
-        let children = self.delegated_workspaces(id).await?;
-        Ok(std::iter::once(id.to_owned())
-            .chain(children.into_iter().map(|child| child.id))
-            .collect())
     }
 
     /// The updates queued on the cursors of the child workspaces whose
@@ -733,16 +726,18 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let _guard = self.pr_gate.lock().await;
         let waits = self.item_waits.clone();
-        let delivered = self.agent_workspaces(&workspace.id).await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
+                // The agent also received the updates of the child workspaces
+                // it works on.
+                let delivered = crate::daemon::workspace::delegation_paths(&tx, &workspace.id)?;
                 // A delivering wait has ended, so a wait running in one of
-                // these workspaces started after it and must report their
-                // updates as well.
-                waits.with_idle(&delivered, |idle| {
-                    acknowledge_deliveries(&tx, idle, &deliveries)?;
+                // these workspaces, or above one, started after it and must
+                // report their updates as well.
+                waits.with_unwatched(&delivered, |unwatched| {
+                    acknowledge_deliveries(&tx, unwatched, &deliveries)?;
                     Ok(tx.commit()?)
                 })
             })
@@ -844,17 +839,32 @@ fn acknowledge_deliveries(
 }
 
 /// The leading `updates` that fit in one response beside its other fields,
-/// at least one; the rest stay pending for the next delivery.
+/// at least the first delivery. Updates sharing a delivery are acknowledged
+/// together, so each delivery goes whole; the rest stay pending.
 fn within_frame(mut updates: Vec<Update>) -> Vec<Update> {
-    let mut size = 0;
-    let fitting = updates
-        .iter()
-        .take_while(|update| {
-            size += serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()) + 1;
-            size < crate::protocol::MAX_FRAME - 256
-        })
-        .count();
-    updates.truncate(fitting.max(1));
+    let mut size = 0_usize;
+    let mut fitting = 0;
+    let mut index = 0;
+    while index < updates.len() {
+        let delivery = &updates[index].delivery;
+        let end = index
+            + updates[index..]
+                .iter()
+                .take_while(|update| update.delivery == *delivery)
+                .count();
+        size = updates[index..end]
+            .iter()
+            .map(|update| serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()))
+            .fold(size, |size, bytes| {
+                size.saturating_add(bytes).saturating_add(1)
+            });
+        if fitting > 0 && size >= crate::protocol::MAX_FRAME - 256 {
+            break;
+        }
+        fitting = end;
+        index = end;
+    }
+    updates.truncate(fitting);
     updates
 }
 
@@ -1447,6 +1457,21 @@ mod tests {
             .iter()
             .map(|update| update.delivery.clone())
             .collect::<Vec<_>>();
+        // A newer watch in the parent receives the child's updates as well.
+        let parent_wait = manager.item_waits.start(&parent.id);
+        manager
+            .acknowledge_pr_updates(&parent.id, deliveries.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.pending_pr_activity(&parent.id).await.unwrap().len(),
+            1
+        );
+        assert_eq!(
+            manager.pending_pr_activity(&child.id).await.unwrap().len(),
+            1
+        );
+        drop(parent_wait);
         // A watch in the child starts before the parent acknowledges.
         let child_wait = manager.item_waits.start(&child.id);
         manager
@@ -1478,21 +1503,77 @@ mod tests {
         );
     }
 
-    #[test]
-    fn combined_updates_fit_one_response() {
-        let update = |n: usize| Update {
-            url: format!("pr-{n}"),
+    fn large_update(n: usize, delivery: usize) -> Update {
+        Update {
+            url: "child-pr".into(),
             kind: UpdateKind::Comment,
-            message: "x".repeat(4096),
-            delivery: n.to_string(),
+            message: format!("{n}{}", "x".repeat(4096)),
+            delivery: delivery.to_string(),
             check: None,
-            workspace: Some("child".into()),
-        };
-        let fitting = within_frame((0..64).map(update).collect());
-        assert!(!fitting.is_empty() && fitting.len() < 64);
-        assert_eq!(fitting[0].url, "pr-0");
+            workspace: None,
+        }
+    }
+
+    #[test]
+    fn combined_updates_fit_one_response_in_whole_deliveries() {
+        // 21 deliveries of three updates each, more than one response holds.
+        let updates = (0..63).map(|n| large_update(n, n / 3)).collect::<Vec<_>>();
+        let fitting = within_frame(updates);
+        assert!(!fitting.is_empty() && fitting.len() < 63);
+        assert_eq!(fitting.len() % 3, 0);
         assert!(serde_json::to_vec(&fitting).unwrap().len() < crate::protocol::MAX_FRAME - 256);
         assert!(within_frame(Vec::new()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn deliveries_left_out_of_a_response_stay_pending_whole() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        register_watch(&manager, &child.id, "child-pr").await;
+        let id = child.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                for n in 0..63 {
+                    queue_update(db, &id, large_update(n, n / 3))?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let first = manager.agent_updates(&parent.id).await.unwrap();
+        assert!(first.updates.len() < 63);
+        manager
+            .acknowledge_pr_updates(
+                &parent.id,
+                first
+                    .updates
+                    .iter()
+                    .map(|update| update.delivery.clone())
+                    .collect(),
+            )
+            .await
+            .unwrap();
+        let rest = manager.pending_pr_activity(&child.id).await.unwrap();
+        assert_eq!(first.updates.len() + rest.len(), 63);
+        assert_eq!(rest.len() % 3, 0);
+        assert!(
+            rest[0]
+                .message
+                .starts_with(&first.updates.len().to_string())
+        );
     }
 
     #[tokio::test]

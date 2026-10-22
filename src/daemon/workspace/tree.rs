@@ -113,6 +113,25 @@ pub(crate) fn delegated(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> 
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The workspace `id` and those below it whose activity its agent receives,
+/// each as the path of workspaces from `id` down to it.
+pub(crate) fn delegation_paths(db: &Connection, id: &str) -> Result<Vec<Vec<String>>> {
+    db.prepare(
+        "WITH RECURSIVE delegated(id, depth, path) AS (
+                SELECT ?1, 0, ?1
+                UNION SELECT workspaces.id, delegated.depth + 1,
+                        delegated.path || ',' || workspaces.id
+                    FROM workspaces
+                    JOIN delegated ON workspaces.parent_workspace_id=delegated.id
+                    WHERE NOT EXISTS (SELECT 1 FROM workspace_agent_state
+                        WHERE workspace_agent_state.workspace_id=workspaces.id)
+            ) SELECT path FROM delegated ORDER BY depth, id",
+    )?
+    .query_map([id], |row| row.get::<_, String>(0))?
+    .map(|path| Ok(path?.split(',').map(str::to_owned).collect()))
+    .collect()
+}
+
 /// Fill in the workspace's parent and its children.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.parent_workspace = db
