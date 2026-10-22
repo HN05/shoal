@@ -16,6 +16,7 @@ pub mod events;
 mod execution_connection;
 mod execution_recovery;
 pub(crate) mod handoff;
+pub mod links;
 pub(crate) mod log;
 pub mod notifications;
 mod overload;
@@ -579,7 +580,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             let workspace = manager.workspace(&workspace).await?;
             manager.verify_worktree(&workspace).await?;
             if on_branch {
-                crate::forge::pr::current_head(&workspace).await?;
+                crate::daemon::links::pr::current_head(&workspace).await?;
             }
             Body::Workspace(workspace)
         }

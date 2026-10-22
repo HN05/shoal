@@ -13,7 +13,7 @@ use super::{
     api::Request,
     gh,
     link::ItemKind,
-    pr::state::{CheckResult, PrStatus, ReviewState},
+    status::{CheckResult, PrStatus, ReviewState},
     thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
 };
 

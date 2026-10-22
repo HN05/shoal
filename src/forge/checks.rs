@@ -3,13 +3,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
-    ForgeKind, ForgeRepo,
-    account::Account,
-    api::Request,
-    link::{ItemKind, Selection},
-};
-use crate::daemon::workspace::Manager;
+use super::{ForgeKind, ForgeRepo, account::Account, api::Request, link::ItemKind};
 
 /// Small enough for one protocol frame even when JSON escapes every byte.
 const TAIL_BYTES: usize = 8192;
@@ -24,79 +18,8 @@ pub struct CheckLog {
     pub failed_step: Option<String>,
 }
 
-impl Manager {
-    /// Log failures stay on their CI update and never hide other activity.
-    pub(crate) async fn summarize_failed_checks(
-        &self,
-        workspace: &str,
-        updates: &mut [super::updates::Update],
-    ) {
-        for index in 0..updates.len() {
-            let update = &updates[index];
-            let Some(check) = &update.check else { continue };
-            if !matches!(check.result.as_str(), "failure" | "error")
-                || !ForgeRepo::from_pull_url(&update.url)
-                    .is_ok_and(|forge| forge.kind == ForgeKind::Forgejo)
-            {
-                continue;
-            }
-            let selection = Selection {
-                kind: Some(ItemKind::Pr),
-                input: Some(update.url.clone()),
-            };
-            let log = self.check_log(workspace, &selection, &check.name).await;
-            let summary = match log {
-                Ok(log) => log
-                    .failed_step
-                    .map(|step| format!("; failed step: {step}"))
-                    .unwrap_or_default(),
-                Err(error) => format!(
-                    "; log unavailable: {}",
-                    format!("{error:#}").chars().take(512).collect::<String>()
-                ),
-            };
-            let message = format!(
-                "{}{summary}; read the log with shoal view {} --check '{}'",
-                update.message,
-                update.url,
-                check.name.replace('\'', "'\\''")
-            );
-            let previous = std::mem::replace(&mut updates[index].message, message);
-            if serde_json::to_vec(updates).map_or(true, |bytes| {
-                bytes.len() >= crate::protocol::MAX_FRAME - 1024
-            }) {
-                updates[index].message = previous;
-            }
-        }
-    }
-
-    pub async fn check_log(
-        &self,
-        selector: &str,
-        selection: &Selection,
-        name: &str,
-    ) -> Result<CheckLog> {
-        validate_check_name(name)?;
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let selection = Selection {
-            kind: selection.kind.or(Some(ItemKind::Pr)),
-            input: selection.input.clone(),
-        };
-        let items = self.selected_items(&workspace, &selection).await?;
-        let [(url, ItemKind::Pr)] = items.as_slice() else {
-            anyhow::bail!(
-                "select one PR to read a check log; use shoal view pr <number> --check <name>"
-            );
-        };
-        let forge = super::items::workspace_forge(&workspace).await?;
-        let account = self.agent_account(&workspace).await?;
-        forge.failed_check_log(&account, url, name).await
-    }
-}
-
 /// Refuse a check name no forge shows, before any lookup.
-pub(super) fn validate_check_name(name: &str) -> Result<()> {
+pub(crate) fn validate_check_name(name: &str) -> Result<()> {
     ensure!(
         !name.trim().is_empty() && name.len() <= 1024,
         "check name must be nonempty and at most 1024 bytes"
@@ -109,7 +32,7 @@ impl ForgeRepo {
         self.kind == ForgeKind::Forgejo
     }
 
-    pub(super) async fn failed_check_log(
+    pub(crate) async fn failed_check_log(
         &self,
         account: &Account,
         url: &str,

@@ -10,7 +10,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use super::{RegistrationKind, current_head};
+use super::pr::{RegistrationKind, current_head};
 use crate::{
     daemon::{agent_messages::AgentMessage, store, workspace::Manager},
     forge::{
@@ -1022,7 +1022,7 @@ pub(crate) fn linked_items(
                 |row| row.get(0),
             )
             .optional()?;
-        if let Some(super::Registration {
+        if let Some(super::pr::Registration {
             kind: RegistrationKind::Watch { urls, .. },
             ..
         }) = registration
@@ -1294,7 +1294,7 @@ mod tests {
 
     async fn register_watch(manager: &Manager, id: &str, url: &str) {
         let id = id.to_owned();
-        let registration = super::super::Registration {
+        let registration = super::super::pr::Registration {
             kind: RegistrationKind::Watch {
                 urls: vec![url.into()],
                 merged_head: None,
@@ -1995,7 +1995,7 @@ mod tests {
             .await
             .unwrap();
         manager
-            .set_pr(&workspace.id, super::super::Action::Clear)
+            .set_pr(&workspace.id, super::super::pr::Action::Clear)
             .await
             .unwrap();
         assert_eq!(
@@ -2223,7 +2223,7 @@ mod tests {
             1
         );
         restarted
-            .set_pr(&workspace.id, super::super::Action::Clear)
+            .set_pr(&workspace.id, super::super::pr::Action::Clear)
             .await
             .unwrap();
         let id = workspace.id.clone();
@@ -2261,7 +2261,7 @@ mod tests {
                 .is_empty()
         );
         restarted
-            .set_pr(&workspace.id, super::super::Action::Clear)
+            .set_pr(&workspace.id, super::super::pr::Action::Clear)
             .await
             .unwrap();
         assert!(restarted.wait_prs(&workspace.id, Some(0)).await.is_err());
@@ -2305,7 +2305,7 @@ mod tests {
         let recorded = manager.record_activity(&workspace.id, observation, &all);
         assert!(recorded.await.unwrap().is_empty());
         manager
-            .set_pr(&workspace.id, super::super::Action::Clear)
+            .set_pr(&workspace.id, super::super::pr::Action::Clear)
             .await
             .unwrap();
 

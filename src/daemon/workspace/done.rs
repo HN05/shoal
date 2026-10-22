@@ -67,7 +67,7 @@ impl Manager {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        let head = crate::forge::pr::current_head(&workspace).await?;
+        let head = crate::daemon::links::pr::current_head(&workspace).await?;
         self.record_done(&workspace, head, cleanup).await
     }
 
@@ -184,7 +184,7 @@ impl Manager {
             return Ok(false);
         }
         ensure!(
-            crate::forge::pr::current_head(workspace).await? == completion.head,
+            crate::daemon::links::pr::current_head(workspace).await? == completion.head,
             "HEAD changed after the assignment was marked done; retaining workspace"
         );
         Ok(true)

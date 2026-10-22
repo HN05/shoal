@@ -1,17 +1,23 @@
 //! Link issues and PRs to workspaces by relation. Assigned items keep the
 //! issue and PR watch rules; opened and related items are only recorded.
+mod actions;
+mod checks;
+mod ci;
+pub mod issue;
+pub mod pr;
+mod stack;
+pub mod wait;
+
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
-use super::{
-    link::{ItemKind, Relation},
-    pr::Action,
-};
 use crate::{
     daemon::{
         events::{self, EventKind},
+        links::pr::Action,
         workspace::Manager,
     },
+    forge::link::{ItemKind, Relation},
     model::LinkedItem,
     state::WorkspaceState,
 };

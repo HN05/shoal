@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    forge::pr::Action,
+    daemon::links::pr::Action,
     test_support::{commit, git, manager, repository},
 };
 use std::{fs, sync::Arc};

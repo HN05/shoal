@@ -10,7 +10,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::agent_messages::AgentMessage,
-    forge::pr::wait::Updates,
+    daemon::links::wait::Updates,
     protocol::Method,
 };
 

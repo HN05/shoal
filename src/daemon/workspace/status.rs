@@ -2,12 +2,14 @@ use anyhow::{Context, Result, bail, ensure};
 
 use super::Manager;
 use crate::{
-    daemon::store,
+    daemon::{
+        links::{pr, wait::linked_items},
+        store,
+    },
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
         link::{self, ItemKind, Relation},
-        pr::{self, wait::linked_items},
         view::{Selected, SelectedItem},
     },
     git,
@@ -31,7 +33,7 @@ impl Manager {
         };
         let account = self.user_account();
         let (prs, issue_status) = tokio::join!(
-            pr::state::watched(
+            pr::watched(
                 &account,
                 &inspection.workspace,
                 inspection.pr_cleanup.as_ref()

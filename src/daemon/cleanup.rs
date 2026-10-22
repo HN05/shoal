@@ -983,7 +983,7 @@ mod tests {
     #[tokio::test]
     async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         use crate::{
-            forge::pr::Action,
+            daemon::links::pr::Action,
             test_support::{manager, repository},
         };
         let (temp, manager) = manager().await;

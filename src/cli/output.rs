@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    forge::pr::state::ReviewState,
+    forge::status::ReviewState,
     sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };

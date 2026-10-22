@@ -2,7 +2,10 @@
 use anyhow::Result;
 use rusqlite::params;
 
-use super::{RegistrationKind, current_head, wait};
+use super::{
+    pr::{RegistrationKind, current_head},
+    wait,
+};
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     forge::{

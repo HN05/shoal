@@ -712,11 +712,11 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
         )
         .optional()?
         .and_then(|record| {
-            serde_json::from_str::<crate::forge::pr::Registration>(&record)
+            serde_json::from_str::<crate::daemon::links::pr::Registration>(&record)
                 .ok()
                 .and_then(|registration| match registration.kind {
-                    crate::forge::pr::RegistrationKind::Watch { urls, .. } => Some(urls),
-                    crate::forge::pr::RegistrationKind::Acknowledgement { .. } => None,
+                    crate::daemon::links::pr::RegistrationKind::Watch { urls, .. } => Some(urls),
+                    crate::daemon::links::pr::RegistrationKind::Acknowledgement { .. } => None,
                 })
         })
         .unwrap_or_default();

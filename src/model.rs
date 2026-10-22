@@ -319,9 +319,9 @@ pub struct Completion {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
-    pub issue: Option<crate::forge::issue::Registration>,
+    pub issue: Option<crate::daemon::links::issue::Registration>,
     pub completion: Option<Completion>,
-    pub pr_cleanup: Option<crate::forge::pr::Registration>,
+    pub pr_cleanup: Option<crate::daemon::links::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,
@@ -356,7 +356,7 @@ pub struct WorkspaceStatus {
     pub cleanup_at: Option<u64>,
     /// The current state of each watched PR.
     #[serde(default)]
-    pub prs: Vec<crate::forge::pr::state::PrStatus>,
+    pub prs: Vec<crate::forge::status::PrStatus>,
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,

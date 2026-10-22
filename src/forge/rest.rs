@@ -10,7 +10,7 @@ use super::{
     item::{Current, ItemState},
     link::ItemKind,
     list,
-    pr::state::{Verdict, forgejo_reviews},
+    status::{Verdict, forgejo_reviews},
 };
 
 /// A CI check in the states every REST forge is mapped to; `Pending` is the

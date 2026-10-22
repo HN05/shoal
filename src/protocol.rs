@@ -323,7 +323,7 @@ pub enum Method {
     SetPr {
         workspace: String,
         #[serde(flatten)]
-        action: crate::forge::pr::Action,
+        action: crate::daemon::links::pr::Action,
     },
     PrWait {
         workspace: String,
@@ -823,7 +823,7 @@ response_bodies! {
     Questions(crate::daemon::questions::Listing),
     Notification(Notification),
     EventItem(EventItem),
-    PrUpdates(crate::forge::pr::wait::Updates),
+    PrUpdates(crate::daemon::links::wait::Updates),
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[test]
     fn pr_actions_preserve_existing_wire_fields() {
-        use crate::forge::pr::Action;
+        use crate::daemon::links::pr::Action;
         for (action, url, clear) in [
             (
                 Action::Watch {
@@ -1164,7 +1164,7 @@ mod tests {
             json!({"clear": true, "unwatch": "7"}),
             json!({"clear": false, "url": "8", "unwatch": "7"}),
         ] {
-            assert!(serde_json::from_value::<crate::forge::pr::Action>(action).is_err());
+            assert!(serde_json::from_value::<crate::daemon::links::pr::Action>(action).is_err());
         }
     }
 

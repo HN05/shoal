@@ -15,8 +15,8 @@ use super::{
     api::{HttpMethod, Request},
     item::{Current, Item, ItemState, PrSummary, text},
     link::ItemKind,
-    pr::state::Verdict,
     rest::RestCheck,
+    status::Verdict,
     thread::{Target, Thread},
     view::{Comment, Details, PrDetails, Review, ReviewComment},
 };

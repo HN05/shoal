@@ -785,7 +785,7 @@ impl Manager {
         removal.verify(&check, stage)?;
         match (removal, stage) {
             (Removal::Merged { head } | Removal::Completed { head, .. }, _) => ensure!(
-                crate::forge::pr::current_head(workspace).await? == head,
+                crate::daemon::links::pr::current_head(workspace).await? == head,
                 "HEAD changed {}",
                 stage.change()
             ),

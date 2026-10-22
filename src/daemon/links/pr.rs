@@ -1,7 +1,4 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
-mod stack;
-pub mod state;
-pub mod wait;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
@@ -14,7 +11,7 @@ use crate::{
         store,
         workspace::Manager,
     },
-    forge::ForgeRepo,
+    forge::{ForgeRepo, account::Account, status::PrStatus},
     git,
     model::Workspace,
     repository,
@@ -546,6 +543,38 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
         .await?
         .trim()
         .to_owned())
+}
+
+/// Look up each watched PR concurrently; a failure stays on its PR.
+pub(crate) async fn watched(
+    account: &Account,
+    workspace: &Workspace,
+    registration: Option<&Registration>,
+) -> Vec<PrStatus> {
+    let Some(Registration {
+        kind: RegistrationKind::Watch { urls, .. },
+        ..
+    }) = registration
+    else {
+        return Vec::new();
+    };
+    let forge = async {
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("PR lookup needs an origin remote")?;
+        ForgeRepo::parse(&remote)
+    }
+    .await;
+    match forge {
+        Ok(forge) => {
+            futures_util::future::join_all(urls.iter().map(|url| forge.pr_status(account, url)))
+                .await
+        }
+        Err(error) => urls
+            .iter()
+            .map(|url| PrStatus::failed(url.clone(), &error))
+            .collect(),
+    }
 }
 
 #[cfg(test)]

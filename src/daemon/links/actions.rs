@@ -2,19 +2,19 @@
 //! scope rules apply and each change reaches the event journal.
 use anyhow::{Context, Result, bail};
 
-use super::{
-    ForgeRepo,
-    account::Account,
-    action::{Action, Edit},
-    conventions,
-    create::{NewIssue, NewPull, PullOptions},
-    item::{Item, ItemState, Opened},
-    link::{ItemKind, Relation},
-    pr::wait::{OwnChange, record_own_change},
-};
+use super::wait::{OwnChange, record_own_change};
 use crate::{
     config::resolve::Effective,
     daemon::{events, workspace::Manager},
+    forge::{
+        ForgeRepo,
+        account::Account,
+        action::{Action, Edit},
+        conventions,
+        create::{NewIssue, NewPull, PullOptions},
+        item::{Item, ItemState, Opened},
+        link::{ItemKind, Relation},
+    },
     model::{ReviewMark, Workspace},
 };
 
@@ -357,7 +357,7 @@ impl Manager {
     async fn accepts_links(&self, id: &str) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| super::relations::accepts_links(db, &id))
+            .run(move |db| super::accepts_links(db, &id))
             .await
     }
 }
@@ -381,9 +381,9 @@ fn record_opened(
 ) -> Result<bool> {
     let tx = db.transaction()?;
     events::record_item(&tx, id, kind, url, "open")?;
-    let recorded = super::relations::accepts_links(&tx, id)?;
+    let recorded = super::accepts_links(&tx, id)?;
     if recorded {
-        super::relations::record(&tx, id, Relation::Opened, kind, url, Some(title))?;
+        super::record(&tx, id, Relation::Opened, kind, url, Some(title))?;
     }
     tx.commit()?;
     Ok(recorded)

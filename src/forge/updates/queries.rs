@@ -5,8 +5,8 @@ use crate::forge::{
     gh,
     item::{Current, ItemState},
     link::ItemKind,
-    pr::state::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
     rest::RestCheck,
+    status::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
 };
 use anyhow::{Context, Result, ensure};
 
@@ -513,7 +513,7 @@ mod tests {
         );
         assert_eq!(
             status.review,
-            Some(crate::forge::pr::state::ReviewState::Approved)
+            Some(crate::forge::status::ReviewState::Approved)
         );
         assert!(status.errors.is_empty());
 

@@ -98,7 +98,7 @@ pub struct Manager {
     /// without cancelling hooks or mutations already in progress.
     pub(super) background_operations: Arc<RwLock<()>>,
     pub(crate) pr_gate: Mutex<()>,
-    pub(crate) item_waits: crate::forge::pr::wait::ActiveWaits,
+    pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub cleanup_notify: tokio::sync::Notify,
     pub(super) cleanup_health: std::sync::Mutex<super::cleanup::Health>,
     /// The global file as last loaded; a reload replaces it for later reads

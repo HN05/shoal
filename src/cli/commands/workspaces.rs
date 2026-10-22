@@ -20,14 +20,11 @@ use crate::{
     },
     daemon::{
         approvals::Undecided,
+        links::pr::RegistrationKind,
         recovery::{ReconcileOptions, Report},
     },
     env, execution,
-    forge::{
-        IssueInput,
-        link::Selection,
-        pr::{RegistrationKind, state::PrStatus},
-    },
+    forge::{IssueInput, link::Selection, status::PrStatus},
     git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
     model::{
@@ -630,7 +627,7 @@ pub(super) async fn link_pull(
         &ctx.paths,
         Method::SetPr {
             workspace: workspace.id.clone(),
-            action: crate::forge::pr::Action::Watch { url: url.clone() },
+            action: crate::daemon::links::pr::Action::Watch { url: url.clone() },
         },
     )
     .await;
@@ -1926,7 +1923,7 @@ pub(super) async fn watch_items(
     timeout: Option<u64>,
 ) -> Result<i32> {
     let body = wait_for_items(ctx, &workspace, selection, timeout).await?;
-    let updates = crate::forge::pr::wait::Updates::try_from(body)?;
+    let updates = crate::daemon::links::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
             println!("Message: {}", message.message);
@@ -1992,7 +1989,7 @@ pub(super) async fn wait_for_items(
                             .as_secs(),
                     );
                     if timeout_secs == Some(0) {
-                        return Ok(Body::PrUpdates(crate::forge::pr::wait::Updates {
+                        return Ok(Body::PrUpdates(crate::daemon::links::wait::Updates {
                             updates: Vec::new(),
                             messages: Vec::new(),
                             timed_out: true,
@@ -2058,7 +2055,7 @@ mod tests {
     async fn item_wait_continues_on_the_replacement_daemon() {
         use crate::{
             cli::context::Context,
-            forge::pr::wait::Updates,
+            daemon::links::wait::Updates,
             paths::Paths,
             protocol::{self, Body, Method, Request, Response},
         };
@@ -2119,7 +2116,7 @@ mod tests {
     async fn item_wait_closed_with_under_a_second_left_times_out() {
         use crate::{
             cli::context::Context,
-            forge::pr::wait::Updates,
+            daemon::links::wait::Updates,
             paths::Paths,
             protocol::{self, Request},
         };

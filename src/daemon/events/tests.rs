@@ -172,7 +172,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
 #[tokio::test]
 async fn removal_causes_and_retained_errors_survive_ownership_and_notification_reads() {
     use crate::{
-        forge::pr::Action,
+        daemon::links::pr::Action,
         removal::{InspectionPolicy, UnsavedWork},
     };
     let (temp, manager) = manager().await;

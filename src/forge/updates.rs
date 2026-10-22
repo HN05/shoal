@@ -38,7 +38,7 @@ pub struct Update {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub delivery: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<super::pr::state::CheckResult>,
+    pub check: Option<super::status::CheckResult>,
     /// The child workspace whose item this is, when its parent's agent
     /// receives the update.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -125,7 +125,7 @@ impl Snapshot {
         snapshot
     }
 
-    pub(super) fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
+    pub(crate) fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
         let mut updates = Vec::new();
         let mut emit = |kind, message, check| {
             updates.push(Update {
@@ -157,7 +157,7 @@ impl Snapshot {
                 emit(
                     UpdateKind::CiCompleted,
                     format!("{}: {}", check.name, check.state),
-                    Some(super::pr::state::CheckResult {
+                    Some(super::status::CheckResult {
                         name: check.name.clone(),
                         result: check.state.to_ascii_lowercase(),
                     }),
@@ -226,7 +226,7 @@ impl Snapshot {
     /// base is taken once two polls in a row see it there, since the forge may
     /// still show its result for the previous one. Unknown mergeability keeps
     /// the previous observation.
-    pub(super) fn schedule_conflict_reports(&mut self, previous: &Self) {
+    pub(crate) fn schedule_conflict_reports(&mut self, previous: &Self) {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
             self.conflict_at = previous.conflict_at.clone();
@@ -241,7 +241,7 @@ impl Snapshot {
         };
     }
 
-    pub(super) fn retain_failed_checks(&mut self, previous: &Self) {
+    pub(crate) fn retain_failed_checks(&mut self, previous: &Self) {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
@@ -283,7 +283,7 @@ impl Snapshot {
 
     /// Keeps each unchanged failure's report time until the interval passes,
     /// so `changes` reports a persisting failure again once per interval.
-    pub(super) fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
+    pub(crate) fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
         self.reported = self
             .errors
             .iter()
