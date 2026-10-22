@@ -105,6 +105,14 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
             "answer 1 yes",
             "cannot answer questions without their scope token",
         ),
+        (
+            "approve 1",
+            "cannot decide approval requests without their scope token",
+        ),
+        (
+            "escalate 1",
+            "cannot decide approval requests without their scope token",
+        ),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());

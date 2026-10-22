@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 115;
+pub const VERSION: u32 = 116;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -606,6 +606,14 @@ pub enum Method {
     DecideApproval {
         id: i64,
         approve: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
+    },
+    /// Pass a request the coordinating agent of `workspace` decides on to the
+    /// next coordinating agent above it that holds a grant, or to the user.
+    EscalateApproval {
+        workspace: String,
+        id: i64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
     },

@@ -862,6 +862,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .decide_approval(id, approve, shown.map(|shown| *shown))
                 .await?,
         )),
+        Method::EscalateApproval {
+            workspace,
+            id,
+            shown,
+        } => Body::ApprovalRequest(Box::new(
+            manager
+                .escalate_approval(&workspace, id, shown.map(|shown| *shown))
+                .await?,
+        )),
         Method::ResourceAcquire { workspace, request } => manager
             .acquire_resource(&workspace, request, caller)
             .await?

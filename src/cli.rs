@@ -528,6 +528,12 @@ pub enum Command {
         /// Request number; omit to choose a pending request.
         id: Option<i64>,
     },
+    /// Pass an approval request routed to this workspace's agent to the next
+    /// coordinating agent that holds a grant for it, or to the user.
+    Escalate {
+        /// Request number.
+        id: i64,
+    },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(
         hide = true,

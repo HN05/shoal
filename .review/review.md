@@ -145,7 +145,9 @@ instead of the PR delivery guidance below.
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
   user scripts own external resource integrations.
 - Resource approvals bind effective allocation settings and require an unscoped
-  decision, which queues an agent message for the requester; failing to queue it
+  decision, or one by the coordinating agent a child workspace's request was routed
+  to because it holds an approved grant for the same target and settings; it may pass
+  the request up instead. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

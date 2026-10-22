@@ -637,3 +637,156 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
     assert!(manager.reopen_workspace(&child.id).await.is_err());
     assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
+    use crate::{
+        daemon::approvals::{
+            ApprovalRequest, DecisionStatus, Lifetime, SecretSpecification, Specification, Target,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let root = manager
+        .create_workspace(&repo.id, "root".into(), None, None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .split_workspace(&root.id, "parent".into(), None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&root, &parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let secret = |workspace: &Workspace| {
+        ApprovalRequest::new(
+            &workspace.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        )
+    };
+    // The root holds a grant for the secret; the parent does not.
+    let granted = manager
+        .request_approval(secret(&root))
+        .await
+        .unwrap()
+        .unwrap();
+    manager
+        .decide_approval(granted.id, true, None)
+        .await
+        .unwrap();
+    let requested = manager
+        .request_approval(secret(&child))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &requested).await;
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(root.id.as_str()));
+    let messages = |workspace: &Workspace| {
+        let id = workspace.id.clone();
+        let manager = &manager;
+        async move {
+            manager
+                .agent_messages(&id)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|message| message.message)
+                .collect::<Vec<_>>()
+        }
+    };
+    assert!(messages(&parent).await[0].ends_with("passed up, since you hold no grant for it"));
+    assert!(
+        messages(&root)
+            .await
+            .last()
+            .unwrap()
+            .contains("shoal escalate")
+    );
+    let user = || async {
+        manager
+            .notifications(false, 10)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.kind == crate::daemon::notifications::NotificationKind::ApprovalRequested)
+            .count()
+    };
+    assert_eq!(user().await, 0);
+
+    // Only the decider decides it, bound to the request it was shown.
+    for (workspace, allowed) in [(&parent, false), (&root, true)] {
+        manager
+            .issue_scope(
+                format!("scope-{}", workspace.name),
+                Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                },
+            )
+            .await;
+        let mut decide = Method::DecideApproval {
+            id: requested.id,
+            approve: true,
+            shown: None,
+        };
+        let authorized = crate::daemon::scope::authorize(
+            &manager,
+            Some(&format!("scope-{}", workspace.name)),
+            &mut decide,
+        )
+        .await;
+        assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
+        if allowed {
+            assert!(matches!(
+                decide,
+                Method::DecideApproval { shown: Some(_), .. }
+            ));
+        }
+    }
+
+    // Passed up by the root, it reaches the user; repeating the request
+    // does not route it again.
+    let escalated = manager
+        .escalate_approval(&root.id, requested.id, None)
+        .await
+        .unwrap();
+    assert_eq!(escalated.decider, None);
+    assert_eq!(escalated.status, DecisionStatus::Pending);
+    assert_eq!(user().await, 1);
+    let error = manager
+        .escalate_approval(&root.id, requested.id, None)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("not root's to decide"));
+    manager.notify_approval(&child.name, &escalated).await;
+    let again = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.decider, None);
+}

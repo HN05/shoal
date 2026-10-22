@@ -27,6 +27,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "approvals",
             "approve",
             "deny",
+            "escalate",
             "done",
             "undone",
             "rm",

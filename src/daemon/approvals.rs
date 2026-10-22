@@ -184,6 +184,13 @@ pub struct ApprovalRequest {
     pub decided_at: Option<u64>,
     /// False for workspace grants retained after release.
     pub active: bool,
+    /// Whether the request went up the workspace tree to find its decider.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub routed: bool,
+    /// The workspace whose coordinating agent decides the request, since it
+    /// holds a grant for the same thing; the user decides without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decider: Option<String>,
 }
 
 const COLUMNS: &str = "SELECT id,record,active,number FROM access_requests";
@@ -332,6 +339,8 @@ impl ApprovalRequest {
             created_at: crate::time::unix_seconds(),
             decided_at: None,
             active: true,
+            routed: false,
+            decider: None,
         }
     }
 
@@ -371,6 +380,60 @@ impl ApprovalRequest {
             self.status
         )
     }
+}
+
+/// Whether the workspace holds an approved grant for the same target and
+/// settings as `request`, which lets its agent decide the request for the
+/// workspaces below it.
+fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
+    let candidates = db
+        .prepare(CANDIDATES)?
+        .query_map(params![workspace, request.target], record_row)?
+        .map(|row| decode_record(row?))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(candidates.iter().any(|grant| {
+        grant.status == DecisionStatus::Approved && grant.specification == request.specification
+    }))
+}
+
+/// A pending request and the coordinators routing passed over, which hold no
+/// grant for it.
+pub struct Routed {
+    pub request: ApprovalRequest,
+    pub passed: Vec<String>,
+}
+
+/// Give the pending request stored under `key` to the first of `candidates`
+/// that holds a grant for it, or to the user.
+fn route(tx: &Transaction<'_>, key: &str, candidates: &[String]) -> Result<Routed> {
+    let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
+    ensure!(
+        request.status == DecisionStatus::Pending,
+        "approval request {} is already decided",
+        request.id
+    );
+    // Without coordinators the request stays the user's, as recorded.
+    if candidates.is_empty() && !request.routed {
+        return Ok(Routed {
+            request,
+            passed: Vec::new(),
+        });
+    }
+    let mut passed = Vec::new();
+    request.decider = None;
+    for candidate in candidates {
+        if holds_grant(tx, candidate, &request)? {
+            request.decider = Some(candidate.clone());
+            break;
+        }
+        passed.push(candidate.clone());
+    }
+    request.routed = true;
+    tx.execute(
+        "UPDATE access_requests SET record=?2 WHERE id=?1",
+        params![key, serde_json::to_string(&request)?],
+    )?;
+    Ok(Routed { request, passed })
 }
 
 /// Keep a request bound to a commit that no longer applies, because it was
@@ -596,25 +659,139 @@ impl Manager {
 
     /// A request's target never changes, so it can be read before taking the
     /// gate its decision needs.
-    async fn approval_request(&self, id: i64) -> Result<Option<ApprovalRequest>> {
+    pub(crate) async fn approval_request(&self, id: i64) -> Result<Option<ApprovalRequest>> {
         self.store.run(move |db| by_number(db, id)).await
     }
 
+    /// Tell whoever decides a pending request about it: the first coordinating
+    /// agent above its workspace that holds a grant for the same thing, the
+    /// coordinators passed over on the way, or else the user. A request is
+    /// routed once; repeating it tells its decider again.
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
-        if request.status == DecisionStatus::Pending {
-            self.notify(
-                Some(workspace),
-                crate::daemon::notifications::NotificationKind::ApprovalRequested,
-                format!(
-                    "approval {}: {}: {}; approve with shoal approve {}",
-                    request.id,
-                    request.subject(),
-                    request.reason,
-                    request.id
-                ),
+        if request.status != DecisionStatus::Pending {
+            return;
+        }
+        let routed = match request.routed {
+            true => Ok(Routed {
+                request: request.clone(),
+                passed: Vec::new(),
+            }),
+            false => self.route_approval(request, None).await,
+        };
+        match routed {
+            Ok(routed) => self.announce_approval(workspace, &routed).await,
+            Err(error) => {
+                log!("approval {} not routed: {error:#}", request.id);
+                self.ask_user(workspace, request).await;
+            }
+        }
+    }
+
+    /// Pass the request the coordinator of `workspace` decides on to the next
+    /// coordinating agent above it that holds a grant, or to the user. With
+    /// `shown`, a later request reusing its number is refused.
+    pub async fn escalate_approval(
+        &self,
+        workspace: &str,
+        id: i64,
+        shown: Option<ApprovalRequest>,
+    ) -> Result<ApprovalRequest> {
+        let workspace = self.workspace(workspace).await?;
+        let request = self
+            .approval_request(id)
+            .await?
+            .with_context(|| format!("unknown approval request {id}"))?;
+        ensure!(
+            shown.is_none_or(|shown| request.is_same(&shown)),
+            "approval request {id} changed since it was shown; choose again"
+        );
+        ensure!(
+            request.decider.as_deref() == Some(workspace.id.as_str()),
+            "approval request {id} is not {}'s to decide",
+            workspace.name
+        );
+        let routed = self.route_approval(&request, Some(&workspace.id)).await?;
+        self.announce_approval(&request.workspace, &routed).await;
+        Ok(routed.request)
+    }
+
+    /// Route `request` through the coordinators of its workspace, or through
+    /// those above `above` when that coordinator passes it on.
+    async fn route_approval(
+        &self,
+        request: &ApprovalRequest,
+        above: Option<&str>,
+    ) -> Result<Routed> {
+        let agents = self.tracked_agents().await;
+        let (key, workspace) = (request.key.clone(), request.workspace_id.clone());
+        let above = above.map(str::to_owned);
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let candidates = match &above {
+                    Some(above) => {
+                        crate::daemon::workspace::ancestors_with_agents(&tx, above, &agents)?
+                    }
+                    None => crate::daemon::workspace::coordinators(&tx, &workspace, &agents)?,
+                };
+                let routed = route(&tx, &key, &candidates)?;
+                tx.commit()?;
+                Ok(routed)
+            })
+            .await
+    }
+
+    /// Message the request's decider and the coordinators it passed over, or
+    /// notify the user when no coordinator decides it.
+    async fn announce_approval(&self, workspace: &str, routed: &Routed) {
+        let request = &routed.request;
+        let about = format!(
+            "{workspace}: approval {}: {}: {}",
+            request.id,
+            request.subject(),
+            request.reason
+        );
+        for passed in &routed.passed {
+            self.tell_agent(
+                passed,
+                format!("{about}; passed up, since you hold no grant for it"),
             )
             .await;
         }
+        match &request.decider {
+            Some(decider) => {
+                self.tell_agent(
+                    decider,
+                    format!(
+                        "{about}; decide with shoal approve {id} or shoal deny {id}, or pass it up with shoal escalate {id}",
+                        id = request.id
+                    ),
+                )
+                .await;
+            }
+            None => self.ask_user(workspace, request).await,
+        }
+    }
+
+    async fn tell_agent(&self, workspace: &str, message: String) {
+        if let Err(error) = self.queue_agent_message(workspace, message).await {
+            log!("approval message not queued: {error:#}");
+        }
+    }
+
+    async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
+        self.notify(
+            Some(workspace),
+            crate::daemon::notifications::NotificationKind::ApprovalRequested,
+            format!(
+                "approval {}: {}: {}; approve with shoal approve {}",
+                request.id,
+                request.subject(),
+                request.reason,
+                request.id
+            ),
+        )
+        .await;
     }
 }
 

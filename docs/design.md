@@ -327,9 +327,9 @@ and its agent's exits and stops, plus its ready marks, become that agent's
 messages instead, falling back to the user without such an ancestor or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
-questions asked below it or passes them up with its own question. Proposed
-next (#913): approval requests go to the coordinator too, which decides one it
-holds a grant for and otherwise passes it up, the user deciding at the top.
+questions asked below it or passes them up with its own question. Approval
+requests go to the coordinator too when it holds an approved grant for the same
+thing; it decides them or passes them up, the user deciding at the top.
 
 `shoal rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay
@@ -1023,7 +1023,10 @@ a branch (see scope) and resource access. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
-only an unscoped caller decides it, and the decision is sent to the requesting
+only an unscoped caller decides it, or the nearest coordinating agent above the
+requesting child workspace that holds an approved grant for the same target and
+settings, which may pass it up to the next such coordinator or the user; the
+coordinators passed over are told so. The decision is sent to the requesting
 workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval

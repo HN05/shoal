@@ -242,6 +242,11 @@ with `shoal answer <number> <answer>`, or ask the user yourself with
 `shoal ask` when the decision is theirs. Send it instructions with
 `shoal message <child> "<text>"`.
 
+A child agent's approval request comes to you when you hold an approved grant
+for the same thing; otherwise it passes you by, with a message saying so. Decide
+it with `shoal approve <number>` or `shoal deny <number>`, or pass it up with
+`shoal escalate <number>` when the user should decide.
+
 ## Ports
 
 ```sh

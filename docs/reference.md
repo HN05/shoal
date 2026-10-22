@@ -2570,6 +2570,18 @@ the decision. Pending requests produce a daemon notification, collapsed until re
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.
 
+A request from a [child workspace](#child-workspaces) with an agent of its own
+goes up the tree first. The nearest coordinating agent above it that holds an
+approved grant for the same target and settings decides it instead of the user,
+by number with `shoal approve <number>` or `shoal deny <number>`. It may also
+pass the request up with `shoal escalate <number>`, to the next coordinating
+agent with such a grant, or to the user. Each coordinating agent passed over
+without a grant receives a message saying so. Without a deciding coordinator,
+the user is notified as above. A land request names its own branch and commit,
+which no other workspace holds a grant for, so it always reaches the user. The
+request records its `decider`, the coordinator's workspace, while one decides
+it; the user may still decide it.
+
 An acquisition waiting for a decision returns exit 2 and JSON
 `code: "approval_pending"` with the request; denial returns `"approval_denied"`.
 `--queue` waits for pending approvals and capacity, stopping on denial. Retrying the same

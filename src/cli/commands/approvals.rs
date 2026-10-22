@@ -11,12 +11,13 @@ use crate::{
 
 /// Approve or deny a request, choosing among pending ones when no number is given.
 pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Result<i32> {
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot decide approval requests; ask the user to run this command"
-    );
+    ensure_scope_token(ctx)?;
     let (id, shown) = match id {
         Some(id) => (id, None),
+        // Workspace processes decide only the requests routed to them, by number.
+        None if crate::env::inherits_scope(&ctx.paths.state) => {
+            anyhow::bail!("workspace processes decide by number: shoal approve <number>")
+        }
         None => {
             let picked = pick_pending(ctx).await?;
             (picked.id, Some(Box::new(picked)))
@@ -27,6 +28,40 @@ pub(super) async fn decide(ctx: &Context, id: Option<i64>, approve: bool) -> Res
             .await?;
     ctx.emit(&describe(&request), &request)?;
     Ok(0)
+}
+
+/// Pass a request routed to this workspace's agent up to the next coordinating
+/// agent that holds a grant for it, or to the user.
+pub(super) async fn escalate(ctx: &Context, id: i64) -> Result<i32> {
+    ensure_scope_token(ctx)?;
+    let workspace = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
+    let request = request::<Box<ApprovalRequest>>(
+        &ctx.paths,
+        Method::EscalateApproval {
+            workspace,
+            id,
+            shown: None,
+        },
+    )
+    .await?;
+    let decider = match &request.decider {
+        Some(_) => "the next coordinating agent",
+        None => "the user",
+    };
+    ctx.emit(
+        &format!("Passed approval {} to {decider}", request.id),
+        &request,
+    )?;
+    Ok(0)
+}
+
+/// A process that cleared the scope token it inherits would act as the user.
+fn ensure_scope_token(ctx: &Context) -> Result<()> {
+    ensure!(
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot decide approval requests without their scope token"
+    );
+    Ok(())
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {

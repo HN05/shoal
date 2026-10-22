@@ -151,6 +151,31 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::DecideApproval { id, shown, .. } => {
+            // A coordinating agent decides the requests routed to it, since
+            // it holds a grant for the same thing. The decision binds to the
+            // request checked here, refused once a later one reuses its number.
+            let request = match shown.take() {
+                Some(shown) => *shown,
+                None => manager
+                    .approval_request(*id)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?,
+            };
+            ensure!(
+                request.id == *id && request.decider.as_deref() == Some(owner.as_str()),
+                "workspace processes decide only the approval requests routed to them; ask the user to run this command"
+            );
+            *shown = Some(Box::new(request));
+            None
+        }
+        Method::EscalateApproval { workspace, .. } => {
+            ensure!(
+                manager.workspace(workspace).await?.id == *owner,
+                "workspace processes pass up only the approval requests routed to their own workspace"
+            );
+            Some(workspace)
+        }
         Method::QueueAdd { request } => {
             let denied =
                 "workspace processes can start agents only in the workspaces split from theirs";
