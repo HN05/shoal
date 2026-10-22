@@ -67,6 +67,14 @@ impl ForgeRepo {
 
     /// Open the PR and return it as the forge reports it.
     pub async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
+        let (number, follow_up) = self.post_pull(account, pull).await?;
+        self.finish_item(account, ItemKind::Pr, number, &follow_up)
+            .await
+    }
+
+    /// Post the PR and return its number with the edit that finishes it: its
+    /// labels, reviewers and files the forge keeps with the item.
+    pub async fn post_pull(&self, account: &Account, pull: &NewPull) -> Result<(u64, Edit)> {
         self.ensure_labels(&pull.labels)?;
         let per_item = self.check_uploads(account, &pull.attachments).await?;
         let (body, pending) = self
@@ -86,16 +94,7 @@ impl ForgeRepo {
             add_reviewers: pull.reviewers,
             ..pending_edit(pending)
         };
-        if follow_up == Edit::default() {
-            return Ok(self.read(account, ItemKind::Pr, number).await?.item);
-        }
-        self.act(account, ItemKind::Pr, number, &Action::Edit(follow_up))
-            .await
-            .with_context(|| {
-                format!(
-                    "PR #{number} was opened, but labeling it, requesting reviews or attaching its files failed"
-                )
-            })
+        Ok((number, follow_up))
     }
 
     fn create_pull_request(&self, pull: &NewPull) -> Request {
@@ -105,7 +104,8 @@ impl ForgeRepo {
     /// Open the issue and return it as the forge reports it.
     pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
         let (number, follow_up) = self.post_issue(account, issue).await?;
-        self.finish_issue(account, number, &follow_up).await
+        self.finish_item(account, ItemKind::Issue, number, &follow_up)
+            .await
     }
 
     /// Post the issue and return its number with the edit that finishes it:
@@ -138,27 +138,28 @@ impl ForgeRepo {
         Ok((number, follow_up))
     }
 
-    /// Apply the edit [`Self::post_issue`] left to the issue `number`, and
-    /// return the issue as the forge then reports it.
-    pub async fn finish_issue(
+    /// Apply the edit [`Self::post_issue`] or [`Self::post_pull`] left to
+    /// the item `number`, and return it as the forge then reports it.
+    pub async fn finish_item(
         &self,
         account: &Account,
+        kind: ItemKind,
         number: u64,
         follow_up: &Edit,
     ) -> Result<Item> {
         if *follow_up == Edit::default() {
-            return Ok(self.read(account, ItemKind::Issue, number).await?.item);
+            return Ok(self.read(account, kind, number).await?.item);
         }
-        self.act(
-            account,
-            ItemKind::Issue,
-            number,
-            &Action::Edit(follow_up.clone()),
-        )
-        .await
-        .with_context(|| {
-            format!("issue #{number} was opened, but labeling it or attaching its files failed")
-        })
+        self.act(account, kind, number, &Action::Edit(follow_up.clone()))
+            .await
+            .with_context(|| match kind {
+                ItemKind::Issue => format!(
+                    "issue #{number} was opened, but labeling it or attaching its files failed"
+                ),
+                ItemKind::Pr => format!(
+                    "PR #{number} was opened, but labeling it, requesting reviews or attaching its files failed"
+                ),
+            })
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {

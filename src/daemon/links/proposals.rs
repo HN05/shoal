@@ -23,7 +23,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        items::action::Action,
+        items::action::{Action, Edit},
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
         items::item::{Item, ItemState, Opened},
@@ -118,6 +118,7 @@ impl Manager {
             pull,
             commit,
             agent: proposer.agent,
+            follow_up: None,
         });
         let request = proposal(workspace, Target::PrOpen, proposals::PR, specification);
         self.record_proposal(workspace, request, proposals::propose_pull)
@@ -256,7 +257,7 @@ impl Manager {
             Target::IssueOpen => self.open_proposed_issue(&mut request, workspace).await?,
             Target::PrOpen => {
                 let workspace = workspace.context("the workspace that proposed the PR is gone")?;
-                self.open_proposed_pull(&request, workspace).await?
+                self.open_proposed_pull(&mut request, workspace).await?
             }
             _ => bail!("approval request {} is not a proposal", request.id),
         };
@@ -293,7 +294,7 @@ impl Manager {
             }
         };
         let item = self
-            .finish_proposed_issue(request, &forge, &account)
+            .finish_proposed(request, &forge, &account, ItemKind::Issue)
             .await?;
         self.post_findings(request, workspace, &forge, &account, &item)
             .await?;
@@ -315,11 +316,7 @@ impl Manager {
             .clone();
         let (number, follow_up) = forge.post_issue(account, &proposed.issue).await?;
         let url = forge.item_url(ItemKind::Issue, number)?;
-        request.url = Some(url.clone());
-        request.set_follow_up(Some(follow_up));
-        self.save_proposal(request.clone())
-            .await
-            .with_context(|| format!("{url} was opened, but recording it failed"))?;
+        self.keep_posted(request, &url, follow_up).await?;
         let item = Item {
             kind: ItemKind::Issue,
             number,
@@ -334,22 +331,41 @@ impl Manager {
             .await)
     }
 
-    /// Apply what posting the issue left, such as Forgejo's labels, and read
-    /// the issue as the forge then reports it.
-    async fn finish_proposed_issue(
+    /// Keep the posted item's URL and the edit that finishes it on the
+    /// request, so approving again finishes it instead of posting another.
+    async fn keep_posted(
+        &self,
+        request: &mut ApprovalRequest,
+        url: &str,
+        follow_up: Edit,
+    ) -> Result<()> {
+        request.url = Some(url.to_owned());
+        request.set_follow_up(Some(follow_up));
+        self.save_proposal(request.clone())
+            .await
+            .with_context(|| format!("{url} was opened, but recording it failed"))
+    }
+
+    /// Apply what posting the item left, such as its labels, and read it as
+    /// the forge then reports it.
+    async fn finish_proposed(
         &self,
         request: &mut ApprovalRequest,
         forge: &ForgeRepo,
         account: &Account,
+        kind: ItemKind,
     ) -> Result<Item> {
         let url = request
             .url
             .clone()
-            .context("the issue proposal has no opened issue")?;
-        let (number, _) = forge.issue(&url)?;
+            .context("the proposal has no opened item")?;
+        let (number, _) = match kind {
+            ItemKind::Issue => forge.issue(&url)?,
+            ItemKind::Pr => forge.pull(&url)?,
+        };
         let follow_up = request.follow_up().cloned().unwrap_or_default();
         let item = forge
-            .finish_issue(account, number, &follow_up)
+            .finish_item(account, kind, number, &follow_up)
             .await
             .with_context(|| format!("{url}: approve again to retry"))?;
         if request.follow_up().is_some() {
@@ -415,41 +431,62 @@ impl Manager {
     }
 
     /// Open the proposed PR, or link the branch's open PR, as the agent
-    /// account. A branch with newer commits outdates the request instead.
+    /// account. A branch that changed since the proposal outdates the request
+    /// instead. The request keeps the PR once it is posted and the edit that
+    /// finishes it, so approving again after a failure finishes that edit.
     async fn open_proposed_pull(
         &self,
-        request: &ApprovalRequest,
+        request: &mut ApprovalRequest,
         workspace: &Workspace,
     ) -> Result<(Item, bool)> {
-        let proposed = request
-            .proposed_pull()
-            .context("the PR proposal has no PR")?;
         self.verify_worktree(workspace).await?;
         ensure!(
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
         );
-        if !pull_current(workspace, proposed).await? {
-            return Err(self.outdate_pull(request).await?.into());
-        }
         let (forge, account) = self.workspace_forge_account(workspace).await?;
-        let item = match forge.open_pull_for(&account, &workspace.branch).await? {
-            Some(number) => {
-                let item = forge.read(&account, ItemKind::Pr, number).await?.item;
-                let watch = super::pr::Action::Watch {
-                    url: item.url.clone(),
-                };
-                self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
-                    .await
-                    .with_context(|| format!("{} is open, but linking it failed", item.url))?;
-                return Ok((item, true));
+        if request.url.is_none() {
+            let proposed = request
+                .proposed_pull()
+                .context("the PR proposal has no PR")?
+                .clone();
+            if !pull_current(workspace, &proposed).await? {
+                return Err(self.outdate_pull(request).await?.into());
             }
-            None => forge.create_pull(&account, &proposed.pull).await?,
-        };
+            if let Some(number) = forge.open_pull_for(&account, &workspace.branch).await? {
+                return self
+                    .link_open_pull(workspace, &forge, &account, number)
+                    .await;
+            }
+            let (number, follow_up) = forge.post_pull(&account, &proposed.pull).await?;
+            let url = forge.item_url(ItemKind::Pr, number)?;
+            self.keep_posted(request, &url, follow_up).await?;
+        }
+        let item = self
+            .finish_proposed(request, &forge, &account, ItemKind::Pr)
+            .await?;
         let (linked, _) = self
             .keep_created(workspace, ItemKind::Pr, &item, true)
             .await?;
         Ok((item, linked))
+    }
+
+    /// Link the branch's PR, which someone opened since the proposal.
+    async fn link_open_pull(
+        &self,
+        workspace: &Workspace,
+        forge: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(Item, bool)> {
+        let item = forge.read(account, ItemKind::Pr, number).await?.item;
+        let watch = super::pr::Action::Watch {
+            url: item.url.clone(),
+        };
+        self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
+            .await
+            .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+        Ok((item, true))
     }
 
     /// Keep the request as outdated and tell the agent to propose again.

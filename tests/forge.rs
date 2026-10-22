@@ -2224,3 +2224,52 @@ fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
         [json!(["PUT repos/team/project/issues/40/labels", {"labels": ["bug"]}])]
     );
 }
+
+#[test]
+fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let root = fixture.root.path();
+    let remote = root.join("remote.git");
+    git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
+    git(
+        &fixture.repo,
+        &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
+    );
+    let mut responses = json!({
+        "GET repos/team/project/pulls?state=open&head=team%3Atopic": {"body": []},
+        "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
+        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "initial", &[])},
+        // Labeling the new PR fails the first time.
+        "PUT repos/team/project/issues/9/labels": {"status": 500,
+            "body": {"message": "unavailable"}},
+    });
+    fixture.respond(responses.clone());
+    let id = scoped(&fixture, &["pr", "open", "--label", "bug"])["proposed"]["id"].to_string();
+    let failed = fixture.run(&["approve", &id]);
+    assert!(
+        String::from_utf8_lossy(&failed.stderr).contains("approve again to retry"),
+        "{failed:?}"
+    );
+    let url = format!("{}/pull/9", fixture.web);
+    assert_eq!(fixture.ok(&["approvals"])[0]["url"], url);
+    let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
+    assert_eq!(
+        posted,
+        [
+            "POST repos/team/project/pulls",
+            "PUT repos/team/project/issues/9/labels"
+        ]
+    );
+
+    responses["PUT repos/team/project/issues/9/labels"] = json!({"body": []});
+    fixture.respond(responses);
+    assert_eq!(fixture.ok(&["approve", &id])["url"], url);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["PUT repos/team/project/issues/9/labels", {"labels": ["bug"]}])]
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "topic"])["workspace"]["links"]["prs"],
+        json!([url])
+    );
+}

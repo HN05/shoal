@@ -62,6 +62,10 @@ pub struct PullSpecification {
     pub commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// What is left to do to the PR once approval posted it, such as its
+    /// labels and reviewers, until it is done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<Edit>,
 }
 
 /// What the user decides about a proposal besides yes or no.
@@ -157,14 +161,20 @@ impl ApprovalRequest {
             .map_or(&[], |issue| issue.duplicates.as_slice())
     }
 
-    /// What is left to do to an issue approval posted.
+    /// What is left to do to an item approval posted.
     pub fn follow_up(&self) -> Option<&Edit> {
-        self.proposed_issue()?.follow_up.as_ref()
+        match &self.specification {
+            Specification::Issue(issue) => issue.follow_up.as_ref(),
+            Specification::Pull(pull) => pull.follow_up.as_ref(),
+            _ => None,
+        }
     }
 
     pub fn set_follow_up(&mut self, follow_up: Option<Edit>) {
-        if let Specification::Issue(issue) = &mut self.specification {
-            issue.follow_up = follow_up;
+        match &mut self.specification {
+            Specification::Issue(issue) => issue.follow_up = follow_up,
+            Specification::Pull(pull) => pull.follow_up = follow_up,
+            _ => {}
         }
     }
 
