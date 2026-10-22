@@ -7671,18 +7671,18 @@ head -n 1 "$HOME/picker-input"
             // Every key is bound, and those the view leaves out unbound at start.
             let (unbound, header) = if scoped {
                 (
-                    Some("ctrl-d,ctrl-a,ctrl-s,ctrl-t"),
-                    "enter: cd   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
+                    Some("ctrl-t,ctrl-a,ctrl-s,ctrl-d"),
+                    "enter: cd   ctrl-f: diff   ctrl-e: execute   ctrl-o: inspect",
                 )
             } else {
                 (
                     None,
-                    "enter: cd   tab: next view   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
+                    "enter: cd   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-a: add   ctrl-e: execute   ctrl-o: inspect   ctrl-s: stop   ctrl-d: delete",
                 )
             };
             assert!(args.contains(&format!("--header\n{header}\n")), "{args}");
             let binds: String = [
-                "enter", "ctrl-d", "ctrl-e", "ctrl-a", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-f",
+                "enter", "ctrl-t", "ctrl-f", "ctrl-a", "ctrl-e", "ctrl-o", "ctrl-s", "ctrl-d",
             ]
             .iter()
             .map(|key| format!("--bind\n{key}:print({key})+accept\n"))
@@ -7798,13 +7798,13 @@ esac
     );
     let to_notifications = next("work> ");
     assert!(
-        to_notifications.starts_with("unbind(ctrl-d,ctrl-e,ctrl-s,ctrl-t,ctrl-f)+")
+        to_notifications.starts_with("unbind(ctrl-t,ctrl-f,ctrl-e,ctrl-s,ctrl-d)+")
             && to_notifications.ends_with("internal menu-rows notifications\n"),
         "{to_notifications}"
     );
     let to_inbox = next("notifications> ");
     assert!(
-        to_inbox.starts_with("unbind(ctrl-d,ctrl-e,ctrl-s)+")
+        to_inbox.starts_with("unbind(ctrl-e,ctrl-s,ctrl-d)+")
             && to_inbox.contains("change-header(enter: act   tab: next view   ")
             && to_inbox.ends_with("internal menu-rows inbox\n"),
         "{to_inbox}"
@@ -7831,12 +7831,12 @@ esac
     assert!(args.contains("--prompt\ninbox> \n"), "{args}");
     assert!(
         args.contains(
-            "--header\nenter: act   tab: next view   ctrl-t: attach   ctrl-o: inspect   ctrl-f: diff   ctrl-a: add\n"
+            "--header\nenter: act   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-a: add   ctrl-o: inspect\n"
         ),
         "{args}"
     );
     assert!(
-        args.contains("--bind\nstart:unbind(ctrl-d,ctrl-e,ctrl-s)\n"),
+        args.contains("--bind\nstart:unbind(ctrl-e,ctrl-s,ctrl-d)\n"),
         "{args}"
     );
     assert!(args.contains("internal menu-next"), "{args}");

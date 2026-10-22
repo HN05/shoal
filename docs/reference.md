@@ -388,10 +388,11 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `needs input`, `ready`, the other [agent states](#agent-state),
 `running` while an agent or command runs, `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
-The header names the keys the list binds. Enter enters the selection; Ctrl-D deletes, Ctrl-E
-runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
-Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
-shell.
+The header names the keys the list binds, most used first, on as many lines as
+the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
+the diff, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
+opens Codex/T3 apps, or runs a shell command, Ctrl-O inspects, Ctrl-S stops,
+Ctrl-D deletes. Each action returns to your shell.
 `shoal work --print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: your own workspaces first, then each running [chat](#chats)
 marked ◆ with its agent, followed by the workspaces it opened; `work --chats`

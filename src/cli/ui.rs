@@ -376,6 +376,26 @@ pub fn picker_width() -> Option<usize> {
     Some(crate::cli::output::terminal_width(terminal)?.saturating_sub(3))
 }
 
+/// `items` joined by `separator` into lines no wider than `width`, where
+/// one item fits; no limit keeps one line.
+pub fn wrapped(items: &[String], separator: &str, width: Option<usize>) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for item in items {
+        match lines.last_mut() {
+            Some(line)
+                if width.is_none_or(|width| {
+                    line.chars().count() + separator.len() + item.chars().count() <= width
+                }) =>
+            {
+                line.push_str(separator);
+                line.push_str(item);
+            }
+            _ => lines.push(item.clone()),
+        }
+    }
+    lines.join("\n")
+}
+
 /// One picker input line: the id, a tab, and the label on one line.
 pub fn picker_line(id: &str, label: &str) -> String {
     format!("{id}\t{}", label.replace(['\n', '\r', '\t'], " "))
@@ -1264,6 +1284,26 @@ mod tests {
         assert_eq!(
             aligned_to(rows(), plain, limit(10))[0],
             "question  Which datab…  SQLite"
+        );
+    }
+
+    #[test]
+    fn wrapped_items_fill_lines_up_to_the_width() {
+        let items: Vec<String> = ["enter: cd", "tab: next view", "ctrl-d: delete"]
+            .map(String::from)
+            .into();
+        assert_eq!(
+            wrapped(&items, "   ", None),
+            "enter: cd   tab: next view   ctrl-d: delete"
+        );
+        assert_eq!(
+            wrapped(&items, "   ", Some(26)),
+            "enter: cd   tab: next view\nctrl-d: delete"
+        );
+        // An item wider than the limit gets a line of its own.
+        assert_eq!(
+            wrapped(&items, "   ", Some(5)),
+            "enter: cd\ntab: next view\nctrl-d: delete"
         );
     }
 

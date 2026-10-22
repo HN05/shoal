@@ -41,15 +41,16 @@ enum Key {
 }
 
 impl Key {
+    /// Every key, in the order headers list them: by how often each is used.
     const ALL: [Self; 8] = [
         Self::Enter,
-        Self::Delete,
-        Self::Execute,
-        Self::Add,
-        Self::Inspect,
-        Self::Stop,
         Self::Attach,
         Self::Diff,
+        Self::Add,
+        Self::Execute,
+        Self::Inspect,
+        Self::Stop,
+        Self::Delete,
     ];
 
     /// Its fzf name.
@@ -117,20 +118,11 @@ impl View {
     }
 
     /// The keys the view binds, in header order.
-    fn keys(self) -> &'static [Key] {
+    fn binds(self, key: Key) -> bool {
         match self {
-            Self::Inbox => &[Key::Enter, Key::Attach, Key::Inspect, Key::Diff, Key::Add],
-            Self::Notifications => &[Key::Enter, Key::Inspect, Key::Add],
-            Self::Work => &[
-                Key::Enter,
-                Key::Delete,
-                Key::Execute,
-                Key::Add,
-                Key::Inspect,
-                Key::Stop,
-                Key::Attach,
-                Key::Diff,
-            ],
+            Self::Inbox => !matches!(key, Key::Execute | Key::Stop | Key::Delete),
+            Self::Notifications => matches!(key, Key::Enter | Key::Inspect | Key::Add),
+            Self::Work => true,
         }
     }
 
@@ -169,14 +161,14 @@ impl View {
 
     /// The keys a caller with this scope may use here.
     fn bound(self, scoped: bool) -> Vec<Key> {
-        self.keys()
-            .iter()
-            .copied()
-            .filter(|key| !scoped || key.allowed_scoped())
+        Key::ALL
+            .into_iter()
+            .filter(|&key| self.binds(key) && (!scoped || key.allowed_scoped()))
             .collect()
     }
 
     /// The bound keys, with Tab after Enter when there is another view.
+    /// Wrapped to the picker's width, as fzf cuts a line that is wider.
     fn header(self, keys: &[Key], switches: bool) -> String {
         let mut labels: Vec<_> = keys
             .iter()
@@ -185,7 +177,7 @@ impl View {
         if switches {
             labels.insert(1, "tab: next view".into());
         }
-        labels.join("   ")
+        ui::wrapped(&labels, "   ", ui::picker_width())
     }
 
     /// The fzf actions that switch to this view, reloading its rows with
