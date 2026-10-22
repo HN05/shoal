@@ -10,6 +10,9 @@ pub(super) struct Update {
 }
 
 impl Update {
+    /// Record the executable this daemon was started from. The daemon calls
+    /// this before any startup work, while the path still names the running
+    /// binary, so a replacement during startup is already pending.
     pub(super) fn new(managed: bool) -> Option<Self> {
         if !managed {
             return None;

@@ -80,6 +80,7 @@ struct Server {
 }
 
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
+    let update = auto_update::Update::new(managed);
     paths.prepare()?;
     let descriptors = connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
@@ -90,7 +91,6 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
-    let update = auto_update::Update::new(managed);
     let mut update_tick = tokio::time::interval(Duration::from_secs(1));
     let server = Server {
         manager: manager.clone(),

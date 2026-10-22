@@ -217,6 +217,79 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
 }
 
 #[test]
+fn managed_daemon_restarts_for_a_replacement_during_startup() {
+    use std::os::unix::{
+        ffi::OsStrExt,
+        fs::{OpenOptionsExt, symlink},
+    };
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let launcher = root.path().join("shoal");
+    let started = root.path().join("replacement-started");
+    let replacement = root.path().join("replacement");
+    symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
+    support::install_test_script(
+        &replacement,
+        r#"#!/bin/sh
+printf ready > "$SHOAL_TEST_UPDATE_GATE"
+exec "$SHOAL_TEST_REAL_BINARY" "$@"
+"#,
+    );
+    // Startup blocks reading the global config until the test writes it.
+    let config = root.path().join(".config/shoal/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    let fifo = std::ffi::CString::new(config.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    let mut launch = support::isolated(root.path(), &launcher);
+    launch
+        .args(["daemon", "run", "--managed"])
+        .env("SHOAL_TEST_UPDATE_GATE", &started)
+        .env("SHOAL_TEST_REAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut daemon = DaemonGuard {
+        child: launch.spawn().unwrap(),
+    };
+    // A nonblocking writer opens only once the daemon is reading.
+    let mut writer = None;
+    wait_until("daemon to read its config", || {
+        assert!(
+            daemon.child.try_wait().unwrap().is_none(),
+            "daemon exited during startup"
+        );
+        writer = fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&config)
+            .ok();
+        writer.is_some()
+    });
+    // The restarted daemon reads a regular file.
+    let settled = root.path().join("config.toml");
+    fs::write(&settled, "").unwrap();
+    fs::rename(&settled, &config).unwrap();
+    let next = root.path().join("shoal-next");
+    symlink(&replacement, &next).unwrap();
+    fs::rename(next, &launcher).unwrap();
+    drop(writer);
+    wait_until("replacement to start", || {
+        assert!(
+            daemon.child.try_wait().unwrap().is_none(),
+            "daemon exited instead of restarting"
+        );
+        started.exists()
+    });
+    wait_until("restarted daemon", || {
+        command(root.path())
+            .args(["daemon", "status"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    });
+}
+
+#[test]
 fn global_config_changes_reload_a_running_daemon() {
     let daemon = Daemon::start();
     let policy = || {

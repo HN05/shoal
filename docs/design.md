@@ -176,8 +176,9 @@ input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service; foreground mode covers
 environments without a service manager. The service captures the installing shell's
 `PATH`.
-Managed daemons watch their stable executable path and restart after a replacement
-once daemon operations are idle and no setup or landing runs; commands reattach.
+Managed daemons record their stable executable path before startup work and restart
+after a replacement, including one during startup, once daemon operations are idle
+and no setup or landing runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
 the replacement under the same service PID. Read-only streams reconnect after the
 handoff, preserving event cursors, and item waits resume for their remaining time;
