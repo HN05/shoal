@@ -46,9 +46,17 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .create_workspace(&repo.id, "ready".into(), None, None, None)
         .await
         .unwrap();
-    // Draft state is covered with a fake forge below.
+    // Draft state and convention warnings are covered below; this forge
+    // only keeps marking away from a real one.
+    let forge_dir = temp.path().join("forge");
+    std::fs::create_dir(&forge_dir).unwrap();
+    let gh = fake_gh(&forge_dir);
+    let config = format!(
+        "[ready]\nundraft = false\n[agent_auth]\ngh = '{}'\n",
+        gh.display()
+    );
     manager
-        .set_repository_config(&repo.id, Some("[ready]\nundraft = false\n".into()))
+        .set_repository_config(&repo.id, Some(config))
         .await
         .unwrap();
     git(&workspace.path, &["remote", "add", "origin", REMOTE]);
@@ -319,8 +327,9 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     }));
 }
 
-/// A `gh` that serves PR 12 of [`REMOTE`] with the draft state in `state`,
-/// changes it through GraphQL, and fails while `fail` exists.
+/// A `gh` that serves PR 12 of [`REMOTE`] with the draft state in `state`
+/// and no labels, and the repository's one label; changes draft state
+/// through GraphQL, and fails while `fail` exists.
 fn fake_gh(dir: &std::path::Path) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let gh = dir.join("gh-agent");
@@ -341,6 +350,8 @@ case "$*" in
       *convertPullRequestToDraft*) echo true > '{state}' ;;
     esac
     echo '{{"data":{{}}}}' ;;
+  */labels*)
+    echo '[{{"name":"type/bug","description":"Broken"}}]' ;;
   *pulls/12*)
     printf '{{"number":12,"title":"Fix","state":"open","draft":%s,"node_id":"PR_1","head":{{"ref":"ready"}},"base":{{"ref":"main"}},"labels":[]}}' "$(cat '{state}')" ;;
 esac
@@ -400,11 +411,19 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     };
 
     // Marking undrafts by default, and a PR already out of draft is left alone.
-    manager
+    // The unlabeled PR comes back with a warning that is never stored.
+    let marks = manager
         .mark_ready(&workspace.id, Selection::default())
         .await
         .unwrap();
     assert!(!draft());
+    assert!(
+        marks[0].warnings[0].starts_with("PR #12 has no labels"),
+        "{:?}",
+        marks[0].warnings
+    );
+    let stored = manager.workspace(&workspace.id).await.unwrap().review;
+    assert!(stored[0].warnings.is_empty());
     manager
         .mark_ready(&workspace.id, Selection::default())
         .await
