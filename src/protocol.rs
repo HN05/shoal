@@ -309,14 +309,14 @@ pub enum Method {
         workspace: String,
         kind: crate::forge::link::ItemKind,
         url: String,
-        relation: crate::forge::link::Relation,
+        relation: crate::model::Relation,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
     /// Unlink the relation's items, optionally only one kind or one item.
     UnlinkItems {
         workspace: String,
-        relation: crate::forge::link::Relation,
+        relation: crate::model::Relation,
         kind: Option<crate::forge::link::ItemKind>,
         url: Option<String>,
     },

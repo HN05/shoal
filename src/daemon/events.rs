@@ -154,7 +154,7 @@ pub struct LinkEvent {
     pub url: String,
     /// Absent from events recorded before relations existed, which were assignments.
     #[serde(default)]
-    pub relation: crate::forge::link::Relation,
+    pub relation: crate::model::Relation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,7 +267,7 @@ pub(crate) fn record_link(
     db: &Connection,
     id: &str,
     event_kind: EventKind,
-    relation: crate::forge::link::Relation,
+    relation: crate::model::Relation,
     kind: crate::forge::link::ItemKind,
     url: &str,
 ) -> Result<()> {

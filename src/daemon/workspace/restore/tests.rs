@@ -435,7 +435,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
 
 #[tokio::test]
 async fn a_removal_record_keeps_links_made_until_removal_starts() {
-    use crate::forge::link::{ItemKind, Relation};
+    use crate::{forge::link::ItemKind, model::Relation};
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager

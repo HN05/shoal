@@ -96,7 +96,7 @@ impl Manager {
                         &tx,
                         &workspace.id,
                         EventKind::Linked,
-                        crate::forge::link::Relation::Assigned,
+                        crate::model::Relation::Assigned,
                         crate::forge::link::ItemKind::Issue,
                         &url,
                     )?;
@@ -149,7 +149,7 @@ impl Manager {
                         &tx,
                         &workspace.id,
                         EventKind::Unlinked,
-                        crate::forge::link::Relation::Assigned,
+                        crate::model::Relation::Assigned,
                         crate::forge::link::ItemKind::Issue,
                         &url,
                     )?;

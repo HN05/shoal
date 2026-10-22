@@ -9,9 +9,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::events::EventCause,
-    forge::link::Relation,
     git,
-    model::{CheckpointCause, RemovedWorkspace, RestoredWorkspace, Workspace, WorkspaceLinks},
+    model::{
+        CheckpointCause, Relation, RemovedWorkspace, RestoredWorkspace, Workspace, WorkspaceLinks,
+    },
     time::unix_seconds,
 };
 

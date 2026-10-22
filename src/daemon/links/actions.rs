@@ -13,10 +13,10 @@ use crate::{
         conventions,
         create::{NewIssue, NewPull, PullOptions},
         item::{Item, ItemState, Opened},
-        link::{ItemKind, Relation},
+        link::ItemKind,
     },
     fsutil::expand_home,
-    model::{ReviewMark, Workspace},
+    model::{Relation, ReviewMark, Workspace},
 };
 
 impl Manager {

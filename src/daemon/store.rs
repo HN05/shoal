@@ -6,8 +6,9 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
 use crate::{
-    forge::link::Relation,
-    model::{Execution, LinkedItem, PortReservation, Repository, Workspace, WorkspaceLinks},
+    model::{
+        Execution, LinkedItem, PortReservation, Relation, Repository, Workspace, WorkspaceLinks,
+    },
     sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };

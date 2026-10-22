@@ -106,6 +106,25 @@ pub struct WorkspaceLinks {
     pub related: Vec<LinkedItem>,
 }
 
+crate::state::states!(
+    /// How an issue or PR relates to a workspace.
+    Relation: ValueEnum {
+        /// The work the workspace exists for; it drives completion and cleanup.
+        Assigned => "assigned",
+        /// The workspace created the item through Shoal.
+        Opened => "opened",
+        /// The item informs the work without driving it.
+        Related => "related",
+    }
+);
+
+impl Default for Relation {
+    /// Links recorded before relations existed were assignments.
+    fn default() -> Self {
+        Self::Assigned
+    }
+}
+
 /// An issue or PR a workspace records without lifecycle effect.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkedItem {

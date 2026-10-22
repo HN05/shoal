@@ -9,25 +9,6 @@ crate::state::states!(ItemKind {
     Pr => "pr",
 });
 
-crate::state::states!(
-    /// How an issue or PR relates to a workspace.
-    Relation: ValueEnum {
-        /// The work the workspace exists for; it drives completion and cleanup.
-        Assigned => "assigned",
-        /// The workspace created the item through Shoal.
-        Opened => "opened",
-        /// The item informs the work without driving it.
-        Related => "related",
-    }
-);
-
-impl Default for Relation {
-    /// Links recorded before relations existed were assignments.
-    fn default() -> Self {
-        Self::Assigned
-    }
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Selection {
     /// Missing for every kind, or for a number the CLI has yet to classify.

@@ -90,7 +90,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
         &db,
         "w",
         crate::daemon::events::EventKind::Linked,
-        crate::forge::link::Relation::Assigned,
+        crate::model::Relation::Assigned,
         crate::forge::link::ItemKind::Pr,
         "https://forge.example/team/repo/pulls/7",
     )?;

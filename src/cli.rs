@@ -22,7 +22,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::{
     agent::{Agent, BuiltinAgent},
-    forge::{IssueInput, link::Relation},
+    forge::IssueInput,
+    model::Relation,
 };
 
 #[derive(Debug, Parser)]
