@@ -149,7 +149,7 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
     );
     let now = crate::time::unix_seconds() as i64;
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,workspace_id)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
         params![
             launch.id,
@@ -184,7 +184,7 @@ pub(crate) struct Start {
 }
 
 const ENTRY_COLUMNS: &str =
-    "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id";
+    "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,opens_workspace_id";
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch no limit applies
@@ -784,7 +784,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db.execute(
                     "UPDATE agent_queue SET workspace_id=?2
-                     WHERE id=?1 AND state=?3 AND (workspace_id IS NULL OR workspace_id=?2)",
+                     WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?)
             })
@@ -803,7 +803,7 @@ impl Manager {
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM agent_queue WHERE workspace_id=?1 AND kind=?2",
+                    "SELECT 1 FROM agent_queue WHERE (workspace_id=?1 OR opens_workspace_id=?1) AND kind=?2",
                     params![workspace_id, QueueKind::Launch],
                 )
             })
@@ -1052,6 +1052,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         position: None,
         created_at: row.get("created_at")?,
         workspace_id: row.get("workspace_id")?,
+        opens: row.get("opens_workspace_id")?,
     })
 }
 

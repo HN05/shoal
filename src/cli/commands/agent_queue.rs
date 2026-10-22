@@ -186,7 +186,7 @@ async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
 pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
     let started = async {
         let (queued, plan) = plan(ctx, &entry).await?;
-        if let Some(workspace) = &queued.entry.workspace_id {
+        if let Some(workspace) = &queued.entry.opens {
             let workspace = client::inspect(&ctx.paths, workspace.clone())
                 .await?
                 .workspace;

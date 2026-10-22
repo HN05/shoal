@@ -620,9 +620,11 @@ pub struct QueueEntry {
     /// The 1-based place among waiting entries; `None` once starting.
     pub position: Option<usize>,
     pub created_at: i64,
-    /// The workspace a starting launch opened or, for a launch in an existing
-    /// workspace, opens; a restore's own.
+    /// The workspace a starting launch opened, or a restore's own.
     pub workspace_id: Option<String>,
+    /// The existing workspace a launch in it opens, known when it is queued.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opens: Option<String>,
 }
 
 /// An agent launch `shoal add` asks the daemon to admit or queue. The plan

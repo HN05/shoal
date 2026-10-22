@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 55;
+const SCHEMA_VERSION: i64 = 56;
 
 #[cfg(test)]
 mod benchmark;
@@ -385,7 +385,14 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     // Unix time `done` closed an unanswered question.
     (54, "ALTER TABLE questions ADD COLUMN closed_at INTEGER;", None),
     (55, include_str!("store/workspace_parent.sql"), None),
+    (56, QUEUE_TARGETS, None),
 ];
+
+/// The existing workspace a queued launch opens, apart from the workspace a
+/// starting launch reports it opened.
+const QUEUE_TARGETS: &str =
+    "ALTER TABLE agent_queue ADD COLUMN opens_workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE;
+    CREATE INDEX IF NOT EXISTS agent_queue_opens ON agent_queue(opens_workspace_id);";
 
 /// When the grace period of an unattended removal ends, and whether the
 /// current sweep pass still wants to remove the workspace.
@@ -1015,6 +1022,9 @@ mod tests {
         }
         if version >= 55 {
             db.execute_batch(include_str!("store/workspace_parent.sql"))?;
+        }
+        if version >= 56 {
+            db.execute_batch(QUEUE_TARGETS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

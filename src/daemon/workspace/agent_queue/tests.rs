@@ -881,7 +881,8 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .unwrap();
     let entry = admission.entry.unwrap();
     assert!(!admission.start);
-    assert_eq!(entry.workspace_id.as_deref(), Some(child.id.as_str()));
+    assert_eq!(entry.opens.as_deref(), Some(child.id.as_str()));
+    assert_eq!(entry.workspace_id, None);
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started(&entry.id));
     // A launch that has yet to start keeps its workspace from cleanup.
@@ -968,4 +969,44 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("not ready"), "{error:#}");
     assert!(manager.queue_entries().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("max_agents = 'none'"));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    let entry = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.id.clone()),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    // Its worker ended, as on a restart, before opening the workspace.
+    let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE agent_queue SET seen_at=?1", [past])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == NotificationKind::QueueFailed
+                && notification.message.contains(&entry.name)
+        }),
+        "{notifications:?}"
+    );
 }
