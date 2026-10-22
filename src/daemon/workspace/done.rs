@@ -86,27 +86,7 @@ impl Manager {
             cleanup: cleanup || settings.done.cleanup,
             error: None,
         };
-        let id = workspace.id.clone();
-        let record = completion.clone();
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
-                tx.execute(
-                    "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
-                 ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
-                    rusqlite::params![id, serde_json::to_string(&record)?, EventCause::Manual],
-                )?;
-                // Like the continuation it replaced, a hold made from one by
-                // migration 31 ends at the next explicit done.
-                tx.execute(
-                    "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
-                    [&id],
-                )?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
+        self.persist_completion(&workspace.id, &completion).await?;
         self.forget_last_session(&workspace.id);
         self.notify(
             Some(&workspace.name),
@@ -123,6 +103,31 @@ impl Manager {
         }
         self.cleanup_notify.notify_one();
         Ok(completion)
+    }
+
+    /// Record `completion` for the workspace.
+    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<()> {
+        let id = id.to_owned();
+        let record = serde_json::to_string(completion)?;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &id)?;
+                tx.execute(
+                    "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
+                 ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
+                    rusqlite::params![id, record, EventCause::Manual],
+                )?;
+                // Like the continuation it replaced, a hold made from one by
+                // migration 31 ends at the next explicit done.
+                tx.execute(
+                    "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
+                    [&id],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
     }
 
     /// The configured `post_done_cmd`, holding off permit and lifecycle changes
