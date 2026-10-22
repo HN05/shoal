@@ -82,6 +82,44 @@ impl NotificationKind {
     }
 }
 
+/// Record an event for the user in the caller's transaction, returning its ID,
+/// or `None` when it collapses into an identical unread one. Callers wake
+/// watchers with `notifications_changed` after committing.
+pub(crate) fn insert(
+    tx: &rusqlite::Transaction<'_>,
+    workspace: Option<&str>,
+    kind: NotificationKind,
+    message: &str,
+) -> Result<Option<i64>> {
+    if kind.collapses() {
+        let pending: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1 AND kind=?2 AND message=?3",
+                params![workspace, kind, message],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if pending.is_some() {
+            return Ok(None);
+        }
+    }
+    tx.execute(
+        "INSERT INTO notifications(created_at,workspace,kind,message) VALUES (?1,?2,?3,?4)",
+        params![
+            i64::try_from(crate::time::unix_seconds())?,
+            workspace,
+            kind,
+            message
+        ],
+    )?;
+    let id = tx.last_insert_rowid();
+    tx.execute(
+        "DELETE FROM notifications WHERE read=1 AND id <= (SELECT id FROM notifications ORDER BY id DESC LIMIT 1 OFFSET ?1)",
+        [RETAINED as i64],
+    )?;
+    Ok(Some(id))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {
     pub id: i64,
@@ -172,34 +210,9 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                if kind.collapses() {
-                    let pending: Option<i64> = tx
-                        .query_row(
-                            "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1 AND kind=?2 AND message=?3",
-                            params![workspace, kind, message],
-                            |row| row.get(0),
-                        )
-                        .optional()?;
-                    if pending.is_some() {
-                        return Ok(None);
-                    }
-                }
-                tx.execute(
-                    "INSERT INTO notifications(created_at,workspace,kind,message) VALUES (?1,?2,?3,?4)",
-                    params![
-                        i64::try_from(crate::time::unix_seconds())?,
-                        workspace,
-                        kind,
-                        message
-                    ],
-                )?;
-                let id = tx.last_insert_rowid();
-                tx.execute(
-                    "DELETE FROM notifications WHERE read=1 AND id <= (SELECT id FROM notifications ORDER BY id DESC LIMIT 1 OFFSET ?1)",
-                    [RETAINED as i64],
-                )?;
+                let id = insert(&tx, workspace.as_deref(), kind, &message)?;
                 tx.commit()?;
-                Ok(Some(id))
+                Ok(id)
             })
             .await?;
         if let Some(id) = recorded {
