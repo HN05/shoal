@@ -550,6 +550,7 @@ impl Manager {
             } else {
                 None
             };
+            let derived_data = self.derived_data_location(&workspace, present).await;
             let outcome = match removal {
                 Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
@@ -564,12 +565,12 @@ impl Manager {
                 },
             )
             .await?;
-            Ok((outcome, post_remove))
+            Ok((outcome, post_remove, derived_data))
         }
         .await;
         match result {
-            Ok((outcome, post_remove)) => Ok(self
-                .complete_workspace_removal(&workspace, outcome, post_remove)
+            Ok((outcome, post_remove, derived_data)) => Ok(self
+                .complete_workspace_removal(&workspace, outcome, post_remove, derived_data)
                 .await),
             Err(error) => {
                 // A deleted directory can no longer be ready.
@@ -619,10 +620,14 @@ impl Manager {
         workspace: &Workspace,
         mut outcome: RemovalResult,
         post_remove: Option<PostRemoveHook>,
+        derived_data: Option<PathBuf>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         // Session logs are run data owned by the record just deleted.
         let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
+        if let Some(location) = derived_data {
+            self.delete_derived_data(workspace, location).await;
+        }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             // The hook runs with the workspace identity after removal's sweep.

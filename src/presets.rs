@@ -11,6 +11,7 @@ use crate::{
     state::states,
 };
 
+pub mod derived_data;
 mod xcode;
 
 const XCODE_CACHE: &str = "preset.xcode";

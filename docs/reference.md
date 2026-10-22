@@ -1341,6 +1341,10 @@ the workspace path in `#filePath` and debug info with `/^workspace`. Builds from
 the Xcode app, root-level Swift packages (whose package name is the folder
 name) and a configured `XCODE_XCCONFIG_FILE` do not use it. Each workspace
 still keeps its own DerivedData, since Xcode copies cached results into it.
+Removing a workspace deletes the DerivedData folder of every project inside it,
+found by the `WorkspacePath` its `info.plist` records, in Xcode's custom
+DerivedData location when that is absolute and in
+`~/Library/Developer/Xcode/DerivedData` otherwise.
 
 ### Seed builds
 
