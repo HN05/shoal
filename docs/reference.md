@@ -431,7 +431,7 @@ without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error` and `doctor` reports the error. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, child workspaces and assignment state before commands, leases and Git state, or the idle delay
+open questions, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
@@ -1647,7 +1647,7 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions and child workspaces do; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions, child workspaces and queued agent launches do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 Upgrading turns a `shoal continue` from earlier versions into a hold named

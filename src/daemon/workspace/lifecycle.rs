@@ -402,8 +402,9 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds, open questions and child workspaces, which keep a workspace
-    /// from every unattended removal, completion and PR cleanup included.
+    /// Holds, open questions, child workspaces and queued agent launches,
+    /// which keep a workspace from every unattended removal, completion and
+    /// PR cleanup included.
     pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         if self.has_holds(id).await? {
             return Ok(Some(CleanupReason::Held));
@@ -411,8 +412,13 @@ impl Manager {
         if self.has_open_questions(id).await? {
             return Ok(Some(CleanupReason::Question));
         }
-        Ok((!self.workspace(id).await?.child_workspaces.is_empty())
-            .then_some(CleanupReason::Children))
+        if !self.workspace(id).await?.child_workspaces.is_empty() {
+            return Ok(Some(CleanupReason::Children));
+        }
+        Ok(self
+            .has_queued_launch(id)
+            .await?
+            .then_some(CleanupReason::QueuedAgent))
     }
 
     /// Assignment state whose own cleanup path decides removal.
@@ -770,6 +776,10 @@ impl Manager {
             ensure!(
                 check.workspace.child_workspaces.is_empty(),
                 "workspaces split from it remain; retaining workspace"
+            );
+            ensure!(
+                !self.has_queued_launch(&workspace.id).await?,
+                "an agent launch in it waits in the agent queue; retaining workspace"
             );
         }
         removal.verify(&check, stage)?;

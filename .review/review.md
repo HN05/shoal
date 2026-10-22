@@ -117,8 +117,8 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds, open questions and child workspaces block every unattended
-  removal, rechecked after the removal reserves the workspace; a split needs a ready
+  and PR cleanup. Holds, open questions, child workspaces and queued agent launches block
+  every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
@@ -232,7 +232,7 @@ instead of the PR delivery guidance below.
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
-  cleanup; only holds, open questions and child workspaces keep a workspace.
+  cleanup; only holds, open questions, child workspaces and queued agent launches keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches and completion but never holds, open

@@ -767,6 +767,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Whether an agent launch in the workspace waits in the queue or starts.
+    pub(crate) async fn has_queued_launch(&self, workspace_id: &str) -> Result<bool> {
+        let workspace_id = workspace_id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM agent_queue WHERE workspace_id=?1 AND kind=?2",
+                    params![workspace_id, QueueKind::Launch],
+                )
+            })
+            .await
+    }
+
     /// The ID of the ready workspace of `repository_id` a launch opens.
     async fn launch_target(&self, workspace: &str, repository_id: &str) -> Result<String> {
         let workspace = self.workspace(workspace).await?;

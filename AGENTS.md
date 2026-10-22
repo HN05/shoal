@@ -80,12 +80,12 @@ when behavior changes, distinguishing decisions from proposals.
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
-  open questions and child workspaces keep a workspace.
+  open questions, child workspaces and queued agent launches keep a workspace.
   Completion cleanup without a PR registration requires every commit pushed or
   merged, retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
   Associated issues suppress idle cleanup, not merged cleanup; holds, open
-  questions and child workspaces suppress every unattended removal. Holds belong to the user and
+  questions, child workspaces and queued agent launches suppress every unattended removal. Holds belong to the user and
   host apps; scoped callers only list them.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with

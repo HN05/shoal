@@ -781,12 +781,14 @@ per idle stretch, and the prompt's hook delivers them. That is the only input
 Shoal writes to an agent's terminal: the daemon never does, the prompt carries
 no forge text, and it is appended to anything typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse,
-and scoped processes may read their own workspace's messages but not send any.
+and scoped processes may read their own workspace's messages and send messages
+only to the agents of the workspaces below their own, which they coordinate.
 
 Questions are how an agent asks the user for a decision whose answer is text,
 separate from approvals, whose answer is yes or no. A question states the
 decision and the agent's recommendation, so most answers are a word or a choice
-number. Only the user answers, and the answer travels as an agent message naming
+number. Only the user answers, or the agent coordinating the asking workspace
+from an ancestor, and the answer travels as an agent message naming
 the question, so the same hooks deliver it and wake an idle agent; an agent that
 cannot continue without it waits on the question instead. The answer and its
 message are recorded together, and a wait that prints the answer delivers the
@@ -794,7 +796,7 @@ message, so the agent sees it once. Re-asking an identical question returns it
 until its answer is delivered, which makes an interrupted wait safe to rerun.
 Delivery deletes the question: the agent's transcript keeps the exchange, and
 nothing in Shoal reads it again. An open question means an agent is waiting on the
-user, so it keeps the workspace from idle cleanup; questions belong to the
+user or its coordinator, so it keeps the workspace from idle cleanup; questions belong to the
 workspace and go with it. Marking the assignment done closes its open questions,
 since the finished work waits on no answer and a question it made pointless would
 otherwise keep the workspace until the user answers. Withdrawing completion does
@@ -1054,7 +1056,8 @@ external sessions; scoped callers list their own workspace's holds but cannot ch
 them. Removal is reversible through checkpoints, so agents have no way to keep a
 workspace: one that needs the user asks, and an open question, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included. So
-does a child workspace, until the child is removed.
+does a child workspace, until the child is removed, and an agent launch waiting
+in the agent queue to start in the workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
@@ -1064,7 +1067,8 @@ Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: only holds, open questions and child workspaces keep a workspace.
+defers cleanup: only holds, open questions, child workspaces and queued agent
+launches keep a workspace.
 The daemon runs `post_done_cmd`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
