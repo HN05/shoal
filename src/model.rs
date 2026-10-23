@@ -736,10 +736,12 @@ pub struct SelectedItem {
 }
 
 impl Selected {
-    /// The kind of the item numbered `number`, when one is selected; an issue
-    /// and a PR that share the number are ambiguous.
+    /// The kind of the selected item numbered `number` in the repository
+    /// `remote` names, when one is selected; an issue and a PR that share the
+    /// number are ambiguous.
     pub(crate) fn kind_of(
         &self,
+        remote: &str,
         number: u64,
     ) -> anyhow::Result<Option<crate::forge::items::link::ItemKind>> {
         let mut kinds = self
@@ -747,7 +749,7 @@ impl Selected {
             .iter()
             .filter(|item| {
                 crate::forge::items::link::item(item.kind, &item.url)
-                    .is_ok_and(|(_, item)| item == number)
+                    .is_ok_and(|(repository, item)| item == number && repository.is_remote(remote))
             })
             .map(|item| item.kind);
         let kind = kinds.next();
@@ -780,13 +782,20 @@ mod tests {
                 ),
             ],
         };
-        assert_eq!(selected.kind_of(5).unwrap(), Some(ItemKind::Issue));
-        assert_eq!(selected.kind_of(6).unwrap(), Some(ItemKind::Pr));
-        assert_eq!(selected.kind_of(7).unwrap(), None);
+        let remote = "git@gitlab.com:team/repo.git";
+        assert_eq!(selected.kind_of(remote, 5).unwrap(), Some(ItemKind::Issue));
+        assert_eq!(selected.kind_of(remote, 6).unwrap(), Some(ItemKind::Pr));
+        assert_eq!(selected.kind_of(remote, 7).unwrap(), None);
+        // An item of another repository is not the workspace's.
+        selected.items.push(item(
+            ItemKind::Issue,
+            "https://github.com/them/tool/issues/6",
+        ));
+        assert_eq!(selected.kind_of(remote, 6).unwrap(), Some(ItemKind::Pr));
         selected.items.push(item(
             ItemKind::Pr,
             "https://gitlab.com/team/repo/-/merge_requests/5",
         ));
-        assert!(selected.kind_of(5).is_err());
+        assert!(selected.kind_of(remote, 5).is_err());
     }
 }

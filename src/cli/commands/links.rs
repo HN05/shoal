@@ -65,7 +65,12 @@ async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Opti
         url: item.url,
         kind: item.kind,
     }));
-    linked.kind_of(number)
+    // A number names an item of the workspace's repository; issues opened
+    // in another one share its numbers.
+    let remote = crate::repository::remote_url_from_path(&linked.path)
+        .await?
+        .context("issue lookup needs an origin remote")?;
+    linked.kind_of(&remote, number)
 }
 
 pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
