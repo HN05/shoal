@@ -2353,6 +2353,7 @@ messages and send messages only to the agents of the [workspaces below their own
 ```sh
 shoal ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
 shoal questions [workspace]          # Open questions
+shoal questions withdraw <number>    # Close a question the agent no longer needs answered
 shoal answer [number] [answer]       # Answer text or a choice number; omitted, pick and type
 ```
 
@@ -2377,12 +2378,14 @@ interrupted `--wait` can be rerun; the same question with other details is refus
 A listing returns the newest open questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer, except that a workspace process
 answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
-Scoped callers ask and list only their own workspace's questions, or a child's
-with `--workspace`. An open question keeps the workspace from idle
+Scoped callers ask, list and withdraw only their own workspace's questions, or a
+child's with `--workspace`. An open question keeps the workspace from idle
 cleanup; removing the workspace deletes its questions. `shoal done` closes the
-workspace's open questions: answers to them are refused, waits on them fail, and
-`shoal undone` does not reopen them. A closed question keeps its number until the
-workspace goes.
+workspace's open questions, and `withdraw` closes one of them: answers to a closed
+question are refused, waits on it fail, and `shoal undone` does not reopen it.
+Withdrawing deletes the question's `question_asked` notification while it is
+unread, and otherwise raises `question_withdrawn`. A closed question keeps its
+number until the workspace goes.
 
 ### Leases
 

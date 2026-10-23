@@ -201,7 +201,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
             }
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
                 ("id", _, "approve" | "deny") => Some(Target::ApprovalRequests),
-                ("id", _, "answer") => Some(Target::Questions),
+                ("id", _, "answer") | ("id", "questions", "withdraw") => Some(Target::Questions),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),

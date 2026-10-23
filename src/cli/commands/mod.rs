@@ -58,8 +58,8 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand, ShellCommand,
-        WorkspaceScope, agents, client,
+        Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand, QuestionsCommand,
+        ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -468,7 +468,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 (workspace, _) => questions::ask(&ctx, workspace, ask, wait).await,
             }
         }
-        Command::Questions { workspace } => questions::list(&ctx, workspace).await,
+        Command::Questions {
+            command: Some(QuestionsCommand::Withdraw { id, workspace }),
+            ..
+        } => questions::withdraw(&ctx, workspace, id).await,
+        Command::Questions {
+            command: None,
+            workspace,
+        } => questions::list(&ctx, workspace).await,
         Command::Answer { id, answer } => questions::answer(&ctx, id, answer).await,
         Command::Messages { workspace, hook } => {
             if hook {

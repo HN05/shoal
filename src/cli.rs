@@ -317,7 +317,12 @@ pub enum Command {
         resume: Option<i64>,
     },
     /// List open questions from workspace agents.
-    Questions { workspace: Option<String> },
+    #[command(args_conflicts_with_subcommands = true)]
+    Questions {
+        #[command(subcommand)]
+        command: Option<QuestionsCommand>,
+        workspace: Option<String>,
+    },
     /// Answer a question from a workspace's agents.
     Answer {
         /// Question number; omit to choose an open question.
@@ -1097,6 +1102,18 @@ pub struct ItemArgs {
 pub enum NotificationsCommand {
     /// Delete all notifications, including unread ones.
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum QuestionsCommand {
+    /// Withdraw an open question the workspace's agent no longer needs answered.
+    Withdraw {
+        /// Question number.
+        id: i64,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

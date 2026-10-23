@@ -1,5 +1,6 @@
-//! `shoal ask` records a question for the user, `shoal questions` lists them
-//! and `shoal answer` sends the user's answer to the asking agents.
+//! `shoal ask` records a question for the user, `shoal questions` lists them,
+//! `shoal answer` sends the user's answer to the asking agents and
+//! `shoal questions withdraw` closes one they no longer need answered.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
@@ -137,6 +138,20 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     Ok(0)
 }
 
+pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let question =
+        request::<Question>(&ctx.paths, Method::WithdrawQuestion { workspace, id }).await?;
+    ctx.emit(
+        &format!(
+            "Withdrew question {} ({})",
+            question.id, question.ask.question
+        ),
+        &question,
+    )?;
+    Ok(0)
+}
+
 pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String>) -> Result<i32> {
     // A process that cleared the scope token it inherits would answer as the user.
     ensure!(
@@ -226,7 +241,9 @@ pub(in crate::cli) fn summary(question: &Question) -> String {
 }
 
 fn render(question: &Question, palette: Palette) -> String {
-    let status = if question.closed_at.is_some() {
+    let status = if question.withdrawn {
+        "withdrawn"
+    } else if question.closed_at.is_some() {
         "closed"
     } else if question.is_open() {
         "open"

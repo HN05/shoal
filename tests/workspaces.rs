@@ -16326,6 +16326,31 @@ fn remove_guidance(text: &str) -> String {
 }
 
 #[test]
+fn agents_withdraw_questions_they_no_longer_need_answered() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let output = scoped_command(
+        &fixture,
+        "asker",
+        &["ask", "Which database?", "--recommend", "SQLite"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let question: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let id = question["id"].to_string();
+    let output = scoped_command(&fixture, "asker", &["questions", "withdraw", &id]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fixture.ok(&["questions"]),
+        serde_json::json!({"questions": [], "omitted": 0})
+    );
+    let refused = fixture.run(&["answer", &id, "Postgres"]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("was withdrawn"),
+        "{refused:?}"
+    );
+}
+
+#[test]
 fn agents_wait_for_the_answer_to_their_question() {
     let fixture = Fixture::new();
     fixture.add("asker");
