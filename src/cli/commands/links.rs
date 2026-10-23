@@ -274,6 +274,22 @@ pub(super) fn review_lines(marks: &[ReviewMark]) -> String {
         .join("\n")
 }
 
+/// Whether `positional` is a pasted issue, PR or branch URL of any forge,
+/// rather than a repository.
+fn is_item_link(positional: &str) -> bool {
+    const ROUTES: &[&str] = &[
+        "/issues/",
+        "/pull/",
+        "/pulls/",
+        "/-/merge_requests/",
+        "/pull-requests/",
+        "/tree/",
+        "/branch/",
+    ];
+    IssueInput::parse(positional) == IssueInput::Url
+        && ROUTES.iter().any(|route| positional.contains(route))
+}
+
 pub(super) struct AddInput {
     pub positional: Option<String>,
     pub repository: Option<String>,
@@ -304,10 +320,7 @@ pub(super) async fn add(
         && creation.branch.is_none()
         && creation.existing.is_none()
         && input.issue.is_none();
-    let pasted = ["/issues/", "/pull/", "/pulls/", "/tree/", "/src/branch/"]
-        .iter()
-        .any(|route| positional.contains(route))
-        && IssueInput::parse(positional) == IssueInput::Url;
+    let pasted = is_item_link(positional);
     if !number && !pasted {
         ensure!(
             input.repository.is_none(),
@@ -429,4 +442,29 @@ pub(super) async fn pull_creation(
     }
     creation.pr = Some(pull.url);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_item_link;
+
+    #[test]
+    fn item_links_of_every_forge_are_told_from_repositories() {
+        for link in [
+            "https://github.com/team/repo/issues/3",
+            "https://github.com/team/repo/pull/4",
+            "https://github.com/team/repo/tree/fix/a",
+            "https://forge.example/team/repo/pulls/4",
+            "https://forge.example/team/repo/src/branch/fix",
+            "https://gitlab.com/group/repo/-/merge_requests/5",
+            "https://gitlab.com/group/repo/-/issues/6",
+            "https://bitbucket.org/team/repo/pull-requests/7",
+            "https://bitbucket.org/team/repo/branch/fix",
+        ] {
+            assert!(is_item_link(link), "{link}");
+        }
+        for repository in ["https://github.com/team/repo", "my-project", "42"] {
+            assert!(!is_item_link(repository), "{repository}");
+        }
+    }
 }
