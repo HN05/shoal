@@ -13,6 +13,7 @@ use crate::{
     daemon::links::proposals::{OpenOutcome, Proposed},
     forge::{
         ForgeRepo,
+        capability::Capability,
         ci::{CiActed, CiAction},
         items::{
             action::{Action, Edit, ThreadChange},
@@ -424,7 +425,7 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
         return Ok(());
     };
     let forge = ForgeRepo::resolve_pull_url(&item.url, &ctx.forge_hosts()?).await?;
-    forge.ensure_resolves_threads()?;
+    forge.require(Capability::ResolveThreads)?;
     let (number, _) = forge.pull(&item.url)?;
     let thread = ctx
         .progress(

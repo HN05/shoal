@@ -3,6 +3,7 @@
 //! [`account::Account`] a request acts as; this crate never decides who may act.
 pub mod account;
 pub mod backends;
+pub mod capability;
 pub mod ci;
 pub mod conventions;
 pub mod hosts;

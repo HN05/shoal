@@ -20,6 +20,7 @@ use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
     backends::rest::{RestCheck, RestReads, fingerprints},
+    capability::{self, Capability, Support},
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     conventions::{Lookup, shared_lookups},
     items::{
@@ -60,6 +61,30 @@ impl Backend for Forgejo {
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string())
+    }
+
+    fn name(&self) -> &'static str {
+        "Forgejo or Gitea"
+    }
+
+    /// Shoal does not sign in to the web UI, where Forgejo resolves threads
+    /// and reruns jobs.
+    fn support(&self, capability: Capability) -> Support {
+        match capability {
+            Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
+            Capability::RerunJobs => {
+                Support::Unsupported(Some("rerun them from the web UI or push a fix"))
+            }
+            Capability::CancelJobs
+            | Capability::ReadJobLogs
+            | Capability::ReopenPrs
+            | Capability::Labels
+            | Capability::DraftPrs
+            | Capability::Attachments
+            | Capability::MergeCommit
+            | Capability::RebaseMerge
+            | Capability::SquashMerge => Support::Supported,
+        }
     }
 
     fn nests_groups(&self) -> bool {
@@ -248,10 +273,6 @@ impl Backend for Forgejo {
         Ok(threads::thread(&reviews, comment))
     }
 
-    fn resolves_threads(&self) -> bool {
-        false
-    }
-
     /// A reply is a comment of the thread's review on the first comment's
     /// lines.
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
@@ -284,7 +305,7 @@ impl Backend for Forgejo {
         _thread: &Thread,
         _resolved: bool,
     ) -> Result<Request> {
-        bail!("Forgejo review threads cannot be resolved through its API")
+        Err(capability::unsupported(self, Capability::ResolveThreads))
     }
 
     async fn open_issue_dependencies(
@@ -352,14 +373,6 @@ impl Backend for Forgejo {
             .context(self.login_hint())
     }
 
-    fn check_ci_action(&self, action: CiAction) -> Result<()> {
-        ensure!(
-            action != CiAction::Rerun,
-            "Forgejo's API cannot rerun Actions jobs; rerun them from the web UI or push a fix"
-        );
-        Ok(())
-    }
-
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -385,10 +398,9 @@ impl Backend for Forgejo {
         let Some(Location::Forgejo { run_number }) = job.location else {
             bail!("check {} is not a Forgejo Actions job", job.name);
         };
-        ensure!(
-            action == CiAction::Cancel,
-            "Forgejo's API cannot rerun Actions jobs"
-        );
+        if action != CiAction::Cancel {
+            return Err(capability::unsupported(self, Capability::ci(action)));
+        }
         Ok((
             Operation::CancelForgejoRun { run_number },
             vec![job.name.clone()],
@@ -411,10 +423,6 @@ impl Backend for Forgejo {
                 Ok(format!("actions/runs/{run}/cancel"))
             }
         }
-    }
-
-    fn reads_check_logs(&self) -> bool {
-        true
     }
 
     async fn failed_check_log(

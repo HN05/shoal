@@ -9,6 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
+    capability::{Capability, Support},
     ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
     conventions::Lookup,
     items::{
@@ -56,6 +57,28 @@ impl Backend for GitLab {
         let request = Request::get("version".into()).withholding(ENV_TOKENS);
         let version = host.send(account, &request).await?;
         Ok(version["version"].is_string() && version["revision"].is_string())
+    }
+
+    fn name(&self) -> &'static str {
+        "GitLab"
+    }
+
+    fn support(&self, capability: Capability) -> Support {
+        match capability {
+            Capability::ReadJobLogs => Support::Unsupported(None),
+            Capability::RebaseMerge => Support::Unsupported(Some(
+                "GitLab merges with the project's merge method; use merge or squash",
+            )),
+            Capability::ResolveThreads
+            | Capability::RerunJobs
+            | Capability::CancelJobs
+            | Capability::ReopenPrs
+            | Capability::Labels
+            | Capability::DraftPrs
+            | Capability::Attachments
+            | Capability::MergeCommit
+            | Capability::SquashMerge => Support::Supported,
+        }
     }
 
     fn nests_groups(&self) -> bool {
@@ -355,10 +378,6 @@ impl Backend for GitLab {
         Ok(find_thread(&discussions, comment))
     }
 
-    fn resolves_threads(&self) -> bool {
-        true
-    }
-
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
         let Target::GitLab { discussion } = &thread.target else {
             bail!("not a GitLab review thread");
@@ -459,10 +478,6 @@ impl Backend for GitLab {
         view_discussion(repo, account, kind, number, details)
             .await
             .context(self.login_hint())
-    }
-
-    fn check_ci_action(&self, _action: CiAction) -> Result<()> {
-        Ok(())
     }
 
     async fn ci_checks(

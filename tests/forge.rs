@@ -593,7 +593,8 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     ])));
     let refused = fixture.run(&[&["pr", "resolve", "5", "--body", "Kept"][..], &pr].concat());
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("no API for resolving"),
+        String::from_utf8_lossy(&refused.stderr)
+            .contains("Shoal cannot resolve review threads on Forgejo or Gitea"),
         "{refused:?}"
     );
     assert!(
@@ -2133,7 +2134,7 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
         rerun["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("Forgejo's API cannot rerun Actions jobs"),
+            .contains("Shoal cannot rerun CI jobs on Forgejo or Gitea"),
         "{rerun}"
     );
     assert!(fixture.requests().is_empty());

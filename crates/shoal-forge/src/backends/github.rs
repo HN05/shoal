@@ -16,6 +16,7 @@ use super::{
 use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
+    capability::{Capability, Support},
     ci::{CiAction, CiCheck, Job, Location, Operation},
     conventions::{Lookup, shared_lookups},
     items::{
@@ -62,6 +63,26 @@ impl Backend for GitHub {
         Ok(["verifiable_password_authentication", "installed_version"]
             .iter()
             .any(|field| meta.get(field).is_some()))
+    }
+
+    fn name(&self) -> &'static str {
+        "GitHub"
+    }
+
+    fn support(&self, capability: Capability) -> Support {
+        match capability {
+            Capability::ReadJobLogs => Support::Unsupported(None),
+            Capability::ResolveThreads
+            | Capability::RerunJobs
+            | Capability::CancelJobs
+            | Capability::ReopenPrs
+            | Capability::Labels
+            | Capability::DraftPrs
+            | Capability::Attachments
+            | Capability::MergeCommit
+            | Capability::RebaseMerge
+            | Capability::SquashMerge => Support::Supported,
+        }
     }
 
     fn nests_groups(&self) -> bool {
@@ -399,10 +420,6 @@ impl Backend for GitHub {
         ))
     }
 
-    fn resolves_threads(&self) -> bool {
-        true
-    }
-
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
         let endpoint =
             repo.repo_endpoint(&format!("pulls/{number}/comments/{}/replies", thread.first));
@@ -492,10 +509,6 @@ impl Backend for GitHub {
         _details: &mut Details,
     ) -> Result<Option<Vec<Review>>> {
         view::reviews(repo, account, kind, number).await
-    }
-
-    fn check_ci_action(&self, _action: CiAction) -> Result<()> {
-        Ok(())
     }
 
     /// Only each check's latest attempt, not those reruns replaced.

@@ -11,6 +11,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
+        capability::Capability,
         ci::checks::CheckLog,
         items::link::{ItemKind, Selection},
         review::view::{Details, ItemView, PrDetails, Review},
@@ -102,7 +103,7 @@ async fn read_failed_logs(
     for view in views {
         if !ForgeRepo::resolve_pull_url(&view.url, hosts)
             .await
-            .is_ok_and(|forge| forge.supports_check_logs())
+            .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
         {
             continue;
         }

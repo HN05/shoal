@@ -12,6 +12,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
+    capability::{Capability, Support},
     ci::{CiAction, CiCheck, Job, Location, Operation},
     conventions::Lookup,
     items::{
@@ -53,6 +54,31 @@ impl Backend for Bitbucket {
     /// Bitbucket Cloud serves only `bitbucket.org`, which is known by name.
     async fn serves(&self, _host: &ForgeRepo, _account: &Account) -> Result<bool> {
         Ok(false)
+    }
+
+    fn name(&self) -> &'static str {
+        "Bitbucket Cloud"
+    }
+
+    /// Shoal has no Pipelines support.
+    fn support(&self, capability: Capability) -> Support {
+        match capability {
+            Capability::ReopenPrs => Support::Unsupported(Some(
+                "Bitbucket cannot reopen a declined pull request; open a new one",
+            )),
+            Capability::Labels => Support::Unsupported(Some("Bitbucket has no labels")),
+            Capability::Attachments => {
+                Support::Unsupported(Some("Bitbucket has no API for attaching files"))
+            }
+            Capability::RerunJobs | Capability::CancelJobs | Capability::ReadJobLogs => {
+                Support::Unsupported(None)
+            }
+            Capability::ResolveThreads
+            | Capability::DraftPrs
+            | Capability::MergeCommit
+            | Capability::RebaseMerge
+            | Capability::SquashMerge => Support::Supported,
+        }
     }
 
     fn nests_groups(&self) -> bool {
@@ -334,10 +360,6 @@ impl Backend for Bitbucket {
         Ok(find_thread(&comments, comment))
     }
 
-    fn resolves_threads(&self) -> bool {
-        true
-    }
-
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
         let pr = repo.item_endpoint(ItemKind::Pr, number);
         Ok(Request::new(
@@ -422,17 +444,14 @@ impl Backend for Bitbucket {
             .context(self.login_hint())
     }
 
-    fn check_ci_action(&self, action: CiAction) -> Result<()> {
-        bail!("Shoal cannot {action} Bitbucket Pipelines")
-    }
-
+    /// No CI job Shoal can act on, since it has no Pipelines support.
     async fn ci_checks(
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
         _head: &str,
     ) -> Result<Vec<CiCheck>> {
-        bail!("Bitbucket Pipelines are not supported")
+        Ok(Vec::new())
     }
 
     fn locate_job(&self, _repo: &ForgeRepo, _target: &str) -> Option<Location> {

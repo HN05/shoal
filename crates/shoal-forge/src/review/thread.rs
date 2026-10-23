@@ -3,8 +3,8 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
-    transport::api::Request,
+    ForgeRepo, account::Account, backends::Backend, capability::Capability,
+    items::action::ThreadChange, transport::api::Request,
 };
 
 /// A review thread, found from any of its comments.
@@ -47,15 +47,6 @@ impl ForgeRepo {
         thread.with_context(|| format!("comment {comment} is not in a review thread of #{number}"))
     }
 
-    /// Refuse a resolution change the forge's API cannot make.
-    pub fn ensure_resolves_threads(&self) -> Result<()> {
-        ensure!(
-            self.kind.resolves_threads(),
-            "Forgejo and Gitea have no API for resolving review threads; reply in the thread instead"
-        );
-        Ok(())
-    }
-
     /// The requests that reply in `thread` and then change its resolution.
     /// Refuses before any request when the resolution cannot change.
     pub(crate) fn plan_thread(
@@ -66,7 +57,7 @@ impl ForgeRepo {
     ) -> Result<Vec<Request>> {
         let resolution = match change.resolve {
             Some(resolved) => {
-                self.ensure_resolves_threads()?;
+                self.require(Capability::ResolveThreads)?;
                 ensure!(
                     thread.resolved != Some(resolved),
                     "thread {} is already {}",

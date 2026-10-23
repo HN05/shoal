@@ -4,6 +4,7 @@ use anyhow::Result;
 use crate::{
     daemon::workspace::Manager,
     forge::{
+        capability::Capability,
         ci::checks::{CheckLog, validate_check_name},
         items::link::{ItemKind, Selection},
         updates::Update,
@@ -20,7 +21,7 @@ impl Manager {
                 || !self
                     .pull_forge(&update.url)
                     .await
-                    .is_ok_and(|forge| forge.supports_check_logs())
+                    .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
             {
                 continue;
             }

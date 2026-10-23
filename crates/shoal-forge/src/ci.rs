@@ -11,6 +11,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
+    capability::Capability,
     items::{item::ItemState, link::ItemKind},
     transport::api::{HttpMethod, Request},
 };
@@ -97,7 +98,7 @@ impl ForgeRepo {
         action: CiAction,
         names: &[String],
     ) -> Result<Plan> {
-        self.kind.check_ci_action(action)?;
+        self.require(Capability::ci(action))?;
         let head = self.open_head(account, number).await?;
         let jobs = self.ci_jobs(account, &head).await?;
         let selected = select(&jobs, action, names)?;

@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend};
+use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
 pub const TAIL_BYTES: usize = 8192;
@@ -27,16 +27,13 @@ pub fn validate_check_name(name: &str) -> Result<()> {
 }
 
 impl ForgeRepo {
-    pub fn supports_check_logs(&self) -> bool {
-        self.kind.reads_check_logs()
-    }
-
     pub async fn failed_check_log(
         &self,
         account: &Account,
         url: &str,
         name: &str,
     ) -> Result<CheckLog> {
+        self.require(Capability::ReadJobLogs)?;
         self.kind.failed_check_log(self, account, url, name).await
     }
 }

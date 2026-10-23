@@ -16,6 +16,7 @@ use anyhow::Context;
 use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
+    capability::{Capability, Support},
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     conventions::Lookup,
     items::{
@@ -90,6 +91,12 @@ pub(crate) trait Backend {
     /// version or metadata endpoint as `account`; an error when it could
     /// not be asked.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
+
+    /// The forge's name in messages.
+    fn name(&self) -> &'static str;
+
+    /// Whether the forge has `capability`.
+    fn support(&self, capability: Capability) -> Support;
 
     /// Whether a repository path may have more than `owner/repository`.
     fn nests_groups(&self) -> bool;
@@ -285,9 +292,6 @@ pub(crate) trait Backend {
         comment: u64,
     ) -> Result<Option<Thread>>;
 
-    /// Whether the forge's API can resolve review threads.
-    fn resolves_threads(&self) -> bool;
-
     /// The request that replies in `thread` on PR `number`.
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request>;
 
@@ -348,9 +352,6 @@ pub(crate) trait Backend {
         details: &mut Details,
     ) -> Result<Option<Vec<Review>>>;
 
-    /// Refuse a CI action the forge's API cannot take.
-    fn check_ci_action(&self, action: CiAction) -> Result<()>;
-
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
         &self,
@@ -386,11 +387,6 @@ pub(crate) trait Backend {
         }
     }
 
-    /// Whether the logs of failed checks can be read.
-    fn reads_check_logs(&self) -> bool {
-        false
-    }
-
     /// The log of the failed check `name` on the current head of PR `url`.
     async fn failed_check_log(
         &self,
@@ -399,7 +395,10 @@ pub(crate) trait Backend {
         _url: &str,
         _name: &str,
     ) -> Result<CheckLog> {
-        anyhow::bail!("check logs currently require Forgejo Actions")
+        Err(crate::capability::unsupported(
+            self,
+            Capability::ReadJobLogs,
+        ))
     }
 
     /// Refuse `attachments` the forge or `account` cannot upload, before
@@ -494,6 +493,14 @@ macro_rules! dispatch {
 impl Backend for ForgeKind {
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         dispatch!(self, backend => backend.serves(host, account).await)
+    }
+
+    fn name(&self) -> &'static str {
+        dispatch!(self, backend => backend.name())
+    }
+
+    fn support(&self, capability: Capability) -> Support {
+        dispatch!(self, backend => backend.support(capability))
     }
 
     fn nests_groups(&self) -> bool {
@@ -697,10 +704,6 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.thread(repo, account, number, comment).await)
     }
 
-    fn resolves_threads(&self) -> bool {
-        dispatch!(self, backend => backend.resolves_threads())
-    }
-
     fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
         dispatch!(self, backend => backend.reply(repo, number, thread, body))
     }
@@ -766,10 +769,6 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details).await)
     }
 
-    fn check_ci_action(&self, action: CiAction) -> Result<()> {
-        dispatch!(self, backend => backend.check_ci_action(action))
-    }
-
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -801,10 +800,6 @@ impl Backend for ForgeKind {
         operation: Operation,
     ) -> Result<String> {
         dispatch!(self, backend => backend.ci_endpoint(repo, account, head, operation).await)
-    }
-
-    fn reads_check_logs(&self) -> bool {
-        dispatch!(self, backend => backend.reads_check_logs())
     }
 
     async fn failed_check_log(
