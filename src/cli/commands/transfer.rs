@@ -12,6 +12,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
+        output::{Palette, Style},
         ui::{self, Fallback},
     },
     model::{RestoredWorkspace, Workspace},
@@ -50,9 +51,11 @@ pub(super) async fn export_all(
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     let workspaces = repository_workspaces(ctx, repository).await?;
-    let directory = export_directory(&directory)?;
+    let directory = ExportDirectory::create(directory)?;
     let planned = check_exports(ctx, &workspaces, &directory, yes).await?;
-    export_each(ctx, planned).await.report(ctx, &directory)
+    export_each(ctx, planned, &directory)
+        .await
+        .report(ctx, &directory)
 }
 
 fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
@@ -165,7 +168,11 @@ async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String
                 report.imported.push(reopened);
             }
             Err(error) => {
-                eprintln!("error: cannot import {}: {error:#}", file.display());
+                eprintln!(
+                    "{} cannot import {}: {error:#}",
+                    Palette::stderr(ctx.json).paint(Style::Error, "error:"),
+                    file.display()
+                );
                 report
                     .failed
                     .push(json!({"file": file, "error": format!("{error:#}")}));
@@ -441,12 +448,36 @@ async fn repository_workspaces(ctx: &Context, repository: String) -> Result<Vec<
     Ok(workspaces)
 }
 
-/// The directory an export of every workspace goes to, created when missing.
-fn export_directory(directory: &Path) -> Result<PathBuf> {
-    std::fs::create_dir_all(directory)
-        .with_context(|| format!("create the directory {}", directory.display()))?;
-    std::fs::canonicalize(directory)
-        .with_context(|| format!("find the directory {}", directory.display()))
+/// The directory an export of every workspace goes to, shown as the user
+/// named it.
+struct ExportDirectory {
+    path: PathBuf,
+    shown: PathBuf,
+}
+
+impl ExportDirectory {
+    /// Create the directory when it is missing.
+    fn create(shown: PathBuf) -> Result<Self> {
+        std::fs::create_dir_all(&shown)
+            .with_context(|| format!("create the directory {}", shown.display()))?;
+        let path = std::fs::canonicalize(&shown)
+            .with_context(|| format!("find the directory {}", shown.display()))?;
+        Ok(Self { path, shown })
+    }
+
+    /// The file `workspace` goes to.
+    fn file(&self, workspace: &str) -> PathBuf {
+        self.path.join(Self::file_name(workspace))
+    }
+
+    /// The file `workspace` goes to, as the user names it.
+    fn shown_file(&self, workspace: &str) -> PathBuf {
+        self.shown.join(Self::file_name(workspace))
+    }
+
+    fn file_name(workspace: &str) -> String {
+        format!("{workspace}.shoal")
+    }
 }
 
 /// A workspace that passed its export check, with the file it goes to.
@@ -460,7 +491,7 @@ struct PlannedExport {
 async fn check_exports(
     ctx: &Context,
     workspaces: &[Workspace],
-    directory: &Path,
+    directory: &ExportDirectory,
     yes: bool,
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
@@ -473,13 +504,13 @@ async fn check_exports(
     }
     ensure!(
         refusals.is_empty(),
-        "no workspace was exported, since some cannot be:\n  {}",
+        "cannot export these workspaces, so none was removed:\n  {}",
         refusals.join("\n  ")
     );
     let action = format!(
         "Export {} workspaces to {}\nRemoves them here and releases these holds:",
         planned.len(),
-        directory.display()
+        directory.shown.display()
     );
     let held: Vec<&RemovalCheck> = planned
         .iter()
@@ -496,9 +527,9 @@ async fn check_exports(
 async fn plan_export(
     ctx: &Context,
     workspace: &Workspace,
-    directory: &Path,
+    directory: &ExportDirectory,
 ) -> Result<PlannedExport> {
-    let output = Output::reserve(&directory.join(format!("{}.shoal", workspace.name)))?;
+    let output = Output::reserve(&directory.file(&workspace.name))?;
     let check = check_export(ctx, &workspace.id, &output).await?;
     ensure!(
         !crate::cli::terminal::closes_with(&ctx.paths, &workspace.id),
@@ -508,7 +539,11 @@ async fn plan_export(
 }
 
 /// Export each planned workspace, going on after one fails.
-async fn export_each(ctx: &Context, planned: Vec<PlannedExport>) -> ExportReport {
+async fn export_each(
+    ctx: &Context,
+    planned: Vec<PlannedExport>,
+    directory: &ExportDirectory,
+) -> ExportReport {
     let mut report = ExportReport::default();
     for PlannedExport { check, output } in planned {
         let name = &check.workspace.name;
@@ -516,7 +551,10 @@ async fn export_each(ctx: &Context, planned: Vec<PlannedExport>) -> ExportReport
         match export_checked(ctx, &check, &output).await {
             Ok(exported) => {
                 if !ctx.json {
-                    println!("Exported {name} to {}", file.display());
+                    println!(
+                        "Exported {name} to {}",
+                        directory.shown_file(name).display()
+                    );
                 }
                 report.exported.push(json!({
                     "file": file,
@@ -525,7 +563,10 @@ async fn export_each(ctx: &Context, planned: Vec<PlannedExport>) -> ExportReport
                 }));
             }
             Err(error) => {
-                eprintln!("error: cannot export {name}: {error:#}");
+                eprintln!(
+                    "{} cannot export {name}: {error:#}",
+                    Palette::stderr(ctx.json).paint(Style::Error, "error:")
+                );
                 report
                     .failed
                     .push(json!({"workspace": name, "error": format!("{error:#}")}));
@@ -544,25 +585,23 @@ struct ExportReport {
 }
 
 impl ExportReport {
-    fn report(self, ctx: &Context, directory: &Path) -> Result<i32> {
+    fn report(self, ctx: &Context, directory: &ExportDirectory) -> Result<i32> {
         let exported = self.exported.len();
+        let shown = directory.shown.display();
         let message = if self.failed.is_empty() {
             format!(
-                "Exported {exported} workspaces to {}; shoal import {} opens them on another machine",
-                directory.display(),
-                directory.display()
+                "Exported {exported} workspaces to {shown}; shoal import {shown} opens them on another machine"
             )
         } else {
             format!(
-                "Exported {exported} of {} workspaces to {}; {} failed",
+                "Exported {exported} of {} workspaces to {shown}; {} failed",
                 exported + self.failed.len(),
-                directory.display(),
                 self.failed.len()
             )
         };
         ctx.emit(
             &message,
-            json!({"directory": directory, "exported": self.exported, "failed": self.failed}),
+            json!({"directory": directory.path, "exported": self.exported, "failed": self.failed}),
         )?;
         Ok(if self.failed.is_empty() { 0 } else { 1 })
     }
