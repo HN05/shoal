@@ -10,17 +10,11 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use crate::{
-    ForgeRepo,
-    account::{Account, ForgejoLogin},
-    backends::{Backend, tea},
-    transport::programs,
-};
+use crate::{ForgeRepo, account::Account, backends::Backend, transport::programs};
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
-const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 /// Bounds a JSON response read through a CLI, which curl's own limit cannot.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -104,46 +98,6 @@ impl Request {
 }
 
 impl ForgeRepo {
-    /// Read plaintext logs without following redirects or exposing the login.
-    pub(crate) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
-        let token = match account.forgejo_login(&self.host).await? {
-            ForgejoLogin::Tea(login) => {
-                let request = Request::get(endpoint.to_owned());
-                return tea::send(account, &login, &request, MAX_LOG_BYTES)
-                    .await
-                    .context("fetch Forgejo job log (maximum 8 MiB)");
-            }
-            ForgejoLogin::Token(token) => Some(token),
-            ForgejoLogin::Anonymous => None,
-        };
-        let url = format!("{}://{}/api/v1/{endpoint}", self.web_scheme, self.host);
-        let mut curl = Command::new(programs::CURL);
-        curl.args([
-            "-q",
-            "-sS",
-            "--max-time",
-            "30",
-            "--max-filesize",
-            "8388608",
-            "-H",
-            "Accept: text/plain",
-            "-w",
-            "\n%{http_code}",
-            "-K",
-            "-",
-            &url,
-        ]);
-        let output = shoal_subprocess::Run::new(curl)
-            .input(token.map(authorization).unwrap_or_default())
-            .timeout(TIMEOUT)
-            // curl appends a newline and a three-digit HTTP status.
-            .output_limit(MAX_LOG_BYTES + 4)
-            .output()
-            .await
-            .context("fetch Forgejo job log (maximum 8 MiB)")?;
-        Ok(curl_body(&output)?.to_owned())
-    }
-
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
         self.kind.repo_endpoint(self, path)
@@ -360,7 +314,7 @@ fn curl_response(text: &str) -> Result<Value> {
     json_body(curl_body(text)?)
 }
 
-fn curl_body(text: &str) -> Result<&str> {
+pub(crate) fn curl_body(text: &str) -> Result<&str> {
     let (body, status) = text.rsplit_once('\n').unwrap_or(("", text));
     let status: u16 = status
         .trim()

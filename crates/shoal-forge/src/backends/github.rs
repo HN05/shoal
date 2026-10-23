@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+mod actions;
 mod activity;
 pub(crate) mod threads;
 mod view;
@@ -14,6 +15,7 @@ use super::{
 use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
+    ci::{CiAction, CiCheck, Job, Location, Operation},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -457,6 +459,37 @@ impl Backend for GitHub {
         _details: &mut Details,
     ) -> Result<Option<Vec<Review>>> {
         view::reviews(repo, account, kind, number).await
+    }
+
+    fn check_ci_action(&self, _action: CiAction) -> Result<()> {
+        Ok(())
+    }
+
+    /// Only each check's latest attempt, not those reruns replaced.
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>> {
+        let endpoint = repo.repo_endpoint(&format!(
+            "commits/{head}/check-runs?filter=latest&per_page=100"
+        ));
+        actions::checks(&repo.send(account, &Request::get(endpoint)).await?)
+    }
+
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
+        actions::locate(repo, target)
+    }
+
+    fn ci_operation(
+        &self,
+        jobs: &[Job],
+        selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)> {
+        actions::operation(jobs, selected, job, action)
     }
 }
 

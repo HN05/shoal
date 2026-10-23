@@ -12,6 +12,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
+    ci::{CiAction, CiCheck, Job, Location, Operation},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -408,6 +409,33 @@ impl Backend for Bitbucket {
         view_discussion(repo, account, kind, number, details)
             .await
             .context(self.login_hint())
+    }
+
+    fn check_ci_action(&self, action: CiAction) -> Result<()> {
+        bail!("Shoal cannot {action} Bitbucket Pipelines")
+    }
+
+    async fn ci_checks(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _head: &str,
+    ) -> Result<Vec<CiCheck>> {
+        bail!("Bitbucket Pipelines are not supported")
+    }
+
+    fn locate_job(&self, _repo: &ForgeRepo, _target: &str) -> Option<Location> {
+        None
+    }
+
+    fn ci_operation(
+        &self,
+        _jobs: &[Job],
+        _selected: &[Job],
+        job: &Job,
+        _action: CiAction,
+    ) -> Result<(Operation, Vec<String>)> {
+        bail!("check {} is not a CI job Shoal can act on", job.name)
     }
 }
 

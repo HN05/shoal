@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+mod actions;
 pub(crate) mod threads;
 mod view;
 
@@ -16,6 +17,7 @@ use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
     backends::rest::{RestCheck, RestReads, fingerprints},
+    ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     items::{
         action::{Edit, MergeMethod, draft_title},
         create::{NewIssue, NewPull},
@@ -309,6 +311,81 @@ impl Backend for Forgejo {
         view::discussion(repo, account, kind, number, details)
             .await
             .context(self.login_hint())
+    }
+
+    fn check_ci_action(&self, action: CiAction) -> Result<()> {
+        ensure!(
+            action != CiAction::Rerun,
+            "Forgejo's API cannot rerun Actions jobs; rerun them from the web UI or push a fix"
+        );
+        Ok(())
+    }
+
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>> {
+        let endpoint = repo.repo_endpoint(&format!("commits/{head}/status?limit=50"));
+        actions::checks(&repo.send(account, &Request::get(endpoint)).await?)
+    }
+
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
+        let (run_number, _) = actions::job_location(repo, target).ok()?;
+        Some(Location::Forgejo { run_number })
+    }
+
+    fn ci_operation(
+        &self,
+        _jobs: &[Job],
+        _selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)> {
+        let Some(Location::Forgejo { run_number }) = job.location else {
+            bail!("check {} is not a Forgejo Actions job", job.name);
+        };
+        ensure!(
+            action == CiAction::Cancel,
+            "Forgejo's API cannot rerun Actions jobs"
+        );
+        Ok((
+            Operation::CancelForgejoRun { run_number },
+            vec![job.name.clone()],
+        ))
+    }
+
+    /// Forgejo links a run by its number in the repository, not the API ID
+    /// its cancellation takes.
+    async fn ci_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+        operation: Operation,
+    ) -> Result<String> {
+        match operation {
+            Operation::Post(endpoint) => Ok(endpoint),
+            Operation::CancelForgejoRun { run_number } => {
+                let run = actions::run_id_for(repo, account, run_number, head).await?;
+                Ok(format!("actions/runs/{run}/cancel"))
+            }
+        }
+    }
+
+    fn reads_check_logs(&self) -> bool {
+        true
+    }
+
+    async fn failed_check_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        url: &str,
+        name: &str,
+    ) -> Result<CheckLog> {
+        actions::failed_check_log(repo, account, url, name).await
     }
 }
 

@@ -2,14 +2,15 @@
 //! as the workspace's agent account.
 pub mod checks;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::state::states;
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::Account,
+    backends::Backend,
     items::{item::ItemState, link::ItemKind},
     transport::api::{HttpMethod, Request},
 };
@@ -30,14 +31,14 @@ pub struct CiActed {
 /// A check on a PR's head under the name the forge shows, and the CI job it
 /// reports when Shoal can act on that job.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Job {
-    name: String,
-    state: JobState,
-    location: Option<Location>,
+pub(crate) struct Job {
+    pub(crate) name: String,
+    pub(crate) state: JobState,
+    pub(crate) location: Option<Location>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum JobState {
+pub(crate) enum JobState {
     Failed,
     Running,
     Finished,
@@ -45,7 +46,7 @@ enum JobState {
 
 /// A CI job in the repository, by the IDs its forge acts on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Location {
+pub(crate) enum Location {
     GitHub {
         run: u64,
         job: u64,
@@ -61,7 +62,7 @@ enum Location {
 
 /// A request that carries out an action.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Operation {
+pub(crate) enum Operation {
     /// POST to this endpoint under the repository's.
     Post(String),
     CancelForgejoRun {
@@ -78,7 +79,7 @@ pub struct Plan {
 
 impl CiAction {
     /// The state of the jobs the action applies to.
-    fn applies_to(self) -> (JobState, &'static str) {
+    pub(crate) fn applies_to(self) -> (JobState, &'static str) {
         match self {
             Self::Rerun => (JobState::Failed, "failed"),
             Self::Cancel => (JobState::Running, "running"),
@@ -96,17 +97,18 @@ impl ForgeRepo {
         action: CiAction,
         names: &[String],
     ) -> Result<Plan> {
-        self.supports_ci_action(action)?;
+        self.kind.check_ci_action(action)?;
         let head = self.open_head(account, number).await?;
         let jobs = self.ci_jobs(account, &head).await?;
         let selected = select(&jobs, action, names)?;
-        let (operations, checks) = operations(&jobs, &selected, action)?;
+        let (operations, checks) = operations(&self.kind, &jobs, &selected, action)?;
         let mut endpoints = Vec::new();
         for operation in operations {
-            push_new(
-                &mut endpoints,
-                self.endpoint(account, &head, operation).await?,
-            );
+            let endpoint = self
+                .kind
+                .ci_endpoint(self, account, &head, operation)
+                .await?;
+            push_new(&mut endpoints, endpoint);
         }
         Ok(Plan { endpoints, checks })
     }
@@ -123,44 +125,9 @@ impl ForgeRepo {
         (endpoints.len(), Ok(()))
     }
 
-    fn supports_ci_action(&self, action: CiAction) -> Result<()> {
-        match (self.kind, action) {
-            (ForgeKind::GitHub | ForgeKind::GitLab, _) | (ForgeKind::Forgejo, CiAction::Cancel) => {
-                Ok(())
-            }
-            (ForgeKind::Forgejo, CiAction::Rerun) => bail!(
-                "Forgejo's API cannot rerun Actions jobs; rerun them from the web UI or push a fix"
-            ),
-            (ForgeKind::Bitbucket, _) => bail!("Shoal cannot {action} Bitbucket Pipelines"),
-        }
-    }
-
-    async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
-        let pull = self.read(account, ItemKind::Pr, number).await?;
-        ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
-        pull.head_sha.context("PR has no head commit")
-    }
-
-    /// Each check's latest attempt on `head`.
+    /// Each check's latest attempt on `head`, with the job it links.
     async fn ci_jobs(&self, account: &Account, head: &str) -> Result<Vec<Job>> {
-        let checks = match self.kind {
-            ForgeKind::GitHub => {
-                // Only each check's latest attempt, not those reruns replaced.
-                let endpoint = self.repo_endpoint(&format!(
-                    "commits/{head}/check-runs?filter=latest&per_page=100"
-                ));
-                github_checks(&self.send(account, &Request::get(endpoint)).await?)?
-            }
-            ForgeKind::Forgejo => {
-                let endpoint = self.repo_endpoint(&format!("commits/{head}/status?limit=50"));
-                forgejo_checks(&self.send(account, &Request::get(endpoint)).await?)?
-            }
-            ForgeKind::GitLab => {
-                let endpoint = self.repo_endpoint(&format!("repository/commits/{head}/statuses"));
-                gitlab_checks(&self.pages(account, &endpoint).await?)?
-            }
-            ForgeKind::Bitbucket => bail!("Bitbucket Pipelines are not supported"),
-        };
+        let checks = self.kind.ci_checks(self, account, head).await?;
         Ok(checks
             .into_iter()
             .map(|(name, state, target)| Job {
@@ -173,35 +140,22 @@ impl ForgeRepo {
 
     /// The CI job a check's web URL links in this repository, if any.
     fn locate(&self, target: &str) -> Option<Location> {
-        match self.kind {
-            ForgeKind::GitHub => {
-                let parts = self.repository_path(target, "/actions/runs/")?;
-                let [run, "job", job] = parts.as_slice() else {
-                    return None;
-                };
-                Some(Location::GitHub {
-                    run: id(run)?,
-                    job: id(job)?,
-                })
-            }
-            ForgeKind::GitLab => {
-                let parts = self.repository_path(target, "/-/jobs/")?;
-                let [job] = parts.as_slice() else {
-                    return None;
-                };
-                Some(Location::GitLab { job: id(job)? })
-            }
-            ForgeKind::Forgejo => {
-                let (run_number, _) = self.job_location(target).ok()?;
-                Some(Location::Forgejo { run_number })
-            }
-            ForgeKind::Bitbucket => None,
-        }
+        self.kind.locate_job(self, target)
+    }
+
+    async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
+        let pull = self.read(account, ItemKind::Pr, number).await?;
+        ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
+        pull.head_sha.context("PR has no head commit")
     }
 
     /// The path components of `target` after this repository's `section`.
     /// Forges link jobs over HTTPS even when the remote uses HTTP.
-    fn repository_path<'a>(&self, target: &'a str, section: &str) -> Option<Vec<&'a str>> {
+    pub(crate) fn repository_path<'a>(
+        &self,
+        target: &'a str,
+        section: &str,
+    ) -> Option<Vec<&'a str>> {
         let path = target
             .strip_prefix("https://")
             .or_else(|| target.strip_prefix("http://"))?
@@ -209,24 +163,10 @@ impl ForgeRepo {
             .strip_prefix(section)?;
         Some(path.split('/').collect())
     }
-
-    async fn endpoint(
-        &self,
-        account: &Account,
-        head: &str,
-        operation: Operation,
-    ) -> Result<String> {
-        Ok(match operation {
-            Operation::Post(endpoint) => endpoint,
-            Operation::CancelForgejoRun { run_number } => {
-                let run = self.forgejo_run_id(account, run_number, head).await?;
-                format!("actions/runs/{run}/cancel")
-            }
-        })
-    }
 }
 
-fn id(text: &str) -> Option<u64> {
+/// A positive ID in a job URL.
+pub(crate) fn id(text: &str) -> Option<u64> {
     text.parse::<u64>().ok().filter(|id| *id > 0)
 }
 
@@ -270,11 +210,10 @@ fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> 
 }
 
 /// The operations that apply `action` to `selected` jobs among all of the
-/// head's `jobs`, and the checks they reach. A GitHub job rerun starts a new
-/// attempt of its run, which then refuses its other jobs, so several failed
-/// jobs of one run rerun together with the rest of its failed jobs. GitHub
-/// reruns only finished runs.
+/// head's `jobs`, as `backend` plans each, and the checks they reach; jobs
+/// that share an operation share it once.
 fn operations(
+    backend: &impl Backend,
     jobs: &[Job],
     selected: &[Job],
     action: CiAction,
@@ -282,7 +221,7 @@ fn operations(
     let mut operations = Vec::new();
     let mut checks = Vec::new();
     for job in selected {
-        let (operation, reached) = operation(jobs, selected, job, action)?;
+        let (operation, reached) = backend.ci_operation(jobs, selected, job, action)?;
         push_new(&mut operations, operation);
         for name in reached {
             push_new(&mut checks, name);
@@ -291,161 +230,19 @@ fn operations(
     Ok((operations, checks))
 }
 
-/// The operation that applies `action` to `job`, and the checks it reaches.
-fn operation(
-    jobs: &[Job],
-    selected: &[Job],
-    job: &Job,
-    action: CiAction,
-) -> Result<(Operation, Vec<String>)> {
-    let location = job.location.context("check has no CI job")?;
-    let in_run = |run| move |other: &&Job| github_run(other) == Some(run);
-    let only = |operation| Ok((operation, vec![job.name.clone()]));
-    if let (Location::GitHub { run, .. }, CiAction::Rerun) = (location, action) {
-        // GitHub reruns only finished runs.
-        let running = jobs
-            .iter()
-            .filter(in_run(run))
-            .find(|other| other.state == JobState::Running);
-        if let Some(running) = running {
-            bail!(
-                "check {} is still running in the same workflow run; wait for it or cancel it before rerunning {}",
-                running.name,
-                job.name
-            );
-        }
-    }
-    match (location, action) {
-        (Location::GitHub { run, .. }, CiAction::Rerun)
-            if selected.iter().filter(in_run(run)).count() > 1 =>
-        {
-            let failed = jobs
-                .iter()
-                .filter(in_run(run))
-                .filter(|other| other.state == JobState::Failed);
-            Ok((
-                Operation::Post(format!("actions/runs/{run}/rerun-failed-jobs")),
-                failed.map(|other| other.name.clone()).collect(),
-            ))
-        }
-        (Location::GitHub { job: id, .. }, CiAction::Rerun) => {
-            only(Operation::Post(format!("actions/jobs/{id}/rerun")))
-        }
-        (Location::GitHub { run, .. }, CiAction::Cancel) => {
-            only(Operation::Post(format!("actions/runs/{run}/cancel")))
-        }
-        (Location::GitLab { job: id }, CiAction::Rerun) => {
-            only(Operation::Post(format!("jobs/{id}/retry")))
-        }
-        (Location::GitLab { job: id }, CiAction::Cancel) => {
-            only(Operation::Post(format!("jobs/{id}/cancel")))
-        }
-        (Location::Forgejo { run_number }, CiAction::Cancel) => {
-            only(Operation::CancelForgejoRun { run_number })
-        }
-        (Location::Forgejo { .. }, CiAction::Rerun) => {
-            bail!("Forgejo's API cannot rerun Actions jobs")
-        }
-    }
-}
-
 /// Jobs of one run share its cancellation or rerun.
-fn push_new<T: PartialEq>(items: &mut Vec<T>, item: T) {
+pub(crate) fn push_new<T: PartialEq>(items: &mut Vec<T>, item: T) {
     if !items.contains(&item) {
         items.push(item);
     }
 }
 
-fn github_run(job: &Job) -> Option<u64> {
-    match job.location {
-        Some(Location::GitHub { run, .. }) => Some(run),
-        _ => None,
-    }
-}
-
 /// A check's name, state and web URL.
-type Check = (String, JobState, String);
+pub(crate) type CiCheck = (String, JobState, String);
 
-/// GitHub's latest check runs.
-fn github_checks(response: &Value) -> Result<Vec<Check>> {
-    let runs = response["check_runs"]
-        .as_array()
-        .context("GitHub check runs are not a list")?;
-    ensure!(
-        response["total_count"].as_u64() == Some(runs.len() as u64),
-        "GitHub returned a partial page of check runs"
-    );
-    runs.iter()
-        .map(|run| {
-            let state = match (run["status"].as_str(), run["conclusion"].as_str()) {
-                (
-                    Some("completed"),
-                    Some("failure" | "timed_out" | "cancelled" | "startup_failure"),
-                ) => JobState::Failed,
-                (Some("completed"), _) => JobState::Finished,
-                (Some(_), _) => JobState::Running,
-                (None, _) => bail!("GitHub check run has no status"),
-            };
-            check(run, "name", state, "details_url")
-        })
-        .collect()
-}
-
-/// Forgejo's latest status of each check.
-fn forgejo_checks(combined: &Value) -> Result<Vec<Check>> {
-    let statuses = match &combined["statuses"] {
-        Value::Null => &[][..],
-        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
-    };
-    ensure!(
-        combined["total_count"].as_u64() == Some(statuses.len() as u64),
-        "Forgejo returned a partial page of CI statuses"
-    );
-    statuses
-        .iter()
-        .map(|status| {
-            let state = match status["status"].as_str() {
-                Some("pending") => JobState::Running,
-                Some("failure" | "error") => JobState::Failed,
-                Some("success" | "warning" | "skipped") => JobState::Finished,
-                _ => bail!("unknown Forgejo CI state"),
-            };
-            check(status, "context", state, "target_url")
-        })
-        .collect()
-}
-
-/// GitLab's newest status of each name; a retried job keeps its earlier ones.
-fn gitlab_checks(statuses: &[Value]) -> Result<Vec<Check>> {
-    let mut latest = std::collections::BTreeMap::new();
-    for status in statuses {
-        let id = status["id"].as_u64().context("GitLab status has no ID")?;
-        let state = match status["status"].as_str() {
-            Some(
-                "created"
-                | "waiting_for_resource"
-                | "preparing"
-                | "pending"
-                | "running"
-                | "scheduled"
-                | "waiting_for_callback",
-            ) => JobState::Running,
-            Some("failed" | "canceled") => JobState::Failed,
-            Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
-            state => bail!("unknown GitLab CI state {state:?}"),
-        };
-        let check = check(status, "name", state, "target_url")?;
-        if latest
-            .get(&check.0)
-            .is_none_or(|(newest, _): &(u64, Check)| *newest < id)
-        {
-            latest.insert(check.0.clone(), (id, check));
-        }
-    }
-    Ok(latest.into_values().map(|(_, check)| check).collect())
-}
-
-fn check(value: &Value, name: &str, state: JobState, target: &str) -> Result<Check> {
+/// A check from the fields of a forge's check or status that hold its name
+/// and web URL.
+pub(crate) fn check(value: &Value, name: &str, state: JobState, target: &str) -> Result<CiCheck> {
     let name = value[name]
         .as_str()
         .filter(|name| !name.is_empty())
@@ -457,7 +254,7 @@ fn check(value: &Value, name: &str, state: JobState, target: &str) -> Result<Che
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::backends::github::GitHub;
 
     fn job(name: &str, state: JobState, location: Option<Location>) -> Job {
         Job {
@@ -519,7 +316,7 @@ mod tests {
         ];
         let post = |endpoint: &str| Operation::Post(endpoint.into());
         let selected = [jobs[0].clone(), jobs[1].clone(), jobs[3].clone()];
-        let (planned, checks) = operations(&jobs, &selected, CiAction::Rerun).unwrap();
+        let (planned, checks) = operations(&GitHub, &jobs, &selected, CiAction::Rerun).unwrap();
         assert_eq!(
             planned,
             [
@@ -529,13 +326,13 @@ mod tests {
         );
         assert_eq!(checks, ["rust", "docs", "lint", "fmt"]);
         let repeated = select(&jobs, CiAction::Rerun, &["rust".into(), "rust".into()]).unwrap();
-        let (planned, checks) = operations(&jobs, &repeated, CiAction::Rerun).unwrap();
+        let (planned, checks) = operations(&GitHub, &jobs, &repeated, CiAction::Rerun).unwrap();
         assert_eq!(planned, [post("actions/jobs/11/rerun")]);
         assert_eq!(checks, ["rust"]);
-        let (planned, _) = operations(&jobs, &jobs[4..5], CiAction::Cancel).unwrap();
+        let (planned, _) = operations(&GitHub, &jobs, &jobs[4..5], CiAction::Cancel).unwrap();
         assert_eq!(planned, [post("actions/runs/3/cancel")]);
         // A run with a running job refuses reruns until it finishes.
-        let error = operations(&jobs, &jobs[5..], CiAction::Rerun).unwrap_err();
+        let error = operations(&GitHub, &jobs, &jobs[5..], CiAction::Rerun).unwrap_err();
         assert!(
             error.to_string().contains("test is still running"),
             "{error}"
@@ -576,49 +373,5 @@ mod tests {
             Some(Location::Forgejo { run_number: 2765 })
         );
         assert_eq!(forgejo.locate("https://ci.example/build/1"), None);
-    }
-
-    #[test]
-    fn each_forge_reports_failed_and_running_checks() {
-        let states = |checks: Vec<Check>| checks.into_iter().map(|c| c.1).collect::<Vec<_>>();
-        let github = json!({"total_count": 3, "check_runs": [
-            {"name": "rust", "status": "completed", "conclusion": "timed_out", "details_url": "u"},
-            {"name": "docs", "status": "queued", "conclusion": null},
-            {"name": "lint", "status": "completed", "conclusion": "success"}
-        ]});
-        assert_eq!(
-            states(github_checks(&github).unwrap()),
-            [JobState::Failed, JobState::Running, JobState::Finished]
-        );
-        let partial = json!({"total_count": 4, "check_runs": github["check_runs"]});
-        assert!(github_checks(&partial).is_err());
-
-        let forgejo = json!({"total_count": 2, "statuses": [
-            {"context": "ci / rust", "status": "error", "target_url": "/t/r/actions/runs/1/jobs/0"},
-            {"context": "ci / docs", "status": "pending"}
-        ]});
-        let checks = forgejo_checks(&forgejo).unwrap();
-        assert_eq!(checks[0].2, "/t/r/actions/runs/1/jobs/0");
-        assert_eq!(states(checks), [JobState::Failed, JobState::Running]);
-        let none = json!({"total_count": 0, "statuses": null});
-        assert!(forgejo_checks(&none).unwrap().is_empty());
-
-        // A retried job's newest attempt decides; its failed first one is history.
-        let gitlab = [
-            json!({"id": 7, "name": "rust", "status": "failed", "target_url": "old"}),
-            json!({"id": 9, "name": "rust", "status": "running", "target_url": "new"}),
-            json!({"id": 8, "name": "docs", "status": "canceled"}),
-            json!({"id": 10, "name": "deploy", "status": "waiting_for_callback"}),
-        ];
-        assert_eq!(
-            gitlab_checks(&gitlab).unwrap(),
-            [
-                ("deploy".into(), JobState::Running, String::new()),
-                ("docs".into(), JobState::Failed, String::new()),
-                ("rust".into(), JobState::Running, "new".into())
-            ]
-        );
-        let unknown = [json!({"id": 1, "name": "x", "status": "later"})];
-        assert!(gitlab_checks(&unknown).is_err());
     }
 }

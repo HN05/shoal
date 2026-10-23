@@ -9,6 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
+    ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -417,6 +418,45 @@ impl Backend for GitLab {
             .await
             .context(self.login_hint())
     }
+
+    fn check_ci_action(&self, _action: CiAction) -> Result<()> {
+        Ok(())
+    }
+
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>> {
+        let endpoint = repo.repo_endpoint(&format!("repository/commits/{head}/statuses"));
+        latest_checks(&repo.pages(account, &endpoint).await?)
+    }
+
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
+        let parts = repo.repository_path(target, "/-/jobs/")?;
+        let [job] = parts.as_slice() else {
+            return None;
+        };
+        Some(Location::GitLab { job: id(job)? })
+    }
+
+    fn ci_operation(
+        &self,
+        _jobs: &[Job],
+        _selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)> {
+        let Some(Location::GitLab { job: id }) = job.location else {
+            bail!("check {} is not a GitLab job", job.name);
+        };
+        let endpoint = match action {
+            CiAction::Rerun => format!("jobs/{id}/retry"),
+            CiAction::Cancel => format!("jobs/{id}/cancel"),
+        };
+        Ok((Operation::Post(endpoint), vec![job.name.clone()]))
+    }
 }
 
 async fn view_details(
@@ -747,6 +787,36 @@ fn labels(labels: &Value) -> Vec<String> {
         .collect()
 }
 
+/// GitLab's newest status of each name; a retried job keeps its earlier ones.
+fn latest_checks(statuses: &[Value]) -> Result<Vec<CiCheck>> {
+    let mut latest = std::collections::BTreeMap::new();
+    for status in statuses {
+        let id = status["id"].as_u64().context("GitLab status has no ID")?;
+        let state = match status["status"].as_str() {
+            Some(
+                "created"
+                | "waiting_for_resource"
+                | "preparing"
+                | "pending"
+                | "running"
+                | "scheduled"
+                | "waiting_for_callback",
+            ) => JobState::Running,
+            Some("failed" | "canceled") => JobState::Failed,
+            Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
+            state => bail!("unknown GitLab CI state {state:?}"),
+        };
+        let check = check(status, "name", state, "target_url")?;
+        if latest
+            .get(&check.0)
+            .is_none_or(|(newest, _): &(u64, CiCheck)| *newest < id)
+        {
+            latest.insert(check.0.clone(), (id, check));
+        }
+    }
+    Ok(latest.into_values().map(|(_, check)| check).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -930,5 +1000,26 @@ mod tests {
         let mut merged = issue;
         merged["state"] = json!("merged");
         assert!(gitlab().current(ItemKind::Issue, 3, &merged).is_err());
+    }
+
+    #[test]
+    fn retried_jobs_report_their_newest_attempt() {
+        // A retried job's newest attempt decides; its failed first one is history.
+        let gitlab = [
+            json!({"id": 7, "name": "rust", "status": "failed", "target_url": "old"}),
+            json!({"id": 9, "name": "rust", "status": "running", "target_url": "new"}),
+            json!({"id": 8, "name": "docs", "status": "canceled"}),
+            json!({"id": 10, "name": "deploy", "status": "waiting_for_callback"}),
+        ];
+        assert_eq!(
+            latest_checks(&gitlab).unwrap(),
+            [
+                ("deploy".into(), JobState::Running, String::new()),
+                ("docs".into(), JobState::Failed, String::new()),
+                ("rust".into(), JobState::Running, "new".into())
+            ]
+        );
+        let unknown = [json!({"id": 1, "name": "x", "status": "later"})];
+        assert!(latest_checks(&unknown).is_err());
     }
 }

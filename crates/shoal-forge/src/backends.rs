@@ -18,6 +18,7 @@ use anyhow::Context;
 use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
+    ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -299,6 +300,60 @@ pub(crate) trait Backend {
         number: u64,
         details: &mut Details,
     ) -> Result<Option<Vec<Review>>>;
+
+    /// Refuse a CI action the forge's API cannot take.
+    fn check_ci_action(&self, action: CiAction) -> Result<()>;
+
+    /// Each check's latest attempt on `head`.
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>>;
+
+    /// The CI job a check's web URL links in the repository, if any.
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location>;
+
+    /// The operation that applies `action` to `job`, one of `selected` among
+    /// the head's `jobs`, and the checks it reaches.
+    fn ci_operation(
+        &self,
+        jobs: &[Job],
+        selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)>;
+
+    /// The endpoint under the repository that carries out `operation`.
+    async fn ci_endpoint(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _head: &str,
+        operation: Operation,
+    ) -> Result<String> {
+        match operation {
+            Operation::Post(endpoint) => Ok(endpoint),
+            Operation::CancelForgejoRun { .. } => anyhow::bail!("not a Forgejo repository"),
+        }
+    }
+
+    /// Whether the logs of failed checks can be read.
+    fn reads_check_logs(&self) -> bool {
+        false
+    }
+
+    /// The log of the failed check `name` on the current head of PR `url`.
+    async fn failed_check_log(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _url: &str,
+        _name: &str,
+    ) -> Result<CheckLog> {
+        anyhow::bail!("check logs currently require Forgejo Actions")
+    }
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -575,6 +630,57 @@ impl Backend for ForgeKind {
         details: &mut Details,
     ) -> Result<Option<Vec<Review>>> {
         dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details).await)
+    }
+
+    fn check_ci_action(&self, action: CiAction) -> Result<()> {
+        dispatch!(self, backend => backend.check_ci_action(action))
+    }
+
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>> {
+        dispatch!(self, backend => backend.ci_checks(repo, account, head).await)
+    }
+
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
+        dispatch!(self, backend => backend.locate_job(repo, target))
+    }
+
+    fn ci_operation(
+        &self,
+        jobs: &[Job],
+        selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)> {
+        dispatch!(self, backend => backend.ci_operation(jobs, selected, job, action))
+    }
+
+    async fn ci_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+        operation: Operation,
+    ) -> Result<String> {
+        dispatch!(self, backend => backend.ci_endpoint(repo, account, head, operation).await)
+    }
+
+    fn reads_check_logs(&self) -> bool {
+        dispatch!(self, backend => backend.reads_check_logs())
+    }
+
+    async fn failed_check_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        url: &str,
+        name: &str,
+    ) -> Result<CheckLog> {
+        dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
     }
 }
 
