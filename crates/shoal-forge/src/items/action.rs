@@ -21,8 +21,11 @@ use crate::{
 /// Marks a failure after an action's first request reached the forge, such
 /// as a comment posted before attaching its files failed, so a caller does
 /// not send it again.
-#[derive(Debug)]
-pub struct Sent;
+#[derive(Debug, Default)]
+pub struct Sent {
+    /// The activity key of the comment or reply the action posted.
+    pub authored: Option<String>,
+}
 
 impl std::fmt::Display for Sent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,7 +35,22 @@ impl std::fmt::Display for Sent {
 
 /// `error`, marked as [`Sent`] when the action's first request was sent.
 pub fn after_send(error: anyhow::Error, sent: bool) -> anyhow::Error {
-    if sent { error.context(Sent) } else { error }
+    if sent {
+        error.context(Sent::default())
+    } else {
+        error
+    }
+}
+
+/// `error`, marked as [`Sent`] with what the action posted once its first
+/// request was sent.
+fn after_post(error: anyhow::Error, sent: bool, authored: &Option<String>) -> anyhow::Error {
+    if !sent {
+        return error;
+    }
+    error.context(Sent {
+        authored: authored.clone(),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,28 +211,26 @@ impl ForgeRepo {
         let mut authored = None;
         let mut first = None;
         for request in self.requests(account, current, &action).await? {
-            let sent = first.is_some();
             let response = self
                 .send(account, &request)
                 .await
-                .map_err(|error| after_send(error, sent))?;
+                .map_err(|error| after_post(error, first.is_some(), &authored))?;
             // A comment, or a thread's reply, is the action's first request.
             if first.is_none() {
                 authored = self.posted(&action, &response);
                 first = Some(response);
             }
         }
-        let sent = first.is_some();
-        if let (Some(pending), Some(comment)) = (pending, first) {
-            self.attach_to_comment(account, &comment, pending)
+        if let (Some(pending), Some(comment)) = (pending, &first) {
+            self.attach_to_comment(account, comment, pending)
                 .await
                 .context("the comment was posted, but attaching its files failed")
-                .map_err(|error| after_send(error, true))?;
+                .map_err(|error| after_post(error, first.is_some(), &authored))?;
         }
         let item = self
             .read(account, kind, number)
             .await
-            .map_err(|error| after_send(error, sent))?
+            .map_err(|error| after_post(error, first.is_some(), &authored))?
             .item;
         Ok(Acted { item, authored })
     }

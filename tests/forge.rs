@@ -918,11 +918,30 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "--body-file",
         body,
     ]);
+    // A comment posted before attaching its files failed is the agent's too.
+    let [_, image, _] = attachment_files(&fixture);
+    fixture.respond(json!({
+        "GET settings/attachment": attachment_settings(true, "", 1),
+        "GET repos/team/project/issues/8": issue("open"),
+        "POST repos/team/project/issues/8/comments": {"body": {"id": 3, "body": "`login.png`"}},
+        "POST repos/team/project/issues/comments/3/assets?name=login.png":
+            {"status": 422, "body": {"message": "refused"}},
+    }));
+    let failed = fixture.run(&[
+        "issue",
+        "comment",
+        "--workspace",
+        "topic",
+        "--attach",
+        &image,
+    ]);
+    let stderr = String::from_utf8_lossy(&failed.stderr);
+    assert!(stderr.contains("attaching its files failed"), "{stderr}");
     // Closing in the web interface is someone else's change; the agent's own
-    // comment beside it is not reported.
+    // comments beside it are not reported.
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue("closed"),
-        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1, 2]),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1, 2, 3]),
     }));
     let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
     let kinds: Vec<_> = closed["updates"]

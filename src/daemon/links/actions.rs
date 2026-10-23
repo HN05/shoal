@@ -14,7 +14,7 @@ use crate::{
         account::{Account, AgentLogins},
         conventions,
         items::{
-            action::{Action, Edit},
+            action::{Action, Edit, Sent},
             create::{NewIssue, NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
@@ -128,8 +128,8 @@ impl Manager {
         ))
     }
 
-    /// Apply `action` and record it as the workspace's own change. The
-    /// caller holds the PR gate.
+    /// Apply `action` and record it as the workspace's own change, as well as
+    /// a comment it posted before failing. The caller holds the PR gate.
     pub(super) async fn apply_own(
         &self,
         id: &str,
@@ -138,17 +138,47 @@ impl Manager {
         target: Target,
         action: &Action,
     ) -> Result<Item> {
-        let Target { kind, number, url } = target;
-        let acted = forge
-            .apply(account, kind, number, action)
+        let acted = match forge
+            .apply(account, target.kind, target.number, action)
             .await
-            .with_context(|| format!("could not {} {url}", action.name()))?;
+        {
+            Ok(acted) => acted,
+            Err(error) => {
+                let error = error.context(format!("could not {} {}", action.name(), target.url));
+                return Err(self.record_failed_post(id, target, action, error).await);
+            }
+        };
         let own = own_state(action).then(|| acted.item.state.as_str());
-        let target = Target { kind, number, url };
         self.record_own_action(id, target, action.name(), own, acted.authored)
             .await
             .map_err(|error| crate::forge::items::action::after_send(error, true))?;
         Ok(acted.item)
+    }
+
+    /// Record the comment or reply a failed action posted as the workspace's
+    /// own, so polling does not report it back, and return the failure.
+    async fn record_failed_post(
+        &self,
+        id: &str,
+        target: Target,
+        action: &Action,
+        error: anyhow::Error,
+    ) -> anyhow::Error {
+        let Some(authored) = error
+            .downcast_ref::<Sent>()
+            .and_then(|sent| sent.authored.clone())
+        else {
+            return error;
+        };
+        match self
+            .record_own_action(id, target, action.name(), None, Some(authored))
+            .await
+        {
+            Ok(()) => error,
+            Err(recording) => error.context(format!(
+                "recording what was posted also failed: {recording:#}"
+            )),
+        }
     }
 
     /// Journal an applied action and advance the workspace's cursor past it,
