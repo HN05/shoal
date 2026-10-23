@@ -993,8 +993,7 @@ async fn issue_creation(
         .iter()
         .filter(|workspace| workspace.repository_id == repo.id)
     {
-        let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
-        if inspection.issue.is_some_and(|issue| issue.url == issue_url) {
+        if workspace.links.issue.as_deref() == Some(issue_url) {
             ensure!(
                 associated.is_none(),
                 "multiple workspaces are associated with this issue; pass an explicit branch"

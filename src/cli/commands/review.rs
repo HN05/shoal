@@ -321,11 +321,7 @@ async fn issue_workspace(
         .into_iter()
         .filter(|workspace| workspace.repository_id == repo.id)
     {
-        let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
-        if inspection
-            .issue
-            .is_some_and(|linked| linked.url == issue.url)
-        {
+        if workspace.links.issue.as_deref() == Some(issue.url.as_str()) {
             return Ok(Some(workspace));
         }
         if workspace.branch == branch {
