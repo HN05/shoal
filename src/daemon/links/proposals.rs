@@ -306,6 +306,14 @@ impl Manager {
         workspace: Option<&Workspace>,
         item: &Item,
     ) -> Vec<String> {
+        // The workspace's conventions do not apply to another repository,
+        // and its item commands cannot change an issue there.
+        if request
+            .proposed_issue()
+            .is_some_and(|issue| issue.repository.is_some())
+        {
+            return Vec::new();
+        }
         let Ok((forge, account)) = self.proposal_forge_account(request, workspace).await else {
             return Vec::new();
         };
@@ -318,11 +326,6 @@ impl Manager {
             _ => None,
         };
         let required = super::actions::required_labels(&settings, item.kind);
-        // The workspace's templates and labels do not apply to another repository.
-        let (body, required) = match request.proposed_issue() {
-            Some(issue) if issue.repository.is_some() => (None, &[][..]),
-            _ => (body, required),
-        };
         conventions::warnings(&forge, &account, &path, item, body, required).await
     }
 

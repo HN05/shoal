@@ -2952,6 +2952,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},
         "GET repos/them/tool/issues/5": {"body": {"number": 5, "title": "Crash",
             "state": "open", "labels": []}},
+        "GET repos/them/tool/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
     }));
     let open = [
         "issue",
@@ -2966,6 +2967,9 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
     assert_eq!(opened["url"], url);
     assert_eq!(opened["created"], true);
     assert_eq!(opened["linked"], false);
+    // The workspace's commands cannot label an issue there, so nothing
+    // suggests it.
+    assert!(opened.get("warnings").is_none(), "{opened}");
     assert_eq!(
         writes(&fixture),
         [json!(["POST repos/them/tool/issues", {"title": "Crash", "body": "", "labels": []}])]

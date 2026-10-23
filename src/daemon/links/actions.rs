@@ -338,10 +338,14 @@ impl Manager {
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
-        // The workspace's templates do not apply to another repository.
-        let body = (!destination.elsewhere).then_some(issue.body.as_str());
-        let checked =
-            conventions::warnings(forge, &account, &workspace.path, &item, body, required).await;
+        // The workspace's conventions do not apply to another repository,
+        // and its item commands cannot change an issue there.
+        let checked = if destination.elsewhere {
+            Vec::new()
+        } else {
+            let body = Some(issue.body.as_str());
+            conventions::warnings(forge, &account, &workspace.path, &item, body, required).await
+        };
         Ok(OpenOutcome::Opened(Opened {
             item,
             created: true,

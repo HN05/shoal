@@ -2032,7 +2032,8 @@ the workspace could record and link the new issue.
 
 `--repo` opens the issue in another repository, named as `OWNER/NAME` on the
 workspace's forge or by a repository URL on any forge, still as the agent
-account. The workspace's required labels and templates do not apply there, and
+account. The workspace's [conventions](#repository-conventions) do not apply
+there, so nothing requires or warns about its labels or description, and
 `--link` is refused. `[issue] other_repositories` decides it for workspace
 processes: `"propose"` records an [approval request](#approval-for-agent-issues-and-prs)
 naming the repository, `"direct"` opens it at once, and `"deny"` refuses it.
