@@ -217,10 +217,10 @@ so one of each can run concurrently. Review and audit workflows follow review-bo
 latest `main` commit.
 `.forgejo/workflows/audit.yml` runs a weekly read-only code audit using
 `.review/audit.md`: one job per focus (bugs, maintainability, testing, performance
-and docs) on an area that rotates by ISO week, or manually with a selected focus,
-ref and scope. It opens one issue per new finding, labelled `audit/<focus>`;
-findings are advisory and never a required check. Close an audit issue when it is
-fixed, or explain in a comment or with `audit/wontfix` why it will not be.
+and docs) over the entire application, or manually with a selected focus and ref.
+It opens one issue per new finding, labelled `audit/<focus>`; findings are
+advisory and never a required check. Close an audit issue when it is fixed, or
+explain in a comment or with `audit/wontfix` why it will not be.
 Issues and PRs carry one or more `area/` labels and one `type/` and one
 `complexity/` label; `shoal labels` lists what each means, and
 `.forgejo/scripts/labels.sh` creates the scheme. An issue states the problem or

@@ -27,10 +27,31 @@ generated output and lockfile churn; inspect their generators instead.
 
 ## Coverage
 
-The workflow selects one area per week; a manual run may name another scope.
-Trace related callers and tests as needed, but do not claim coverage outside
-the requested scope. State the inspected area and any coverage limitations in
-the summary, and report an incomplete outcome if the scope cannot be finished.
+Every run audits the entire application: `src`, `crates`, `tests`, `.forgejo`
+and `scripts`. Do not narrow the audit to a subset. Partition it among workers
+by these areas, giving any path not listed to the closest one:
+
+- Workspaces, ownership and removal: `src/daemon/workspace`, `src/daemon/cleanup`,
+  `src/removal`, `src/git`, `src/repository.rs`
+- Daemon lifecycle, persisted state and recovery: `src/daemon.rs`,
+  `src/daemon/store`, `src/daemon/recovery`, `src/daemon/handoff.rs`,
+  `src/daemon/auto_update.rs`, `src/state.rs`, `src/protocol.rs`
+- Execution wrapper, tracked processes and agents: `src/execution`,
+  `src/process`, `src/daemon/execution_*`, `src/daemon/agent_*`, `src/agent`,
+  `src/happy`
+- Resources and access: `src/daemon/ports`, `src/daemon/resources`, `src/sim`,
+  `src/daemon/approvals`, `src/daemon/scope.rs`, `src/secrets.rs`
+- Forge integration, links, events and messages: `crates/shoal-forge`,
+  `src/daemon/links`, `src/daemon/events`, `src/daemon/questions`,
+  `src/daemon/chats`
+- CLI and configuration: `src/cli`, `src/config`, `src/presets`, `src/seed`,
+  `src/transfer`
+- Tests, CI and release tooling: `tests`, `crates/shoal-subprocess`,
+  `.forgejo`, `scripts`
+
+Reuse a worker for another area once it finishes. State any coverage
+limitations in the summary, and report an incomplete outcome if an area was not
+inspected.
 
 ## Previous findings
 

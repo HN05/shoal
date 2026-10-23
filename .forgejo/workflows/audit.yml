@@ -30,7 +30,8 @@ jobs:
   audit:
     name: review-bot audit (${{ matrix.focus }})
     runs-on: docker
-    timeout-minutes: 60
+    # Room for the lead attempt and the fallback agent's attempt.
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
@@ -41,30 +42,15 @@ jobs:
         - /var/lib/review-bot/claude:/var/lib/review-bot/claude
         - /var/lib/review-bot/codex:/var/lib/review-bot/codex
     steps:
-      - name: Select this week's area
-        id: scope
-        shell: bash
-        run: |
-          # Every focus audits the same area in a given ISO week.
-          areas=(
-            'Workspace ownership, creation, adoption and removal (src/daemon/workspace, src/removal, src/git)'
-            'Daemon lifecycle, persisted state and recovery (src/daemon.rs, src/daemon/store, src/daemon/recovery.rs, src/daemon/handoff.rs, src/daemon/auto_update.rs)'
-            'Execution wrapper and tracked processes (src/execution, src/process, src/daemon/execution_connection.rs, src/daemon/execution_recovery.rs)'
-            'Resource leases: ports, simulators and permits (src/daemon/ports, src/daemon/resources, src/sim)'
-            'CLI, configuration and forge integration (src/cli, src/config, src/forge)'
-            'Tests, CI and release tooling (tests, .forgejo, scripts)'
-          )
-          week=$((10#$(date -u +%V)))
-          echo "area=${areas[week % ${#areas[@]}]}" >> "$GITHUB_OUTPUT"
       - uses: https://git.henriknordvik.com/HN05/review-bot@main
         with:
           mode: audit
           agent: codex
           audit-focus: ${{ matrix.focus }}
           audit-ref: ${{ inputs.ref || '' }}
-          audit-scope: ${{ steps.scope.outputs.area }}
           audit-instructions-file: .review/audit.md
-          audit-timeout-seconds: '900'
+          # The whole application takes longer to inspect than one area did.
+          audit-timeout-seconds: '2700'
           # Reuse a writable shared mount to serialize issue creation across containers.
           audit-lock-dir: /var/lib/review-bot/codex/audit-locks
           codex-model: ${{ vars.AUDIT_CODEX_MODEL || 'gpt-6-astra' }}
