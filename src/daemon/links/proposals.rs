@@ -243,6 +243,13 @@ impl Manager {
             request.id,
             request.status
         );
+        // Another decision may have saved edits, or opened the item, while
+        // this one waited for the gate; the user reviewed the earlier text.
+        ensure!(
+            request.specification == chosen.specification && request.url == chosen.url,
+            "approval request {} changed while it waited; review it again",
+            request.id
+        );
         Ok(request)
     }
 
@@ -905,5 +912,56 @@ mod tests {
             .unwrap();
         manager.sweep_proposal_files().await.unwrap();
         assert!(!files.join("kept").exists());
+    }
+
+    #[tokio::test]
+    async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "topic".into(), None, None, None)
+            .await
+            .unwrap();
+        let issue = NewIssue {
+            title: "Flaky".into(),
+            ..NewIssue::default()
+        };
+        let specification = Specification::Issue(IssueSpecification {
+            issue,
+            link: false,
+            branch: "topic".into(),
+            commit: "head".into(),
+            agent: None,
+            duplicates: Vec::new(),
+            follow_up: None,
+        });
+        let request = proposal(
+            &workspace,
+            Target::IssueOpen,
+            proposals::ISSUE,
+            specification,
+        );
+        let (chosen, _) = manager
+            .store_proposal(request, proposals::propose_issue)
+            .await
+            .unwrap();
+        assert!(manager.pending_proposal(chosen.clone()).await.is_ok());
+
+        // Another approval saves its edits before this decision takes the gate.
+        let mut edited = chosen.clone();
+        edited.edit(&ProposalDecision {
+            title: Some("Flaky test".into()),
+            ..ProposalDecision::default()
+        });
+        manager.save_proposal(edited).await.unwrap();
+        let error = manager.pending_proposal(chosen).await.unwrap_err();
+        assert!(
+            format!("{error:#}").contains("changed while it waited"),
+            "{error:#}"
+        );
     }
 }
