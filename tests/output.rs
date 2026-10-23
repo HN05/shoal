@@ -233,24 +233,23 @@ fn terminal_styles_respect_redirection_json_and_environment() {
         ),
         (vec!["cd", "-"], false, "\x1b[1;31merror:\x1b[0m"),
     ] {
-        let env = [("SHOAL_PREVIOUS_DIR", "/nonexistent-shoal-color-test")];
-        let (output, text) = run(&args, Some(stdout), &env);
+        let (output, text) = run(&args, Some(stdout), &[]);
         assert!(!output.status.success());
         assert!(
             text.contains(marker),
             "args={args:?} text={text:?} output={output:?}"
         );
-        let (piped, _) = run(&args, Some(!stdout), &env);
+        let (piped, _) = run(&args, Some(!stdout), &[]);
         let bytes = if stdout { piped.stdout } else { piped.stderr };
         assert!(!bytes.contains(&0x1b));
         assert!(!bytes.is_empty());
         for opt_out in [("NO_COLOR", "1"), ("TERM", "dumb")] {
-            let (_, text) = run(&args, Some(stdout), &[env[0], opt_out]);
+            let (_, text) = run(&args, Some(stdout), &[opt_out]);
             assert!(!text.contains('\x1b'), "{text:?}");
         }
         let mut json_args = vec!["--json"];
         json_args.extend(args);
-        let (_, text) = run(&json_args, Some(stdout), &env);
+        let (_, text) = run(&json_args, Some(stdout), &[]);
         assert!(!text.contains('\x1b'));
         serde_json::from_str::<serde_json::Value>(&text).unwrap();
     }

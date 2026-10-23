@@ -5167,8 +5167,11 @@ cd "$REPO"
 shoal add "$REPO" navigate
 test "${PWD##*/}" = navigate
 shoal_repo_dir="$(dirname "$PWD")"
+shoal add "$REPO" other
+test "${PWD##*/}" = other
+shoal cd navigate
 shoal cd -
-test "$PWD" = "$REPO"
+test "${PWD##*/}" = other
 shoal cd -
 test "${PWD##*/}" = navigate
 cd "$REPO"
@@ -5188,6 +5191,10 @@ test -f untracked
 rm untracked
 mkdir nested
 cd nested
+shoal rm
+test "$PWD" = "$shoal_repo_dir"
+shoal cd -
+test "${PWD##*/}" = other
 shoal rm
 test "$PWD" = "$shoal_repo_dir"
 if shoal cd -; then
@@ -7739,77 +7746,56 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
 }
 
 #[test]
-fn cd_previous_checks_existence_and_json_never_navigates() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("previous");
-    let path = Path::new(workspace["path"].as_str().unwrap());
-    let directive = fixture.root.path().join("cd-directive");
-    fs::write(&directive, "").unwrap();
-    let output = fixture
-        .command()
-        .env("OLDPWD", path)
-        .env_remove("SHOAL_PREVIOUS_DIR")
-        .env("SHOAL_SHELL_DIRECTIVE", &directive)
-        .args(["--json", "cd", "-"])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()["path"],
-        fs::canonicalize(path).unwrap().to_str().unwrap()
-    );
-    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
-    fixture.ok(&["rm", "previous"]);
-    let deleted = fixture
-        .command()
-        .env("OLDPWD", path)
-        .env_remove("SHOAL_PREVIOUS_DIR")
-        .env("SHOAL_SHELL_DIRECTIVE", &directive)
-        .args(["cd", "-"])
-        .output()
-        .unwrap();
-    assert!(!deleted.status.success());
-    assert!(String::from_utf8_lossy(&deleted.stderr).contains("no longer exists"));
-    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
-    for previous in [None, Some("relative/directory")] {
-        let mut command = fixture.command();
-        command
-            .env_remove("OLDPWD")
-            .env_remove("SHOAL_PREVIOUS_DIR");
-        if let Some(previous) = previous {
-            command.env("OLDPWD", previous);
-        }
-        assert!(!command.args(["cd", "-"]).output().unwrap().status.success());
-    }
-}
-
-#[test]
-fn cd_previous_cannot_escape_execution_scope() {
+fn cd_previous_returns_to_the_workspace_left_and_json_never_navigates() {
     let fixture = Fixture::new();
     let first = fixture.add("first");
-    let other = fixture.add("other");
-    let binary = env!("CARGO_BIN_EXE_shoal");
-    let scoped = |destination: &str| {
+    let second = fixture.add("second");
+    let path = |workspace: &Value| {
+        fs::canonicalize(workspace["path"].as_str().unwrap())
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let directive = fixture.root.path().join("cd-directive");
+    fs::write(&directive, "").unwrap();
+    let cd = |from: &Path, args: &[&str]| {
         fixture
             .command()
-            .env("SHOAL_PREVIOUS_DIR", destination)
-            .args(["exec", "first", "--", binary, "--json", "cd", "-"])
+            .current_dir(from)
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .args(args)
             .output()
             .unwrap()
     };
-    assert!(scoped(first["path"].as_str().unwrap()).status.success());
-    for path in [
-        other["path"].as_str().unwrap(),
-        fixture.repo.to_str().unwrap(),
-    ] {
-        let output = scoped(path);
-        assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot navigate outside"));
+    let none = cd(&fixture.repo, &["cd", "-"]);
+    assert!(!none.status.success());
+    assert!(String::from_utf8_lossy(&none.stderr).contains("no previous workspace"));
+    let first_path = path(&first);
+    let second_path = path(&second);
+    assert!(
+        cd(Path::new(&first_path), &["--json", "cd", "second"])
+            .status
+            .success()
+    );
+    for (from, to) in [(&second_path, &first_path), (&first_path, &second_path)] {
+        let output = cd(Path::new(from), &["--json", "cd", "-"]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap()["path"],
+            to.as_str()
+        );
     }
+    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
+    fixture.ok(&["rm", "first"]);
+    let removed = cd(Path::new(&second_path), &["cd", "-"]);
+    assert!(!removed.status.success());
+    assert!(String::from_utf8_lossy(&removed.stderr).contains("no previous workspace"));
+    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
 }
 
 #[test]

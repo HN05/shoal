@@ -426,7 +426,7 @@ pub enum Command {
         #[arg(value_parser = item_reference)]
         item: Option<String>,
     },
-    /// Enter a workspace, or use - for the previous directory.
+    /// Enter a workspace, or use - for the one you were in before.
     ///
     /// Omit the workspace to open the picker, even inside a workspace.
     Cd { workspace: Option<String> },
@@ -1239,6 +1239,7 @@ impl Command {
     /// so `-` selects the previous one; `None` for commands that keep no history.
     pub fn recent_name(&self) -> Option<String> {
         Some(match self {
+            Command::Cd { .. } => "cd".into(),
             Command::Attach { .. } => "attach".into(),
             Command::Edit { .. } => "edit".into(),
             Command::Diff { .. } => "diff".into(),

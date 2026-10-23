@@ -72,8 +72,6 @@ pub const AGENT_EXIT_CODE: &str = "SHOAL_AGENT_EXIT_CODE";
 pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
-/// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.
-pub const PREVIOUS_DIR: &str = "SHOAL_PREVIOUS_DIR";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
 /// Runtime override for the packaged skills directory.

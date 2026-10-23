@@ -16,7 +16,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{self, Palette, Style},
-        terminal,
+        recent, terminal,
         ui::{self, Fallback},
     },
     daemon::{
@@ -198,28 +198,17 @@ pub(super) async fn conflicts(
 }
 
 pub(super) async fn cd(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    if workspace.as_deref() == Some("-") {
-        let destination = shell::previous_directory()?;
-        if env::inherits_scope(&ctx.paths.state) {
-            let workspaces = client::workspaces(&ctx.paths).await?;
-            ensure!(
-                workspaces.iter().any(|w| w.contains(&destination)),
-                "workspace processes cannot navigate outside their worktree"
-            );
-        }
-        navigate(ctx, &destination)?;
-    } else {
-        let workspace = match workspace {
-            Some(workspace) => workspace,
-            None => ui::workspace_picker(ctx).await?,
-        };
-        let inspection = client::inspect(&ctx.paths, workspace).await?;
-        ensure!(
-            inspection.workspace.path.is_dir(),
-            "workspace directory is missing"
-        );
-        navigate(ctx, &inspection.workspace.path)?;
-    }
+    let workspace = match workspace {
+        Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
+        None => ui::workspace_picker(ctx).await?,
+    };
+    let inspection = client::inspect(&ctx.paths, workspace).await?;
+    ensure!(
+        inspection.workspace.path.is_dir(),
+        "workspace directory is missing"
+    );
+    recent::record_move(ctx, &inspection.workspace.id).await;
+    navigate(ctx, &inspection.workspace.path)?;
     Ok(0)
 }
 

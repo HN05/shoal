@@ -88,9 +88,20 @@ pub async fn previous(ctx: &Context) -> Result<String> {
         .with_context(|| format!("no previous workspace for `shoal {command}`"))
 }
 
-/// Remember that the command acted on the workspace `selector` names. Scoped
-/// callers keep no history, and failing to keep it never fails the command.
+/// Remember that the command acted on the workspace `selector` names.
 pub async fn record(ctx: &Context, selector: &str) {
+    remember(ctx, selector, false).await;
+}
+
+/// Remember that the command moved from the current workspace to the one
+/// `selector` names, so `-` returns to the one it left.
+pub async fn record_move(ctx: &Context, selector: &str) {
+    remember(ctx, selector, true).await;
+}
+
+/// Scoped callers keep no history, and failing to keep it never fails the
+/// command.
+async fn remember(ctx: &Context, selector: &str, from_current: bool) {
     let Some(command) = ctx.recent.as_deref() else {
         return;
     };
@@ -108,6 +119,9 @@ pub async fn record(ctx: &Context, selector: &str) {
         return;
     };
     let mut history = History::load(&ctx.paths);
+    if from_current && let Ok(Some(current)) = ui::current_workspace(&workspaces) {
+        history.record(command, &current.id);
+    }
     history.record(command, &target.id);
     let _ = history.save(&ctx.paths);
 }

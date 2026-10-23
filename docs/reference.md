@@ -449,10 +449,10 @@ The picker leaves out workspaces without what the command acts on, such as an
 agent session for `attach` or a running agent or command for `stop`, and reports
 when none is left. Workspaces the command would refuse for their state, or for
 `setup` a running execution, come last with the reason in place of their status.
-`attach` and the commands that open, show or run something in one workspace
+`cd`, `attach` and the commands that open, show or run something in one workspace
 remember, across terminals, the workspaces each acted on, and take `-` as the
-target for the latest one other than the current workspace. Scoped callers keep
-no such history.
+target for the latest one other than the current workspace; `cd` also remembers
+the workspace it leaves. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
@@ -2546,10 +2546,10 @@ including after upgrades. The function lets `add` and `cd` enter workspaces
 and moves you out of a removed one. If cleanup removes your directory while an
 agent runs, the shell returns to the nearest surviving parent after exit or at
 the next prompt, preserving the exit status. `shoal cd` always opens fzf, `shoal cd
-<name>` goes directly, and `shoal cd -` returns to the shell's previous
-directory (`OLDPWD`, per shell), refusing a deleted destination. Scoped agents
-cannot navigate outside their worktree. Without the function, Shoal prints the
-destination and, in an interactive terminal, explains how to load the integration;
+<name>` goes directly, and `shoal cd -` switches back to the workspace it last
+left or entered. Scoped agents cannot navigate outside their worktree. Without
+the function, Shoal prints the destination and, in an interactive terminal,
+explains how to load the integration;
 `--json` returns the path without requesting navigation.
 The wrapper refreshes the Zsh line-editor prompt after navigation; Bash updates
 its prompt through `PROMPT_COMMAND`.
