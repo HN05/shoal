@@ -256,6 +256,8 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
   callers before fixing them or rejecting them with evidence in the thread.
+  After fixing substantial findings, request another review and mark the PR
+  ready only once it comes back clean.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
 
