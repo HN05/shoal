@@ -10,9 +10,9 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        checks::CheckLog,
-        link::{ItemKind, Selection},
-        view::{Details, ItemView, PrDetails, Review},
+        ci::checks::CheckLog,
+        items::link::{ItemKind, Selection},
+        review::view::{Details, ItemView, PrDetails, Review},
     },
     model::Selected,
     protocol::Method,

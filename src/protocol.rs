@@ -282,12 +282,12 @@ pub enum Method {
     },
     MarkReady {
         workspace: String,
-        selection: crate::forge::link::Selection,
+        selection: crate::forge::items::link::Selection,
     },
     /// `draft` overrides `[unready] draft` when set.
     ClearReady {
         workspace: String,
-        selection: crate::forge::link::Selection,
+        selection: crate::forge::items::link::Selection,
         draft: Option<bool>,
     },
     /// The caller's execution, when scoped, is recorded as the reporter,
@@ -307,7 +307,7 @@ pub enum Method {
     /// Link an issue or PR by number or URL with a relation.
     LinkItem {
         workspace: String,
-        kind: crate::forge::link::ItemKind,
+        kind: crate::forge::items::link::ItemKind,
         url: String,
         relation: crate::model::Relation,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -317,7 +317,7 @@ pub enum Method {
     UnlinkItems {
         workspace: String,
         relation: crate::model::Relation,
-        kind: Option<crate::forge::link::ItemKind>,
+        kind: Option<crate::forge::items::link::ItemKind>,
         url: Option<String>,
     },
     SetPr {
@@ -331,7 +331,7 @@ pub enum Method {
     },
     WatchItems {
         workspace: String,
-        selection: crate::forge::link::Selection,
+        selection: crate::forge::items::link::Selection,
         timeout_secs: Option<u64>,
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
@@ -360,21 +360,21 @@ pub enum Method {
     /// Link the open PR of the workspace's branch, or open one and link it.
     OpenPull {
         workspace: String,
-        options: crate::forge::create::PullOptions,
+        options: crate::forge::items::create::PullOptions,
     },
     /// Open an issue in the workspace's repository, linking it when `link` is set.
     OpenIssue {
         workspace: String,
-        issue: crate::forge::create::NewIssue,
+        issue: crate::forge::items::create::NewIssue,
         link: bool,
     },
     /// Change an issue or PR of the workspace's repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {
         workspace: String,
-        kind: crate::forge::link::ItemKind,
+        kind: crate::forge::items::link::ItemKind,
         item: Option<String>,
-        action: crate::forge::action::Action,
+        action: crate::forge::items::action::Action,
     },
     WorkspaceEnv {
         workspace: String,
@@ -389,11 +389,11 @@ pub enum Method {
     /// Linked items, or an explicit one, for the CLI to look up.
     SelectItems {
         workspace: String,
-        selection: crate::forge::link::Selection,
+        selection: crate::forge::items::link::Selection,
     },
     CheckLog {
         workspace: String,
-        selection: crate::forge::link::Selection,
+        selection: crate::forge::items::link::Selection,
         check: String,
     },
     /// Rerun failed or cancel running checks on a PR's head; none named means all.
@@ -828,15 +828,15 @@ response_bodies! {
     Branches(Vec<crate::git::existing_branch::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),
-    Item(crate::forge::item::Item),
-    Opened(crate::forge::item::Opened),
+    Item(crate::forge::items::item::Item),
+    Opened(crate::forge::items::item::Opened),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::model::Selected),
-    CheckLog(crate::forge::checks::CheckLog),
+    CheckLog(crate::forge::ci::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),

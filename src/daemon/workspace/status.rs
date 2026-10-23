@@ -9,7 +9,7 @@ use crate::{
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
-        link::{self, ItemKind},
+        items::link::{self, ItemKind},
     },
     git,
     model::{

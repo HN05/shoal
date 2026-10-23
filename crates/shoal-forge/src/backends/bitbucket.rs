@@ -8,17 +8,21 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{
+use crate::{
     ForgeRepo,
     account::Account,
-    action::{Edit, MergeMethod},
-    api::{HttpMethod, Request},
-    item::{Current, Item, ItemState, PrSummary, text},
-    link::ItemKind,
-    rest::RestCheck,
-    status::Verdict,
-    thread::{Target, Thread},
-    view::{Comment, Details, PrDetails, Review, ReviewComment},
+    backends::rest::RestCheck,
+    items::{
+        action::{Edit, MergeMethod},
+        item::{Current, Item, ItemState, PrSummary, text},
+        link::ItemKind,
+    },
+    review::{
+        status::Verdict,
+        thread::{Target, Thread},
+        view::{Comment, Details, PrDetails, Review, ReviewComment},
+    },
+    transport::api::{HttpMethod, Request},
 };
 
 /// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
@@ -59,14 +63,14 @@ impl Credentials {
 
     /// The curl config line that signs a request in, or none without a
     /// configured token, which reaches only public repositories.
-    pub(super) async fn authorization(&self) -> Result<Option<Vec<u8>>> {
+    pub(crate) async fn authorization(&self) -> Result<Option<Vec<u8>>> {
         let Some((program, args)) = self.token_command.split_first() else {
             return Ok(None);
         };
         let mut command = tokio::process::Command::new(program);
         command.args(args);
         let token = shoal_subprocess::Run::new(command)
-            .timeout(super::api::TIMEOUT)
+            .timeout(crate::transport::api::TIMEOUT)
             .output()
             .await
             .context("run bitbucket.token_command")?;
@@ -93,7 +97,7 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
 
 impl ForgeRepo {
     /// An issue or pull request as Bitbucket reports it.
-    pub(super) fn bitbucket_current(
+    pub(crate) fn bitbucket_current(
         &self,
         kind: ItemKind,
         number: u64,
@@ -154,7 +158,7 @@ impl ForgeRepo {
 
 impl ForgeRepo {
     /// The newest status of each build reported on the pull request.
-    pub(super) async fn bitbucket_checks(
+    pub(crate) async fn bitbucket_checks(
         &self,
         account: &Account,
         number: u64,
@@ -164,7 +168,7 @@ impl ForgeRepo {
     }
 
     /// Each participant's approval or change request.
-    pub(super) async fn bitbucket_verdicts(
+    pub(crate) async fn bitbucket_verdicts(
         &self,
         account: &Account,
         number: u64,
@@ -178,7 +182,7 @@ impl ForgeRepo {
         verdicts(&pull)
     }
 
-    pub(super) async fn bitbucket_details(
+    pub(crate) async fn bitbucket_details(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -211,7 +215,7 @@ impl ForgeRepo {
 
     /// Fills the item's comments and returns a pull request's reviews: one
     /// per inline thread, and one per approval or change request.
-    pub(super) async fn bitbucket_discussion(
+    pub(crate) async fn bitbucket_discussion(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -244,7 +248,7 @@ impl ForgeRepo {
 
     /// One update of the changed fields. Bitbucket has no labels, keeps
     /// draft state as a flag, and replaces reviewers by Atlassian account ID.
-    pub(super) fn bitbucket_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+    pub(crate) fn bitbucket_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         ensure!(
             edit.add_labels.is_empty() && edit.remove_labels.is_empty(),
             "Bitbucket has no labels"
@@ -289,7 +293,7 @@ impl ForgeRepo {
 
     /// Decline a pull request, or resolve or reopen an issue. Bitbucket
     /// cannot reopen a declined pull request.
-    pub(super) fn bitbucket_state(&self, item: &Item, state: ItemState) -> Result<Request> {
+    pub(crate) fn bitbucket_state(&self, item: &Item, state: ItemState) -> Result<Request> {
         let endpoint = self.item_endpoint(item.kind, item.number);
         Ok(match (item.kind, state) {
             (ItemKind::Pr, ItemState::Open) => {
@@ -311,7 +315,7 @@ impl ForgeRepo {
 }
 
 /// Bitbucket's strategy for each merge method; rebasing fast-forwards.
-pub(super) fn merge(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
+pub(crate) fn merge(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
     let strategy = match method {
         MergeMethod::Merge => "merge_commit",
         MergeMethod::Squash => "squash",
@@ -422,7 +426,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The thread with `comment`, named by its first comment.
-pub(super) fn bitbucket_thread(comments: &[Value], comment: u64) -> Option<Thread> {
+pub(crate) fn bitbucket_thread(comments: &[Value], comment: u64) -> Option<Thread> {
     let comments = listed(comments);
     let root = roots(&comments);
     comments.iter().find(|value| value["id"] == comment)?;
@@ -478,7 +482,7 @@ fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment
 }
 
 /// A deleted account has no user.
-pub(super) fn nickname(user: &Value) -> String {
+pub(crate) fn nickname(user: &Value) -> String {
     text(&user["nickname"])
         .or_else(|| text(&user["display_name"]))
         .unwrap_or_else(|| "ghost".into())

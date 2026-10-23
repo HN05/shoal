@@ -3,7 +3,9 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{ForgeKind, ForgeRepo, account::Account, api::Request, link::ItemKind};
+use crate::{
+    ForgeKind, ForgeRepo, account::Account, items::link::ItemKind, transport::api::Request,
+};
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
 pub const TAIL_BYTES: usize = 8192;
@@ -90,7 +92,7 @@ impl ForgeRepo {
 
     /// The API ID of the run numbered `number` in the repository, which must
     /// have run on `head`.
-    pub(super) async fn forgejo_run_id(
+    pub(crate) async fn forgejo_run_id(
         &self,
         account: &Account,
         number: u64,
@@ -107,7 +109,7 @@ impl ForgeRepo {
 
     /// Web URLs use a repository run number and zero-based job index, neither
     /// API ID. A host may link over HTTPS while its remote uses HTTP.
-    pub(super) fn job_location(&self, target: &str) -> Result<(u64, usize)> {
+    pub(crate) fn job_location(&self, target: &str) -> Result<(u64, usize)> {
         let relative = ["https", "http"]
             .iter()
             .find_map(|scheme| target.strip_prefix(&format!("{scheme}://{}", self.host)))

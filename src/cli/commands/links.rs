@@ -9,7 +9,7 @@ use crate::{
     cli::{ItemArgs, RelationArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        link::{ItemKind, Link, LinkTarget, Selection},
+        items::link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
     model::{Relation, Repository, ReviewMark, Selected, SelectedItem, Workspace},

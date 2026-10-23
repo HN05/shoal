@@ -22,7 +22,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     execution::recovery,
-    forge::link::{self, ItemKind},
+    forge::items::link::{self, ItemKind},
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
     state::{AgentState, QueueKind},
@@ -276,7 +276,7 @@ pub fn pick_item(
     ctx: &Context,
     prompt: &str,
     kind: &str,
-    items: Vec<crate::forge::list::Item>,
+    items: Vec<crate::forge::items::list::Item>,
 ) -> Result<String> {
     ensure!(!items.is_empty(), "no open {kind}");
     let entries = items

@@ -17,7 +17,7 @@ use crate::{
         links::pr::Action,
         workspace::Manager,
     },
-    forge::link::ItemKind,
+    forge::items::link::ItemKind,
     model::{LinkedItem, Relation},
     state::WorkspaceState,
 };

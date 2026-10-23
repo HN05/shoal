@@ -10,10 +10,10 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo,
     account::{Account, ForgejoLogin},
-    api::{Request, Upload, encode},
+    transport::api::{Request, Upload, encode},
 };
 
 /// The largest image Shoal uploads, which is GitHub's limit.

@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
-    forge::action::Action,
+    forge::items::action::Action,
     protocol::{ConfigTarget, Method},
 };
 use anyhow::{Result, bail, ensure};

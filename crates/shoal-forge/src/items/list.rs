@@ -1,7 +1,7 @@
 //! Open issues and PRs, for choosing one interactively.
 use anyhow::{Context, Result};
 
-use super::{ForgeKind, ForgeRepo, Query, account::Account, gh, link::ItemKind};
+use crate::{ForgeKind, ForgeRepo, Query, account::Account, gh, items::link::ItemKind};
 
 /// An open issue or PR.
 #[derive(Debug, PartialEq, serde::Deserialize)]

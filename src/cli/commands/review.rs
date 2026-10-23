@@ -13,7 +13,7 @@ use crate::{
     },
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        link::{ItemKind, Link, LinkTarget},
+        items::link::{ItemKind, Link, LinkTarget},
     },
     git,
     model::{Repository, Workspace},

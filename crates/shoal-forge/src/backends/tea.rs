@@ -3,30 +3,33 @@
 use anyhow::{Context, Result, bail, ensure};
 use tokio::process::Command;
 
-use super::{account::Account, api::Request, programs};
+use crate::{
+    account::Account,
+    transport::{api::Request, programs},
+};
 
 /// A tea login and the root URL of the forge it signs in to.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct TeaLogin {
+pub(crate) struct TeaLogin {
     pub name: String,
     pub url: String,
 }
 
 /// The tea login, as `account` runs tea, for the forge at `host`.
-pub(super) async fn login(account: &Account, host: &str) -> Result<Option<TeaLogin>> {
+pub(crate) async fn login(account: &Account, host: &str) -> Result<Option<TeaLogin>> {
     let mut tea = Command::new(programs::TEA);
     tea.env("NO_COLOR", "1")
         .args(["login", "list", "--output", "json"]);
     account.apply(&mut tea);
     let output = shoal_subprocess::Run::new(tea)
-        .timeout(super::api::TIMEOUT)
+        .timeout(crate::transport::api::TIMEOUT)
         .output()
         .await?;
     login_for(&output, host)
 }
 
 /// Send `request` as `login` and return the body of a successful response.
-pub(super) async fn send(
+pub(crate) async fn send(
     account: &Account,
     login: &TeaLogin,
     request: &Request,
@@ -54,7 +57,7 @@ pub(super) async fn send(
     let body = request.body.as_ref().map(ToString::to_string);
     let output = shoal_subprocess::Run::new(tea)
         .input(body.unwrap_or_default())
-        .timeout(super::api::TIMEOUT)
+        .timeout(crate::transport::api::TIMEOUT)
         .output_limit(limit)
         .capture()
         .await
@@ -67,7 +70,7 @@ pub(super) async fn send(
     // tea reports HTTP failures with exit status zero; --include adds the status.
     let status = status(&String::from_utf8_lossy(&output.stderr))?;
     let body = String::from_utf8(output.stdout).context("tea output is not UTF-8")?;
-    super::api::http_body(status, &body).map(str::to_owned)
+    crate::transport::api::http_body(status, &body).map(str::to_owned)
 }
 
 /// The login whose URL names `host`; an exact host and port wins over a

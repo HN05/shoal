@@ -8,9 +8,12 @@ use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
 use crate::{
-    daemon::links::{pr::current_head, wait::linked_items},
-    daemon::{notifications::NotificationKind, store},
-    forge::link::{ItemKind, Selection},
+    daemon::{
+        links::{pr::current_head, wait::linked_items},
+        notifications::NotificationKind,
+        store,
+    },
+    forge::items::link::{ItemKind, Selection},
     hooks::{self, Hook, HookKind},
     model::{ReviewMark, Workspace},
 };

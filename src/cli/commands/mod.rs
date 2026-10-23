@@ -63,7 +63,7 @@ use crate::{
         output::{Palette, Style},
     },
     env,
-    forge::link::ItemKind,
+    forge::items::link::ItemKind,
     model::Workspace,
     paths::Paths,
     shell,

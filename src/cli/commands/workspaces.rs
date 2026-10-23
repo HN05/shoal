@@ -24,7 +24,7 @@ use crate::{
         recovery::{ReconcileOptions, Report},
     },
     env, execution,
-    forge::{IssueInput, link::Selection, status::PrStatus},
+    forge::{IssueInput, items::link::Selection, review::status::PrStatus},
     git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
     model::{
@@ -1938,7 +1938,7 @@ pub(super) async fn done(ctx: &Context, workspace: Option<String>, cleanup: bool
 pub(super) async fn watch_items(
     ctx: &Context,
     workspace: String,
-    selection: crate::forge::link::Selection,
+    selection: crate::forge::items::link::Selection,
     timeout: Option<u64>,
 ) -> Result<i32> {
     let body = wait_for_items(ctx, &workspace, selection, timeout).await?;

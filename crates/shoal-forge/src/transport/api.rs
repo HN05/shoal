@@ -11,13 +11,14 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo,
     account::{Account, ForgejoLogin},
-    programs, tea,
+    backends::tea,
+    transport::programs,
 };
 
-pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// Forgejo's default maximum page size.
@@ -109,7 +110,7 @@ impl Request {
 
 impl ForgeRepo {
     /// Read plaintext logs without following redirects or exposing the login.
-    pub(super) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
+    pub(crate) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
         let token = match account.forgejo_login(&self.host).await? {
             ForgejoLogin::Tea(login) => {
                 let request = Request::get(endpoint.to_owned());
@@ -323,7 +324,7 @@ impl ForgeRepo {
     }
 
     /// Every item of a paginated list endpoint, read as `account`.
-    pub(super) async fn pages(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
+    pub(crate) async fn pages(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
         let (size, page_size) = match self.kind {
             ForgeKind::Forgejo => ("limit", PAGE_SIZE),
@@ -450,7 +451,7 @@ fn curl_body(text: &str) -> Result<&str> {
 }
 
 /// The body of a successful response, or the error a failed one reports.
-pub(super) fn http_body(status: u16, body: &str) -> Result<&str> {
+pub(crate) fn http_body(status: u16, body: &str) -> Result<&str> {
     if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
         bail!("HTTP {status}: {}", detail.trim());
@@ -510,12 +511,12 @@ fn upload_args(upload: &Upload) -> Result<Vec<String>> {
 }
 
 /// A curl config line, so the token never appears on a command line.
-pub(super) fn authorization(token: String) -> Vec<u8> {
+pub(crate) fn authorization(token: String) -> Vec<u8> {
     format!("header = \"Authorization: token {token}\"\n").into_bytes()
 }
 
 /// Where fj keeps the user's logins.
-pub(super) fn fj_keys_path() -> Result<PathBuf> {
+pub(crate) fn fj_keys_path() -> Result<PathBuf> {
     let data = std::env::var_os("XDG_DATA_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from);
@@ -524,7 +525,7 @@ pub(super) fn fj_keys_path() -> Result<PathBuf> {
 
 /// Where fj run with `home` keeps its logins; `data` is its XDG data
 /// directory, which Linux honors.
-pub(super) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
+pub(crate) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
     if cfg!(target_os = "macos") {
         home.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
     } else {
@@ -534,7 +535,7 @@ pub(super) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
 }
 
 /// The token fj saved for exactly this host.
-pub(super) fn fj_token(path: &Path, host: &str) -> Result<String> {
+pub(crate) fn fj_token(path: &Path, host: &str) -> Result<String> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("read fj logins at {}; run fj auth login", path.display()))?;
     let keys: serde_json::Value = serde_json::from_str(&text).context("parse fj logins")?;
@@ -553,7 +554,7 @@ pub(super) fn fj_token(path: &Path, host: &str) -> Result<String> {
 }
 
 /// The user's home directory, where the CLIs keep their logins.
-pub(super) fn home_dir() -> Result<PathBuf> {
+pub(crate) fn home_dir() -> Result<PathBuf> {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .context("HOME is not set")

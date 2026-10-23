@@ -3,14 +3,16 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    api::Request,
-    item::{Current, ItemState},
-    link::ItemKind,
-    list,
-    status::{Verdict, forgejo_reviews},
+    items::{
+        item::{Current, ItemState},
+        link::ItemKind,
+        list,
+    },
+    review::status::{Verdict, forgejo_reviews},
+    transport::api::Request,
 };
 
 /// A CI check in the states every REST forge is mapped to; `Pending` is the
@@ -24,7 +26,7 @@ pub(crate) struct RestCheck {
 impl ForgeRepo {
     /// The commits of the PR once it has merged, or `None` before. The PR must
     /// have `branch` as its head.
-    pub(super) async fn rest_merged_commits(
+    pub(crate) async fn rest_merged_commits(
         &self,
         account: &Account,
         number: u64,
@@ -44,7 +46,7 @@ impl ForgeRepo {
 
     /// The PR, which must have `branch` as its head when one is given. Only a
     /// failed request suggests logging in.
-    pub(super) async fn rest_branch_pull(
+    pub(crate) async fn rest_branch_pull(
         &self,
         account: &Account,
         number: u64,
@@ -64,7 +66,7 @@ impl ForgeRepo {
     }
 
     /// Title, head and base of a PR whose head branch is in this repository.
-    pub(super) async fn rest_pull_details(
+    pub(crate) async fn rest_pull_details(
         &self,
         account: &Account,
         number: u64,
@@ -73,7 +75,7 @@ impl ForgeRepo {
         self.branches(pull)
     }
 
-    pub(super) async fn rest_open_items(
+    pub(crate) async fn rest_open_items(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -99,7 +101,7 @@ impl ForgeRepo {
     }
 
     /// The CI checks on the PR's head commit.
-    pub(super) async fn rest_checks(
+    pub(crate) async fn rest_checks(
         &self,
         account: &Account,
         pull: &Current,
@@ -113,7 +115,7 @@ impl ForgeRepo {
     }
 
     /// Each submitted review's reviewer and verdict.
-    pub(super) async fn rest_verdicts(
+    pub(crate) async fn rest_verdicts(
         &self,
         account: &Account,
         number: u64,
@@ -129,7 +131,7 @@ impl ForgeRepo {
     }
 
     /// Each comment by ID, with what changes when it is added or edited.
-    pub(super) async fn rest_discussion(
+    pub(crate) async fn rest_discussion(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -159,7 +161,7 @@ impl ForgeRepo {
 
     /// Each review by ID with what changes when it is submitted, edited,
     /// dismissed or answered.
-    pub(super) async fn rest_review_activity(
+    pub(crate) async fn rest_review_activity(
         &self,
         account: &Account,
         number: u64,
@@ -227,7 +229,7 @@ fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
 }
 
 /// Each item's ID with the fields of it that matter for activity.
-pub(super) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(String, String)>> {
+pub(crate) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(String, String)>> {
     items
         .iter()
         .map(|item| {
@@ -289,7 +291,7 @@ fn list_item(item: &Value, field: &str) -> Result<list::Item> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::item::{Item, PrSummary};
+    use crate::items::item::{Item, PrSummary};
     use serde_json::json;
 
     fn pull(head_repository: Option<&str>) -> Current {

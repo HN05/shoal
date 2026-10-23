@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use super::{ForgeRepo, IssueInput};
+use crate::{ForgeRepo, IssueInput};
 
 crate::state::states!(ItemKind {
     Issue => "issue",

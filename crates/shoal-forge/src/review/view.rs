@@ -5,14 +5,16 @@ use futures_util::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
-    api::Request,
     gh,
-    link::ItemKind,
-    status::{CheckResult, PrStatus, ReviewState},
-    thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
+    items::link::ItemKind,
+    review::{
+        status::{CheckResult, PrStatus, ReviewState},
+        thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
+    },
+    transport::api::Request,
 };
 
 /// A failed lookup leaves `details` empty, or the discussion it would have
@@ -24,7 +26,7 @@ pub struct ItemView {
     #[serde(flatten)]
     pub details: Option<Details>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub check_logs: Vec<super::checks::CheckLog>,
+    pub check_logs: Vec<crate::ci::checks::CheckLog>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
@@ -282,7 +284,7 @@ impl ForgeRepo {
     }
 
     /// Each review of a PR with its inline comments.
-    pub(super) async fn forgejo_review_comments(
+    pub(crate) async fn forgejo_review_comments(
         &self,
         account: &Account,
         number: u64,
@@ -311,7 +313,7 @@ impl PrDetails {
         errors.extend(status.errors);
     }
 
-    pub(super) fn new(head: String, base: String, draft: bool) -> Self {
+    pub(crate) fn new(head: String, base: String, draft: bool) -> Self {
         Self {
             head,
             base,

@@ -5,14 +5,12 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    action::ThreadChange,
-    api::{HttpMethod, Request},
-    bitbucket::bitbucket_thread,
-    gitlab::gitlab_thread,
-    link::ItemKind,
+    backends::{bitbucket::bitbucket_thread, gitlab::gitlab_thread},
+    items::{action::ThreadChange, link::ItemKind},
+    transport::api::{HttpMethod, Request},
 };
 
 /// A review thread, found from any of its comments.
@@ -83,7 +81,7 @@ impl ForgeRepo {
 
     /// The requests that reply in `thread` and then change its resolution.
     /// Refuses before any request when the resolution cannot change.
-    pub(super) fn plan_thread(
+    pub(crate) fn plan_thread(
         &self,
         number: u64,
         thread: &Thread,
@@ -242,7 +240,7 @@ fn forgejo_inline_comments(reviews: &[(Value, Value)]) -> Vec<(u64, &Value)> {
 
 /// A GitHub review thread, which only GraphQL reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct GitHubThread {
+pub(crate) struct GitHubThread {
     /// The GraphQL ID its resolution mutations take.
     pub node: String,
     pub resolved: bool,
@@ -255,7 +253,7 @@ const GITHUB_THREADS: &str = "query($owner: String!, $name: String!, $number: In
 const GITHUB_THREAD_COMMENTS: &str = "query($id: ID!, $after: String) { node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { databaseId } } } } }";
 
 impl ForgeRepo {
-    pub(super) async fn github_threads(
+    pub(crate) async fn github_threads(
         &self,
         account: &Account,
         number: u64,
@@ -358,14 +356,14 @@ fn next_cursor(connection: &Value) -> Result<Option<String>> {
 /// What makes a Forgejo conversation: Forgejo adds a comment to the one of
 /// its review that ends on the same line, and starts one otherwise.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct ForgejoKey {
+pub(crate) struct ForgejoKey {
     review: u64,
     path: String,
     /// The last line of the comment's range, negative on the old side.
     line: i64,
 }
 
-pub(super) fn forgejo_thread_key(review: u64, comment: &Value) -> ForgejoKey {
+pub(crate) fn forgejo_thread_key(review: u64, comment: &Value) -> ForgejoKey {
     let line = forgejo_line(comment);
     let extra = comment["extra_lines_count"].as_i64().unwrap_or_default();
     ForgejoKey {
@@ -385,7 +383,7 @@ fn forgejo_line(comment: &Value) -> i64 {
 
 /// The first comment and resolution of each Forgejo thread. Forgejo marks
 /// resolution on one comment of the thread, which the web UI shows for all.
-pub(super) fn forgejo_threads(comments: &[(u64, &Value)]) -> BTreeMap<ForgejoKey, (u64, bool)> {
+pub(crate) fn forgejo_threads(comments: &[(u64, &Value)]) -> BTreeMap<ForgejoKey, (u64, bool)> {
     let mut threads: BTreeMap<_, (u64, bool)> = BTreeMap::new();
     for (review, comment) in comments {
         let Some(id) = comment["id"].as_u64() else {

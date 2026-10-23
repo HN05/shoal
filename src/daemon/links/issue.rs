@@ -97,7 +97,7 @@ impl Manager {
                         &workspace.id,
                         EventKind::Linked,
                         crate::model::Relation::Assigned,
-                        crate::forge::link::ItemKind::Issue,
+                        crate::forge::items::link::ItemKind::Issue,
                         &url,
                     )?;
                 }
@@ -150,7 +150,7 @@ impl Manager {
                         &workspace.id,
                         EventKind::Unlinked,
                         crate::model::Relation::Assigned,
-                        crate::forge::link::ItemKind::Issue,
+                        crate::forge::items::link::ItemKind::Issue,
                         &url,
                     )?;
                 }
@@ -228,7 +228,7 @@ mod tests {
             })
             .collect();
         assert_eq!(linked.len(), 1);
-        assert_eq!(linked[0].kind, crate::forge::link::ItemKind::Issue);
+        assert_eq!(linked[0].kind, crate::forge::items::link::ItemKind::Issue);
         assert_eq!(linked[0].url, url);
         assert!(manager.set_issue(&workspace.id, "317", None).await.is_err());
         assert!(

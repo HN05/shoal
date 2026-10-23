@@ -1,14 +1,14 @@
 //! Issue and PR locator syntax; callers select the route for their forge.
 use anyhow::{Context, Result, ensure};
 
-use super::{ForgeRepo, IssueInput};
+use crate::{ForgeRepo, IssueInput};
 
 const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
 const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
     /-/merge_requests/<number> or /pull-requests/<number>";
 
 #[derive(Clone, Copy)]
-pub(super) enum ItemRoute {
+pub(crate) enum ItemRoute {
     Issue,
     /// GitLab keeps item routes under `/-/`, which no project path can contain.
     GitLabIssue,
@@ -18,7 +18,7 @@ pub(super) enum ItemRoute {
     PullRequests,
 }
 
-pub(super) struct ItemUrl<'a> {
+pub(crate) struct ItemUrl<'a> {
     pub repository: &'a str,
     number: &'a str,
     url: &'a str,

@@ -1,9 +1,9 @@
 //! Which forge serves a repository, and the details of its API and web URLs
 //! that differ between forges.
-use super::{glab, locator::ItemRoute};
+use crate::{backends::glab, repo::locator::ItemRoute};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ForgeKind {
+pub(crate) enum ForgeKind {
     GitHub,
     /// Forgejo, and Gitea, which serves the same API.
     Forgejo,

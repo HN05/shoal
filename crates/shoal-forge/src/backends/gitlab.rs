@@ -5,17 +5,21 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
-use super::{
+use crate::{
     ForgeRepo,
     account::Account,
-    action::{Edit, MergeMethod},
-    api::{HttpMethod, Request, encode},
-    item::{Current, Item, ItemState, PrSummary, text},
-    link::ItemKind,
-    rest::RestCheck,
-    status::Verdict,
-    thread::{Target, Thread},
-    view::{Comment, Details, PrDetails, Review, ReviewComment},
+    backends::rest::RestCheck,
+    items::{
+        action::{Edit, MergeMethod},
+        item::{Current, Item, ItemState, PrSummary, text},
+        link::ItemKind,
+    },
+    review::{
+        status::Verdict,
+        thread::{Target, Thread},
+        view::{Comment, Details, PrDetails, Review, ReviewComment},
+    },
+    transport::api::{HttpMethod, Request, encode},
 };
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
@@ -26,7 +30,7 @@ const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "W
 
 impl ForgeRepo {
     /// An issue or merge request as GitLab reports it.
-    pub(super) fn gitlab_current(
+    pub(crate) fn gitlab_current(
         &self,
         kind: ItemKind,
         number: u64,
@@ -90,7 +94,7 @@ impl ForgeRepo {
 
 impl ForgeRepo {
     /// Look up the IDs of the users `names` that `current` has none for.
-    pub(super) async fn gitlab_user_ids(
+    pub(crate) async fn gitlab_user_ids(
         &self,
         account: &Account,
         names: &[String],
@@ -120,7 +124,7 @@ impl ForgeRepo {
 
     /// One update with every changed field; GitLab adds and removes labels by
     /// name, keeps draft state in the title and replaces reviewers by ID.
-    pub(super) fn gitlab_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+    pub(crate) fn gitlab_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         let item = &current.item;
         let mut fields = serde_json::Map::new();
         let mut title = edit.title.clone();
@@ -162,7 +166,7 @@ impl ForgeRepo {
     }
 
     /// The latest status of each CI job and external check on `head`.
-    pub(super) async fn gitlab_checks(
+    pub(crate) async fn gitlab_checks(
         &self,
         account: &Account,
         head: &str,
@@ -172,7 +176,7 @@ impl ForgeRepo {
     }
 
     /// Reviewers' states, with every approval as an approving review.
-    pub(super) async fn gitlab_verdicts(
+    pub(crate) async fn gitlab_verdicts(
         &self,
         account: &Account,
         number: u64,
@@ -188,7 +192,7 @@ impl ForgeRepo {
     }
 
     /// The item's notes that people wrote, without GitLab's system notes.
-    pub(super) async fn gitlab_notes(
+    pub(crate) async fn gitlab_notes(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -200,7 +204,7 @@ impl ForgeRepo {
         Ok(notes)
     }
 
-    pub(super) async fn gitlab_details(
+    pub(crate) async fn gitlab_details(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -230,7 +234,7 @@ impl ForgeRepo {
 
     /// Fills the item's comments and returns a merge request's reviews: one
     /// per diff thread, and one per approval or change request.
-    pub(super) async fn gitlab_discussion(
+    pub(crate) async fn gitlab_discussion(
         &self,
         account: &Account,
         kind: ItemKind,
@@ -263,7 +267,7 @@ impl ForgeRepo {
 }
 
 /// GitLab merges with the project's merge method, optionally squashing.
-pub(super) fn gitlab_merge(
+pub(crate) fn gitlab_merge(
     endpoint: String,
     method: MergeMethod,
     delete_branch: bool,
@@ -283,7 +287,7 @@ pub(super) fn gitlab_merge(
 }
 
 /// The title with GitLab's draft prefix added or removed.
-pub(super) fn draft_title(title: &str, draft: bool) -> String {
+pub(crate) fn draft_title(title: &str, draft: bool) -> String {
     let bare = DRAFT_PREFIXES
         .iter()
         .find_map(|prefix| {
@@ -413,7 +417,7 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The discussion with note `comment`, which replies and resolution name.
-pub(super) fn gitlab_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
+pub(crate) fn gitlab_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
     discussions.iter().find_map(|discussion| {
         let notes = notes(discussion);
         notes.iter().find(|note| note["id"] == comment)?;

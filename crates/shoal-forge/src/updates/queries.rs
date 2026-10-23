@@ -2,11 +2,13 @@ use super::{Check, MergeRevision, Snapshot};
 use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
+    backends::rest::RestCheck,
     gh,
-    item::{Current, ItemState},
-    link::ItemKind,
-    rest::RestCheck,
-    status::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
+    items::{
+        item::{Current, ItemState},
+        link::ItemKind,
+    },
+    review::status::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
 };
 use anyhow::{Context, Result, ensure};
 
@@ -511,7 +513,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("deploy", "success"), ("rust", "in_progress")]
         );
-        assert_eq!(status.review, Some(crate::status::ReviewState::Approved));
+        assert_eq!(
+            status.review,
+            Some(crate::review::status::ReviewState::Approved)
+        );
         assert!(status.errors.is_empty());
 
         pull["reviews"][0]["state"] = json!("LATER");

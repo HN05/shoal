@@ -865,7 +865,7 @@ pub enum PrCommand {
         item: ItemSelector,
         /// How to merge.
         #[arg(long, value_enum)]
-        method: crate::forge::action::MergeMethod,
+        method: crate::forge::items::action::MergeMethod,
         /// Delete the PR's branch on the forge after merging.
         #[arg(long)]
         delete_branch: bool,

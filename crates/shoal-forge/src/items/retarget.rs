@@ -1,11 +1,13 @@
 //! Change a PR's base branch, for stacked workspaces whose base PR merged.
 use anyhow::{Context, Result};
 
-use super::{
+use crate::{
     ForgeRepo,
     account::Account,
-    action::{Action, Edit},
-    link::ItemKind,
+    items::{
+        action::{Action, Edit},
+        link::ItemKind,
+    },
 };
 
 impl ForgeRepo {

@@ -81,7 +81,7 @@ pub struct Config {
     pub agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
-    pub bitbucket: crate::forge::bitbucket::Credentials,
+    pub bitbucket: crate::forge::backends::bitbucket::Credentials,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
     pub copy_ignored: Option<bool>,

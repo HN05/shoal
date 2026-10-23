@@ -6,9 +6,8 @@ use super::actions::{linked, workspace_forge};
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
-        checks::validate_check_name,
-        ci::{CiActed, CiAction},
-        link::ItemKind,
+        ci::{CiActed, CiAction, checks::validate_check_name},
+        items::link::ItemKind,
     },
 };
 

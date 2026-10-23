@@ -4,8 +4,8 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{ForgeKind, ForgeRepo, link::ItemKind};
 use crate::state::states;
+use crate::{ForgeKind, ForgeRepo, items::link::ItemKind};
 
 /// Forgejo treats a PR whose title starts with one of these as a draft.
 pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
@@ -180,7 +180,7 @@ impl ForgeRepo {
 
 /// The kind of the item a GitHub or Forgejo issue read returned, which
 /// reports a PR as an issue with a `pull_request` field.
-pub(super) fn issue_read_kind(number: u64, value: &Value) -> Result<ItemKind> {
+pub(crate) fn issue_read_kind(number: u64, value: &Value) -> Result<ItemKind> {
     ensure!(
         value["number"] == number,
         "the forge returned a different item than #{number}"
@@ -192,7 +192,7 @@ pub(super) fn issue_read_kind(number: u64, value: &Value) -> Result<ItemKind> {
     })
 }
 
-pub(super) fn text(value: &Value) -> Option<String> {
+pub(crate) fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
 

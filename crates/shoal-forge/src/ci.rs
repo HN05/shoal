@@ -1,17 +1,18 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the workspace's agent account.
+pub mod checks;
+
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use crate::state::states;
+use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    api::{HttpMethod, Request},
-    item::ItemState,
-    link::ItemKind,
+    items::{item::ItemState, link::ItemKind},
+    transport::api::{HttpMethod, Request},
 };
-use crate::state::states;
 
 states!(CiAction: ValueEnum {
     Rerun => "rerun",

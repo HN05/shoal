@@ -9,11 +9,13 @@ use crate::{
     forge::{
         ForgeRepo,
         account::{Account, AgentLogins},
-        action::{Action, Edit},
         conventions,
-        create::{NewIssue, NewPull, PullOptions},
-        item::{Item, ItemState, Opened},
-        link::ItemKind,
+        items::{
+            action::{Action, Edit},
+            create::{NewIssue, NewPull, PullOptions},
+            item::{Item, ItemState, Opened},
+            link::ItemKind,
+        },
     },
     fsutil::expand_home,
     model::{Relation, ReviewMark, Workspace},

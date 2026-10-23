@@ -91,7 +91,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
         "w",
         crate::daemon::events::EventKind::Linked,
         crate::model::Relation::Assigned,
-        crate::forge::link::ItemKind::Pr,
+        crate::forge::items::link::ItemKind::Pr,
         "https://forge.example/team/repo/pulls/7",
     )?;
     let record: String = db.query_row(
@@ -132,7 +132,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
     crate::daemon::events::record_item_activity(
         &db,
         "w",
-        crate::forge::link::ItemKind::Pr,
+        crate::forge::items::link::ItemKind::Pr,
         &update.url,
         &update,
     )?;

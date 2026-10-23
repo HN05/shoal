@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::{ForgeRepo, labels::Label},
+    forge::{ForgeRepo, conventions::labels::Label},
     model::Workspace,
     protocol::Method,
     repository,

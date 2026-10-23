@@ -1,7 +1,12 @@
 //! Look up issue state.
 use anyhow::{Context, Result, ensure};
 
-use super::{ForgeKind, ForgeRepo, Query, account::Account, gh, item::ItemState, link::ItemKind};
+use crate::{
+    ForgeKind, ForgeRepo, Query,
+    account::Account,
+    gh,
+    items::{item::ItemState, link::ItemKind},
+};
 
 impl ForgeRepo {
     pub async fn issue_closed(&self, account: &Account, number: u64) -> Result<bool> {
@@ -9,7 +14,7 @@ impl ForgeRepo {
     }
 
     /// An issue's state; a PR's number is refused.
-    pub(super) async fn issue_state(&self, account: &Account, number: u64) -> Result<ItemState> {
+    pub(crate) async fn issue_state(&self, account: &Account, number: u64) -> Result<ItemState> {
         match self.kind {
             ForgeKind::GitHub => {
                 let id = number.to_string();
@@ -36,7 +41,7 @@ impl ForgeRepo {
     }
 }
 
-pub(super) fn require_open(state: ItemState) -> Result<()> {
+pub(crate) fn require_open(state: ItemState) -> Result<()> {
     ensure!(
         state == ItemState::Open,
         "issue is already closed; reopen it before starting an issue workspace"
@@ -45,7 +50,7 @@ pub(super) fn require_open(state: ItemState) -> Result<()> {
 }
 
 /// The state `gh issue view --json number,state` reports.
-pub(super) fn github_state(output: &str, number: u64) -> Result<ItemState> {
+pub(crate) fn github_state(output: &str, number: u64) -> Result<ItemState> {
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "UPPERCASE")]
     enum State {

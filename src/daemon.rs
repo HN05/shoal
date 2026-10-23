@@ -1081,8 +1081,8 @@ async fn wait_pr_updates(
         request_id,
         manager,
         workspace,
-        crate::forge::link::Selection {
-            kind: Some(crate::forge::link::ItemKind::Pr),
+        crate::forge::items::link::Selection {
+            kind: Some(crate::forge::items::link::ItemKind::Pr),
             input: None,
         },
         timeout_secs,
@@ -1095,7 +1095,7 @@ async fn watch_item_updates(
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
-    selection: crate::forge::link::Selection,
+    selection: crate::forge::items::link::Selection,
     timeout_secs: Option<u64>,
 ) -> Result<()> {
     let updates = async {

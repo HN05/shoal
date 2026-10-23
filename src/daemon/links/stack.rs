@@ -9,7 +9,7 @@ use super::{
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     forge::{
-        link::ItemKind,
+        items::link::ItemKind,
         updates::{Update, UpdateKind},
     },
     model::{Workspace, WorkspaceRef},

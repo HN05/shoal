@@ -6,17 +6,18 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{
+use crate::state::states;
+use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    api::{HttpMethod, Request},
-    attach::{Attachment, Holder, Pending},
-    bitbucket,
-    gitlab::gitlab_merge,
-    item::{Current, Item, ItemState, draft_prefix},
-    link::ItemKind,
+    backends::{bitbucket, gitlab::gitlab_merge},
+    items::{
+        attach::{Attachment, Holder, Pending},
+        item::{Current, Item, ItemState, draft_prefix},
+        link::ItemKind,
+    },
+    transport::api::{HttpMethod, Request},
 };
-use crate::state::states;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -265,7 +266,7 @@ impl ForgeRepo {
     /// reported back like anyone else's, rather than failing a post that
     /// succeeded.
     fn posted(&self, action: &Action, response: &serde_json::Value) -> Option<String> {
-        use super::updates::DISCUSSION;
+        use crate::updates::DISCUSSION;
         let reply = matches!(action, Action::Thread(change) if change.reply.is_some());
         let (source, field) = match (action, self.kind) {
             (Action::Comment { .. }, ForgeKind::GitHub) => (DISCUSSION, "node_id"),
@@ -278,7 +279,7 @@ impl ForgeRepo {
         response
             .get(field)
             .filter(|id| id.is_string() || id.is_number())
-            .map(|id| super::updates::activity_key(source, id))
+            .map(|id| crate::updates::activity_key(source, id))
     }
 
     /// The requests that carry out `action`, after reading what it needs
@@ -324,7 +325,7 @@ impl ForgeRepo {
                 &Request::get(self.item_endpoint(ItemKind::Issue, number)),
             )
             .await?;
-        super::item::issue_read_kind(number, &value)
+        crate::items::item::issue_read_kind(number, &value)
     }
 
     /// The requests that carry out `action` on `current`, in order.
@@ -430,7 +431,7 @@ impl ForgeRepo {
                         HttpMethod::Delete,
                         self.repo_endpoint(&format!(
                             "git/refs/heads/{}",
-                            super::api::encode(&pr.head, true)
+                            crate::transport::api::encode(&pr.head, true)
                         )),
                         None,
                     ));
@@ -563,7 +564,7 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::item::PrSummary;
+    use crate::items::item::PrSummary;
     use serde_json::Value;
 
     fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {

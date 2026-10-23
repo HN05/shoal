@@ -128,7 +128,7 @@ impl Default for Relation {
 /// An issue or PR a workspace records without lifecycle effect.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkedItem {
-    pub kind: crate::forge::link::ItemKind,
+    pub kind: crate::forge::items::link::ItemKind,
     pub url: String,
     /// The item's title when the recording caller knew it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -241,7 +241,7 @@ pub struct RestoredWorkspace {
 pub struct ReviewMark {
     /// The linked issue or PR; both are absent when the mark covers the
     /// workspace itself.
-    pub kind: Option<crate::forge::link::ItemKind>,
+    pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
     pub created_at: i64,
@@ -375,7 +375,7 @@ pub struct WorkspaceStatus {
     pub cleanup_at: Option<u64>,
     /// The current state of each watched PR.
     #[serde(default)]
-    pub prs: Vec<crate::forge::status::PrStatus>,
+    pub prs: Vec<crate::forge::review::status::PrStatus>,
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,
@@ -471,7 +471,7 @@ pub struct IssueStatus {
 pub enum WorkspaceTarget {
     /// An issue or PR number or URL.
     Item {
-        kind: crate::forge::link::ItemKind,
+        kind: crate::forge::items::link::ItemKind,
         input: String,
     },
     /// A resource pool or member with a lease.
@@ -694,7 +694,7 @@ pub struct Selected {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectedItem {
     pub url: String,
-    pub kind: crate::forge::link::ItemKind,
+    pub kind: crate::forge::items::link::ItemKind,
 }
 
 impl Selected {
@@ -703,12 +703,13 @@ impl Selected {
     pub(crate) fn kind_of(
         &self,
         number: u64,
-    ) -> anyhow::Result<Option<crate::forge::link::ItemKind>> {
+    ) -> anyhow::Result<Option<crate::forge::items::link::ItemKind>> {
         let mut kinds = self
             .items
             .iter()
             .filter(|item| {
-                crate::forge::link::item(item.kind, &item.url).is_ok_and(|(_, item)| item == number)
+                crate::forge::items::link::item(item.kind, &item.url)
+                    .is_ok_and(|(_, item)| item == number)
             })
             .map(|item| item.kind);
         let kind = kinds.next();
@@ -723,7 +724,7 @@ impl Selected {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::forge::link::ItemKind;
+    use crate::forge::items::link::ItemKind;
 
     #[test]
     fn selected_numbers_name_one_kind() {

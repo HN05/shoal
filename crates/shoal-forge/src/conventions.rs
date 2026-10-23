@@ -2,11 +2,18 @@
 //! requires, a label scheme on the forge, and the forge's description
 //! templates. Shoal checks them where agents open and mark items, so the
 //! repository's conventions reach agents at the moment they apply.
+pub mod labels;
+
 use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use super::{ForgeKind, ForgeRepo, account::Account, item::Item, labels::Label, link::ItemKind};
+use crate::{
+    ForgeKind, ForgeRepo,
+    account::Account,
+    conventions::labels::Label,
+    items::{item::Item, link::ItemKind},
+};
 
 /// Refuse a new item of `kind` whose labels leave a required entry unmet,
 /// naming the repository's labels that would meet it.
@@ -341,7 +348,7 @@ fn described(label: &Label) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::item::ItemState;
+    use crate::items::item::ItemState;
 
     fn item(kind: ItemKind) -> Item {
         Item {

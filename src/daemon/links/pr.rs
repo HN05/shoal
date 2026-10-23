@@ -11,7 +11,7 @@ use crate::{
         store,
         workspace::Manager,
     },
-    forge::{ForgeRepo, account::Account, status::PrStatus},
+    forge::{ForgeRepo, account::Account, review::status::PrStatus},
     git,
     model::Workspace,
     repository,
@@ -286,10 +286,10 @@ impl Manager {
                 tx.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2) ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record", rusqlite::params![id, serde_json::to_string(&registration)?])?;
             } else { tx.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [&id])?; }
             for url in &removed {
-                events::record_link(&tx, &id, EventKind::Unlinked, crate::model::Relation::Assigned, crate::forge::link::ItemKind::Pr, url)?;
+                events::record_link(&tx, &id, EventKind::Unlinked, crate::model::Relation::Assigned, crate::forge::items::link::ItemKind::Pr, url)?;
             }
             for url in &added {
-                events::record_link(&tx, &id, EventKind::Linked, crate::model::Relation::Assigned, crate::forge::link::ItemKind::Pr, url)?;
+                events::record_link(&tx, &id, EventKind::Linked, crate::model::Relation::Assigned, crate::forge::items::link::ItemKind::Pr, url)?;
             }
             tx.commit()?;
             Ok(())

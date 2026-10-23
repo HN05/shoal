@@ -2,39 +2,23 @@
 //! through each forge's own CLI login or REST API. Callers choose the
 //! [`account::Account`] a request acts as; this crate never decides who may act.
 pub mod account;
-pub mod action;
-mod api;
-pub mod attach;
-pub mod bitbucket;
-pub mod checks;
+pub mod backends;
 pub mod ci;
 pub mod conventions;
-pub mod create;
-mod gitlab;
-mod glab;
-pub mod issue;
-pub mod item;
-mod kind;
-pub mod labels;
-pub mod link;
-pub mod list;
-mod locator;
-pub mod programs;
-pub mod remote_url;
-mod rest;
-mod retarget;
+pub mod items;
+pub mod repo;
+pub mod review;
 mod state;
-pub mod status;
-mod tea;
-mod thread;
+pub mod transport;
 pub mod updates;
-pub mod view;
 
 use anyhow::{Context, Result, ensure};
 
-use kind::ForgeKind;
-use locator::ItemRoute;
-use remote_url::{RemoteUrl, Transport};
+use backends::kind::ForgeKind;
+use repo::{
+    locator::ItemRoute,
+    remote_url::{RemoteUrl, Transport},
+};
 
 /// Classify before resolving a repository; validate identity and number at lookup.
 /// In particular, zero and overflowing numbers still use number-based targeting.
@@ -227,10 +211,10 @@ impl ForgeKind {
             Self::GitHub => github_issue_details(repo, account, number).await?,
             Self::Forgejo | Self::GitLab | Self::Bitbucket => {
                 let issue = repo
-                    .read(account, link::ItemKind::Issue, number)
+                    .read(account, items::link::ItemKind::Issue, number)
                     .await
                     .context(self.login_hint())?;
-                issue::require_open(issue.item.state)?;
+                items::issue::require_open(issue.item.state)?;
                 (issue.item.title, issue.body)
             }
         };
@@ -256,7 +240,7 @@ async fn github_issue_details(
         "number,title,body,state",
     ];
     let text = gh(account, &args, Query::Issue).await?;
-    issue::require_open(issue::github_state(&text, number)?)?;
+    items::issue::require_open(items::issue::github_state(&text, number)?)?;
     #[derive(serde::Deserialize)]
     struct GitHubIssue {
         number: u64,
@@ -372,7 +356,7 @@ enum Query {
 
 /// Run `gh` as `account`, the CLI that reads GitHub's items.
 async fn gh(account: &account::Account, args: &[&str], query: Query) -> Result<String> {
-    let tool = programs::GH;
+    let tool = transport::programs::GH;
     let mut command = tokio::process::Command::new(tool);
     command.args(args).env("NO_COLOR", "1");
     account.apply(&mut command);

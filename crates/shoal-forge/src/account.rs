@@ -6,10 +6,12 @@ use anyhow::{Context, Result, ensure};
 
 use tokio::sync::OnceCell;
 
-use super::{
-    api::{fj_keys_at, fj_keys_path, fj_token},
-    bitbucket::Credentials,
-    tea::{self, TeaLogin},
+use crate::{
+    backends::{
+        bitbucket::Credentials,
+        tea::{self, TeaLogin},
+    },
+    transport::api::{fj_keys_at, fj_keys_path, fj_token},
 };
 /// Starts a forge CLI as someone other than the user, such as through
 /// their wrappers.
@@ -47,7 +49,7 @@ pub struct Account {
 }
 
 /// How a Forgejo or Gitea request authenticates.
-pub(super) enum ForgejoLogin {
+pub(crate) enum ForgejoLogin {
     /// The token fj saved for the host.
     Token(String),
     /// tea's login for the host, which sends the request itself.
@@ -81,7 +83,7 @@ impl Account {
     }
 
     /// Select this account's CLI for a request.
-    pub(super) fn apply(&self, command: &mut tokio::process::Command) {
+    pub(crate) fn apply(&self, command: &mut tokio::process::Command) {
         if let Some(launch) = &self.launch {
             launch.apply(command);
         }
@@ -90,7 +92,7 @@ impl Account {
     /// The login for a Forgejo or Gitea `host`: fj's token, then tea's
     /// login. The user may have neither, which leaves an anonymous request;
     /// an agent with a wrapper must have a login through it.
-    pub(super) async fn forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
+    pub(crate) async fn forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
         ensure!(
             !self.fj_home_missing,
             "set agent_auth.fj_home to the HOME the agent's fj wrapper uses, so Shoal can use the agent's Forgejo login"
@@ -132,7 +134,7 @@ impl Account {
     }
 
     /// The curl config line that signs a Bitbucket request in, if any.
-    pub(super) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
+    pub(crate) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
         self.bitbucket_authorization
             .get_or_try_init(|| self.bitbucket.authorization())
             .await

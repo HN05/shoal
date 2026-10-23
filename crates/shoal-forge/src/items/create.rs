@@ -4,15 +4,17 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{
+use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    action::{Action, Edit, draft_title},
-    api::{HttpMethod, Request, encode},
-    attach::{Attachment, Pending},
-    gitlab,
-    item::Item,
-    link::ItemKind,
+    backends::gitlab,
+    items::{
+        action::{Action, Edit, draft_title},
+        attach::{Attachment, Pending},
+        item::Item,
+        link::ItemKind,
+    },
+    transport::api::{HttpMethod, Request, encode},
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

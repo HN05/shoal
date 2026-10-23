@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Whether glab has a login for `host`, read from its configuration without
 /// running it, since every forge lookup selects a backend.
-pub(super) fn has_login(host: &str) -> bool {
+pub(crate) fn has_login(host: &str) -> bool {
     let named = |candidate: &str| matches_host(candidate, host);
     if std::env::var("GITLAB_HOST").is_ok_and(|value| named(&value)) {
         return true;
@@ -22,7 +22,11 @@ fn config_path() -> Option<PathBuf> {
     }
     let config = directory("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| super::api::home_dir().ok().map(|home| home.join(".config")))?;
+        .or_else(|| {
+            crate::transport::api::home_dir()
+                .ok()
+                .map(|home| home.join(".config"))
+        })?;
     Some(config.join("glab-cli/config.yml"))
 }
 

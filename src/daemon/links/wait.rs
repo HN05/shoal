@@ -15,7 +15,7 @@ use crate::{
     daemon::{agent_messages::AgentMessage, store, workspace::Manager},
     forge::{
         ForgeRepo,
-        link::{ItemKind, Selection},
+        items::link::{ItemKind, Selection},
         updates::{MergeCheck, Snapshot, Update},
     },
     model::{ConflictCheck, Workspace},

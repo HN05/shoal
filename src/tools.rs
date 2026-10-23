@@ -1,5 +1,5 @@
 //! Executable names and the dependencies checked by doctor on every installation.
-use crate::forge::programs;
+use crate::forge::transport::programs;
 
 #[derive(Clone, Copy)]
 pub enum Dependency {

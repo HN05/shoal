@@ -137,7 +137,7 @@ mod present_or_null {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewEvent {
     /// The linked issue or PR; both are null for a workspace mark.
-    pub kind: Option<crate::forge::link::ItemKind>,
+    pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
 }
@@ -150,7 +150,7 @@ pub struct AgentStateEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkEvent {
-    pub kind: crate::forge::link::ItemKind,
+    pub kind: crate::forge::items::link::ItemKind,
     pub url: String,
     /// Absent from events recorded before relations existed, which were assignments.
     #[serde(default)]
@@ -159,7 +159,7 @@ pub struct LinkEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemEvent {
-    pub kind: crate::forge::link::ItemKind,
+    pub kind: crate::forge::items::link::ItemKind,
     pub url: String,
     /// The action's name, such as `edit` or `merge`.
     pub action: String,
@@ -167,7 +167,7 @@ pub struct ItemEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemActivityEvent {
-    pub kind: crate::forge::link::ItemKind,
+    pub kind: crate::forge::items::link::ItemKind,
     pub url: String,
     pub update: ItemActivityUpdate,
 }
@@ -268,7 +268,7 @@ pub(crate) fn record_link(
     id: &str,
     event_kind: EventKind,
     relation: crate::model::Relation,
-    kind: crate::forge::link::ItemKind,
+    kind: crate::forge::items::link::ItemKind,
     url: &str,
 ) -> Result<()> {
     ensure!(matches!(
@@ -290,7 +290,7 @@ pub(crate) fn record_link(
 pub(crate) fn record_item(
     db: &Connection,
     id: &str,
-    kind: crate::forge::link::ItemKind,
+    kind: crate::forge::items::link::ItemKind,
     url: &str,
     action: &str,
 ) -> Result<()> {
@@ -309,7 +309,7 @@ pub(crate) fn record_item(
 pub(crate) fn record_item_activity(
     db: &Connection,
     id: &str,
-    kind: crate::forge::link::ItemKind,
+    kind: crate::forge::items::link::ItemKind,
     url: &str,
     update: &crate::forge::updates::Update,
 ) -> Result<()> {

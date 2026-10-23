@@ -11,7 +11,7 @@ mod queries;
 const FAILURE_REPORT_INTERVAL: u64 = 600;
 
 /// The comment source of an item's discussion, where Shoal posts comments.
-pub(super) const DISCUSSION: &str = "discussion";
+pub(crate) const DISCUSSION: &str = "discussion";
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -33,7 +33,7 @@ pub struct Update {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub delivery: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<super::status::CheckResult>,
+    pub check: Option<crate::review::status::CheckResult>,
     /// The child workspace whose item this is, when its parent's agent
     /// receives the update.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -150,7 +150,7 @@ impl Snapshot {
                 emit(
                     UpdateKind::CiCompleted,
                     format!("{}: {}", check.name, check.state),
-                    Some(super::status::CheckResult {
+                    Some(crate::review::status::CheckResult {
                         name: check.name.clone(),
                         result: check.state.to_ascii_lowercase(),
                     }),
@@ -313,7 +313,7 @@ impl Snapshot {
 }
 
 /// A forge ID as text: strings without JSON quotes, numbers as digits.
-pub(super) fn id_text(id: &serde_json::Value) -> String {
+pub(crate) fn id_text(id: &serde_json::Value) -> String {
     match id {
         serde_json::Value::String(id) => id.clone(),
         id => id.to_string(),
@@ -321,12 +321,12 @@ pub(super) fn id_text(id: &serde_json::Value) -> String {
 }
 
 /// The activity key of `source`'s comment or review `id`.
-pub(super) fn activity_key(source: &str, id: &serde_json::Value) -> String {
+pub(crate) fn activity_key(source: &str, id: &serde_json::Value) -> String {
     format!("{source}:{}", id_text(id))
 }
 
 /// The activity key of the discussion comment `id`.
-pub(super) fn discussion_key(id: &serde_json::Value) -> String {
+pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
     activity_key(DISCUSSION, id)
 }
 

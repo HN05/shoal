@@ -5,8 +5,8 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        checks::{CheckLog, validate_check_name},
-        link::{ItemKind, Selection},
+        ci::checks::{CheckLog, validate_check_name},
+        items::link::{ItemKind, Selection},
         updates::Update,
     },
 };
@@ -80,7 +80,7 @@ impl Manager {
 
 #[cfg(test)]
 mod tests {
-    use crate::forge::checks::{CheckLog, TAIL_BYTES};
+    use crate::forge::ci::checks::{CheckLog, TAIL_BYTES};
 
     #[test]
     fn the_longest_log_tail_fits_one_protocol_frame_even_when_escaped() {
