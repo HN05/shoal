@@ -1,7 +1,7 @@
 //! Value queries with caller-selected Git invocation policy.
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use super::run;
 
@@ -29,6 +29,18 @@ pub async fn symbolic_revision(
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
     run(repo, &["rev-parse", "--symbolic-full-name", reference]).await
+}
+
+/// HEAD's commit and the branch it is on, `None` when detached, read with
+/// one Git process instead of two.
+pub async fn head_and_branch(repo: &Path) -> Result<(String, Option<String>)> {
+    let output = run(repo, &["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]).await?;
+    let mut lines = output.lines();
+    let commit = lines.next().context("git rev-parse printed no commit")?;
+    let branch = lines
+        .next()
+        .and_then(|name| name.strip_prefix("refs/heads/"));
+    Ok((commit.to_owned(), branch.map(str::to_owned)))
 }
 
 /// Detached HEAD returns an empty branch name.
@@ -111,5 +123,21 @@ mod tests {
         git(&repo, &["config", "branch.topic.pushRemote", "mine"]);
         assert_eq!(push_remote(&repo, "topic").await.unwrap(), "mine");
         assert_eq!(push_remote(&repo, "other").await.unwrap(), "fork");
+    }
+
+    #[tokio::test]
+    async fn head_and_branch_names_no_branch_when_detached() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        git(&repo, &["checkout", "-q", "-b", "feature/x"]);
+        let commit = revision(&repo, "HEAD", run)
+            .await
+            .unwrap()
+            .trim()
+            .to_owned();
+        let on_branch = head_and_branch(&repo).await.unwrap();
+        assert_eq!(on_branch, (commit.clone(), Some("feature/x".to_owned())));
+        git(&repo, &["checkout", "-q", "--detach"]);
+        assert_eq!(head_and_branch(&repo).await.unwrap(), (commit, None));
     }
 }

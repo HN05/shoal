@@ -611,14 +611,12 @@ fn record_pr_link(db: &Connection, id: &str, kind: EventKind, url: &str) -> Resu
 }
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
+    let (head, branch) = git::head_and_branch(&workspace.path).await?;
     ensure!(
-        git::current_branch(&workspace.path).await?.trim_end() == workspace.branch,
+        branch.as_deref() == Some(workspace.branch.as_str()),
         "workspace is not on its recorded branch"
     );
-    Ok(git::revision(&workspace.path, "HEAD", git::run)
-        .await?
-        .trim()
-        .to_owned())
+    Ok(head)
 }
 
 /// Look up each watched PR concurrently; a failure stays on its PR.
