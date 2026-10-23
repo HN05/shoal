@@ -10,7 +10,7 @@ use crate::{
     daemon::{log, store},
     fsutil, git,
     model::{MovedRepository, Repository, Workspace},
-    process,
+    process, seed,
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
@@ -373,8 +373,8 @@ impl Manager {
         self.close_move(&intent).await
     }
 
-    /// Repair Git's links between the checkout and its present worktrees, and
-    /// record their admin directories.
+    /// Repair Git's links between the checkout and its present worktrees,
+    /// including the seed's, and record the workspaces' admin directories.
     async fn reconnect_worktrees(&self, id: &str) -> Result<()> {
         let repo = self.repository(id).await?;
         let present: Vec<_> = self
@@ -383,7 +383,12 @@ impl Manager {
             .into_iter()
             .filter(|workspace| workspace.path.exists())
             .collect();
-        let paths: Vec<_> = present.iter().map(|w| w.path.clone()).collect();
+        let seed = seed::Layout::of(&repo).map(|layout| layout.worktree());
+        let paths: Vec<_> = present
+            .iter()
+            .map(|w| w.path.clone())
+            .chain(seed.filter(|worktree| worktree.exists()))
+            .collect();
         git::repair_worktrees(&repo.path, &paths).await?;
         for workspace in &present {
             if let Err(error) = self.record_worktree_identity(workspace).await {
@@ -535,6 +540,11 @@ mod tests {
     async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         let (_temp, manager, repo, workspace, root) = cloned().await?;
         let old = repo.workspaces_dir.clone().context("no directory")?;
+        // The seed's locked worktree moves and reconnects too.
+        test_support::git(
+            &repo.path,
+            &["worktree", "add", "--lock", "--detach", "../.seed/worktree"],
+        );
 
         let moved = manager.move_repositories().await?;
         let [moved] = moved.as_slice() else {
@@ -558,11 +568,15 @@ mod tests {
         );
         manager.verify_worktree(&workspace).await?;
         let trees = git::worktrees(&moved.repository.path, git::run).await?;
-        assert!(
-            trees
-                .iter()
-                .any(|tree| tree.path == workspace.path && !tree.prunable)
-        );
+        for path in [&workspace.path, &directory.join(".seed/worktree")] {
+            assert!(
+                trees
+                    .iter()
+                    .any(|tree| tree.path == *path && !tree.prunable),
+                "{} is not connected",
+                path.display()
+            );
+        }
 
         // Moving again finds nothing outside the root, and new workspaces go there.
         assert!(manager.move_repositories().await?.is_empty());
