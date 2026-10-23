@@ -7,7 +7,9 @@ description: Use inside a Shoal workspace to finish assignments with `shoal done
 
 Use `--json`, omit targets for the current context, and request only needed resources.
 When acquisition returns `approval_pending`, give the user the request number and wait
-for an unscoped `shoal approve <number>` or `shoal deny <number>`. Supply `--reason` for
+for an unscoped `shoal approve <number>` or `shoal deny <number>`. When you no
+longer need a pending request, withdraw it with
+`shoal --json approvals withdraw <number>`. Supply `--reason` for
 protected access; inspect your requests with `shoal approvals`. Retry after approval,
 and stop on `approval_denied`. Never remove scope to approve your own request.
 

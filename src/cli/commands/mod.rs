@@ -58,8 +58,8 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand, QuestionsCommand,
-        ShellCommand, WorkspaceScope, agents, client,
+        ApprovalsCommand, Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand,
+        QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -571,7 +571,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
-        Command::Approvals { workspace } => approvals::list(&ctx, workspace).await,
+        Command::Approvals {
+            command: Some(ApprovalsCommand::Withdraw { id, workspace }),
+            ..
+        } => approvals::withdraw(&ctx, workspace, id).await,
+        Command::Approvals {
+            command: None,
+            workspace,
+        } => approvals::list(&ctx, workspace).await,
         Command::Approve { id, title, body } => {
             let details = ProposalDecision {
                 title,

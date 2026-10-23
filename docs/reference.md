@@ -2751,6 +2751,15 @@ the decision. Pending requests produce a daemon notification, collapsed until re
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.
 
+`shoal approvals withdraw <number> [--workspace W]` lets the requesting workspace
+take back a pending request it no longer needs, as releasing a lease does for a
+lease request. The request stays listed as `withdrawn` on the same terms as
+`outdated`, except a proposed issue, which is deleted as a decided proposal is.
+Withdrawal deletes the request's `approval_requested` notification while it is
+unread; otherwise its deciding coordinator is told, or the user gets
+`approval_withdrawn`. A command that retries the request, such as a queued
+`acquire`, requests it again.
+
 A request from a [child workspace](#child-workspaces) with an agent of its own
 goes up the tree first. The nearest coordinating agent above it that holds an
 approved grant for the same target and settings decides it instead of the user,

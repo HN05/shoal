@@ -529,7 +529,12 @@ pub enum Command {
         scope: WorkspaceScope,
     },
     /// List approval requests and retained grants (scoped callers see their own workspace).
-    Approvals { workspace: Option<String> },
+    #[command(args_conflicts_with_subcommands = true)]
+    Approvals {
+        #[command(subcommand)]
+        command: Option<ApprovalsCommand>,
+        workspace: Option<String>,
+    },
     /// Approve the exact settings recorded in a request; does not allocate
     /// capacity. Approving an issue or PR proposal opens it.
     Approve {
@@ -1102,6 +1107,18 @@ pub struct ItemArgs {
 pub enum NotificationsCommand {
     /// Delete all notifications, including unread ones.
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ApprovalsCommand {
+    /// Withdraw a pending request the workspace's agent no longer needs.
+    Withdraw {
+        /// Request number.
+        id: i64,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

@@ -16747,6 +16747,27 @@ fn approval_decisions_pick_an_omitted_pending_request() {
     assert!(statuses.contains(&(signing, "denied".into())));
 }
 
+#[test]
+fn agents_withdraw_requests_they_no_longer_need() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    let web = pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let id = web["id"].to_string();
+    let output = scoped_command(&fixture, "agent", &["approvals", "withdraw", &id]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["approvals"])[0]["status"], "withdrawn");
+    let refused = fixture.run(&["approve", &id]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("is withdrawn"),
+        "{refused:?}"
+    );
+}
+
 fn pending_approval(output: Output) -> Value {
     assert_eq!(
         output.status.code(),
