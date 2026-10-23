@@ -1043,15 +1043,29 @@ A chat passes a question up by asking the user, who attends it. Holding no
 grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
 one and focuses it, numbered by the lowest free number among the repository's
-running chats. The chat waits for the user to speak first: an agent that takes
-instructions apart from the first message gets them so, and another gets them as
-its first message, which starts a turn and so asks only for a short reply.
+running chats. A chat waits for the user to speak first unless it opens on a
+task: an agent that takes instructions apart from the first message gets them
+so, and another gets them as its first message, which starts a turn and so asks
+only for a short reply or carries the task.
 A chat's launcher runs where only the checkout's path has a value, so one that
 uses another workspace placeholder is refused rather than given the literal text.
 A Happy chat has no terminal to focus: like a workspace Happy session it starts
 detached, as Happy's daemon would start it, so the user continues it in the
 Happy app, and the process that recorded the chat hands the record to the
 session's process.
+
+Issues split by whether their plan is settled: `[issue] plan_label` marks one
+that needs the owner's choices and `planned_label` one whose body holds a plan
+an agent implements without asking. Both are repository configuration, so Shoal
+assumes no label scheme, and issues with neither stay outside the flow.
+`shoal plan` settles a plan in a chat, not a workspace: planning changes no
+code, needs the user's attention and their authority to rewrite the issue, and
+the chat then coordinates the implementing workspace it opens. The plan goes
+into the issue body because the body is all an implementing agent's prompt
+carries. The planning task is built in, like an issue review's, since a
+repository's planning conventions belong in its own contributor rules, and it
+keeps the discussion in the conversation: questions and forge comments serve
+agents blocked during implementation.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither

@@ -368,6 +368,10 @@ pub struct Issue {
     pub required_labels: Vec<String>,
     /// Whether scoped callers may open issues in other repositories.
     pub other_repositories: repo::OtherRepositories,
+    /// Marks an issue that needs a plan before anyone implements it.
+    pub plan_label: Option<String>,
+    /// Marks an issue whose body holds a settled plan.
+    pub planned_label: Option<String>,
 }
 
 /// Which agent forge writes wait for the user's approval.

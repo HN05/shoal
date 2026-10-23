@@ -804,6 +804,27 @@ chat, which returns it to you. While it runs, the chat
 [coordinates](#child-workspaces) the workspaces it owns; one that ends before
 receiving their events gives you the notifications they stand for.
 
+### Planning issues
+
+`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--here] [-- ARGS]`
+starts a [chat](#chats) that settles an issue's plan with you before anyone
+implements it. The issue is a number or URL; without one, a picker offers the
+open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
+one from either end instead. The repository follows `shoal review --issue`, and
+the agent, tab and session follow `shoal chat`, with a tab labelled
+`<repo>#<number> plan`. Instead of waiting for you, the agent starts on the
+issue: it checks it against the default branch, talks the open points through
+with you in the chat, then rewrites the issue's body with a Plan section, since
+an implementing agent receives only the body, swaps `plan_label` for
+`planned_label` where they are set, and offers to start an agent on it with
+`shoal add --issue`.
+
+```toml
+[issue]
+plan_label = "needs-plan" # Default: unset
+planned_label = "planned" # Default: unset
+```
+
 ### Agent queue
 
 ```sh

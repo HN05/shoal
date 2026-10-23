@@ -149,6 +149,7 @@ shoal codex fix-login --app    # Open in the Codex desktop app
 shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal chat my-project          # Discuss the repository with an agent in its checkout
+shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal inspect fix-login       # Detailed workspace and execution records

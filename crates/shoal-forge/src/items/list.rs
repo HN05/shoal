@@ -105,6 +105,16 @@ impl ForgeRepo {
             .await
     }
 
+    /// Open issues labelled `label`, newest first. Unlike a picker's, the
+    /// listing reaches back far enough to hold the oldest of them.
+    pub async fn open_issues_labelled(&self, account: &Account, label: &str) -> Result<Vec<Item>> {
+        let search = Search {
+            labels: vec![label.to_owned()],
+            ..Search::open(MAX_LIMIT)
+        };
+        self.list(account, ItemKind::Issue, &search).await
+    }
+
     pub async fn open_pulls(&self, account: &Account) -> Result<Vec<Item>> {
         self.list(account, ItemKind::Pr, &Search::open(PICKER_LIMIT))
             .await

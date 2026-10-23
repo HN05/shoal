@@ -24,6 +24,7 @@ mod listing;
 pub(crate) mod menu;
 mod messages;
 mod notifications;
+mod plan;
 mod ports;
 mod questions;
 mod recovery;
@@ -618,6 +619,22 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => chat::start(&ctx, repository, agent, here, args).await,
+        Command::Plan {
+            issue,
+            oldest,
+            newest,
+            repository,
+            here,
+            agent,
+            args,
+        } => {
+            let pick = match (oldest, newest) {
+                (true, _) => plan::Pick::Oldest,
+                (_, true) => plan::Pick::Newest,
+                _ => plan::Pick::Picker,
+            };
+            plan::start(&ctx, issue, repository, pick, agent, here, args).await
+        }
         Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
         Command::Release { kind, workspace } => leases::release(&ctx, kind, workspace).await,
         Command::Leases {

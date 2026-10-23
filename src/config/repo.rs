@@ -449,14 +449,16 @@ pub struct Pr {
     pub required_labels: Option<Vec<String>>,
 }
 
-/// The labels a new issue needs, and whether agents may open issues in
-/// other repositories.
+/// The labels a new issue needs, whether agents may open issues in other
+/// repositories, and the labels that say whether an issue's plan is settled.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Issue {
     /// An empty list turns inherited entries off.
     pub required_labels: Option<Vec<String>>,
     pub other_repositories: Option<OtherRepositories>,
+    pub plan_label: Option<String>,
+    pub planned_label: Option<String>,
 }
 
 /// Whether `shoal land` pushes the default branch to its upstream afterwards,

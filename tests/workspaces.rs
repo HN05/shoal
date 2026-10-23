@@ -20268,6 +20268,80 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
 }
 
 #[test]
+fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
+    let fixture = Fixture::with_config(Some(
+        "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",
+    ));
+    forge_origin(&fixture);
+    // The agents' directory is on the terminal's PATH.
+    install_forgejo_curl(&fixture.root.path().join("bin"));
+    let issue = |number: u64, title: &str| {
+        serde_json::json!({"number": number, "title": title, "state": "open",
+            "body": format!("Body of {number}."), "labels": [{"name": "needs-plan"}],
+            "html_url": format!("https://forge.example/team/project/issues/{number}"),
+            "pull_request": null})
+    };
+    for (number, title) in [(12, "Clarify retries"), (9, "Pick a cache")] {
+        forgejo_api(
+            fixture.root.path(),
+            &format!("repos/team/project/issues/{number}"),
+            &issue(number, title),
+        );
+    }
+    forgejo_api(
+        fixture.root.path(),
+        "repos/team/project/issues?type=issues&state=open&labels=needs-plan&limit=50&page=1",
+        &serde_json::json!([issue(12, "Clarify retries"), issue(9, "Pick a cache")]),
+    );
+    let plan = |args: &[&str], agent: &str| {
+        install_recording_agent(&fixture, agent);
+        let (output, transcript) = fixture.interactive_command(
+            fixture
+                .command()
+                .arg("plan")
+                .args(args)
+                .args(["--agent", agent, "--here"])
+                .current_dir(&fixture.repo),
+            "",
+        );
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        chat_args(&fixture)
+    };
+
+    // The oldest labelled issue opens the chat with the chat template and
+    // the planning task, which swaps the configured labels.
+    let args = plan(&["--oldest"], "pi");
+    assert_eq!(args.len(), 1, "{args:?}");
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    assert!(args[0].contains(checkout.to_str().unwrap()), "{}", args[0]);
+    for expected in [
+        "\n\nPlan issue #9: Pick a cache\nhttps://forge.example/team/project/issues/9\n\nBody of 9.",
+        "Then replace its `needs-plan` label with `planned`.",
+        "`shoal add --issue 9 --agent <name>`.",
+    ] {
+        assert!(args[0].contains(expected), "{}", args[0]);
+    }
+    assert!(
+        !args[0].contains("Reply only that you are ready"),
+        "{}",
+        args[0]
+    );
+    assert!(plan(&["--newest"], "pi")[0].contains("Plan issue #12: Clarify retries"));
+
+    // An agent with an instructions template keeps them apart and starts on
+    // the task as its prompt.
+    let args = plan(&["https://forge.example/team/project/issues/12"], "claude");
+    assert_eq!(args[0], "--append-system-prompt");
+    assert!(!args[1].contains("Plan issue"), "{}", args[1]);
+    assert!(
+        args.last()
+            .unwrap()
+            .starts_with("Plan issue #12: Clarify retries"),
+        "{args:?}"
+    );
+}
+
+#[test]
 fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);

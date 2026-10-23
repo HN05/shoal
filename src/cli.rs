@@ -813,6 +813,33 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Settle an issue's plan with an agent in a chat before anyone implements it.
+    ///
+    /// Without an issue, offers the open issues labelled [issue] plan_label.
+    /// The chat opens like `shoal chat`, with the issue as its first task.
+    Plan {
+        /// Issue number or URL; defaults to a picker.
+        #[arg(value_parser = item_reference)]
+        issue: Option<String>,
+        /// Plan the oldest open issue labelled [issue] plan_label.
+        #[arg(long, conflicts_with_all = ["issue", "newest"])]
+        oldest: bool,
+        /// Plan the newest open issue labelled [issue] plan_label.
+        #[arg(long, conflicts_with = "issue")]
+        newest: bool,
+        /// Registered repository of the issue; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Run in the current pane instead of opening a Herdr tab.
+        #[arg(long)]
+        here: bool,
+        /// Agent to start; defaults to default_agent, otherwise a picker.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Start a detached agent session in Happy.
     #[cfg(feature = "happy")]
     Happy {
