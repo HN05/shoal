@@ -54,28 +54,40 @@ fn copy_entry(source: &Path, destination: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Copy `source` to `destination` recursively, keeping every entry that
-/// `destination` already has. Symbolic links are copied as links.
-pub fn copy_missing(source: &Path, destination: &Path) -> io::Result<()> {
+/// Copy `source` to `destination` recursively, replacing only files missing
+/// there or modified before the source's; copies keep the source's
+/// modification time. Symbolic links are copied as links where nothing is.
+pub fn copy_newer(source: &Path, destination: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(source)?;
     if metadata.is_dir() {
         fs::create_dir_all(destination)?;
         for entry in fs::read_dir(source)? {
             let entry = entry?;
-            copy_missing(&entry.path(), &destination.join(entry.file_name()))?;
+            copy_newer(&entry.path(), &destination.join(entry.file_name()))?;
         }
         return Ok(());
     }
-    match fs::symlink_metadata(destination) {
-        Ok(_) => return Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+    let existing = match fs::symlink_metadata(destination) {
+        Ok(existing) => Some(existing),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
-    }
+    };
     if metadata.is_symlink() {
-        std::os::unix::fs::symlink(fs::read_link(source)?, destination)
-    } else {
-        fs::copy(source, destination).map(drop)
+        return match existing {
+            None => std::os::unix::fs::symlink(fs::read_link(source)?, destination),
+            Some(_) => Ok(()),
+        };
     }
+    if let Some(existing) = existing
+        && !(existing.is_file() && existing.modified()? < metadata.modified()?)
+    {
+        return Ok(());
+    }
+    fs::copy(source, destination)?;
+    fs::File::options()
+        .write(true)
+        .open(destination)?
+        .set_modified(metadata.modified()?)
 }
 
 fn remove_existing(path: &Path) -> io::Result<()> {

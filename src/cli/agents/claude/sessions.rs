@@ -1,7 +1,10 @@
 //! Claude Code's project folders: `<config>/projects/<directory>` holds the
 //! sessions that ran in that directory, named after its path with every
 //! character but ASCII letters and digits replaced by `-`.
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -17,7 +20,8 @@ pub(super) fn projects(ctx: &Context) -> Result<PathBuf> {
         .join("projects"))
 }
 
-/// The project folder holding `session`; `None` when no folder does.
+/// The project folder holding the latest copy of `session`, the one
+/// modified last; `None` when no folder holds it.
 pub(super) fn find(projects: &Path, session: &str) -> Result<Option<PathBuf>> {
     if !recovery::valid_session(session) {
         return Ok(None);
@@ -28,17 +32,23 @@ pub(super) fn find(projects: &Path, session: &str) -> Result<Option<PathBuf>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error).with_context(|| format!("read {}", projects.display())),
     };
+    let mut latest: Option<(SystemTime, PathBuf)> = None;
     for folder in folders {
         let folder = folder?.path();
-        if folder.join(&file).is_file() {
-            return Ok(Some(folder));
+        let Ok(metadata) = std::fs::metadata(folder.join(&file)) else {
+            continue;
+        };
+        let modified = metadata.modified()?;
+        if metadata.is_file() && latest.as_ref().is_none_or(|(time, _)| modified > *time) {
+            latest = Some((modified, folder));
         }
     }
-    Ok(None)
+    Ok(latest.map(|(_, folder)| folder))
 }
 
-/// Copy the project folder holding `session` into `directory`'s, keeping
-/// what that folder already has, so Claude Code resumes it there.
+/// Copy the project folder holding the latest copy of `session` into
+/// `directory`'s, replacing only older files, so Claude Code resumes the
+/// latest conversation there.
 pub(super) fn carry(projects: &Path, session: &str, directory: &Path) -> Result<()> {
     let source = find(projects, session)?
         .with_context(|| format!("no project folder in {} holds it", projects.display()))?;
@@ -46,7 +56,7 @@ pub(super) fn carry(projects: &Path, session: &str, directory: &Path) -> Result<
     if source == target {
         return Ok(());
     }
-    crate::fsutil::copy_missing(&source, &target)
+    crate::fsutil::copy_newer(&source, &target)
         .with_context(|| format!("copy {} to {}", source.display(), target.display()))
 }
 
@@ -95,31 +105,54 @@ mod tests {
         assert!(folder_name(&long).is_err());
     }
 
+    /// Write `contents` to `path`, modified `seconds` after the epoch.
+    fn write(path: &Path, contents: &str, seconds: u64) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+        let modified = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(seconds);
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+    }
+
     #[test]
-    fn carrying_a_session_copies_its_project_folder_and_keeps_the_targets_files() {
+    fn carrying_a_session_copies_the_newer_files_of_its_latest_project_folder() {
         let root = tempfile::tempdir().unwrap();
         let projects = root.path().join("projects");
-        let source = projects.join("-old-workspace");
-        fs::create_dir_all(source.join("s1/subagents")).unwrap();
-        fs::write(source.join("s1.jsonl"), "conversation\n").unwrap();
-        fs::write(source.join("s1/subagents/agent.jsonl"), "subagent\n").unwrap();
-        fs::write(source.join("other.jsonl"), "old\n").unwrap();
-        let directory = root.path().join("new");
-        fs::create_dir(&directory).unwrap();
-        let target = projects.join(folder_name(&directory).unwrap());
-        fs::create_dir_all(&target).unwrap();
-        fs::write(target.join("other.jsonl"), "new\n").unwrap();
+        let folder = |name: &str| {
+            let directory = root.path().join(name);
+            fs::create_dir(&directory).unwrap();
+            (projects.join(folder_name(&directory).unwrap()), directory)
+        };
+        let (old, old_directory) = folder("old");
+        let (new, new_directory) = folder("new");
+        write(&old.join("s1.jsonl"), "conversation\n", 20);
+        write(&old.join("s1/subagents/agent.jsonl"), "subagent\n", 20);
+        write(&old.join("other.jsonl"), "old\n", 10);
+        // The new path held the session before, and has a newer other one.
+        write(&new.join("s1.jsonl"), "stale\n", 5);
+        write(&new.join("other.jsonl"), "new\n", 30);
 
-        assert_eq!(find(&projects, "s1").unwrap(), Some(source.clone()));
-        carry(&projects, "s1", &directory).unwrap();
+        assert_eq!(find(&projects, "s1").unwrap(), Some(old.clone()));
+        carry(&projects, "s1", &new_directory).unwrap();
         let read = |path: PathBuf| fs::read_to_string(path).unwrap();
-        assert_eq!(read(target.join("s1.jsonl")), "conversation\n");
-        assert_eq!(read(target.join("s1/subagents/agent.jsonl")), "subagent\n");
-        assert_eq!(read(target.join("other.jsonl")), "new\n");
-        assert_eq!(read(source.join("s1.jsonl")), "conversation\n");
-        // Carrying again finds the session in both folders and keeps them.
-        carry(&projects, "s1", &directory).unwrap();
-        assert_eq!(read(target.join("s1.jsonl")), "conversation\n");
+        assert_eq!(read(new.join("s1.jsonl")), "conversation\n");
+        assert_eq!(read(new.join("s1/subagents/agent.jsonl")), "subagent\n");
+        assert_eq!(read(new.join("other.jsonl")), "new\n");
+        assert_eq!(read(old.join("s1.jsonl")), "conversation\n");
+
+        // The conversation continues at the new path, then moves back.
+        write(&new.join("s1.jsonl"), "continued\n", 40);
+        assert_eq!(find(&projects, "s1").unwrap(), Some(new.clone()));
+        carry(&projects, "s1", &old_directory).unwrap();
+        assert_eq!(read(old.join("s1.jsonl")), "continued\n");
+        assert_eq!(read(old.join("other.jsonl")), "new\n");
+        // Carrying where the latest copy is changes nothing.
+        carry(&projects, "s1", &old_directory).unwrap();
+        assert_eq!(read(old.join("s1.jsonl")), "continued\n");
     }
 
     #[test]
