@@ -484,7 +484,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(30);
         let agent = loop {
             if let Ok(pid) = std::fs::read_to_string(&agent_pid)
-                && let Ok(pid) = pid.trim().parse::<libc::pid_t>()
+                && let Ok(pid) = pid.trim().parse::<u32>()
             {
                 break pid;
             }
@@ -494,10 +494,17 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(20));
         };
+        let agent = crate::process::identity::capture(agent)
+            .unwrap()
+            .expect("the agent runs");
         stop_session(session);
-        // The orphaned agent is reaped by init once it dies.
-        // SAFETY: kill takes no pointers; signal 0 only checks the process exists.
-        while unsafe { libc::kill(agent, 0) } == 0 {
+        // An orphaned agent may stay a zombie where nothing reaps it, which
+        // the identity check counts as ended.
+        while crate::process::identity::capture(agent.pid)
+            .unwrap()
+            .as_ref()
+            == Some(&agent)
+        {
             assert!(Instant::now() < deadline, "the agent outlived its session");
             std::thread::sleep(Duration::from_millis(20));
         }
