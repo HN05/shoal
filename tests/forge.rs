@@ -614,6 +614,42 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     assert!(fixture.requests().is_empty());
 }
 
+#[test]
+fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    let review = |id: u64, body: &str| {
+        json!({"id": id, "comments_count": 1, "state": "COMMENT", "body": body,
+            "user": {"login": "bot"}, "submitted_at": "t"})
+    };
+    let comment = json!([{"id": 5, "path": "a.rs", "position": 4, "original_position": 0,
+        "body": "Nit", "user": {"login": "bot"}, "resolver": null}]);
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project/issues/8/comments": {"body": []},
+        format!("GET {endpoint}/reviews?limit=50&page=1"):
+            {"body": [review(3, "Retried"), review(4, "Unreadable")]},
+        format!("GET {endpoint}/reviews/3/comments"):
+            [{"status": 503, "body": {"message": "busy"}}, {"body": comment}],
+        format!("GET {endpoint}/reviews/4/comments"): {"status": 403, "body": {"message": "no"}},
+    }));
+    let view = &fixture.ok(&["view", "pr", "8", "--workspace", "topic"])[0];
+    let reviews = view["reviews"].as_array().unwrap();
+    assert_eq!(reviews[0]["comments"][0]["body"], "Nit", "{view}");
+    assert_eq!(reviews[1]["body"], "Unreadable", "{view}");
+    let errors: Vec<&str> = view["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|error| error.as_str().filter(|error| error.contains("comments")))
+        .collect();
+    assert_eq!(errors.len(), 1, "{view}");
+    assert!(
+        errors[0].starts_with("comments lookup failed for review 4: GET "),
+        "{view}"
+    );
+}
+
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
 /// beside them that references the image.
 fn attachment_files(fixture: &Fixture) -> [String; 3] {

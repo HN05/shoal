@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use futures_util::future::join_all;
+use futures_util::StreamExt;
 use serde_json::Value;
 
 use crate::{
@@ -13,8 +13,12 @@ use crate::{
     transport::api::Request,
 };
 
+/// How many reviews' comments are read at once; a burst of connections can
+/// be refused.
+const REVIEW_READS: usize = 4;
+
 /// Each review of a PR with its inline comments, or why they could not be
-/// read.
+/// read, a few reviews at a time.
 pub(crate) async fn review_comments(
     repo: &ForgeRepo,
     account: &Account,
@@ -22,11 +26,14 @@ pub(crate) async fn review_comments(
 ) -> Result<Vec<(Value, Result<Value>)>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
     let reviews = repo.pages(account, &endpoint).await?;
-    Ok(join_all(reviews.into_iter().map(|review| async move {
-        let comments = inline_comments_of(repo, account, number, &review).await;
-        (review, comments)
-    }))
-    .await)
+    Ok(futures_util::stream::iter(reviews)
+        .map(|review| async move {
+            let comments = inline_comments_of(repo, account, number, &review).await;
+            (review, comments)
+        })
+        .buffered(REVIEW_READS)
+        .collect()
+        .await)
 }
 
 /// Each review of a PR with its inline comments, failing when any could
@@ -55,7 +62,8 @@ async fn inline_comments_of(
         return Ok(Value::Array(Vec::new()));
     }
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
-    repo.send(account, &Request::get(endpoint)).await
+    repo.send(account, &Request::get(endpoint).repeatable())
+        .await
 }
 
 /// The Forgejo thread with `comment`.
