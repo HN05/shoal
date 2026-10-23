@@ -237,8 +237,9 @@ impl Reopened {
     }
 }
 
-/// Print the reopening's warnings, set the workspace up and link its PRs
-/// again; `None` when its setup did not finish.
+/// Print the reopening's warnings, make its agents' sessions resumable at
+/// its path, set the workspace up and link its PRs again; `None` when its
+/// setup did not finish.
 pub(super) async fn prepare_reopened(
     ctx: &Context,
     restored: RestoredWorkspace,
@@ -251,6 +252,7 @@ pub(super) async fn prepare_reopened(
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
+    crate::cli::agents::carry_sessions(ctx, &opened.workspace, &removed).await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(ready) = super::workspaces::setup_workspace(ctx, &workspace).await? else {

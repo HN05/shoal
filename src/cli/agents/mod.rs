@@ -385,9 +385,9 @@ pub(in crate::cli) fn has_session(ctx: &Context, name: &str, session: &str) -> b
     integration(name).has_session(ctx, session)
 }
 
-/// Make the sessions that `workspace`, reopened from `removed` at a new path,
-/// keeps for `shoal resume` resumable there, trusting the path for their
-/// agents. Failures only warn.
+/// Make the sessions that `workspace`, reopened from `removed`, keeps for
+/// `shoal resume` resumable at its path, which may be new, trusting the path
+/// for their agents. Failures only warn.
 pub(in crate::cli) async fn carry_sessions(
     ctx: &Context,
     workspace: &Workspace,

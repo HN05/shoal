@@ -4777,7 +4777,15 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    // The removal record keeps the last session for the restored workspace.
+    // The removal record keeps the last session for the restored workspace,
+    // which carries Claude Code's latest copy of it to its path, as an import
+    // does.
+    let latest = fixture
+        .root
+        .path()
+        .join(".claude/projects/-elsewhere/quit-session.jsonl");
+    fs::create_dir_all(latest.parent().unwrap()).unwrap();
+    fs::write(&latest, "conversation\n").unwrap();
     fixture.ok(&["rm", "quit", "--yes"]);
     let removed = fixture.ok(&["restore"]);
     assert_eq!(
@@ -4799,6 +4807,28 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         fs::read_to_string(path.join("resumed")).unwrap(),
         "quit-session"
     );
+    assert_eq!(
+        fs::read_to_string(claude_project(&fixture, path).join("quit-session.jsonl")).unwrap(),
+        "conversation\n"
+    );
+}
+
+/// Claude Code's project folder of `directory` in the fixture's home.
+fn claude_project(fixture: &Fixture, directory: &Path) -> std::path::PathBuf {
+    let name: String = fs::canonicalize(directory)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() {
+                char
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    fixture.root.path().join(".claude/projects").join(name)
 }
 
 #[test]
@@ -4852,21 +4882,8 @@ fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
         fs::read_to_string(path.join("resumed")).unwrap(),
         "carried-session"
     );
-    let folder: String = fs::canonicalize(path)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .chars()
-        .map(|char| {
-            if char.is_ascii_alphanumeric() {
-                char
-            } else {
-                '-'
-            }
-        })
-        .collect();
     assert_eq!(
-        fs::read_to_string(projects.join(folder).join("carried-session.jsonl")).unwrap(),
+        fs::read_to_string(claude_project(&fixture, path).join("carried-session.jsonl")).unwrap(),
         "conversation\n"
     );
 }

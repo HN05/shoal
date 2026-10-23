@@ -182,7 +182,6 @@ async fn import_and_prepare(
     repository: Option<String>,
 ) -> Result<Reopened> {
     let restored = import_workspace(ctx, file, repository).await?;
-    agents::carry_sessions(ctx, &restored.opened.workspace, &restored.removed).await;
     super::restore::prepare_reopened(ctx, restored)
         .await?
         .context("its setup did not finish")

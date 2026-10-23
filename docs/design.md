@@ -1296,9 +1296,10 @@ begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private, path-keyed files, and Shoal
 does not store conversations. The export records the exporting machine's ID
 with the agents' sessions beside the moved records, which older importers read.
-An import on that machine keeps each session its tool still has and makes it
-resumable from the new path, for Claude Code by copying its project folder
-without overwriting; elsewhere, or when the session is gone, moved recovery
+An import on that machine keeps each session its tool still has, and every
+reopen makes the kept sessions resumable from the workspace's path, for Claude
+Code by copying the newer files of the folder with the session's latest copy;
+elsewhere, or when the session is gone, moved recovery
 records drop their session, place and wrapper, and `shoal resume` starts them
 through the fresh-agent launch, with its trust setup and guidance, told the
 workspace moved. Shoal provides only these operations; deciding when and where to move work
