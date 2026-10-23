@@ -151,3 +151,38 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
         .unwrap_err();
     assert!(error.to_string().contains("unknown chat"), "{error:#}");
 }
+
+#[tokio::test]
+async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut recording = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "happy-claude".into(), recording.id())
+        .await
+        .unwrap();
+    // A sweep finds the recording process ended...
+    let recorded = manager.store.run(recorded_processes).await.unwrap();
+    recording.kill().unwrap();
+    recording.wait().unwrap();
+    let ended = finished(recorded);
+    assert_eq!(ended.len(), 1);
+    // ...while the chat moves to its session's process.
+    let moved = manager
+        .move_chat(&chat.id, std::process::id())
+        .await
+        .unwrap();
+    manager
+        .store
+        .run(move |db| delete(db, &ended))
+        .await
+        .unwrap();
+    assert_eq!(manager.chats().await.unwrap(), [moved]);
+}

@@ -177,7 +177,7 @@ fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {
 
 /// The chats whose process no longer has its recorded identity. A process
 /// that cannot be read keeps its chat.
-fn finished(recorded: Vec<(String, Identity)>) -> Vec<String> {
+fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
     recorded
         .into_iter()
         .filter(|(id, process)| match identity::capture(process.pid) {
@@ -187,16 +187,24 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<String> {
                 false
             }
         })
-        .map(|(id, _)| id)
         .collect()
 }
 
-/// Delete the chats, giving the user their unread messages; returns the last
-/// notification recorded.
-fn delete(db: &mut Connection, ids: &[String]) -> Result<Option<i64>> {
+/// Delete the chats still recorded with the process found ended, giving the
+/// user their unread messages; a chat moved to another process since keeps
+/// running. Returns the last notification recorded.
+fn delete(db: &mut Connection, ended: &[(String, Identity)]) -> Result<Option<i64>> {
     let tx = db.transaction()?;
     let mut last = None;
-    for id in ids {
+    for (id, process) in ended {
+        let unchanged: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND pid=?2 AND birth=?3)",
+            params![id, process.pid, process.birth],
+            |row| row.get(0),
+        )?;
+        if !unchanged {
+            continue;
+        }
         last = chat_messages::hand_to_user(&tx, id)?.or(last);
         tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
     }
