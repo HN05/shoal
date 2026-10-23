@@ -211,6 +211,9 @@ impl Manager {
     }
 }
 
+/// The forge memory of the user's own logins.
+const USER_LOGINS: &str = "user";
+
 /// The item an action changes.
 #[derive(Clone)]
 pub(super) struct Target {
@@ -228,7 +231,7 @@ fn own_state(action: &Action) -> bool {
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket).remembering(self.forge_memory("user"))
+        Account::user(&self.config().bitbucket).remembering(self.forge_memory(USER_LOGINS))
     }
 
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
@@ -252,7 +255,11 @@ impl Manager {
             fj: auth.fj.is_some(),
             tea: auth.tea.is_some(),
         };
-        let identity = format!("agent {}", serde_json::to_string(auth)?);
+        // An agent with the user's logins shares what the user's requests taught.
+        let identity = match auth.forge_identity()? {
+            Some(logins) => format!("agent {logins}"),
+            None => USER_LOGINS.to_owned(),
+        };
         Ok(Account::agent(logins, &config.bitbucket).remembering(self.forge_memory(&identity)))
     }
 

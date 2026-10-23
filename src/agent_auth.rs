@@ -70,6 +70,28 @@ impl Config {
         Ok(Some(Wrappers { directory }))
     }
 
+    /// What tells the forge logins this configuration selects apart, or none
+    /// when the agent uses the user's own.
+    pub fn forge_identity(&self) -> Result<Option<String>> {
+        let logins = Self {
+            git_profile: None,
+            ..self.clone()
+        };
+        if [
+            &logins.fj,
+            &logins.fj_home,
+            &logins.gh,
+            &logins.glab,
+            &logins.tea,
+        ]
+        .iter()
+        .all(|login| login.is_none())
+        {
+            return Ok(None);
+        }
+        Ok(Some(serde_json::to_string(&logins)?))
+    }
+
     pub fn validate(&self) -> Result<()> {
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
@@ -162,6 +184,32 @@ mod tests {
         let effective = global.resolve(&layers).unwrap();
         assert_eq!(effective.agent_auth.fj, Some("/saved/fj-agent".into()));
         assert_eq!(effective.agent_auth.gh, Some("/global/gh-agent".into()));
+    }
+
+    #[test]
+    fn forge_identity_names_the_logins_and_ignores_the_git_profile() {
+        let profile = |gh: Option<&str>, git_profile: &str| Config {
+            gh: gh.map(Into::into),
+            git_profile: Some(git_profile.into()),
+            ..Default::default()
+        };
+        assert_eq!(profile(None, "work").forge_identity().unwrap(), None);
+        let agent = profile(Some("/bin/gh-agent"), "work")
+            .forge_identity()
+            .unwrap();
+        assert!(agent.is_some());
+        assert_eq!(
+            profile(Some("/bin/gh-agent"), "home")
+                .forge_identity()
+                .unwrap(),
+            agent
+        );
+        assert_ne!(
+            profile(Some("/bin/gh-other"), "work")
+                .forge_identity()
+                .unwrap(),
+            agent
+        );
     }
 
     #[test]
