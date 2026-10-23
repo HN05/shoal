@@ -1276,10 +1276,12 @@ Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
 login, because discussion can exceed a protocol frame: `gh` for GitHub, and
 Forgejo's API with fj's saved token for the host, or anonymously without one,
-because fj has no structured output. Views automatically include failed Forgejo
-check logs, fetched by the daemon with the workspace's agent account and returned as
-bounded tails, so scoped callers never need forge credentials. Successful and
-pending checks omit logs; explicit selection limits output to one failed check.
+because fj has no structured output. Views automatically include the logs of
+failed CI jobs where the forge serves them, fetched by the daemon with the
+workspace's agent account and returned as bounded tails with the job's URL, so
+scoped callers never need forge credentials. Successful and pending checks omit
+logs, and a check that links no CI job in the repository has none to read;
+explicit selection limits output to one failed check.
 Failed-check watch updates include its failing step when recorded by the runner; an unavailable
 log is reported on that update without hiding other activity.
 Agents can also rerun failed and cancel running CI jobs on a PR's current head

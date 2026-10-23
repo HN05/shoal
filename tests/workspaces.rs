@@ -12709,7 +12709,9 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     );
     let second: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(second["updates"].as_array().unwrap().len(), 1);
-    assert_eq!(second["updates"][0]["message"], "rust: FAILURE");
+    // This gh answers no log lookup; tests/forge.rs covers what it adds.
+    let message = second["updates"][0]["message"].as_str().unwrap();
+    assert!(message.starts_with("rust: FAILURE; "), "{message}");
     // A conflict is reported once a second poll sees it at the same commits.
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
@@ -13381,7 +13383,15 @@ fn view_shows_linked_items_with_status_and_discussion() {
             &serde_json::json!(false)
         )
     );
-    assert!(pr.get("errors").is_none(), "{pr}");
+    // This gh answers no log lookup; tests/forge.rs covers failed logs.
+    let errors = pr["errors"].as_array().unwrap();
+    assert!(
+        errors.iter().all(|error| error
+            .as_str()
+            .unwrap()
+            .starts_with("rust: log unavailable: ")),
+        "{pr}"
+    );
 
     let status = fixture.ok(&["status", "view"]);
     assert_eq!(status["issue_status"]["state"], "open");

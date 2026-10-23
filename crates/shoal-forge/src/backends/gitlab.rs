@@ -65,7 +65,6 @@ impl Backend for GitLab {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
-            Capability::ReadJobLogs => Support::Unsupported(None),
             Capability::ForkPrs => Support::Unsupported(Some(
                 "GitLab opens a fork's merge request in the fork project, so open it on GitLab",
             )),
@@ -78,6 +77,7 @@ impl Backend for GitLab {
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
+            | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
             | Capability::DraftPrs
@@ -545,6 +545,14 @@ impl Backend for GitLab {
             CiAction::Cancel => format!("jobs/{id}/cancel"),
         };
         Ok((Operation::Post(endpoint), vec![job.name.clone()]))
+    }
+
+    /// A job's trace is its log.
+    fn job_log_endpoint(&self, location: Location) -> Result<String> {
+        let Location::GitLab { job } = location else {
+            bail!("not a GitLab job");
+        };
+        Ok(format!("jobs/{job}/trace"))
     }
 
     async fn check_uploads(

@@ -4,7 +4,7 @@ or a Forgejo API server with `serve <port-file>`.
 
 Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
-arguments start with. A list answers successive requests in turn, repeating
+arguments start with. A string body is sent as text, anything else as JSON. A list answers successive requests in turn, repeating
 its last entry. Each entry is {"status": 200, "body": ...}, and may add
 "headers" to send. The server tags
 each successful body, and answers a request that names its tag in
@@ -78,7 +78,9 @@ def gh(args):
         status, answer, _ = respond(f"{method} {endpoint}", body, auth)
         if "--include" in args:
             print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n\r")
-        if answer is not None:
+        if isinstance(answer, str):
+            sys.stdout.write(answer)
+        elif answer is not None:
             print(json.dumps(answer))
         if status >= 400:
             print(f"gh: HTTP {status}", file=sys.stderr)

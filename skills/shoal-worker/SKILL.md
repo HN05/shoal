@@ -105,7 +105,8 @@ with its state, merge conflicts, CI check results, review state and lookup error
 `shoal view` adds the linked issue and each item's description, comments and
 reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 `view pr <number>` or a URL for an unlinked item and `--no-comments` for state only.
-`shoal view` automatically includes failed check log tails where the forge reads them;
+`shoal view` automatically includes the log tails and URLs of failed CI jobs where
+the forge reads job logs; checks from outside services have none.
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
 `shoal --json ci rerun --check '<check name>'` reruns a failed check on the PR's

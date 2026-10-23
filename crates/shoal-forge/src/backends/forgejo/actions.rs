@@ -8,15 +8,16 @@ use super::tea;
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
-    ci::{CiCheck, JobState, check, checks::CheckLog},
+    ci::{
+        CiCheck, JobState, check,
+        checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
+    },
     items::link::ItemKind,
     transport::{
         api::{Request, TIMEOUT, authorization, curl_body},
         programs,
     },
 };
-
-const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 
 /// Forgejo's latest status of each check.
 pub(crate) fn checks(combined: &Value) -> Result<Vec<CiCheck>> {
@@ -74,10 +75,9 @@ pub(crate) async fn failed_check_log(
         matches!(status["status"].as_str(), Some("failure" | "error")),
         "check has not failed"
     );
-    let target = status["target_url"]
-        .as_str()
-        .context("check has no Actions job URL")?;
-    let (run_number, job_index) = job_location(repo, target)?;
+    let no_log = || NoJobLog { name: name.into() };
+    let target = status["target_url"].as_str().ok_or_else(no_log)?;
+    let (run_number, job_index) = job_location(repo, target).map_err(|_| no_log())?;
     let run_id = run_id_for(repo, account, run_number, head).await?;
     let jobs = repo
         .send(
@@ -159,7 +159,7 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
         "--max-time",
         "30",
         "--max-filesize",
-        "8388608",
+        &MAX_LOG_BYTES.to_string(),
         "-H",
         "Accept: text/plain",
         "-w",

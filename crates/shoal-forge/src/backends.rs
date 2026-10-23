@@ -400,11 +400,17 @@ pub(crate) trait Backend {
     /// The log of the failed check `name` on the current head of PR `url`.
     async fn failed_check_log(
         &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _url: &str,
-        _name: &str,
+        repo: &ForgeRepo,
+        account: &Account,
+        url: &str,
+        name: &str,
     ) -> Result<CheckLog> {
+        repo.failed_job_log(account, url, name).await
+    }
+
+    /// The endpoint under the repository that serves the plain-text log of
+    /// the job at `location`.
+    fn job_log_endpoint(&self, _location: Location) -> Result<String> {
         Err(crate::capability::unsupported(
             self,
             Capability::ReadJobLogs,
@@ -845,6 +851,10 @@ impl Backend for ForgeKind {
         name: &str,
     ) -> Result<CheckLog> {
         dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
+    }
+
+    fn job_log_endpoint(&self, location: Location) -> Result<String> {
+        dispatch!(self, backend => backend.job_log_endpoint(location))
     }
 
     async fn check_uploads(

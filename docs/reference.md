@@ -2187,12 +2187,13 @@ branch. Assigned items suppress idle cleanup.
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, description, comments, and reviews with their inline comments; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
-reports, plus the last 8 KiB of each failed check's log, where the forge
-[reads job logs](#forges), and its
+reports, plus the last 8 KiB of each failed CI job's log, where the forge
+[reads job logs](#forges), with the job's URL and its
 failing step when recorded by the runner. The daemon fetches logs as the
 workspace's agent account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
-report an error; log downloads are limited to 8 MiB.
+report an error, as does a check that links no CI job in the repository, such as
+an outside service's; log downloads are limited to 8 MiB.
 Kinds and explicit items select as they do for `watch`, and
 `--no-comments` leaves out comments and reviews. Each inline comment shows its ID,
 the ID of the comment that starts its thread when it is a reply, and whether
@@ -2244,8 +2245,8 @@ repeats a REST read as a conditional request with the `ETag` and `Last-Modified`
 of the last response it got for that URL as the same account, and takes a
 `304 Not Modified` to mean that response still holds; it keeps them in memory
 only. Reads through tea and GitHub's `gh pr view` are sent in full.
-Failed Forgejo checks include the failing step when the runner records it and
-a command to read the log; a log lookup failure stays on that check's update.
+Failed CI jobs include the failing step when the runner records it and a
+command to read the log; a log lookup failure stays on that check's update.
 
 Once every linked PR has merged and at least one contains current HEAD, or the
 freshly fetched default branch has its changes, as after a rebase that followed

@@ -71,10 +71,10 @@ impl Backend for GitHub {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
-            Capability::ReadJobLogs => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
+            | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
             | Capability::DraftPrs
@@ -549,6 +549,10 @@ impl Backend for GitHub {
         action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
         actions::operation(jobs, selected, job, action)
+    }
+
+    fn job_log_endpoint(&self, location: Location) -> Result<String> {
+        actions::log_endpoint(location)
     }
 
     async fn check_uploads(

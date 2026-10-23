@@ -25,7 +25,8 @@ use crate::{
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
-/// Bounds a JSON response read through a CLI, which curl's own limit cannot.
+/// Bounds a response read through a CLI, which curl's own limit cannot,
+/// unless the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +67,8 @@ pub(crate) struct Request {
     /// Environment variables a CLI would read a token from for any host,
     /// left out so the request carries only a login saved for its own host.
     pub withheld_tokens: &'static [&'static str],
+    /// The most of the response, in bytes, a CLI may print for it.
+    pub max_bytes: usize,
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -92,6 +95,7 @@ impl Request {
             resend: Resend::Never,
             conditions: Vec::new(),
             withheld_tokens: &[],
+            max_bytes: MAX_RESPONSE_BYTES,
         }
     }
 
@@ -109,6 +113,12 @@ impl Request {
             resend: Resend::Unreceived,
             ..Self::new(HttpMethod::Post, endpoint, None)
         }
+    }
+
+    /// Refuse a response longer than `bytes`.
+    pub fn limited(mut self, bytes: usize) -> Self {
+        self.max_bytes = bytes;
+        self
     }
 
     /// Send again after any failure that may pass, since sending it twice
@@ -176,18 +186,14 @@ impl ForgeRepo {
         let read = request.method == HttpMethod::Get;
         let url = format!("{}/{}", self.host, request.endpoint);
         let memory = account.memory();
-        let now = unix_seconds();
-        memory.check_limit(&self.host, now)?;
         let recalled = read.then(|| memory.recall(&url)).flatten();
         let response = match &recalled {
             Some((conditions, _)) => {
                 let conditional = request.conditional(conditions.clone());
-                self.kind.send(self, account, &conditional).await?
+                self.within_limit(account, &conditional).await?
             }
-            None => self.kind.send(self, account, request).await?,
+            None => self.within_limit(account, request).await?,
         };
-        // Relative limits count from the response, which may have taken a while.
-        memory.observe_limit(&self.host, &response, unix_seconds())?;
         if let (304, Some((_, body))) = (response.status, recalled) {
             return Ok(body);
         }
@@ -196,6 +202,28 @@ impl ForgeRepo {
             memory.remember(&url, &response, &body);
         }
         Ok(body)
+    }
+
+    /// The text of the response to `request`, which need not be JSON, such
+    /// as a job log; it is not remembered for a conditional read.
+    pub(crate) async fn read_text(&self, account: &Account, request: &Request) -> Result<String> {
+        async {
+            let response = self.within_limit(account, request).await?;
+            response.success_body().map(str::to_owned)
+        }
+        .await
+        .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
+    }
+
+    /// The response to `request`, refused without sending it while the
+    /// forge limits the account's requests.
+    async fn within_limit(&self, account: &Account, request: &Request) -> Result<Response> {
+        let memory = account.memory();
+        memory.check_limit(&self.host, unix_seconds())?;
+        let response = self.kind.send(self, account, request).await?;
+        // Relative limits count from the response, which may have taken a while.
+        memory.observe_limit(&self.host, &response, unix_seconds())?;
+        Ok(response)
     }
 
     /// Send through `gh api` or `glab api`, which own their logins and
@@ -253,7 +281,7 @@ impl ForgeRepo {
         let output = shoal_subprocess::Run::new(cli)
             .input(input)
             .timeout(request.timeout())
-            .output_limit(MAX_RESPONSE_BYTES)
+            .output_limit(request.max_bytes)
             .capture()
             .await
             .with_context(|| format!("run {program}; is it installed?"))?;

@@ -1888,6 +1888,90 @@ fn failed_check_responses() -> Value {
 }
 
 #[test]
+fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_checks() {
+    for gitlab in [false, true] {
+        let fixture = Fixture::new(
+            Forge::GitHub,
+            "[agent_auth]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n",
+        );
+        let root = fixture.root.path();
+        let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
+        support::install_test_script(root.join("agent-gh"), wrapper);
+        support::install_test_script(root.join("agent-glab"), wrapper);
+        let external = "https://coverage.example/7";
+        let (job, log, responses) = if gitlab {
+            std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
+            git(
+                &fixture.repo,
+                &[
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "git@gitlab.com:team/project.git",
+                ],
+            );
+            let project = "projects/team%2Fproject";
+            let job = "https://gitlab.com/team/project/-/jobs/56";
+            let log = format!("GET {project}/jobs/56/trace");
+            let responses = json!({
+                format!("GET {project}/merge_requests/8"): {"body": {"iid": 8, "title": "Fix",
+                    "state": "opened", "description": "", "labels": [], "source_branch": "topic",
+                    "target_branch": "main", "draft": false, "sha": "head",
+                    "source_project_id": 1, "target_project_id": 1}},
+                format!("GET {project}/repository/commits/head/statuses?per_page=100&page=1"): {"body": [
+                    {"id": 1, "name": "rust", "status": "success", "target_url": job},
+                    {"id": 2, "name": "rust", "status": "failed", "target_url": job},
+                    {"id": 3, "name": "coverage", "status": "failed", "target_url": external}
+                ]},
+                log.clone(): {"body": "assertion failed\n"},
+            });
+            (job, log, responses)
+        } else {
+            let job = "https://github.com/team/project/actions/runs/12/job/34";
+            let log = "GET repos/team/project/actions/jobs/34/logs".to_owned();
+            let mut open = pull(8, "open", "Fix", &[]);
+            open["head"]["sha"] = json!("head");
+            let responses = json!({
+                "GET repos/team/project/pulls/8": {"body": open},
+                "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
+                    "total_count": 2, "check_runs": [
+                        {"name": "rust", "status": "completed", "conclusion": "failure", "details_url": job},
+                        {"name": "coverage", "status": "completed", "conclusion": "failure", "details_url": external}
+                    ]}},
+                log.clone(): {"body": "assertion failed\n"},
+            });
+            (job, log, responses)
+        };
+        fixture.respond(responses);
+        let read = ["view", "pr", "8", "--workspace", "topic", "--check"];
+        let result = fixture.ok(&[&read[..], &["rust"]].concat());
+        assert_eq!(result["job_url"], job, "{result}");
+        assert_eq!(result["text"], "assertion failed\n", "{result}");
+        let requests = fixture.requests();
+        assert_eq!(requests.last().unwrap()[0], log.as_str());
+        assert!(
+            requests.iter().all(|request| request[2] == "agent"),
+            "{requests:?}"
+        );
+
+        let output = fixture.run(&[&read[..], &["coverage"]].concat());
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            error.contains("check coverage is not a CI job in this repository"),
+            "{error}"
+        );
+        assert!(
+            !fixture.requests().iter().any(|request| request[0]
+                .as_str()
+                .unwrap()
+                .ends_with("/logs")
+                || request[0].as_str().unwrap().ends_with("/trace"))
+        );
+    }
+}
+
+#[test]
 fn check_log_downloads_are_bounded_even_when_curl_ignores_max_filesize() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     fixture.respond(failed_check_responses());

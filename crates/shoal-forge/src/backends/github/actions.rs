@@ -1,5 +1,5 @@
-//! GitHub Actions: check runs on a commit, the jobs their URLs link, and
-//! the requests that rerun or cancel them.
+//! GitHub Actions: check runs on a commit, the jobs their URLs link, the
+//! requests that rerun or cancel them, and where their logs are.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
@@ -93,6 +93,14 @@ pub(crate) fn operation(
         }
         _ => bail!("check {} is not a GitHub Actions job", job.name),
     }
+}
+
+/// GitHub redirects a job's log to a download that gh follows.
+pub(crate) fn log_endpoint(location: Location) -> Result<String> {
+    let Location::GitHub { job, .. } = location else {
+        bail!("not a GitHub Actions job");
+    };
+    Ok(format!("actions/jobs/{job}/logs"))
 }
 
 fn github_run(job: &Job) -> Option<u64> {
