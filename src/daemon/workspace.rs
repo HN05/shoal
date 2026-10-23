@@ -371,9 +371,13 @@ impl Manager {
             workspaces.retain(|w| subtree.contains(&w.id));
             workspaces.sort_by_key(|w| w.id != owner);
         }
-        for workspace in &mut workspaces {
-            self.annotate_review(workspace).await;
-        }
+        // Each check reads HEAD with Git, so a long listing runs them together.
+        futures_util::future::join_all(
+            workspaces
+                .iter_mut()
+                .map(|workspace| self.annotate_review(workspace)),
+        )
+        .await;
         Ok(workspaces)
     }
 
