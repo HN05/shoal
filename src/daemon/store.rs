@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 60;
+const SCHEMA_VERSION: i64 = 61;
 
 #[cfg(test)]
 mod benchmark;
@@ -391,7 +391,12 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (58, include_str!("store/repository_approvals.sql"), None),
     (59, QUESTION_WITHDRAWN, None),
     (60, NOTIFICATION_SENDERS, None),
+    (61, CHAT_MESSAGE_SENDERS, None),
 ];
+
+/// The workspace a chat's message is about, by identity, which the user's
+/// notification keeps when the chat ends first. Earlier messages name none.
+const CHAT_MESSAGE_SENDERS: &str = "ALTER TABLE chat_messages ADD COLUMN workspace_id TEXT;";
 
 /// The workspace a notification is about, by identity, so withdrawing what
 /// it sent survives a rename and never reaches a later workspace of the same
@@ -1050,6 +1055,9 @@ mod tests {
         }
         if version >= 60 {
             db.execute_batch(NOTIFICATION_SENDERS)?;
+        }
+        if version >= 61 {
+            db.execute_batch(CHAT_MESSAGE_SENDERS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

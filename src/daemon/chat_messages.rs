@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use crate::daemon::{
     agent_messages::{AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
     links::wait::Updates,
-    notifications::{self, NotificationKind},
+    notifications::{self, About, NotificationKind},
     workspace::Manager,
 };
 
@@ -149,8 +149,8 @@ fn insert(
         "the chat's unread messages would exceed {MAX_UNREAD_BYTES} bytes"
     );
     tx.execute(
-        "INSERT INTO chat_messages(chat_id,created_at,workspace,kind,message)
-            VALUES (?1,?2,?3,?4,?5)",
+        "INSERT INTO chat_messages(chat_id,created_at,workspace,workspace_id,kind,message)
+            VALUES (?1,?2,?3,(SELECT id FROM workspaces WHERE name=?3),?4,?5)",
         params![
             chat,
             i64::try_from(crate::time::unix_seconds())?,
@@ -168,14 +168,20 @@ fn insert(
 pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i64>> {
     let unread = tx
         .prepare(
-            "SELECT workspace,kind,message FROM chat_messages
+            "SELECT workspace,workspace_id,kind,message FROM chat_messages
                 WHERE chat_id=?1 AND kind IS NOT NULL ORDER BY id",
         )?
-        .query_map([chat], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .collect::<rusqlite::Result<Vec<(String, NotificationKind, String)>>>()?;
+        .query_map([chat], |row| {
+            let about = About {
+                name: Some(row.get(0)?),
+                id: row.get(1)?,
+            };
+            Ok((about, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(About, NotificationKind, String)>>>()?;
     let mut last = None;
-    for (workspace, kind, message) in unread {
-        let recorded = notifications::insert(tx, Some(&workspace), kind, &message)?;
+    for (about, kind, message) in unread {
+        let recorded = notifications::insert(tx, &about, kind, &message)?;
         if recorded.new {
             last = Some(recorded.id);
         }

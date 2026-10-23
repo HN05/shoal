@@ -99,21 +99,46 @@ pub(crate) struct Recorded {
     pub new: bool,
 }
 
-/// Record an event for the user in the caller's transaction, with the
-/// identity of the workspace that now has its name. Callers wake watchers
-/// with `notifications_changed` after committing a new one.
+/// The workspace a notification is about: its name at the time, and its
+/// identity, which withdrawal matches since names change and are reused.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct About {
+    pub name: Option<String>,
+    pub id: Option<String>,
+}
+
+impl About {
+    /// The workspace that has `name` now, if any.
+    fn named(db: &rusqlite::Connection, name: Option<&str>) -> Result<Self> {
+        let id = match name {
+            Some(name) => db
+                .query_row("SELECT id FROM workspaces WHERE name=?1", [name], |row| {
+                    row.get(0)
+                })
+                .optional()?,
+            None => None,
+        };
+        Ok(Self {
+            name: name.map(str::to_owned),
+            id,
+        })
+    }
+}
+
+/// Record an event for the user in the caller's transaction. Callers wake
+/// watchers with `notifications_changed` after committing a new one.
 pub(crate) fn insert(
     tx: &rusqlite::Transaction<'_>,
-    workspace: Option<&str>,
+    about: &About,
     kind: NotificationKind,
     message: &str,
 ) -> Result<Recorded> {
     if kind.collapses() {
         let pending: Option<i64> = tx
             .query_row(
-                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1 AND kind=?2 AND message=?3
-                    AND workspace_id IS (SELECT id FROM workspaces WHERE name=?1)",
-                params![workspace, kind, message],
+                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1
+                    AND workspace_id IS ?2 AND kind=?3 AND message=?4",
+                params![about.name, about.id, kind, message],
                 |row| row.get(0),
             )
             .optional()?;
@@ -123,10 +148,11 @@ pub(crate) fn insert(
     }
     tx.execute(
         "INSERT INTO notifications(created_at,workspace,workspace_id,kind,message)
-            VALUES (?1,?2,(SELECT id FROM workspaces WHERE name=?2),?3,?4)",
+            VALUES (?1,?2,?3,?4,?5)",
         params![
             i64::try_from(crate::time::unix_seconds())?,
-            workspace,
+            about.name,
+            about.id,
             kind,
             message
         ],
@@ -297,7 +323,8 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let recorded = insert(&tx, workspace.as_deref(), kind, &message)?;
+                let about = About::named(&tx, workspace.as_deref())?;
+                let recorded = insert(&tx, &about, kind, &message)?;
                 tx.commit()?;
                 Ok(recorded)
             })

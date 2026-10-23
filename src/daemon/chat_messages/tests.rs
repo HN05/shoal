@@ -233,3 +233,65 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
         ]
     );
 }
+
+#[tokio::test]
+async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
+    let (temp, manager) = manager().await;
+    let (_, worker) = chat_and_worker(&temp, &manager).await;
+    let mut process = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            worker.repository_id.clone().into(),
+            "codex".into(),
+            process.id(),
+        )
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    manager
+        .send_message(&worker.id, "unread".into())
+        .await
+        .unwrap();
+    // The worker is renamed and a new workspace takes its name before the
+    // chat ends.
+    manager
+        .rename_workspace(&worker.id, "renamed", None)
+        .await
+        .unwrap();
+    let successor = manager
+        .create_workspace(
+            &worker.repository_id,
+            "worker".into(),
+            None,
+            None,
+            Some(temp.path().join("successor")),
+        )
+        .await
+        .unwrap();
+
+    process.kill().unwrap();
+    process.wait().unwrap();
+    manager.end_finished_chats().await.unwrap();
+    let handed = manager.notifications(true, 50).await.unwrap();
+    assert_eq!(handed.len(), 1);
+    let id = handed[0].id;
+    let error = manager
+        .withdraw_message(&successor.id, id)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("sent no notification"),
+        "{error:#}"
+    );
+    manager.withdraw_message(&worker.id, id).await.unwrap();
+}
