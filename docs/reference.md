@@ -413,7 +413,9 @@ mark on the workspace itself); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
 `kind` (`question`, `approval`, `needs_input`, `failed` or `ready`) with its
-`question`, `request` or `workspace` and a ready item's `mark`.
+`question`, `request` or `workspace` and a ready item's `mark`. A workspace
+process gets only its own items, printed, and none after clearing its scope
+token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.

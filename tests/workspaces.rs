@@ -7835,6 +7835,24 @@ esac
         1,
         "the refused listing marked nothing read"
     );
+    // Nor list the inbox without its token; with it, it gets its own items
+    // printed instead of the picker it could not act from.
+    let cleared = fixture
+        .command()
+        .args(["exec", "asker", "--", "sh", "-c"])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" inbox --print; exit $?"#)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(!cleared.status.success(), "{cleared:?}");
+    assert!(!String::from_utf8_lossy(&cleared.stdout).contains("Which database?"));
+    fs::remove_file(fixture.root.path().join("picker-input")).unwrap();
+    let mut scoped = fixture.command();
+    scoped.args(["exec", "asker", "--", env!("CARGO_BIN_EXE_shoal"), "inbox"]);
+    let (output, transcript) = fixture.terminal_command(&mut scoped, "", true);
+    assert!(output.status.success(), "{transcript}");
+    assert!(!fixture.root.path().join("picker-input").exists());
+    assert!(transcript.contains("Which database?"), "{transcript}");
 
     // Inside a workspace with items, it starts searching for them.
     let path = Path::new(asker["path"].as_str().unwrap());

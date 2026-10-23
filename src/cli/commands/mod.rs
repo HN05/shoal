@@ -158,10 +158,13 @@ async fn collect_workspace_overviews<T>(
 fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu::View>> {
     match command {
         None => Some(None),
+        // Workspace processes, who cannot act on it, get the inbox printed.
         Some(Command::Inbox {
             repository: None,
             print: false,
-        }) if lists_interactively(ctx) => Some(Some(menu::View::Inbox)),
+        }) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
+            Some(Some(menu::View::Inbox))
+        }
         Some(Command::Work {
             queue: false,
             chats: false,
