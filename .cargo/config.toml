@@ -1,0 +1,6 @@
+[env]
+# Building the CLI's argument tree in a debug build takes nearly all of a
+# thread's default 2 MiB stack, so tests that parse it give out as commands
+# are added. Test threads get the 8 MiB the daemon's workers have; unused
+# stack is reserved, not committed. A RUST_MIN_STACK already set wins.
+RUST_MIN_STACK = "8388608"
