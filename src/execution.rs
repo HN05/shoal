@@ -31,7 +31,7 @@ use crate::{
     },
     daemon::{approvals::Undecided, workspace::ExecutionKind},
     env,
-    model::ExecutionPlan,
+    model::{ExecutionPlan, PortReservation},
     paths::Paths,
     process,
     protocol::{Body, Control, ExecutionEvent, Method, Protection, Reattach, timing},
@@ -269,87 +269,21 @@ async fn run_tracked(
             }
             Ok(Outcome::Paused { code, stop }) => {
                 if let Some(recovery) = &recovery {
-                    let automatic = recovery.automatic && stop.recovers();
-                    let restore = stop.restore(&plan.workspace.name, &plan.id);
-                    // A detached agent never ran in the launching terminal.
-                    let place = (!matches!(mode, Mode::Detached { .. }))
-                        .then(crate::cli::terminal::current_place)
-                        .flatten();
-                    let saved = recovery.save(
-                        paths,
-                        &plan.workspace.id,
-                        &plan.id,
-                        stop.saved_reason(),
-                        place,
-                        automatic.then(this_wrapper).flatten(),
-                    );
-                    match &saved {
-                        Ok(path) => {
-                            recovery_record = Some(path.clone());
-                            if !automatic {
-                                eprintln!("{}", stop.manual_restore(&restore));
-                            }
-                        }
-                        Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
-                    }
-                    if link.refusal().is_none() {
-                        match &stop {
-                            Halt::Protection {
-                                reason,
-                                resumes_when,
-                                ..
-                            } if automatic => link.await_restore(Protection {
-                                reason: reason.clone(),
-                                resumes_when: resumes_when.clone(),
-                            }),
-                            // Once paused, the daemon may forget the stopped child.
-                            _ => link.disarm(),
-                        }
-                        link.send(&ExecutionEvent::Paused).await?;
-                        if let Halt::Protection { resumes_when, .. } = &stop
-                            && automatic
-                        {
-                            eprintln!(
-                                "shoal: agent stopped{}; waiting until {resumes_when}; the agent resumes automatically",
-                                stop.stated_reason()
-                            );
-                            match recovery::wait(&mut link).await? {
-                                recovery::Waited::Resume(ports) => {
-                                    plan.ports = ports;
-                                    next_command = recovery
-                                        .restore_command(
-                                            paths,
-                                            &plan.workspace,
-                                            recovery_record.as_deref(),
-                                        )
-                                        .await;
-                                    eprintln!("shoal: restoring agent session");
-                                    continue;
-                                }
-                                recovery::Waited::Cancelled(cancelled) if saved.is_ok() => {
-                                    let cancelled = cancelled.map(|reason| format!(": {reason}"));
-                                    eprintln!(
-                                        "shoal: agent stopped{}; automatic restore cancelled{}; {restore}",
-                                        stop.stated_reason(),
-                                        cancelled.unwrap_or_default()
-                                    );
-                                }
-                                recovery::Waited::Cancelled(_) => {}
-                            }
-                        }
+                    let after =
+                        pause_agent(&mut link, paths, &plan, &mode, recovery, &stop).await?;
+                    if let AfterPause::Restart {
+                        command,
+                        ports,
+                        record,
+                    } = after
+                    {
+                        plan.ports = ports;
+                        next_command = command;
+                        recovery_record = record;
+                        continue;
                     }
                 } else if matches!(mode, Mode::Command { record: true }) {
-                    match recovery::save_command(paths, &plan.workspace.id, &plan.id, &next_command)
-                    {
-                        Ok(_) => eprintln!(
-                            "shoal: command stopped{}; shoal resume {} lists it",
-                            stop.stated_reason(),
-                            plan.workspace.name
-                        ),
-                        Err(error) => {
-                            eprintln!("warning: cannot record stopped command: {error:#}")
-                        }
-                    }
+                    record_stopped_command(paths, &plan, &next_command, &stop);
                 }
                 break Ok(code);
             }
@@ -520,6 +454,139 @@ enum Outcome {
     },
 }
 
+/// How the wrapper continues after its agent paused.
+enum AfterPause {
+    /// Report the stopped agent's exit code.
+    Finish,
+    /// The daemon resumed the agent: run `command` with `ports`, consuming
+    /// `record` once the restored child is registered.
+    Restart {
+        command: Vec<OsString>,
+        ports: Vec<PortReservation>,
+        record: Option<PathBuf>,
+    },
+}
+
+/// Save the paused agent's recovery record before reporting the pause, then,
+/// when protection stopped it, wait for the daemon to restore it.
+async fn pause_agent(
+    link: &mut Link,
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    mode: &Mode,
+    recovery: &recovery::Recovery,
+    stop: &Halt,
+) -> Result<AfterPause> {
+    let automatic = recovery.automatic && stop.recovers();
+    let saved = save_paused_agent(paths, plan, mode, recovery, stop, automatic);
+    match &saved {
+        Ok(_) if !automatic => eprintln!(
+            "{}",
+            stop.manual_restore(&stop.restore(&plan.workspace.name, &plan.id))
+        ),
+        Ok(_) => {}
+        Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
+    }
+    if link.refusal().is_some() {
+        return Ok(AfterPause::Finish);
+    }
+    let awaited = stop.protection().filter(|_| automatic);
+    report_pause(link, awaited.clone()).await?;
+    let Some(protection) = awaited else {
+        return Ok(AfterPause::Finish);
+    };
+    eprintln!(
+        "shoal: agent stopped{}; waiting until {}; the agent resumes automatically",
+        stop.stated_reason(),
+        protection.resumes_when
+    );
+    await_restore(link, paths, plan, recovery, stop, saved).await
+}
+
+/// Wait for the daemon to restore an agent protection stopped, restarting it
+/// from its saved `record` when it resumes.
+async fn await_restore(
+    link: &mut Link,
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    recovery: &recovery::Recovery,
+    stop: &Halt,
+    record: Result<PathBuf>,
+) -> Result<AfterPause> {
+    match recovery::wait(link).await? {
+        recovery::Waited::Resume(ports) => {
+            let record = record.ok();
+            let command = recovery
+                .restore_command(paths, &plan.workspace, record.as_deref())
+                .await;
+            eprintln!("shoal: restoring agent session");
+            Ok(AfterPause::Restart {
+                command,
+                ports,
+                record,
+            })
+        }
+        recovery::Waited::Cancelled(cancelled) => {
+            if record.is_ok() {
+                let cancelled = cancelled.map(|reason| format!(": {reason}"));
+                eprintln!(
+                    "shoal: agent stopped{}; automatic restore cancelled{}; {}",
+                    stop.stated_reason(),
+                    cancelled.unwrap_or_default(),
+                    stop.restore(&plan.workspace.name, &plan.id)
+                );
+            }
+            Ok(AfterPause::Finish)
+        }
+    }
+}
+
+/// The recovery record of a paused agent, naming where it ran and, when it
+/// restores automatically, this wrapper as the one waiting to restore it.
+fn save_paused_agent(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    mode: &Mode,
+    recovery: &recovery::Recovery,
+    stop: &Halt,
+    automatic: bool,
+) -> Result<PathBuf> {
+    // A detached agent never ran in the launching terminal.
+    let place = (!matches!(mode, Mode::Detached { .. }))
+        .then(crate::cli::terminal::current_place)
+        .flatten();
+    recovery.save(
+        paths,
+        &plan.workspace.id,
+        &plan.id,
+        stop.saved_reason(),
+        place,
+        automatic.then(this_wrapper).flatten(),
+    )
+}
+
+/// Tell the daemon the agent paused. Awaiting a restore keeps the link armed
+/// to reattach; otherwise the daemon may forget the stopped child.
+async fn report_pause(link: &mut Link, awaited: Option<Protection>) -> Result<()> {
+    match awaited {
+        Some(protection) => link.await_restore(protection),
+        None => link.disarm(),
+    }
+    link.send(&ExecutionEvent::Paused).await
+}
+
+/// Keep a stopped command for `shoal resume` to report.
+fn record_stopped_command(paths: &Paths, plan: &ExecutionPlan, command: &[OsString], stop: &Halt) {
+    match recovery::save_command(paths, &plan.workspace.id, &plan.id, command) {
+        Ok(_) => eprintln!(
+            "shoal: command stopped{}; shoal resume {} lists it",
+            stop.stated_reason(),
+            plan.workspace.name
+        ),
+        Err(error) => eprintln!("warning: cannot record stopped command: {error:#}"),
+    }
+}
+
 /// This wrapper, as a recovery record names the one restoring its agent.
 fn this_wrapper() -> Option<process::identity::Identity> {
     process::identity::capture(std::process::id())
@@ -548,6 +615,21 @@ enum Halt {
 impl Halt {
     fn recovers(&self) -> bool {
         matches!(self, Self::Protection { recover: true, .. })
+    }
+
+    /// The protection the daemon restores the agent after.
+    fn protection(&self) -> Option<Protection> {
+        match self {
+            Self::Protection {
+                reason,
+                resumes_when,
+                ..
+            } => Some(Protection {
+                reason: reason.clone(),
+                resumes_when: resumes_when.clone(),
+            }),
+            Self::Pause { .. } => None,
+        }
     }
 
     fn saved_reason(&self) -> Option<&str> {
