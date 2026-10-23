@@ -8,9 +8,9 @@ use serde_json::json;
 
 use crate::state::states;
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::Account,
-    backends::{Backend, bitbucket, gitlab::gitlab_merge},
+    backends::Backend,
     items::{
         attach::{Attachment, Holder, Pending},
         item::{Current, Item, ItemState, draft_prefix},
@@ -260,20 +260,14 @@ impl ForgeRepo {
     }
 
     /// The activity key of what `action` posted, from its response: the
-    /// entry each forge's activity records it under. GitHub reads discussion
-    /// comments by GraphQL node ID, which REST returns as `node_id`, and
-    /// Forgejo counts a reply in its review. Without an ID the post is
+    /// entry the forge's activity records it under. Without an ID the post is
     /// reported back like anyone else's, rather than failing a post that
     /// succeeded.
     fn posted(&self, action: &Action, response: &serde_json::Value) -> Option<String> {
-        use crate::updates::DISCUSSION;
         let reply = matches!(action, Action::Thread(change) if change.reply.is_some());
-        let (source, field) = match (action, self.kind) {
-            (Action::Comment { .. }, ForgeKind::GitHub) => (DISCUSSION, "node_id"),
-            (Action::Comment { .. }, _) => (DISCUSSION, "id"),
-            (_, ForgeKind::GitHub) if reply => ("inline", "id"),
-            (_, ForgeKind::Forgejo) if reply => ("reviews", "pull_request_review_id"),
-            (_, ForgeKind::GitLab | ForgeKind::Bitbucket) if reply => (DISCUSSION, "id"),
+        let (source, field) = match action {
+            Action::Comment { .. } => self.kind.comment_key(),
+            _ if reply => self.kind.reply_key(),
             _ => return None,
         };
         response
@@ -290,14 +284,15 @@ impl ForgeRepo {
         mut current: Current,
         action: &Action,
     ) -> Result<Vec<Request>> {
-        match (action, self.kind) {
-            (Action::Thread(change), _) => {
+        match action {
+            Action::Thread(change) => {
                 let number = current.item.number;
                 let thread = self.thread(account, number, change.comment).await?;
                 self.plan_thread(number, &thread, change)
             }
-            (Action::Edit(edit), ForgeKind::GitLab) => {
-                self.gitlab_user_ids(account, &edit.add_reviewers, &mut current)
+            Action::Edit(edit) => {
+                self.kind
+                    .prepare_edit(self, account, edit, &mut current)
                     .await?;
                 self.plan(&current, action)
             }
@@ -332,19 +327,15 @@ impl ForgeRepo {
     pub(crate) fn plan(&self, current: &Current, action: &Action) -> Result<Vec<Request>> {
         let item = &current.item;
         Ok(match action {
-            Action::Edit(edit) => match self.kind {
-                ForgeKind::GitHub | ForgeKind::Forgejo => self.plan_edit(current, edit)?,
-                ForgeKind::GitLab => self.gitlab_edit(current, edit)?,
-                ForgeKind::Bitbucket => self.bitbucket_edit(current, edit)?,
-            },
-            Action::Comment { body, .. } => vec![self.comment_request(item, body)],
+            Action::Edit(edit) => self.kind.edit(self, current, edit)?,
+            Action::Comment { body, .. } => vec![self.kind.comment(self, item, body)],
             Action::Close => {
                 ensure!(
                     item.state == ItemState::Open,
                     "#{} is not open",
                     item.number
                 );
-                vec![self.state_request(item, ItemState::Closed)?]
+                vec![self.kind.set_state(self, item, ItemState::Closed)?]
             }
             Action::Reopen => {
                 ensure!(
@@ -352,7 +343,7 @@ impl ForgeRepo {
                     "#{} is not closed, or was merged",
                     item.number
                 );
-                vec![self.state_request(item, ItemState::Open)?]
+                vec![self.kind.set_state(self, item, ItemState::Open)?]
             }
             Action::Merge {
                 method,
@@ -363,161 +354,10 @@ impl ForgeRepo {
                     "#{} is not open",
                     item.number
                 );
-                self.plan_merge(current, *method, *delete_branch)?
+                self.kind.merge(self, current, *method, *delete_branch)?
             }
             Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
         })
-    }
-
-    /// Post `body` as a comment on the item.
-    fn comment_request(&self, item: &Item, body: &str) -> Request {
-        let item_endpoint = self.item_endpoint(item.kind, item.number);
-        let (endpoint, body) = match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => (
-                self.repo_endpoint(&format!("issues/{}/comments", item.number)),
-                json!({ "body": body }),
-            ),
-            ForgeKind::GitLab => (format!("{item_endpoint}/notes"), json!({ "body": body })),
-            ForgeKind::Bitbucket => (
-                format!("{item_endpoint}/comments"),
-                json!({ "content": { "raw": body } }),
-            ),
-        };
-        Request::new(HttpMethod::Post, endpoint, Some(body))
-    }
-
-    /// Close or reopen the item.
-    fn state_request(&self, item: &Item, state: ItemState) -> Result<Request> {
-        let endpoint = self.item_endpoint(item.kind, item.number);
-        let open = state == ItemState::Open;
-        Ok(match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => Request::new(
-                HttpMethod::Patch,
-                endpoint,
-                Some(json!({ "state": if open { "open" } else { "closed" } })),
-            ),
-            ForgeKind::GitLab => Request::new(
-                HttpMethod::Put,
-                endpoint,
-                Some(json!({ "state_event": if open { "reopen" } else { "close" } })),
-            ),
-            ForgeKind::Bitbucket => self.bitbucket_state(item, state)?,
-        })
-    }
-
-    fn plan_merge(
-        &self,
-        current: &Current,
-        method: MergeMethod,
-        delete_branch: bool,
-    ) -> Result<Vec<Request>> {
-        let item = &current.item;
-        let pr = item.pr.as_ref().context("only PRs merge")?;
-        let merge = format!("{}/merge", self.item_endpoint(ItemKind::Pr, item.number));
-        Ok(match self.kind {
-            ForgeKind::GitHub => {
-                // GitHub can answer success without merging.
-                let mut requests = vec![
-                    Request::new(
-                        HttpMethod::Put,
-                        merge,
-                        Some(json!({ "merge_method": method.as_str() })),
-                    )
-                    .confirming("merged"),
-                ];
-                // A fork's branch is not this repository's to delete.
-                if delete_branch && current.head_repository.as_deref() == Some(self.path.as_str()) {
-                    requests.push(Request::new(
-                        HttpMethod::Delete,
-                        self.repo_endpoint(&format!(
-                            "git/refs/heads/{}",
-                            crate::transport::api::encode(&pr.head, true)
-                        )),
-                        None,
-                    ));
-                }
-                requests
-            }
-            ForgeKind::Forgejo => vec![Request::new(
-                HttpMethod::Post,
-                merge,
-                Some(json!({
-                    "Do": method.as_str(),
-                    "delete_branch_after_merge": delete_branch,
-                })),
-            )],
-            ForgeKind::GitLab => vec![gitlab_merge(merge, method, delete_branch)?],
-            ForgeKind::Bitbucket => vec![bitbucket::merge(merge, method, delete_branch)],
-        })
-    }
-
-    fn plan_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        let item = &current.item;
-        let mut requests = Vec::new();
-        let mut fields = serde_json::Map::new();
-        let mut title = edit.title.clone();
-        let draft = edit
-            .draft
-            .filter(|draft| item.pr.as_ref().is_some_and(|pr| pr.draft != *draft));
-        // Forgejo keeps draft state in the title, so a new title carries it too.
-        if let (Some(pr), ForgeKind::Forgejo) = (&item.pr, self.kind)
-            && (title.is_some() || draft.is_some())
-        {
-            let current = title.as_deref().unwrap_or(&item.title);
-            title = Some(draft_title(current, draft.unwrap_or(pr.draft)));
-        }
-        if let Some(title) = title {
-            fields.insert("title".into(), title.into());
-        }
-        if let Some(body) = &edit.body {
-            fields.insert("body".into(), body.clone().into());
-        }
-        if let Some(base) = &edit.base {
-            fields.insert("base".into(), base.clone().into());
-        }
-        if !fields.is_empty() {
-            requests.push(Request::new(
-                HttpMethod::Patch,
-                self.item_endpoint(item.kind, item.number),
-                Some(fields.into()),
-            ));
-        }
-        if !edit.add_labels.is_empty() || !edit.remove_labels.is_empty() {
-            // Replacing the set takes label names on both forges.
-            let mut labels: Vec<_> = item
-                .labels
-                .iter()
-                .filter(|label| !edit.remove_labels.contains(label))
-                .cloned()
-                .collect();
-            for label in &edit.add_labels {
-                if !labels.contains(label) {
-                    labels.push(label.clone());
-                }
-            }
-            requests.push(Request::new(
-                HttpMethod::Put,
-                self.repo_endpoint(&format!("issues/{}/labels", item.number)),
-                Some(json!({ "labels": labels })),
-            ));
-        }
-        let reviewers = self.repo_endpoint(&format!("pulls/{}/requested_reviewers", item.number));
-        for (method, reviewers_list) in [
-            (HttpMethod::Post, &edit.add_reviewers),
-            (HttpMethod::Delete, &edit.remove_reviewers),
-        ] {
-            if !reviewers_list.is_empty() {
-                requests.push(Request::new(
-                    method,
-                    reviewers.clone(),
-                    Some(json!({ "reviewers": reviewers_list })),
-                ));
-            }
-        }
-        if let (Some(draft), ForgeKind::GitHub) = (draft, self.kind) {
-            requests.push(github_draft(current, draft)?);
-        }
-        Ok(requests)
     }
 }
 
@@ -526,29 +366,6 @@ fn comment_id(response: &serde_json::Value) -> Result<u64> {
     response["id"]
         .as_u64()
         .context("the forge did not report the comment's ID")
-}
-
-/// GitHub changes draft state only through GraphQL.
-fn github_draft(current: &Current, draft: bool) -> Result<Request> {
-    let id = current
-        .node_id
-        .as_deref()
-        .context("GitHub did not report the PR's node ID")?;
-    let mutation = if draft {
-        "convertPullRequestToDraft"
-    } else {
-        "markPullRequestReadyForReview"
-    };
-    Ok(Request::new(
-        HttpMethod::Post,
-        "graphql".into(),
-        Some(json!({
-            "query": format!(
-                "mutation($id: ID!) {{ {mutation}(input: {{pullRequestId: $id}}) {{ clientMutationId }} }}"
-            ),
-            "variables": { "id": id },
-        })),
-    ))
 }
 
 /// The title with Forgejo's draft prefix added or removed.
@@ -564,7 +381,7 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::item::PrSummary;
+    use crate::{backends::ForgeKind, items::item::PrSummary};
     use serde_json::Value;
 
     fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {

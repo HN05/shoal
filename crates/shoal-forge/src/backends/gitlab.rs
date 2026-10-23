@@ -25,6 +25,7 @@ use crate::{
         api::{HttpMethod, Request, encode, full_page},
         programs,
     },
+    updates::DISCUSSION,
 };
 
 use super::{Backend, rest};
@@ -156,28 +157,21 @@ impl Backend for GitLab {
         };
         rest::open_items(repo, account, endpoint).await
     }
-}
 
-/// Merge statuses during which GitLab has not yet decided mergeability.
-const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
-
-/// Title prefixes that make a merge request a draft, including the former `WIP:`.
-const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
-
-impl ForgeRepo {
-    /// Look up the IDs of the users `names` that `current` has none for.
-    pub(crate) async fn gitlab_user_ids(
+    /// Look up the IDs of the users the edit adds that `current` has none for.
+    async fn prepare_edit(
         &self,
+        repo: &ForgeRepo,
         account: &Account,
-        names: &[String],
+        edit: &Edit,
         current: &mut Current,
     ) -> Result<()> {
-        for name in names {
+        for name in &edit.add_reviewers {
             if current.user_ids.contains_key(name) {
                 continue;
             }
             let request = Request::get(format!("users?username={}", encode(name, false)));
-            let users = self.send(account, &request).await?;
+            let users = repo.send(account, &request).await?;
             let id = users
                 .as_array()
                 .into_iter()
@@ -196,7 +190,7 @@ impl ForgeRepo {
 
     /// One update with every changed field; GitLab adds and removes labels by
     /// name, keeps draft state in the title and replaces reviewers by ID.
-    pub(crate) fn gitlab_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         let item = &current.item;
         let mut fields = serde_json::Map::new();
         let mut title = edit.title.clone();
@@ -232,11 +226,60 @@ impl ForgeRepo {
         }
         Ok(vec![Request::new(
             HttpMethod::Put,
-            self.item_endpoint(item.kind, item.number),
+            repo.item_endpoint(item.kind, item.number),
             Some(fields.into()),
         )])
     }
 
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
+        let endpoint = format!("{}/notes", repo.item_endpoint(item.kind, item.number));
+        Request::new(HttpMethod::Post, endpoint, Some(json!({ "body": body })))
+    }
+
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
+        let event = if state == ItemState::Open {
+            "reopen"
+        } else {
+            "close"
+        };
+        Ok(Request::new(
+            HttpMethod::Put,
+            repo.item_endpoint(item.kind, item.number),
+            Some(json!({ "state_event": event })),
+        ))
+    }
+
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![merge_request(
+            format!("{endpoint}/merge"),
+            method,
+            delete_branch,
+        )?])
+    }
+
+    fn comment_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "id")
+    }
+
+    fn reply_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "id")
+    }
+}
+
+/// Merge statuses during which GitLab has not yet decided mergeability.
+const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
+
+/// Title prefixes that make a merge request a draft, including the former `WIP:`.
+const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
+
+impl ForgeRepo {
     /// The latest status of each CI job and external check on `head`.
     pub(crate) async fn gitlab_checks(
         &self,
@@ -339,11 +382,7 @@ impl ForgeRepo {
 }
 
 /// GitLab merges with the project's merge method, optionally squashing.
-pub(crate) fn gitlab_merge(
-    endpoint: String,
-    method: MergeMethod,
-    delete_branch: bool,
-) -> Result<Request> {
+fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Result<Request> {
     ensure!(
         method != MergeMethod::Rebase,
         "GitLab merges with the project's merge method; use merge or squash"

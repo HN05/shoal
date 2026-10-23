@@ -1,7 +1,7 @@
 //! GitHub, through `gh`, which owns the login: its CLI reports items and
 //! activity as structured data, and `gh api` sends REST and GraphQL requests.
 use anyhow::{Context, Result, bail, ensure};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     Backend,
@@ -11,16 +11,18 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     items::{
+        action::{Edit, MergeMethod},
         issue::require_open,
-        item::{Current, ItemState},
+        item::{Current, Item, ItemState},
         link::ItemKind,
         list,
     },
     repo::locator::ItemRoute,
     transport::{
-        api::{Request, full_page},
+        api::{HttpMethod, Request, encode, full_page},
         programs,
     },
+    updates::DISCUSSION,
 };
 
 #[derive(Clone, Copy)]
@@ -243,6 +245,62 @@ impl Backend for GitHub {
         );
         Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
     }
+
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        let mut requests = github_rest::edit(repo, current, edit, Dialect::GitHub);
+        if let Some(draft) = github_rest::draft_change(current, edit) {
+            requests.push(draft_request(current, draft)?);
+        }
+        Ok(requests)
+    }
+
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
+        github_rest::comment(repo, item, body)
+    }
+
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
+        Ok(github_rest::set_state(repo, item, state))
+    }
+
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let item = &current.item;
+        let pr = item.pr.as_ref().context("only PRs merge")?;
+        let merge = format!("{}/merge", repo.item_endpoint(ItemKind::Pr, item.number));
+        // GitHub can answer success without merging.
+        let mut requests = vec![
+            Request::new(
+                HttpMethod::Put,
+                merge,
+                Some(json!({ "merge_method": method.as_str() })),
+            )
+            .confirming("merged"),
+        ];
+        // A fork's branch is not this repository's to delete.
+        if delete_branch && current.head_repository.as_deref() == Some(repo.path.as_str()) {
+            requests.push(Request::new(
+                HttpMethod::Delete,
+                repo.repo_endpoint(&format!("git/refs/heads/{}", encode(&pr.head, true))),
+                None,
+            ));
+        }
+        Ok(requests)
+    }
+
+    /// GitHub reads discussion comments by GraphQL node ID, which REST
+    /// returns as `node_id`.
+    fn comment_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "node_id")
+    }
+
+    fn reply_key(&self) -> (&'static str, &'static str) {
+        ("inline", "id")
+    }
 }
 
 /// What a `gh` read is for, which decides its timeout and error guidance.
@@ -311,6 +369,29 @@ fn reported_state(output: &str, number: u64) -> Result<ItemState> {
         State::Open => ItemState::Open,
         State::Closed => ItemState::Closed,
     })
+}
+
+/// GitHub changes draft state only through GraphQL.
+fn draft_request(current: &Current, draft: bool) -> Result<Request> {
+    let id = current
+        .node_id
+        .as_deref()
+        .context("GitHub did not report the PR's node ID")?;
+    let mutation = if draft {
+        "convertPullRequestToDraft"
+    } else {
+        "markPullRequestReadyForReview"
+    };
+    Ok(Request::new(
+        HttpMethod::Post,
+        "graphql".into(),
+        Some(json!({
+            "query": format!(
+                "mutation($id: ID!) {{ {mutation}(input: {{pullRequestId: $id}}) {{ clientMutationId }} }}"
+            ),
+            "variables": { "id": id },
+        })),
+    ))
 }
 
 /// The messages of a GraphQL response's `errors`, when it has any.

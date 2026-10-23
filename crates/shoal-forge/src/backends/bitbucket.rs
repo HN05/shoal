@@ -25,6 +25,7 @@ use crate::{
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::api::{HttpMethod, Request},
+    updates::DISCUSSION,
 };
 
 use super::{Backend, rest};
@@ -164,6 +165,105 @@ impl Backend for Bitbucket {
             ItemKind::Pr => "pullrequests?state=OPEN",
         };
         rest::open_items(repo, account, endpoint).await
+    }
+
+    /// One update of the changed fields. Bitbucket has no labels, keeps
+    /// draft state as a flag, and replaces reviewers by Atlassian account ID.
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        ensure!(
+            edit.add_labels.is_empty() && edit.remove_labels.is_empty(),
+            "Bitbucket has no labels"
+        );
+        let item = &current.item;
+        // A pull request update needs its title even when it keeps it.
+        let mut fields = json!({ "title": edit.title.as_deref().unwrap_or(&item.title) });
+        if let Some(body) = &edit.body {
+            match item.kind {
+                ItemKind::Issue => fields["content"] = json!({ "raw": body }),
+                ItemKind::Pr => fields["description"] = body.clone().into(),
+            }
+        }
+        if let Some(base) = &edit.base {
+            fields["destination"] = json!({ "branch": { "name": base } });
+        }
+        if let Some(draft) = edit.draft {
+            fields["draft"] = draft.into();
+        }
+        if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
+            let mut reviewers: Vec<&String> = current
+                .reviewers
+                .iter()
+                .filter(|id| !edit.remove_reviewers.contains(id))
+                .collect();
+            for id in &edit.add_reviewers {
+                if !reviewers.contains(&id) {
+                    reviewers.push(id);
+                }
+            }
+            fields["reviewers"] = reviewers
+                .into_iter()
+                .map(|id| json!({ "account_id": id }))
+                .collect();
+        }
+        Ok(vec![Request::new(
+            HttpMethod::Put,
+            repo.item_endpoint(item.kind, item.number),
+            Some(fields),
+        )])
+    }
+
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
+        let endpoint = format!("{}/comments", repo.item_endpoint(item.kind, item.number));
+        Request::new(
+            HttpMethod::Post,
+            endpoint,
+            Some(json!({ "content": { "raw": body } })),
+        )
+    }
+
+    /// Decline a pull request, or resolve or reopen an issue. Bitbucket
+    /// cannot reopen a declined pull request.
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
+        let endpoint = repo.item_endpoint(item.kind, item.number);
+        Ok(match (item.kind, state) {
+            (ItemKind::Pr, ItemState::Open) => {
+                bail!("Bitbucket cannot reopen a declined pull request")
+            }
+            (ItemKind::Pr, _) => {
+                Request::new(HttpMethod::Post, format!("{endpoint}/decline"), None)
+            }
+            (ItemKind::Issue, ItemState::Open) => {
+                Request::new(HttpMethod::Put, endpoint, Some(json!({ "state": "open" })))
+            }
+            (ItemKind::Issue, _) => Request::new(
+                HttpMethod::Put,
+                endpoint,
+                Some(json!({ "state": "resolved" })),
+            ),
+        })
+    }
+
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![merge_request(
+            format!("{endpoint}/merge"),
+            method,
+            delete_branch,
+        )])
+    }
+
+    fn comment_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "id")
+    }
+
+    fn reply_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "id")
     }
 }
 
@@ -326,77 +426,10 @@ impl ForgeRepo {
         }));
         Ok(Some(reviews))
     }
-
-    /// One update of the changed fields. Bitbucket has no labels, keeps
-    /// draft state as a flag, and replaces reviewers by Atlassian account ID.
-    pub(crate) fn bitbucket_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        ensure!(
-            edit.add_labels.is_empty() && edit.remove_labels.is_empty(),
-            "Bitbucket has no labels"
-        );
-        let item = &current.item;
-        // A pull request update needs its title even when it keeps it.
-        let mut fields = json!({ "title": edit.title.as_deref().unwrap_or(&item.title) });
-        if let Some(body) = &edit.body {
-            match item.kind {
-                ItemKind::Issue => fields["content"] = json!({ "raw": body }),
-                ItemKind::Pr => fields["description"] = body.clone().into(),
-            }
-        }
-        if let Some(base) = &edit.base {
-            fields["destination"] = json!({ "branch": { "name": base } });
-        }
-        if let Some(draft) = edit.draft {
-            fields["draft"] = draft.into();
-        }
-        if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
-            let mut reviewers: Vec<&String> = current
-                .reviewers
-                .iter()
-                .filter(|id| !edit.remove_reviewers.contains(id))
-                .collect();
-            for id in &edit.add_reviewers {
-                if !reviewers.contains(&id) {
-                    reviewers.push(id);
-                }
-            }
-            fields["reviewers"] = reviewers
-                .into_iter()
-                .map(|id| json!({ "account_id": id }))
-                .collect();
-        }
-        Ok(vec![Request::new(
-            HttpMethod::Put,
-            self.item_endpoint(item.kind, item.number),
-            Some(fields),
-        )])
-    }
-
-    /// Decline a pull request, or resolve or reopen an issue. Bitbucket
-    /// cannot reopen a declined pull request.
-    pub(crate) fn bitbucket_state(&self, item: &Item, state: ItemState) -> Result<Request> {
-        let endpoint = self.item_endpoint(item.kind, item.number);
-        Ok(match (item.kind, state) {
-            (ItemKind::Pr, ItemState::Open) => {
-                bail!("Bitbucket cannot reopen a declined pull request")
-            }
-            (ItemKind::Pr, _) => {
-                Request::new(HttpMethod::Post, format!("{endpoint}/decline"), None)
-            }
-            (ItemKind::Issue, ItemState::Open) => {
-                Request::new(HttpMethod::Put, endpoint, Some(json!({ "state": "open" })))
-            }
-            (ItemKind::Issue, _) => Request::new(
-                HttpMethod::Put,
-                endpoint,
-                Some(json!({ "state": "resolved" })),
-            ),
-        })
-    }
 }
 
 /// Bitbucket's strategy for each merge method; rebasing fast-forwards.
-pub(crate) fn merge(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
+fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
     let strategy = match method {
         MergeMethod::Merge => "merge_commit",
         MergeMethod::Squash => "squash",
@@ -764,7 +797,7 @@ mod tests {
             remove_reviewers: vec!["a".into()],
             ..Edit::default()
         };
-        let requests = bitbucket().bitbucket_edit(&current, &edit).unwrap();
+        let requests = Bitbucket.edit(&bitbucket(), &current, &edit).unwrap();
         assert_eq!(
             requests,
             [Request::new(
@@ -779,31 +812,31 @@ mod tests {
             add_labels: vec!["bug".into()],
             ..Edit::default()
         };
-        assert!(bitbucket().bitbucket_edit(&current, &labels).is_err());
+        assert!(Bitbucket.edit(&bitbucket(), &current, &labels).is_err());
         assert_eq!(
-            bitbucket()
-                .bitbucket_state(&current.item, ItemState::Closed)
+            Bitbucket
+                .set_state(&bitbucket(), &current.item, ItemState::Closed)
                 .unwrap()
                 .endpoint,
             "repositories/workspace/repo/pullrequests/7/decline"
         );
         current.item.state = ItemState::Closed;
         assert!(
-            bitbucket()
-                .bitbucket_state(&current.item, ItemState::Open)
+            Bitbucket
+                .set_state(&bitbucket(), &current.item, ItemState::Open)
                 .is_err()
         );
         current.item.kind = ItemKind::Issue;
         current.item.pr = None;
         assert_eq!(
-            bitbucket()
-                .bitbucket_state(&current.item, ItemState::Open)
+            Bitbucket
+                .set_state(&bitbucket(), &current.item, ItemState::Open)
                 .unwrap()
                 .body,
             Some(json!({"state": "open"}))
         );
         assert_eq!(
-            merge("merge".into(), MergeMethod::Rebase, true).body,
+            merge_request("merge".into(), MergeMethod::Rebase, true).body,
             Some(json!({"merge_strategy": "rebase_fast_forward", "close_source_branch": true}))
         );
     }

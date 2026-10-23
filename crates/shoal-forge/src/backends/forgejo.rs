@@ -2,7 +2,7 @@
 //! under `/api/v1`, sent with the token fj saved for the host, else through
 //! tea's login, else anonymously.
 use anyhow::Result;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     Backend,
@@ -12,9 +12,17 @@ use super::{
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
-    items::{item::Current, link::ItemKind, list},
+    items::{
+        action::{Edit, MergeMethod},
+        item::{Current, Item, ItemState},
+        link::ItemKind,
+        list,
+    },
     repo::locator::ItemRoute,
-    transport::api::{MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body},
+    transport::api::{
+        HttpMethod, MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body,
+    },
+    updates::DISCUSSION,
 };
 
 /// Forgejo's default maximum page size.
@@ -106,6 +114,45 @@ impl Backend for Forgejo {
             ItemKind::Pr => "pulls?state=open",
         };
         rest::open_items(repo, account, endpoint).await
+    }
+
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        Ok(github_rest::edit(repo, current, edit, Dialect::Forgejo))
+    }
+
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
+        github_rest::comment(repo, item, body)
+    }
+
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
+        Ok(github_rest::set_state(repo, item, state))
+    }
+
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let number = current.item.number;
+        Ok(vec![Request::new(
+            HttpMethod::Post,
+            format!("{}/merge", repo.item_endpoint(ItemKind::Pr, number)),
+            Some(json!({
+                "Do": method.as_str(),
+                "delete_branch_after_merge": delete_branch,
+            })),
+        )])
+    }
+
+    fn comment_key(&self) -> (&'static str, &'static str) {
+        (DISCUSSION, "id")
+    }
+
+    /// Forgejo counts a reply in its review.
+    fn reply_key(&self) -> (&'static str, &'static str) {
+        ("reviews", "pull_request_review_id")
     }
 }
 

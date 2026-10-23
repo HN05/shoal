@@ -19,7 +19,8 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     items::{
-        item::{Current, ItemState},
+        action::{Edit, MergeMethod},
+        item::{Current, Item, ItemState},
         link::ItemKind,
         list,
     },
@@ -159,6 +160,41 @@ pub(crate) trait Backend {
             .await
             .context(MERGED_HINT.trim_start_matches("; ").to_owned())
     }
+    /// Read what `edit` needs beyond `current` before it is planned.
+    async fn prepare_edit(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _edit: &Edit,
+        _current: &mut Current,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// The requests that change `current` as `edit` says, in order.
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>>;
+
+    /// Post `body` as a comment on the item.
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request;
+
+    /// Close or reopen the item.
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request>;
+
+    /// The requests that merge the open PR `current`.
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>>;
+
+    /// Where activity records a posted comment: its source, and the
+    /// response field that holds its ID.
+    fn comment_key(&self) -> (&'static str, &'static str);
+
+    /// Where activity records a reply in a review thread.
+    fn reply_key(&self) -> (&'static str, &'static str);
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -288,6 +324,45 @@ impl Backend for ForgeKind {
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
         dispatch!(self, backend => backend.merged_commits(repo, account, number, branch).await)
+    }
+    async fn prepare_edit(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        edit: &Edit,
+        current: &mut Current,
+    ) -> Result<()> {
+        dispatch!(self, backend => backend.prepare_edit(repo, account, edit, current).await)
+    }
+
+    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        dispatch!(self, backend => backend.edit(repo, current, edit))
+    }
+
+    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {
+        dispatch!(self, backend => backend.comment(repo, item, body))
+    }
+
+    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
+        dispatch!(self, backend => backend.set_state(repo, item, state))
+    }
+
+    fn merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        dispatch!(self, backend => backend.merge(repo, current, method, delete_branch))
+    }
+
+    fn comment_key(&self) -> (&'static str, &'static str) {
+        dispatch!(self, backend => backend.comment_key())
+    }
+
+    fn reply_key(&self) -> (&'static str, &'static str) {
+        dispatch!(self, backend => backend.reply_key())
     }
 }
 
