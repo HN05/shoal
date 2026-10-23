@@ -111,7 +111,8 @@ pub(crate) fn insert(
     if kind.collapses() {
         let pending: Option<i64> = tx
             .query_row(
-                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1 AND kind=?2 AND message=?3",
+                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1 AND kind=?2 AND message=?3
+                    AND workspace_id IS (SELECT id FROM workspaces WHERE name=?1)",
                 params![workspace, kind, message],
                 |row| row.get(0),
             )
@@ -626,6 +627,14 @@ mod tests {
             .create_workspace(&repo.id, "sender".into(), None, None, path)
             .await
             .unwrap();
+        // The same message from it is its own, not collapsed into the earlier one.
+        let own = manager
+            .send_message(&successor.id, "PR #14 is ready to merge".into())
+            .await
+            .unwrap()
+            .notification
+            .unwrap();
+        assert_ne!(own, unread);
         let error = manager
             .withdraw_message(&successor.id, unread)
             .await
