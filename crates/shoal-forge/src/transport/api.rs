@@ -29,26 +29,16 @@ const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HttpMethod {
-    Get,
-    Post,
-    Patch,
-    Put,
-    Delete,
-}
-
-impl HttpMethod {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Get => "GET",
-            Self::Post => "POST",
-            Self::Patch => "PATCH",
-            Self::Put => "PUT",
-            Self::Delete => "DELETE",
-        }
+crate::state::states!(
+    /// The HTTP methods forge requests use.
+    HttpMethod: ValueEnum {
+        Get => "GET",
+        Post => "POST",
+        Patch => "PATCH",
+        Put => "PUT",
+        Delete => "DELETE",
     }
-}
+);
 
 /// One REST request; `endpoint` is relative to the forge's API root.
 #[derive(Debug, Clone, PartialEq)]

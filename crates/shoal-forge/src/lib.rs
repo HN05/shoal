@@ -8,6 +8,7 @@ pub mod ci;
 pub mod conventions;
 pub mod hosts;
 pub mod items;
+pub mod raw;
 pub mod repo;
 pub mod review;
 mod state;
