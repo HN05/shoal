@@ -5,6 +5,7 @@ pub mod account;
 pub mod backends;
 pub mod ci;
 pub mod conventions;
+pub mod hosts;
 pub mod items;
 pub mod repo;
 pub mod review;
@@ -15,6 +16,7 @@ pub mod updates;
 use anyhow::{Context, Result, ensure};
 
 use backends::{Backend, ForgeKind};
+use hosts::HostTypes;
 use repo::{
     locator::ItemRoute,
     remote_url::{RemoteUrl, Transport},
@@ -63,6 +65,23 @@ impl ForgeRepo {
     }
 
     fn from_remote(remote: &RemoteUrl<'_>) -> Result<Self> {
+        let (host, path, web_scheme) = Self::location(remote)?;
+        let kind = ForgeKind::detect(&host);
+        Self::on(kind, host, path, web_scheme)
+    }
+
+    /// The repository `remote` names, on the forge `hosts` says its host
+    /// serves, which this process then remembers for the host.
+    pub async fn resolve(remote: &str, hosts: &impl HostTypes) -> Result<Self> {
+        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
+        let (host, path, web_scheme) = Self::location(&remote)?;
+        let kind = hosts.forge_type(&host, web_scheme).await?;
+        hosts::learn(&host, kind);
+        Self::on(kind, host, path, web_scheme)
+    }
+
+    /// The web host, repository path and web scheme of `remote`.
+    fn location<'a>(remote: &RemoteUrl<'a>) -> Result<(String, &'a str, &'static str)> {
         ensure!(
             matches!(
                 remote.transport,
@@ -86,8 +105,16 @@ impl ForgeRepo {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
             "issue lookup needs a remote with host/owner/repository"
         );
-        let host = host.to_ascii_lowercase();
-        let kind = ForgeKind::detect(&host);
+        let web_scheme = if remote.transport == Transport::Http {
+            "http"
+        } else {
+            "https"
+        };
+        Ok((host.to_ascii_lowercase(), path, web_scheme))
+    }
+
+    /// The repository at `path` on `host`, which serves `kind`.
+    fn on(kind: ForgeKind, host: String, path: &str, web_scheme: &'static str) -> Result<Self> {
         let segments = path.split('/').count();
         ensure!(
             (segments == 2 || kind.nests_groups() && segments > 2)
@@ -102,12 +129,18 @@ impl ForgeRepo {
             kind,
             host,
             path: path.into(),
-            web_scheme: if remote.transport == Transport::Http {
-                "http"
-            } else {
-                "https"
-            },
+            web_scheme,
         })
+    }
+
+    /// `host` as a repository without a path, for asking it as `kind`.
+    pub(crate) fn host(host: &str, web_scheme: &'static str, kind: ForgeKind) -> Self {
+        Self {
+            kind,
+            host: host.into(),
+            path: String::new(),
+            web_scheme,
+        }
     }
 
     pub async fn issue_details(
@@ -122,7 +155,13 @@ impl ForgeRepo {
 
     /// The repository an issue URL belongs to.
     pub fn from_issue_url(url: &str) -> Result<Self> {
-        ItemRoute::discover(url, &[ItemRoute::GitLabIssue, ItemRoute::Issue])
+        Self::parse(ItemRoute::discover(url, ISSUE_ROUTES)?)
+    }
+
+    /// The repository an issue URL belongs to, on the forge `hosts` says
+    /// its host serves.
+    pub async fn resolve_issue_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
+        Self::resolve(ItemRoute::discover(url, ISSUE_ROUTES)?, hosts).await
     }
 
     pub fn repository_url(&self) -> String {
@@ -166,15 +205,13 @@ pub struct PullRequest {
 impl ForgeRepo {
     /// The repository a PR URL belongs to.
     pub fn from_pull_url(url: &str) -> Result<Self> {
-        ItemRoute::discover(
-            url,
-            &[
-                ItemRoute::Pull,
-                ItemRoute::Pulls,
-                ItemRoute::MergeRequest,
-                ItemRoute::PullRequests,
-            ],
-        )
+        Self::parse(ItemRoute::discover(url, PULL_ROUTES)?)
+    }
+
+    /// The repository a PR URL belongs to, on the forge `hosts` says its
+    /// host serves.
+    pub async fn resolve_pull_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
+        Self::resolve(ItemRoute::discover(url, PULL_ROUTES)?, hosts).await
     }
 
     /// Only PRs whose head branch lives in this repository can be checked out.
@@ -198,6 +235,15 @@ impl ForgeRepo {
         })
     }
 }
+
+const ISSUE_ROUTES: &[ItemRoute] = &[ItemRoute::GitLabIssue, ItemRoute::Issue];
+
+const PULL_ROUTES: &[ItemRoute] = &[
+    ItemRoute::Pull,
+    ItemRoute::Pulls,
+    ItemRoute::MergeRequest,
+    ItemRoute::PullRequests,
+];
 
 pub(crate) const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
 

@@ -58,13 +58,13 @@ impl ItemRoute {
         })
     }
 
-    /// The repository of an item URL in the first of `routes` it uses.
-    pub fn discover(input: &str, routes: &[Self]) -> Result<ForgeRepo> {
+    /// The repository URL of an item URL in the first of `routes` it uses.
+    pub fn discover<'a>(input: &'a str, routes: &[Self]) -> Result<&'a str> {
         let item = routes
             .iter()
             .find_map(|route| route.split_url(input))
             .with_context(|| routes[0].diagnostic(ISSUE_URL, PULL_URL))?;
-        ForgeRepo::parse(item.repository)
+        Ok(item.repository)
     }
 
     fn url(self, input: &str) -> Result<ItemUrl<'_>> {

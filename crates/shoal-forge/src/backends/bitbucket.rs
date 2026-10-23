@@ -50,6 +50,11 @@ const CLOSED_ISSUE_STATES: [&str; 5] = ["resolved", "invalid", "duplicate", "won
 pub(crate) struct Bitbucket;
 
 impl Backend for Bitbucket {
+    /// Bitbucket Cloud serves only `bitbucket.org`, which is known by name.
+    async fn serves(&self, _host: &ForgeRepo, _account: &Account) -> Result<bool> {
+        Ok(false)
+    }
+
     fn nests_groups(&self) -> bool {
         false
     }

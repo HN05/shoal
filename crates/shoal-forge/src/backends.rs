@@ -40,37 +40,55 @@ use forgejo::Forgejo;
 use github::GitHub;
 use gitlab::GitLab;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ForgeKind {
-    GitHub,
-    /// Forgejo, and Gitea, which serves the same API.
-    Forgejo,
-    GitLab,
-    /// Bitbucket Cloud.
-    Bitbucket,
-}
+crate::state::states!(
+    /// The API a forge host serves.
+    ForgeKind: Variants {
+        GitHub => "github",
+        /// Forgejo, and Gitea, which serves the same API.
+        Forgejo => "forgejo",
+        GitLab => "gitlab",
+        /// Bitbucket Cloud.
+        Bitbucket => "bitbucket",
+    }
+);
 
 impl ForgeKind {
-    /// Well-known hosts by name, where Bitbucket means Bitbucket Cloud; a host glab has a login for, or whose name
-    /// has a `gitlab` label, as GitLab; any other as Forgejo or Gitea.
-    pub fn detect(host: &str) -> Self {
+    /// The well-known hosts, where Bitbucket means Bitbucket Cloud.
+    pub fn named(host: &str) -> Option<Self> {
         match host {
-            "github.com" => Self::GitHub,
-            "gitlab.com" => Self::GitLab,
-            "bitbucket.org" => Self::Bitbucket,
-            _ if host.split(['.', ':']).any(|label| label == "gitlab")
-                || gitlab::glab::has_login(host) =>
-            {
-                Self::GitLab
-            }
-            _ => Self::Forgejo,
+            "github.com" => Some(Self::GitHub),
+            "gitlab.com" => Some(Self::GitLab),
+            "bitbucket.org" => Some(Self::Bitbucket),
+            _ => None,
         }
+    }
+
+    /// What this process learned `host` serves, else the well-known hosts by
+    /// name; until then a host glab has a login for, or whose name has a
+    /// `gitlab` label, counts as GitLab and any other as Forgejo or Gitea.
+    pub(crate) fn detect(host: &str) -> Self {
+        crate::hosts::learned(host)
+            .or_else(|| Self::named(host))
+            .unwrap_or_else(|| {
+                if host.split(['.', ':']).any(|label| label == "gitlab")
+                    || gitlab::glab::has_login(host)
+                {
+                    Self::GitLab
+                } else {
+                    Self::Forgejo
+                }
+            })
     }
 }
 
 /// What a forge does its own way. Methods that need the repository take it
 /// as `repo`.
 pub(crate) trait Backend {
+    /// Whether `host`, a repository without a path, answers this forge's
+    /// version or metadata endpoint as `account`; an error when it could
+    /// not be asked.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
+
     /// Whether a repository path may have more than `owner/repository`.
     fn nests_groups(&self) -> bool;
 
@@ -472,6 +490,10 @@ macro_rules! dispatch {
 }
 
 impl Backend for ForgeKind {
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
+        dispatch!(self, backend => backend.serves(host, account).await)
+    }
+
     fn nests_groups(&self) -> bool {
         dispatch!(self, backend => backend.nests_groups())
     }

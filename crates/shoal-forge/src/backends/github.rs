@@ -45,6 +45,15 @@ use crate::{
 pub(crate) struct GitHub;
 
 impl Backend for GitHub {
+    /// GitHub's metadata names its SSH keys' password policy, and an
+    /// Enterprise Server its version.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
+        let meta = host.send(account, &Request::get("meta".into())).await?;
+        Ok(["verifiable_password_authentication", "installed_version"]
+            .iter()
+            .any(|field| meta.get(field).is_some()))
+    }
+
     fn nests_groups(&self) -> bool {
         false
     }

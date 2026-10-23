@@ -41,6 +41,12 @@ use super::{Backend, rest};
 pub(crate) struct GitLab;
 
 impl Backend for GitLab {
+    /// GitLab reports its version with the revision it was built from.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
+        let version = host.send(account, &Request::get("version".into())).await?;
+        Ok(version["version"].is_string() && version["revision"].is_string())
+    }
+
     fn nests_groups(&self) -> bool {
         true
     }

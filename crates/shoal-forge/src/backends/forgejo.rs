@@ -56,6 +56,12 @@ const PULL_READS: usize = 8;
 pub(crate) struct Forgejo;
 
 impl Backend for Forgejo {
+    /// Forgejo and Gitea report their version under `/api/v1`.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
+        let version = host.send(account, &Request::get("version".into())).await?;
+        Ok(version["version"].is_string())
+    }
+
     fn nests_groups(&self) -> bool {
         false
     }
