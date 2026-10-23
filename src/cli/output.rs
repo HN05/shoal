@@ -48,6 +48,12 @@ pub enum Style {
     Warning,
     Error,
     Muted,
+    /// Something waits for the user.
+    Attention,
+    /// Something runs without saying what it does.
+    Active,
+    /// An agent waits for a turn.
+    Idle,
 }
 
 #[derive(Clone, Copy)]
@@ -102,26 +108,15 @@ impl Palette {
             Style::Warning => "33",
             Style::Error => "1;31",
             Style::Muted => "2",
+            Style::Attention => "1;33",
+            Style::Active => "36",
+            Style::Idle => "34",
         };
         format!("\x1b[{code}m{value}\x1b[0m")
     }
 
     pub fn workspace_state(self, state: WorkspaceState) -> String {
         self.paint(workspace_state_style(state), state)
-    }
-
-    /// A one-column state marker whose shape stays readable without color.
-    pub fn workspace_marker(self, state: WorkspaceState) -> String {
-        let marker = match state {
-            WorkspaceState::Ready => "●",
-            WorkspaceState::Failed => "✗",
-            WorkspaceState::Preparing
-            | WorkspaceState::Stopping
-            | WorkspaceState::Removing
-            | WorkspaceState::Reconciling
-            | WorkspaceState::Restoring => "◌",
-        };
-        self.paint(workspace_state_style(state), marker)
     }
 
     pub fn simulator_state(self, state: SimulatorState) -> String {

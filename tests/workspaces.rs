@@ -20044,7 +20044,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
                 "process running",
                 "claude"
             ],
-            vec!["● └ chat-worker", "inactive"],
+            vec!["○ └ chat-worker", "inactive"],
         ]
     );
 

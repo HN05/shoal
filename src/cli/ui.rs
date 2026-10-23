@@ -613,7 +613,11 @@ fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Op
     });
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
         .into_iter()
-        .map(|(resumable, w)| (resume_status_cell(resumable), w))
+        .map(|(resumable, w)| {
+            let stopped = matches!(resumable, Some((_, true)));
+            let status = ListStatus::of_workspace(&w, stopped);
+            ((status, resume_status_cell(resumable)), w)
+        })
         .unzip();
     let labels = rows_with_status(
         &workspaces,
@@ -772,11 +776,12 @@ fn availability_entries(
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
         .into_iter()
         .map(|(refusal, w)| {
-            let status = match refusal {
+            let status = ListStatus::of_workspace(&w, stopped.contains(&w.id));
+            let cell = match refusal {
                 Some(refusal) => (refusal, Some(Style::Muted)),
-                None => status_cell(&w, stopped.contains(&w.id)),
+                None => status_cell(status),
             };
-            (status, w)
+            ((status, cell), w)
         })
         .unzip();
     let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width());
@@ -797,12 +802,11 @@ pub fn agent_state_label(state: AgentState) -> &'static str {
     ListStatus::agent(state).label()
 }
 
-fn status_cell(workspace: &Workspace, stopped: bool) -> Cell {
-    let status = ListStatus::of_workspace(workspace, stopped);
+fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
-/// One aligned row per workspace: a state marker, the name, the repository
+/// One aligned row per workspace: a status marker, the name, the repository
 /// when the rows span several (`(id, name)` pairs), the status, and the linked
 /// issue's title when known.
 pub fn workspace_rows(
@@ -814,7 +818,10 @@ pub fn workspace_rows(
 ) -> Vec<String> {
     let statuses = workspaces
         .iter()
-        .map(|w| status_cell(w, stopped.contains(&w.id)))
+        .map(|w| {
+            let status = ListStatus::of_workspace(w, stopped.contains(&w.id));
+            (status, status_cell(status))
+        })
         .collect();
     rows_with_status(workspaces, repositories, statuses, palette, width)
 }
@@ -907,12 +914,13 @@ fn tree_workspace_row(
         0 => workspace.name.clone(),
         depth => format!("{}└ {}", "  ".repeat(depth - 1), workspace.name),
     };
+    let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
-        palette.workspace_marker(workspace.state),
+        status.marker(palette),
         [
             (name, Some(Style::Heading)),
             (String::new(), None),
-            status_cell(workspace, stopped.contains(&workspace.id)),
+            status_cell(status),
             (
                 workspace.links.issue_title.clone().unwrap_or_default(),
                 None,
@@ -946,14 +954,19 @@ pub fn chat_label(chat: &Chat, repositories: &[Repository]) -> String {
     }
 }
 
-/// `workspace_rows` with a status cell per workspace.
+/// `workspace_rows` with a status, which picks the marker, and a status cell
+/// per workspace.
 fn rows_with_status(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
-    statuses: Vec<Cell>,
+    statuses: Vec<(ListStatus, Cell)>,
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
+    let (markers, statuses): (Vec<_>, Vec<_>) = statuses
+        .into_iter()
+        .map(|(status, cell)| (status.marker(palette), cell))
+        .unzip();
     let cells: Vec<[Cell; 4]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
@@ -967,10 +980,10 @@ fn rows_with_status(
             ]
         })
         .collect();
-    workspaces
-        .iter()
+    markers
+        .into_iter()
         .zip(aligned_to(cells, palette, title_limit(width)))
-        .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
+        .map(|(marker, row)| format!("{marker} {row}"))
         .collect()
 }
 
@@ -1038,9 +1051,10 @@ pub fn queue_rows(
             ]
         })
         .collect();
-    aligned(cells, palette)
-        .into_iter()
-        .map(|row| format!("{} {row}", palette.paint(Style::Muted, "◌")))
+    entries
+        .iter()
+        .zip(aligned(cells, palette))
+        .map(|(entry, row)| format!("{} {row}", ListStatus::of_entry(entry).marker(palette)))
         .collect()
 }
 
@@ -1305,7 +1319,7 @@ mod tests {
             branch: "unlisted".into(),
         });
         let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain, None);
-        let expected = ["● orphan ", "● parent ", "● └ child ", "●   └ grandchild "];
+        let expected = ["○ orphan ", "○ parent ", "○ └ child ", "○   └ grandchild "];
         assert_eq!(rows.len(), expected.len());
         for (row, start) in rows.iter().zip(expected) {
             assert!(row.starts_with(start), "{row:?}");
@@ -1435,12 +1449,12 @@ mod tests {
                 "● fix-login  stopped",
                 "✗ x          failed",
                 "◌ new        preparing",
-                "● busy       process running   Refine the list view",
+                "◐ busy       process running   Refine the list view",
                 "● review     ready",
-                "● quiet      ready (outdated)",
+                "○ quiet      ready (outdated)",
                 "● asking     needs input",
                 "● marked     ready",
-                "● agent      waiting",
+                "○ agent      waiting",
             ]
         );
         let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
@@ -1451,8 +1465,8 @@ mod tests {
         assert_eq!(
             workspace_rows(&workspaces, &repositories, &HashSet::new(), plain, None),
             [
-                "● fix-login  shoal  inactive",
-                "● y          app    inactive"
+                "○ fix-login  shoal  inactive",
+                "○ y          app    inactive"
             ]
         );
     }

@@ -1,6 +1,7 @@
-//! The status column of workspace and agent queue lists.
+//! The status column of workspace and agent queue lists, and the marker
+//! that starts each row.
 use crate::{
-    cli::output::Style,
+    cli::output::{Palette, Style},
     model::{QueueEntry, Workspace},
     state::{AgentState, QueueState, WorkspaceState},
 };
@@ -98,7 +99,10 @@ impl ListStatus {
         match self {
             Self::Failed => Style::Error,
             Self::Ready => Style::Success,
-            Self::Working | Self::Waiting | Self::ProcessRunning => Style::Heading,
+            Self::Working => Style::Heading,
+            Self::Waiting => Style::Idle,
+            Self::ProcessRunning => Style::Active,
+            Self::NeedsInput => Style::Attention,
             Self::Inactive | Self::Queued => Style::Muted,
             Self::Preparing
             | Self::Stopping
@@ -106,11 +110,51 @@ impl ListStatus {
             | Self::Reconciling
             | Self::Restoring
             | Self::Stopped
-            | Self::NeedsInput
             | Self::ReadyOutdated
             | Self::Starting => Style::Warning,
         }
     }
+
+    /// A one-column marker for what the status asks of the user, whose shape
+    /// stays readable without color.
+    pub fn marker(self, palette: Palette) -> String {
+        let (style, marker) = match self.group() {
+            Group::YourTurn => (Style::Attention, "●"),
+            Group::Busy => (Style::Heading, "◐"),
+            Group::Quiet => (Style::Muted, "○"),
+            Group::Changing => (Style::Warning, "◌"),
+            Group::Failed => (Style::Error, "✗"),
+        };
+        palette.paint(style, marker)
+    }
+
+    fn group(self) -> Group {
+        match self {
+            Self::NeedsInput | Self::Ready | Self::Stopped => Group::YourTurn,
+            Self::Working | Self::ProcessRunning => Group::Busy,
+            Self::Waiting | Self::ReadyOutdated | Self::Inactive | Self::Queued => Group::Quiet,
+            Self::Preparing
+            | Self::Stopping
+            | Self::Removing
+            | Self::Reconciling
+            | Self::Restoring
+            | Self::Starting => Group::Changing,
+            Self::Failed => Group::Failed,
+        }
+    }
+}
+
+/// Statuses that ask the same of the user share a row marker.
+enum Group {
+    /// The user has something to answer, review or resume.
+    YourTurn,
+    /// An agent or process works.
+    Busy,
+    /// Nothing happens until something wakes it.
+    Quiet,
+    /// The workspace moves between states.
+    Changing,
+    Failed,
 }
 
 #[cfg(test)]
