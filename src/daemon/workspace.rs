@@ -345,6 +345,22 @@ impl Manager {
             .await
     }
 
+    /// The workspaces a caller lists, with review marks checked against
+    /// HEAD. A workspace process sees its own subtree with its own workspace
+    /// first, since scoped commands without a target act on the first one.
+    pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
+        let mut workspaces = self.list_workspaces().await?;
+        if let Some(owner) = owner {
+            let subtree = self.subtree(owner).await?;
+            workspaces.retain(|w| subtree.contains(&w.id));
+            workspaces.sort_by_key(|w| w.id != owner);
+        }
+        for workspace in &mut workspaces {
+            self.annotate_review(workspace).await;
+        }
+        Ok(workspaces)
+    }
+
     /// Record that a restart would stop this connected execution.
     pub(super) fn mark_unattachable(&self, id: &str) {
         self.unattachable

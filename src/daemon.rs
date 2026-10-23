@@ -522,20 +522,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
                 .await?,
         ),
-        Method::ListWorkspaces => {
-            let mut workspaces = manager.list_workspaces().await?;
-            if let Some(caller) = caller {
-                // The caller's own workspace comes first: scoped commands
-                // without a target act on it.
-                let subtree = manager.subtree(&caller.workspace_id).await?;
-                workspaces.retain(|w| subtree.contains(&w.id));
-                workspaces.sort_by_key(|w| w.id != caller.workspace_id);
-            }
-            for workspace in &mut workspaces {
-                manager.annotate_review(workspace).await;
-            }
-            Body::Workspaces(workspaces)
-        }
+        Method::ListWorkspaces => Body::Workspaces(
+            manager
+                .visible_workspaces(caller.map(|c| c.workspace_id.as_str()))
+                .await?,
+        ),
         Method::StartChat {
             repository,
             agent,

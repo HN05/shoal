@@ -164,6 +164,38 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
 }
 
 #[tokio::test]
+async fn workspace_processes_list_their_subtree_with_their_own_workspace_first() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    create("sibling").await.unwrap();
+    // The child sorts before its parent by name.
+    manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let names = |workspaces: Vec<Workspace>| {
+        workspaces
+            .into_iter()
+            .map(|workspace| workspace.name)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        names(manager.visible_workspaces(None).await.unwrap()),
+        ["child", "parent", "sibling"]
+    );
+    assert_eq!(
+        names(manager.visible_workspaces(Some(&parent.id)).await.unwrap()),
+        ["parent", "child"]
+    );
+}
+
+#[tokio::test]
 async fn children_keep_their_parent_from_cleanup() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
