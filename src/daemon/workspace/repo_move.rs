@@ -99,7 +99,7 @@ impl Manager {
     }
 
     /// `root`, or the configured one, refused inside a directory that would
-    /// move into it.
+    /// move into it or a workspace placed elsewhere.
     async fn move_root(&self, root: Option<&Path>, repositories: &[Repository]) -> Result<PathBuf> {
         let root = match root {
             Some(root) => root.to_owned(),
@@ -120,6 +120,14 @@ impl Manager {
                 "root_dir {} is inside the repository directory {}",
                 root.display(),
                 directory.display()
+            );
+        }
+        for workspace in self.list_workspaces().await? {
+            ensure!(
+                !root.starts_with(&workspace.path),
+                "root_dir {} is inside the workspace {}",
+                root.display(),
+                workspace.name
             );
         }
         Ok(root)
@@ -753,20 +761,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refuses_a_root_inside_a_repository_directory() -> Result<()> {
-        let (_temp, manager, repo, _workspace, _root) = cloned().await?;
-        let inside = repo.workspaces_dir.context("no directory")?.join("nested");
-        test_support::configure(&manager, &format!("root_dir = {:?}\n", inside)).await;
-        let error = manager
-            .move_repositories()
-            .await
-            .err()
-            .context("moved into itself")?;
-        assert!(
-            error
-                .to_string()
-                .contains("inside the repository directory")
-        );
+    async fn refuses_a_root_inside_a_repository_directory_or_workspace() -> Result<()> {
+        let (temp, manager, repo, _workspace, _root) = cloned().await?;
+        let placed = fs::canonicalize(temp.path())?.join("placed");
+        manager
+            .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
+            .await?;
+        for (inside, message) in [
+            (
+                repo.workspaces_dir
+                    .clone()
+                    .context("no directory")?
+                    .join("nested"),
+                "inside the repository directory",
+            ),
+            (placed.join("nested"), "inside the workspace placed"),
+        ] {
+            test_support::configure(&manager, &format!("root_dir = {:?}\n", inside)).await;
+            let error = manager
+                .move_repositories()
+                .await
+                .err()
+                .context("moved into itself")?;
+            assert!(error.to_string().contains(message), "{error:#}");
+        }
         Ok(())
     }
 }
