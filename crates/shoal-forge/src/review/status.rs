@@ -68,6 +68,10 @@ impl PrStatus {
                 .iter()
                 .map(|(source, error)| format!("{source} lookup failed: {error}")),
         );
+        // A status reports the checks it could not read, whatever stopped it.
+        if let Some(limit) = &snapshot.limited {
+            self.errors.push(format!("CI lookup failed: {limit}"));
+        }
         self.merge_conflicts = snapshot.conflict;
         self.checks = snapshot.check_results();
     }
@@ -169,6 +173,22 @@ pub(crate) fn github_reviews(pull: &serde_json::Value) -> Result<Vec<(String, Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rate_limited_checks_are_reported_as_unread() {
+        let snapshot = Snapshot {
+            limited: Some(crate::transport::limits::RateLimited {
+                host: "forge.example".into(),
+                until: u64::MAX,
+            }),
+            ..Snapshot::default()
+        };
+        let mut status = PrStatus::new("pr".into(), Some(PrState::Open));
+        status.record_snapshot(snapshot);
+        assert!(status.checks.is_empty());
+        assert_eq!(status.errors.len(), 1, "{:?}", status.errors);
+        assert!(status.errors[0].starts_with("CI lookup failed: forge.example limits"));
+    }
 
     fn review(reviewer: &str, verdict: Verdict) -> (String, Verdict) {
         (reviewer.into(), verdict)
