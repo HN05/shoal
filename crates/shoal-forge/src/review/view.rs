@@ -8,6 +8,7 @@ use serde_json::Value;
 use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
+    backends::Backend,
     gh,
     items::link::ItemKind,
     review::{

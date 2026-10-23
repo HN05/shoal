@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    backends::gitlab,
+    backends::{Backend, gitlab},
     items::{
         action::{Action, Edit, draft_title},
         attach::{Attachment, Pending},

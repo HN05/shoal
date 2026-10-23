@@ -14,7 +14,7 @@ use tokio::process::Command;
 use crate::{
     ForgeKind, ForgeRepo,
     account::{Account, ForgejoLogin},
-    backends::tea,
+    backends::{Backend, tea},
     transport::programs,
 };
 
@@ -151,11 +151,7 @@ impl ForgeRepo {
 
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => format!("repos/{}/{path}", self.path),
-            ForgeKind::GitLab => format!("projects/{}/{path}", encode(&self.path, false)),
-            ForgeKind::Bitbucket => format!("repositories/{}/{path}", self.path),
-        }
+        self.kind.repo_endpoint(self, path)
     }
 
     /// The response body, or null for an empty one.

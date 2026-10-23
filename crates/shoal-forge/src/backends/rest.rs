@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
+    backends::Backend,
     items::{
         item::{Current, ItemState},
         link::ItemKind,

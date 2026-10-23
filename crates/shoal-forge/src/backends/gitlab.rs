@@ -14,6 +14,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
     },
+    repo::locator::ItemRoute,
     review::{
         status::Verdict,
         thread::{Target, Thread},
@@ -21,6 +22,45 @@ use crate::{
     },
     transport::api::{HttpMethod, Request, encode},
 };
+
+use super::Backend;
+
+#[derive(Clone, Copy)]
+pub(crate) struct GitLab;
+
+impl Backend for GitLab {
+    fn nests_groups(&self) -> bool {
+        true
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::GitLabIssue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::MergeRequest
+    }
+
+    fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
+        format!("projects/{}/{path}", encode(&repo.path, false))
+    }
+
+    fn pull_resource(&self) -> &'static str {
+        "merge_requests"
+    }
+
+    fn number_field(&self) -> &'static str {
+        "iid"
+    }
+
+    fn commit_field(&self) -> &'static str {
+        "id"
+    }
+
+    fn login_hint(&self) -> &'static str {
+        "GitLab API request failed; check `glab auth login` for the host"
+    }
+}
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
 const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];

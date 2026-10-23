@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
+    backends::Backend,
     gh,
     items::{item::ItemState, link::ItemKind},
 };

@@ -2,7 +2,7 @@ use super::{Check, MergeRevision, Snapshot};
 use crate::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
-    backends::rest::RestCheck,
+    backends::{Backend, rest::RestCheck},
     gh,
     items::{
         item::{Current, ItemState},

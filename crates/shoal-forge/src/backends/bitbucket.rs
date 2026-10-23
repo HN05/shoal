@@ -17,6 +17,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
     },
+    repo::locator::ItemRoute,
     review::{
         status::Verdict,
         thread::{Target, Thread},
@@ -24,6 +25,45 @@ use crate::{
     },
     transport::api::{HttpMethod, Request},
 };
+
+use super::Backend;
+
+#[derive(Clone, Copy)]
+pub(crate) struct Bitbucket;
+
+impl Backend for Bitbucket {
+    fn nests_groups(&self) -> bool {
+        false
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::Issue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::PullRequests
+    }
+
+    fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
+        format!("repositories/{}/{path}", repo.path)
+    }
+
+    fn pull_resource(&self) -> &'static str {
+        "pullrequests"
+    }
+
+    fn number_field(&self) -> &'static str {
+        "id"
+    }
+
+    fn commit_field(&self) -> &'static str {
+        "hash"
+    }
+
+    fn login_hint(&self) -> &'static str {
+        "Bitbucket API request failed; private repositories need [bitbucket] token_command"
+    }
+}
 
 /// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]

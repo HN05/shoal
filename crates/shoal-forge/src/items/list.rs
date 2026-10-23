@@ -1,6 +1,7 @@
 //! Open issues and PRs, for choosing one interactively.
 use anyhow::{Context, Result};
 
+use crate::backends::Backend;
 use crate::{ForgeKind, ForgeRepo, Query, account::Account, gh, items::link::ItemKind};
 
 /// An open issue or PR.

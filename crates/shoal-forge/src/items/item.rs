@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::backends::Backend;
 use crate::state::states;
 use crate::{ForgeKind, ForgeRepo, items::link::ItemKind};
 
@@ -75,11 +76,9 @@ pub struct Current {
 impl ForgeRepo {
     /// The item's REST endpoint.
     pub(crate) fn item_endpoint(&self, kind: ItemKind, number: u64) -> String {
-        let resource = match (kind, self.kind) {
-            (ItemKind::Issue, _) => "issues",
-            (ItemKind::Pr, ForgeKind::GitHub | ForgeKind::Forgejo) => "pulls",
-            (ItemKind::Pr, ForgeKind::GitLab) => "merge_requests",
-            (ItemKind::Pr, ForgeKind::Bitbucket) => "pullrequests",
+        let resource = match kind {
+            ItemKind::Issue => "issues",
+            ItemKind::Pr => self.kind.pull_resource(),
         };
         self.repo_endpoint(&format!("{resource}/{number}"))
     }

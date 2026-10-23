@@ -14,7 +14,7 @@ pub mod updates;
 
 use anyhow::{Context, Result, ensure};
 
-use backends::kind::ForgeKind;
+use backends::{Backend, ForgeKind};
 use repo::{
     locator::ItemRoute,
     remote_url::{RemoteUrl, Transport},
