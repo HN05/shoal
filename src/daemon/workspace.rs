@@ -56,6 +56,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use branches::UpstreamPolicy;
+use futures_util::StreamExt as _;
 use ownership::owns_git_dir;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{
@@ -64,6 +65,11 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
+
+/// Review checks a listing runs at once, each reading HEAD with one Git
+/// process: enough to overlap their waits without one listing taking a
+/// process per workspace.
+const REVIEW_CHECK_CONCURRENCY: usize = 8;
 
 enum WorkspaceSource {
     /// A new branch from an optional base ref, split from an optional parent
@@ -371,13 +377,11 @@ impl Manager {
             workspaces.retain(|w| subtree.contains(&w.id));
             workspaces.sort_by_key(|w| w.id != owner);
         }
-        // Each check reads HEAD with Git, so a long listing runs them together.
-        futures_util::future::join_all(
-            workspaces
-                .iter_mut()
-                .map(|workspace| self.annotate_review(workspace)),
-        )
-        .await;
+        futures_util::stream::iter(&mut workspaces)
+            .for_each_concurrent(REVIEW_CHECK_CONCURRENCY, |workspace| {
+                self.annotate_review(workspace)
+            })
+            .await;
         Ok(workspaces)
     }
 
