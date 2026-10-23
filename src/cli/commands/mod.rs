@@ -3,6 +3,7 @@
 mod acquisition;
 mod agent_queue;
 mod agent_state;
+mod api;
 mod approvals;
 mod base;
 mod branches;
@@ -382,6 +383,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Capabilities(repository) => {
             capabilities::capabilities(&ctx, repository.workspace).await
         }
+        Command::Api(args) => api::api(&ctx, args).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready {
             items,

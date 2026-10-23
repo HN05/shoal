@@ -3139,3 +3139,74 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         json!([{"kind": "issue", "url": url, "title": "Crash"}])
     );
 }
+
+#[test]
+fn api_requests_reach_any_path_and_agents_only_read() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    // Longer than one protocol frame, so it arrives in pieces.
+    let branches: Vec<Value> = (0..400)
+        .map(|n| json!({"name": format!("b{n}"), "commit": {"message": "\"x\"".repeat(100)}}))
+        .collect();
+    fixture.respond(json!({
+        "GET repos/team/project/branches?limit=400": {"body": branches},
+        "PATCH repos/team/project": {"body": {"description": "new"}},
+    }));
+    let path = "/repos/{owner}/{repo}/branches?limit=400";
+    let listed = fixture.ok(&["api", path, "--workspace", "topic"]);
+    assert_eq!(listed, json!(branches));
+    let output = fixture.run(&["api", path, "--workspace", "topic"]);
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(printed.starts_with("[\n  {\n    \"commit\""), "{printed}");
+    let body = fixture.root.path().join("body.json");
+    fs::write(&body, r#"{"description": "new"}"#).unwrap();
+    let body = body.to_str().unwrap();
+    let edited = fixture.ok(&[
+        "api",
+        "repos/{owner}/{repo}",
+        "-X",
+        "patch",
+        "--input",
+        body,
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(edited, json!({"description": "new"}));
+    let read = "GET repos/team/project/branches?limit=400";
+    assert_eq!(
+        fixture.requests(),
+        [
+            json!([read, null, "token usertoken"]),
+            json!([read, null, "token usertoken"]),
+            json!(["PATCH repos/team/project", {"description": "new"}, "token usertoken"]),
+        ]
+    );
+
+    // The agent reads as itself, and writes only when the repository lets it.
+    assert_eq!(scoped(&fixture, &["api", path]), json!(branches));
+    assert_eq!(
+        fixture.requests(),
+        [json!([read, null, "token agenttoken"])]
+    );
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let output = fixture.run(&[
+        "exec",
+        "topic",
+        "--",
+        shoal,
+        "api",
+        "repos/{owner}/{repo}",
+        "--input",
+        body,
+    ]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[api] agent_writes = true"), "{stderr}");
+    assert!(fixture.requests().is_empty());
+}

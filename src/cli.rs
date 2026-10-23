@@ -61,6 +61,24 @@ pub struct RepositoryArgs {
     pub workspace: Option<String>,
 }
 
+/// `shoal api` arguments, outside the derived `Command` builder for the same
+/// reason (#997).
+#[derive(Debug, Args)]
+pub struct ApiArgs {
+    /// Path under the forge's API root, where `{owner}` and `{repo}` name the
+    /// repository, such as `repos/{owner}/{repo}/branches`.
+    pub path: String,
+    /// HTTP method; defaults to POST with --input and GET otherwise.
+    #[arg(short = 'X', long, value_enum, ignore_case = true)]
+    pub method: Option<crate::forge::raw::HttpMethod>,
+    /// JSON request body from a file, or `-` for standard input.
+    #[arg(long, value_name = "FILE")]
+    pub input: Option<PathBuf>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
 /// `shoal export` arguments, outside the derived `Command` builder, whose stack
 /// frame in debug builds grows with every inline argument (#997).
 #[derive(Debug, Args)]
@@ -268,6 +286,12 @@ pub enum Command {
     Labels(RepositoryArgs),
     /// List what the repository's forge supports.
     Capabilities(RepositoryArgs),
+    /// Send a request to the repository's forge API and print its JSON response.
+    ///
+    /// Workspace processes send it as the agent account, and only GET unless
+    /// `[api] agent_writes` lets agents send others; anyone else sends any
+    /// request with your own logins.
+    Api(ApiArgs),
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]

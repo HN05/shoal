@@ -2189,6 +2189,31 @@ running, and cancels the job's run; GitLab retries or cancels each job; Forgejo
 cancels each check's run. `--json` returns `url`, `action` and the
 `checks` acted on.
 
+#### Forge API requests
+
+```sh
+shoal api 'repos/{owner}/{repo}/branches'   # GET a path of the forge's API
+shoal api 'repos/{owner}/{repo}' -X PATCH --input body.json
+```
+
+`shoal api` sends a request to a path under the workspace repository's forge API
+root, such as `/api/v1` on Forgejo, and prints the JSON response, which `--json`
+prints on one line. `{owner}` and `{repo}` fill in the repository; on GitLab
+`{owner}` is the encoded group path, so `projects/{owner}%2F{repo}` names a
+nested project. A path that names another host or has a `.` or `..` segment is
+refused. The request is a GET, or a POST with `--input`, a JSON body from a file
+or `-` for standard input, unless `-X` names another method. It uses the logins,
+rate limits and 64 MiB response bound of other forge requests. Processes inside
+a workspace send it as the [agent account](#agent-accounts), and only GET unless
+`[api] agent_writes` lets agents send other methods, which could merge, approve
+or skip required labels around Shoal's checks; anyone else sends any request
+with your own logins.
+
+```toml
+[api]
+agent_writes = true # Default: false
+```
+
 ### Linked items and cleanup
 
 `shoal link <number-or-url> <relation>` associates an issue or PR with the

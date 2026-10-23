@@ -943,7 +943,13 @@ merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
-reads pages only until the limit is met. Forgejo's issue search lists PRs
+reads pages only until the limit is met. `shoal api` passes any request under
+the repository's forge API root through the daemon the same way, for reads no
+command models, since fj has no API passthrough to fall back to. The daemon
+cannot tell what another method changes, so a scoped caller sends only GET
+unless `[api] agent_writes` accepts that its writes may merge, approve or skip
+required labels; the path stays under the API root, so the login reaches only
+its own forge's API. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a

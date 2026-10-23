@@ -185,6 +185,7 @@ shoal issue open --title Bug  # Open an issue, recorded as opened; --link also a
 shoal issue open --repo team/tool --title Bug # Open it in another repository
 shoal labels                  # The repository's labels and what each one means
 shoal capabilities            # What the repository's forge supports, such as resolving threads
+shoal api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to

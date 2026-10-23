@@ -90,7 +90,8 @@ instead of the PR delivery guidance below.
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing, opening and changing issues and PRs
   of the own repository except merging, rerunning or cancelling their CI jobs,
-  own-repository sync and
+  GET requests to the own repository's forge API, or others where `[api] agent_writes`
+  allows them, own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
@@ -178,8 +179,9 @@ instead of the PR delivery guidance below.
 - Once every watched PR of a base merges and covers its HEAD, the PR sweep restacks its stacked
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting its branch, and queues a watch update; it never rebases or pushes.
-  Forge writes are retargeting and the daemon's typed issue and PR actions, sent
-  through the REST transport; scoped callers cannot merge. Forgejo and Gitea API
+  Forge writes are retargeting, the daemon's typed issue and PR actions and
+  `shoal api` requests, sent through the REST transport; scoped callers cannot
+  merge. `shoal api` paths stay under the forge's API root. Forgejo and Gitea API
   requests use fj's saved token for the repository's own host, validated, passed
   to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
   through `tea api`; GitLab requests go through `glab api`. Bitbucket requests
