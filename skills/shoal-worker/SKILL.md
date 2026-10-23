@@ -42,7 +42,10 @@ finding in its thread: `shoal view` shows every review comment's ID, and
 (Forgejo cannot resolve threads through its API; reply there instead). They default to the
 linked item; pass a number or URL for another item in the repository. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
-workspace, and only `--link` assigns it to you. Merging is
+workspace, and only `--link` assigns it to you. Before opening one, search for an
+existing issue with `shoal --json issue list <words>` (`--state all`, `--label`,
+`--author`, `--limit`; `pr list` takes the same), and comment there instead of
+opening a duplicate. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
 Every link names its relation last: `assigned` for the work you are doing,
