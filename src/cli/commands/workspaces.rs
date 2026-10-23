@@ -1,6 +1,5 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
 use std::{
-    collections::BTreeMap,
     ffi::OsString,
     path::{Path, PathBuf},
     time::Duration,
@@ -1277,30 +1276,6 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
     Ok(0)
 }
 
-/// The variables `[env]` adds to the workspace's tracked executions and hooks.
-pub(super) async fn configured_environment(
-    ctx: &Context,
-    workspace: &Workspace,
-) -> Result<BTreeMap<String, OsString>> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let repo = client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == workspace.repository_id)
-        .context("workspace repository is missing")?;
-    Ok(crate::env::render_configured_environment(
-        &settings.env,
-        workspace,
-        repository::name(&repo),
-        &client::inspect(&ctx.paths, workspace.id.clone())
-            .await?
-            .ports,
-        // Only the daemon creates them; tools create a missing one.
-        &crate::caches::locate(&repo, &settings.caches),
-    ))
-}
-
 /// Run the configured `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 pub(super) async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
@@ -1313,7 +1288,23 @@ pub(super) async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Resu
     )
     .await?;
     if let Some(command) = command {
-        let configured_env = configured_environment(ctx, workspace).await?;
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        let repo = client::repositories(&ctx.paths)
+            .await?
+            .into_iter()
+            .find(|repo| repo.id == workspace.repository_id)
+            .context("workspace repository is missing")?;
+        let configured_env = crate::env::render_configured_environment(
+            &settings.env,
+            workspace,
+            repository::name(&repo),
+            &client::inspect(&ctx.paths, workspace.id.clone())
+                .await?
+                .ports,
+            // Only the daemon creates them; tools create a missing one.
+            &crate::caches::locate(&repo, &settings.caches),
+        );
         hooks::run_interactive(
             Hook::PostSetup,
             workspace,

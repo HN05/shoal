@@ -161,34 +161,8 @@ pub fn claude_config_dir() -> Result<Option<PathBuf>> {
     absolute_dir_var(CLAUDE_CONFIG_DIR)
 }
 
-/// [`claude_config_dir`] of a process whose environment adds `configured`
-/// to this one's.
-pub fn claude_config_dir_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
-    absolute_dir(
-        CLAUDE_CONFIG_DIR,
-        configured_var(configured, CLAUDE_CONFIG_DIR),
-    )
-}
-
-/// [`codex_home`] of a process whose environment adds `configured` to this
-/// one's.
-pub fn codex_home_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
-    absolute_dir(CODEX_HOME, configured_var(configured, CODEX_HOME))
-}
-
-fn configured_var(configured: &BTreeMap<String, OsString>, name: &str) -> Option<OsString> {
-    configured
-        .get(name)
-        .cloned()
-        .or_else(|| std::env::var_os(name))
-}
-
 fn absolute_dir_var(name: &str) -> Result<Option<PathBuf>> {
-    absolute_dir(name, std::env::var_os(name))
-}
-
-fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> {
-    let Some(dir) = value else {
+    let Some(dir) = std::env::var_os(name) else {
         return Ok(None);
     };
     let dir = PathBuf::from(dir);

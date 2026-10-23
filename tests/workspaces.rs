@@ -4777,15 +4777,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    // The removal record keeps the last session for the restored workspace,
-    // which carries Claude Code's latest copy of it to its path, as an import
-    // does.
-    let latest = fixture
-        .root
-        .path()
-        .join(".claude/projects/-elsewhere/quit-session.jsonl");
-    fs::create_dir_all(latest.parent().unwrap()).unwrap();
-    fs::write(&latest, "conversation\n").unwrap();
+    // The removal record keeps the last session for the restored workspace.
     fixture.ok(&["rm", "quit", "--yes"]);
     let removed = fixture.ok(&["restore"]);
     assert_eq!(
@@ -4807,53 +4799,21 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         fs::read_to_string(path.join("resumed")).unwrap(),
         "quit-session"
     );
-    assert_eq!(
-        fs::read_to_string(
-            claude_project(&fixture.root.path().join(".claude/projects"), path)
-                .join("quit-session.jsonl")
-        )
-        .unwrap(),
-        "conversation\n"
-    );
-}
-
-/// Claude Code's project folder of `directory` in `projects`.
-fn claude_project(projects: &Path, directory: &Path) -> std::path::PathBuf {
-    let name: String = fs::canonicalize(directory)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .chars()
-        .map(|char| {
-            if char.is_ascii_alphanumeric() {
-                char
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    projects.join(name)
 }
 
 #[test]
-fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
+fn import_on_the_exporting_machine_continues_the_session() {
     let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
-    // Claude Code runs with the directory `[env]` gives it.
-    let claude = fixture.root.path().join("claude-config");
-    let config = fixture.root.path().join(".config/shoal/config.toml");
-    let mut text = fs::read_to_string(&config).unwrap();
-    text.push_str(&format!(
-        "[env]\nCLAUDE_CONFIG_DIR = '{}'\n",
-        claude.display()
-    ));
-    fs::write(&config, text).unwrap();
     let workspace = fixture.add("carried");
     let path = Path::new(workspace["path"].as_str().unwrap());
+    // The agent reports its session as Claude Code's hooks do, also when it
+    // resumes one, then quits.
     fs::write(
         path.join("agent.sh"),
         format!(
-            "if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; exit 0; fi\n\
-             printf '{{\"session_id\":\"carried-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            "session=carried-session\n\
+             if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; session=$2; fi\n\
+             printf '{{\"session_id\":\"%s\"}}' \"$session\" | '{}' internal agent-state idle >/dev/null || exit 3\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     )
@@ -4865,39 +4825,42 @@ fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    // Claude Code keeps the session in the project folder of the directory
-    // the workspace had before.
-    let projects = claude.join("projects");
-    let old = projects.join("-old-workspace");
-    fs::create_dir_all(&old).unwrap();
-    fs::write(old.join("carried-session.jsonl"), "conversation\n").unwrap();
     let file = fixture.root.path().join("carried.shoal");
     let file = file.to_str().unwrap();
-    let exported = fixture.ok(&["export", "carried", "-o", file]);
     let repo = fixture.repo.to_str().unwrap();
+    let resume = || {
+        let output = fixture
+            .command()
+            .current_dir(path)
+            .arg("resume")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+    };
+
+    let exported = fixture.ok(&["export", "carried", "-o", file]);
+    // The import trusts the workspace's path for the agent it resumes there.
+    let config = fixture.root.path().join(".claude.json");
+    fs::remove_file(&config).unwrap();
     let imported = fixture.ok(&["import", file, "--repo", repo]);
     assert_eq!(imported["warnings"], serde_json::json!([]));
-
-    let output = fixture
-        .command()
-        .current_dir(path)
-        .arg("resume")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
     // A machine without an ID cannot tell it exported the workspace.
     if exported["manifest"]["sessions"].is_null() {
+        resume();
         assert!(!path.join("resumed").exists());
         return;
     }
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(
+        root["projects"][checkout.to_str().unwrap()]["hasTrustDialogAccepted"],
+        true
+    );
+    resume();
     assert_eq!(
         fs::read_to_string(path.join("resumed")).unwrap(),
         "carried-session"
-    );
-    assert_eq!(
-        fs::read_to_string(claude_project(&projects, path).join("carried-session.jsonl")).unwrap(),
-        "conversation\n"
     );
 }
 

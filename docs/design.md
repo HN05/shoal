@@ -1293,17 +1293,15 @@ bundle builds on, since that branch only advances. Repositories match by origin.
 Exporting every workspace of a repository checks each one before removing any, so
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
-Agent conversations are the agent tools' private, path-keyed files, and Shoal
-does not store conversations. The export records the exporting machine's ID
-with the agents' sessions beside the moved records, which older importers read.
-An import on that machine keeps the agents' sessions, and every reopen checks
-each where its tool keeps sessions under the workspace's `[env]`, which only
-then resolves, and makes it resumable from the workspace's path, for Claude Code
-by copying the newer files of the folder with the session's latest copy;
-elsewhere, or when the session is gone, moved recovery
-records drop their session, place and wrapper, and `shoal resume` starts them
-through the fresh-agent launch, with its trust setup and guidance, told the
-workspace moved. Shoal provides only these operations; deciding when and where to move work
+Agent conversations are the agent tools' private files, and Shoal neither
+stores nor touches them. The export records the exporting machine's ID with the
+agents' sessions beside the moved records, which older importers read. An import
+on that machine keeps the session IDs, which the agents resume from any
+directory, and every reopen trusts the workspace's path for those agents, since
+resuming skips the launch's trust setup. Otherwise moved recovery records drop
+their session, place and wrapper, and `shoal resume` starts them through the
+fresh-agent launch, with its trust setup and guidance, told the workspace moved.
+Shoal provides only these operations; deciding when and where to move work
 belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree

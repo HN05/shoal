@@ -1,11 +1,11 @@
 //! Detached Happy sessions and their tool-specific prompt delivery.
-use std::{ffi::OsString, path::Path};
+use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 use serde_json::json;
 
-use super::{AgentEnvironment, Integration, Launch, trust::TrustFile};
+use super::{Integration, Launch, trust::TrustFile};
 use crate::{
     cli::{
         client,
@@ -40,19 +40,6 @@ impl Integration for Happy {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         self.inner().trust_file()
-    }
-
-    fn has_session(&self, environment: &AgentEnvironment, session: &str) -> bool {
-        self.inner().has_session(environment, session)
-    }
-
-    fn carry_session(
-        &self,
-        environment: &AgentEnvironment,
-        session: &str,
-        directory: &Path,
-    ) -> Result<()> {
-        self.inner().carry_session(environment, session, directory)
     }
 
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {

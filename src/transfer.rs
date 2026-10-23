@@ -105,8 +105,8 @@ impl Manifest {
     }
 
     /// The removal record to import on `machine`. On the exporting machine,
-    /// each agent with a session keeps it, which reopening checks where the
-    /// agent runs; every other agent starts a new session.
+    /// each agent with a session keeps it; every other agent starts a new
+    /// session.
     pub fn workspace_on(&self, machine: Option<&str>) -> RemovedWorkspace {
         let Some(sessions) = self
             .sessions
