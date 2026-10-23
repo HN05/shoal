@@ -9,7 +9,7 @@ use crate::{
     backends::Backend,
     items::{
         issue::require_open,
-        item::{Current, ItemState},
+        item::{Current, Item, ItemState},
         link::ItemKind,
         list,
     },
@@ -195,20 +195,63 @@ pub(crate) async fn pull_details(
     branches(repo, pull)
 }
 
-/// The open items a list endpoint under the repository returns.
-pub(crate) async fn open_items(
+/// Up to `search.limit` items of `kind` that a list endpoint under the
+/// repository returns, keeping those in a state the search asks for.
+pub(crate) async fn list_items(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    endpoint: &str,
+    search: &list::Search,
+) -> Result<Vec<Item>> {
+    listed(repo, account, endpoint, search.limit, |value| {
+        let item = repo.current(kind, listed_number(repo, value)?, value)?.item;
+        Ok(search.includes(item.state).then_some(item))
+    })
+    .await
+}
+
+/// The numbers of up to `limit` items a list endpoint under the repository
+/// returns.
+pub(crate) async fn listed_numbers(
     repo: &ForgeRepo,
     account: &Account,
     endpoint: &str,
-) -> Result<Vec<list::Item>> {
-    let items = repo
-        .pages(account, &repo.repo_endpoint(endpoint))
-        .await
-        .context(repo.kind.login_hint())?;
-    items
-        .iter()
-        .map(|item| list_item(item, repo.kind.number_field()))
-        .collect()
+    limit: usize,
+) -> Result<Vec<u64>> {
+    listed(repo, account, endpoint, limit, |value| {
+        listed_number(repo, value).map(Some)
+    })
+    .await
+}
+
+/// Up to `limit` entries of a list endpoint under the repository as `read`
+/// reads them, skipping those it reads as none, page by page until enough.
+async fn listed<T>(
+    repo: &ForgeRepo,
+    account: &Account,
+    endpoint: &str,
+    limit: usize,
+    mut read: impl FnMut(&Value) -> Result<Option<T>>,
+) -> Result<Vec<T>> {
+    let mut entries = Vec::new();
+    repo.pages_while(account, &repo.repo_endpoint(endpoint), |batch| {
+        for value in batch {
+            entries.extend(read(value)?);
+        }
+        Ok(entries.len() < limit)
+    })
+    .await
+    .context(repo.kind.login_hint())?;
+    entries.truncate(limit);
+    Ok(entries)
+}
+
+fn listed_number(repo: &ForgeRepo, value: &Value) -> Result<u64> {
+    value[repo.kind.number_field()]
+        .as_u64()
+        .filter(|number| *number > 0)
+        .context("listed item has no number")
 }
 
 /// An issue's state, read from its REST item.
@@ -280,22 +323,10 @@ pub(crate) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(Stri
         .collect()
 }
 
-fn list_item(item: &Value, field: &str) -> Result<list::Item> {
-    let number = item[field]
-        .as_u64()
-        .filter(|number| *number > 0)
-        .context("listed item has no number")?;
-    let title = item["title"].as_str().context("listed item has no title")?;
-    Ok(list::Item {
-        number,
-        title: title.to_owned(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::item::{Item, PrSummary};
+    use crate::items::item::PrSummary;
     use serde_json::json;
 
     fn pull(head_repository: Option<&str>) -> Current {
@@ -348,15 +379,14 @@ mod tests {
         ] {
             assert!(commit_shas(&[commit], "sha").is_err());
         }
+        let forge = ForgeRepo::parse("https://gitlab.com/team/repo").unwrap();
         assert_eq!(
-            list_item(&json!({"iid": 3, "id": 9, "title": "Bug"}), "iid").unwrap(),
-            list::Item {
-                number: 3,
-                title: "Bug".into()
-            }
+            listed_number(&forge, &json!({"iid": 3, "id": 9})).unwrap(),
+            3
         );
-        assert!(list_item(&json!({"number": 0, "title": "Bug"}), "number").is_err());
-        assert!(list_item(&json!({"title": "Bug"}), "number").is_err());
+        let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        assert!(listed_number(&forge, &json!({"number": 0})).is_err());
+        assert!(listed_number(&forge, &json!({"title": "Bug"})).is_err());
     }
 
     #[test]

@@ -276,7 +276,7 @@ pub fn pick_item(
     ctx: &Context,
     prompt: &str,
     kind: &str,
-    items: Vec<crate::forge::items::list::Item>,
+    items: Vec<crate::forge::items::item::Item>,
 ) -> Result<String> {
     ensure!(!items.is_empty(), "no open {kind}");
     let entries = items

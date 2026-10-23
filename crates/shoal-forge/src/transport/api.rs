@@ -223,9 +223,25 @@ impl ForgeRepo {
 
     /// Every item of a paginated list endpoint, read as `account`.
     pub(crate) async fn pages(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
+        let mut items = Vec::new();
+        self.pages_while(account, endpoint, |batch| {
+            items.extend(batch.iter().cloned());
+            Ok(true)
+        })
+        .await?;
+        Ok(items)
+    }
+
+    /// Hand each page of a paginated list endpoint, read as `account`, to
+    /// `visit` until it returns false or no page follows.
+    pub(crate) async fn pages_while(
+        &self,
+        account: &Account,
+        endpoint: &str,
+        mut visit: impl FnMut(&[Value]) -> Result<bool>,
+    ) -> Result<()> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
         let (size, page_size) = self.kind.page_size();
-        let mut items = Vec::new();
         for page in 1.. {
             let request = Request::get(format!(
                 "{endpoint}{separator}{size}={page_size}&page={page}"
@@ -235,12 +251,11 @@ impl ForgeRepo {
                 .kind
                 .page(&response, page_size)
                 .with_context(|| format!("{endpoint} is not a list"))?;
-            items.extend(batch.iter().cloned());
-            if !more {
+            if !visit(batch)? || !more {
                 break;
             }
         }
-        Ok(items)
+        Ok(())
     }
 }
 

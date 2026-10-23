@@ -151,17 +151,15 @@ impl Backend for GitLab {
         false
     }
 
-    async fn open_items(
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
-        let endpoint = match kind {
-            ItemKind::Issue => "issues?state=opened",
-            ItemKind::Pr => "merge_requests?state=opened",
-        };
-        rest::open_items(repo, account, endpoint).await
+        search: &list::Search,
+    ) -> Result<Vec<Item>> {
+        let endpoint = search_endpoint(kind, search);
+        rest::list_items(repo, account, kind, &endpoint, search).await
     }
 
     /// Look up the IDs of the users the edit adds that `current` has none for.
@@ -861,9 +859,62 @@ fn latest_checks(statuses: &[Value]) -> Result<Vec<CiCheck>> {
     Ok(latest.into_values().map(|(_, check)| check).collect())
 }
 
+/// The list endpoint that runs `search` for items of `kind`. GitLab keeps
+/// merged merge requests apart from closed ones, so a search for closed ones
+/// lists all and leaves the open ones for the caller to drop.
+fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+    let state = match (search.state, kind) {
+        (list::StateFilter::Open, _) => "opened",
+        (list::StateFilter::Closed, ItemKind::Issue) => "closed",
+        (list::StateFilter::Closed, ItemKind::Pr) | (list::StateFilter::All, _) => "all",
+    };
+    let resource = match kind {
+        ItemKind::Issue => "issues",
+        ItemKind::Pr => "merge_requests",
+    };
+    let mut endpoint = format!("{resource}?state={state}");
+    if !search.labels.is_empty() {
+        endpoint += &format!("&labels={}", encode(&search.labels.join(","), false));
+    }
+    if let Some(author) = &search.author {
+        endpoint += &format!("&author_username={}", encode(author, false));
+    }
+    if let Some(text) = &search.text {
+        endpoint += &format!("&search={}", encode(text, false));
+    }
+    endpoint
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closed_merge_request_searches_list_all_to_include_merged_ones() {
+        let mut search = list::Search {
+            state: list::StateFilter::Closed,
+            labels: vec!["bug".into(), "ui".into()],
+            author: Some("dev".into()),
+            text: Some("crash on start".into()),
+            limit: 30,
+        };
+        assert_eq!(
+            search_endpoint(ItemKind::Pr, &search),
+            "merge_requests?state=all&labels=bug%2Cui&author_username=dev&search=crash%20on%20start"
+        );
+        search.labels.clear();
+        search.author = None;
+        search.text = None;
+        assert_eq!(
+            search_endpoint(ItemKind::Issue, &search),
+            "issues?state=closed"
+        );
+        search.state = list::StateFilter::Open;
+        assert_eq!(
+            search_endpoint(ItemKind::Pr, &search),
+            "merge_requests?state=opened"
+        );
+    }
     use serde_json::json;
 
     fn gitlab() -> ForgeRepo {

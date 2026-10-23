@@ -116,13 +116,17 @@ pub(crate) trait Backend {
     /// Whether issues and PRs share one sequence, so a number names one item.
     fn numbers_items_together(&self) -> bool;
 
-    /// The repository's open issues or PRs.
-    async fn open_items(
+    /// Issues or PRs that `search` matches, newest first, through the
+    /// forge's search where it has one: the first `search.limit` matches at
+    /// least. The caller drops items beyond the limit and those in a state
+    /// the search leaves out.
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>>;
+        search: &list::Search,
+    ) -> Result<Vec<Item>>;
 
     /// An issue's state; a PR's number is refused.
     async fn issue_state(
@@ -500,13 +504,14 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.numbers_items_together())
     }
 
-    async fn open_items(
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
-        dispatch!(self, backend => backend.open_items(repo, account, kind).await)
+        search: &list::Search,
+    ) -> Result<Vec<Item>> {
+        dispatch!(self, backend => backend.list_items(repo, account, kind, search).await)
     }
 
     async fn issue_state(

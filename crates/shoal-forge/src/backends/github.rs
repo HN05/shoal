@@ -23,7 +23,7 @@ use crate::{
         attach::{Attachment, Holder, Media},
         create::{NewIssue, NewPull},
         issue::require_open,
-        item::{Current, Item, ItemState},
+        item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
         list,
     },
@@ -107,31 +107,26 @@ impl Backend for GitHub {
         true
     }
 
-    async fn open_items(
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
+        search: &list::Search,
+    ) -> Result<Vec<Item>> {
         let noun = match kind {
             ItemKind::Issue => "issue",
             ItemKind::Pr => "pr",
         };
-        let repo = format!("{}/{}", repo.host, repo.path);
-        let args = [
-            noun,
-            "list",
-            "--repo",
-            &repo,
-            "--state",
-            "open",
-            "--limit",
-            "200",
-            "--json",
-            "number,title",
-        ];
+        let args = list_args(repo, kind, search);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let text = gh(account, &args, Query::List).await?;
-        serde_json::from_str(&text).with_context(|| format!("invalid gh {noun} list response"))
+        let listed: Vec<ListedItem> = serde_json::from_str(&text)
+            .with_context(|| format!("invalid gh {noun} list response"))?;
+        listed
+            .into_iter()
+            .map(|item| item.into_item(repo, kind))
+            .collect()
     }
 
     async fn issue_state(
@@ -553,6 +548,85 @@ impl Backend for GitHub {
     }
 }
 
+/// The `gh issue list` or `gh pr list` arguments for `search`. Values go
+/// in `--flag=value` form, so one starting with `-` stays a value.
+fn list_args(repo: &ForgeRepo, kind: ItemKind, search: &list::Search) -> Vec<String> {
+    let (noun, fields) = match kind {
+        ItemKind::Issue => ("issue", "number,title,state,labels"),
+        ItemKind::Pr => (
+            "pr",
+            "number,title,state,labels,headRefName,baseRefName,isDraft",
+        ),
+    };
+    let mut args: Vec<String> = [noun, "list"].map(String::from).into();
+    args.extend([
+        format!("--repo={}/{}", repo.host, repo.path),
+        // gh counts merged PRs as closed.
+        format!("--state={}", search.state),
+        format!("--limit={}", search.limit),
+        format!("--json={fields}"),
+    ]);
+    args.extend(search.labels.iter().map(|label| format!("--label={label}")));
+    args.extend(
+        search
+            .author
+            .iter()
+            .map(|author| format!("--author={author}")),
+    );
+    args.extend(search.text.iter().map(|text| format!("--search={text}")));
+    args
+}
+
+/// An issue or PR as `gh issue list` or `gh pr list` reports it.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListedItem {
+    number: u64,
+    title: String,
+    state: String,
+    labels: Vec<ListedLabel>,
+    head_ref_name: Option<String>,
+    base_ref_name: Option<String>,
+    is_draft: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+struct ListedLabel {
+    name: String,
+}
+
+impl ListedItem {
+    fn into_item(self, repo: &ForgeRepo, kind: ItemKind) -> Result<Item> {
+        let state = match self.state.as_str() {
+            "OPEN" => ItemState::Open,
+            "CLOSED" => ItemState::Closed,
+            "MERGED" if kind == ItemKind::Pr => ItemState::Merged,
+            state => bail!("unrecognized gh state {state:?}"),
+        };
+        let pr = match kind {
+            ItemKind::Issue => None,
+            ItemKind::Pr => Some(PrSummary {
+                head: self
+                    .head_ref_name
+                    .context("gh listed a PR without its head")?,
+                base: self
+                    .base_ref_name
+                    .context("gh listed a PR without its base")?,
+                draft: self.is_draft.unwrap_or_default(),
+            }),
+        };
+        Ok(Item {
+            kind,
+            number: self.number,
+            url: repo.item_url(kind, self.number)?,
+            title: self.title,
+            state,
+            labels: self.labels.into_iter().map(|label| label.name).collect(),
+            pr,
+        })
+    }
+}
+
 /// What a `gh` read is for, which decides its timeout and error guidance.
 #[derive(Clone, Copy)]
 pub(crate) enum Query {
@@ -661,6 +735,40 @@ fn graphql_errors(body: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lists_keep_filter_values_attached_to_their_flags() {
+        let repo = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
+        let search = list::Search {
+            state: list::StateFilter::Closed,
+            labels: vec!["-odd".into()],
+            author: Some("dev".into()),
+            text: Some("crash in:title".into()),
+            limit: 5,
+        };
+        assert_eq!(
+            list_args(&repo, ItemKind::Pr, &search),
+            [
+                "pr",
+                "list",
+                "--repo=github.com/team/repo",
+                "--state=closed",
+                "--limit=5",
+                "--json=number,title,state,labels,headRefName,baseRefName,isDraft",
+                "--label=-odd",
+                "--author=dev",
+                "--search=crash in:title",
+            ]
+        );
+        let listed: ListedItem = serde_json::from_value(json!({"number": 4, "title": "Fix",
+            "state": "MERGED", "labels": [{"name": "bug"}], "headRefName": "topic",
+            "baseRefName": "main", "isDraft": false}))
+        .unwrap();
+        let item = listed.into_item(&repo, ItemKind::Pr).unwrap();
+        assert_eq!(item.state, ItemState::Merged);
+        assert_eq!(item.url, "https://github.com/team/repo/pull/4");
+        assert_eq!(item.pr.unwrap().head, "topic");
+    }
 
     #[test]
     fn query_errors_preserve_login_guidance_and_diagnostic_limits() {

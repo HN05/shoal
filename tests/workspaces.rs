@@ -11545,9 +11545,9 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
         fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
 case "$1 $2" in
- 'issue list') echo '[{"number":34,"title":"Fix API timeout"},{"number":35,"title":"Other"}]';;
+ 'issue list') echo '[{"number":34,"title":"Fix API timeout","state":"OPEN","labels":[]},{"number":35,"title":"Other","state":"OPEN","labels":[]}]';;
  'issue view') echo '{"state":"OPEN","number":34,"title":"Fix API timeout","body":""}';;
- 'pr list') echo '[{"number":7,"title":"Topic"}]';;
+ 'pr list') echo '[{"number":7,"title":"Topic","state":"OPEN","labels":[],"headRefName":"topic","baseRefName":"main","isDraft":false}]';;
  'pr view') echo '{"number":7,"title":"Topic","headRefName":"topic","baseRefName":"main","isCrossRepository":false}';;
  *) exit 1;;
 esac
@@ -11601,8 +11601,8 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
         fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
 case "$1 $2" in
- 'issue list') echo '[{"number":34,"title":"Fix API timeout"}]';;
- 'pr list') echo '[{"number":7,"title":"Topic"}]';;
+ 'issue list') echo '[{"number":34,"title":"Fix API timeout","state":"OPEN","labels":[]}]';;
+ 'pr list') echo '[{"number":7,"title":"Topic","state":"OPEN","labels":[],"headRefName":"topic","baseRefName":"main","isDraft":false}]';;
  'issue view') echo '{"number":34,"state":"OPEN","title":"Fix API timeout","body":"","comments":[]}';;
  'pr view') echo '{"number":7,"state":"OPEN","headRefName":"topic","headRefOid":"head","title":"Topic","baseRefName":"main","isCrossRepository":false,"commits":[],"comments":[],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}';;
  *) printf '[]';;

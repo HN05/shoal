@@ -2,6 +2,7 @@
 //! under `/api/v1`, sent with the token fj saved for the host, else through
 //! tea's login, else anonymously.
 use anyhow::{Context, Result, bail, ensure};
+use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Value, json};
 
 mod actions;
@@ -46,6 +47,9 @@ pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
 
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
+
+/// How many listed PRs are read at once.
+const PULL_READS: usize = 8;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Forgejo;
@@ -122,17 +126,28 @@ impl Backend for Forgejo {
         true
     }
 
-    async fn open_items(
+    /// Forgejo searches PRs only through its issue list, which leaves out
+    /// their branches, so each listed PR is read in full.
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
-        let endpoint = match kind {
-            ItemKind::Issue => "issues?state=open&type=issues",
-            ItemKind::Pr => "pulls?state=open",
-        };
-        rest::open_items(repo, account, endpoint).await
+        search: &list::Search,
+    ) -> Result<Vec<Item>> {
+        let endpoint = search_endpoint(kind, search);
+        if kind == ItemKind::Issue {
+            return rest::list_items(repo, account, kind, &endpoint, search).await;
+        }
+        let numbers = rest::listed_numbers(repo, account, &endpoint, search.limit).await?;
+        futures_util::stream::iter(numbers)
+            .map(|number| async move {
+                Ok::<_, anyhow::Error>(repo.read(account, ItemKind::Pr, number).await?.item)
+            })
+            .buffered(PULL_READS)
+            .try_collect()
+            .await
+            .context(self.login_hint())
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
@@ -568,9 +583,50 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
     }
 }
 
+/// The issue list endpoint that runs `search` for items of `kind`.
+fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+    let kind = match kind {
+        ItemKind::Issue => "issues",
+        ItemKind::Pr => "pulls",
+    };
+    let mut endpoint = format!("issues?type={kind}&state={}", search.state);
+    if !search.labels.is_empty() {
+        endpoint += &format!("&labels={}", encode(&search.labels.join(","), false));
+    }
+    if let Some(author) = &search.author {
+        endpoint += &format!("&created_by={}", encode(author, false));
+    }
+    if let Some(text) = &search.text {
+        endpoint += &format!("&q={}", encode(text, false));
+    }
+    endpoint
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn searches_go_through_the_issue_list_for_either_kind() {
+        let mut search = list::Search {
+            state: list::StateFilter::All,
+            labels: Vec::new(),
+            author: None,
+            text: None,
+            limit: 30,
+        };
+        assert_eq!(
+            search_endpoint(ItemKind::Issue, &search),
+            "issues?type=issues&state=all"
+        );
+        search.labels = vec!["area/cli".into(), "bug".into()];
+        search.author = Some("claude-dev".into());
+        search.text = Some("watch timeout".into());
+        assert_eq!(
+            search_endpoint(ItemKind::Pr, &search),
+            "issues?type=pulls&state=all&labels=area%2Fcli%2Cbug&created_by=claude-dev&q=watch%20timeout"
+        );
+    }
 
     #[test]
     fn forgejo_statuses_need_every_status_and_known_states() {

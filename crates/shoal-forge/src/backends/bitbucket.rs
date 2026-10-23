@@ -39,6 +39,10 @@ const API: &str = "https://api.bitbucket.org/2.0";
 /// The page size Bitbucket's lists take by default.
 const PAGE_SIZE: usize = 50;
 
+/// The issue states Shoal reads as open, and as closed.
+const OPEN_ISSUE_STATES: [&str; 3] = ["new", "open", "on hold"];
+const CLOSED_ISSUE_STATES: [&str; 5] = ["resolved", "invalid", "duplicate", "wontfix", "closed"];
+
 #[derive(Clone, Copy)]
 pub(crate) struct Bitbucket;
 
@@ -102,11 +106,10 @@ impl Backend for Bitbucket {
             (ItemKind::Pr, Some("OPEN")) => ItemState::Open,
             (ItemKind::Pr, Some("MERGED")) => ItemState::Merged,
             (ItemKind::Pr, Some("DECLINED" | "SUPERSEDED")) => ItemState::Closed,
-            (ItemKind::Issue, Some("new" | "open" | "on hold")) => ItemState::Open,
-            (
-                ItemKind::Issue,
-                Some("resolved" | "invalid" | "duplicate" | "wontfix" | "closed"),
-            ) => ItemState::Closed,
+            (ItemKind::Issue, Some(state)) if OPEN_ISSUE_STATES.contains(&state) => ItemState::Open,
+            (ItemKind::Issue, Some(state)) if CLOSED_ISSUE_STATES.contains(&state) => {
+                ItemState::Closed
+            }
             (_, state) => bail!("unrecognized Bitbucket state {state:?}"),
         };
         let pr = match kind {
@@ -154,21 +157,15 @@ impl Backend for Bitbucket {
         false
     }
 
-    async fn open_items(
+    async fn list_items(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
-        let endpoint = match kind {
-            ItemKind::Issue =>
-            // state="new" OR state="open" OR state="on hold"
-            {
-                "issues?q=state%3D%22new%22%20OR%20state%3D%22open%22%20OR%20state%3D%22on%20hold%22"
-            }
-            ItemKind::Pr => "pullrequests?state=OPEN",
-        };
-        rest::open_items(repo, account, endpoint).await
+        search: &list::Search,
+    ) -> Result<Vec<Item>> {
+        let endpoint = search_endpoint(kind, search);
+        rest::list_items(repo, account, kind, &endpoint, search).await
     }
 
     /// One update of the changed fields. Bitbucket has no labels, keeps
@@ -276,8 +273,7 @@ impl Backend for Bitbucket {
         account: &Account,
         branch: &str,
     ) -> Result<Vec<Value>> {
-        let literal = branch.replace('\\', "\\\\").replace('"', "\\\"");
-        let query = encode(&format!("source.branch.name=\"{literal}\""), false);
+        let query = encode(&format!("source.branch.name={}", literal(branch)), false);
         let endpoint = format!("pullrequests?state=OPEN&q={query}");
         repo.pages(account, &repo.repo_endpoint(&endpoint)).await
     }
@@ -810,10 +806,131 @@ pub(crate) fn nickname(user: &Value) -> String {
         .unwrap_or_else(|| "ghost".into())
 }
 
+/// The list endpoint that runs `search` for items of `kind`, newest first,
+/// as a Bitbucket query. Bitbucket has no labels.
+fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+    let (resource, text_fields) = match kind {
+        ItemKind::Issue => ("issues", ["title", "content.raw"]),
+        ItemKind::Pr => ("pullrequests", ["title", "description"]),
+    };
+    let mut endpoint = format!("{resource}?sort=-created_on");
+    let mut clauses = Vec::new();
+    match kind {
+        ItemKind::Issue => {
+            let states: &[&str] = match search.state {
+                list::StateFilter::Open => &OPEN_ISSUE_STATES,
+                list::StateFilter::Closed => &CLOSED_ISSUE_STATES,
+                list::StateFilter::All => &[],
+            };
+            if !states.is_empty() {
+                let states: Vec<String> = states
+                    .iter()
+                    .map(|state| format!("state={}", literal(state)))
+                    .collect();
+                clauses.push(format!("({})", states.join(" OR ")));
+            }
+        }
+        // Without a state Bitbucket lists only open pull requests.
+        ItemKind::Pr => {
+            let states: &[&str] = match search.state {
+                list::StateFilter::Open => &["OPEN"],
+                list::StateFilter::Closed => &["MERGED", "DECLINED", "SUPERSEDED"],
+                list::StateFilter::All => &["OPEN", "MERGED", "DECLINED", "SUPERSEDED"],
+            };
+            for state in states {
+                endpoint += &format!("&state={state}");
+            }
+        }
+    }
+    if let Some(text) = &search.text {
+        let [first, second] = text_fields.map(|field| format!("{field} ~ {}", literal(text)));
+        clauses.push(format!("({first} OR {second})"));
+    }
+    if let Some(author) = &search.author {
+        let field = match kind {
+            ItemKind::Issue => "reporter",
+            ItemKind::Pr => "author",
+        };
+        clauses.push(format!("{field}.nickname={}", literal(author)));
+    }
+    if !clauses.is_empty() {
+        endpoint += &format!("&q={}", encode(&clauses.join(" AND "), false));
+    }
+    endpoint
+}
+
+/// `text` as a quoted Bitbucket query string.
+fn literal(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn searches_query_states_text_and_author_newest_first() {
+        let mut search = list::Search {
+            state: list::StateFilter::Open,
+            labels: Vec::new(),
+            author: None,
+            text: None,
+            limit: 30,
+        };
+        let decoded = |kind, search: &list::Search| {
+            let endpoint = search_endpoint(kind, search);
+            let (path, query) = endpoint.split_once("&q=").unwrap_or((&endpoint, ""));
+            (path.to_owned(), percent_decoded(query))
+        };
+        assert_eq!(
+            decoded(ItemKind::Issue, &search),
+            (
+                "issues?sort=-created_on".into(),
+                r#"(state="new" OR state="open" OR state="on hold")"#.into()
+            )
+        );
+        assert_eq!(
+            decoded(ItemKind::Pr, &search),
+            (
+                "pullrequests?sort=-created_on&state=OPEN".into(),
+                String::new()
+            )
+        );
+        search.state = list::StateFilter::Closed;
+        search.text = Some(r#"say "hi""#.into());
+        search.author = Some("dev".into());
+        assert_eq!(
+            decoded(ItemKind::Pr, &search),
+            (
+                "pullrequests?sort=-created_on&state=MERGED&state=DECLINED&state=SUPERSEDED".into(),
+                r#"(title ~ "say \"hi\"" OR description ~ "say \"hi\"") AND author.nickname="dev""#
+                    .into()
+            )
+        );
+        search.state = list::StateFilter::All;
+        assert_eq!(
+            decoded(ItemKind::Issue, &search).1,
+            r#"(title ~ "say \"hi\"" OR content.raw ~ "say \"hi\"") AND reporter.nickname="dev""#
+        );
+    }
+
+    fn percent_decoded(text: &str) -> String {
+        let bytes = text.as_bytes();
+        let mut decoded = Vec::new();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] == b'%' {
+                let hex = std::str::from_utf8(&bytes[index + 1..index + 3]).unwrap();
+                decoded.push(u8::from_str_radix(hex, 16).unwrap());
+                index += 3;
+            } else {
+                decoded.push(bytes[index]);
+                index += 1;
+            }
+        }
+        String::from_utf8(decoded).unwrap()
+    }
 
     fn bitbucket() -> ForgeRepo {
         ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap()
