@@ -25,8 +25,8 @@ use crate::{
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
-/// Bounds a response read through a CLI, which curl's own limit cannot,
-/// unless the request sets a lower one.
+/// Bounds a response and the head the transport prints with it, unless
+/// the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,6 +330,7 @@ impl ForgeRepo {
         let output = shoal_subprocess::Run::new(curl)
             .input(authorization.unwrap_or_default())
             .timeout(request.timeout())
+            .output_limit(request.max_bytes)
             .capture()
             .await
             .map_err(curl_unrun)?;
@@ -448,14 +449,15 @@ fn error_message(text: &str) -> Option<String> {
     })
 }
 
-/// Why curl did not run to its end: a timeout may pass, a missing curl will
-/// not.
+/// Why curl did not run to its end: a timeout may pass, a missing curl or
+/// an oversized response will not.
 fn curl_unrun(error: std::io::Error) -> anyhow::Error {
-    if error.kind() == std::io::ErrorKind::TimedOut {
-        return Transient::Interrupted(error.to_string()).into();
+    match error.kind() {
+        std::io::ErrorKind::TimedOut => Transient::Interrupted(error.to_string()).into(),
+        std::io::ErrorKind::NotFound => anyhow::Error::new(error)
+            .context("curl is required for Forgejo, Gitea and Bitbucket API requests"),
+        _ => anyhow::Error::new(error).context("read curl's response"),
     }
-    anyhow::Error::new(error)
-        .context("curl is required for Forgejo, Gitea and Bitbucket API requests")
 }
 
 /// The failure curl's exit reports, marked when it may pass.
@@ -687,6 +689,20 @@ printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
         assert_eq!(format!("{:#}", curl_body("\n404").unwrap_err()), "HTTP 404");
         assert!(curl_body("{}").is_err());
+    }
+
+    #[test]
+    fn only_a_missing_curl_asks_for_curl() {
+        use std::io::{Error, ErrorKind};
+        let missing = curl_unrun(Error::from(ErrorKind::NotFound));
+        assert!(format!("{missing:#}").starts_with("curl is required"));
+        let oversized = curl_unrun(Error::other("tool output exceeded 4 bytes"));
+        assert_eq!(
+            format!("{oversized:#}"),
+            "read curl's response: tool output exceeded 4 bytes"
+        );
+        let slow = curl_unrun(Error::from(ErrorKind::TimedOut));
+        assert!(slow.downcast_ref::<Transient>().is_some());
     }
 
     #[test]
