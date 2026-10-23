@@ -1,6 +1,6 @@
-//! Forgejo Actions: statuses on a commit, the runs their URLs link, and
-//! the logs of failed jobs.
-use anyhow::{Context, Result, bail, ensure};
+//! Forgejo Actions: the runs that commit statuses link, and the logs of
+//! failed jobs.
+use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
@@ -8,40 +8,13 @@ use super::tea;
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
-    ci::{
-        CiCheck, JobState, check,
-        checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
-    },
+    ci::checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
     items::link::ItemKind,
     transport::{
         api::{Request, TIMEOUT, authorization, curl_body},
         programs,
     },
 };
-
-/// Forgejo's latest status of each check.
-pub(crate) fn checks(combined: &Value) -> Result<Vec<CiCheck>> {
-    let statuses = match &combined["statuses"] {
-        Value::Null => &[][..],
-        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
-    };
-    ensure!(
-        combined["total_count"].as_u64() == Some(statuses.len() as u64),
-        "Forgejo returned a partial page of CI statuses"
-    );
-    statuses
-        .iter()
-        .map(|status| {
-            let state = match status["status"].as_str() {
-                Some("pending") => JobState::Running,
-                Some("failure" | "error") => JobState::Failed,
-                Some("success" | "warning" | "skipped") => JobState::Finished,
-                _ => bail!("unknown Forgejo CI state"),
-            };
-            check(status, "context", state, "target_url")
-        })
-        .collect()
-}
 
 /// The log of the failed check `name` on the current head of PR `url`.
 pub(crate) async fn failed_check_log(
@@ -249,19 +222,5 @@ mod tests {
         assert_eq!(job_id(&jobs, 1, 9331).unwrap(), 18345);
         assert!(job_id(&jobs, 0, 9331).is_err());
         assert!(job_id(&jobs, 1, 7).is_err());
-    }
-
-    #[test]
-    fn statuses_report_failed_and_running_checks() {
-        let states = |checks: Vec<CiCheck>| checks.into_iter().map(|c| c.1).collect::<Vec<_>>();
-        let forgejo = json!({"total_count": 2, "statuses": [
-            {"context": "ci / rust", "status": "error", "target_url": "/t/r/actions/runs/1/jobs/0"},
-            {"context": "ci / docs", "status": "pending"}
-        ]});
-        let listed = checks(&forgejo).unwrap();
-        assert_eq!(listed[0].2, "/t/r/actions/runs/1/jobs/0");
-        assert_eq!(states(listed), [JobState::Failed, JobState::Running]);
-        let none = json!({"total_count": 0, "statuses": null});
-        assert!(checks(&none).unwrap().is_empty());
     }
 }

@@ -395,7 +395,10 @@ impl Backend for Forgejo {
         head: &str,
     ) -> Result<Vec<CiCheck>> {
         let endpoint = repo.repo_endpoint(&format!("commits/{head}/status?limit=50"));
-        actions::checks(&repo.send(account, &Request::get(endpoint)).await?)
+        github_rest::commit_statuses(
+            &repo.send(account, &Request::get(endpoint)).await?,
+            Dialect::Forgejo,
+        )
     }
 
     fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {

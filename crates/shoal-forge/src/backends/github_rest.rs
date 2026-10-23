@@ -9,6 +9,7 @@ use super::{
 };
 use crate::{
     ForgeRepo,
+    ci::{CiCheck, JobState, check},
     items::{
         action::Edit,
         create::{Head, NewPull},
@@ -288,9 +289,59 @@ fn open_urls(issues: &[Value]) -> Result<Vec<String>> {
         .collect()
 }
 
+/// The latest status of each context in a commit's combined status.
+pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<CiCheck>> {
+    let statuses = match &combined["statuses"] {
+        Value::Null => &[][..],
+        statuses => statuses.as_array().context("invalid commit statuses")?,
+    };
+    ensure!(
+        combined["total_count"].as_u64() == Some(statuses.len() as u64),
+        "the forge returned a partial page of commit statuses"
+    );
+    let field = match dialect {
+        Dialect::GitHub => "state",
+        Dialect::Forgejo => "status",
+    };
+    statuses
+        .iter()
+        .map(|status| {
+            let state = match status[field].as_str() {
+                Some("pending") => JobState::Running,
+                Some("failure" | "error") => JobState::Failed,
+                Some("success" | "warning" | "skipped") => JobState::Finished,
+                _ => anyhow::bail!("unknown commit status state"),
+            };
+            check(status, "context", state, "target_url")
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn statuses_report_failed_and_running_checks() {
+        let states = |checks: Vec<CiCheck>| checks.into_iter().map(|c| c.1).collect::<Vec<_>>();
+        let forgejo = json!({"total_count": 2, "statuses": [
+            {"context": "ci / rust", "status": "error", "target_url": "/t/r/actions/runs/1/jobs/0"},
+            {"context": "ci / docs", "status": "pending"}
+        ]});
+        let listed = commit_statuses(&forgejo, Dialect::Forgejo).unwrap();
+        assert_eq!(listed[0].2, "/t/r/actions/runs/1/jobs/0");
+        assert_eq!(states(listed), [JobState::Failed, JobState::Running]);
+        let none = json!({"total_count": 0, "statuses": null});
+        assert!(commit_statuses(&none, Dialect::Forgejo).unwrap().is_empty());
+        let github = json!({"total_count": 1, "statuses": [
+            {"context": "deploy", "state": "failure", "target_url": "https://ci.example/1"}
+        ]});
+        assert_eq!(
+            states(commit_statuses(&github, Dialect::GitHub).unwrap()),
+            [JobState::Failed]
+        );
+        assert!(commit_statuses(&github, Dialect::Forgejo).is_err());
+    }
 
     #[test]
     fn dependencies_keep_open_issues() {
