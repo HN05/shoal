@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
-    process::Stdio,
+    process::{Child, Stdio},
 };
 
 use anyhow::{Context as _, Result};
@@ -250,7 +250,12 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
     .await?;
     let command = happy::command(agent, prompt.as_deref(), args);
     let log = files.with_extension("log");
-    let record = match run_chat(ctx, repository, &record, &log, command, &opening.env()).await {
+    let started = spawn_session(ctx, repository, &record, &log, command, &opening.env());
+    let handed_over = match started {
+        Ok(session) => hand_over(ctx, &record, session).await,
+        Err(error) => Err(error),
+    };
+    let record = match handed_over {
         Ok(moved) => moved,
         Err(error) => {
             opening.discard().await;
@@ -280,16 +285,27 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
     Ok(0)
 }
 
+/// Hand `chat` to `session`'s process, stopping the session when the daemon
+/// cannot record it, since the chat would end with this process.
+async fn hand_over(ctx: &Context, chat: &Chat, mut session: Child) -> Result<Chat> {
+    let moved = client::move_chat(&ctx.paths, chat, session.id()).await;
+    if moved.is_err() {
+        let _ = session.kill();
+        let _ = session.wait();
+    }
+    moved
+}
+
 /// Start `command` in its own session at the checkout with the chat's
-/// identity and `env`, writing to `log`, and hand the chat to it.
-async fn run_chat(
+/// identity and `env`, writing to `log`.
+fn spawn_session(
     ctx: &Context,
     repository: &Repository,
     chat: &Chat,
     log: &Path,
     command: Vec<OsString>,
     env: &[(&str, String)],
-) -> Result<Chat> {
+) -> Result<Child> {
     if let Some(parent) = log.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
@@ -316,8 +332,7 @@ async fn run_chat(
             Ok(())
         });
     }
-    let child = session.spawn().context("start the Happy session")?;
-    client::move_chat(&ctx.paths, chat, child.id()).await
+    session.spawn().context("start the Happy session")
 }
 
 /// Whether Happy's daemon has recorded itself, warning when it has not, since
