@@ -182,8 +182,6 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
 }
 
 async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
-    let workspace =
-        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let query = args.query.join(" ");
     let search = Search {
         state: args.state,
@@ -192,6 +190,10 @@ async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
         text: (!query.is_empty()).then_some(query),
         limit: args.limit.into(),
     };
+    // Refuse a bad filter before the workspace picker asks for anything.
+    search.check()?;
+    let workspace =
+        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let method = Method::ListItems {
         workspace,
         kind,

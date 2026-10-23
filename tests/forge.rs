@@ -1226,6 +1226,19 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         String::from_utf8_lossy(&output.stdout),
         "#40  open    Flaky watch  [bug]\n"
     );
+    // Outside a workspace, a bad filter fails before a workspace is chosen.
+    for filter in [&["--label", ""][..], &["--author", " "], &[" "]] {
+        let output = fixture
+            .command()
+            .current_dir(fixture.root.path())
+            .args(["issue", "list"])
+            .args(filter)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cannot be empty"), "{filter:?}: {stderr}");
+    }
     // A listing longer than one protocol frame arrives in several.
     let long: Vec<Value> = (1..=400)
         .map(|number| {

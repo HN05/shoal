@@ -60,14 +60,12 @@ impl Search {
         }
     }
 
-    fn validate(&self, has_labels: bool) -> Result<()> {
+    /// Refuse a limit out of range or an empty filter, before anything is
+    /// chosen or sent.
+    pub fn check(&self) -> Result<()> {
         ensure!(
             (1..=MAX_LIMIT).contains(&self.limit),
             "the limit must be between 1 and {MAX_LIMIT}"
-        );
-        ensure!(
-            self.labels.is_empty() || has_labels,
-            "this forge has no labels"
         );
         let blank = |text: &str| text.trim().is_empty();
         ensure!(
@@ -75,6 +73,15 @@ impl Search {
                 && !self.author.as_deref().is_some_and(blank)
                 && !self.text.as_deref().is_some_and(blank),
             "a label, author or search text cannot be empty"
+        );
+        Ok(())
+    }
+
+    fn validate(&self, has_labels: bool) -> Result<()> {
+        self.check()?;
+        ensure!(
+            self.labels.is_empty() || has_labels,
+            "this forge has no labels"
         );
         Ok(())
     }
