@@ -343,6 +343,14 @@ impl Manager {
             self.switch_move(id, &intent.source, &intent.destination)
                 .await?;
         }
+        // A renamed directory carries the source's identity; a copy fills the
+        // reserved one. Without either, the original may be the only copy.
+        ensure!(
+            is_directory(&intent.destination, &intent.source_id)?
+                || is_directory(&intent.destination, &intent.destination_id)?,
+            "repository directory {} is unavailable; restore it, then run shoal repo migrate again",
+            intent.destination.display()
+        );
         // A copy's original goes first: copied worktrees' Git links still
         // resolve to it, and repair reconnects them only once it is gone.
         remove_recorded(&intent.source, &intent.source_id)?;
@@ -351,7 +359,8 @@ impl Manager {
     }
 
     /// Repair Git's links between the checkout and its present worktrees,
-    /// including the seed's, and record the workspaces' admin directories.
+    /// including the seed's, then verify each workspace still owns its
+    /// worktree before recording its admin directory.
     async fn reconnect_worktrees(&self, id: &str) -> Result<()> {
         let repo = self.repository(id).await?;
         let present: Vec<_> = self
@@ -368,7 +377,8 @@ impl Manager {
             .collect();
         git::repair_worktrees(&repo.path, &paths).await?;
         for workspace in &present {
-            if let Err(error) = self.record_worktree_identity(workspace).await {
+            let verified = self.verify_and_record_worktree(workspace, true).await?;
+            if let Err(error) = verified.identity {
                 log!(
                     "worktree identity not recorded for {}: {error:#}",
                     workspace.name
@@ -524,7 +534,7 @@ fn remove_recorded(path: &Path, identity: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support;
+    use crate::{daemon::workspace::identity, test_support};
     use std::sync::Arc;
 
     /// A manager with a cloned repository and one workspace under the default
@@ -653,6 +663,12 @@ mod tests {
         manager.record_move(&repo.id, &source, &destination).await?;
         fsutil::copy_directory(&source, &destination).await?;
         manager.switch_move(&repo.id, &source, &destination).await?;
+        // An unavailable copy keeps the original.
+        let away = root.join("unmounted");
+        fs::rename(&destination, &away)?;
+        assert!(manager.finish_repository_moves().await.is_err());
+        assert!(source.join(".checkout").exists());
+        fs::rename(&away, &destination)?;
         manager.finish_repository_moves().await?;
 
         assert!(!source.exists());
@@ -677,6 +693,31 @@ mod tests {
             trees
                 .iter()
                 .any(|tree| tree.path == workspace.path && !tree.prunable)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
+        let (_temp, manager, repo, workspace, root) = cloned().await?;
+        let source = repo.workspaces_dir.clone().context("no directory")?;
+        let destination = root.join("origin");
+        fs::create_dir_all(&destination)?;
+        manager.record_move(&repo.id, &source, &destination).await?;
+        fs::rename(&source, &destination)?;
+        let admin = destination.join(".checkout/.git/worktrees/feature");
+        identity::mark_owner(&admin, "another")?;
+
+        let error = manager
+            .finish_repository_moves()
+            .await
+            .err()
+            .context("adopted a replaced worktree")?;
+        assert!(format!("{error:#}").contains("another Shoal workspace"));
+        assert!(manager.ensure_repository_available(&repo.id).await.is_err());
+        assert_eq!(
+            manager.workspace(&workspace.id).await?.state,
+            WorkspaceState::Reconciling
         );
         Ok(())
     }
