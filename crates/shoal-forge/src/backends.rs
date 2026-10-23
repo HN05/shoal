@@ -19,6 +19,7 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
+    conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
@@ -389,6 +390,16 @@ pub(crate) trait Backend {
     /// where the forge keeps uploads with comments.
     fn edit_comment(&self, _repo: &ForgeRepo, _id: u64, _body: &str) -> Result<Request> {
         anyhow::bail!("this forge keeps attached files with the repository")
+    }
+
+    /// Where the forge looks for the description templates of a new item
+    /// of `kind`, in its lookup order.
+    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)>;
+
+    /// Whether the label `name`, as the forge lists it in `label`, allows an
+    /// item at most one label of its scope.
+    fn exclusive_label(&self, _name: &str, _label: &Value) -> bool {
+        false
     }
 }
 
@@ -761,6 +772,14 @@ impl Backend for ForgeKind {
 
     fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
         dispatch!(self, backend => backend.edit_comment(repo, id, body))
+    }
+
+    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+        dispatch!(self, backend => backend.template_lookups(kind))
+    }
+
+    fn exclusive_label(&self, name: &str, label: &Value) -> bool {
+        dispatch!(self, backend => backend.exclusive_label(name, label))
     }
 }
 

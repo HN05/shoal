@@ -11,6 +11,7 @@ use anyhow::{Result, bail};
 use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
+    backends::Backend,
     conventions::labels::Label,
     items::{item::Item, link::ItemKind},
 };
@@ -183,31 +184,7 @@ impl Template {
 /// directory that has one, in the forge's lookup order. Unreadable files are
 /// left out; a template without headings asks for nothing.
 fn templates(forge: ForgeKind, kind: ItemKind, worktree: &Path) -> Vec<Template> {
-    let candidates: Vec<(&str, Lookup)> = match (forge, kind) {
-        (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Pr) => TEMPLATE_DIRS
-            .iter()
-            .map(|dir| (*dir, Lookup::File("pull_request_template.md")))
-            .collect(),
-        (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Issue) => TEMPLATE_DIRS
-            .iter()
-            .flat_map(|dir| {
-                [
-                    (*dir, Lookup::Directory("issue_template")),
-                    (*dir, Lookup::File("issue_template.md")),
-                ]
-            })
-            .collect(),
-        (ForgeKind::GitLab, ItemKind::Pr) => {
-            vec![(
-                ".gitlab/merge_request_templates",
-                Lookup::File("default.md"),
-            )]
-        }
-        (ForgeKind::GitLab, ItemKind::Issue) => {
-            vec![(".gitlab", Lookup::Directory("issue_templates"))]
-        }
-        (ForgeKind::Bitbucket, _) => Vec::new(),
-    };
+    let candidates = forge.template_lookups(kind);
     candidates
         .into_iter()
         .map(|(dir, lookup)| lookup.find(worktree, dir))
@@ -218,9 +195,29 @@ fn templates(forge: ForgeKind, kind: ItemKind, worktree: &Path) -> Vec<Template>
 /// Where GitHub, Forgejo and Gitea look for templates, Forgejo's own first.
 const TEMPLATE_DIRS: [&str; 5] = [".forgejo", ".gitea", ".github", "", "docs"];
 
+/// The template lookups GitHub, Forgejo and Gitea share, in each of their
+/// directories.
+pub(crate) fn shared_lookups(kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+    match kind {
+        ItemKind::Pr => TEMPLATE_DIRS
+            .iter()
+            .map(|dir| (*dir, Lookup::File("pull_request_template.md")))
+            .collect(),
+        ItemKind::Issue => TEMPLATE_DIRS
+            .iter()
+            .flat_map(|dir| {
+                [
+                    (*dir, Lookup::Directory("issue_template")),
+                    (*dir, Lookup::File("issue_template.md")),
+                ]
+            })
+            .collect(),
+    }
+}
+
 /// A template file, or a directory of templates, named case-insensitively
 /// as forges match them.
-enum Lookup {
+pub(crate) enum Lookup {
     File(&'static str),
     Directory(&'static str),
 }

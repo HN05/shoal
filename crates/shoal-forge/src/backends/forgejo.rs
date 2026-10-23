@@ -18,6 +18,7 @@ use crate::{
     account::{Account, ForgejoLogin},
     backends::rest::{RestCheck, RestReads, fingerprints},
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
+    conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod, draft_title},
         attach::{Attachment, Holder, Media},
@@ -442,6 +443,14 @@ impl Backend for Forgejo {
             endpoint,
             Some(json!({ "body": body })),
         ))
+    }
+
+    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+        shared_lookups(kind)
+    }
+
+    fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
+        label["exclusive"].as_bool().unwrap_or(false)
     }
 }
 

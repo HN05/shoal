@@ -13,6 +13,7 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     ci::{CiAction, CiCheck, Job, Location, Operation},
+    conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
@@ -451,6 +452,10 @@ impl Backend for Bitbucket {
         _repository: Option<u64>,
     ) -> Result<Request> {
         bail!("Bitbucket has no API for attaching files")
+    }
+
+    fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+        Vec::new()
     }
 }
 

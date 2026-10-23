@@ -10,6 +10,7 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
+    conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
@@ -482,6 +483,21 @@ impl Backend for GitLab {
                 field: Some("file"),
             },
         ))
+    }
+
+    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+        match kind {
+            ItemKind::Pr => vec![(
+                ".gitlab/merge_request_templates",
+                Lookup::File("default.md"),
+            )],
+            ItemKind::Issue => vec![(".gitlab", Lookup::Directory("issue_templates"))],
+        }
+    }
+
+    /// GitLab's scoped labels are named `key::value`.
+    fn exclusive_label(&self, name: &str, _label: &Value) -> bool {
+        name.contains("::")
     }
 }
 

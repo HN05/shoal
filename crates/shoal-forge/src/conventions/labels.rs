@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeKind, ForgeRepo, account::Account, backends::Backend};
+use crate::{ForgeRepo, account::Account, backends::Backend};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
@@ -30,11 +30,7 @@ impl ForgeRepo {
 
     fn label(&self, label: &Value) -> Option<Label> {
         let name = label["name"].as_str()?.to_owned();
-        let exclusive = match self.kind {
-            ForgeKind::Forgejo => label["exclusive"].as_bool().unwrap_or(false),
-            ForgeKind::GitLab => name.contains("::"),
-            ForgeKind::GitHub | ForgeKind::Bitbucket => false,
-        };
+        let exclusive = self.kind.exclusive_label(&name, label);
         Some(Label {
             description: label["description"].as_str().unwrap_or_default().to_owned(),
             name,

@@ -17,6 +17,7 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     ci::{CiAction, CiCheck, Job, Location, Operation},
+    conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
@@ -545,6 +546,10 @@ impl Backend for GitHub {
             Media::Video => url.to_owned(),
             Media::Image => image(alt, url),
         }
+    }
+
+    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
+        shared_lookups(kind)
     }
 }
 
