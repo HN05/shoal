@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import tomllib
+from typing import NamedTuple
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
@@ -38,31 +39,68 @@ def release_checksums(manifest, version, platforms=None):
     return checksums
 
 
-def update_formula(text, version, revision, manifest,
-                   source_url="https://github.com/HN05/shoal.git"):
+class PublishedRelease(NamedTuple):
+    version: str
+    revision: str | None
+    checksums: dict[str, str] | None
+
+
+def repository_url(source_url):
     parsed = urlparse(source_url)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.path != "/HN05/shoal.git" or parsed.query or parsed.fragment):
         raise ValueError("expected an HTTPS Shoal repository URL")
-    new_version = release_version(version)
-    commit_id(revision)
+    return source_url.removesuffix(".git")
+
+
+def published_release(text, source_url):
+    """Read the release the tap's formula publishes, validating its recorded sources."""
     versions = re.findall(r'^  version "([^"\n]+)"$', text, re.M)
     if len(versions) != 1:
         raise ValueError("expected exactly one formula version")
-    if new_version < release_version(versions[0]):
-        raise ValueError("refusing to downgrade the release channel")
+    version = versions[0]
     # Accept the original source formula once, then only our generated formula.
-    legacy = re.search(rf'^  url "{re.escape(source_url)}", tag: "v{re.escape(versions[0])}"'
+    legacy = re.search(rf'^  url "{re.escape(source_url)}", tag: "v{re.escape(version)}"'
                        r'(?:, revision: "([0-9a-f]+)")?$', text, re.M)
     pinned = re.search(r'^  # Release commit: ([0-9a-f]+)$', text, re.M)
     if not legacy and not pinned:
         raise ValueError("expected a Shoal release source or pinned release commit")
-    old_revision = (legacy or pinned)[1]
-    if version == versions[0] and old_revision and old_revision != revision:
-        raise ValueError("refusing to move an already pinned release tag")
-    repository = source_url.removesuffix(".git")
+    checksums = None if legacy else formula_checksums(text, version, repository_url(source_url))
+    return PublishedRelease(version, (legacy or pinned)[1], checksums)
+
+
+def formula_checksums(text, version, repository):
+    """Return a generated formula's checksums once its assets match its version and source."""
+    assets = re.findall(r'^      url "([^"\n]+)"\n      sha256 "([0-9a-f]{64})"$', text, re.M)
+    manifest = "\n".join(f"{checksum}  {url.rsplit('/', 1)[-1]}" for url, checksum in assets)
+    # Older formulas may predate a change to the supported platform set.
+    platforms = []
+    for url, _ in assets:
+        match = re.fullmatch(rf"shoal-v{re.escape(version)}-([a-z0-9_-]+)\.tar\.gz",
+                             url.rsplit('/', 1)[-1])
+        if not match:
+            raise ValueError("unexpected release asset names")
+        platforms.append(match[1])
+    if not platforms:
+        raise ValueError("expected release asset URLs")
+    checksums = release_checksums(manifest, version, platforms)
+    expected_urls = {f"{repository}/releases/download/v{version}/{name}" for name in checksums}
+    if {url for url, _ in assets} != expected_urls:
+        raise ValueError("unexpected release asset URLs")
+    return checksums
+
+
+def render_formula(repository, version, revision, checksums):
+    template = Path(__file__).with_name("shoal.rb.template").read_text()
+    for key, value in (("REPOSITORY", repository), ("REVISION", revision),
+                       ("VERSION", version),
+                       ("RELEASE_SOURCES", release_sources(repository, version, checksums))):
+        template = template.replace(f"@{key}@", value)
+    return template
+
+
+def release_sources(repository, version, checksums):
     download = f"{repository}/releases/download/v{version}"
-    checksums = release_checksums(manifest, version)
     platforms_by_os = {}
     for _, platform, platform_os, arch in release_targets():
         platforms_by_os.setdefault(platform_os, []).append((platform, arch))
@@ -74,33 +112,24 @@ def update_formula(text, version, revision, manifest,
             blocks.extend([f"    on_{arch} do", f'      url "{download}/{name}"',
                            f'      sha256 "{checksums[name]}"', "    end"])
         blocks.append("  end")
-    template = Path(__file__).with_name("shoal.rb.template").read_text()
-    # A generated formula must match its recorded version and sources before replacement.
-    if not legacy:
-        assets = re.findall(r'^      url "([^"\n]+)"\n      sha256 "([0-9a-f]{64})"$', text, re.M)
-        old_manifest = "\n".join(f"{checksum}  {url.rsplit('/', 1)[-1]}"
-                                 for url, checksum in assets)
-        # Older formulas may predate a change to the supported platform set.
-        old_platforms = []
-        for url, _ in assets:
-            match = re.fullmatch(rf"shoal-v{re.escape(versions[0])}-([a-z0-9_-]+)\.tar\.gz",
-                                 url.rsplit('/', 1)[-1])
-            if not match:
-                raise ValueError("unexpected release asset names")
-            old_platforms.append(match[1])
-        if not old_platforms:
-            raise ValueError("expected release asset URLs")
-        old_checksums = release_checksums(old_manifest, versions[0], old_platforms)
-        expected_urls = {f'{repository}/releases/download/v{versions[0]}/{name}'
-                         for name in old_checksums}
-        if {url for url, _ in assets} != expected_urls:
-            raise ValueError("unexpected release asset URLs")
-        if version == versions[0] and checksums != old_checksums:
+    return "\n".join(blocks)
+
+
+def update_formula(text, version, revision, manifest,
+                   source_url="https://github.com/HN05/shoal.git"):
+    repository = repository_url(source_url)
+    new_version = release_version(version)
+    commit_id(revision)
+    published = published_release(text, source_url)
+    if new_version < release_version(published.version):
+        raise ValueError("refusing to downgrade the release channel")
+    checksums = release_checksums(manifest, version)
+    if version == published.version:
+        if published.revision and published.revision != revision:
+            raise ValueError("refusing to move an already pinned release tag")
+        if published.checksums is not None and checksums != published.checksums:
             raise ValueError("refusing to change already pinned release checksums")
-    for key, value in (("REPOSITORY", repository), ("REVISION", revision),
-                       ("VERSION", version), ("RELEASE_SOURCES", "\n".join(blocks))):
-        template = template.replace(f"@{key}@", value)
-    return template
+    return render_formula(repository, version, revision, checksums)
 
 
 def main():
