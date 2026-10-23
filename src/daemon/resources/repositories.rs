@@ -77,6 +77,14 @@ pub(super) fn resolve(
         "related repository removal is incomplete: {selector}"
     );
     ensure!(
+        !store::exists(
+            db,
+            "SELECT 1 FROM repository_moves WHERE repository_id=?1",
+            [&repo.id]
+        )?,
+        "related repository move is incomplete: {selector}"
+    );
+    ensure!(
         fs::canonicalize(&repo.path)
             .with_context(|| format!("related repository checkout is unavailable: {selector}"))?
             == repo.path

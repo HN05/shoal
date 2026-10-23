@@ -128,6 +128,8 @@ impl Manager {
             "repository directory {} is missing",
             directory.display()
         );
+        let id = repo.id.clone();
+        self.store.run(move |db| ensure_not_leased(db, &id)).await?;
         let processes = process::in_directory(directory).await?;
         ensure!(
             processes.is_empty(),
@@ -233,6 +235,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                ensure_not_leased(&tx, &id)?;
                 ensure!(
                     !store::repository_has_executions(&tx, &id)?,
                     "a command or agent is running in a workspace of the repository; stop it first"
@@ -298,7 +301,6 @@ impl Manager {
                 for (table, columns) in [
                     ("repositories", vec!["path", "workspaces_dir"]),
                     ("workspaces", vec!["path", "git_dir"]),
-                    ("repository_resource_leases", vec!["path"]),
                 ] {
                     let key = if table == "repositories" {
                         "id"
@@ -442,6 +444,19 @@ fn utf8(path: &Path) -> Result<String> {
         .to_str()
         .context("repository directory is not UTF-8")?
         .to_owned())
+}
+
+/// Refuse moving a checkout that a resource lease handed to a caller.
+fn ensure_not_leased(db: &rusqlite::Connection, id: &str) -> Result<()> {
+    ensure!(
+        !store::exists(
+            db,
+            "SELECT 1 FROM repository_resource_leases WHERE repository_id=?1",
+            [id]
+        )?,
+        "the repository checkout is leased as a resource; release it first"
+    );
+    Ok(())
 }
 
 fn remove_directory(path: &Path) -> Result<()> {
