@@ -175,7 +175,10 @@ pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i6
         .collect::<rusqlite::Result<Vec<(String, NotificationKind, String)>>>()?;
     let mut last = None;
     for (workspace, kind, message) in unread {
-        last = notifications::insert(tx, Some(&workspace), kind, &message)?.or(last);
+        let recorded = notifications::insert(tx, Some(&workspace), kind, &message)?;
+        if recorded.new {
+            last = Some(recorded.id);
+        }
     }
     Ok(last)
 }

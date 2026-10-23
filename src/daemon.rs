@@ -856,8 +856,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Notifications(manager.notifications(unread_only, limit).await?)
         }
         Method::SendMessage { workspace, message } => {
-            manager.send_message(&workspace, message).await?;
-            Body::Ok
+            Body::Sent(manager.send_message(&workspace, message).await?)
+        }
+        Method::WithdrawMessage { workspace, id } => {
+            Body::Notification(manager.withdraw_message(&workspace, id).await?)
         }
         Method::SendAgentMessage { workspace, message } => {
             manager.send_agent_message(&workspace, message).await?;

@@ -189,7 +189,7 @@ impl Manager {
             .record_notification(None, NotificationKind::CleanupFailed, message)
             .await
         {
-            Ok(()) => {
+            Ok(_) => {
                 if let Some(failure) = &mut self.cleanup_health().failure {
                     failure.notified = true;
                 }

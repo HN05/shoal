@@ -14,7 +14,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::notifications::{Cleared, Notification},
+    daemon::notifications::{Cleared, Notification, Sent},
     protocol::{self, Method, Response},
 };
 
@@ -75,8 +75,12 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 
 pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    request::<()>(&ctx.paths, Method::SendMessage { workspace, message }).await?;
-    ctx.emit("Notification sent.", ())?;
+    let sent = request::<Sent>(&ctx.paths, Method::SendMessage { workspace, message }).await?;
+    let text = match sent.notification {
+        Some(id) => format!("Notification {id} sent."),
+        None => "Sent to the coordinating agent.".to_owned(),
+    };
+    ctx.emit(&text, &sent)?;
     Ok(0)
 }
 

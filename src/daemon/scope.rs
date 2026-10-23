@@ -68,6 +68,7 @@ pub async fn authorize(
         | Method::WorkspaceUndone { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SendMessage { workspace, .. }
+        | Method::WithdrawMessage { workspace, .. }
         | Method::AgentMessages { workspace }
         | Method::MarkAgentMessagesDelivered { workspace, .. }
         | Method::AskQuestion { workspace, .. }

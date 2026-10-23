@@ -579,6 +579,11 @@ pub enum Method {
         workspace: String,
         id: i64,
     },
+    /// Delete the unread message `id` the workspace sent the user.
+    WithdrawMessage {
+        workspace: String,
+        id: i64,
+    },
     /// Close the workspace's open question `id`, which its agents no longer
     /// need answered.
     WithdrawQuestion {
@@ -895,6 +900,7 @@ response_bodies! {
     Question(crate::daemon::questions::Question),
     Questions(crate::daemon::questions::Listing),
     Notification(Notification),
+    Sent(crate::daemon::notifications::Sent),
     EventItem(EventItem),
     PrUpdates(crate::daemon::links::wait::Updates),
     Port(PortReservation),

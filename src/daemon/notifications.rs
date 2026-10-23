@@ -1,7 +1,7 @@
 //! Events the daemon records for the user: conflicts it saw, agents that
 //! finished, workspaces it removed. Recording never fails the operation that
 //! caused the event; the CLI shows them and marks them read.
-use anyhow::Result;
+use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
@@ -91,15 +91,21 @@ impl NotificationKind {
     }
 }
 
-/// Record an event for the user in the caller's transaction, returning its ID,
-/// or `None` when it collapses into an identical unread one. Callers wake
-/// watchers with `notifications_changed` after committing.
+/// A recorded notification, and whether recording added it rather than
+/// collapsing it into an identical unread one.
+pub(crate) struct Recorded {
+    pub id: i64,
+    pub new: bool,
+}
+
+/// Record an event for the user in the caller's transaction. Callers wake
+/// watchers with `notifications_changed` after committing a new one.
 pub(crate) fn insert(
     tx: &rusqlite::Transaction<'_>,
     workspace: Option<&str>,
     kind: NotificationKind,
     message: &str,
-) -> Result<Option<i64>> {
+) -> Result<Recorded> {
     if kind.collapses() {
         let pending: Option<i64> = tx
             .query_row(
@@ -108,8 +114,8 @@ pub(crate) fn insert(
                 |row| row.get(0),
             )
             .optional()?;
-        if pending.is_some() {
-            return Ok(None);
+        if let Some(id) = pending {
+            return Ok(Recorded { id, new: false });
         }
     }
     tx.execute(
@@ -126,7 +132,7 @@ pub(crate) fn insert(
         "DELETE FROM notifications WHERE read=1 AND id <= (SELECT id FROM notifications ORDER BY id DESC LIMIT 1 OFFSET ?1)",
         [RETAINED as i64],
     )?;
-    Ok(Some(id))
+    Ok(Recorded { id, new: true })
 }
 
 /// Delete the unread notification of `kind` recording `message` for
@@ -170,6 +176,15 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
 
 const COLUMNS: &str = "id,created_at,workspace,kind,message,read";
 
+/// Where a workspace process's message went: the user's notification, which
+/// the sender may withdraw while unread, or none when a coordinating agent
+/// received it instead.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Sent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification: Option<i64>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cleared {
     /// Notifications deleted, read or not.
@@ -192,58 +207,94 @@ impl Manager {
 
     /// Record a message a workspace process sends the user. Unlike daemon
     /// events, the message is the whole operation, so failures are returned.
-    pub async fn send_message(&self, selector: &str, message: String) -> Result<()> {
+    pub async fn send_message(&self, selector: &str, message: String) -> Result<Sent> {
         crate::validate::message(&message)?;
         let workspace = self.workspace(selector).await?;
-        self.record_notification(
-            Some(&workspace.name),
-            NotificationKind::AgentMessage,
-            message,
-        )
-        .await
+        let notification = self
+            .record_notification(
+                Some(&workspace.name),
+                NotificationKind::AgentMessage,
+                message,
+            )
+            .await?;
+        Ok(Sent { notification })
+    }
+
+    /// Delete the message `id` the workspace sent the user, which the user
+    /// need not see after all. A shown message stays; a correction follows it.
+    pub async fn withdraw_message(&self, selector: &str, id: i64) -> Result<Notification> {
+        let workspace = self.workspace(selector).await?;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let notification = tx
+                    .query_row(
+                        &format!(
+                            "SELECT {COLUMNS} FROM notifications
+                                WHERE id=?1 AND workspace=?2 AND kind=?3"
+                        ),
+                        params![id, workspace.name, NotificationKind::AgentMessage],
+                        row,
+                    )
+                    .optional()?
+                    .with_context(|| {
+                        format!("workspace {} sent no notification {id}", workspace.name)
+                    })?;
+                ensure!(
+                    !notification.read,
+                    "notification {id} was already shown; send a correction with shoal notify"
+                );
+                tx.execute("DELETE FROM notifications WHERE id=?1", [id])?;
+                tx.commit()?;
+                Ok(notification)
+            })
+            .await
     }
 
     /// Tell the agent coordinating the workspace's work about an event, or
-    /// record it for the user.
+    /// record it for the user and return its ID.
     pub(super) async fn record_notification(
         &self,
         workspace: Option<&str>,
         kind: NotificationKind,
         message: impl Into<String>,
-    ) -> Result<()> {
+    ) -> Result<Option<i64>> {
         let message = message.into();
         if let (Some(source), Some(name)) = (kind.coordination(), workspace)
             && self
                 .tell_coordinator(name, Some(kind), message.clone(), source)
                 .await
         {
-            return Ok(());
+            return Ok(None);
         }
-        self.record_user_notification(workspace, kind, message)
-            .await
+        let id = self
+            .record_user_notification(workspace, kind, message)
+            .await?;
+        Ok(Some(id))
     }
 
-    /// Record an event for the user and wake watchers.
+    /// Record an event for the user, wake watchers when it is new, and return
+    /// its ID.
     async fn record_user_notification(
         &self,
         workspace: Option<&str>,
         kind: NotificationKind,
         message: String,
-    ) -> Result<()> {
+    ) -> Result<i64> {
         let workspace = workspace.map(str::to_owned);
         let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let id = insert(&tx, workspace.as_deref(), kind, &message)?;
+                let recorded = insert(&tx, workspace.as_deref(), kind, &message)?;
                 tx.commit()?;
-                Ok(id)
+                Ok(recorded)
             })
             .await?;
-        if let Some(id) = recorded {
-            self.notifications_changed.send_replace(id);
+        if recorded.new {
+            self.notifications_changed.send_replace(recorded.id);
         }
-        Ok(())
+        Ok(recorded.id)
     }
 
     /// Oldest first. `unread_only` gives the oldest unread notifications, so a
@@ -465,16 +516,23 @@ mod tests {
             )
             .await;
         for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
-            let mut method = Method::SendMessage {
-                workspace: target.clone(),
-                message: "hello".into(),
-            };
-            assert_eq!(
-                scope::authorize(&manager, Some("scope"), &mut method)
-                    .await
-                    .is_ok(),
-                allowed
-            );
+            for mut method in [
+                Method::SendMessage {
+                    workspace: target.clone(),
+                    message: "hello".into(),
+                },
+                Method::WithdrawMessage {
+                    workspace: target.clone(),
+                    id: 1,
+                },
+            ] {
+                assert_eq!(
+                    scope::authorize(&manager, Some("scope"), &mut method)
+                        .await
+                        .is_ok(),
+                    allowed
+                );
+            }
         }
         for mut method in [
             Method::ListNotifications {
@@ -489,6 +547,61 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn senders_withdraw_their_own_messages_until_shown() {
+        use crate::test_support::repository;
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let sender = manager
+            .create_workspace(&repo.id, "sender".into(), None, None, None)
+            .await
+            .unwrap();
+        let other = manager
+            .create_workspace(&repo.id, "other".into(), None, None, None)
+            .await
+            .unwrap();
+        let send = async |message: &str| {
+            manager
+                .send_message(&sender.id, message.into())
+                .await
+                .unwrap()
+                .notification
+                .unwrap()
+        };
+        let sent = send("PR #12 is ready to merge").await;
+        // A repeat collapses into the same notification.
+        assert_eq!(send("PR #12 is ready to merge").await, sent);
+        manager
+            .notify(Some("sender"), NotificationKind::ResourceBusy, "pool busy")
+            .await;
+        let busy = manager.notifications(true, 50).await.unwrap()[1].id;
+        for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
+            let error = manager.withdraw_message(workspace, id).await.unwrap_err();
+            assert!(
+                error.to_string().contains("sent no notification"),
+                "{error:#}"
+            );
+        }
+
+        let withdrawn = manager.withdraw_message(&sender.id, sent).await.unwrap();
+        assert_eq!(withdrawn.message, "PR #12 is ready to merge");
+        let unread = manager.notifications(true, 50).await.unwrap();
+        assert_eq!(unread.len(), 1);
+        assert_eq!(unread[0].id, busy);
+
+        let shown = send("PR #13 is ready to merge").await;
+        manager.mark_notifications_read(vec![shown]).await.unwrap();
+        let error = manager
+            .withdraw_message(&sender.id, shown)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("already shown"), "{error:#}");
     }
 
     #[tokio::test]

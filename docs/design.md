@@ -793,7 +793,9 @@ CLI shows them once, unless asked to keep them unread, on request or as a follow
 terminal's own notifications (OSC 9); `work`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
-the user a PR is ready neither ends the assignment nor affects cleanup. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
+the user a PR is ready neither ends the assignment nor affects cleanup. The
+sending workspace may withdraw its message while it is unread; once shown, it
+stays, because deleting it would not unsay it, and a correction does. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
 integrations while the workspace is ready, using normal configuration precedence
 and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
