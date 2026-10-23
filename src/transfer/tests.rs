@@ -123,6 +123,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
     let status = git(&workspace.path, &["status", "--porcelain"]);
+    recovery::save_session(&exporting.paths, &workspace.id, "stopped-agent", "s1").unwrap();
     recovery::save_record(
         &exporting.paths,
         &workspace.id,
@@ -136,6 +137,15 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let read = Import::read(&mut &file[..]).unwrap();
     assert_eq!(read.manifest.remote_url.as_deref(), origin.to_str());
     assert!(read.manifest.bundle);
+    // The exporting machine's import can resume the session it recorded.
+    let sessions = read.manifest.sessions.as_ref();
+    assert_eq!(
+        sessions.map(|sessions| sessions.machine.clone()),
+        crate::process::machine::id()
+    );
+    if let Some(sessions) = sessions {
+        assert_eq!(sessions.agents[0].record.session.as_deref(), Some("s1"));
+    }
     let restored = import(&importing, &target_repo, &file).await;
 
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);

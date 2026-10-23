@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    execution::recovery::StoppedAgent,
+    execution::recovery::{LastSession, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
     model::{RemovedWorkspace, Repository},
 };
@@ -31,6 +31,22 @@ pub struct Manifest {
     pub bundle: bool,
     /// The removal record, with agents that start new sessions.
     pub workspace: RemovedWorkspace,
+    /// The agents with their sessions, for an import on the exporting
+    /// machine, where the sessions remain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<Sessions>,
+}
+
+/// An export's stopped agents and last session as the exporting machine
+/// recorded them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sessions {
+    /// The exporting machine's ID.
+    pub machine: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<StoppedAgent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_session: Option<LastSession>,
 }
 
 /// An export the daemon wrote, and the removal that preceded it when the
@@ -74,11 +90,17 @@ impl Manifest {
             }
             None => true,
         };
+        let sessions = crate::process::machine::id().map(|machine| Sessions {
+            machine,
+            agents: removed.agents.clone(),
+            last_session: removed.last_session.clone(),
+        });
         Ok(Self {
             remote_url: crate::repository::remote_url_from_source(&repo.source).await?,
             prerequisite: if bundle { shared } else { Some(commit) },
             bundle,
             workspace: moved(removed),
+            sessions,
         })
     }
 }
