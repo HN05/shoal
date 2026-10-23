@@ -1240,7 +1240,8 @@ Interactive calls identify the resolved repository, source, and checkout path be
 `Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is required for scripts
 and `--json`. `repo remove` is an alias.
 Linked worktrees outside Shoal must be removed first; prunable stale records do
-not block, locked worktrees do. Shoal refuses redirected paths and deletions
+not block, locked worktrees do. Shoal refuses redirected paths, a checkout whose
+Git config sets `core.bare` although it has a working tree, and deletions
 that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.

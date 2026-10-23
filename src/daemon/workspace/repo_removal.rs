@@ -14,7 +14,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 use std::{fs, path::Path};
 
@@ -338,6 +338,9 @@ fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) ->
 /// The checkout must be a plain repository whose only linked worktrees are
 /// the given Shoal workspaces.
 async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<()> {
+    if let Some(problem) = crate::repository::bare_flag_problem(&repo.path).await? {
+        bail!("{problem}, then retry shoal repo rm --yes");
+    }
     let root = git::worktree_root(&repo.path).await?;
     ensure!(
         fs::canonicalize(root.trim())? == repo.path,
@@ -440,6 +443,31 @@ mod tests {
         assert!(manager.list_workspaces().await.unwrap().is_empty());
         assert!(!repo.path.exists());
         assert!(!repo.workspaces_dir.unwrap().exists());
+    }
+
+    #[tokio::test]
+    async fn removal_names_a_bare_flag_on_a_checkout_with_a_working_tree() -> Result<()> {
+        let (root, manager) = test_support::manager().await;
+        let checkout = test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+            .await?;
+        test_support::git(&repo.path, &["config", "core.bare", "true"]);
+
+        let error = manager
+            .remove_repository(&repo.id)
+            .await
+            .err()
+            .context("removal succeeded")?;
+        let message = format!("{error:#}");
+        assert!(message.contains("core.bare=true"), "{message}");
+        assert!(message.contains("config core.bare false"), "{message}");
+        assert!(repo.path.exists());
+
+        test_support::git(&repo.path, &["config", "core.bare", "false"]);
+        manager.remove_repository(&repo.id).await?;
+        assert!(!repo.path.exists());
+        Ok(())
     }
 
     #[test]

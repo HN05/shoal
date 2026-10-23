@@ -40,6 +40,19 @@ pub async fn worktree_root(repo: &Path) -> Result<String> {
     run(repo, &["rev-parse", "--show-toplevel"]).await
 }
 
+/// Whether the checkout at `path` has a `.git` directory, yet its Git config
+/// sets `core.bare`, so Git refuses every working-tree command there. Running
+/// `git init --bare` with an inherited `GIT_DIR` leaves a checkout this way.
+pub async fn is_bare_with_work_tree(path: &Path) -> Result<bool> {
+    if !path.join(".git").is_dir() {
+        return Ok(false);
+    }
+    Ok(run(path, &["rev-parse", "--is-bare-repository"])
+        .await?
+        .trim()
+        == "true")
+}
+
 pub async fn git_dir(repo: &Path) -> Result<PathBuf> {
     let dir = run(repo, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
     Ok(std::fs::canonicalize(dir.trim())?)

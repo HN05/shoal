@@ -135,6 +135,26 @@ pub async fn remote_url_from_path(path: &Path) -> Result<Option<String>> {
     ))
 }
 
+/// What is wrong with a checkout whose Git config sets `core.bare` although it
+/// has a working tree, and how to fix it; `None` when Git can use the working tree.
+pub async fn bare_flag_problem(path: &Path) -> Result<Option<String>> {
+    if !git::is_bare_with_work_tree(path).await? {
+        return Ok(None);
+    }
+    let fix = crate::shell::quote(&[
+        "git",
+        "-C",
+        &path.to_string_lossy(),
+        "config",
+        "core.bare",
+        "false",
+    ]);
+    Ok(Some(format!(
+        "{} has a working tree, but its Git config sets core.bare=true; run {fix}",
+        path.display()
+    )))
+}
+
 /// Normalize equivalent transports of one remote to a comparable key.
 fn url_key(url: &str) -> String {
     RemoteUrl::parse(url)
