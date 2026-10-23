@@ -59,12 +59,35 @@ pub fn worktrees_check_name(repository: &str) -> String {
     format!("worktrees:{repository}")
 }
 
+fn checkout_check_name(repository: &str) -> String {
+    format!("checkout:{repository}")
+}
+
+/// Whether Git can use the working tree of a registered checkout.
+async fn checkout(repo: &crate::model::Repository) -> Check {
+    let name = checkout_check_name(crate::repository::name(repo));
+    match crate::repository::bare_flag_problem(&repo.path).await {
+        Ok(None) => Check::new(name, CheckStatus::Ok, "Git config does not set core.bare"),
+        Ok(Some(problem)) => Check::new(
+            name,
+            CheckStatus::Warning,
+            format!("{problem}, then check git status: the index may lag behind HEAD"),
+        ),
+        Err(error) => Check::new(
+            name,
+            CheckStatus::Error,
+            format!("Could not check {}: {error:#}", repo.path.display()),
+        ),
+    }
+}
+
 /// Repository names belong to the daemon and are unknown when it is unavailable.
 pub fn unavailable_checks() -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, _)| tool.check_name())
         .chain([
             "cleanup".to_owned(),
+            checkout_check_name("*"),
             worktrees_check_name("*"),
             "workspaces".to_owned(),
         ])
@@ -83,6 +106,7 @@ impl Manager {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
         checks.push(self.cleanup_check());
         for repo in self.repositories().await? {
+            checks.push(checkout(&repo).await);
             let Some(root) = &repo.workspaces_dir else {
                 continue;
             };

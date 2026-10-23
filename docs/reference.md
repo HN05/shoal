@@ -2493,10 +2493,12 @@ shoal doctor fix-login --repair --reclaim  # Re-establish ownership after checki
 Exit 2 while findings or incomplete checks remain, 0 when clear. JSON contains
 `checks` and `workspaces`. Environment checks cover daemon reachability and
 version, executable `git`, `wt`, `lsof`, `zmx`, and `fzf` (for interactive pickers) on
-the daemon's PATH, Git worktrees under registered repository roots that Shoal
-does not track, and shell integration in the calling shell. They run regardless
-of the workspace selection and only diagnose, even with `--repair`. An unavailable or mismatched daemon leaves its
-checks marked as skipped (`dependency:<tool>` and `worktrees:*` when repository
+the daemon's PATH, registered checkouts whose Git config sets `core.bare`
+although they have a working tree, Git worktrees under registered repository
+roots that Shoal does not track, and shell integration in the calling shell.
+They run regardless of the workspace selection and only diagnose, even with
+`--repair`. An unavailable or mismatched daemon leaves its checks marked as
+skipped (`dependency:<tool>`, `checkout:*` and `worktrees:*` when repository
 names are unavailable); doctor never starts or restarts it.
 When current checks find no issues, reports show the recorded failure and repair guidance.
 `doctor` is unavailable inside scoped executions. Before accepting requests or

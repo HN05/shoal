@@ -8286,6 +8286,31 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
 }
 
 #[test]
+fn doctor_daemon_reports_a_bare_flag_on_a_checkout_with_a_working_tree() {
+    let fixture = Fixture::new();
+    fixture.add("owned");
+    let checkout_findings = || {
+        let response = fixture.request_with_id(2, serde_json::json!("diagnose"));
+        response["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["name"].as_str().unwrap().starts_with("checkout:"))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(checkout_findings()[0]["status"], "ok");
+
+    git(&fixture.repo, &["config", "core.bare", "true"]);
+    let findings = checkout_findings();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["status"], "warning");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(message.contains("core.bare=true"), "{message}");
+    assert!(message.contains("config core.bare false"), "{message}");
+}
+
+#[test]
 fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
     let fixture = Fixture::new();
     let owned = fixture.add("owned");

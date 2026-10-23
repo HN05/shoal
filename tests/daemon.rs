@@ -884,6 +884,7 @@ fn doctor_reports_a_stopped_daemon_without_creating_state() {
             "dependency:zmx",
             "dependency:fzf",
             "cleanup",
+            "checkout:*",
             "worktrees:*",
             "workspaces"
         ]
