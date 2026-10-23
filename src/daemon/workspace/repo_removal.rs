@@ -81,7 +81,11 @@ impl Manager {
     async fn remove_locked_repository(&self, repo: Repository) -> Result<RepositoryRemoval> {
         let id = repo.id.clone();
         self.store
-            .run(move |db| crate::daemon::resources::ensure_no_external_leases(db, &id))
+            .run(move |db| {
+                // An unfinished move may leave the checkout in either place.
+                store::ensure_repository_not_moving(db, &id)?;
+                crate::daemon::resources::ensure_no_external_leases(db, &id)
+            })
             .await?;
         let workspaces: Vec<_> = self
             .list_workspaces()

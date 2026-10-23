@@ -690,6 +690,12 @@ mod tests {
             .err()
             .context("chat started during a move")?;
         assert!(error.to_string().contains("repository move is incomplete"));
+        let error = manager
+            .remove_repository(&repo.id)
+            .await
+            .err()
+            .context("removed a repository during its move")?;
+        assert!(format!("{error:#}").contains("repository move is incomplete"));
         // Quarantine fails the reserved workspaces; setup must not revive one.
         manager.store.quarantine_interrupted_operations().await?;
         test_support::configure(
