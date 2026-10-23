@@ -1836,8 +1836,9 @@ GitLab keep uploads with the repository. Forgejo and Gitea keep them with the
 item or comment, so a new comment or item is first posted naming the files,
 then updated to show them; Shoal first refuses a file the instance's attachment
 settings would refuse, by type or size. It resends an upload up to three times
-while the connection fails before sending it or the forge answers 429 or 503, and a
-comment's update also after a broken connection or another 5xx.
+while the connection fails before sending it or the forge answers 503, and a
+comment's update also after a broken connection or another 5xx; a 429 is the
+forge's [rate limit](#linked-items-and-cleanup), which holds back requests until it ends.
 GitHub needs write access to the repository and Forgejo
 an fj login; Bitbucket has no API for attachments and refuses them before
 sending anything.

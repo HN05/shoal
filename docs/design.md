@@ -778,7 +778,8 @@ GitHub does not count against its primary rate limit. The memory is not
 persisted: a restart reads everything once in full. The same layer reads each
 forge's rate-limit headers and sends nothing to a forge that limits the account
 until the limit ends; polls wait for it and the user gets one notification,
-because a lookup failure would ask an agent to act on what only time fixes.
+because a lookup failure would ask an agent to act on what only time fixes. A
+429 is such a limit, never resent within seconds as a 503 is.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
@@ -877,7 +878,7 @@ upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Forgejo
 takes a comment's files only once it is posted, so a failure there would leave it
 without them: Shoal refuses what the instance's attachment settings refuse before
 posting, and resends the uploads and the comment's update after failures that may
-pass. An upload is resent only when the forge did not get it or answered 429 or 503,
+pass. An upload is resent only when the forge did not get it or answered 503,
 since a second copy would stay on the comment and a proxy's other 5xx may follow a
 stored one; the update also after those. A comment whose files still fail stays posted, neither deleted
 nor finished later, and its error says so. Each action
