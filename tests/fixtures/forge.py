@@ -5,8 +5,8 @@ or a Forgejo API server with `serve <port-file>`.
 Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A list answers successive requests in turn, repeating
-its last entry. Each entry is {"status": 200, "body": ...}, may add
-"headers" to send, and may hold the answer for "delay" seconds. The server tags
+its last entry. Each entry is {"status": 200, "body": ...}, and may add
+"headers" to send. The server tags
 each successful body, and answers a request that names its tag in
 If-None-Match with 304. Every request is appended to
 $HOME/forge/requests.jsonl with its body, credentials (the agent's, or an
@@ -20,7 +20,6 @@ import json
 import os
 import re
 import sys
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.join(os.environ["HOME"], "forge")
@@ -44,7 +43,6 @@ def respond(key, body, auth=None, prefix=False, tag=None):
     answer = responses.get(key, {"status": 404, "body": {"message": "no fixture for " + key}})
     if isinstance(answer, list):
         answer = answer[min(seen, len(answer) - 1)]
-    time.sleep(answer.get("delay", 0))
     status, headers = answer.get("status", 200), answer.get("headers", {})
     answer = answer.get("body")
     if status == 200 and tag is not None and tag == etag(answer):

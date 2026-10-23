@@ -216,7 +216,39 @@ pub fn forge_check_name(host: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::Config, forge::ForgeRepo};
+    use std::{sync::Arc, time::Duration};
+
+    use crate::{
+        config::Config,
+        forge::{ForgeRepo, backends::ForgeKind},
+    };
+
+    #[tokio::test]
+    async fn a_lookup_waiting_on_the_host_takes_the_answer_the_first_one_records() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let host = "waiting.invalid";
+        let asking = manager.lock_forge_host(host).await;
+        let gate = manager.forge_host_gates.lock().await[host].clone();
+        let waiting = tokio::spawn({
+            let manager = manager.clone();
+            async move { manager.forge_type(host, "https").await }
+        });
+        // The map, the asking lookup, this test and the waiting lookup.
+        tokio::time::timeout(Duration::from_secs(60), async {
+            while Arc::strong_count(&gate) < 4 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the second lookup reaches the host's gate");
+        manager
+            .record_forge_host(host, ForgeKind::GitHub, "https")
+            .await
+            .unwrap();
+        drop(asking);
+        // Asking the host itself would fail: it does not resolve.
+        assert_eq!(waiting.await.unwrap().unwrap(), ForgeKind::GitHub);
+    }
 
     #[tokio::test]
     async fn reloaded_pins_reach_link_parsing_and_removed_ones_leave_it() {

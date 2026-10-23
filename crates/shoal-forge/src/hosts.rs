@@ -113,18 +113,22 @@ mod tests {
     #[test]
     fn readers_wait_for_the_pins_another_reader_is_loading() {
         let (loading, started) = std::sync::mpsc::channel();
+        let (proceed, waiting) = std::sync::mpsc::channel::<()>();
         learn_pins(move || {
             loading.send(()).unwrap();
-            std::thread::sleep(std::time::Duration::from_millis(200));
+            waiting.recv().unwrap();
             vec![("gitlab.pinned.example".into(), ForgeKind::Forgejo)]
         });
         let first = std::thread::spawn(|| learned("other.pinned.example"));
         started.recv().unwrap();
+        // Any other reader would wait for the pins.
+        assert!(PINS.try_lock().is_err());
+        proceed.send(()).unwrap();
+        assert_eq!(first.join().unwrap(), None);
         assert_eq!(
             ForgeKind::detect("gitlab.pinned.example", None),
             ForgeKind::Forgejo
         );
-        assert_eq!(first.join().unwrap(), None);
     }
 
     #[test]
