@@ -81,12 +81,38 @@ async fn checkout(repo: &crate::model::Repository) -> Check {
     }
 }
 
+const ROOT_DIR_CHECK: &str = "root_dir";
+
+/// Whether the daemon can create files in `root_dir`, where new repositories
+/// and their workspaces go.
+async fn root_dir(root: Result<PathBuf>) -> Check {
+    let checked = match root {
+        Ok(root) => crate::daemon::access::ensure_writable(&root)
+            .await
+            .map(|()| root),
+        Err(error) => Err(error),
+    };
+    match checked {
+        Ok(root) => Check::new(
+            ROOT_DIR_CHECK,
+            CheckStatus::Ok,
+            format!("The daemon can write to {}", root.display()),
+        ),
+        Err(error) => Check::new(
+            ROOT_DIR_CHECK,
+            CheckStatus::Error,
+            format!("Cannot use root_dir: {error:#}"),
+        ),
+    }
+}
+
 /// Repository names belong to the daemon and are unknown when it is unavailable.
 pub fn unavailable_checks() -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, _)| tool.check_name())
         .chain([
             "cleanup".to_owned(),
+            ROOT_DIR_CHECK.to_owned(),
             checkout_check_name("*"),
             worktrees_check_name("*"),
             "workspaces".to_owned(),
@@ -105,6 +131,7 @@ impl Manager {
     pub async fn diagnose(&self) -> Result<Vec<Check>> {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
         checks.push(self.cleanup_check());
+        checks.push(root_dir(self.config().root_dir(&self.paths)).await);
         for repo in self.repositories().await? {
             checks.push(checkout(&repo).await);
             let Some(root) = &repo.workspaces_dir else {
@@ -194,6 +221,25 @@ mod tests {
             .map(|check| check.name)
             .collect();
         assert_eq!(skipped, checked);
+    }
+
+    #[tokio::test]
+    async fn root_dir_reports_whether_the_daemon_can_write_there() {
+        let root = tempfile::tempdir().unwrap();
+        let check = root_dir(Ok(root.path().join("shoal"))).await;
+        assert_eq!(check.status, CheckStatus::Ok);
+        let file = root.path().join("file");
+        fs::write(&file, "").unwrap();
+        let check = root_dir(Ok(file.clone())).await;
+        assert_eq!(check.status, CheckStatus::Error);
+        assert!(
+            check.message.starts_with(&format!(
+                "Cannot use root_dir: the Shoal daemon cannot write to {}: ",
+                file.display()
+            )),
+            "{}",
+            check.message
+        );
     }
 
     #[test]

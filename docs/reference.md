@@ -2560,7 +2560,8 @@ shoal doctor fix-login --repair --reclaim  # Re-establish ownership after checki
 Exit 2 while findings or incomplete checks remain, 0 when clear. JSON contains
 `checks` and `workspaces`. Environment checks cover daemon reachability and
 version, executable `git`, `wt`, `lsof`, `zmx`, and `fzf` (for interactive pickers) on
-the daemon's PATH, registered checkouts whose Git config sets `core.bare`
+the daemon's PATH, whether the daemon can create a file in `root_dir`,
+registered checkouts whose Git config sets `core.bare`
 although they have a working tree, Git worktrees under registered repository
 roots that Shoal does not track, and shell integration in the calling shell.
 They run regardless of the workspace selection and only diagnose, even with
