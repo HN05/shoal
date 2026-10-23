@@ -64,8 +64,8 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
-    /// Whether the agent's session `session` is on this machine. A session
-    /// the agent finds by ID from any directory needs no check.
+    /// Whether the agent's session `session` is on this machine; without a
+    /// way to check, it counts as there.
     fn has_session(&self, _ctx: &Context, _session: &str) -> bool {
         true
     }

@@ -1,8 +1,8 @@
 //! Codex: its hooks deliver updates and report its turn state, its wrapper
 //! wakes it by typing a prompt into its session, `config.toml` records the
-//! directories it trusts, and `codex.default_mode` may hand a launch to the
-//! Codex app.
-use std::ffi::OsString;
+//! directories it trusts, its sessions are rollout files under `sessions`,
+//! and `codex.default_mode` may hand a launch to the Codex app.
+use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -48,6 +48,14 @@ impl Integration for Codex {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CODEX)
+    }
+
+    /// Codex resumes a session by ID from any directory.
+    fn has_session(&self, ctx: &Context, session: &str) -> bool {
+        crate::env::codex_home().is_ok_and(|home| {
+            let home = home.unwrap_or_else(|| ctx.paths.home.join(".codex"));
+            has_rollout(&home.join("sessions"), session)
+        })
     }
 
     fn wakes_by_prompt(&self) -> bool {
@@ -128,6 +136,26 @@ fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
         .collect())
 }
 
+/// Whether `sessions` holds the rollout file of `session`, which Codex names
+/// `rollout-<time>-<session>.jsonl` in a directory per day.
+fn has_rollout(sessions: &Path, session: &str) -> bool {
+    if !crate::execution::recovery::valid_session(session) {
+        return false;
+    }
+    let name = format!("-{session}.jsonl");
+    let Ok(entries) = std::fs::read_dir(sessions) else {
+        return false;
+    };
+    entries.flatten().any(|entry| match entry.file_type() {
+        Ok(kind) if kind.is_dir() => has_rollout(&entry.path(), session),
+        Ok(kind) if kind.is_file() => entry
+            .file_name()
+            .to_str()
+            .is_some_and(|file| file.ends_with(&name)),
+        _ => false,
+    })
+}
+
 /// Each Codex hook event with the group that reports its state. Codex has no
 /// notice that its prompt waits for input, so an interrupted turn stays
 /// working until its next turn ends.
@@ -150,6 +178,20 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
+
+    #[test]
+    fn sessions_are_found_by_their_rollout_file() {
+        let root = tempfile::tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        assert!(!has_rollout(&sessions, "abc"));
+        let day = sessions.join("2026/10/23");
+        std::fs::create_dir_all(&day).unwrap();
+        std::fs::write(day.join("rollout-2026-10-23T12-00-00-abc.jsonl"), "").unwrap();
+        assert!(has_rollout(&sessions, "abc"));
+        assert!(!has_rollout(&sessions, "bc"));
+        assert!(!has_rollout(&sessions, "abd"));
+        assert!(!has_rollout(&sessions, "-abc"));
+    }
 
     #[test]
     fn config_overrides_deliver_messages_and_report_state() {
