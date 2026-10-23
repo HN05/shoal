@@ -111,7 +111,14 @@ pub(super) async fn start(
             repository,
             post,
         } => {
-            let repo = item_repository(ctx, kind, &input, repository).await?;
+            let repo = super::issues::item_repository(
+                ctx,
+                kind,
+                Some(&input),
+                repository,
+                "shoal review <url> --repo <repository>",
+            )
+            .await?;
             match kind {
                 ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, args).await,
                 ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, args).await,
@@ -128,50 +135,6 @@ impl Reviewer {
             (false, None) => Reviewer::Ask,
         }
     }
-}
-
-/// The registered repository of a PR or issue, from `--repo`, its URL, or the
-/// current checkout, offering to register one that is missing.
-async fn item_repository(
-    ctx: &Context,
-    kind: ItemKind,
-    input: &str,
-    repository: Option<String>,
-) -> Result<Repository> {
-    let mut repos = client::repositories(&ctx.paths).await?;
-    let repository = match repository {
-        Some(repository) => {
-            let selector = ui::repository_selector(repository)?;
-            match super::repositories::offer_unregistered(ctx, &selector).await? {
-                Some(repo) => {
-                    let id = repo.id.clone();
-                    repos.push(repo);
-                    id.into()
-                }
-                None => selector,
-            }
-        }
-        None if IssueInput::parse(input) == IssueInput::Url => {
-            let forge = match kind {
-                ItemKind::Pr => ForgeRepo::from_pull_url(input)?,
-                ItemKind::Issue => ForgeRepo::from_issue_url(input)?,
-            };
-            super::issues::registered_remote(
-                ctx,
-                &mut repos,
-                forge,
-                "shoal review <url> --repo <repository>",
-            )
-            .await?
-            .into()
-        }
-        None => super::issues::current_repository(ctx, repos.clone(), super::issues::REPO_OR_URL)
-            .await?
-            .into(),
-    };
-    Ok(crate::repository::select(&repos, &repository)
-        .await?
-        .clone())
 }
 
 /// Review a PR in the workspace that owns its head branch, opening one from

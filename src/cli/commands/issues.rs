@@ -3,7 +3,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::ForgeRepo,
+    forge::{ForgeRepo, IssueInput, items::link::ItemKind},
     git,
     model::Repository,
     repository,
@@ -123,6 +123,49 @@ async fn repository_with_remote<'a>(
             forge.path
         ),
     }
+}
+
+/// The registered repository of a PR or issue, from `--repo`, its URL, or the
+/// current checkout, offering to register one that is missing; `retry` names
+/// the spelling that selects one when several share the URL's remote.
+pub(super) async fn item_repository(
+    ctx: &Context,
+    kind: ItemKind,
+    input: Option<&str>,
+    repository: Option<String>,
+    retry: &str,
+) -> Result<Repository> {
+    let mut repos = client::repositories(&ctx.paths).await?;
+    let repository = match repository {
+        Some(repository) => {
+            let selector = ui::repository_selector(repository)?;
+            match super::repositories::offer_unregistered(ctx, &selector).await? {
+                Some(repo) => {
+                    let id = repo.id.clone();
+                    repos.push(repo);
+                    id.into()
+                }
+                None => selector,
+            }
+        }
+        None if let Some(input) =
+            input.filter(|input| IssueInput::parse(input) == IssueInput::Url) =>
+        {
+            let forge = match kind {
+                ItemKind::Pr => ForgeRepo::from_pull_url(input)?,
+                ItemKind::Issue => ForgeRepo::from_issue_url(input)?,
+            };
+            registered_remote(ctx, &mut repos, forge, retry)
+                .await?
+                .into()
+        }
+        None => current_repository(ctx, repos.clone(), REPO_OR_URL)
+            .await?
+            .into(),
+    };
+    Ok(crate::repository::select(&repos, &repository)
+        .await?
+        .clone())
 }
 
 pub(in crate::cli) struct Issue {
