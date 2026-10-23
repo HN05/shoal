@@ -214,8 +214,12 @@ impl Manager {
             self.fetch_missing(&repo, commit).await?;
         }
         let removed = self.imported_record(&repo, removed).await?;
-        self.record_import(&repo.path, bundle, removed.clone())
-            .await?;
+        {
+            // A repository move holds this gate; the checkout may have moved.
+            let (repo, _git) = self.lock_repository(&repo.id).await?;
+            self.record_import(&repo.path, bundle, removed.clone())
+                .await?;
+        }
         self.restore_workspace(&removed.workspace_id)
             .await
             .with_context(|| {

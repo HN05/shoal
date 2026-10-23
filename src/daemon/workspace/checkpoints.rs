@@ -359,7 +359,16 @@ impl Manager {
         Ok(())
     }
 
+    /// A busy repository, or one being moved or removed, keeps its refs until
+    /// a later pass rather than holding up the others.
     async fn expire_repository_checkpoints(&self, repo: &Repository) -> Result<()> {
+        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+            return Ok(());
+        };
+        if self.ensure_repository_available(&repo.id).await.is_err() {
+            return Ok(());
+        }
+        let repo = &self.repository(&repo.id).await?;
         let _refs = self.checkpoint_gate.lock().await;
         let repository_id = repo.id.clone();
         self.store

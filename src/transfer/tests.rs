@@ -168,6 +168,50 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
 }
 
 #[tokio::test]
+async fn import_writes_nothing_while_the_repository_moves() {
+    let (_source, exporting, source_repo, origin) = exporter().await;
+    let (_target, importing, target_repo) = importer(&origin).await;
+    let workspace = exporting
+        .create_workspace(&source_repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    let file = export_removed(&exporting, &workspace.id).await;
+
+    // A move that has not finished: its checkout may be half copied.
+    let id = target_repo.id.clone();
+    importing
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO repository_moves
+                    (repository_id,source,destination,source_id,destination_id,states)
+                    VALUES (?1,'/old','/new','old','new','{}')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let import = Import::read(&mut &file[..]).unwrap();
+    let error = importing
+        .import_workspace(
+            &target_repo.id.as_str().into(),
+            import.bundle.as_ref().map(|bundle| bundle.path()),
+            import.manifest.prerequisite.as_deref(),
+            import.manifest.workspace,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("repository move is incomplete"),
+        "{error:#}"
+    );
+    assert!(importing.removed_workspaces().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn export_leaves_out_a_checkpoint_the_default_branch_has() {
     let (_source, exporting, source_repo, origin) = exporter().await;
     let (_target, importing, target_repo) = importer(&origin).await;
