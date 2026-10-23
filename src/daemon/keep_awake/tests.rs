@@ -2,7 +2,22 @@ use super::*;
 use crate::test_support::{manager, repository};
 
 async fn has_work(manager: &Manager) -> bool {
-    manager.store.run(agents_have_work).await.unwrap()
+    manager.agents_have_work().await.unwrap()
+}
+
+async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, r#"{"url":"https://example.com/o/r/pulls/1"}"#],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Workspace {
@@ -44,18 +59,7 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&manager, &temp).await;
     report(&manager, &workspace, AgentState::Idle).await;
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
-                rusqlite::params![id, r#"{"url":"https://example.com/o/r/pulls/1"}"#],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    watch_pr(&manager, &workspace).await;
     // A PR no poll has seen yet is open.
     assert!(has_work(&manager).await);
     for (state, work) in [("open", true), ("merged", false), ("closed", false)] {
@@ -91,6 +95,22 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
         })
         .await
         .unwrap();
+    assert!(!has_work(&manager).await);
+}
+
+#[tokio::test]
+async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
+    let (temp, manager) = manager().await;
+    let parent = workspace(&manager, &temp).await;
+    let child = manager
+        .split_workspace(&parent.name, "child".into(), None)
+        .await
+        .unwrap();
+    report(&manager, &parent, AgentState::Idle).await;
+    watch_pr(&manager, &child).await;
+    assert!(has_work(&manager).await);
+    // Once the child reports its own agent, that agent receives the PR.
+    report(&manager, &child, AgentState::Waiting).await;
     assert!(!has_work(&manager).await);
 }
 

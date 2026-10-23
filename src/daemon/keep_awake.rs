@@ -12,7 +12,10 @@ use tokio::{
 };
 
 use super::{
-    links::wait::watches_open_pr, log, notifications::NotificationKind, workspace::Manager,
+    links::wait::watches_open_pr,
+    log,
+    notifications::NotificationKind,
+    workspace::{Manager, TrackedAgents, agent_state, delegated},
 };
 use crate::state::AgentState;
 
@@ -91,7 +94,7 @@ async fn wanted(manager: &Manager) -> Option<bool> {
     if !manager.config().keep_awake {
         return Some(false);
     }
-    match manager.store.run(agents_have_work).await {
+    match manager.agents_have_work().await {
         Ok(work) => Some(work),
         Err(error) => {
             log!("keep awake: {error:#}");
@@ -100,20 +103,37 @@ async fn wanted(manager: &Manager) -> Option<bool> {
     }
 }
 
-/// Whether an agent is working on a turn, or has finished one while it
-/// watches an open PR, whose activity Shoal delivers as its next turn.
-fn agents_have_work(db: &mut Connection) -> Result<bool> {
-    let agents = db
-        .prepare("SELECT workspace_id,state FROM workspace_agent_state")?
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<Vec<(String, AgentState)>>>()?;
-    for (id, state) in agents {
+impl Manager {
+    async fn agents_have_work(&self) -> Result<bool> {
+        let agents = self.tracked_agents().await;
+        self.store
+            .run(move |db| agents_have_work(db, &agents))
+            .await
+    }
+}
+
+/// Whether an agent is working on a turn, or has finished one while an open
+/// PR whose activity Shoal delivers to it as its next turn is watched.
+fn agents_have_work(db: &Connection, agents: &TrackedAgents) -> Result<bool> {
+    for (id, state) in agent_state::all(db)? {
         let work = match state {
             AgentState::Working => true,
-            AgentState::Idle => watches_open_pr(db, &id)?,
+            AgentState::Idle => receives_open_pr_activity(db, &id, agents)?,
             AgentState::Waiting => false,
         };
         if work {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether the workspace, or a child workspace whose activity its agent
+/// receives, watches an open PR.
+fn receives_open_pr_activity(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+    let children = delegated(db, id, agents)?.into_iter().map(|child| child.id);
+    for workspace in std::iter::once(id.to_owned()).chain(children) {
+        if watches_open_pr(db, &workspace)? {
             return Ok(true);
         }
     }

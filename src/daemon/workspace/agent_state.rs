@@ -21,6 +21,14 @@ pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
         .optional()?)
 }
 
+/// Every workspace's last reported state.
+pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
+    Ok(db
+        .prepare("SELECT workspace_id,state FROM workspace_agent_state")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 impl Manager {
     /// Record the state reported from `execution`, which clears it when its
     /// record goes, and the agent `session` it reports for resuming it.

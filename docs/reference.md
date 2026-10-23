@@ -306,9 +306,10 @@ keep_awake = true              # Opt in; global config only
 ```
 
 With `keep_awake` set, the daemon keeps the machine from sleeping while an
-[agent's turn](#agent-state) is working, or while an idle agent's workspace
-[watches](#linked-items-and-cleanup) a PR not yet seen merged or closed, whose
-activity starts the agent's next turn. Closing a laptop's lid or leaving it idle
+[agent's turn](#agent-state) is working, or while an idle agent receives the
+activity of a [watched](#linked-items-and-cleanup) PR not yet seen merged or
+closed, from its own workspace or a [child](#child-workspaces) without an agent,
+since that activity starts its next turn. Closing a laptop's lid or leaving it idle
 then does not suspend the work; once no agent has either, the machine may sleep
 again. Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,
 which logind and idle daemons that honour its inhibitors obey; macOS runs

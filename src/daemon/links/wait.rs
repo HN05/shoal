@@ -1103,23 +1103,32 @@ pub(crate) fn linked_items(
 /// closed, so its activity is still to come.
 pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<bool> {
     for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
-        let record: Option<String> = db
-            .query_row(
-                "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
-                params![id, url],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let Some(record) = record else {
-            return Ok(true);
-        };
-        let snapshot: Snapshot = serde_json::from_str(&record)?;
-        let state = snapshot.state();
-        if state != ItemState::Merged.as_str() && state != ItemState::Closed.as_str() {
+        if observed_item(db, id, &url)?.is_none_or(|snapshot| !concluded(&snapshot)) {
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// The item as the workspace's last poll saw it, if one has.
+fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<Snapshot>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+            params![id, url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record
+        .map(|record| serde_json::from_str(&record))
+        .transpose()?)
+}
+
+/// Whether the item was seen merged or closed, ending its activity.
+fn concluded(snapshot: &Snapshot) -> bool {
+    [ItemState::Merged, ItemState::Closed]
+        .iter()
+        .any(|state| snapshot.state() == state.as_str())
 }
 
 impl Updates {
