@@ -115,6 +115,7 @@ pub struct RepoConfig {
     pub issue: Issue,
     pub land: Land,
     pub approvals: Approvals,
+    pub api: Api,
     pub seed: Seed,
 }
 
@@ -459,6 +460,13 @@ pub struct Issue {
     pub other_repositories: Option<OtherRepositories>,
     pub plan_label: Option<String>,
     pub planned_label: Option<String>,
+}
+
+/// Whether `shoal api` sends an agent's requests that are not reads.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Api {
+    pub agent_writes: Option<bool>,
 }
 
 /// Whether `shoal land` pushes the default branch to its upstream afterwards,

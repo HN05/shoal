@@ -409,6 +409,17 @@ async fn serve(
                 .await;
             return write_pages(stream, request.id, listed, Body::Items).await;
         }
+        Method::ForgeApi {
+            workspace,
+            request: raw,
+        } => {
+            let response = server
+                .manager
+                .forge_api(&workspace, &raw, caller.is_some())
+                .await
+                .map(|response| protocol::text_pieces(&response.to_string()));
+            return write_pages(stream, request.id, response, Body::ApiResponse).await;
+        }
         Method::RemovedWorkspaces => {
             let listed = server.manager.removed_workspaces().await;
             return write_pages(stream, request.id, listed, Body::RemovedWorkspaces).await;
@@ -459,6 +470,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::WatchItems { .. }
         | Method::WaitChatMessages { .. }
         | Method::ListItems { .. }
+        | Method::ForgeApi { .. }
         | Method::RemovedWorkspaces
         | Method::AgentEnvironments { .. } => {
             anyhow::bail!("unsupported operation")

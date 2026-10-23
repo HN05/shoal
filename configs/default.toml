@@ -244,3 +244,7 @@ other_repositories = "propose"
 [approvals]
 issue_open = "direct"
 pr_open = "direct"
+
+# Whether shoal api sends agents' requests that are not reads; you may always send them.
+[api]
+agent_writes = false

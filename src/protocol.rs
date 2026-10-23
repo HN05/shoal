@@ -428,6 +428,13 @@ pub enum Method {
         kind: crate::forge::items::link::ItemKind,
         search: crate::forge::items::list::Search,
     },
+    /// A request to the workspace repository's forge API, answered with
+    /// the response's JSON text in one or more `api_response` frames and
+    /// then `ok`.
+    ForgeApi {
+        workspace: String,
+        request: crate::forge::raw::RawRequest,
+    },
     /// Linked items, or an explicit one, for the CLI to look up.
     SelectItems {
         workspace: String,
@@ -915,6 +922,7 @@ response_bodies! {
     Inspection(Inspection),
     Item(crate::forge::items::item::Item),
     Items(Vec<crate::forge::items::item::Item>),
+    ApiResponse(Vec<String>),
     Opened(crate::daemon::links::proposals::OpenOutcome),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
@@ -1181,6 +1189,24 @@ pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
     Ok(pages)
 }
 
+/// `text` in pieces that each fit in a frame's page, however much JSON
+/// escaping grows them.
+pub fn text_pieces(text: &str) -> Vec<String> {
+    const PIECE_BYTES: usize = MAX_FRAME / 4;
+    let mut pieces = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let mut end = rest.len().min(PIECE_BYTES);
+        while !rest.is_char_boundary(end) {
+            end -= 1;
+        }
+        let (piece, tail) = rest.split_at(end);
+        pieces.push(piece.to_owned());
+        rest = tail;
+    }
+    pieces
+}
+
 /// A message longer than [`MAX_FRAME`]; none of it was written.
 #[derive(Debug)]
 pub struct FrameTooLarge {
@@ -1228,6 +1254,18 @@ mod tests {
             assert!(serde_json::to_vec(page).unwrap().len() < MAX_FRAME - 512);
         }
         assert_eq!(pages.concat(), items);
+    }
+
+    #[test]
+    fn text_pieces_fit_frames_and_keep_characters_whole() {
+        assert!(text_pieces("").is_empty());
+        // Quotes double when escaped; multibyte characters straddle piece ends.
+        let text = format!("{}{}", "\"".repeat(MAX_FRAME), "é".repeat(MAX_FRAME));
+        let pieces = text_pieces(&text);
+        for page in frame_pages(pieces.clone()).unwrap() {
+            assert!(serde_json::to_vec(&page).unwrap().len() < MAX_FRAME - 512);
+        }
+        assert_eq!(pieces.concat(), text);
     }
 
     #[tokio::test]

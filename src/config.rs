@@ -134,6 +134,7 @@ pub struct Config {
     pub issue: repo::Issue,
     pub land: repo::Land,
     pub approvals: repo::Approvals,
+    pub api: repo::Api,
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
     pub env: BTreeMap<String, String>,
@@ -372,6 +373,12 @@ pub struct Issue {
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
+}
+
+/// Whether `shoal api` sends an agent's requests that are not reads.
+#[derive(Debug, Default, Serialize)]
+pub struct Api {
+    pub agent_writes: bool,
 }
 
 /// Which agent forge writes wait for the user's approval.
@@ -641,6 +648,7 @@ impl Config {
             issue: self.issue.clone(),
             land: self.land,
             approvals: self.approvals,
+            api: self.api,
             ..Default::default()
         }
     }

@@ -8,8 +8,9 @@ use serde_json::Value;
 
 use crate::{
     config::{
-        self, Approvals, AutoCleanup, Cleanup, Codex, Config, Done, Issue, Land, MergedCleanup,
-        Ports, Pr, PrCleanup, Ready, Restore, Review, Simulators, Unready, named_commands,
+        self, Api, Approvals, AutoCleanup, Cleanup, Codex, Config, Done, Issue, Land,
+        MergedCleanup, Ports, Pr, PrCleanup, Ready, Restore, Review, Simulators, Unready,
+        named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
     hooks::HookKind,
@@ -64,6 +65,7 @@ pub struct Effective {
     pub issue: Issue,
     pub land: Land,
     pub approvals: Approvals,
+    pub api: Api,
     pub seed: config::repo::Seed,
 }
 
@@ -317,6 +319,9 @@ impl Effective {
                 issue_open: built_in(merged.approvals.issue_open, "approvals.issue_open")?,
                 pr_open: built_in(merged.approvals.pr_open, "approvals.pr_open")?,
             },
+            api: Api {
+                agent_writes: built_in(merged.api.agent_writes, "api.agent_writes")?,
+            },
             seed: merged.seed,
         })
     }
@@ -405,6 +410,9 @@ fn built_in() -> RepoConfig {
         approvals: config::repo::Approvals {
             issue_open: Some(Approvals::default().issue_open),
             pr_open: Some(Approvals::default().pr_open),
+        },
+        api: config::repo::Api {
+            agent_writes: Some(Api::default().agent_writes),
         },
         ..Default::default()
     }
@@ -709,6 +717,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(land.requires_approval),
         scalar!(approvals.issue_open),
         scalar!(approvals.pr_open),
+        scalar!(api.agent_writes),
         scalar!(seed.cmd),
         list!(seed.paths),
     ];
@@ -735,7 +744,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
 [cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\nother_repositories = 'direct'\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[land]\npush = true\nrequires_approval = false\n\
-[approvals]\nissue_open = 'propose'\npr_open = 'propose'\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
+[approvals]\nissue_open = 'propose'\npr_open = 'propose'\n[api]\nagent_writes = true\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -1058,6 +1067,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             issue,
             land,
             approvals,
+            api,
             seed,
         } = full.clone();
         assert!(
@@ -1131,6 +1141,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             land.requires_approval.is_some(),
             approvals.issue_open.is_some(),
             approvals.pr_open.is_some(),
+            api.agent_writes.is_some(),
             seed.cmd.is_some(),
             presets.is_some(),
         ] {
