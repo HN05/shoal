@@ -73,6 +73,10 @@ pub struct Snapshot {
     /// Replaces the PR conflict message for a local branch check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) conflict_message: Option<String>,
+    /// Whether the conflict observation is exact when made, as a local merge
+    /// check is, rather than what the forge last computed.
+    #[serde(skip)]
+    pub(crate) conflict_exact: bool,
     pub(crate) state: String,
     pub(crate) errors: BTreeMap<String, String>,
     /// Unix seconds when each failing source was last reported.
@@ -119,6 +123,7 @@ impl Snapshot {
                     base: check.base,
                 };
                 snapshot.conflict_message = check.conflict;
+                snapshot.conflict_exact = true;
             }
             Err(error) => {
                 snapshot
@@ -225,11 +230,11 @@ impl Snapshot {
         )
     }
 
-    /// Takes a conflict as reported at once when none was reported since the
-    /// item was last mergeable. A conflict that persists across a new head or
-    /// base is taken once two polls in a row see it there, since the forge may
-    /// still show its result for the previous one. Unknown mergeability keeps
-    /// the previous observation.
+    /// Takes a conflict as reported once two polls in a row see it at the same
+    /// head and base, since right after a push or base change the forge may
+    /// still show its result for the previous commits, or report a PR it is
+    /// still checking as not mergeable. An exact observation is taken at once.
+    /// Unknown mergeability keeps the previous observation.
     pub fn schedule_conflict_reports(&mut self, previous: &Self) {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
@@ -237,11 +242,12 @@ impl Snapshot {
             self.reported_conflict = previous.reported_conflict.clone();
             return;
         }
-        let confirmed = previous.conflict == Some(true) && previous.conflict_at == self.conflict_at;
-        self.reported_conflict = match (&previous.reported_conflict, self.conflict) {
-            (_, Some(false)) => None,
-            (Some(reported), _) if !confirmed => Some(reported.clone()),
-            _ => Some(self.conflict_at.clone()),
+        let confirmed = self.conflict_exact
+            || (previous.conflict == Some(true) && previous.conflict_at == self.conflict_at);
+        self.reported_conflict = match self.conflict {
+            Some(false) => None,
+            _ if confirmed => Some(self.conflict_at.clone()),
+            _ => previous.reported_conflict.clone(),
         };
     }
 
@@ -445,13 +451,13 @@ mod tests {
         pending
             .checks
             .insert("review".into(), check("review", false));
+        pending.conflict = Some(true);
         assert!(Snapshot::default().changes(&pending, "pr").is_empty());
         let mut reviewed = pending.clone();
         reviewed
             .checks
             .insert("review".into(), check("review", true));
         reviewed.comments.insert("review".into(), "finding".into());
-        reviewed.conflict = Some(true);
         reviewed.schedule_conflict_reports(&pending);
         let updates = pending.changes(&reviewed, "pr");
         assert_eq!(
@@ -488,7 +494,9 @@ mod tests {
                 .collect::<Vec<_>>();
             (next, messages)
         };
-        let (first, messages) = poll(&Snapshot::default(), "a", "m1", Some(true));
+        let (seen, messages) = poll(&Snapshot::default(), "a", "m1", Some(true));
+        assert!(messages.is_empty());
+        let (first, messages) = poll(&seen, "a", "m1", Some(true));
         assert_eq!(messages, ["PR has merge conflicts"]);
         // Right after a push the forge may still show the old head's result.
         let (pushed, messages) = poll(&first, "b", "m1", Some(true));
@@ -506,10 +514,12 @@ mod tests {
             messages,
             ["PR has merge conflicts with new commits on its base branch"]
         );
-        // A conflict on a mergeable PR is reported at once.
+        // A conflict on a mergeable PR also waits for a second poll.
         let (mergeable, messages) = poll(&moved, "c", "m2", Some(false));
         assert!(messages.is_empty());
-        let (_, messages) = poll(&mergeable, "c", "m3", Some(true));
+        let (conflicting, messages) = poll(&mergeable, "c", "m3", Some(true));
+        assert!(messages.is_empty());
+        let (_, messages) = poll(&conflicting, "c", "m3", Some(true));
         assert_eq!(messages, ["PR has merge conflicts"]);
     }
 
@@ -707,7 +717,7 @@ mod tests {
                 ("deploy", "Skipped"),
             ],
         );
-        snapshot.schedule_conflict_reports(&Snapshot::default());
+        snapshot.schedule_conflict_reports(&rest_snapshot("rev-1", true, &[]));
         let updates = Snapshot::default().changes(&snapshot, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -743,7 +753,7 @@ mod tests {
 
     #[test]
     fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
-        let before = rest_snapshot("rev-1", false, &[("review", "Success")]);
+        let before = rest_snapshot("rev-1", true, &[("review", "Success")]);
         let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
         let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
             "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
@@ -793,10 +803,41 @@ mod tests {
                 .collect::<Vec<_>>();
             (snapshot, kinds)
         };
-        let (before, _) = observe(&Snapshot::default(), "rebased", "main-1");
+        let (seen, _) = observe(&Snapshot::default(), "rebased", "main-1");
+        let (before, kinds) = observe(&seen, "rebased", "main-1");
+        assert_eq!(kinds, [UpdateKind::MergeConflict]);
         let (returned, kinds) = observe(&before, "rebased", "main-2");
         assert!(kinds.is_empty());
         let (_, kinds) = observe(&returned, "rebased", "main-2");
+        assert_eq!(kinds, [UpdateKind::MergeConflict]);
+    }
+
+    #[test]
+    fn a_forgejo_push_waits_for_a_second_poll_to_report_a_conflict() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let observe = |previous: &Snapshot, head: &str, mergeable: bool| {
+            let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": mergeable,
+                "head": {"ref": "topic", "sha": head}, "base": {"ref": "main", "sha": "main-1"}});
+            let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+            let mut snapshot = Snapshot::default();
+            snapshot.record_checks(&pull, Ok(Vec::new()));
+            snapshot.schedule_conflict_reports(previous);
+            let kinds = previous
+                .changes(&snapshot, "pr")
+                .iter()
+                .map(|update| update.kind)
+                .collect::<Vec<_>>();
+            (snapshot, kinds)
+        };
+        let (mergeable, _) = observe(&Snapshot::default(), "rev-1", true);
+        // Forgejo shows a PR it is still checking as not mergeable.
+        let (checking, kinds) = observe(&mergeable, "rev-2", false);
+        assert!(kinds.is_empty());
+        let (checked, kinds) = observe(&checking, "rev-2", true);
+        assert!(kinds.is_empty());
+        let (checking, kinds) = observe(&checked, "rev-3", false);
+        assert!(kinds.is_empty());
+        let (_, kinds) = observe(&checking, "rev-3", false);
         assert_eq!(kinds, [UpdateKind::MergeConflict]);
     }
 

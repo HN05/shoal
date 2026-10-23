@@ -12379,9 +12379,12 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         String::from_utf8_lossy(&result.stderr)
     );
     let second: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(second["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(second["updates"].as_array().unwrap().len(), 1);
     assert_eq!(second["updates"][0]["message"], "rust: FAILURE");
-    assert_eq!(second["updates"][1]["kind"], "merge_conflict");
+    // A conflict is reported once a second poll sees it at the same commits.
+    let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
+    assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
+    assert_eq!(third["updates"][0]["kind"], "merge_conflict");
     assert!(fixture.ok(&["inspect", "watch"])["completion"].is_null());
     fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--workspace", "watch"]);
@@ -12735,7 +12738,7 @@ fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
             .iter()
             .map(|update| update["kind"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["ci_completed", "merge_conflict"],
+        ["ci_completed"],
         "{watched}"
     );
     assert!(
@@ -12744,7 +12747,15 @@ fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
             .unwrap()
             .starts_with("rust: Failure; log unavailable:")
     );
-    assert_eq!(updates[1]["message"], "PR has merge conflicts");
+    // Forgejo also shows a PR it is still checking as not mergeable, so the
+    // conflict waits for a second poll.
+    let confirmed = fixture.ok(&["watch", "pr", "--workspace", "api"]);
+    assert_eq!(
+        confirmed["updates"].as_array().unwrap().len(),
+        1,
+        "{confirmed}"
+    );
+    assert_eq!(confirmed["updates"][0]["message"], "PR has merge conflicts");
     assert!(
         fs::read_to_string(home.join("curl-urls"))
             .unwrap()
@@ -12807,14 +12818,16 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     forgejo_api(home, "repos/team/repo/pulls/7", &conflicting);
     forgejo_api(home, &status, &checks("failure"));
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(third["updates"].as_array().unwrap().len(), 2, "{third}");
+    assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
     assert!(
         third["updates"][0]["message"]
             .as_str()
             .unwrap()
             .starts_with("rust: Failure; log unavailable:")
     );
-    assert_eq!(third["updates"][1]["kind"], "merge_conflict");
+    let fourth = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
+    assert_eq!(fourth["updates"].as_array().unwrap().len(), 1, "{fourth}");
+    assert_eq!(fourth["updates"][0]["kind"], "merge_conflict");
 }
 
 #[test]

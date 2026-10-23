@@ -1340,8 +1340,10 @@ polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or
 reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
 A conflict belongs to the head and base commits it was seen at, so a push or base
-change that leaves the item conflicting is reported again; that report waits for a
-second poll, because Forgejo shows the previous result until it rechecks. An
+change that leaves the item conflicting is reported again. A forge's conflict is
+reported once two polls in a row see it at the same commits, because Forgejo shows
+the previous result until it rechecks and a PR it is still checking as not
+mergeable. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
 cursor item named by the branch, so work without a PR still learns of conflicts; a
 linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads

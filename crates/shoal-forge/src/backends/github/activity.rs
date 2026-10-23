@@ -286,8 +286,12 @@ mod tests {
         pull["comments"] = json!([{"id": "IC_1", "body": "hello"}]);
         pull["reviews"] = json!([{"id": "PRR_1", "body": "finding"}]);
         pull["mergeable"] = json!("CONFLICTING");
-        let before = Snapshot::default();
         let mut observed = snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
+        let before = Snapshot {
+            conflict: observed.conflict,
+            conflict_at: observed.conflict_at.clone(),
+            ..Default::default()
+        };
         observed.schedule_conflict_reports(&before);
         let updates = before.changes(&observed, "pr");
         assert_eq!(
