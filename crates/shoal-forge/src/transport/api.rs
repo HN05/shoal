@@ -63,6 +63,9 @@ pub(crate) struct Request {
     /// Header lines that make a read conditional on the body remembered
     /// for it.
     pub conditions: Vec<String>,
+    /// Environment variables a CLI would read a token from for any host,
+    /// left out so the request carries only a login saved for its own host.
+    pub withheld_tokens: &'static [&'static str],
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -88,7 +91,15 @@ impl Request {
             upload: None,
             resend: Resend::Never,
             conditions: Vec::new(),
+            withheld_tokens: &[],
         }
+    }
+
+    /// This request without the token variables `tokens`, for a host that
+    /// may not be the forge they are meant for.
+    pub fn withholding(mut self, tokens: &'static [&'static str]) -> Self {
+        self.withheld_tokens = tokens;
+        self
     }
 
     /// POST the file `upload` names, again if the forge did not get it.
@@ -236,6 +247,9 @@ impl ForgeRepo {
             }
         }
         account.apply(&mut cli);
+        for token in request.withheld_tokens {
+            cli.env_remove(token);
+        }
         let output = shoal_subprocess::Run::new(cli)
             .input(input)
             .timeout(request.timeout())

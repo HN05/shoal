@@ -40,10 +40,21 @@ use super::{Backend, rest};
 #[derive(Clone, Copy)]
 pub(crate) struct GitLab;
 
+/// The variables glab takes a token from instead of its saved logins.
+const ENV_TOKENS: &[&str] = &[
+    "GITLAB_TOKEN",
+    "GITLAB_ACCESS_TOKEN",
+    "OAUTH_TOKEN",
+    "CI_JOB_TOKEN",
+];
+
 impl Backend for GitLab {
-    /// GitLab reports its version with the revision it was built from.
+    /// GitLab reports its version with the revision it was built from. Only
+    /// glab's login for the host is sent, never a token it would read from
+    /// the environment for any host.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
-        let version = host.send(account, &Request::get("version".into())).await?;
+        let request = Request::get("version".into()).withholding(ENV_TOKENS);
+        let version = host.send(account, &request).await?;
         Ok(version["version"].is_string() && version["revision"].is_string())
     }
 

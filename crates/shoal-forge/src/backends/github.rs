@@ -44,11 +44,21 @@ use crate::{
 #[derive(Clone, Copy)]
 pub(crate) struct GitHub;
 
+/// The variables gh takes a token from instead of its saved logins.
+const ENV_TOKENS: &[&str] = &[
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+];
+
 impl Backend for GitHub {
     /// GitHub's metadata names its SSH keys' password policy, and an
-    /// Enterprise Server its version.
+    /// Enterprise Server its version. Only gh's login for the host is sent,
+    /// never a token it would read from the environment for any host.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
-        let meta = host.send(account, &Request::get("meta".into())).await?;
+        let request = Request::get("meta".into()).withholding(ENV_TOKENS);
+        let meta = host.send(account, &request).await?;
         Ok(["verifiable_password_authentication", "installed_version"]
             .iter()
             .any(|field| meta.get(field).is_some()))

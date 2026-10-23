@@ -48,6 +48,11 @@ impl Drop for Fixture {
 
 impl Fixture {
     fn new(forge: Forge, config: &str) -> Self {
+        Self::with_daemon_env(forge, config, &[])
+    }
+
+    /// A fixture whose daemon also has `env` in its environment.
+    fn with_daemon_env(forge: Forge, config: &str, env: &[(&str, &str)]) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
         fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
@@ -57,7 +62,9 @@ impl Fixture {
         support::install_test_script(&script, FORGE);
         let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        let daemon = DaemonGuard::start(root.path(), &mut support::cli(root.path()));
+        let mut launch = support::cli(root.path());
+        launch.envs(env.iter().copied());
+        let daemon = DaemonGuard::start(root.path(), &mut launch);
         let mut fixture = Self {
             _daemon: daemon,
             server: None,
@@ -271,7 +278,9 @@ fn label_pr(fixture: &Fixture) -> Value {
 
 #[test]
 fn unknown_hosts_are_asked_once_which_forge_they_serve() {
-    let fixture = Fixture::new(Forge::GitHub, "");
+    // A token gh reads for every Enterprise host stays out of the probe.
+    let fixture =
+        Fixture::with_daemon_env(Forge::GitHub, "", &[("GH_ENTERPRISE_TOKEN", "enterprise")]);
     git(
         &fixture.repo,
         &[
@@ -314,14 +323,24 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
         assert_eq!(labels[0]["name"], "bug");
     }
     let label_list = "GET repos/team/project/labels?per_page=100&page=1";
-    assert_eq!(keys(&fixture), ["GET meta", label_list, label_list]);
+    assert_eq!(
+        fixture.requests(),
+        [
+            json!(["GET meta", null, null]),
+            json!([label_list, null, null]),
+            json!([label_list, null, null]),
+        ]
+    );
     let response = label_pr(&fixture);
     assert_eq!(response["type"], "item", "{response}");
     assert_eq!(
         response["data"]["url"],
         "https://ghe.invalid/team/project/pull/8"
     );
-    assert!(!keys(&fixture).contains(&json!("GET meta")));
+    // Once the host is known to be GitHub, gh's own requests use the token.
+    let requests = fixture.requests();
+    assert!(requests.iter().all(|request| request[0] != "GET meta"));
+    assert_eq!(requests[0][2], "enterprise", "{requests:?}");
     // A pasted link of the host names its forge before anything is asked.
     let url = "https://ghe.invalid/team/project/pull/8";
     let linked = fixture.ok(&["link", url, "related", "--workspace", "topic"]);

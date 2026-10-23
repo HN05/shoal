@@ -9,7 +9,8 @@ its last entry. Each entry is {"status": 200, "body": ...}, may add
 "headers" to send, and may hold the answer for "delay" seconds. The server tags
 each successful body, and answers a request that names its tag in
 If-None-Match with 304. Every request is appended to
-$HOME/forge/requests.jsonl with its body, credentials and status; an uploaded
+$HOME/forge/requests.jsonl with its body, credentials (the agent's, or an
+Enterprise token gh would send) and status; an uploaded
 file's body is {"file": name, "type": content type, "bytes": size}.
 The server reports a Forgejo version, unlogged, when no response names
 "GET version", so Shoal recognizes it as Forgejo.
@@ -75,7 +76,8 @@ def gh(args):
                 "type": header.removeprefix("Content-Type: "),
                 "bytes": len(data),
             }
-        status, answer, _ = respond(f"{method} {endpoint}", body, os.environ.get("AGENT"))
+        auth = os.environ.get("AGENT") or os.environ.get("GH_ENTERPRISE_TOKEN")
+        status, answer, _ = respond(f"{method} {endpoint}", body, auth)
         if "--include" in args:
             print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n\r")
         if answer is not None:

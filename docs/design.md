@@ -884,8 +884,10 @@ host, since fj has no API passthrough, or the configured Bitbucket token. Gitea 
 login through `tea api`, which owns that token, and otherwise reads anonymously.
 The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
-version or metadata endpoint with the user's login, since a name cannot tell a
-GitHub Enterprise Server or a self-hosted GitLab from Forgejo. The daemon records
+version or metadata endpoint with the user's login for that host, since a name
+cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo.
+Asking leaves out the tokens gh and glab read from the environment for any
+host, so a host that may be another forge never receives them. The daemon records
 each answer in its state and asks recorded hosts again from `doctor`, which
 otherwise changes no state without `--repair`; a global `[forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that

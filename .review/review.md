@@ -178,9 +178,11 @@ instead of the PR delivery guidance below.
   send the token `[bitbucket] token_command` prints, validated, only to
   api.bitbucket.org on curl's stdin, never stored or logged. The forge is chosen
   by a pinned `[forges."<host>"] type`, a well-known host name, or else the
-  host's own answer to each forge's version or metadata endpoint, which the
-  daemon records so the host is asked once and `doctor` asks again; a pasted
-  link of a host not yet resolved is classified by the forge its routes name.
+  host's own answer to each forge's version or metadata endpoint, asked with
+  only the logins saved for that host and never gh's or glab's environment
+  tokens, which the daemon records so the host is asked once and `doctor` asks
+  again; a pasted link of a host not yet resolved is classified by the forge
+  its routes name.
   Views automatically include failed Actions logs, read by the daemon as the
   workspace's agent account, resolving web indices to API IDs and validating the PR head before returning
   a bounded tail; scoped callers cannot access another workspace's logs.
