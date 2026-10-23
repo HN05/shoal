@@ -13,6 +13,30 @@ pub async fn porcelain(repo: &Path) -> Result<String> {
     run(repo, &["status", "--porcelain", "--untracked-files=normal"]).await
 }
 
+/// Whether the checkout holds work no remote keeps: changed or untracked
+/// files, a stash, a Git operation under way, or commits on a local branch,
+/// tag or detached HEAD that none of `kept`, the branches and tags the
+/// remotes advertise, has.
+pub async fn unretained_work(repo: &Path, kept: &[super::RemoteHead]) -> Result<bool> {
+    if !porcelain(repo).await?.is_empty()
+        || operation_in_progress(repo).await?
+        || super::ref_exists(repo, "refs/stash", super::command).await?
+    {
+        return Ok(true);
+    }
+    let mut args = vec![
+        "rev-list",
+        "--count",
+        "HEAD",
+        "--branches",
+        "--tags",
+        "--not",
+    ];
+    args.extend(kept.iter().map(|head| head.commit.as_str()));
+    let commits = run(repo, &args).await?;
+    Ok(commits.trim() != "0")
+}
+
 /// Quote paths and list every untracked file for a user-facing preview.
 pub async fn changed_files(repo: &Path) -> Result<String> {
     run(
@@ -266,6 +290,61 @@ mod tests {
     };
 
     use crate::test_support::{commit, git, repository};
+
+    #[tokio::test]
+    async fn unretained_work_finds_files_stashes_and_unpushed_commits() {
+        let root = tempfile::tempdir().unwrap();
+        let upstream = repository(root.path(), "upstream");
+        let clone = root.path().join("clone");
+        let (upstream_path, clone_path) = (upstream.to_str().unwrap(), clone.to_str().unwrap());
+        git(root.path(), &["clone", "-q", upstream_path, clone_path]);
+        // What the remote advertises now, not what tracking refs remember.
+        let work = async || {
+            let mut refs = crate::git::remote_heads(&clone, "origin").await.unwrap();
+            refs.extend(crate::git::remote_tags(&clone, "origin").await.unwrap());
+            let kept = crate::git::present_heads(&clone, &refs).await.unwrap();
+            super::unretained_work(&clone, &kept).await.unwrap()
+        };
+        assert!(!work().await);
+        fs::write(clone.join("tracked"), "changed\n").unwrap();
+        assert!(work().await);
+        let identity = ["-c", "user.name=T", "-c", "user.email=t@example.invalid"];
+        git(&clone, &[&identity[..], &["stash", "-q"]].concat());
+        assert!(work().await, "a stash");
+        git(&clone, &["stash", "drop", "-q"]);
+        assert!(!work().await);
+        git(&clone, &["bisect", "start"]);
+        assert!(work().await, "a bisect under way");
+        git(&clone, &["bisect", "reset"]);
+        assert!(!work().await);
+        git(&clone, &["switch", "-q", "--detach"]);
+        fs::write(clone.join("detached"), "detached\n").unwrap();
+        commit(&clone, "detached");
+        assert!(work().await, "a commit on a detached HEAD");
+        git(&clone, &["tag", "kept"]);
+        git(&clone, &["switch", "-q", "main"]);
+        assert!(work().await, "a commit only a local tag has");
+        git(&clone, &["push", "-q", "origin", "kept"]);
+        assert!(!work().await, "a commit a remote tag has");
+        git(&clone, &["switch", "-q", "--detach"]);
+        fs::write(clone.join("annotated"), "annotated\n").unwrap();
+        commit(&clone, "annotated");
+        let tag = ["tag", "-a", "-m", "release", "release"];
+        git(&clone, &[&identity[..], &tag].concat());
+        git(&clone, &["switch", "-q", "main"]);
+        assert!(work().await, "a commit only a local annotated tag has");
+        git(&clone, &["push", "-q", "origin", "release"]);
+        assert!(!work().await, "a commit a remote annotated tag has");
+        git(&clone, &["switch", "-q", "-c", "local"]);
+        fs::write(clone.join("new"), "new\n").unwrap();
+        commit(&clone, "new");
+        assert!(work().await, "a local commit");
+        git(&clone, &["push", "-q", "origin", "local"]);
+        assert!(!work().await, "a pushed commit");
+        // A branch the remote deleted leaves a stale tracking ref behind.
+        git(&upstream, &["branch", "-q", "-D", "local"]);
+        assert!(work().await, "a commit only a stale tracking ref has");
+    }
 
     #[tokio::test]
     async fn status_leaves_a_stale_index_unwritten() {

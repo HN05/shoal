@@ -434,12 +434,15 @@ pub(crate) async fn cleanup_repository_trust(
     workspace_paths: &[PathBuf],
 ) {
     let agent_environments = agent_environments(ctx, repository).await;
-    forget_repository_trust(
-        ctx,
+    let warnings = forget_repository_trust(
+        &ctx.paths.home,
         repository,
         workspace_paths,
         agent_environments.as_deref().unwrap_or_default(),
     );
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
     if agent_environments.is_some() {
         forget_agent_environments(ctx, repository).await;
     }
@@ -481,32 +484,36 @@ async fn forget_agent_environments(ctx: &Context, repository: &Repository) {
     }
 }
 
-/// [`cleanup_repository_trust`] in the configs of this process's environment
-/// and of `agent_environments`.
-fn forget_repository_trust(
-    ctx: &Context,
+/// Remove a deleted repository's trust entries from the configs of this
+/// process's environment and of `agent_environments`, under `home`; each
+/// failure comes back as a warning.
+pub(crate) fn forget_repository_trust(
+    home: &Path,
     repository: &Repository,
     workspace_paths: &[PathBuf],
     agent_environments: &[BTreeMap<String, String>],
-) {
+) -> Vec<String> {
     let paths = trust::repository_paths(repository, workspace_paths);
     let configured = configured_environments(agent_environments);
-    let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(&ctx.paths.home))
-        .chain(configured.iter().map(|configured| AgentEnvironment {
-            home: &ctx.paths.home,
-            configured,
-        }))
+    let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(home))
+        .chain(
+            configured
+                .iter()
+                .map(|configured| AgentEnvironment { home, configured }),
+        )
         .collect();
     let mut cleaned: Vec<&trust::TrustFile> = Vec::new();
+    let mut warnings = Vec::new();
     for (_, integration) in integrations() {
         let Some(trust) = integration.trust_file() else {
             continue;
         };
         if !cleaned.iter().any(|done| std::ptr::eq(*done, trust)) {
-            trust.forget(&environments, &paths);
+            warnings.extend(trust.forget(&environments, &paths));
             cleaned.push(trust);
         }
     }
+    warnings
 }
 
 /// `agent_environments` as the `[env]` values agents run with.

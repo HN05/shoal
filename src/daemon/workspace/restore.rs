@@ -428,9 +428,13 @@ fn record(db: &Connection, removed: &RemovedWorkspace) -> Result<()> {
 }
 
 /// Record an imported workspace's checkpoint under its next number and its
-/// removal record naming that number.
+/// removal record naming that number, unless the repository is being removed.
 fn record_imported(db: &mut Connection, mut removed: RemovedWorkspace) -> Result<()> {
     let tx = db.transaction()?;
+    anyhow::ensure!(
+        !crate::daemon::store::repository_removing(&tx, &removed.repository_id)?,
+        "the repository is being removed"
+    );
     removed.checkpoint.number = super::checkpoints::insert_numbered(&tx, &removed.checkpoint)?;
     record(&tx, &removed)?;
     tx.commit()?;

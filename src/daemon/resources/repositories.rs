@@ -116,15 +116,21 @@ pub(super) fn record(db: &Connection, lease: &ResourceLease) -> Result<()> {
 /// whose leases will be released by the shared workspace removal path.
 pub(crate) fn ensure_no_external_leases(db: &Connection, repository_id: &str) -> Result<()> {
     ensure!(
-        !store::exists(
-            db,
-            "SELECT 1 FROM repository_resource_leases r
-             JOIN resource_leases l ON l.id=r.lease_id
-             JOIN workspaces w ON w.id=l.workspace_id
-             WHERE r.repository_id=?1 AND w.repository_id<>?1",
-            [repository_id]
-        )?,
+        !borrowed(db, repository_id)?,
         "repository is borrowed by another workspace; release its repo resource leases first"
     );
     Ok(())
+}
+
+/// Whether a workspace of another repository holds a lease on one of the
+/// repository's resources.
+pub(crate) fn borrowed(db: &Connection, repository_id: &str) -> Result<bool> {
+    store::exists(
+        db,
+        "SELECT 1 FROM repository_resource_leases r
+         JOIN resource_leases l ON l.id=r.lease_id
+         JOIN workspaces w ON w.id=l.workspace_id
+         WHERE r.repository_id=?1 AND w.repository_id<>?1",
+        [repository_id],
+    )
 }

@@ -127,12 +127,16 @@ struct Launch {
     opens: Option<String>,
 }
 
-/// Record `launch` unless its repository already queues the same name. A
-/// launch in an existing workspace needs it ready in the same transaction:
-/// removal reserves the workspace before its final checks, so the launch
-/// either precedes them, which keeps the workspace, or is refused here.
+/// Record `launch` unless its repository already queues the same name or is
+/// being removed. A launch in an existing workspace needs it ready in the same
+/// transaction: removal reserves the workspace before its final checks, so the
+/// launch either precedes them, which keeps the workspace, or is refused here.
 fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
     let tx = db.transaction()?;
+    ensure!(
+        !crate::daemon::store::repository_removing(&tx, &launch.repository)?,
+        "the repository is being removed"
+    );
     if let Some(workspace) = &launch.opens {
         crate::daemon::store::require_ready(&tx, workspace)
             .context("start agents in a ready workspace")?;

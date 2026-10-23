@@ -7,6 +7,7 @@ mod branches;
 pub(crate) mod capacity;
 mod checkpoints;
 mod conflicts;
+mod contributions;
 mod diff;
 mod done;
 mod environment;

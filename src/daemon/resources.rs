@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 mod repositories;
 pub use repositories::RepositoryView;
-pub(crate) use repositories::ensure_no_external_leases;
+pub(crate) use repositories::{borrowed, ensure_no_external_leases};
 
 use crate::{
     daemon::{

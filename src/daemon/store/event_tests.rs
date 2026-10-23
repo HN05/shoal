@@ -237,6 +237,8 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("DROP TABLE checkpoints; DROP TABLE checkpoint_numbers;")?;
     db.execute_batch("DROP TABLE kept_branches;")?;
     db.execute_batch("DROP TABLE forge_hosts;")?;
-    db.execute_batch("ALTER TABLE repositories DROP COLUMN contribution;")?;
+    db.execute_batch(
+        "ALTER TABLE repositories DROP COLUMN contribution; DROP TABLE contribution_grace;",
+    )?;
     Ok(())
 }

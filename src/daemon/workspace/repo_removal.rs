@@ -34,11 +34,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 ensure!(
-                    !store::exists(
-                        db,
-                        "SELECT 1 FROM repository_removals WHERE repository_id=?1",
-                        [id]
-                    )?,
+                    !store::repository_removing(db, &id)?,
                     "repository removal is incomplete; retry shoal repo rm --yes"
                 );
                 Ok(())
@@ -56,6 +52,32 @@ impl Manager {
         let repo = self.repository(selector).await?;
         let _seed = self.stop_seed_build(&repo.id).await;
         let _git = self.lock_repository_git(&repo.id).await;
+        self.remove_locked_repository(repo).await
+    }
+
+    /// Remove a contribution repository nothing of which is left, checked
+    /// again under the gates workspace creation takes; `None` when something
+    /// is, in its records or its checkout. The check of the records records
+    /// the removal, which refuses new work from then on.
+    pub(crate) async fn remove_finished_contribution(
+        &self,
+        id: &str,
+    ) -> Result<Option<RepositoryRemoval>> {
+        let _registry = self.registry_gate.lock().await;
+        let repo = self.repository(id).await?;
+        let _seed = self.stop_seed_build(&repo.id).await;
+        let _git = self.lock_repository_git(&repo.id).await;
+        if !repo.contribution
+            || self.checkout_has_work(&repo).await?
+            || !self.begin_contribution_removal(&repo).await?
+        {
+            return Ok(None);
+        }
+        self.remove_locked_repository(repo).await.map(Some)
+    }
+
+    /// Remove the repository; the caller holds its registry and Git gates.
+    async fn remove_locked_repository(&self, repo: Repository) -> Result<RepositoryRemoval> {
         let id = repo.id.clone();
         self.store
             .run(move |db| crate::daemon::resources::ensure_no_external_leases(db, &id))

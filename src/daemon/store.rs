@@ -400,9 +400,14 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
 ];
 
 /// Repositories `shoal contribute` registered, which Shoal removes once
-/// nothing of them is left.
+/// nothing of them is left, after a grace period like a workspace's.
 const REPOSITORY_CONTRIBUTIONS: &str = "ALTER TABLE repositories
-    ADD COLUMN contribution INTEGER NOT NULL DEFAULT 0 CHECK(contribution IN (0,1));";
+    ADD COLUMN contribution INTEGER NOT NULL DEFAULT 0 CHECK(contribution IN (0,1));
+CREATE TABLE contribution_grace (
+    repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+    cleanup_at INTEGER NOT NULL,
+    claimed INTEGER NOT NULL CHECK(claimed IN (0, 1))
+);";
 
 /// The approval request a notification asks the user to decide, by its key,
 /// so withdrawing the request finds it though the user edited its text.
@@ -697,6 +702,15 @@ fn json_column<T: DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Resu
             })
         })
         .transpose()
+}
+
+/// Whether the repository's removal has begun, which refuses new work in it.
+pub fn repository_removing(db: &Connection, repository_id: &str) -> Result<bool> {
+    exists(
+        db,
+        "SELECT 1 FROM repository_removals WHERE repository_id=?1",
+        [repository_id],
+    )
 }
 
 pub const REPOSITORY_COLUMNS: &str = "id,path,source,last_used,name,workspaces_dir,contribution";

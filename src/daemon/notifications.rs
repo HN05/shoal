@@ -60,6 +60,8 @@ states!(NotificationKind {
     ForgeLimited => "forge_limited",
     /// The sleep inhibitor `keep_awake` holds could not start or ended.
     KeepAwakeFailed => "keep_awake_failed",
+    /// The daemon removed a contribution repository nothing was left of.
+    RepositoryRemoved => "repository_removed",
 });
 
 impl NotificationKind {

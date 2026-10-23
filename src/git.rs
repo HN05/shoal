@@ -113,6 +113,31 @@ pub async fn remote_heads(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> 
         .collect())
 }
 
+/// The tags `remote` itself advertises now, each naming the commit it
+/// points to: an annotated tag's peeled commit, not its tag object.
+pub async fn remote_tags(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> {
+    let listing = run_isolated(repo, &["ls-remote", "--tags", "--", remote]).await?;
+    let mut tags: Vec<RemoteHead> = Vec::new();
+    for line in listing.lines() {
+        let Some((commit, name)) = line.split_once('\t') else {
+            continue;
+        };
+        // Git lists an annotated tag's commit right after it, as `<tag>^{}`.
+        match name.strip_suffix("^{}") {
+            Some(tag) => {
+                if let Some(listed) = tags.iter_mut().find(|listed| listed.name == tag) {
+                    listed.commit = commit.to_owned();
+                }
+            }
+            None => tags.push(RemoteHead {
+                name: name.to_owned(),
+                commit: commit.to_owned(),
+            }),
+        }
+    }
+    Ok(tags)
+}
+
 /// The heads whose commits this repository has, in one Git process.
 pub async fn present_heads(repo: &Path, heads: &[RemoteHead]) -> Result<Vec<RemoteHead>> {
     if heads.is_empty() {

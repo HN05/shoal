@@ -118,32 +118,40 @@ impl TrustFile {
 
     /// Remove the entries for `paths` from the config file of each of
     /// `environments`, while preserving other project settings.
-    pub(super) fn forget(&self, environments: &[AgentEnvironment], paths: &[std::path::PathBuf]) {
-        for config in self.configs(environments) {
+    pub(super) fn forget(
+        &self,
+        environments: &[AgentEnvironment],
+        paths: &[std::path::PathBuf],
+    ) -> Vec<String> {
+        let (configs, mut warnings) = self.configs(environments);
+        for config in configs {
             if let Err(error) = (self.remove)(&config, paths) {
-                eprintln!(
-                    "warning: could not clean {} trust config {}: {error:#}",
+                warnings.push(format!(
+                    "could not clean {} trust config {}: {error:#}",
                     self.tool,
                     config.display()
-                );
+                ));
             }
         }
+        warnings
     }
 
-    /// The distinct config files the tool reads with `environments`.
-    fn configs(&self, environments: &[AgentEnvironment]) -> Vec<std::path::PathBuf> {
+    /// The distinct config files the tool reads with `environments`, and a
+    /// warning for each environment that names none.
+    fn configs(&self, environments: &[AgentEnvironment]) -> (Vec<std::path::PathBuf>, Vec<String>) {
         let mut configs = Vec::new();
+        let mut warnings = Vec::new();
         for environment in environments {
             match (self.config)(environment) {
                 Ok(config) if !configs.contains(&config) => configs.push(config),
                 Ok(_) => {}
-                Err(error) => eprintln!(
-                    "warning: could not clean {} trust config: {error:#}",
+                Err(error) => warnings.push(format!(
+                    "could not clean {} trust config: {error:#}",
                     self.tool
-                ),
+                )),
             }
         }
-        configs
+        (configs, warnings)
     }
 }
 

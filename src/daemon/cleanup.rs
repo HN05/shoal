@@ -344,6 +344,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         kept_branches::sweep(manager, &mut timers.kept_branches).await,
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
+    step("contributions", manager.sweep_contributions().await);
     step("proposal files", manager.sweep_proposal_files().await);
     step("grace periods", manager.end_unclaimed_grace().await);
     ensure!(failed.is_empty(), "{}", failed.join("; "));

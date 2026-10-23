@@ -72,7 +72,8 @@ impl Manager {
     }
 }
 
-/// Insert a chat under the lowest number its repository's running chats leave free.
+/// Insert a chat under the lowest number its repository's running chats leave
+/// free, unless the repository is being removed.
 fn insert(
     db: &mut Connection,
     repository: String,
@@ -81,6 +82,10 @@ fn insert(
     started_at: i64,
 ) -> Result<Chat> {
     let tx = db.transaction()?;
+    anyhow::ensure!(
+        !crate::daemon::store::repository_removing(&tx, &repository)?,
+        "the repository is being removed"
+    );
     let number = free_number(&tx, &repository)?;
     let chat = Chat {
         id: Uuid::new_v4().to_string(),
