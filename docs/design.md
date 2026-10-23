@@ -46,8 +46,9 @@ without managing the integrated tool.
 One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
-Each protocol message is one frame of at most 64 KiB, and the daemon answers a
-reply that would not fit with an error saying so.
+Each protocol message is one frame of at most 64 KiB. Listings that can outgrow
+one are sent in as many frames as they need, then `ok`; the daemon answers any
+other reply that would not fit with an error saying so.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup. Connections reading a request
@@ -866,8 +867,7 @@ merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
-reads pages only until the limit is met. The daemon sends the results in as many
-protocol frames as they need, then `ok`, because a long listing exceeds one. Forgejo's issue search lists PRs
+reads pages only until the limit is met. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a

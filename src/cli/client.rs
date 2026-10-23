@@ -164,6 +164,22 @@ where
     T::try_from(call(paths, method).await?)
 }
 
+/// The items of every page the daemon sends for `method` before `ok`.
+pub async fn pages<T>(paths: &Paths, method: Method) -> Result<Vec<T>>
+where
+    Vec<T>: TryFrom<Body, Error = anyhow::Error>,
+{
+    let (mut reader, body) = open_buffered(paths, method).await?;
+    let mut items = Vec::<T>::try_from(body)?;
+    loop {
+        let response: Response = protocol::read_buffered(&mut reader).await?;
+        match response.body {
+            Body::Ok => return Ok(items),
+            body => items.extend(Vec::<T>::try_from(body)?),
+        }
+    }
+}
+
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
 pub async fn settings(

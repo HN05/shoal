@@ -25,7 +25,7 @@ use crate::{
     },
     git,
     model::{Selected, Workspace},
-    protocol::{self, Body, Method, Response},
+    protocol::Method,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
@@ -200,23 +200,11 @@ async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
         kind,
         search,
     };
-    let items = ctx.progress("Searching", read_items(ctx, method)).await?;
+    let items = ctx
+        .progress("Searching", client::pages::<Item>(&ctx.paths, method))
+        .await?;
     ctx.show(&items, |items| render_list(kind, items))?;
     Ok(0)
-}
-
-/// The items of every `items` frame the daemon sends before `ok`.
-async fn read_items(ctx: &Context, method: Method) -> Result<Vec<Item>> {
-    let (mut reader, body) = client::open_buffered(&ctx.paths, method).await?;
-    let mut items: Vec<Item> = body.try_into()?;
-    loop {
-        let response: Response = protocol::read_buffered(&mut reader).await?;
-        match response.body {
-            Body::Items(page) => items.extend(page),
-            Body::Ok => return Ok(items),
-            body => return Err(body.unexpected("Items")),
-        }
-    }
 }
 
 /// One line per item: its number, state, title and labels.

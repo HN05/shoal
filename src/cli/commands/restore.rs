@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        client::request,
+        client::{self, request},
         context::Context,
         output::{Palette, Style},
         terminal,
@@ -75,7 +75,7 @@ pub(super) async fn run(
 /// Reopen the removed workspace the user picks, or list the removed
 /// workspaces when there is no terminal or none to pick.
 async fn choose_removed(ctx: &Context) -> Result<i32> {
-    let removed = request::<Vec<RemovedWorkspace>>(&ctx.paths, Method::RemovedWorkspaces).await?;
+    let removed = client::pages::<RemovedWorkspace>(&ctx.paths, Method::RemovedWorkspaces).await?;
     if removed.is_empty() || !ctx.interactive() {
         ctx.show(&removed, |removed| print_removed(removed))?;
         return Ok(0);

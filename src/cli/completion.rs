@@ -434,11 +434,9 @@ impl Typed {
             ));
         }
         if matches!(target, Target::RestorableWorkspaces) {
-            let removed = client::request::<Vec<crate::model::RemovedWorkspace>>(
-                &paths,
-                Method::RemovedWorkspaces,
-            )
-            .await?;
+            let removed =
+                client::pages::<crate::model::RemovedWorkspace>(&paths, Method::RemovedWorkspaces)
+                    .await?;
             let existing = client::workspaces(&paths).await?;
             return Ok(removed
                 .into_iter()

@@ -395,7 +395,11 @@ async fn serve(
                 .manager
                 .list_items(&workspace, kind, &search, caller.is_some())
                 .await;
-            return write_items(stream, request.id, listed).await;
+            return write_pages(stream, request.id, listed, Body::Items).await;
+        }
+        Method::RemovedWorkspaces => {
+            let listed = server.manager.removed_workspaces().await;
+            return write_pages(stream, request.id, listed, Body::RemovedWorkspaces).await;
         }
         method => match operation(&server.manager, method, caller.as_ref()).await {
             Ok(body) => body,
@@ -438,7 +442,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::AwaitAnswer { .. }
         | Method::WatchItems { .. }
         | Method::WaitChatMessages { .. }
-        | Method::ListItems { .. } => {
+        | Method::ListItems { .. }
+        | Method::RemovedWorkspaces => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -777,7 +782,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Cleanup { dry_run, caches } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, caches).await?)
         }
-        Method::RemovedWorkspaces => Body::RemovedWorkspaces(manager.removed_workspaces().await?),
         Method::KeptBranches => Body::KeptBranches(manager.list_kept_branches().await?),
         Method::DeleteKeptBranches { branches } => {
             Body::KeptBranches(manager.delete_kept_branches(branches).await?)
@@ -1035,12 +1039,13 @@ async fn watch_notifications(
     }
 }
 
-/// Send listed items in as many `items` frames as they need, then `ok`, so
-/// a long listing never exceeds one frame.
-async fn write_items(
+/// Send a listing in as many `page` frames as it needs, then `ok`, so a long
+/// listing never exceeds one frame.
+async fn write_pages<T: serde::Serialize>(
     mut stream: UnixStream,
     request_id: u64,
-    listed: Result<Vec<crate::forge::items::item::Item>>,
+    listed: Result<Vec<T>>,
+    page: fn(Vec<T>) -> Body,
 ) -> Result<()> {
     let items = match listed {
         Ok(items) => items,
@@ -1049,8 +1054,8 @@ async fn write_items(
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
-    for page in protocol::frame_pages(items)? {
-        protocol::write(&mut stream, &Response::new(request_id, Body::Items(page))).await?;
+    for items in protocol::frame_pages(items)? {
+        protocol::write(&mut stream, &Response::new(request_id, page(items))).await?;
     }
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await
 }

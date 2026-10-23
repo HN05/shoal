@@ -997,6 +997,39 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 }
 
 #[test]
+fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
+    let fixture = Fixture::new();
+    fixture.add("scratch");
+    fixture.ok(&["rm", "scratch", "--yes"]);
+    // Copies of the record with long checkpoint names add up to more than
+    // the 64 KiB frame.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 40)
+         INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+         SELECT 'copy-' || n, repository_id, 'copy-' || n, expires_at,
+             json_set(record, '$.workspace_id', 'copy-' || n, '$.name', 'copy-' || n,
+                 '$.checkpoint.name', replace(hex(zeroblob(1000)), '0', 'x'))
+         FROM removed_workspaces, copies",
+        [],
+    )
+    .unwrap();
+    let removed = fixture.ok(&["restore"]);
+    let names: Vec<_> = removed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
+        .collect();
+    let expected: Vec<_> = (1..=40)
+        .rev()
+        .map(|n| format!("copy-{n}"))
+        .chain(["scratch".to_owned()])
+        .collect();
+    assert_eq!(names, expected);
+}
+
+#[test]
 fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoint() {
     let fixture = Fixture::new();
     let picked = fixture.add("picked");
