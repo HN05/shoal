@@ -13,7 +13,7 @@ mod support;
 
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::Write,
     os::unix::{
         fs::PermissionsExt,
         net::{UnixListener, UnixStream},
@@ -29,7 +29,7 @@ use std::{
 };
 
 use support::{
-    cli as command,
+    cli as command, daemon_client,
     wait::{wait_for, wait_until},
 };
 
@@ -61,19 +61,11 @@ impl Daemon {
     }
 
     fn socket(&self) -> UnixStream {
-        let stream = UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(3)))
-            .unwrap();
-        stream
+        daemon_client::connect(self.root.path())
     }
 
     fn request(&self, request: &Value) -> Value {
-        let mut stream = self.socket();
-        writeln!(stream, "{request}").unwrap();
-        let mut line = String::new();
-        BufReader::new(stream).read_line(&mut line).unwrap();
-        serde_json::from_str(&line).unwrap()
+        daemon_client::exchange(self.root.path(), request)
     }
 }
 
@@ -186,11 +178,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     });
     let socket = root.path().join("state/daemon.sock");
     let before = fs::metadata(&socket).unwrap();
-    let mut probe = UnixStream::connect(&socket).unwrap();
-    writeln!(probe, "{}", json!({"protocol":0,"id":1,"method":"status"})).unwrap();
-    let mut line = String::new();
-    BufReader::new(probe).read_line(&mut line).unwrap();
-    let protocol = serde_json::from_str::<Value>(&line).unwrap()["protocol"].clone();
+    let protocol = daemon_client::protocol(root.path());
     let next = root.path().join("shoal-next");
     symlink(&replacement, &next).unwrap();
     fs::rename(next, &launcher).unwrap();
@@ -209,20 +197,13 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
         .unwrap();
     assert!(!other.status.success());
     assert!(String::from_utf8_lossy(&other.stderr).contains("a daemon already owns"));
-    let mut queued = UnixStream::connect(&socket).unwrap();
-    queued
-        .set_read_timeout(Some(Duration::from_secs(60)))
-        .unwrap();
-    writeln!(
-        queued,
-        "{}",
-        json!({"protocol":protocol,"id":42,"method":"status"})
-    )
-    .unwrap();
+    let queued = daemon_client::connect(root.path());
+    daemon_client::send(
+        &queued,
+        &json!({"protocol":protocol,"id":42,"method":"status"}),
+    );
     writeln!(daemon.child.stdin.as_mut().unwrap(), "resume").unwrap();
-    let mut line = String::new();
-    BufReader::new(queued).read_line(&mut line).unwrap();
-    let response: Value = serde_json::from_str(&line).unwrap();
+    let response = daemon_client::receive(&queued);
     assert_eq!(response["id"], 42);
     assert_eq!(response["data"]["pid"], daemon.child.id());
     let after = fs::metadata(socket).unwrap();
@@ -365,10 +346,8 @@ fn protocol_rejects_bad_clients_and_remains_available() {
     assert!(daemon.run(&["daemon", "status"]).status.success());
     let mut oversized = daemon.socket();
     oversized.write_all(&vec![b'x'; 65537]).unwrap();
-    let mut line = String::new();
-    BufReader::new(oversized).read_line(&mut line).unwrap();
     assert_eq!(
-        serde_json::from_str::<Value>(&line).unwrap()["data"]["code"],
+        daemon_client::receive(&oversized)["data"]["code"],
         "invalid_request"
     );
     assert!(daemon.run(&["daemon", "status"]).status.success());
