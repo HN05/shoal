@@ -131,6 +131,17 @@ impl BuiltinAgent {
     /// `shoal messages --hook`, its turn state, and for Claude Code the wake
     /// hook. The hooks inherit the execution's scope and state directory.
     pub fn hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
+        self.hooks(true)
+    }
+
+    /// The hooks of a chat, which belongs to no workspace and so reports no
+    /// turn state: `shoal messages --hook`, and for Claude Code the wake
+    /// hook. They inherit the chat's identity.
+    pub fn chat_hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
+        self.hooks(false)
+    }
+
+    fn hooks(self, turn_state: bool) -> std::io::Result<Vec<std::ffi::OsString>> {
         let shoal = crate::fsutil::invoked_executable()?;
         let shoal = crate::shell::quote(&[&shoal.to_string_lossy()]);
         let command = format!("{shoal} messages --hook");
@@ -138,13 +149,16 @@ impl BuiltinAgent {
         let messages = MESSAGE_HOOK_EVENTS
             .iter()
             .map(|event| (*event, serde_json::json!({"hooks": [handler]})));
+        let state = match (self, turn_state) {
+            (_, false) => Vec::new(),
+            (Self::Claude, true) => state_hooks::claude(&shoal),
+            (Self::Codex, true) => state_hooks::codex(&shoal),
+        };
         Ok(match self {
             Self::Claude => {
                 // One `--settings` carries every hook; Claude Code merges it
                 // with the user's own settings.
-                let groups = messages
-                    .chain(state_hooks::claude(&shoal))
-                    .chain([claude_wake_hook(&shoal)]);
+                let groups = messages.chain(state).chain([claude_wake_hook(&shoal)]);
                 vec![
                     "--settings".into(),
                     serde_json::json!({"hooks": by_event(groups)})
@@ -152,7 +166,7 @@ impl BuiltinAgent {
                         .into(),
                 ]
             }
-            Self::Codex => by_event(messages.chain(state_hooks::codex(&shoal)))
+            Self::Codex => by_event(messages.chain(state))
                 .into_iter()
                 .flat_map(|(event, groups)| {
                     let groups: toml::Value =

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client::request,
+        client::{self, request},
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
@@ -22,14 +22,11 @@ pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: Stri
 }
 
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let messages: Vec<AgentMessage> = request(
-        &ctx.paths,
-        Method::AgentMessages {
-            workspace: workspace.clone(),
-        },
-    )
-    .await?;
+    let inbox = match workspace {
+        Some(workspace) => Inbox::Workspace(workspace),
+        None => Inbox::current(ctx, Fallback::CurrentDirectory).await?,
+    };
+    let messages = inbox.messages(ctx).await?;
     ctx.show(&messages, |messages| {
         let palette = Palette::stdout(ctx.json);
         for message in messages {
@@ -44,7 +41,7 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
         }
     })?;
     std::io::Write::flush(&mut std::io::stdout())?;
-    delivered(ctx, workspace, &messages).await?;
+    inbox.delivered(ctx, &messages).await?;
     Ok(0)
 }
 
@@ -64,32 +61,27 @@ pub(super) async fn hook(ctx: &Context) -> Result<i32> {
 }
 
 async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
-    let workspace = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
-    let updates: Updates = request(
-        &ctx.paths,
-        Method::AgentUpdates {
-            workspace: workspace.clone(),
-        },
-    )
-    .await?;
+    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+    let updates = inbox.updates(ctx).await?;
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(());
     }
-    println!("{}", hook_output(input, &hook_context(&updates)));
+    println!("{}", hook_output(input, &inbox.hook_context(&updates)));
     std::io::Write::flush(&mut std::io::stdout())?;
-    acknowledge(ctx, workspace, &updates).await
+    inbox.acknowledge(ctx, &updates).await
 }
 
-/// Claude Code's `asyncRewake` `Stop` hook: wait for the workspace's next
-/// messages or item activity, then exit 2, which starts the idle agent's next
-/// turn with them. A newer delivery, a failure or the exit of `agent`, the
-/// agent's process, ends it with 0 and leaves the agent idle.
+/// Claude Code's `asyncRewake` `Stop` hook: wait for the next messages or
+/// item activity of the agent's workspace or chat, then exit 2, which starts
+/// the idle agent's next turn with them. A newer delivery, a failure or the
+/// exit of `agent`, the agent's process, ends it with 0 and leaves the agent
+/// idle.
 pub(super) async fn wake(ctx: &Context, agent: u32) -> Result<i32> {
     let next = tokio::select! {
         next = next_updates(ctx) => next,
         () = agent_exit(agent) => return Ok(0),
     };
-    let (workspace, updates) = match next {
+    let (inbox, updates) = match next {
         Ok(Some(next)) => next,
         Ok(None) => return Ok(0),
         Err(error) => {
@@ -97,9 +89,9 @@ pub(super) async fn wake(ctx: &Context, agent: u32) -> Result<i32> {
             return Ok(0);
         }
     };
-    eprintln!("{}", hook_context(&updates));
+    eprintln!("{}", inbox.hook_context(&updates));
     std::io::Write::flush(&mut std::io::stderr())?;
-    if let Err(error) = acknowledge(ctx, workspace, &updates).await {
+    if let Err(error) = inbox.acknowledge(ctx, &updates).await {
         eprintln!("shoal: these updates may be delivered again: {error:#}");
     }
     Ok(2)
@@ -122,23 +114,132 @@ async fn agent_exit(agent: u32) {
     }
 }
 
-/// The workspace's next messages or item activity, or `None` when a newer
+/// The inbox's next messages or item activity, or `None` when a newer
 /// delivery takes them.
-async fn next_updates(ctx: &Context) -> Result<Option<(String, Updates)>> {
-    let workspace = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
-    let body = super::workspaces::wait_for_items(ctx, &workspace, Default::default(), None).await?;
-    let updates = Updates::try_from(body)?;
+async fn next_updates(ctx: &Context) -> Result<Option<(Inbox, Updates)>> {
+    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+    let updates = inbox.next(ctx).await?;
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(None);
     }
-    Ok(Some((workspace, updates)))
+    Ok(Some((inbox, updates)))
 }
 
-/// What an agent hook tells the agent about `updates`.
-pub(super) fn hook_context(updates: &Updates) -> String {
+/// Where an agent's messages arrive: its chat's, when it runs under one
+/// outside any workspace scope, otherwise its workspace's.
+enum Inbox {
+    Workspace(String),
+    Chat(String),
+}
+
+impl Inbox {
+    async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
+        if !crate::env::is_scoped()
+            && let Some(chat) = crate::env::chat()
+        {
+            return Ok(Self::Chat(chat));
+        }
+        Ok(Self::Workspace(
+            ui::select_workspace(ctx, None, fallback).await?,
+        ))
+    }
+
+    async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {
+        match self {
+            Self::Workspace(workspace) => {
+                let workspace = workspace.clone();
+                request(&ctx.paths, Method::AgentMessages { workspace }).await
+            }
+            Self::Chat(chat) => Ok(chat_updates(ctx, chat).await?.messages),
+        }
+    }
+
+    /// Undelivered messages and queued item updates, without waiting.
+    async fn updates(&self, ctx: &Context) -> Result<Updates> {
+        match self {
+            Self::Workspace(workspace) => {
+                let workspace = workspace.clone();
+                request(&ctx.paths, Method::AgentUpdates { workspace }).await
+            }
+            Self::Chat(chat) => chat_updates(ctx, chat).await,
+        }
+    }
+
+    /// The next messages or item updates, waiting for them.
+    async fn next(&self, ctx: &Context) -> Result<Updates> {
+        match self {
+            Self::Workspace(workspace) => Updates::try_from(
+                super::workspaces::wait_for_items(ctx, workspace, Default::default(), None).await?,
+            ),
+            Self::Chat(chat) => wait_for_chat(ctx, chat).await,
+        }
+    }
+
+    /// What an agent hook tells the agent about `updates`.
+    fn hook_context(&self, updates: &Updates) -> String {
+        let heading = match self {
+            Self::Workspace(_) => "New Shoal messages for this workspace:",
+            Self::Chat(_) => "New Shoal messages about the workspaces this chat coordinates:",
+        };
+        hook_context(heading, updates)
+    }
+
+    /// Shown once: the messages and updates a hook printed do not come back.
+    async fn acknowledge(&self, ctx: &Context, updates: &Updates) -> Result<()> {
+        match self {
+            Self::Workspace(workspace) => acknowledge(ctx, workspace.clone(), updates).await,
+            Self::Chat(_) => self.delivered(ctx, &updates.messages).await,
+        }
+    }
+
+    /// Shown once: exactly the messages a caller printed do not come back.
+    async fn delivered(&self, ctx: &Context, messages: &[AgentMessage]) -> Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+        let ids = messages.iter().map(|message| message.id).collect();
+        let method = match self {
+            Self::Workspace(workspace) => Method::MarkAgentMessagesDelivered {
+                workspace: workspace.clone(),
+                ids,
+            },
+            Self::Chat(chat) => Method::AcknowledgeChatMessages {
+                chat: chat.clone(),
+                ids,
+            },
+        };
+        request::<()>(&ctx.paths, method).await
+    }
+}
+
+/// The chat's undelivered messages, without waiting.
+async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
+    let chat = chat.to_owned();
+    request(&ctx.paths, Method::ChatUpdates { chat }).await
+}
+
+/// The chat's next messages, waiting again when the daemon restarts.
+async fn wait_for_chat(ctx: &Context, chat: &str) -> Result<Updates> {
+    loop {
+        let method = Method::WaitChatMessages {
+            chat: chat.to_owned(),
+        };
+        match client::open(&ctx.paths, method).await {
+            Ok((_stream, body)) => return Updates::try_from(body),
+            Err(error) if client::stream_closed(&error) => {
+                tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// What an agent hook tells the agent about `updates`, its messages under
+/// `heading`.
+fn hook_context(heading: &str, updates: &Updates) -> String {
     let mut lines = Vec::new();
     if !updates.messages.is_empty() {
-        lines.push("New Shoal messages for this workspace:".to_owned());
+        lines.push(heading.to_owned());
         lines.extend(
             updates
                 .messages
@@ -169,7 +270,7 @@ fn hook_output(input: &str, context: &str) -> String {
 }
 
 /// Shown once: the messages and updates a hook printed do not come back.
-pub(super) async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
+async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
     request::<()>(
         &ctx.paths,
         Method::AcknowledgePrUpdates {
@@ -180,25 +281,6 @@ pub(super) async fn acknowledge(ctx: &Context, workspace: String, updates: &Upda
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
-        },
-    )
-    .await
-}
-
-/// Shown once: exactly the messages a caller printed do not come back.
-pub(super) async fn delivered(
-    ctx: &Context,
-    workspace: String,
-    messages: &[AgentMessage],
-) -> Result<()> {
-    if messages.is_empty() {
-        return Ok(());
-    }
-    request::<()>(
-        &ctx.paths,
-        Method::MarkAgentMessagesDelivered {
-            workspace,
-            ids: messages.iter().map(|message| message.id).collect(),
         },
     )
     .await
@@ -228,7 +310,7 @@ mod tests {
             timed_out: false,
             superseded: false,
         };
-        let context = hook_context(&updates);
+        let context = Inbox::Workspace("worker".into()).hook_context(&updates);
         assert_eq!(
             context,
             "New Shoal messages for this workspace:\n- Stop the dev server\n\

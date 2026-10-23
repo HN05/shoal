@@ -18907,7 +18907,20 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let args = chat_args(&fixture);
     assert_eq!(args[0], "--append-system-prompt");
     assert!(args[1].contains(checkout.to_str().unwrap()), "{}", args[1]);
-    assert_eq!(args[2..], ["--model", "fast"]);
+    // The chat's hooks deliver its messages and wake it, but report no
+    // workspace turn state.
+    assert_eq!(args[2], "--settings");
+    let hooks: Value = serde_json::from_str(&args[3]).unwrap();
+    let command = |event: &str, group: usize| {
+        hooks["hooks"][event][group]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    assert!(command("PostToolUse", 0).ends_with(" messages --hook"));
+    assert!(command("Stop", 0).contains(" internal wake "));
+    assert!(!args[3].contains("agent-state"), "{}", args[3]);
+    assert_eq!(args[4..], ["--model", "fast"]);
     // The checkout is trusted as workspace launches trust theirs.
     let claude: Value =
         serde_json::from_str(&fs::read_to_string(home.join(".claude.json")).unwrap()).unwrap();
@@ -19027,6 +19040,42 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
 }
 
 #[test]
+fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    // The chat's agent opens a workspace, whose agent then reports.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --workspace chat-worker\n\"$shoal\" notify --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let hook: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("chat-hook")).unwrap()).unwrap();
+    assert_eq!(
+        hook["hookSpecificOutput"]["additionalContext"],
+        "New Shoal messages about the workspaces this chat coordinates:\n- chat-worker: Tests pass"
+    );
+    // A delivered message does not come back, and never reached the user.
+    assert_eq!(
+        fs::read_to_string(home.join("chat-hook-again")).unwrap(),
+        ""
+    );
+    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+}
+
+#[test]
 fn chat_instructions_append_the_checkout_template_to_the_global_one() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
@@ -19058,7 +19107,7 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
     };
     let name = checkout.file_name().unwrap().to_str().unwrap();
     assert_eq!(
-        chat(),
+        chat()[..2],
         [
             "--append-system-prompt".to_owned(),
             format!(
@@ -19133,8 +19182,16 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         "{}",
         args[1]
     );
+    let hooks = args[2..6].chunks(2).map(|flag| {
+        assert_eq!(flag[0], "-c");
+        flag[1].split_once('=').unwrap().0
+    });
+    assert_eq!(
+        hooks.collect::<Vec<_>>(),
+        ["hooks.PostToolUse", "hooks.UserPromptSubmit"]
+    );
     // Codex's default launcher appends its own options after forwarded ones.
-    assert_eq!(args[2], "--search");
+    assert_eq!(args[6], "--search");
     let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
     assert!(
         codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),

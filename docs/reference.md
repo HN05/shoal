@@ -2205,6 +2205,11 @@ is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
+`shoal chat` registers the same message hooks, and for Claude Code the wake
+hook, without turn-state hooks. Under a chat, outside any workspace scope, they
+and `shoal messages` deliver the chat's messages about the workspaces it
+[coordinates](#child-workspaces); a Codex chat receives them after its next tool
+call or prompt.
 An identical message that is still unread is not queued again, and a workspace
 or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.

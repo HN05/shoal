@@ -286,7 +286,7 @@ pub enum Command {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Show the workspace's new agent messages once.
+    /// Show the new agent messages of the workspace, or of the chat it runs in, once.
     Messages {
         workspace: Option<String>,
         /// Run as an agent hook: read the hook event on stdin, print new
@@ -1339,8 +1339,8 @@ pub enum InternalCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Wait for the workspace's next agent messages or item activity, print
-    /// them and exit 2; Shoal's Claude Code `Stop` hook runs it in the
+    /// Wait for the next agent messages or item activity of the workspace or
+    /// chat, print them and exit 2; Shoal's Claude Code `Stop` hook runs it in the
     /// background so the update starts the idle agent's next turn.
     Wake {
         /// The agent's process ID; the hook ends when that process exits.

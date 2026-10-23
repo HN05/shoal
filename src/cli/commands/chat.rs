@@ -169,7 +169,8 @@ async fn start_beside(
     terminal::start_chat(ctx, settings, repo, agent.as_str(), &label, &chat).await
 }
 
-/// The agent's configured launcher with the chat instructions, run at the checkout.
+/// The agent's configured launcher with the chat instructions and the hooks
+/// that deliver its messages, run at the checkout.
 fn command(
     settings: &Effective,
     repo: &Repository,
@@ -178,6 +179,7 @@ fn command(
 ) -> Result<Vec<OsString>> {
     let args = templates::instruction_args(agent, instructions(settings, repo))
         .into_iter()
+        .chain(agent.chat_hook_args()?)
         .chain(args)
         .collect();
     named_commands::expand_outside_workspace(
