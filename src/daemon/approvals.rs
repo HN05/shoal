@@ -558,14 +558,22 @@ fn close(
     Ok(request)
 }
 
-/// Close the workspace's pending request `id`, which its agent no longer
-/// needs. A proposed issue goes as a decided one does, since it would
-/// outlive the workspace; any other request stays as withdrawn, like an
-/// outdated one.
-fn withdraw(tx: &Transaction<'_>, workspace: &Workspace, id: i64) -> Result<ApprovalRequest> {
-    let request = by_number(tx, id)?
+/// The workspace's request `id`, as the agent names it to withdraw.
+fn own_request(db: &Connection, workspace: &Workspace, id: i64) -> Result<ApprovalRequest> {
+    by_number(db, id)?
         .filter(|request| request.workspace_id == workspace.id)
-        .with_context(|| format!("workspace {} has no approval request {id}", workspace.name))?;
+        .with_context(|| format!("workspace {} has no approval request {id}", workspace.name))
+}
+
+/// Close the pending request `selected`, which its agent no longer needs. A
+/// proposed issue goes as a decided one does, since it would outlive the
+/// workspace; any other request stays as withdrawn, like an outdated one.
+/// The stored request is found by its key, so a later request that took the
+/// number since it was selected is never withdrawn in its place.
+fn withdraw(tx: &Transaction<'_>, selected: &ApprovalRequest) -> Result<ApprovalRequest> {
+    let id = selected.id;
+    let request = by_key(tx, &selected.key)?
+        .with_context(|| format!("approval request {id} was decided meanwhile"))?;
     ensure!(
         request.status == DecisionStatus::Pending,
         "approval request {id} is {}; only pending requests can be withdrawn",
@@ -778,13 +786,13 @@ impl Manager {
     /// shown, its decider is told instead.
     pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
         let workspace = self.workspace(selector).await?;
-        let proposal = self
-            .approval_request(id)
-            .await?
-            .is_some_and(|request| request.target.is_proposal());
+        let selected = self
+            .store
+            .run(move |db| own_request(db, &workspace, id))
+            .await?;
         // Deciding a proposal opens its item under this gate before
         // forgetting the request, which withdrawal must not split.
-        let _gate = match proposal {
+        let _gate = match selected.target.is_proposal() {
             true => Some(self.pr_gate.lock().await),
             false => None,
         };
@@ -792,7 +800,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let request = withdraw(&tx, &workspace, id)?;
+                let request = withdraw(&tx, &selected)?;
                 let retracted = notifications::retract(
                     &tx,
                     &request.workspace_id,
@@ -1466,6 +1474,28 @@ mod tests {
                 .is_ok();
             assert_eq!(authorized, allowed);
         }
+    }
+
+    #[tokio::test]
+    async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager
+            .store
+            .run(|db| {
+                owners(db)?;
+                let tx = db.transaction()?;
+                let selected = check(&tx, sample("owner", Target::Port("web".into())))?.unwrap();
+                // Decided and gone while the withdrawal waited for its gate.
+                release(&tx, "owner", &Target::Port("web".into()), "default")?;
+                let later = check(&tx, sample("owner", Target::Port("api".into())))?.unwrap();
+                assert_eq!(later.id, selected.id);
+                let error = withdraw(&tx, &selected).unwrap_err();
+                assert!(error.to_string().contains("decided meanwhile"), "{error:#}");
+                let stored = by_key(&tx, &later.key)?.unwrap();
+                assert_eq!(stored.status, DecisionStatus::Pending);
+                Ok(())
+            })
+            .await
     }
 
     #[test]
