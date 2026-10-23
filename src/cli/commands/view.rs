@@ -142,6 +142,9 @@ async fn read_failed_logs(
 
 fn render_log(log: &CheckLog) {
     println!("{}: {}", log.url, log.name);
+    if let Some(job) = &log.job_url {
+        println!("Job: {job}");
+    }
     if let Some(step) = &log.failed_step {
         println!("Failed step: {step}");
     }

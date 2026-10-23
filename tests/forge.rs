@@ -2018,6 +2018,8 @@ fn view_prints_check_logs_and_reports_lookup_errors() {
             assert!(human.status.success());
             let human = String::from_utf8(human.stdout).unwrap();
             assert!(human.contains("Failed step: Main Test\n"), "{human}");
+            let job = format!("Job: {}/actions/runs/2765/jobs/1\n", fixture.web);
+            assert!(human.contains(&job), "{human}");
             assert!(human.contains("assertion failed\n"), "{human}");
         } else {
             let result =
