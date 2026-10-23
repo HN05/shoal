@@ -73,12 +73,12 @@ impl ForgeRepo {
     }
 
     /// The repository `remote` names, on the forge `hosts` says its host
-    /// serves, which this process then remembers for the host.
+    /// serves, which this process then remembers for an unpinned host.
     pub async fn resolve(remote: &str, hosts: &impl HostTypes) -> Result<Self> {
         let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
         let (host, path, web_scheme) = Self::location(&remote)?;
         let kind = hosts.forge_type(&host, web_scheme).await?;
-        hosts::learn(&host, kind);
+        hosts::learn_answer(&host, kind);
         Self::on(kind, host, path, web_scheme)
     }
 

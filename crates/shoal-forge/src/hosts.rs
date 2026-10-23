@@ -80,6 +80,14 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .insert(host.to_ascii_lowercase(), kind);
 }
 
+/// [`learn`] `kind` for `host` unless it is pinned, whose type is the pin's
+/// rather than an answer, so that dropping the pin leaves what it serves.
+pub(crate) fn learn_answer(host: &str, kind: ForgeKind) {
+    if pinned(&host.to_ascii_lowercase()).is_none() {
+        learn(host, kind);
+    }
+}
+
 /// Make `pins` the types this process pins, replacing any it had and any
 /// [`learn_pins`] has yet to load.
 pub fn pin(pins: Vec<(String, ForgeKind)>) {
@@ -105,23 +113,27 @@ pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'stat
 /// once the caller's pins are loaded; a concurrent first reader waits for
 /// them.
 pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
-    let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(load) = pins.take() {
-        replace_pins(load());
-    }
-    drop(pins);
-    let pinned = PINNED
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(host)
-        .copied();
-    pinned.or_else(|| {
+    pinned(host).or_else(|| {
         LEARNED
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .get(host)
             .copied()
     })
+}
+
+/// The type pinned for `host`, once the caller's pins are loaded.
+fn pinned(host: &str) -> Option<ForgeKind> {
+    let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(load) = pins.take() {
+        replace_pins(load());
+    }
+    drop(pins);
+    PINNED
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(host)
+        .copied()
 }
 
 #[cfg(test)]
@@ -159,6 +171,34 @@ mod tests {
         learn_pins(|| panic!("pins set outright replace these"));
         pin(vec![("outright.pinned.example".into(), ForgeKind::Forgejo)]);
         assert_eq!(learned("outright.pinned.example"), Some(ForgeKind::Forgejo));
+    }
+
+    /// Every host serves `0`.
+    struct Answer(ForgeKind);
+
+    impl HostTypes for Answer {
+        async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<ForgeKind> {
+            Ok(self.0)
+        }
+    }
+
+    #[test]
+    fn resolving_a_pinned_host_keeps_its_answer_for_after_the_pin() {
+        let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let remote = "git@resolved.pinned.example:team/repo.git";
+        let resolve = |kind| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            runtime
+                .block_on(ForgeRepo::resolve(remote, &Answer(kind)))
+                .unwrap();
+        };
+        resolve(ForgeKind::GitLab);
+        pin(vec![("resolved.pinned.example".into(), ForgeKind::Forgejo)]);
+        resolve(ForgeKind::Forgejo);
+        pin(Vec::new());
+        assert_eq!(learned("resolved.pinned.example"), Some(ForgeKind::GitLab));
     }
 
     #[test]
