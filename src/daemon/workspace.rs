@@ -23,6 +23,7 @@ pub(crate) mod paths;
 mod registry;
 mod rename;
 mod repo_configuration;
+mod repo_move;
 mod repo_removal;
 mod restore;
 pub(crate) mod review;
@@ -917,6 +918,7 @@ impl Manager {
                 if state != WorkspaceState::Reconciling && !allow_pending_rename {
                     store::ensure_no_pending_rename(&tx, &id)?;
                 }
+                store::ensure_no_pending_move(&tx, &id)?;
                 let current: Option<WorkspaceState> = tx
                     .query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
                         row.get(0)

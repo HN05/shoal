@@ -211,6 +211,10 @@ instead of the PR delivery guidance below.
   checkouts, workspaces, and other repository directories; never delete their parents.
   Resolve existing symlinks and lexical `..` before checking and creating repository
   roots or explicit workspace paths, including when trailing components are missing.
+- A repository directory moves only whole into a new root while nothing uses it:
+  reserve its workspaces and record the move first, switch records only once the
+  directory arrived, and let recovery finish a completed move or roll back an
+  incomplete one; never delete the source before the records name the destination.
 - Worktrunk compatibility is shared across creation and existing-branch selection:
   reserved names get a leaf suffix on creation and an error on opening; suffixes
   never change derived workspace names or directories. Adapter outcomes preserve

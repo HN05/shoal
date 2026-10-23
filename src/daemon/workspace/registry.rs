@@ -421,7 +421,7 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
 /// state and of every checkout, and the daemon must be able to write there,
 /// so a root it cannot write or inside either is refused before anything is
 /// created.
-async fn prepare_root<'a>(
+pub(super) async fn prepare_root<'a>(
     root: &Path,
     state: &Path,
     checkouts: impl IntoIterator<Item = &'a Path>,
@@ -448,7 +448,11 @@ async fn prepare_root<'a>(
 
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)
 /// by creating it, so concurrent daemons cannot share one directory.
-fn reserve_directory(root: &Path, name: &str, repositories: &[Repository]) -> Result<PathBuf> {
+pub(super) fn reserve_directory(
+    root: &Path,
+    name: &str,
+    repositories: &[Repository],
+) -> Result<PathBuf> {
     for suffix in 1_u64.. {
         let path = root.join(if suffix == 1 {
             name.to_owned()

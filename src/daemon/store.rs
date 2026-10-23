@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 66;
+const SCHEMA_VERSION: i64 = 67;
 
 #[cfg(test)]
 mod benchmark;
@@ -397,6 +397,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (64, FORGE_HOSTS, None),
     (65, REPOSITORY_AGENT_ENVIRONMENTS, None),
     (66, REPOSITORY_CONTRIBUTIONS, None),
+    (67, REPOSITORY_MOVES, None),
 ];
 
 /// Repositories `shoal contribute` registered, which Shoal removes once
@@ -407,6 +408,16 @@ CREATE TABLE contribution_grace (
     repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
     cleanup_at INTEGER NOT NULL,
     claimed INTEGER NOT NULL CHECK(claimed IN (0, 1))
+);";
+
+/// A repository directory moving into a new root, with the state each of its
+/// workspaces returns to; `switched` once the records name the destination.
+const REPOSITORY_MOVES: &str = "CREATE TABLE repository_moves (
+    repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    states TEXT NOT NULL,
+    switched INTEGER NOT NULL DEFAULT 0 CHECK(switched IN (0, 1))
 );";
 
 /// The approval request a notification asks the user to decide, by its key,
@@ -650,6 +661,20 @@ pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &str) -> Result<(
             [workspace_id]
         )?,
         "workspace has an unfinished rename; run shoal doctor --repair first"
+    );
+    Ok(())
+}
+
+/// Refuse lifecycle changes while the workspace's repository directory moves.
+pub fn ensure_no_pending_move(db: &Connection, workspace_id: &str) -> Result<()> {
+    ensure!(
+        !exists(
+            db,
+            "SELECT 1 FROM repository_moves JOIN workspaces USING (repository_id)
+                WHERE workspaces.id=?1",
+            [workspace_id]
+        )?,
+        "repository move is incomplete; run shoal repo migrate again"
     );
     Ok(())
 }
@@ -1120,6 +1145,9 @@ mod tests {
         }
         if version >= 66 {
             db.execute_batch(REPOSITORY_CONTRIBUTIONS)?;
+        }
+        if version >= 67 {
+            db.execute_batch(REPOSITORY_MOVES)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

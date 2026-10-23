@@ -176,6 +176,8 @@ pub enum Method {
     RemoveRepository {
         repository: crate::repository::Selector,
     },
+    /// Move every repository directory into the configured `root_dir`.
+    MoveRepositories,
     /// Fetch the default branch's remote and fast-forward the local default branch.
     SyncRepository {
         repository: crate::repository::Selector,
@@ -890,6 +892,7 @@ response_bodies! {
     Repository(Repository),
     RepositoryConfig(LocalConfig),
     RepositoryRemoved(RepositoryRemoval),
+    MovedRepositories(Vec<crate::model::MovedRepository>),
     Workspace(Workspace),
     Hold(crate::model::WorkspaceHold),
     QueueAdmission(crate::model::QueueAdmission),

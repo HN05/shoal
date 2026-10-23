@@ -19,7 +19,8 @@ pub struct Repository {
     pub last_used: i64,
     pub name: Option<String>,
     /// `<root_dir>/<name>`: parent of this repository's workspaces and of its
-    /// URL clone. Reserved once, never moved; `None` until first needed.
+    /// URL clone. Reserved once and moved only into a new `root_dir`; `None`
+    /// until first needed.
     pub workspaces_dir: Option<PathBuf>,
     /// Registered by `shoal contribute`: removed once nothing of it is left.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -33,6 +34,17 @@ pub struct RepositoryRemoval {
     pub path: PathBuf,
     pub workspaces_removed: usize,
     /// Canonical worktree paths removed during this operation and prior retry attempts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workspace_paths: Vec<PathBuf>,
+}
+
+/// A repository directory moved into the configured `root_dir`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MovedRepository {
+    /// The registration as recorded after the move.
+    pub repository: Repository,
+    pub from: PathBuf,
+    /// The workspace paths before the move.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workspace_paths: Vec<PathBuf>,
 }

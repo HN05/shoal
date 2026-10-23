@@ -243,9 +243,13 @@ Repository roots and explicit workspace paths resolve existing symlinks and lexi
 An explicit workspace path overrides the destination for one creation, without
 changing the repository directory; reject existing paths and overlaps with state,
 checkouts, workspaces, or other repositories' directories. Cleanup owns the worktree,
-never its parent. Directories are reserved atomically and never reused or moved; an
+never its parent. Directories are reserved atomically and never reused; an
 in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
-`--path` clones elsewhere. Registration is idempotent by normalized origin URL,
+`--path` clones elsewhere. A repository directory moves only whole, into a new
+`root_dir`, while nothing runs or uses it: its workspaces are reserved and the
+move is recorded before anything moves, then the records switch and Git's
+worktree links are repaired, so a stopped daemon finishes a completed move and
+rolls back an incomplete one. Checkouts and workspaces outside it stay. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. Repository selectors preserve the caller's argument alongside its
 canonical path. IDs and sources win before path lookup; a registered name survives

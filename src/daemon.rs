@@ -90,6 +90,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let descriptors = connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
+    // Before quarantine, which would leave the moving workspaces failed.
+    if let Err(error) = manager.finish_repository_moves().await {
+        log!("{error:#}");
+    }
     manager.store.quarantine_interrupted_operations().await?;
     manager.learn_recorded_forge_hosts().await?;
     manager.audit_worktrees().await?;
@@ -497,6 +501,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
+        Method::MoveRepositories => Body::MovedRepositories(manager.move_repositories().await?),
         Method::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)
         }
