@@ -5,7 +5,10 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::workspace::Manager, model::Workspace, sim::SimRequest, state::states,
+    daemon::workspace::Manager,
+    model::Workspace,
+    sim::{SimRequest, Simulator},
+    state::states,
     time::unix_seconds,
 };
 
@@ -54,6 +57,32 @@ pub struct CleanRequest {
     pub erase_completed: bool,
     pub evicted: Vec<EvictedDevice>,
     pub error: Option<String>,
+}
+
+impl CleanRequest {
+    /// Record an idle device about to be deleted to make room.
+    pub(super) fn record_eviction(&mut self, sim: &Simulator) {
+        self.evicted.push(EvictedDevice {
+            id: sim.id.clone(),
+            udid: sim.udid.clone(),
+            installed_apps: sim.installed_apps,
+        });
+        self.action = Some(CleanAction::CreateAfterEviction);
+    }
+
+    /// Record the device the request will use and how it becomes clean.
+    pub(super) fn record_selection(&mut self, sim: &Simulator, needs_reset: bool) {
+        self.simulator_id = Some(sim.id.clone());
+        self.udid = sim.udid.clone();
+        self.apps_removed = needs_reset.then_some(sim.installed_apps).flatten();
+        if self.action.is_none() {
+            self.action = Some(if needs_reset {
+                CleanAction::Erase
+            } else {
+                CleanAction::Create
+            });
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

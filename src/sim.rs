@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
+use audit::{CleanRequest, CleanRequestStatus};
 use simctl::Inventory;
 
 use crate::{
@@ -473,17 +473,7 @@ impl Manager {
             ));
         }
         for candidate in &plan.evictions {
-            let mut evicted = (*candidate).clone();
-            if let Some(audit) = audit.as_mut() {
-                audit.evicted.push(EvictedDevice {
-                    id: evicted.id.clone(),
-                    udid: evicted.udid.clone(),
-                    installed_apps: evicted.installed_apps,
-                });
-                audit.action = Some(CleanAction::CreateAfterEviction);
-                self.save_clean_request(audit).await?;
-            }
-            self.delete_sim(&mut evicted).await?;
+            self.evict_sim(candidate, audit).await?;
         }
         if !plan.has_device_capacity {
             return Ok(Allocation::Busy(
@@ -506,16 +496,7 @@ impl Manager {
         });
         let needs_reset = request.clean && sim.udid.is_some();
         if let Some(audit) = audit.as_mut() {
-            audit.simulator_id = Some(sim.id.clone());
-            audit.udid = sim.udid.clone();
-            audit.apps_removed = needs_reset.then_some(sim.installed_apps).flatten();
-            if audit.action.is_none() {
-                audit.action = Some(if needs_reset {
-                    CleanAction::Erase
-                } else {
-                    CleanAction::Create
-                });
-            }
+            audit.record_selection(&sim, needs_reset);
             self.save_clean_request(audit).await?;
         }
         sim.workspace_id = Some(workspace.id.clone());
@@ -536,6 +517,20 @@ impl Manager {
         sim.state = SimulatorState::Leased;
         self.save_sim(&sim).await?;
         Ok(Allocation::Granted(Box::new(sim)))
+    }
+
+    /// Delete an idle device to make room, auditing it first for a clean request.
+    async fn evict_sim(
+        &self,
+        candidate: &Simulator,
+        audit: &mut Option<CleanRequest>,
+    ) -> Result<()> {
+        let mut evicted = candidate.clone();
+        if let Some(audit) = audit.as_mut() {
+            audit.record_eviction(&evicted);
+            self.save_clean_request(audit).await?;
+        }
+        self.delete_sim(&mut evicted).await
     }
 
     /// Create the device if needed, optionally erase it, and boot it.
