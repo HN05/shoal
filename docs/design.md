@@ -1294,8 +1294,9 @@ Exporting every workspace of a repository checks each one before removing any, s
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private files, and Shoal neither
-stores nor touches them. The export records the exporting machine's ID with the
-agents' sessions beside the moved records, which older importers read. An import on that machine, or one told to keep sessions, keeps
+stores nor touches them. The export records the agents' sessions, with the
+exporting machine's ID when it has one, beside the moved records, which older
+importers read. An import on that machine, or one told to keep sessions, keeps
 the session IDs, which the agents resume from any directory, dropping another
 machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust

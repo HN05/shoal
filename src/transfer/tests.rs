@@ -138,14 +138,9 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     assert_eq!(read.manifest.remote_url.as_deref(), origin.to_str());
     assert!(read.manifest.bundle);
     // The exporting machine's import can resume the session it recorded.
-    let sessions = read.manifest.sessions.as_ref();
-    assert_eq!(
-        sessions.map(|sessions| sessions.machine.clone()),
-        crate::process::machine::id()
-    );
-    if let Some(sessions) = sessions {
-        assert_eq!(sessions.agents[0].record.session.as_deref(), Some("s1"));
-    }
+    let sessions = read.manifest.sessions.as_ref().unwrap();
+    assert_eq!(sessions.machine, crate::process::machine::id());
+    assert_eq!(sessions.agents[0].record.session.as_deref(), Some("s1"));
     let restored = import(&importing, &target_repo, &file).await;
 
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
@@ -280,7 +275,7 @@ fn manifest_with_sessions() -> Manifest {
         prerequisite: None,
         bundle: false,
         sessions: Some(Sessions {
-            machine: "m1".into(),
+            machine: Some("m1".into()),
             agents: workspace.agents.clone(),
             last_session: workspace.last_session.clone(),
         }),
@@ -315,6 +310,13 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.place, None);
     assert!(!kept.last_session.unwrap().moved);
+
+    // So does an export from a machine without an ID.
+    manifest.sessions.as_mut().unwrap().machine = None;
+    assert!(manifest.workspace_on(None, None).agents[0].record.moved);
+    let kept = manifest.workspace_on(None, Some(true));
+    assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(kept.agents[0].record.place, None);
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();

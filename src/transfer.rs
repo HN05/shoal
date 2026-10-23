@@ -41,8 +41,9 @@ pub struct Manifest {
 /// recorded them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sessions {
-    /// The exporting machine's ID.
-    pub machine: String,
+    /// The exporting machine's ID, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<StoppedAgent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,8 +91,8 @@ impl Manifest {
             }
             None => true,
         };
-        let sessions = crate::process::machine::id().map(|machine| Sessions {
-            machine,
+        let sessions = Some(Sessions {
+            machine: crate::process::machine::id(),
             agents: removed.agents.clone(),
             last_session: removed.last_session.clone(),
         });
@@ -116,7 +117,7 @@ impl Manifest {
         let exporting = self
             .sessions
             .as_ref()
-            .is_some_and(|sessions| machine == Some(sessions.machine.as_str()));
+            .is_some_and(|sessions| machine.is_some() && sessions.machine.as_deref() == machine);
         let Some(sessions) = self
             .sessions
             .as_ref()

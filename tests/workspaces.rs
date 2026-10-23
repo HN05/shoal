@@ -4846,7 +4846,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     let imported = fixture.ok(&["import", file, "--repo", repo]);
     assert_eq!(imported["warnings"], serde_json::json!([]));
     // A machine without an ID cannot tell it exported the workspace.
-    if exported["manifest"]["sessions"].is_null() {
+    if exported["manifest"]["sessions"]["machine"].is_null() {
         resume();
         assert!(!path.join("resumed").exists());
         return;
