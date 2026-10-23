@@ -22,6 +22,9 @@ impl Manager {
         name: Option<String>,
     ) -> Result<Checkpoint> {
         let workspace = self.workspace(selector).await?;
+        // A repository move holds this gate; the workspace may have moved.
+        let (_repo, _git) = self.lock_repository(&workspace.repository_id).await?;
+        let workspace = self.workspace(&workspace.id).await?;
         ensure!(
             matches!(
                 workspace.state,
@@ -45,6 +48,13 @@ impl Manager {
     /// in another lifecycle operation or removed meanwhile takes none, and a
     /// failure is only logged.
     pub(crate) async fn checkpoint_after_agent(&self, workspace_id: &str) {
+        let Ok(workspace) = self.workspace(workspace_id).await else {
+            return;
+        };
+        // A repository move holds this gate; the workspace may have moved.
+        let Ok((_repo, _git)) = self.lock_repository(&workspace.repository_id).await else {
+            return;
+        };
         let Ok(workspace) = self.workspace(workspace_id).await else {
             return;
         };

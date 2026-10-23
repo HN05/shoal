@@ -767,6 +767,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Result<()> {
+        let (_temp, manager, repo, workspace, root) = cloned().await?;
+        let source = repo.workspaces_dir.clone().context("no directory")?;
+        let destination = root.join("origin");
+        fs::create_dir_all(&destination)?;
+
+        // The move holds the repository's Git gate from its check to its end.
+        let gate = manager.lock_repository_git(&repo.id).await;
+        let checkpointing = manager.clone();
+        let id = workspace.id.clone();
+        let mut checkpoint =
+            Box::pin(async move { checkpointing.take_checkpoint(&id, None).await });
+        test_support::assert_pending(&mut checkpoint).await;
+        manager.record_move(&repo.id, &source, &destination).await?;
+        drop(gate);
+        let error = checkpoint
+            .await
+            .err()
+            .context("checkpoint taken during a move")?;
+        assert!(error.to_string().contains("repository move is incomplete"));
+
+        manager.finish_repository_moves().await?;
+        manager.take_checkpoint(&workspace.id, None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
         let (_temp, manager, repo, workspace, root) = cloned().await?;
         let source = repo.workspaces_dir.clone().context("no directory")?;
