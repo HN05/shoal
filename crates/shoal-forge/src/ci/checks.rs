@@ -80,18 +80,28 @@ impl ForgeRepo {
         url: &str,
         name: &str,
     ) -> Result<CheckLog> {
-        let (number, _) = self.pull(url)?;
-        let pull = self.read(account, ItemKind::Pr, number).await?;
-        let head = pull.head_sha.context("PR has no head commit")?;
+        let head = self.pull_head(account, url).await?;
         let checks = self.kind.ci_checks(self, account, &head).await?;
         let (location, target) = self.failed_job(&checks, name)?;
+        let log = self.job_log(account, location).await?;
+        Ok(CheckLog::from_text(url, name, &log).with_job(target))
+    }
+
+    /// The head commit of PR `url`, open or not.
+    async fn pull_head(&self, account: &Account, url: &str) -> Result<String> {
+        let (number, _) = self.pull(url)?;
+        let pull = self.read(account, ItemKind::Pr, number).await?;
+        pull.head_sha.context("PR has no head commit")
+    }
+
+    /// The plain-text log of the job at `location`, refused beyond
+    /// [`MAX_LOG_BYTES`].
+    async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
         let endpoint = self.repo_endpoint(&self.kind.job_log_endpoint(location)?);
         let request = Request::get(endpoint).limited(MAX_LOG_BYTES);
-        let log = self
-            .read_text(account, &request)
+        self.read_text(account, &request)
             .await
-            .context("fetch job log (maximum 8 MiB)")?;
-        Ok(CheckLog::from_text(url, name, &log).with_job(target))
+            .context("fetch job log (maximum 8 MiB)")
     }
 
     /// The job and web URL of the failed check `name` among `checks`.
