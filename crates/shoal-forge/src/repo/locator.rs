@@ -1,7 +1,7 @@
 //! Issue and PR locator syntax; callers select the route for their forge.
 use anyhow::{Context, Result, ensure};
 
-use crate::{ForgeRepo, IssueInput};
+use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
 
 const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
 const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
@@ -58,13 +58,24 @@ impl ItemRoute {
         })
     }
 
-    /// The repository URL of an item URL in the first of `routes` it uses.
-    pub fn discover<'a>(input: &'a str, routes: &[Self]) -> Result<&'a str> {
-        let item = routes
+    /// The forge whose items use this route alone; GitHub, Forgejo and
+    /// Bitbucket share issue URLs.
+    pub fn forge(self) -> Option<ForgeKind> {
+        match self {
+            Self::Issue => None,
+            Self::GitLabIssue | Self::MergeRequest => Some(ForgeKind::GitLab),
+            Self::Pull => Some(ForgeKind::GitHub),
+            Self::Pulls => Some(ForgeKind::Forgejo),
+            Self::PullRequests => Some(ForgeKind::Bitbucket),
+        }
+    }
+
+    /// The repository URL of an item URL, and the first of `routes` it uses.
+    pub fn discover<'a>(input: &'a str, routes: &[Self]) -> Result<(&'a str, Self)> {
+        routes
             .iter()
-            .find_map(|route| route.split_url(input))
-            .with_context(|| routes[0].diagnostic(ISSUE_URL, PULL_URL))?;
-        Ok(item.repository)
+            .find_map(|&route| Some((route.split_url(input)?.repository, route)))
+            .with_context(|| routes[0].diagnostic(ISSUE_URL, PULL_URL))
     }
 
     fn url(self, input: &str) -> Result<ItemUrl<'_>> {
@@ -76,7 +87,7 @@ impl ItemRoute {
         let (number, url) = if IssueInput::parse(input) == IssueInput::Url {
             let item = self.url(input)?;
             ensure!(
-                ForgeRepo::parse(item.repository)? == *repo,
+                ForgeRepo::parse_linked(item.repository, Some(repo.kind))? == *repo,
                 self.diagnostic(
                     "issue URL belongs to a different repository",
                     "PR belongs to a different repository",

@@ -890,9 +890,11 @@ each answer in its state and asks recorded hosts again from `doctor`, which
 otherwise changes no state without `--repair`; a global `[forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
-parse the same way; a link of a host not yet resolved is classified by name, as
-GitLab for a `gitlab` name label or a glab login and otherwise as Forgejo, until
-its repository is looked up. Host types describe hosts rather than
+parse the same way. A pasted link of a host not yet resolved is classified
+without a request by the forge its routes name, such as `/pull/` for GitHub
+and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
+form several forges share, falls back to the name: GitLab for a `gitlab` name
+label or a glab login, and otherwise Forgejo. Host types describe hosts rather than
 repositories, so they are global only, like `[bitbucket]`. GitLab-only concepts such as approval rules and merge trains
 stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as

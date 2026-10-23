@@ -60,13 +60,15 @@ impl PartialEq for ForgeRepo {
 
 impl ForgeRepo {
     pub fn parse(remote: &str) -> Result<Self> {
-        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
-        Self::from_remote(&remote)
+        Self::parse_linked(remote, None)
     }
 
-    fn from_remote(remote: &RemoteUrl<'_>) -> Result<Self> {
-        let (host, path, web_scheme) = Self::location(remote)?;
-        let kind = ForgeKind::detect(&host);
+    /// The repository `remote` names, where a link that names it uses the
+    /// routes of the forge `linked`.
+    pub(crate) fn parse_linked(remote: &str, linked: Option<ForgeKind>) -> Result<Self> {
+        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
+        let (host, path, web_scheme) = Self::location(&remote)?;
+        let kind = ForgeKind::detect(&host, linked);
         Self::on(kind, host, path, web_scheme)
     }
 
@@ -155,13 +157,14 @@ impl ForgeRepo {
 
     /// The repository an issue URL belongs to.
     pub fn from_issue_url(url: &str) -> Result<Self> {
-        Self::parse(ItemRoute::discover(url, ISSUE_ROUTES)?)
+        let (repository, route) = ItemRoute::discover(url, ISSUE_ROUTES)?;
+        Self::parse_linked(repository, route.forge())
     }
 
     /// The repository an issue URL belongs to, on the forge `hosts` says
     /// its host serves.
     pub async fn resolve_issue_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve(ItemRoute::discover(url, ISSUE_ROUTES)?, hosts).await
+        Self::resolve(ItemRoute::discover(url, ISSUE_ROUTES)?.0, hosts).await
     }
 
     pub fn repository_url(&self) -> String {
@@ -205,13 +208,14 @@ pub struct PullRequest {
 impl ForgeRepo {
     /// The repository a PR URL belongs to.
     pub fn from_pull_url(url: &str) -> Result<Self> {
-        Self::parse(ItemRoute::discover(url, PULL_ROUTES)?)
+        let (repository, route) = ItemRoute::discover(url, PULL_ROUTES)?;
+        Self::parse_linked(repository, route.forge())
     }
 
     /// The repository a PR URL belongs to, on the forge `hosts` says its
     /// host serves.
     pub async fn resolve_pull_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve(ItemRoute::discover(url, PULL_ROUTES)?, hosts).await
+        Self::resolve(ItemRoute::discover(url, PULL_ROUTES)?.0, hosts).await
     }
 
     /// Only PRs whose head branch lives in this repository can be checked out.

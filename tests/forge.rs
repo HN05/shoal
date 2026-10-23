@@ -314,6 +314,11 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
         "https://ghe.invalid/team/project/pull/8"
     );
     assert!(!keys(&fixture).contains(&json!("GET meta")));
+    // A pasted link of the host names its forge before anything is asked.
+    let url = "https://ghe.invalid/team/project/pull/8";
+    let linked = fixture.ok(&["link", url, "related", "--workspace", "topic"]);
+    assert_eq!(linked["registered"], true, "{linked}");
+    keys(&fixture);
 
     // Doctor asks the host again and keeps its answer when it cannot.
     let forge_check = |fixture: &Fixture| {

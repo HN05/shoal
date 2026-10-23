@@ -177,7 +177,7 @@ mod tests {
         ] {
             let remote = RemoteUrl::parse(source).unwrap();
             assert_eq!(remote.registration_key(), key, "{source}");
-            let forge = ForgeRepo::from_remote(&remote);
+            let forge = ForgeRepo::parse(source);
             if let Some(host) = forge_host {
                 let forge = forge.unwrap();
                 assert_eq!(forge.host, host, "{source}");

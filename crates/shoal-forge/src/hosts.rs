@@ -85,9 +85,15 @@ mod tests {
 
     #[test]
     fn learned_hosts_override_names_and_guesses() {
-        assert_eq!(ForgeKind::detect("ghe.learned.example"), ForgeKind::Forgejo);
+        assert_eq!(
+            ForgeKind::detect("ghe.learned.example", None),
+            ForgeKind::Forgejo
+        );
         learn("GHE.learned.example", ForgeKind::GitHub);
-        assert_eq!(ForgeKind::detect("ghe.learned.example"), ForgeKind::GitHub);
+        assert_eq!(
+            ForgeKind::detect("ghe.learned.example", None),
+            ForgeKind::GitHub
+        );
         let repo = ForgeRepo::parse("git@ghe.learned.example:team/repo.git").unwrap();
         assert_eq!(
             repo.pull("3").unwrap().1,

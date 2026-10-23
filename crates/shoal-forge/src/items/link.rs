@@ -1,8 +1,9 @@
-//! Classify pasted forge links without making network requests.
+//! Classify pasted forge links without making network requests. A link of
+//! a host this process has not resolved names its forge by its routes.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, IssueInput};
+use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
 
 crate::state::states!(ItemKind {
     Issue => "issue",
@@ -122,11 +123,16 @@ impl Link {
                 target: LinkTarget::Pr,
             });
         }
-        let (repository, branch) = ["/src/branch/", "/-/tree/", "/tree/", "/branch/"]
-            .iter()
-            .find_map(|marker| url.split_once(marker))
-            .context("expected an issue, PR or branch URL")?;
-        let repository = ForgeRepo::parse(repository)?;
+        let ((repository, branch), forge) = [
+            ("/src/branch/", ForgeKind::Forgejo),
+            ("/-/tree/", ForgeKind::GitLab),
+            ("/tree/", ForgeKind::GitHub),
+            ("/branch/", ForgeKind::Bitbucket),
+        ]
+        .iter()
+        .find_map(|&(marker, forge)| Some((url.split_once(marker)?, forge)))
+        .context("expected an issue, PR or branch URL")?;
+        let repository = ForgeRepo::parse_linked(repository, Some(forge))?;
         let branch = decode_branch(branch)?;
         ensure!(!branch.is_empty(), "branch URL has no branch");
         Ok(Self {
@@ -155,6 +161,40 @@ fn decode_branch(input: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn links_of_unresolved_hosts_use_the_forge_their_routes_name() {
+        for (url, kind, target) in [
+            (
+                "https://ghe.corp.example/team/repo/pull/8",
+                ForgeKind::GitHub,
+                ItemKind::Pr,
+            ),
+            (
+                "https://code.corp.example/group/sub/project/-/merge_requests/3",
+                ForgeKind::GitLab,
+                ItemKind::Pr,
+            ),
+            (
+                "https://code.corp.example/group/sub/project/-/issues/4",
+                ForgeKind::GitLab,
+                ItemKind::Issue,
+            ),
+        ] {
+            let selection = Selection::parse(Some(url.into()), None).unwrap();
+            assert_eq!(selection.kind, Some(target), "{url}");
+            let link = Link::parse(url).unwrap();
+            assert_eq!(link.repository.kind, kind, "{url}");
+            assert_eq!(
+                item(target, url).unwrap().1,
+                url.rsplit('/').next().unwrap().parse::<u64>().unwrap()
+            );
+        }
+        let branch =
+            Link::parse("https://code.corp.example/group/sub/project/-/tree/topic").unwrap();
+        assert_eq!(branch.repository.kind, ForgeKind::GitLab);
+        assert!(matches!(branch.target, LinkTarget::Branch(name) if name == "topic"));
+    }
 
     #[test]
     fn links_preserve_branch_names_and_validate_item_routes() {
