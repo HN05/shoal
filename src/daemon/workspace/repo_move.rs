@@ -638,12 +638,7 @@ mod tests {
 
         // What a move to another filesystem leaves before the original goes.
         manager.record_move(&repo.id, &source, &destination).await?;
-        let copied = std::process::Command::new("cp")
-            .arg("-pPR")
-            .arg(source.join("."))
-            .arg(&destination)
-            .status()?;
-        ensure!(copied.success(), "copy failed");
+        fsutil::copy_directory(&source, &destination).await?;
         manager.switch_move(&repo.id, &source, &destination).await?;
         manager.finish_repository_moves().await?;
 

@@ -349,12 +349,21 @@ pub async fn move_directory(source: &Path, destination: &Path) -> anyhow::Result
     Ok(Moved::Copied)
 }
 
-async fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
+/// Copy the entries of `source` into `destination`, leaving the destination
+/// directory's own attributes, and with them its identity, unchanged.
+pub(crate) async fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    let entries = fs::read_dir(source)
+        .and_then(|entries| {
+            entries
+                .map(|entry| Ok(entry?.path()))
+                .collect::<io::Result<Vec<_>>>()
+        })
+        .with_context(|| format!("read {}", source.display()))?;
+    if entries.is_empty() {
+        return Ok(());
+    }
     let mut command = tokio::process::Command::new("cp");
-    command
-        .args(["-pPR", "--"])
-        .arg(source.join("."))
-        .arg(destination);
+    command.args(["-pPR", "--"]).args(entries).arg(destination);
     crate::subprocess::output(command)
         .await
         .map(drop)
@@ -367,6 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn moving_a_directory_keeps_its_contents_and_links() -> anyhow::Result<()> {
+        use std::os::unix::fs::MetadataExt as _;
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("source");
         fs::create_dir_all(source.join("nested"))?;
@@ -379,7 +389,12 @@ mod tests {
 
         let copied = temp.path().join("copied");
         fs::create_dir(&copied)?;
+        let before = fs::metadata(&copied)?;
         copy_directory(&source, &copied).await?;
+        // The destination itself keeps its identity.
+        let after = fs::metadata(&copied)?;
+        assert_eq!(after.ino(), before.ino());
+        assert_eq!(after.created().ok(), before.created().ok());
         assert_eq!(fs::read_to_string(copied.join("nested/file"))?, "contents");
         assert_eq!(
             fs::metadata(copied.join("nested/file"))?
