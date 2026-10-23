@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 64;
+const SCHEMA_VERSION: i64 = 65;
 
 #[cfg(test)]
 mod benchmark;
@@ -395,11 +395,22 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (62, NOTIFICATION_SUBJECTS, None),
     (63, include_str!("store/agent_queue_dependencies.sql"), None),
     (64, FORGE_HOSTS, None),
+    (65, REPOSITORY_AGENT_ENVIRONMENTS, None),
 ];
 
 /// The approval request a notification asks the user to decide, by its key,
 /// so withdrawing the request finds it though the user edited its text.
 const NOTIFICATION_SUBJECTS: &str = "ALTER TABLE notifications ADD COLUMN subject TEXT;";
+
+/// Where the tracked agents of a repository's workspaces kept their
+/// configuration, as JSON objects. Rows outlive the repository until the CLI
+/// that removed it has cleaned their trust entries there.
+const REPOSITORY_AGENT_ENVIRONMENTS: &str =
+    "CREATE TABLE IF NOT EXISTS repository_agent_environments (
+    repository_id TEXT NOT NULL,
+    environment TEXT NOT NULL,
+    PRIMARY KEY(repository_id, environment)
+);";
 
 /// The workspace a chat's message is about, by identity, which the user's
 /// notification keeps when the chat ends first. Earlier messages name none.
@@ -1082,6 +1093,9 @@ mod tests {
         }
         if version >= 64 {
             db.execute_batch(FORGE_HOSTS)?;
+        }
+        if version >= 65 {
+            db.execute_batch(REPOSITORY_AGENT_ENVIRONMENTS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

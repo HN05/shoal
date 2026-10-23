@@ -87,6 +87,10 @@ pub const COMPILED_SKILLS_DIR: Option<&str> = option_env!("SHOAL_BUILD_SKILLS_DI
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// Codex's user configuration and state directory override.
 pub const CODEX_HOME: &str = "CODEX_HOME";
+/// Variables that say where agents keep their configuration, which Shoal
+/// keeps when it trusts a workspace for a tracked agent, for the repository's
+/// removal to clean the trust entries.
+pub const AGENT_CONFIG_VARIABLES: [&str; 2] = [CLAUDE_CONFIG_DIR, CODEX_HOME];
 
 /// Validate names configured in `[env]` before they reach a process.
 pub fn validate_configured_environment(values: &BTreeMap<String, String>) -> Result<()> {

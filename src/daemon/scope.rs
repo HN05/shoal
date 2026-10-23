@@ -123,6 +123,7 @@ pub async fn authorize(
             ..
         }
         | Method::WorkspaceHook { workspace, .. }
+        | Method::KeepAgentEnvironment { workspace, .. }
         | Method::PortAcquire { workspace, .. }
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }

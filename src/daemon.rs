@@ -409,6 +409,10 @@ async fn serve(
             let listed = server.manager.removed_workspaces().await;
             return write_pages(stream, request.id, listed, Body::RemovedWorkspaces).await;
         }
+        Method::AgentEnvironments { repository_id } => {
+            let listed = server.manager.agent_environments(&repository_id).await;
+            return write_pages(stream, request.id, listed, Body::AgentEnvironments).await;
+        }
         method => match operation(&server.manager, method, caller.as_ref()).await {
             Ok(body) => body,
             Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
@@ -451,7 +455,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::WatchItems { .. }
         | Method::WaitChatMessages { .. }
         | Method::ListItems { .. }
-        | Method::RemovedWorkspaces => {
+        | Method::RemovedWorkspaces
+        | Method::AgentEnvironments { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -859,6 +864,19 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
         Method::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
+        }
+        Method::KeepAgentEnvironment {
+            workspace,
+            environment,
+        } => {
+            manager
+                .keep_agent_environment(&workspace, environment)
+                .await?;
+            Body::Ok
+        }
+        Method::ForgetAgentEnvironments { repository_id } => {
+            manager.forget_agent_environments(&repository_id).await?;
+            Body::Ok
         }
         Method::WorkspaceHook { workspace, kind } => {
             let workspace = manager.workspace(&workspace).await?;

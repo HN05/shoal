@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 123;
+pub const VERSION: u32 = 124;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -451,6 +451,16 @@ pub enum Method {
     },
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,
+    /// Where the tracked agents of the repository with this ID kept their
+    /// configuration, also once it is removed; in pages.
+    AgentEnvironments {
+        repository_id: String,
+    },
+    /// Forget [`Method::AgentEnvironments`] once a removed repository's trust
+    /// entries there are clean.
+    ForgetAgentEnvironments {
+        repository_id: String,
+    },
     /// Branches removal kept because only they have some commits.
     KeptBranches,
     /// Delete kept branches with the commits only they have; all or none.
@@ -512,6 +522,12 @@ pub enum Method {
     Conflicts {
         workspace: String,
         target: Option<String>,
+    },
+    /// Keep where an agent of the workspace keeps its configuration, before
+    /// Shoal trusts the workspace there, until the repository's removal.
+    KeepAgentEnvironment {
+        workspace: String,
+        environment: std::collections::BTreeMap<String, String>,
     },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
@@ -890,6 +906,7 @@ response_bodies! {
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
+    AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
     KeptBranches(Vec<crate::model::KeptBranch>),
     RestoredWorkspace(crate::model::RestoredWorkspace),
     Checkpoint(crate::model::Checkpoint),

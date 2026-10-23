@@ -16,7 +16,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
-use std::{fs, path::Path};
+use std::{collections::BTreeMap, fs, path::Path};
 
 /// Persisted progress of an interrupted removal.
 struct Progress {
@@ -107,6 +107,80 @@ impl Manager {
             workspaces_removed: workspaces.len(),
             workspace_paths,
         })
+    }
+
+    /// Keep `environment`, the [`crate::env::AGENT_CONFIG_VARIABLES`] an
+    /// agent of the workspace runs with, until the repository's removal
+    /// cleans the agent's trust entries where they point. Other variables
+    /// are ignored.
+    pub async fn keep_agent_environment(
+        &self,
+        selector: &str,
+        mut environment: BTreeMap<String, String>,
+    ) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        environment.retain(|name, _| crate::env::AGENT_CONFIG_VARIABLES.contains(&name.as_str()));
+        if environment.is_empty() {
+            return Ok(());
+        }
+        self.store_agent_environment(&workspace.repository_id, &environment)
+            .await
+    }
+
+    /// Record `environment` for the repository once.
+    async fn store_agent_environment(
+        &self,
+        repository_id: &str,
+        environment: &BTreeMap<String, String>,
+    ) -> Result<()> {
+        let (repository_id, environment) = (
+            repository_id.to_owned(),
+            serde_json::to_string(environment)?,
+        );
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT OR IGNORE INTO repository_agent_environments(repository_id,environment) VALUES (?1,?2)",
+                    params![repository_id, environment],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// What [`Self::keep_agent_environment`] kept for the repository with
+    /// `id`, which may be removed already.
+    pub async fn agent_environments(&self, id: &str) -> Result<Vec<BTreeMap<String, String>>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let mut statement = db.prepare(
+                    "SELECT environment FROM repository_agent_environments WHERE repository_id=?1 ORDER BY environment",
+                )?;
+                let rows = statement.query_map([id], |row| row.get::<_, String>(0))?;
+                rows.map(|environment| Ok(serde_json::from_str(&environment?)?))
+                    .collect()
+            })
+            .await
+    }
+
+    /// Forget what [`Self::keep_agent_environment`] kept for the removed
+    /// repository with `id`, which no agent can add to again.
+    pub async fn forget_agent_environments(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                ensure!(
+                    !store::exists(db, "SELECT 1 FROM repositories WHERE id=?1", [&id])?,
+                    "the repository is still registered"
+                );
+                db.execute(
+                    "DELETE FROM repository_agent_environments WHERE repository_id=?1",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     async fn removal_progress(&self, id: &str) -> Result<Option<Progress>> {
