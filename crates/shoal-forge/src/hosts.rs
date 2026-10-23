@@ -75,6 +75,14 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .insert(host.to_ascii_lowercase(), kind);
 }
 
+/// Forget what this process learned `host` serves, as when its pin goes.
+pub fn forget(host: &str) {
+    LEARNED
+        .write()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&host.to_ascii_lowercase());
+}
+
 /// Learn the hosts `pins` returns the first time this process needs a
 /// host's forge, so a caller that never parses a forge link never reads them.
 pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'static) {

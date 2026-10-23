@@ -192,8 +192,10 @@ impl Manager {
         paths.prepare()?;
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
+        let config = Config::load(&paths)?;
+        super::forge_hosts::learn_forge_pins(None, &config.forges);
         Ok(Arc::new(Self {
-            config: watch::channel(Arc::new(Config::load(&paths)?)).0,
+            config: watch::channel(Arc::new(config)).0,
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
             announcement_gate: Mutex::new(()),
@@ -258,6 +260,7 @@ impl Manager {
         if config.overload != self.config().overload {
             self.reset_overload_recovery();
         }
+        super::forge_hosts::learn_forge_pins(Some(&self.config().forges), &config.forges);
         self.config.send_replace(Arc::new(config));
         // After the swap: a reader that sees the new generation sees this config.
         self.config_generation
