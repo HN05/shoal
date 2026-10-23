@@ -67,8 +67,21 @@ fn main() {
     run_cli(cli);
 }
 
-#[tokio::main]
-async fn run_cli(cli: Cli) {
+/// Tokio worker threads get more stack than its 2 MiB default: the daemon
+/// polls deep async paths, such as manual cleanup's removal, whose debug
+/// builds overflow that on Linux. Unused stack is reserved, not committed.
+const WORKER_STACK: usize = 8 << 20;
+
+fn run_cli(cli: Cli) {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(WORKER_STACK)
+        .build()
+        .expect("build the Tokio runtime")
+        .block_on(run_commands(cli));
+}
+
+async fn run_commands(cli: Cli) {
     let json_output = cli.json;
     match cli::commands::run(cli).await {
         Ok(code) => std::process::exit(code),
