@@ -13,7 +13,7 @@ use std::time::Duration;
 use crate::{
     daemon::{
         agent_messages,
-        notifications::{self, NotificationKind},
+        notifications::{self, About, NotificationKind},
         workspace::Manager,
     },
     model::Workspace,
@@ -422,8 +422,9 @@ impl Manager {
             })
             .await?;
         if new {
-            self.notify(
-                Some(&question.workspace),
+            let about = About::workspace(&question.workspace, &question.workspace_id);
+            self.notify_about(
+                about,
                 NotificationKind::QuestionAsked,
                 question.notification(),
             )

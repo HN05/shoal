@@ -88,6 +88,7 @@ impl Manager {
         }
         self.tell_coordinator(
             &workspace.name,
+            Some(&workspace.id),
             None,
             ready_notice(&marks),
             super::Source::Agent,

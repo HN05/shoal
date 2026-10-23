@@ -61,6 +61,7 @@ impl Manager {
     pub(crate) async fn tell_coordinator(
         &self,
         name: &str,
+        workspace_id: Option<&str>,
         kind: Option<NotificationKind>,
         message: String,
         source: Source,
@@ -77,7 +78,8 @@ impl Manager {
                     .await
             }
             Ok(Some(Coordinator::Chat(chat))) => {
-                self.queue_chat_message(&chat, name, kind, message).await
+                self.queue_chat_message(&chat, name, workspace_id, kind, message)
+                    .await
             }
             Ok(None) => return false,
             Err(error) => {

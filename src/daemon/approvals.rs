@@ -8,7 +8,7 @@ use crate::{
     config::repo::ConflictPolicy,
     daemon::{
         log,
-        notifications::{self, NotificationKind},
+        notifications::{self, About, NotificationKind},
         resources::{Definition, LockMode, Scope},
         store,
         workspace::Manager,
@@ -1118,11 +1118,11 @@ impl Manager {
     }
 
     async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
+        let about = About::workspace(workspace, &request.workspace_id).asking(&request.key);
         self.notify_about(
-            workspace,
+            about,
             NotificationKind::ApprovalRequested,
             request.notification(),
-            request.key.clone(),
         )
         .await;
     }

@@ -197,7 +197,13 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     // Ready marks reach only a coordinator, never the user.
     assert!(
         manager
-            .tell_coordinator(&worker.name, None, "marked ready".into(), Source::Agent)
+            .tell_coordinator(
+                &worker.name,
+                Some(&worker.id),
+                None,
+                "marked ready".into(),
+                Source::Agent,
+            )
             .await
     );
     assert_eq!(

@@ -110,21 +110,44 @@ pub(crate) struct About {
 }
 
 impl About {
-    /// The workspace that has `name` now, if any.
-    fn named(db: &rusqlite::Connection, name: Option<&str>) -> Result<Self> {
-        let id = match name {
-            Some(name) => db
+    /// The workspace named `name`, whose identity recording looks up.
+    fn named(name: Option<&str>) -> Self {
+        Self {
+            name: name.map(str::to_owned),
+            ..Self::default()
+        }
+    }
+
+    /// The workspace `id`, which has `name`.
+    pub(crate) fn workspace(name: &str, id: &str) -> Self {
+        Self {
+            name: Some(name.to_owned()),
+            id: Some(id.to_owned()),
+            subject: None,
+        }
+    }
+
+    /// The same, asking the user to decide the request `subject`.
+    pub(crate) fn asking(self, subject: &str) -> Self {
+        Self {
+            subject: Some(subject.to_owned()),
+            ..self
+        }
+    }
+
+    /// With the identity of the workspace that has the name now when none
+    /// was given.
+    fn resolve(mut self, db: &rusqlite::Connection) -> Result<Self> {
+        if self.id.is_none()
+            && let Some(name) = &self.name
+        {
+            self.id = db
                 .query_row("SELECT id FROM workspaces WHERE name=?1", [name], |row| {
                     row.get(0)
                 })
-                .optional()?,
-            None => None,
-        };
-        Ok(Self {
-            name: name.map(str::to_owned),
-            id,
-            subject: None,
-        })
+                .optional()?;
+        }
+        Ok(self)
     }
 }
 
@@ -272,7 +295,14 @@ impl Manager {
         kind: NotificationKind,
         message: impl Into<String>,
     ) {
-        if let Err(error) = self.record_notification(workspace, kind, message).await {
+        self.notify_about(About::named(workspace), kind, message.into())
+            .await;
+    }
+
+    /// [`Manager::notify`] about a workspace whose identity the caller holds,
+    /// so a rename meanwhile cannot attribute the event to another one.
+    pub(crate) async fn notify_about(&self, about: About, kind: NotificationKind, message: String) {
+        if let Err(error) = self.record_notification(about, kind, message).await {
             log!("notification not recorded: {error:#}");
         }
     }
@@ -282,12 +312,9 @@ impl Manager {
     pub async fn send_message(&self, selector: &str, message: String) -> Result<Sent> {
         crate::validate::message(&message)?;
         let workspace = self.workspace(selector).await?;
+        let about = About::workspace(&workspace.name, &workspace.id);
         let notification = self
-            .record_notification(
-                Some(&workspace.name),
-                NotificationKind::AgentMessage,
-                message,
-            )
+            .record_notification(about, NotificationKind::AgentMessage, message)
             .await?;
         Ok(Sent { notification })
     }
@@ -310,59 +337,41 @@ impl Manager {
     /// record it for the user and return its ID.
     pub(super) async fn record_notification(
         &self,
-        workspace: Option<&str>,
+        about: About,
         kind: NotificationKind,
         message: impl Into<String>,
     ) -> Result<Option<i64>> {
         let message = message.into();
-        if let (Some(source), Some(name)) = (kind.coordination(), workspace)
+        if let (Some(source), Some(name)) = (kind.coordination(), &about.name)
             && self
-                .tell_coordinator(name, Some(kind), message.clone(), source)
+                .tell_coordinator(
+                    name,
+                    about.id.as_deref(),
+                    Some(kind),
+                    message.clone(),
+                    source,
+                )
                 .await
         {
             return Ok(None);
         }
-        let id = self
-            .record_user_notification(workspace, kind, message, None)
-            .await?;
+        let id = self.record_user_notification(about, kind, message).await?;
         Ok(Some(id))
-    }
-
-    /// Ask the user to decide the request `subject` about the workspace. As
-    /// with [`Manager::notify`], failures are logged, never returned.
-    pub(crate) async fn notify_about(
-        &self,
-        workspace: &str,
-        kind: NotificationKind,
-        message: String,
-        subject: String,
-    ) {
-        let recorded = self
-            .record_user_notification(Some(workspace), kind, message, Some(subject))
-            .await;
-        if let Err(error) = recorded {
-            log!("notification not recorded: {error:#}");
-        }
     }
 
     /// Record an event for the user, wake watchers when it is new, and return
     /// its ID.
     async fn record_user_notification(
         &self,
-        workspace: Option<&str>,
+        about: About,
         kind: NotificationKind,
         message: String,
-        subject: Option<String>,
     ) -> Result<i64> {
-        let workspace = workspace.map(str::to_owned);
         let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let about = About {
-                    subject,
-                    ..About::named(&tx, workspace.as_deref())?
-                };
+                let about = about.resolve(&tx)?;
                 let recorded = insert(&tx, &about, kind, &message)?;
                 tx.commit()?;
                 Ok(recorded)
@@ -710,6 +719,40 @@ mod tests {
             "{error:#}"
         );
         manager.withdraw_message(&renamed.id, unread).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
+        use crate::test_support::repository;
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let sender = manager
+            .create_workspace(&repo.id, "sender".into(), None, None, None)
+            .await
+            .unwrap();
+        // The sender is resolved, then renamed and its name taken before
+        // the message is recorded.
+        let about = About::workspace(&sender.name, &sender.id);
+        manager
+            .rename_workspace(&sender.id, "renamed", None)
+            .await
+            .unwrap();
+        let path = Some(temp.path().join("successor"));
+        let successor = manager
+            .create_workspace(&repo.id, "sender".into(), None, None, path)
+            .await
+            .unwrap();
+        let id = manager
+            .record_notification(about, NotificationKind::AgentMessage, "ready")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(manager.withdraw_message(&successor.id, id).await.is_err());
+        manager.withdraw_message(&sender.id, id).await.unwrap();
     }
 
     #[tokio::test]

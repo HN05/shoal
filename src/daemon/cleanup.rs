@@ -186,7 +186,7 @@ impl Manager {
         };
         let message = format!("automatic cleanup failed: {error}");
         match self
-            .record_notification(None, NotificationKind::CleanupFailed, message)
+            .record_notification(Default::default(), NotificationKind::CleanupFailed, message)
             .await
         {
             Ok(_) => {

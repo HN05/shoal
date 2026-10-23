@@ -20,15 +20,22 @@ impl Manager {
         &self,
         chat: &str,
         workspace: &str,
+        workspace_id: Option<&str>,
         kind: Option<NotificationKind>,
         message: String,
     ) -> Result<()> {
         let (chat, workspace) = (chat.to_owned(), workspace.to_owned());
+        let workspace_id = workspace_id.map(str::to_owned);
         let queued = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let queued = insert(&tx, &chat, &workspace, kind, &message)?;
+                let about = About {
+                    name: Some(workspace),
+                    id: workspace_id,
+                    subject: None,
+                };
+                let queued = insert(&tx, &chat, &about, kind, &message)?;
                 tx.commit()?;
                 Ok(queued)
             })
@@ -115,15 +122,16 @@ impl Manager {
     }
 }
 
-/// Queue a message in the caller's transaction, returning whether it was
-/// new.
+/// Queue a message about the named workspace in the caller's transaction,
+/// returning whether it was new.
 fn insert(
     tx: &Transaction<'_>,
     chat: &str,
-    workspace: &str,
+    about: &About,
     kind: Option<NotificationKind>,
     message: &str,
 ) -> Result<bool> {
+    let workspace = about.name.as_deref().unwrap_or_default();
     let pending: Option<i64> = tx
         .query_row(
             "SELECT id FROM chat_messages WHERE chat_id=?1 AND workspace=?2 AND message=?3",
@@ -150,11 +158,12 @@ fn insert(
     );
     tx.execute(
         "INSERT INTO chat_messages(chat_id,created_at,workspace,workspace_id,kind,message)
-            VALUES (?1,?2,?3,(SELECT id FROM workspaces WHERE name=?3),?4,?5)",
+            VALUES (?1,?2,?3,COALESCE(?4,(SELECT id FROM workspaces WHERE name=?3)),?5,?6)",
         params![
             chat,
             i64::try_from(crate::time::unix_seconds())?,
             workspace,
+            about.id,
             kind,
             message
         ],
