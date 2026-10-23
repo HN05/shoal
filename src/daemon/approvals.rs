@@ -792,10 +792,11 @@ impl Manager {
             .await?;
         // Deciding a proposal opens its item under this gate before
         // forgetting the request, which withdrawal must not split.
-        let _gate = match selected.target.is_proposal() {
+        let _decision = match selected.target.is_proposal() {
             true => Some(self.pr_gate.lock().await),
             false => None,
         };
+        let _announcement = self.announcement_gate.lock().await;
         let (request, retracted) = self
             .store
             .run(move |db| {
@@ -910,8 +911,10 @@ impl Manager {
             }
             return Ok(decision.request);
         }
+        let gate = self.announcement_gate.lock().await;
         let routed = self.route_approval(&request, Some(coordinator)).await?;
         self.announce_approval(&request.workspace, &routed).await;
+        drop(gate);
         bail!(
             "approval {id}: the grant for {} has ended, so the request passed up",
             request.subject()
@@ -991,9 +994,18 @@ impl Manager {
     /// coordinators passed over on the way, or else the user. A request is
     /// routed once; repeating it tells its decider again.
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
-        if request.status != DecisionStatus::Pending {
-            return;
-        }
+        let _gate = self.announcement_gate.lock().await;
+        // It may have been withdrawn or decided since it was requested.
+        let key = request.key.clone();
+        let request = match self.store.run(move |db| by_key(db, &key)).await {
+            Ok(Some(stored)) if stored.status == DecisionStatus::Pending => stored,
+            Ok(_) => return,
+            Err(error) => {
+                log!("approval {} not rechecked: {error:#}", request.id);
+                request.clone()
+            }
+        };
+        let request = &request;
         // Publishing to a forge others see is the user's review, so proposals
         // never go to a coordinator.
         if request.target.is_proposal() {
@@ -1039,6 +1051,7 @@ impl Manager {
             "approval request {id} is not {}'s to decide",
             workspace.name
         );
+        let _gate = self.announcement_gate.lock().await;
         let routed = self.route_approval(&request, Some(&workspace.id)).await?;
         self.announce_approval(&request.workspace, &routed).await;
         Ok(routed.request)
@@ -1474,6 +1487,38 @@ mod tests {
                 .is_ok();
             assert_eq!(authorized, allowed);
         }
+    }
+
+    #[tokio::test]
+    async fn a_withdrawn_request_is_never_announced_afterwards() {
+        let (root, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "asker".into(), None, None, None)
+            .await
+            .unwrap();
+        let request = manager
+            .request_approval(sample(&workspace.id, Target::Port("web".into())))
+            .await
+            .unwrap()
+            .unwrap();
+        manager
+            .withdraw_approval(&workspace.name, request.id)
+            .await
+            .unwrap();
+        // The allocation announces the request it recorded only now.
+        manager.notify_approval(&workspace.name, &request).await;
+        let unread = manager.notifications(true, 50).await.unwrap();
+        assert!(
+            unread
+                .iter()
+                .all(|n| n.kind != NotificationKind::ApprovalRequested),
+            "{unread:?}"
+        );
     }
 
     #[tokio::test]

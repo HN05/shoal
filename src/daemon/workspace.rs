@@ -100,6 +100,9 @@ pub struct Manager {
     /// without cancelling hooks or mutations already in progress.
     pub(super) background_operations: Arc<RwLock<()>>,
     pub(crate) pr_gate: Mutex<()>,
+    /// Orders announcing a question or approval request against withdrawing
+    /// it, so a withdrawn one is never announced afterwards.
+    pub(crate) announcement_gate: Mutex<()>,
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
     pub cleanup_notify: tokio::sync::Notify,
@@ -191,6 +194,7 @@ impl Manager {
             config: watch::channel(Arc::new(Config::load(&paths)?)).0,
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
+            announcement_gate: Mutex::new(()),
             item_waits: Default::default(),
             chat_waits: Default::default(),
             cleanup_notify: tokio::sync::Notify::new(),

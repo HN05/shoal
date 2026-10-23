@@ -645,3 +645,19 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         )
     );
 }
+
+#[tokio::test]
+async fn a_withdrawn_question_is_never_announced_afterwards() {
+    let (_root, manager, workspace) = fixture().await;
+    let question = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    manager
+        .withdraw_question(&workspace.name, question.id)
+        .await
+        .unwrap();
+    // An announcement that lost the race to the withdrawal comes too late.
+    manager.announce_question(&question).await;
+    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+}

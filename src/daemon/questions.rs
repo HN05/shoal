@@ -422,15 +422,29 @@ impl Manager {
             })
             .await?;
         if new {
-            let about = About::workspace(&question.workspace, &question.workspace_id);
-            self.notify_about(
-                about,
-                NotificationKind::QuestionAsked,
-                question.notification(),
-            )
-            .await;
+            self.announce_question(&question).await;
         }
         Ok(question)
+    }
+
+    /// Tell the user about `question` unless it was withdrawn or answered
+    /// since it was asked.
+    async fn announce_question(&self, question: &Question) {
+        let _gate = self.announcement_gate.lock().await;
+        let id = question.id;
+        let stored = self.store.run(move |db| by_id(db, id)).await;
+        match stored {
+            Ok(Some(stored)) if stored.is_same(question) && stored.is_open() => {}
+            Ok(_) => return,
+            Err(error) => crate::daemon::log!("question {id} not rechecked: {error:#}"),
+        }
+        let about = About::workspace(&question.workspace, &question.workspace_id);
+        self.notify_about(
+            about,
+            NotificationKind::QuestionAsked,
+            question.notification(),
+        )
+        .await;
     }
 
     /// The newest open questions that fit one response, oldest first.
@@ -498,6 +512,7 @@ impl Manager {
     /// the user or the coordinating agent is told instead.
     pub async fn withdraw_question(&self, selector: &str, id: i64) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
+        let _gate = self.announcement_gate.lock().await;
         let (question, retracted) = self
             .store
             .run(move |db| {

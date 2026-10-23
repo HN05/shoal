@@ -41,37 +41,53 @@ mod tests {
 
     #[tokio::test]
     async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals() {
-        let (_temp, manager) = crate::test_support::manager().await;
+        let (temp, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let worker = manager
+            .create_workspace(&repo.id, "worker".into(), None, None, None)
+            .await
+            .unwrap();
         manager
             .notify_allocation("worker", &Allocation::Granted(()), "")
             .await;
-        let mut request = ApprovalRequest::new(
-            "owner",
-            Target::Port("web".into()),
-            "web",
-            Specification::Port(PortSpecification {
-                env: "PORT_WEB".into(),
-                on_conflict: Default::default(),
-                preferred: None,
-                range: [3000, 3100],
-            }),
-            Lifetime::Lease,
-            Some("serve the app"),
-        );
-        request.id = 7;
-        for status in [DecisionStatus::Approved, DecisionStatus::Denied] {
-            request.status = status;
+        let port = |name: &str| {
+            ApprovalRequest::new(
+                &worker.id,
+                Target::Port(name.into()),
+                name,
+                Specification::Port(PortSpecification {
+                    env: "PORT_WEB".into(),
+                    on_conflict: Default::default(),
+                    preferred: None,
+                    range: [3000, 3100],
+                }),
+                Lifetime::Lease,
+                Some("serve the app"),
+            )
+        };
+        // What was decided before its announcement is not announced.
+        for (name, approve) in [("api", true), ("docs", false)] {
+            let request = manager.request_approval(port(name)).await.unwrap().unwrap();
+            let decided = manager
+                .decide_approval(request.id, approve, None, Default::default())
+                .await
+                .unwrap();
+            assert_ne!(decided.status, DecisionStatus::Pending);
             manager
-                .notify_allocation::<()>(
-                    "worker",
-                    &Allocation::Approval(Box::new(request.clone())),
-                    "",
-                )
+                .notify_allocation::<()>("worker", &Allocation::Approval(Box::new(request)), "")
                 .await;
         }
         assert_eq!(manager.unread_notifications().await.unwrap(), 0);
 
-        request.status = DecisionStatus::Pending;
+        let request = manager
+            .request_approval(port("web"))
+            .await
+            .unwrap()
+            .unwrap();
         for _ in 0..2 {
             for prefix in ["", "simulator: "] {
                 manager
