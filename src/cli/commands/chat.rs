@@ -31,16 +31,62 @@ pub(super) async fn start(
     here: bool,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    ensure_unscoped(ctx)?;
+    let repo = chosen(ctx, repository).await?;
+    let settings = settings(ctx, &repo).await?;
+    let topic = Topic::repository(&repo);
+    begin(ctx, repo, settings, topic, agent, here, args).await
+}
+
+/// What a chat is about beyond its repository, and how it reopens in a new tab.
+pub(super) struct Topic {
+    /// The `shoal` command that starts the same chat again, without the
+    /// agent, `--here` or forwarded arguments.
+    pub relaunch: Vec<OsString>,
+    /// The new tab's label.
+    pub label: String,
+    /// The task the agent starts on, or `None` to wait for the user.
+    pub opening: Option<String>,
+}
+
+impl Topic {
+    fn repository(repo: &Repository) -> Self {
+        Self {
+            relaunch: vec!["chat".into(), repo.id.clone().into()],
+            label: format!("{} chat", repository::name(repo)),
+            opening: None,
+        }
+    }
+}
+
+/// Chats run with the user's authority, which a workspace process lacks.
+pub(super) fn ensure_unscoped(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot start chats"
     );
-    let repo = chosen(ctx, repository).await?;
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
+    Ok(())
+}
+
+/// The repository's settings, which choose the chat's agent and template.
+pub(super) async fn settings(ctx: &Context, repo: &Repository) -> Result<Effective> {
+    client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
+}
+
+/// Start a chat about `repo` and `topic` with the chosen agent.
+pub(super) async fn begin(
+    ctx: &Context,
+    repo: Repository,
+    settings: Effective,
+    topic: Topic,
+    agent: Option<Agent>,
+    here: bool,
+    args: Vec<OsString>,
+) -> Result<i32> {
     let agent = chat_agent(ctx, &settings, agent)?;
     let launch = agents::ChatLaunch {
         instructions: instructions(&settings, &repo),
+        opening: topic.opening.clone(),
         repository: repo,
         settings,
         args,
@@ -53,13 +99,14 @@ pub(super) async fn start(
         repository: repo,
         settings,
         instructions,
+        opening,
         args,
     } = launch;
-    if !here && start_beside(ctx, &settings, &repo, &agent, &args).await? {
+    if !here && start_beside(ctx, &settings, &repo, &topic, &agent, &args).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent.name(), &repo);
-    let command = command(&settings, &repo, &agent, instructions, args)?;
+    let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(ctx, &repo, &chat, &command)
 }
@@ -100,7 +147,7 @@ pub(super) async fn repositories(ctx: &Context, chats: &[Chat]) -> Result<Vec<Re
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
-async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository> {
+pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository> {
     let repos = client::repositories(&ctx.paths).await?;
     let selector = match repository {
         Some(repository) => ui::repository_selector(repository)?,
@@ -143,44 +190,43 @@ async fn start_beside(
     ctx: &Context,
     settings: &Effective,
     repo: &Repository,
+    topic: &Topic,
     agent: &Agent,
     args: &[OsString],
 ) -> Result<bool> {
-    let mut chat: Vec<OsString> = vec![
-        "chat".into(),
-        "--here".into(),
-        repo.id.clone().into(),
-        "--agent".into(),
-        agent.name().into(),
-    ];
+    let mut chat = topic.relaunch.clone();
+    chat.extend(["--here".into(), "--agent".into(), agent.name().into()]);
     if !args.is_empty() {
         chat.push("--".into());
         chat.extend_from_slice(args);
     }
-    let label = format!("{} chat", repository::name(repo));
-    terminal::start_chat(ctx, settings, repo, agent.name(), &label, &chat).await
+    terminal::start_chat(ctx, settings, repo, agent.name(), &topic.label, &chat).await
 }
 
-/// The agent's configured launcher with the chat instructions and the hooks
-/// that deliver its messages, run at the checkout.
+/// The agent's configured launcher with the chat instructions, its opening
+/// task and the hooks that deliver its messages, run at the checkout.
 fn command(
     settings: &Effective,
     repo: &Repository,
     agent: &Agent,
     instructions: String,
+    opening: Option<String>,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
     let name = agent.name();
     // Instructions that join the prompt start a turn before the user speaks.
-    let instructions = match settings.arguments(name).instructions {
-        Some(_) => instructions,
-        None => templates::chat_first_message(&instructions).unwrap_or_default(),
+    let (instructions, opening) = match settings.arguments(name).instructions {
+        Some(_) => (instructions, opening),
+        None => (
+            templates::chat_first_message(&instructions, opening.as_deref()).unwrap_or_default(),
+            None,
+        ),
     };
     let (args, prompt) = agents::input(
         settings,
         name,
         instructions,
-        None,
+        opening,
         agents::chat_hook_args(name)?,
         args,
     );

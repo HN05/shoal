@@ -184,6 +184,8 @@ pub(in crate::cli) struct ChatLaunch {
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,
+    /// The task the chat starts on before the user speaks, if any.
+    pub opening: Option<String>,
     pub args: Vec<OsString>,
 }
 

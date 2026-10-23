@@ -19916,7 +19916,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(
         calls[1][chat..],
         [
-            "chat", "--here", id, "--agent", "claude", "--", "--model", "fast"
+            "chat", id, "--here", "--agent", "claude", "--", "--model", "fast"
         ]
     );
     let started = journal(&fixture)
@@ -20192,7 +20192,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let chat = worker.iter().position(|arg| arg == "chat").unwrap();
     assert_eq!(
         worker[chat..],
-        ["chat", "--here", id, "--agent", "codex", "--", "--search"]
+        ["chat", id, "--here", "--agent", "codex", "--", "--search"]
     );
 
     // The tab's own call runs the agent in its pane.

@@ -226,15 +226,19 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
         repository,
         settings,
         instructions,
+        opening,
         args,
     } = chat;
     super::ensure_available(&name, settings)?;
     let (prompt, args) = match instruction_args(settings, agent, instructions) {
         Some(instruction_args) => (
-            None,
+            opening.clone(),
             instruction_args.into_iter().chain(args.clone()).collect(),
         ),
-        None => (templates::chat_first_message(instructions), args.clone()),
+        None => (
+            templates::chat_first_message(instructions, opening.as_deref()),
+            args.clone(),
+        ),
     };
     if let Some(trust) = happy.trust_file() {
         trust.trust_checkout(ctx, repository);

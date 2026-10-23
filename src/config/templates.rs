@@ -91,14 +91,17 @@ pub fn is_custom_issue_template(template: &str) -> bool {
 }
 
 /// Chat `instructions` sent as an agent's first message, which starts a turn
-/// before the user speaks, so it asks the agent to wait for them.
-pub fn chat_first_message(instructions: &str) -> Option<String> {
+/// before the user speaks: followed by the chat's `opening` task when it has
+/// one, otherwise by a request to wait for the user.
+pub fn chat_first_message(instructions: &str, opening: Option<&str>) -> Option<String> {
     let instructions = instructions.trim_end();
-    (!instructions.is_empty()).then(|| {
-        format!(
-            "{instructions}\n\nReply only that you are ready, then wait for the user's first message."
-        )
-    })
+    let next =
+        opening.unwrap_or("Reply only that you are ready, then wait for the user's first message.");
+    match (instructions.is_empty(), opening) {
+        (true, None) => None,
+        (true, Some(opening)) => Some(opening.to_owned()),
+        (false, _) => Some(format!("{instructions}\n\n{next}")),
+    }
 }
 
 /// How a launched agent receives its issue and PR activity, which
