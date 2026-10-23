@@ -254,9 +254,10 @@ impl Fixture {
             install_test_script(tools.join("zmx"), PASSTHROUGH_ZMX);
         }
         format!(
-            "{}:{}:/usr/bin:/bin",
+            "{}:{}:{}",
             self.root.path().join("bin").display(),
-            tools.display()
+            tools.display(),
+            self.system_path()
         )
     }
 
@@ -268,9 +269,65 @@ impl Fixture {
             fs::create_dir(&tools).unwrap();
             link_runner_program(&tools, "wt");
         }
-        format!("{}:{}:/usr/bin:/bin", bin.display(), tools.display())
+        format!(
+            "{}:{}:{}",
+            bin.display(),
+            tools.display(),
+            self.system_path()
+        )
+    }
+
+    /// `/usr/bin` and `/bin` without the programs fixtures stand in for.
+    /// Distributions package some of them there, as Fedora does fzf, so a
+    /// directory holding one is replaced by links to the rest of its programs.
+    fn system_path(&self) -> String {
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        let mut seen = Vec::new();
+        for dir in ["/usr/bin", "/bin"] {
+            let dir = Path::new(dir);
+            // Merged-/usr systems link /bin to /usr/bin.
+            let canonical = fs::canonicalize(dir).unwrap();
+            if seen.contains(&canonical) {
+                continue;
+            }
+            seen.push(canonical);
+            if !FIXTURE_PROGRAMS
+                .iter()
+                .any(|program| dir.join(program).exists())
+            {
+                dirs.push(dir.to_owned());
+                continue;
+            }
+            let mirror = self
+                .root
+                .path()
+                .join("system")
+                .join(dir.strip_prefix("/").unwrap());
+            if !mirror.exists() {
+                link_programs_except_fixture_ones(dir, &mirror);
+            }
+            dirs.push(mirror);
+        }
+        std::env::join_paths(dirs).unwrap().into_string().unwrap()
     }
 }
+
+/// Fill `mirror` with links to the programs in `dir` except `FIXTURE_PROGRAMS`.
+fn link_programs_except_fixture_ones(dir: &Path, mirror: &Path) {
+    fs::create_dir_all(mirror).unwrap();
+    for entry in fs::read_dir(dir).unwrap() {
+        let name = entry.unwrap().file_name();
+        if !FIXTURE_PROGRAMS.iter().any(|program| name == *program) {
+            std::os::unix::fs::symlink(dir.join(&name), mirror.join(&name)).unwrap();
+        }
+    }
+}
+
+/// Programs tests install fakes for or expect to be missing: the picker, agents,
+/// Happy and zmx. The runner's own must not answer in their place.
+const FIXTURE_PROGRAMS: &[&str] = &[
+    "fzf", "claude", "codex", "opencode", "pi", "grok", "happy", "zmx",
+];
 
 /// Link the runner's `program` into `tools`.
 fn link_runner_program(tools: &Path, program: &str) {
@@ -3492,7 +3549,10 @@ fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
             "--agent",
             "droid",
         ])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), fixture.system_path()),
+        )
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -8930,7 +8990,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
     let output = fixture
         .command()
         .args(["codex", "desktop"])
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", fixture.system_path())
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -13198,8 +13258,9 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             .env(
                 "PATH",
                 format!(
-                    "{}:/usr/bin:/bin",
-                    fixture.root.path().join("bin").display()
+                    "{}:{}",
+                    fixture.root.path().join("bin").display(),
+                    fixture.system_path()
                 ),
             )
             .output()
