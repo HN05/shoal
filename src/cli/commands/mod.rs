@@ -547,7 +547,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             confirmation,
             ..
         }) => transfer::export(&ctx, workspace, output, confirmation.yes).await,
-        Command::Import { file, repository } => transfer::import(&ctx, file, repository).await,
+        Command::Import { files, repository } => transfer::import(&ctx, files, repository).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => {
             agents::run_named(&ctx, "claude", workspace, args).await

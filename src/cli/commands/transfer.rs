@@ -20,6 +20,8 @@ use crate::{
     transfer::{ExportedWorkspace, Import},
 };
 
+use super::restore::Reopened;
+
 /// The file name that reads or writes the standard streams.
 const STANDARD_STREAM: &str = "-";
 
@@ -61,18 +63,37 @@ fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// `shoal import`: open the workspace exported to `file` in the repository
-/// with its origin, or in `repository`.
+/// `shoal import`: open the workspaces exported to `files`, or to the
+/// `.shoal` files in the directories among them, in the repository with each
+/// one's origin, or in `repository`. A directory or several files import
+/// each workspace and report every result.
 pub(super) async fn import(
     ctx: &Context,
-    file: PathBuf,
+    files: Vec<PathBuf>,
     repository: Option<String>,
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot import workspaces; ask the user to run shoal import"
     );
-    let import = read_import(&file)?;
+    if let [file] = files.as_slice()
+        && !file.is_dir()
+    {
+        let restored = import_workspace(ctx, file, repository).await?;
+        return super::restore::finish_reopen(ctx, restored, "Imported").await;
+    }
+    let files = import_files(files)?;
+    import_each(ctx, &files, repository).await.report(ctx)
+}
+
+/// Record the workspace exported to `file` as removed in its repository, or
+/// in `repository`, and open it again there.
+async fn import_workspace(
+    ctx: &Context,
+    file: &Path,
+    repository: Option<String>,
+) -> Result<RestoredWorkspace> {
+    let import = read_import(file)?;
     let repository = repository
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
@@ -85,14 +106,113 @@ pub(super) async fn import(
         prerequisite: import.manifest.prerequisite.clone(),
         workspace: Box::new(import.manifest.workspace.clone()),
     };
-    let restored = ctx
-        .progress(
-            "Importing workspace",
-            request::<RestoredWorkspace>(&ctx.paths, method),
-        )
-        .await?;
-    drop(import);
-    super::restore::finish_reopen(ctx, restored, "Imported").await
+    ctx.progress(
+        "Importing workspace",
+        request::<RestoredWorkspace>(&ctx.paths, method),
+    )
+    .await
+}
+
+/// The export files `files` names, with each directory among them replaced
+/// by its `.shoal` files in name order.
+fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    let mut found = Vec::new();
+    for file in files {
+        ensure!(
+            file.as_os_str() != STANDARD_STREAM,
+            "standard input holds one export; import - on its own"
+        );
+        if !file.is_dir() {
+            found.push(file);
+            continue;
+        }
+        let mut exports = Vec::new();
+        for entry in std::fs::read_dir(&file).with_context(|| format!("read {}", file.display()))? {
+            let path = entry?.path();
+            if path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "shoal")
+            {
+                exports.push(path);
+            }
+        }
+        ensure!(
+            !exports.is_empty(),
+            "{} holds no .shoal files",
+            file.display()
+        );
+        exports.sort();
+        found.extend(exports);
+    }
+    Ok(found)
+}
+
+/// Import each of `files`, going on after one fails.
+async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String>) -> ImportReport {
+    let mut report = ImportReport::default();
+    for file in files {
+        match import_and_prepare(ctx, file, repository.clone()).await {
+            Ok(reopened) => {
+                if !ctx.json {
+                    println!("{}", reopened.message(ctx, "Imported"));
+                }
+                if let Err(error) =
+                    super::workspaces::run_post_setup(ctx, &reopened.workspace).await
+                {
+                    eprintln!("warning: {error:#}");
+                }
+                report.imported.push(reopened);
+            }
+            Err(error) => {
+                eprintln!("error: cannot import {}: {error:#}", file.display());
+                report
+                    .failed
+                    .push(json!({"file": file, "error": format!("{error:#}")}));
+            }
+        }
+    }
+    report
+}
+
+/// Import the workspace exported to `file` and set it up.
+async fn import_and_prepare(
+    ctx: &Context,
+    file: &Path,
+    repository: Option<String>,
+) -> Result<Reopened> {
+    let restored = import_workspace(ctx, file, repository).await?;
+    super::restore::prepare_reopened(ctx, restored)
+        .await?
+        .context("setup failed and the workspace was deleted")
+}
+
+/// The workspaces an import of several files opened, and the files it could
+/// not import.
+#[derive(Default)]
+struct ImportReport {
+    imported: Vec<Reopened>,
+    failed: Vec<serde_json::Value>,
+}
+
+impl ImportReport {
+    fn report(self, ctx: &Context) -> Result<i32> {
+        let imported = self.imported.len();
+        let message = if self.failed.is_empty() {
+            format!("Imported {imported} workspaces")
+        } else {
+            format!(
+                "Imported {imported} of {} workspaces; {} failed",
+                imported + self.failed.len(),
+                self.failed.len()
+            )
+        };
+        ctx.emit(
+            &message,
+            json!({"imported": self.imported, "failed": self.failed}),
+        )?;
+        Ok(if self.failed.is_empty() { 0 } else { 1 })
+    }
 }
 
 /// Read the export in `file`, or on standard input for `-`.

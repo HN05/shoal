@@ -873,7 +873,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
-fn export_all_checks_every_workspace_before_removing_any() {
+fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let fixture = Fixture::new();
     let paths: Vec<_> = ["first", "second"]
         .into_iter()
@@ -928,6 +928,43 @@ fn export_all_checks_every_workspace_before_removing_any() {
     assert_eq!(exported["failed"], serde_json::json!([]));
     assert!(paths.iter().all(|path| !path.exists()));
     assert!(directory.join("first.shoal").exists() && directory.join("second.shoal").exists());
+
+    // A file that is no export fails alone; the others import.
+    fs::write(directory.join("broken.shoal"), "not an export\n").unwrap();
+    let imported = fixture
+        .command()
+        .args([
+            "--json",
+            "import",
+            directory.to_str().unwrap(),
+            "--repo",
+            repo,
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(imported.status.code(), Some(1), "{imported:?}");
+    let imported: Value = serde_json::from_slice(&imported.stdout).unwrap();
+    let names: Vec<_> = imported["imported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|import| import["workspace"]["name"].clone())
+        .collect();
+    assert_eq!(names, ["first", "second"]);
+    let failed = imported["failed"].as_array().unwrap();
+    assert_eq!(failed.len(), 1, "{imported}");
+    assert!(
+        failed[0]["file"]
+            .as_str()
+            .unwrap()
+            .ends_with("broken.shoal")
+    );
+    for (path, name) in paths.iter().zip(["first", "second"]) {
+        assert_eq!(
+            fs::read_to_string(path.join("notes")).unwrap(),
+            format!("{name}\n")
+        );
+    }
 }
 
 #[test]

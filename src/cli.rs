@@ -723,13 +723,15 @@ pub enum Command {
     /// workspace of the repository goes to its own file in the directory -o names, once each
     /// one can be exported.
     Export(ExportArgs),
-    /// Open a workspace shoal export wrote, in the repository with the same origin.
+    /// Open workspaces shoal export wrote, in the repository with the same origin.
     ///
-    /// Fetches the default branch when the file builds on commits the repository lacks. Stopped
+    /// Fetches the default branch when a file builds on commits the repository lacks. Stopped
     /// agents start new sessions with shoal resume, since their sessions stayed on the other
-    /// machine. `-` reads from standard input.
+    /// machine. `-` reads from standard input. A directory imports each .shoal file in it.
     Import {
-        file: PathBuf,
+        /// Export files or directories of them.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
         /// Repository to import into, when it does not share the exported repository's origin.
         #[arg(long = "repo")]
         repository: Option<String>,

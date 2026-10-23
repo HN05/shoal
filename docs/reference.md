@@ -1676,6 +1676,7 @@ shoal export topic -o topic.shoal         # remove topic and write it to a file
 shoal import topic.shoal                  # open it in the repository with the same origin
 shoal export topic -o - | ssh other shoal import -
 shoal export --repo app --all -o moving   # remove every workspace of app, a file each
+shoal import moving                       # open every workspace exported to moving
 ```
 
 `shoal export [workspace] -o <file>` removes the workspace as `shoal rm` does and
@@ -1702,7 +1703,9 @@ exits 1 naming each failed workspace.
 
 `shoal import <file>` reads an export, or standard input for `-`, and opens it in
 the registered repository with the exported repository's origin, or the one
-`--repo` names. It fetches the default branch when the repository lacks the
+`--repo` names. Given several files, or a directory, whose `.shoal` files it
+reads in name order, it imports each one, going on after a failure, lists every
+workspace it opened and exits 1 naming each file it could not import. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal restore` does; when that restore fails,
 `shoal restore <workspace>` retries it. Agent sessions stay on the exporting
