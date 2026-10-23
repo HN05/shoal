@@ -218,8 +218,10 @@ async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
     request(&ctx.paths, Method::ChatUpdates { chat }).await
 }
 
-/// The chat's next messages, waiting again when the daemon restarts.
+/// The chat's next messages, waiting again when the daemon restarts and
+/// continuing in the installed release when an upgrade changes its protocol.
 async fn wait_for_chat(ctx: &Context, chat: &str) -> Result<Updates> {
+    let executable = crate::cli::installed::Executable::current();
     loop {
         let method = Method::WaitChatMessages {
             chat: chat.to_owned(),
@@ -229,7 +231,9 @@ async fn wait_for_chat(ctx: &Context, chat: &str) -> Result<Updates> {
             Err(error) if client::stream_closed(&error) => {
                 tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                return Err(executable.resume_or(error, crate::cli::installed::arguments));
+            }
         }
     }
 }
