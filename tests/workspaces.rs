@@ -20412,3 +20412,49 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         .collect();
     assert_eq!(created, ["before", "after"]);
 }
+
+#[test]
+fn json_split_prints_only_the_child_on_stdout_while_refreshing_and_setting_up() {
+    let fixture = Fixture::with_config(Some("copy_ignored = true\n"));
+    fixture.add("parent");
+    fs::create_dir_all(fixture.repo.join("ignored")).unwrap();
+    fs::write(fixture.repo.join("ignored/file"), "copied\n").unwrap();
+    fs::write(fixture.repo.join(".worktreeinclude"), "ignored/\n").unwrap();
+    for script in ["setup", "post-setup"] {
+        install_test_script(
+            fixture.repo.join(format!("{script}.sh")),
+            format!("#!/bin/sh\necho {script} output\n"),
+        );
+    }
+    commit_resource_config(
+        &fixture.repo,
+        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n",
+    );
+    // The child's creation fast-forwards main to the remote's newer commit.
+    upstream_remote(&fixture);
+    // An agent splits from inside its own workspace.
+    let output = fixture
+        .command()
+        .args(["exec", "parent", "--"])
+        .args([env!("CARGO_BIN_EXE_shoal"), "--json", "split", "child"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let mut values = serde_json::Deserializer::from_slice(&output.stdout).into_iter::<Value>();
+    let child = values.next().unwrap().unwrap();
+    assert!(values.next().is_none(), "{output:?}");
+    assert_eq!(child["state"], "ready");
+    let path = Path::new(child["path"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(path.join("upstream")).unwrap(),
+        "from remote\n"
+    );
+    assert_eq!(
+        fs::read_to_string(path.join("ignored/file")).unwrap(),
+        "copied\n"
+    );
+    for script in ["setup", "post-setup"] {
+        assert!(stderr.contains(&format!("{script} output")), "{stderr}");
+    }
+}
