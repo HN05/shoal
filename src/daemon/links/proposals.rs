@@ -526,6 +526,8 @@ impl Manager {
             let (number, follow_up) = forge.post_pull(&account, &proposed.pull).await?;
             let url = forge.item_url(ItemKind::Pr, number)?;
             self.keep_posted(request, &url, follow_up).await?;
+        } else {
+            ensure_pull_head(&forge, &account, request, workspace).await?;
         }
         let item = self
             .finish_proposed(request, &forge, &account, ItemKind::Pr)
@@ -706,6 +708,30 @@ impl Manager {
         let account = self.agent_account_from(&config, &settings)?;
         Ok((ForgeRepo::parse(&remote)?, account))
     }
+}
+
+/// Refuse to finish a PR an earlier approval posted once the workspace's
+/// branch is no longer its head, as after a rename: linking requires it.
+async fn ensure_pull_head(
+    forge: &ForgeRepo,
+    account: &Account,
+    request: &ApprovalRequest,
+    workspace: &Workspace,
+) -> Result<()> {
+    let url = request
+        .url
+        .as_deref()
+        .context("the proposal has no opened PR")?;
+    let (number, _) = forge.pull(url)?;
+    let item = forge.read(account, ItemKind::Pr, number).await?.item;
+    ensure!(
+        item.pr
+            .as_ref()
+            .is_some_and(|pr| pr.head == workspace.branch),
+        "{url} does not have the workspace branch {} as its head",
+        workspace.branch
+    );
+    Ok(())
 }
 
 /// Whether the workspace still has the proposed branch at the proposed

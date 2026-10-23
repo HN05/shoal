@@ -2278,6 +2278,20 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
 
     responses["PUT repos/team/project/issues/9/labels"] = json!({"body": []});
     fixture.respond(responses);
+
+    // A workspace renamed meanwhile does not get the old branch's PR linked.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let rename = |from: &str, to: &str| {
+        let renamed = fixture.run(&["exec", from, "--", shoal, "--json", "rename", to]);
+        assert!(renamed.status.success(), "{renamed:?}");
+    };
+    rename("topic", "renamed");
+    let refused = fixture.run(&["approve", &id]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("does not have the workspace branch"),
+        "{refused:?}"
+    );
+    rename("renamed", "topic");
     assert_eq!(fixture.ok(&["approve", &id])["url"], url);
     assert_eq!(
         writes(&fixture),
