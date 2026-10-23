@@ -764,12 +764,13 @@ and leaves it there for you to send from the app.
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
-`default_agent`, else a picker of the installed ones; it must take instructions
-apart from its first message (an `instructions` template, built in for Claude
-Code and Codex CLI). The agent's configured launcher runs in the registered
-checkout with the rendered [chat template](#prompt-templates) as those
-instructions, so it waits for your
-first message. The template substitutes `{repo}` and `{path}`; in the launcher,
+`default_agent`, else a picker of the installed ones. The agent's configured
+launcher runs in the registered checkout with the rendered [chat
+template](#prompt-templates) as its instructions. An agent with an
+`instructions` template (built in for Claude Code and Codex CLI) takes them
+apart from its first message and waits for yours; another receives them as its
+first message, through `{prompt}` or as its first argument, ending with a
+request to reply only that it is ready and wait for you. The template substitutes `{repo}` and `{path}`; in the launcher,
 `{path}` is the checkout, and a launcher using a placeholder only a workspace has a value for is refused. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 

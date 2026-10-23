@@ -20173,6 +20173,38 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
 }
 
 #[test]
+fn chat_agents_without_an_instructions_template_get_them_as_their_first_message() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    let chat = |agent: &str| {
+        install_recording_agent(&fixture, agent);
+        let (output, transcript) = fixture.interactive_command(
+            fixture
+                .command()
+                .args(["chat", repo, "--agent", agent, "--here", "--", "--fast"]),
+            "",
+        );
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        chat_args(&fixture)
+    };
+    // The message leads the arguments, and asks the agent to wait for the user.
+    let args = chat("pi");
+    assert_eq!(args.len(), 2, "{args:?}");
+    assert!(args[0].contains(checkout.to_str().unwrap()), "{}", args[0]);
+    assert!(
+        args[0].ends_with(
+            "\n\nReply only that you are ready, then wait for the user's first message."
+        ),
+        "{}",
+        args[0]
+    );
+    assert_eq!(args[1], "--fast");
+    // A launcher with `{prompt}` takes it there.
+    assert_eq!(chat("opencode"), ["--prompt", &args[0], "--fast"]);
+}
+
+#[test]
 fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let fixture = Fixture::with_config(Some("default_agent = \"happy-claude\"\n"));
     install_fake_agents(&fixture, &["claude", "happy"]);

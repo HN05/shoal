@@ -61,18 +61,14 @@ async fn command(
         workspace,
         integration.delivery(ctx, settings),
     );
-    let (instruction_args, prompt) =
-        separate_instructions(settings, name, instructions, prompt.clone());
-    let mut args = args.clone();
-    let argv = &settings.commands[name];
-    if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
-        args.insert(0, prompt.clone().into());
-    }
-    let args = instruction_args
-        .into_iter()
-        .chain(integration.hook_args()?)
-        .chain(args)
-        .collect();
+    let (args, prompt) = input(
+        settings,
+        name,
+        instructions,
+        prompt.clone(),
+        integration.hook_args()?,
+        args.clone(),
+    );
     configured::expand_with_fields(
         &ctx.paths,
         &settings.commands,
@@ -82,6 +78,33 @@ async fn command(
         &[("{prompt}", OsStr::new(&prompt))],
     )
     .await
+}
+
+/// What agent `name`'s configured command receives: the arguments carrying
+/// `instructions`, then `hooks` and `args`, and the value of `{prompt}`. The
+/// prompt leads `args` when the command has no `{prompt}`.
+pub(in crate::cli) fn input(
+    settings: &Effective,
+    name: &str,
+    instructions: String,
+    prompt: Option<String>,
+    hooks: Vec<OsString>,
+    mut args: Vec<OsString>,
+) -> (Vec<OsString>, String) {
+    let (instruction_args, prompt) = separate_instructions(settings, name, instructions, prompt);
+    let takes_prompt = settings
+        .commands
+        .get(name)
+        .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
+    if !prompt.is_empty() && !takes_prompt {
+        args.insert(0, prompt.clone().into());
+    }
+    let args = instruction_args
+        .into_iter()
+        .chain(hooks)
+        .chain(args)
+        .collect();
+    (args, prompt)
 }
 
 /// The arguments carrying `instructions` and the prompt left to send: an

@@ -42,6 +42,11 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
+    /// A Happy session starts detached, not in place of Shoal.
+    fn chats(&self) -> bool {
+        false
+    }
+
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {
         (!settings.happy.enabled).then_some(
             "Happy sessions are off; set happy.enabled = true in the repository or global config",

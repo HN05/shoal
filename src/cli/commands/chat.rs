@@ -99,13 +99,10 @@ async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository>
 /// `--agent`, else `default_agent` when it can chat, else a picker of the
 /// installed agents that can.
 fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
-    let chats = |agent: &Agent| can_chat(settings, agent.name());
+    let chats = |agent: &Agent| agents::chats(agent.name());
     let chosen = match agent {
         Some(agent) => {
-            ensure!(
-                chats(&agent),
-                "{agent} cannot chat; chat runs agents with an [ai.<name>] instructions template"
-            );
+            ensure!(chats(&agent), "{agent} cannot chat");
             Some(agent)
         }
         None => settings.default_agent.clone().filter(chats),
@@ -119,17 +116,11 @@ fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Resu
     }
 }
 
-/// Chats wait for the user to speak first, so the agent must take its
-/// instructions apart from the first message.
-fn can_chat(settings: &Effective, name: &str) -> bool {
-    settings.arguments(name).instructions.is_some()
-}
-
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let names: Vec<_> = agents::names(settings)
         .into_iter()
-        .filter(|name| can_chat(settings, name))
+        .filter(|name| agents::chats(name))
         .filter(|name| agents::installed(name, &settings.commands, &search_path))
         .collect();
     ensure!(!names.is_empty(), "no installed agent can chat");
@@ -173,34 +164,45 @@ fn command(
     agent: &Agent,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    let args = settings
-        .arguments(agent.name())
-        .instruction_args(&instructions(settings, repo))
-        .unwrap_or_default()
-        .into_iter()
-        .chain(agents::chat_hook_args(agent.name())?)
-        .chain(args)
-        .collect();
+    let name = agent.name();
+    let (args, prompt) = agents::input(
+        settings,
+        name,
+        instructions(settings, repo, name),
+        None,
+        agents::chat_hook_args(name)?,
+        args,
+    );
     configured::expand_outside_workspace(
         &settings.commands,
-        agent.name(),
+        name,
         &[
             ("{path}", repo.path.as_os_str()),
-            ("{prompt}", OsStr::new("")),
+            ("{prompt}", OsStr::new(&prompt)),
         ],
         args,
     )
 }
 
-/// The resolved chat template with the repository's name and checkout.
-fn instructions(settings: &Effective, repo: &Repository) -> String {
-    templates::render(
+/// Sent after instructions that reach an agent as its first message, which
+/// starts a turn before the user speaks.
+const WAIT_FOR_USER: &str =
+    "Reply only that you are ready, then wait for the user's first message.";
+
+/// The resolved chat template with the repository's name and checkout; an
+/// agent that takes them as its first message is asked to wait for the user.
+fn instructions(settings: &Effective, repo: &Repository, name: &str) -> String {
+    let instructions = templates::render(
         settings.chat_template.as_deref().unwrap_or_default(),
         &[
             ("{repo}", repository::name(repo)),
             ("{path}", &repo.path.to_string_lossy()),
         ],
-    )
+    );
+    if instructions.is_empty() || settings.arguments(name).instructions.is_some() {
+        return instructions;
+    }
+    format!("{}\n\n{WAIT_FOR_USER}", instructions.trim_end())
 }
 
 /// Replace this process with the agent, so the terminal's signals reach it

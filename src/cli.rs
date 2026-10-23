@@ -805,7 +805,7 @@ pub enum Command {
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Agent to start, one with an instructions template such as claude or codex; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to default_agent, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.

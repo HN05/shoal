@@ -40,6 +40,7 @@ pub(super) use codex::shortcut as codex;
 pub(super) use desktop::shortcut as open_app;
 #[cfg(feature = "happy")]
 pub(super) use happy::shortcut as happy;
+pub(in crate::cli) use launch::input;
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -80,6 +81,12 @@ pub(in crate::cli) trait Integration: Sync {
     /// turned off in config; pickers and completion leave it out.
     fn unavailable(&self, _settings: &Effective) -> Option<&'static str> {
         None
+    }
+
+    /// Whether the agent runs chats, which replace Shoal's process with its
+    /// configured command.
+    fn chats(&self) -> bool {
+        true
     }
 
     /// Start the agent its own way; `None` leaves it to the tracked terminal
@@ -382,6 +389,11 @@ pub(crate) fn hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
 /// Arguments that register Shoal's hooks for a chat of agent `name`.
 pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
     integration(name).chat_hook_args()
+}
+
+/// Whether agent `name` runs chats.
+pub(in crate::cli) fn chats(name: &str) -> bool {
+    integration(name).chats()
 }
 
 /// Whether agent `name`'s wrapper wakes it by typing a prompt.

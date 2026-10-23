@@ -1032,8 +1032,11 @@ A chat passes a question up by asking the user, who attends it. Holding no
 grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
 one and focuses it, numbered by the lowest free number among the repository's
-running chats. Only agents that take instructions apart from the first message
-run chats, so the chat waits for the user to speak first.
+running chats. The chat waits for the user to speak first: an agent that takes
+instructions apart from the first message gets them so, and another gets them as
+its first message, which starts a turn and so asks only for a short reply.
+A chat's launcher runs where only the checkout's path has a value, so one that
+uses another workspace placeholder is refused rather than given the literal text.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
