@@ -94,7 +94,8 @@ instead of the PR delivery guidance below.
   returned, and it never records completion. Only unscoped callers, and the
   coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
   messages and queued item activity, replacing a running watch, and a Claude Code
-  hook wakes the idle agent; a workspace's own Shoal comments, thread replies,
+  hook wakes the idle agent; a chat's hooks deliver its own queue of its workers'
+  events, which the user receives as notifications if the chat ends first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's zmx session, once per
   idle stretch; the daemon never writes to a terminal. Workspace events are an unscoped, durable lifecycle

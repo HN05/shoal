@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 116;
+pub const VERSION: u32 = 117;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -579,6 +579,20 @@ pub enum Method {
     AgentUpdates {
         workspace: String,
     },
+    /// The chat's undelivered messages about the workspaces it coordinates,
+    /// without waiting; acknowledge them with
+    /// [`Method::AcknowledgeChatMessages`]. It replaces a running wait.
+    ChatUpdates {
+        chat: String,
+    },
+    /// Long-lived: the chat's next messages, once it has any.
+    WaitChatMessages {
+        chat: String,
+    },
+    AcknowledgeChatMessages {
+        chat: String,
+        ids: Vec<i64>,
+    },
     /// Long-lived: unread notifications after `after`, then new ones as they
     /// are recorded, each as a [`Body::Notification`] response and marked
     /// read on delivery unless `keep_unread`.
@@ -690,6 +704,7 @@ impl Method {
                 | Self::AwaitAgentWake { .. }
                 | Self::AwaitAnswer { .. }
                 | Self::WatchItems { .. }
+                | Self::WaitChatMessages { .. }
         )
     }
 
@@ -704,6 +719,7 @@ impl Method {
                 | Self::AwaitAgentWake { .. }
                 | Self::AwaitAnswer { .. }
                 | Self::WatchItems { .. }
+                | Self::WaitChatMessages { .. }
         )
     }
 }

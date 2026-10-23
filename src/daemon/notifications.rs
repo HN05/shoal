@@ -189,7 +189,7 @@ impl Manager {
         let message = message.into();
         if let (Some(source), Some(name)) = (kind.coordination(), workspace)
             && self
-                .tell_coordinator(name, format!("{name}: {message}"), source)
+                .tell_coordinator(name, Some(kind), message.clone(), source)
                 .await
         {
             return Ok(());

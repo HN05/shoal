@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 56;
+const SCHEMA_VERSION: i64 = 57;
 
 #[cfg(test)]
 mod benchmark;
@@ -387,6 +387,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (54, "ALTER TABLE questions ADD COLUMN closed_at INTEGER;", None),
     (55, include_str!("store/workspace_parent.sql"), None),
     (56, QUEUE_TARGETS, None),
+    (57, include_str!("store/chat_messages.sql"), None),
 ];
 
 /// The existing workspace a queued launch opens, apart from the workspace a
@@ -1026,6 +1027,9 @@ mod tests {
         }
         if version >= 56 {
             db.execute_batch(QUEUE_TARGETS)?;
+        }
+        if version >= 57 {
+            db.execute_batch(include_str!("store/chat_messages.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

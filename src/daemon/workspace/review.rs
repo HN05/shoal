@@ -85,7 +85,8 @@ impl Manager {
         }
         self.tell_coordinator(
             &workspace.name,
-            ready_notice(&workspace, &marks),
+            None,
+            ready_notice(&marks),
             super::Source::Agent,
         )
         .await;
@@ -282,13 +283,13 @@ fn pr_urls(marks: &[ReviewMark]) -> Vec<String> {
 }
 
 /// What the coordinating agent hears when the workspace marks work ready.
-fn ready_notice(workspace: &Workspace, marks: &[ReviewMark]) -> String {
+fn ready_notice(marks: &[ReviewMark]) -> String {
     let items = marks
         .iter()
         .map(|mark| mark.url.as_deref().unwrap_or("the workspace"))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("{}: marked ready for review: {items}", workspace.name)
+    format!("marked ready for review: {items}")
 }
 
 #[cfg(test)]

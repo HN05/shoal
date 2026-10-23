@@ -42,20 +42,20 @@ pub struct Updates {
     pub superseded: bool,
 }
 
-/// The running wait of each workspace, identified by its supersession signal.
-/// Waits share one cursor per item, so a newer wait supersedes the older one
-/// instead of competing for its updates.
+/// The running wait of each workspace or chat, identified by its
+/// supersession signal. Waits share one cursor per item, so a newer wait
+/// supersedes the older one instead of competing for its updates.
 #[derive(Default, Clone)]
 pub(crate) struct ActiveWaits(Arc<Mutex<HashMap<String, Arc<Notify>>>>);
 
-struct ActiveWait<'a> {
+pub(crate) struct ActiveWait<'a> {
     waits: &'a ActiveWaits,
     workspace: String,
-    superseded: Arc<Notify>,
+    pub(crate) superseded: Arc<Notify>,
 }
 
 impl ActiveWaits {
-    fn start(&self, workspace: &str) -> ActiveWait<'_> {
+    pub(crate) fn start(&self, workspace: &str) -> ActiveWait<'_> {
         let superseded = Arc::new(Notify::new());
         let older = self
             .0
@@ -92,6 +92,13 @@ impl ActiveWaits {
     }
 }
 
+#[cfg(test)]
+impl ActiveWaits {
+    pub(crate) fn is_waiting(&self, key: &str) -> bool {
+        self.0.lock().expect("active waits lock").contains_key(key)
+    }
+}
+
 impl ActiveWait<'_> {
     fn is_current_in(&self, waits: &HashMap<String, Arc<Notify>>) -> bool {
         waits
@@ -99,7 +106,7 @@ impl ActiveWait<'_> {
             .is_some_and(|current| Arc::ptr_eq(current, &self.superseded))
     }
 
-    fn is_current(&self) -> bool {
+    pub(crate) fn is_current(&self) -> bool {
         self.is_current_in(&self.waits.0.lock().expect("active waits lock"))
     }
 }
@@ -185,12 +192,7 @@ impl Manager {
         if !wait.is_current() {
             return Ok(Updates::superseded());
         }
-        Ok(Updates {
-            updates: Vec::new(),
-            messages,
-            timed_out: false,
-            superseded: false,
-        })
+        Ok(Updates::messages(messages))
     }
 
     /// What the workspace's agent has not received: its messages and the
@@ -1070,12 +1072,21 @@ pub(crate) fn linked_items(
 }
 
 impl Updates {
-    fn superseded() -> Self {
+    pub(crate) fn superseded() -> Self {
         Self {
             updates: Vec::new(),
             messages: Vec::new(),
             timed_out: false,
             superseded: true,
+        }
+    }
+
+    pub(crate) fn messages(messages: Vec<AgentMessage>) -> Self {
+        Self {
+            updates: Vec::new(),
+            messages,
+            timed_out: false,
+            superseded: false,
         }
     }
 }

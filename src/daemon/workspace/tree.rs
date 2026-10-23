@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
+    daemon::notifications::NotificationKind,
     model::{Workspace, WorkspaceRef},
     state::WorkspaceState,
 };
@@ -50,28 +51,41 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
-    /// Queue `text` about the workspace named `name` for the agent of its
-    /// nearest ancestor that has one, which coordinates its work. Returns
-    /// false when no ancestor has an agent, its messages are full, or the
-    /// event comes from an agent and the workspace has none of its own, since
-    /// the coordinator itself or the user acted there; the user then
-    /// receives the event instead.
-    pub(crate) async fn tell_coordinator(&self, name: &str, text: String, source: Source) -> bool {
+    /// Queue `message` about the workspace named `name` for its coordinator:
+    /// the agent of its nearest ancestor that has one, or the running chat
+    /// that owns it or a nearer ancestor. `kind` is the notification the
+    /// event would be for the user. Returns false when there is no
+    /// coordinator, its messages are full, or the event comes from an agent
+    /// and the workspace has none of its own, since the coordinator itself
+    /// or the user acted there; the user then receives the event instead.
+    pub(crate) async fn tell_coordinator(
+        &self,
+        name: &str,
+        kind: Option<NotificationKind>,
+        message: String,
+        source: Source,
+    ) -> bool {
         let lookup = name.to_owned();
         let agents = self.tracked_agents().await;
         let found = self
             .store
             .run(move |db| coordinator(db, &lookup, source, &agents))
             .await;
-        let coordinator = match found {
-            Ok(Some(coordinator)) => coordinator,
+        let queued = match found {
+            Ok(Some(Coordinator::Agent(workspace))) => {
+                self.queue_agent_message(&workspace, format!("{name}: {message}"))
+                    .await
+            }
+            Ok(Some(Coordinator::Chat(chat))) => {
+                self.queue_chat_message(&chat, name, kind, message).await
+            }
             Ok(None) => return false,
             Err(error) => {
                 crate::daemon::log!("coordinator of {name}: {error:#}");
                 return false;
             }
         };
-        match self.queue_agent_message(&coordinator, text).await {
+        match queued {
             Ok(()) => true,
             Err(error) => {
                 crate::daemon::log!("message for the coordinator of {name}: {error:#}");
@@ -279,14 +293,25 @@ pub(crate) fn ancestors_with_agents(
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The nearest ancestor with an agent of the workspace named `name`, for an
-/// event from `source`.
+/// Who coordinates a workspace's work.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Coordinator {
+    /// The workspace whose agent does.
+    Agent(String),
+    /// The running chat that does.
+    Chat(String),
+}
+
+/// The coordinator of the workspace named `name` for an event from `source`:
+/// going up from the workspace, the first ancestor with an agent or the
+/// first running chat that owns a workspace on the way, whichever comes
+/// first. A chat's end clears its ownership, so an owning chat is running.
 fn coordinator(
     db: &Connection,
     name: &str,
     source: Source,
     agents: &TrackedAgents,
-) -> Result<Option<String>> {
+) -> Result<Option<Coordinator>> {
     if source == Source::Agent
         && !crate::daemon::store::exists(
             db,
@@ -299,22 +324,25 @@ fn coordinator(
     {
         return Ok(None);
     }
-    Ok(db
-        .query_row(
-            &format!(
-                "WITH RECURSIVE up(id, depth) AS (
-                    SELECT parent_workspace_id, 1 FROM workspaces
-                        WHERE name=?1 AND parent_workspace_id IS NOT NULL
-                    UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
-                        JOIN workspaces ON workspaces.id=up.id
-                        WHERE workspaces.parent_workspace_id IS NOT NULL
-                ) SELECT id FROM up WHERE {} ORDER BY depth LIMIT 1",
-                has_agent("up.id")
-            ),
-            params![name, agents.parameter()],
-            |row| row.get(0),
-        )
-        .optional()?)
+    let path = db
+        .prepare(&format!(
+            "WITH RECURSIVE up(id, depth) AS (
+                SELECT id, 0 FROM workspaces WHERE name=?1
+                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
+                    JOIN workspaces ON workspaces.id=up.id
+                    WHERE workspaces.parent_workspace_id IS NOT NULL
+            ) SELECT up.id, up.depth > 0 AND {}, workspaces.chat_id FROM up
+                JOIN workspaces ON workspaces.id=up.id ORDER BY up.depth",
+            has_agent("up.id")
+        ))?
+        .query_map(params![name, agents.parameter()], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(String, bool, Option<String>)>>>()?;
+    Ok(path.into_iter().find_map(|(id, agent, chat)| match agent {
+        true => Some(Coordinator::Agent(id)),
+        false => chat.map(Coordinator::Chat),
+    }))
 }
 
 /// Fill in the workspace's parent and its children.

@@ -8,7 +8,7 @@ use rusqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{chat_messages, log, workspace::Manager},
     model::Chat,
     process::identity::{self, Identity},
 };
@@ -50,13 +50,16 @@ impl Manager {
     }
 
     /// Delete chats whose process has exited, which returns their workspaces
-    /// to the user.
+    /// to the user along with the messages the chats had not received.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(recorded_processes).await?);
         if ended.is_empty() {
             return Ok(());
         }
-        self.store.run(move |db| delete(db, &ended)).await
+        if let Some(id) = self.store.run(move |db| delete(db, &ended)).await? {
+            self.notifications_changed.send_replace(id);
+        }
+        Ok(())
     }
 
     /// Give `workspace` to the running chat that opened it, or to the user
@@ -164,13 +167,17 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<String> {
         .collect()
 }
 
-fn delete(db: &mut Connection, ids: &[String]) -> Result<()> {
+/// Delete the chats, giving the user their unread messages; returns the last
+/// notification recorded.
+fn delete(db: &mut Connection, ids: &[String]) -> Result<Option<i64>> {
     let tx = db.transaction()?;
+    let mut last = None;
     for id in ids {
+        last = chat_messages::hand_to_user(&tx, id)?.or(last);
         tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
     }
     tx.commit()?;
-    Ok(())
+    Ok(last)
 }
 
 /// An unknown chat leaves the workspace to the user.

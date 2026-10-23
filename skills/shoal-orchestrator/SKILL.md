@@ -86,6 +86,12 @@ Agents ask with `shoal ask`; each question names the decision, the agent's
 recommendation and any choices. Relay them to the user and answer as the user
 decides; the answer reaches the agent as a message.
 
+In a `shoal chat`, the agents of the workspaces you open report to you instead
+of the user: their messages, questions, completion, ready marks and exits
+arrive as Shoal messages naming the workspace. Answer what you can decide with
+`shoal answer`, write to an agent with `shoal message --workspace <name>`, and
+ask the user about the rest.
+
 ## Finish and clean up
 
 Agents run `shoal done` themselves when their assignment is finished. For a

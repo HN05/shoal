@@ -6,6 +6,7 @@ pub mod allocation;
 pub mod approvals;
 mod auto_update;
 pub(crate) mod caches;
+pub mod chat_messages;
 mod chats;
 pub mod cleanup;
 mod connections;
@@ -343,6 +344,12 @@ async fn serve(
             drop(operation_guard);
             return await_answer(stream, request.id, server.manager, workspace, id, ask).await;
         }
+        Method::WaitChatMessages { chat } => {
+            drop(operation_guard);
+            let manager = server.manager.clone();
+            let wait = async move { Ok(Body::PrUpdates(manager.wait_chat_messages(&chat).await?)) };
+            return answer_wait(stream, request.id, &server.manager, wait).await;
+        }
         Method::AwaitAgentWake { workspace, due } => {
             drop(operation_guard);
             return await_agent_wake(stream, request.id, server.manager, workspace, due).await;
@@ -400,7 +407,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::PrWait { .. }
         | Method::AwaitAgentWake { .. }
         | Method::AwaitAnswer { .. }
-        | Method::WatchItems { .. } => {
+        | Method::WatchItems { .. }
+        | Method::WaitChatMessages { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -827,6 +835,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::AgentUpdates { workspace } => {
             Body::PrUpdates(manager.agent_updates(&workspace).await?)
+        }
+        Method::ChatUpdates { chat } => Body::PrUpdates(manager.chat_updates(&chat).await?),
+        Method::AcknowledgeChatMessages { chat, ids } => {
+            manager.mark_chat_messages_delivered(&chat, ids).await?;
+            Body::Ok
         }
         Method::MarkAgentMessagesDelivered { workspace, ids } => {
             manager

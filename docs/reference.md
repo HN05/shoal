@@ -716,7 +716,9 @@ workspaces it opened, and [workspace events](#workspace-events) report its
 start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
 field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
-chat, which returns it to you.
+chat, which returns it to you. While it runs, the chat
+[coordinates](#child-workspaces) the workspaces it owns; one that ends before
+receiving their events gives you the notifications they stand for.
 
 ### Agent queue
 
@@ -1063,16 +1065,18 @@ reopens only the child, failing if it was removed meanwhile. `--json` adds the
 queue entry as `agent`.
 Workspace processes may queue agents only in the workspaces below their own.
 
-The agent of the nearest ancestor that has one coordinates a child's work: it
-receives, as agent messages naming the child, what would otherwise notify the
-user. That covers the child agent's messages from `shoal notify`, its questions,
-its completion, and its ready-for-review marks, which never notify the user
-otherwise. It also covers the daemon's reports that the child's agent exited or
-was stopped. Without such an ancestor, or when its unread messages are full,
-the user receives them as before. A child without an agent of its own is its
-coordinator's own work, so what a process does there reaches the user. The
-coordinating agent answers a question asked below it with
-`shoal answer <number> <answer>`, or passes it up with its own `shoal ask`.
+A workspace's coordinator is the agent of its nearest ancestor that has one,
+or the running [chat](#chats) that owns the workspace or an ancestor nearer than
+that agent. The coordinator receives, as messages naming the workspace, what
+would otherwise notify the user. That covers the workspace agent's messages from
+`shoal notify`, its questions, its completion, and its ready-for-review marks,
+which never notify the user otherwise. It also covers the daemon's reports that
+the workspace's agent exited or was stopped. Without a coordinator, or when its unread messages are full,
+the user receives them as before. A workspace without an agent of its own is its
+coordinator's own work, so what a process does there reaches the user. A
+coordinator answers a question asked below it with
+`shoal answer <number> <answer>`, or passes it up: an agent with its own
+`shoal ask`, a chat by asking the user in the chat.
 
 ### Repositories
 
@@ -2202,7 +2206,7 @@ whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output c
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
 An identical message that is still unread is not queued again, and a workspace
-holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
+or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.
 
 ### Questions

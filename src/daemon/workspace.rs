@@ -101,6 +101,7 @@ pub struct Manager {
     pub(super) background_operations: Arc<RwLock<()>>,
     pub(crate) pr_gate: Mutex<()>,
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
+    pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
     pub cleanup_notify: tokio::sync::Notify,
     pub(super) cleanup_health: std::sync::Mutex<super::cleanup::Health>,
     /// The global file as last loaded; a reload replaces it for later reads
@@ -150,6 +151,8 @@ pub struct Manager {
     pub(crate) notifications_changed: watch::Sender<i64>,
     /// Counts queued agent messages; wakes watches waiting for them.
     pub(crate) agent_messages_changed: watch::Sender<u64>,
+    /// Counts queued chat messages; wakes chats waiting for them.
+    pub(crate) chat_messages_changed: watch::Sender<u64>,
     /// Counts answered and closed questions; wakes waits for an answer.
     pub(crate) questions_changed: watch::Sender<u64>,
     /// Counts background polls that queued item updates; wakes watches.
@@ -186,6 +189,7 @@ impl Manager {
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
             item_waits: Default::default(),
+            chat_waits: Default::default(),
             cleanup_notify: tokio::sync::Notify::new(),
             cleanup_health: Default::default(),
             store: Store::open(paths.database()).await?,
@@ -210,6 +214,7 @@ impl Manager {
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
             agent_messages_changed: watch::channel(0).0,
+            chat_messages_changed: watch::channel(0).0,
             questions_changed: watch::channel(0).0,
             item_updates_queued: watch::channel(0).0,
             agent_wake_changed: watch::channel(0).0,

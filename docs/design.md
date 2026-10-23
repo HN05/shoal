@@ -320,11 +320,12 @@ to its own parent and journals the change. `ls` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
 own through the agent queue; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
-scoped callers may queue only for the workspaces below theirs. The agent of
-the nearest ancestor that has one coordinates a child's work: the events about
+scoped callers may queue only for the workspaces below theirs. A workspace's
+coordinator is the agent of its nearest ancestor that has one, or the chat that
+owns the workspace or an ancestor nearer than that agent: the events about
 it that notify the user, the child agent's messages, questions and completion
 and its agent's exits and stops, plus its ready marks, become that agent's
-messages instead, falling back to the user without such an ancestor or when its
+messages instead, falling back to the user without a coordinator or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
 questions asked below it or passes them up with its own question. Approval
@@ -903,8 +904,13 @@ process, leaving no wrapper to report its exit, so the record lasts while a
 process with the registered identity lives, checked periodically and before
 chats are listed. Starts and ends are journal events. A workspace belongs to the
 chat that last opened it until that chat ends, and opening it outside a chat
-returns it to the user, so Shoal knows which chat coordinates which workers;
-routing their messages to it is a proposal (#811). A repository may have several chats, so each call starts a new
+returns it to the user, so Shoal knows which chat coordinates which workers.
+Having no workspace, a chat keeps its messages in its own queue, which the same
+hooks deliver; a chat that ends gives the user the notifications its unread
+messages stand for, and its workers return to the user even if it is resumed.
+A chat passes a question up by asking the user, who attends it. Holding no
+grant, it receives no approval requests, though with the user's authority it
+may decide them. A repository may have several chats, so each call starts a new
 one and focuses it, numbered by the lowest free number among the repository's
 running chats. Only Claude and Codex run chats, because they take instructions
 apart from the first message.

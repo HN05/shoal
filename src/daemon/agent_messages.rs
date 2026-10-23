@@ -10,8 +10,8 @@ use crate::daemon::workspace::Manager;
 
 /// Unread messages one workspace may hold, and their total size; together
 /// they fit one response.
-const MAX_UNREAD: i64 = 50;
-const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
+pub(crate) const MAX_UNREAD: i64 = 50;
+pub(crate) const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentMessage {
