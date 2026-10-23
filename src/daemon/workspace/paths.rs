@@ -21,7 +21,7 @@ pub(super) fn contains_protected_directory(path: &Path, paths: &Paths) -> Result
 /// Normalize an absolute path, resolving existing symlinks before `..`.
 /// Missing components are retained and `..` is resolved lexically; dangling
 /// symlinks and filesystem errors other than missing components are rejected.
-pub(super) fn canonical_with_missing_tail(path: &Path) -> Result<PathBuf> {
+pub(crate) fn canonical_with_missing_tail(path: &Path) -> Result<PathBuf> {
     ensure!(path.is_absolute(), "path must be absolute");
     let mut result = PathBuf::new();
     for component in path.components() {

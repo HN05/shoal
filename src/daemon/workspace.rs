@@ -18,7 +18,7 @@ mod land;
 mod lifecycle;
 mod location;
 mod ownership;
-mod paths;
+pub(crate) mod paths;
 mod registry;
 mod rename;
 mod repo_configuration;

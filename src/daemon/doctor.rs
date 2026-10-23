@@ -84,8 +84,10 @@ async fn checkout(repo: &crate::model::Repository) -> Check {
 const ROOT_DIR_CHECK: &str = "root_dir";
 
 /// Whether the daemon can create files in `root_dir`, where new repositories
-/// and their workspaces go.
+/// and their workspaces go, resolved as registration resolves it.
 async fn root_dir(root: Result<PathBuf>) -> Check {
+    let root =
+        root.and_then(|root| crate::daemon::workspace::paths::canonical_with_missing_tail(&root));
     let checked = match root {
         Ok(root) => crate::daemon::access::ensure_writable(&root)
             .await
@@ -230,12 +232,14 @@ mod tests {
         assert_eq!(check.status, CheckStatus::Ok);
         let file = root.path().join("file");
         fs::write(&file, "").unwrap();
+        let check = root_dir(Ok(root.path().join("missing/../file"))).await;
+        assert_eq!(check.status, CheckStatus::Error);
         let check = root_dir(Ok(file.clone())).await;
         assert_eq!(check.status, CheckStatus::Error);
         assert!(
             check.message.starts_with(&format!(
                 "Cannot use root_dir: the Shoal daemon cannot write to {}: ",
-                file.display()
+                fs::canonicalize(&file).unwrap().display()
             )),
             "{}",
             check.message
