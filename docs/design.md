@@ -1265,6 +1265,9 @@ branch, so two agents never push it or watch its PRs, and the source's removal
 stays restorable when the transfer fails. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the
 bundle builds on, since that branch only advances. Repositories match by origin.
+Exporting every workspace of a repository checks each one before removing any, so
+one that cannot leave refuses the set while all stay; a failure once removals
+begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations stay behind: they are the agent tools' private, path-keyed
 files, and Shoal does not store conversations, so moved recovery records drop
 their session, place and wrapper, and `shoal resume` starts them through the
