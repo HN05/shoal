@@ -6,9 +6,7 @@ pub(crate) mod forgejo;
 pub(crate) mod github;
 mod github_rest;
 pub(crate) mod gitlab;
-pub(crate) mod glab;
 pub(crate) mod rest;
-pub(crate) mod tea;
 
 use anyhow::Result;
 use serde_json::Value;
@@ -60,7 +58,9 @@ impl ForgeKind {
             "github.com" => Self::GitHub,
             "gitlab.com" => Self::GitLab,
             "bitbucket.org" => Self::Bitbucket,
-            _ if host.split(['.', ':']).any(|label| label == "gitlab") || glab::has_login(host) => {
+            _ if host.split(['.', ':']).any(|label| label == "gitlab")
+                || gitlab::glab::has_login(host) =>
+            {
                 Self::GitLab
             }
             _ => Self::Forgejo,

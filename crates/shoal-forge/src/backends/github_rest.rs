@@ -3,11 +3,12 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
+use super::forgejo::{draft_prefix, draft_title};
 use crate::{
     ForgeRepo,
     items::{
-        action::{Edit, draft_title},
-        item::{Current, Item, ItemState, PrSummary, draft_prefix, text},
+        action::Edit,
+        item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
     },
     transport::api::{HttpMethod, Request},

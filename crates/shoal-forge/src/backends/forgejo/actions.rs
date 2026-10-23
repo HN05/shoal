@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::super::tea;
+use super::tea;
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},

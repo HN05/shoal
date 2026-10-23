@@ -12,7 +12,7 @@ use crate::{
     backends::Backend,
     items::{
         attach::{Attachment, Holder, Pending},
-        item::{Current, Item, ItemState, draft_prefix},
+        item::{Current, Item, ItemState},
         link::ItemKind,
     },
     transport::api::Request,
@@ -358,16 +358,6 @@ fn comment_id(response: &serde_json::Value) -> Result<u64> {
     response["id"]
         .as_u64()
         .context("the forge did not report the comment's ID")
-}
-
-/// The title with Forgejo's draft prefix added or removed.
-pub(crate) fn draft_title(title: &str, draft: bool) -> String {
-    let bare = draft_prefix(title).map_or(title, |len| title[len..].trim_start());
-    if draft {
-        format!("WIP: {bare}")
-    } else {
-        bare.to_owned()
-    }
 }
 
 #[cfg(test)]

@@ -32,6 +32,8 @@ use crate::{
     updates::{DISCUSSION, Snapshot},
 };
 
+pub(crate) mod glab;
+
 use super::{Backend, rest};
 
 #[derive(Clone, Copy)]

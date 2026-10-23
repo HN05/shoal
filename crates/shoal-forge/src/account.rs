@@ -9,7 +9,7 @@ use tokio::sync::OnceCell;
 use crate::{
     backends::{
         bitbucket::Credentials,
-        tea::{self, TeaLogin},
+        forgejo::tea::{self, TeaLogin},
     },
     transport::api::{fj_keys_at, fj_keys_path, fj_token},
 };

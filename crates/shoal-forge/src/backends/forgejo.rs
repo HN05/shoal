@@ -5,13 +5,14 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 mod actions;
+pub(crate) mod tea;
 pub(crate) mod threads;
 mod view;
 
 use super::{
     Backend,
     github_rest::{self, Dialect},
-    image, rest, served_at, tea,
+    image, rest, served_at,
 };
 use crate::{
     ForgeRepo,
@@ -20,7 +21,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     conventions::{Lookup, shared_lookups},
     items::{
-        action::{Edit, MergeMethod, draft_title},
+        action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
@@ -39,6 +40,9 @@ use crate::{
     },
     updates::{DISCUSSION, Snapshot},
 };
+
+/// Forgejo treats a PR whose title starts with one of these as a draft.
+pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
 
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
@@ -544,6 +548,26 @@ fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
         .collect()
 }
 
+/// The length of a Forgejo draft prefix at the start of `title`.
+pub(crate) fn draft_prefix(title: &str) -> Option<usize> {
+    DRAFT_PREFIXES.iter().find_map(|prefix| {
+        title
+            .get(..prefix.len())
+            .filter(|start| start.eq_ignore_ascii_case(prefix))
+            .map(|_| prefix.len())
+    })
+}
+
+/// The title with Forgejo's draft prefix added or removed.
+pub(crate) fn draft_title(title: &str, draft: bool) -> String {
+    let bare = draft_prefix(title).map_or(title, |len| title[len..].trim_start());
+    if draft {
+        format!("WIP: {bare}")
+    } else {
+        bare.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -583,5 +607,13 @@ mod tests {
         let full = serde_json::json!([1, 2]);
         assert!(Forgejo.page(&full, 2).unwrap().1);
         assert!(!Forgejo.page(&full, 3).unwrap().1);
+    }
+
+    #[test]
+    fn draft_prefixes_ignore_case_and_need_the_whole_marker() {
+        assert_eq!(draft_prefix("WIP: x"), Some(4));
+        assert_eq!(draft_prefix("[wip] x"), Some(5));
+        assert_eq!(draft_prefix("Wipe x"), None);
+        assert_eq!(draft_prefix("Ü"), None);
     }
 }

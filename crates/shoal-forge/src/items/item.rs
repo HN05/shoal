@@ -8,9 +8,6 @@ use crate::backends::Backend;
 use crate::state::states;
 use crate::{ForgeRepo, items::link::ItemKind};
 
-/// Forgejo treats a PR whose title starts with one of these as a draft.
-pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
-
 states!(ItemState {
     Open => "open",
     Closed => "closed",
@@ -120,16 +117,6 @@ pub(crate) fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
 
-/// The length of a Forgejo draft prefix at the start of `title`.
-pub(crate) fn draft_prefix(title: &str) -> Option<usize> {
-    DRAFT_PREFIXES.iter().find_map(|prefix| {
-        title
-            .get(..prefix.len())
-            .filter(|start| start.eq_ignore_ascii_case(prefix))
-            .map(|_| prefix.len())
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,13 +190,5 @@ mod tests {
         assert_eq!(issue_read_kind(3, &issue).unwrap(), ItemKind::Issue);
         assert_eq!(issue_read_kind(4, &pull).unwrap(), ItemKind::Pr);
         assert!(issue_read_kind(5, &pull).is_err());
-    }
-
-    #[test]
-    fn draft_prefixes_ignore_case_and_need_the_whole_marker() {
-        assert_eq!(draft_prefix("WIP: x"), Some(4));
-        assert_eq!(draft_prefix("[wip] x"), Some(5));
-        assert_eq!(draft_prefix("Wipe x"), None);
-        assert_eq!(draft_prefix("Ü"), None);
     }
 }
