@@ -16,7 +16,7 @@ use crate::{
     forge::{
         ForgeRepo,
         backends::ForgeKind,
-        hosts::{self, HostTypes},
+        hosts::{self, HostType, HostTypes},
     },
 };
 
@@ -28,8 +28,8 @@ impl HostTypes for ForgeHosts<'_> {
         &self,
         host: &str,
         scheme: &'static str,
-    ) -> impl Future<Output = Result<ForgeKind>> + Send {
-        self.0.forge_type(host, scheme)
+    ) -> impl Future<Output = Result<HostType>> + Send {
+        self.0.host_type(host, scheme)
     }
 }
 
@@ -51,20 +51,21 @@ impl Manager {
         ForgeRepo::resolve_pull_url(url, &self.forge_hosts()).await
     }
 
-    /// The forge `host` serves, asking it over `scheme` when nothing says.
-    pub(crate) async fn forge_type(&self, host: &str, scheme: &'static str) -> Result<ForgeKind> {
+    /// The forge `host` serves and what decided it, asking it over
+    /// `scheme` when nothing says.
+    pub(crate) async fn host_type(&self, host: &str, scheme: &'static str) -> Result<HostType> {
         if let Some(kind) = self.config().forges.settled(host) {
-            return Ok(kind);
+            return Ok(HostType::Settled(kind));
         }
         if let Some(kind) = self.recorded_forge_type(host).await? {
-            return Ok(kind);
+            return Ok(HostType::Answered(kind));
         }
         // Another lookup may have asked the host while this one waited.
         let _gate = self.lock_forge_host(host).await;
         if let Some(kind) = self.recorded_forge_type(host).await? {
-            return Ok(kind);
+            return Ok(HostType::Answered(kind));
         }
-        self.ask_forge_type(host, scheme).await
+        Ok(HostType::Answered(self.ask_forge_type(host, scheme).await?))
     }
 
     /// Hold `host`'s gate while asking it which forge it serves.
@@ -94,7 +95,10 @@ impl Manager {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
             "invalid forge host {host:?}"
         );
-        self.forge_type(&host.to_ascii_lowercase(), scheme).await
+        Ok(self
+            .host_type(&host.to_ascii_lowercase(), scheme)
+            .await?
+            .kind())
     }
 
     /// Remember the recorded answers for this process, as the daemon starts,
@@ -224,7 +228,7 @@ mod tests {
 
     use crate::{
         config::Config,
-        forge::{ForgeRepo, backends::ForgeKind},
+        forge::{ForgeRepo, backends::ForgeKind, hosts::HostType},
     };
 
     #[tokio::test]
@@ -235,7 +239,7 @@ mod tests {
         let gate = manager.forge_host_gates.lock().await[host].clone();
         let waiting = tokio::spawn({
             let manager = manager.clone();
-            async move { manager.forge_type(host, "https").await }
+            async move { manager.host_type(host, "https").await }
         });
         // The map, the asking lookup, this test and the waiting lookup.
         tokio::time::timeout(Duration::from_secs(60), async {
@@ -251,7 +255,10 @@ mod tests {
             .unwrap();
         drop(asking);
         // Asking the host itself would fail: it does not resolve.
-        assert_eq!(waiting.await.unwrap().unwrap(), ForgeKind::GitHub);
+        assert_eq!(
+            waiting.await.unwrap().unwrap(),
+            HostType::Answered(ForgeKind::GitHub)
+        );
     }
 
     #[tokio::test]

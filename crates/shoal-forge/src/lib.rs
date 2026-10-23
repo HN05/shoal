@@ -16,7 +16,7 @@ pub mod updates;
 use anyhow::{Context, Result, ensure};
 
 use backends::{Backend, ForgeKind};
-use hosts::HostTypes;
+use hosts::{HostType, HostTypes};
 use repo::{
     locator::ItemRoute,
     remote_url::{RemoteUrl, Transport},
@@ -73,12 +73,15 @@ impl ForgeRepo {
     }
 
     /// The repository `remote` names, on the forge `hosts` says its host
-    /// serves, which this process then remembers for an unpinned host.
+    /// serves, which this process then remembers when the host answered it.
     pub async fn resolve(remote: &str, hosts: &impl HostTypes) -> Result<Self> {
         let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
         let (host, path, web_scheme) = Self::location(&remote)?;
-        let kind = hosts.forge_type(&host, web_scheme).await?;
-        hosts::learn_answer(&host, kind);
+        let resolved = hosts.forge_type(&host, web_scheme).await?;
+        if let HostType::Answered(kind) = resolved {
+            hosts::learn(&host, kind);
+        }
+        let kind = resolved.kind();
         Self::on(kind, host, path, web_scheme)
     }
 

@@ -6,7 +6,7 @@ use anyhow::Result;
 use crate::{
     cli::client,
     config::forges::Forges,
-    forge::{backends::ForgeKind, hosts::HostTypes},
+    forge::hosts::{HostType, HostTypes},
     paths::Paths,
     protocol::Method,
 };
@@ -17,14 +17,17 @@ pub struct ForgeHosts<'a> {
 }
 
 impl HostTypes for ForgeHosts<'_> {
-    async fn forge_type(&self, host: &str, scheme: &'static str) -> Result<ForgeKind> {
+    async fn forge_type(&self, host: &str, scheme: &'static str) -> Result<HostType> {
         if let Some(kind) = self.forges.settled(host) {
-            return Ok(kind);
+            return Ok(HostType::Settled(kind));
         }
         let method = Method::ForgeType {
             host: host.into(),
             scheme: scheme.into(),
         };
-        client::request(self.paths, method).await
+        // The daemon's own pins are this config's, which outrank its answer.
+        Ok(HostType::Answered(
+            client::request(self.paths, method).await?,
+        ))
     }
 }

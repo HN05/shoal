@@ -32,12 +32,30 @@ static PINS: Mutex<Option<Pins>> = Mutex::new(None);
 /// Where the forge of a host comes from: settings, a recorded answer, or
 /// [`probe`].
 pub trait HostTypes: Sync {
-    /// The forge `host` serves, reached over `scheme` (`http` or `https`).
+    /// The forge `host` serves, reached over `scheme` (`http` or `https`),
+    /// and what decided it.
     fn forge_type(
         &self,
         host: &str,
         scheme: &'static str,
-    ) -> impl Future<Output = Result<ForgeKind>> + Send;
+    ) -> impl Future<Output = Result<HostType>> + Send;
+}
+
+/// A host's forge and what decided it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostType {
+    /// A pin or a well-known name, for which the host is never asked.
+    Settled(ForgeKind),
+    /// The host's own answer, now or when it was last asked.
+    Answered(ForgeKind),
+}
+
+impl HostType {
+    pub fn kind(self) -> ForgeKind {
+        match self {
+            Self::Settled(kind) | Self::Answered(kind) => kind,
+        }
+    }
 }
 
 /// Ask `host` which forge's API it serves, using `account`'s login where
@@ -78,14 +96,6 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .write()
         .unwrap_or_else(PoisonError::into_inner)
         .insert(host.to_ascii_lowercase(), kind);
-}
-
-/// [`learn`] `kind` for `host` unless it is pinned, whose type is the pin's
-/// rather than an answer, so that dropping the pin leaves what it serves.
-pub(crate) fn learn_answer(host: &str, kind: ForgeKind) {
-    if pinned(&host.to_ascii_lowercase()).is_none() {
-        learn(host, kind);
-    }
 }
 
 /// Make `pins` the types this process pins, replacing any it had and any
@@ -173,11 +183,15 @@ mod tests {
         assert_eq!(learned("outright.pinned.example"), Some(ForgeKind::Forgejo));
     }
 
-    /// Every host serves `0`.
-    struct Answer(ForgeKind);
+    /// Every host resolves as `0`; `1` drops the pins first, as a reload
+    /// would while the host resolves.
+    struct Resolved(HostType, bool);
 
-    impl HostTypes for Answer {
-        async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<ForgeKind> {
+    impl HostTypes for Resolved {
+        async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<HostType> {
+            if self.1 {
+                pin(Vec::new());
+            }
             Ok(self.0)
         }
     }
@@ -186,18 +200,18 @@ mod tests {
     fn resolving_a_pinned_host_keeps_its_answer_for_after_the_pin() {
         let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let remote = "git@resolved.pinned.example:team/repo.git";
-        let resolve = |kind| {
+        let resolve = |resolved| {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .build()
                 .unwrap();
             runtime
-                .block_on(ForgeRepo::resolve(remote, &Answer(kind)))
+                .block_on(ForgeRepo::resolve(remote, &resolved))
                 .unwrap();
         };
-        resolve(ForgeKind::GitLab);
+        resolve(Resolved(HostType::Answered(ForgeKind::GitLab), false));
         pin(vec![("resolved.pinned.example".into(), ForgeKind::Forgejo)]);
-        resolve(ForgeKind::Forgejo);
-        pin(Vec::new());
+        // The pin goes while the host resolves as it.
+        resolve(Resolved(HostType::Settled(ForgeKind::Forgejo), true));
         assert_eq!(learned("resolved.pinned.example"), Some(ForgeKind::GitLab));
     }
 
