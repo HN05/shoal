@@ -225,12 +225,18 @@ pub enum Command {
         /// Leave out comments and reviews.
         #[arg(long)]
         no_comments: bool,
-        /// Show only this failed Forgejo Actions check's log.
+        /// Show only this failed check's log, where the forge reads job logs.
         #[arg(long, value_name = "NAME")]
         check: Option<String>,
     },
     /// List the repository's labels with their descriptions.
     Labels {
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// List what the repository's forge supports.
+    Capabilities {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

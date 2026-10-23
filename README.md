@@ -180,6 +180,7 @@ shoal issue list --label bug flaky # Search issues by text, label, author and st
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal labels                  # The repository's labels and what each one means
+shoal capabilities            # What the repository's forge supports, such as resolving threads
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to

@@ -603,6 +603,15 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
             .iter()
             .all(|request| request[0].as_str().unwrap().starts_with("GET")),
     );
+    let reported = fixture.ok(&["capabilities", "--workspace", "topic"]);
+    assert_eq!(reported["forge"], "Forgejo or Gitea", "{reported}");
+    let capabilities = reported["capabilities"].as_array().unwrap();
+    assert!(
+        capabilities.contains(&json!({"capability": "resolve_threads",
+        "supported": false, "hint": "reply in the thread instead"}))
+    );
+    assert!(capabilities.contains(&json!({"capability": "cancel_jobs", "supported": true})));
+    assert!(fixture.requests().is_empty());
 }
 
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file

@@ -1,29 +1,14 @@
 //! `shoal labels`: the workspace repository's labels as the forge lists
 //! them, so agents can pick the ones its scheme asks for.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use crate::{
-    cli::{client, context::Context, ui},
-    forge::{ForgeRepo, conventions::labels::Label},
-    model::Workspace,
-    protocol::Method,
-    repository,
+    cli::{commands::capabilities::workspace_forge, context::Context},
+    forge::conventions::labels::Label,
 };
 
 pub(super) async fn labels(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let workspace: Workspace = client::request(
-        &ctx.paths,
-        Method::VerifyWorkspace {
-            workspace,
-            on_branch: false,
-        },
-    )
-    .await?;
-    let remote = repository::remote_url_from_path(&workspace.path)
-        .await?
-        .context("labels need an origin remote")?;
-    let forge = ForgeRepo::resolve(&remote, &ctx.forge_hosts()?).await?;
+    let forge = workspace_forge(ctx, workspace).await?;
     let labels = ctx
         .progress("Reading labels", forge.labels(&ctx.forge_account()?))
         .await?;

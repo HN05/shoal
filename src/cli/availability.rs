@@ -69,7 +69,7 @@ impl Need {
                 "status" | "inspect" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
                 | "restore" | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr"
-                | "issue" | "ci" | "labels" | "notifications",
+                | "issue" | "ci" | "labels" | "capabilities" | "notifications",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

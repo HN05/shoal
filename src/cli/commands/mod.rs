@@ -6,6 +6,7 @@ mod agent_state;
 mod approvals;
 mod base;
 mod branches;
+mod capabilities;
 mod chat;
 mod cleanup;
 mod configuration;
@@ -373,6 +374,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             resume,
         } => links::watch(&ctx, items, timeout, resume).await,
         Command::Labels { workspace } => labels::labels(&ctx, workspace).await,
+        Command::Capabilities { workspace } => capabilities::capabilities(&ctx, workspace).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready {
             items,

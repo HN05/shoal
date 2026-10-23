@@ -903,7 +903,11 @@ stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as
 `[secrets]` commands do, and Shoal still stores no token; agents act with the
 user's Bitbucket credentials until a separate agent token is configurable. Forge differences stay in planning, such as Forgejo keeping draft
-state in the title, so callers see the same item either way. Actions run in the
+state in the title, so callers see the same item either way. Each backend
+declares the capabilities it has, and a request needing one it lacks is refused
+before anything is sent with one typed error naming the forge and the
+capability, so a backend gains a capability without changes elsewhere;
+`shoal capabilities` reports them so agents can check first. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also

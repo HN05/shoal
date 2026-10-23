@@ -40,9 +40,11 @@ screenshots and videos, which the body shows where it references them as
 `![alt](FILE)`. Answer each review
 finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
-`shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread
-(Forgejo cannot resolve threads through its API; reply there instead). They default to the
-linked item; pass a number or URL for another item in the repository. File
+`shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
+They default to the linked item; pass a number or URL for another item in the
+repository. `shoal --json capabilities` lists what the repository's forge
+supports, such as resolving threads, rerunning jobs or reading job logs, with
+what to do instead; check it before relying on one. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
 workspace, and only `--link` assigns it to you. Before opening one, search for an
 existing issue with `shoal --json issue list <words>` (`--state all`, `--label`,
@@ -100,13 +102,12 @@ with its state, merge conflicts, CI check results, review state and lookup error
 `shoal view` adds the linked issue and each item's description, comments and
 reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 `view pr <number>` or a URL for an unlinked item and `--no-comments` for state only.
-`shoal view` automatically includes failed Forgejo Actions log tails;
+`shoal view` automatically includes failed check log tails where the forge reads them;
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
 `shoal --json ci rerun --check '<check name>'` reruns a failed check on the PR's
 current head, after you have read its log and fixed or reported the cause, and
 `shoal --json ci cancel` cancels running ones; omit `--check` for all of them.
-Forgejo cannot rerun through its API.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

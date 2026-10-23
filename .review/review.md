@@ -183,6 +183,9 @@ instead of the PR delivery guidance below.
   tokens, which the daemon records so the host is asked once and `doctor` asks
   again; a pasted link of a host not yet resolved is classified by its pin,
   else by the forge its routes name.
+  A request needing a capability the forge's backend does not declare is
+  refused with the typed `Unsupported` error before anything is sent; per-forge
+  gaps belong in the backend's declaration, not in separate checks.
   Views automatically include failed Actions logs, read by the daemon as the
   workspace's agent account, resolving web indices to API IDs and validating the PR head before returning
   a bounded tail; scoped callers cannot access another workspace's logs.

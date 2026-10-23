@@ -1829,6 +1829,14 @@ token `[bitbucket]` configures. Without a login, only public repositories are
 readable. Shoal stores no forge credentials. An issue or PR number may be
 written `#42`.
 
+Forges differ in what Shoal can do there. `shoal capabilities` lists each
+capability of the workspace repository's forge, such as resolving review
+threads, rerunning CI jobs, labels or a merge method, and whether the forge has
+it, with what to do instead when it does not; `--json` returns `forge` and
+`capabilities`, each with `capability`, `supported` and an optional `hint`. A
+command that needs a capability the forge lacks fails before sending anything,
+naming the forge and the capability.
+
 Bitbucket has no official CLI, so the global `[bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
 each lookup or change and keeps nothing. The token is an access token, or an
@@ -1842,17 +1850,16 @@ email = "you@example.com"
 
 GitLab projects may sit in subgroups, its merge requests are PRs, and its item
 URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
-`merge` uses the project's merge method, squashed with `--method squash`, so
-`--method rebase` is refused. CI checks are the latest status of each job and
-external check on the head commit, and reviews are reviewers' states and
-approvals; approval rules and merge trains are not modeled.
+`merge` uses the project's merge method, squashed with `--method squash`. CI
+checks are the latest status of each job and external check on the head
+commit, and reviews are reviewers' states and approvals; approval rules and
+merge trains are not modeled.
 
 Bitbucket repositories live under a workspace and its PR URLs use
-`/pull-requests/`. Its PRs have no labels and it reports no merge conflicts.
-Reviewers are Atlassian account IDs, declining a PR closes it and cannot be
-undone, and `--method rebase` rebases and fast-forwards. CI checks are the
-builds reported on the PR, and reviews are participants' approvals and change
-requests. Agents' changes use your Bitbucket credentials.
+`/pull-requests/`. It reports no merge conflicts. Reviewers are Atlassian
+account IDs, declining a PR closes it, and `--method rebase` rebases and
+fast-forwards. CI checks are the builds reported on the PR, and reviews are
+participants' approvals and change requests. Agents' changes use your Bitbucket credentials.
 
 ### Issue and PR actions
 
@@ -1870,6 +1877,7 @@ shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 shoal labels                        # the repository's labels with their descriptions
+shoal capabilities                  # what the repository's forge supports
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
@@ -1915,14 +1923,11 @@ while the connection fails before sending it or the forge answers 503, and a
 comment's update also after a broken connection or another 5xx; a 429 is the
 forge's [rate limit](#linked-items-and-cleanup), which holds back requests until it ends.
 GitHub needs write access to the repository and Forgejo
-an fj login; Bitbucket has no API for attachments and refuses them before
-sending anything.
+an fj login.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review
 thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 `--body` or `--body-file`; `resolve` posts one as a reply first when given.
 Resolving a thread that has no reply asks for confirmation; `--yes` skips it.
-Forgejo and Gitea have no API for thread resolution, so `resolve` and
-`unresolve` fail there without sending anything.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `issue list` and `pr list` list the repository's issues or PRs, newest first,
@@ -1933,8 +1938,7 @@ with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
 30 by default. Workspace processes search as the agent account, anyone else
 with your own logins. Each line shows an item's number, state (`draft` for an
 open draft PR), title and labels; JSON lists the items with the fields every
-other item command reports. Bitbucket has no labels and refuses `--label`; its
-`--author` matches a nickname.
+other item command reports. Bitbucket's `--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Its JSON
@@ -2053,9 +2057,8 @@ as the agent account and records an `item_changed` event once a request succeeds
 a failed request stops the rest. GitHub reruns a failed Actions job, or every
 failed job of a run when several of its jobs are selected, because a rerun starts
 a new attempt of the run, refuses a rerun while another job of the run is still
-running, and cancels the job's run; GitLab retries or cancels each job. Forgejo's API cannot rerun jobs, so `rerun`
-fails there without sending anything, and `cancel` cancels each check's run.
-Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
+running, and cancels the job's run; GitLab retries or cancels each job; Forgejo
+cancels each check's run. `--json` returns `url`, `action` and the
 `checks` acted on.
 
 ### Linked items and cleanup
@@ -2086,7 +2089,8 @@ branch. Assigned items suppress idle cleanup.
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, description, comments, and reviews with their inline comments; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
-reports, plus the last 8 KiB of each failed Forgejo Actions check's log and its
+reports, plus the last 8 KiB of each failed check's log, where the forge
+[reads job logs](#forges), and its
 failing step when recorded by the runner. The daemon fetches logs as the
 workspace's agent account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
