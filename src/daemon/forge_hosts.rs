@@ -5,6 +5,7 @@ use std::future::Future;
 
 use anyhow::{Result, anyhow, bail, ensure};
 use rusqlite::{OptionalExtension, params};
+use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     config::forges,
@@ -58,7 +59,24 @@ impl Manager {
         if let Some(kind) = self.recorded_forge_type(host).await? {
             return Ok(kind);
         }
+        // Another lookup may have asked the host while this one waited.
+        let _gate = self.lock_forge_host(host).await;
+        if let Some(kind) = self.recorded_forge_type(host).await? {
+            return Ok(kind);
+        }
         self.ask_forge_type(host, scheme).await
+    }
+
+    /// Hold `host`'s gate while asking it which forge it serves.
+    async fn lock_forge_host(&self, host: &str) -> OwnedMutexGuard<()> {
+        let gate = self
+            .forge_host_gates
+            .lock()
+            .await
+            .entry(host.to_owned())
+            .or_default()
+            .clone();
+        gate.lock_owned().await
     }
 
     /// The forge type a request names for `host` over `scheme`, which the
@@ -157,6 +175,7 @@ impl Manager {
             );
         }
         let scheme = if scheme == "http" { "http" } else { "https" };
+        let _gate = self.lock_forge_host(host).await;
         match self.ask_forge_type(host, scheme).await {
             Ok(kind) if kind == recorded => {
                 Check::new(name, CheckStatus::Ok, format!("Answers as {kind}"))

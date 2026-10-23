@@ -125,6 +125,8 @@ pub struct Manager {
     checkpoint_gate: Mutex<()>,
     /// Per-repository gate for ref updates and worktree creation/removal.
     git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Per-host gate, so concurrent first lookups ask a forge host once.
+    pub(super) forge_host_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Excludes lifecycle transitions and overlapping permit hooks per workspace.
     resource_gates: Mutex<HashMap<String, Arc<RwLock<()>>>>,
     /// Scope token → the execution it was issued to.
@@ -207,6 +209,7 @@ impl Manager {
             registry_gate: Mutex::new(()),
             checkpoint_gate: Mutex::new(()),
             git_gates: Mutex::new(HashMap::new()),
+            forge_host_gates: Mutex::new(HashMap::new()),
             resource_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),

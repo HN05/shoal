@@ -283,7 +283,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     );
     let endpoint = "repos/team/project/pulls/8";
     fixture.respond(json!({
-        "GET meta": {"body": {"installed_version": "3.14.0"}},
+        "GET meta": {"body": {"installed_version": "3.14.0"}, "delay": 1},
         "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["bug"])},
         "PUT repos/team/project/issues/8/labels": {"body": []},
@@ -295,18 +295,26 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
             .map(|request| request[0].clone())
             .collect()
     };
-    // The CLI asks the daemon, which asks the host and records its answer.
-    assert_eq!(
-        fixture.ok(&["labels", "--workspace", "topic"])[0]["name"],
-        "bug"
-    );
-    assert_eq!(
-        keys(&fixture),
-        [
-            "GET meta",
-            "GET repos/team/project/labels?per_page=100&page=1"
-        ]
-    );
+    // The CLI asks the daemon, which asks the host once for concurrent
+    // lookups and records its answer.
+    let labels: Vec<_> = (0..2)
+        .map(|_| {
+            fixture
+                .command()
+                .args(["--json", "labels", "--workspace", "topic"])
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    for child in labels {
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let labels: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(labels[0]["name"], "bug");
+    }
+    let label_list = "GET repos/team/project/labels?per_page=100&page=1";
+    assert_eq!(keys(&fixture), ["GET meta", label_list, label_list]);
     let response = label_pr(&fixture);
     assert_eq!(response["type"], "item", "{response}");
     assert_eq!(
