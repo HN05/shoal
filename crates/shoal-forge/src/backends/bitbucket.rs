@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::RestCheck,
+    backends::rest::{RestCheck, RestReads, fingerprints},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -21,12 +21,12 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
-        status::Verdict,
+        status::{PrStatus, Verdict},
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::api::{HttpMethod, Request, encode},
-    updates::DISCUSSION,
+    updates::{DISCUSSION, Snapshot},
 };
 
 use super::{Backend, rest};
@@ -354,6 +354,78 @@ impl Backend for Bitbucket {
             None,
         ))
     }
+
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot> {
+        rest::issue_activity(self, repo, account, number).await
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        rest::pr_activity(self, repo, account, number, branch).await
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
+        rest::pr_status(self, repo, account, number, url).await
+    }
+}
+
+impl RestReads for Bitbucket {
+    async fn discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let endpoint = format!("{}/comments", repo.item_endpoint(kind, number));
+        let comments = repo.pages(account, &endpoint).await?;
+        fingerprints(
+            &comments,
+            &["content", "updated_on", "deleted", "resolution"],
+        )
+    }
+
+    async fn checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        pull: &Current,
+    ) -> Result<Vec<RestCheck>> {
+        let pr = repo.item_endpoint(ItemKind::Pr, pull.item.number);
+        statuses(&repo.pages(account, &format!("{pr}/statuses")).await?)
+    }
+
+    /// Each participant's approval or change request.
+    async fn verdicts(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, Verdict)>> {
+        let pull = repo
+            .send(
+                account,
+                &Request::get(repo.item_endpoint(ItemKind::Pr, number)),
+            )
+            .await?;
+        verdicts(&pull)
+    }
 }
 
 /// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
@@ -427,31 +499,6 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
 }
 
 impl ForgeRepo {
-    /// The newest status of each build reported on the pull request.
-    pub(crate) async fn bitbucket_checks(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<Vec<RestCheck>> {
-        let endpoint = format!("{}/statuses", self.item_endpoint(ItemKind::Pr, number));
-        statuses(&self.pages(account, &endpoint).await?)
-    }
-
-    /// Each participant's approval or change request.
-    pub(crate) async fn bitbucket_verdicts(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<Vec<(String, Verdict)>> {
-        let pull = self
-            .send(
-                account,
-                &Request::get(self.item_endpoint(ItemKind::Pr, number)),
-            )
-            .await?;
-        verdicts(&pull)
-    }
-
     pub(crate) async fn bitbucket_details(
         &self,
         account: &Account,
@@ -498,7 +545,7 @@ impl ForgeRepo {
         if kind == ItemKind::Issue {
             return Ok(None);
         }
-        let verdicts = self.bitbucket_verdicts(account, number).await?;
+        let verdicts = Bitbucket.verdicts(self, account, number).await?;
         reviews.extend(verdicts.into_iter().map(|(author, verdict)| {
             Review {
                 author,

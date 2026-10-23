@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::RestCheck,
+    backends::rest::{RestCheck, RestReads, fingerprints},
     items::{
         action::{Edit, MergeMethod},
         create::{NewIssue, NewPull},
@@ -18,7 +18,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
-        status::Verdict,
+        status::{PrStatus, Verdict},
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
@@ -26,7 +26,7 @@ use crate::{
         api::{HttpMethod, Request, encode, full_page},
         programs,
     },
-    updates::DISCUSSION,
+    updates::{DISCUSSION, Snapshot},
 };
 
 use super::{Backend, rest};
@@ -362,6 +362,89 @@ impl Backend for GitLab {
             Some(json!({ "resolved": resolved })),
         ))
     }
+
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot> {
+        rest::issue_activity(self, repo, account, number).await
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        rest::pr_activity(self, repo, account, number, branch).await
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
+        rest::pr_status(self, repo, account, number, url).await
+    }
+}
+
+impl RestReads for GitLab {
+    async fn discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let notes = item_notes(repo, account, kind, number).await?;
+        fingerprints(&notes, &["body", "updated_at", "resolved"])
+    }
+
+    async fn checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        pull: &Current,
+    ) -> Result<Vec<RestCheck>> {
+        let head = pull.head_sha.as_deref().context("PR has no head commit")?;
+        let endpoint = repo.repo_endpoint(&format!("repository/commits/{head}/statuses"));
+        statuses(&repo.pages(account, &endpoint).await?)
+    }
+
+    /// Reviewers' states, with every approval as an approving review.
+    async fn verdicts(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, Verdict)>> {
+        let merge_request = repo.item_endpoint(ItemKind::Pr, number);
+        let reviewers = Request::get(format!("{merge_request}/reviewers"));
+        let approvals = Request::get(format!("{merge_request}/approvals"));
+        let (reviewers, approvals) = tokio::try_join!(
+            repo.send(account, &reviewers),
+            repo.send(account, &approvals)
+        )?;
+        verdicts(&reviewers, &approvals)
+    }
+}
+
+/// The item's notes that people wrote, without GitLab's system notes.
+async fn item_notes(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    number: u64,
+) -> Result<Vec<Value>> {
+    let endpoint = format!("{}/notes", repo.item_endpoint(kind, number));
+    let mut notes = repo.pages(account, &endpoint).await?;
+    notes.retain(|note| note["system"] != true);
+    Ok(notes)
 }
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
@@ -371,45 +454,6 @@ const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_s
 const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
 
 impl ForgeRepo {
-    /// The latest status of each CI job and external check on `head`.
-    pub(crate) async fn gitlab_checks(
-        &self,
-        account: &Account,
-        head: &str,
-    ) -> Result<Vec<RestCheck>> {
-        let endpoint = self.repo_endpoint(&format!("repository/commits/{head}/statuses"));
-        statuses(&self.pages(account, &endpoint).await?)
-    }
-
-    /// Reviewers' states, with every approval as an approving review.
-    pub(crate) async fn gitlab_verdicts(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<Vec<(String, Verdict)>> {
-        let merge_request = self.item_endpoint(ItemKind::Pr, number);
-        let reviewers = Request::get(format!("{merge_request}/reviewers"));
-        let approvals = Request::get(format!("{merge_request}/approvals"));
-        let (reviewers, approvals) = tokio::try_join!(
-            self.send(account, &reviewers),
-            self.send(account, &approvals)
-        )?;
-        verdicts(&reviewers, &approvals)
-    }
-
-    /// The item's notes that people wrote, without GitLab's system notes.
-    pub(crate) async fn gitlab_notes(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Vec<Value>> {
-        let endpoint = format!("{}/notes", self.item_endpoint(kind, number));
-        let mut notes = self.pages(account, &endpoint).await?;
-        notes.retain(|note| note["system"] != true);
-        Ok(notes)
-    }
-
     pub(crate) async fn gitlab_details(
         &self,
         account: &Account,
@@ -453,7 +497,7 @@ impl ForgeRepo {
         if kind == ItemKind::Issue {
             return Ok(None);
         }
-        let verdicts = self.gitlab_verdicts(account, number).await?;
+        let verdicts = GitLab.verdicts(self, account, number).await?;
         reviews.extend(verdicts.into_iter().filter_map(|(author, verdict)| {
             let state = match verdict {
                 Verdict::Approved => "approved",

@@ -26,8 +26,9 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
-    review::thread::Thread,
+    review::{status::PrStatus, thread::Thread},
     transport::api::Request,
+    updates::Snapshot,
 };
 use bitbucket::Bitbucket;
 use forgejo::Forgejo;
@@ -246,6 +247,33 @@ pub(crate) trait Backend {
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request>;
+
+    /// An issue's state and discussion.
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot>;
+
+    /// A PR's state, discussion, reviews, mergeability and checks. The PR
+    /// must have `branch` as its head when one is given.
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot>;
+
+    /// A PR's state, mergeability, checks and review state.
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus>;
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -471,6 +499,35 @@ impl Backend for ForgeKind {
         resolved: bool,
     ) -> Result<Request> {
         dispatch!(self, backend => backend.resolution(repo, number, thread, resolved))
+    }
+
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot> {
+        dispatch!(self, backend => backend.issue_activity(repo, account, number).await)
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        dispatch!(self, backend => backend.pr_activity(repo, account, number, branch).await)
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
+        dispatch!(self, backend => backend.pr_status(repo, account, number, url).await)
     }
 }
 

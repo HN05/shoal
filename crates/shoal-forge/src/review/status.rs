@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::{ForgeRepo, account::Account, backends::Backend, updates::Snapshot};
+
 crate::state::states!(PrState {
     Open => "open",
     Merged => "merged",
@@ -55,6 +57,41 @@ impl PrStatus {
             errors: vec![format!("{error:#}")],
             ..Self::new(url, None)
         }
+    }
+
+    /// An open PR's mergeability and checks as `snapshot` observed them,
+    /// with the lookups that failed.
+    pub(crate) fn record_snapshot(&mut self, snapshot: Snapshot) {
+        self.errors.extend(
+            snapshot
+                .errors
+                .iter()
+                .map(|(source, error)| format!("{source} lookup failed: {error}")),
+        );
+        self.merge_conflicts = snapshot.conflict;
+        self.checks = snapshot.check_results();
+    }
+
+    /// The review state, or why it could not be read.
+    pub(crate) fn record_reviews(&mut self, reviews: Result<Vec<(String, Verdict)>>) {
+        match reviews {
+            Ok(reviews) => self.review = Some(summarize(reviews)),
+            Err(error) => self
+                .errors
+                .push(format!("reviews lookup failed: {error:#}")),
+        }
+    }
+}
+
+impl ForgeRepo {
+    /// Each failed lookup is recorded on the result instead of failing it.
+    pub async fn pr_status(&self, account: &Account, url: &str) -> PrStatus {
+        let result = async {
+            let (number, _) = self.pull(url)?;
+            self.kind.pr_status(self, account, number, url).await
+        }
+        .await;
+        result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error))
     }
 }
 

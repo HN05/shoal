@@ -1,10 +1,16 @@
-//! Read-only issue and PR activity through the user's existing forge login.
+//! Issue and PR activity as snapshots, and the updates between two of them.
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-mod queries;
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::{Backend, rest::RestCheck},
+    items::item::Current,
+    review::status::CheckResult,
+};
 
 /// How long a lookup may keep failing with the same error before it is
 /// reported again, so a failing source cannot silence a wait indefinitely.
@@ -53,39 +59,39 @@ impl std::fmt::Display for Update {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
-    comments: BTreeMap<String, String>,
-    checks: BTreeMap<String, Check>,
-    conflict: Option<bool>,
+    pub(crate) comments: BTreeMap<String, String>,
+    pub(crate) checks: BTreeMap<String, Check>,
+    pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
     #[serde(default)]
-    conflict_at: MergeRevision,
+    pub(crate) conflict_at: MergeRevision,
     /// The revision of the last reported conflict, cleared once the item is
     /// seen mergeable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    reported_conflict: Option<MergeRevision>,
+    pub(crate) reported_conflict: Option<MergeRevision>,
     /// Replaces the PR conflict message for a local branch check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    conflict_message: Option<String>,
-    state: String,
-    errors: BTreeMap<String, String>,
+    pub(crate) conflict_message: Option<String>,
+    pub(crate) state: String,
+    pub(crate) errors: BTreeMap<String, String>,
     /// Unix seconds when each failing source was last reported.
     #[serde(default)]
-    reported: BTreeMap<String, u64>,
+    pub(crate) reported: BTreeMap<String, u64>,
 }
 
 /// The commits a merge check compares; empty when the forge does not say.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-struct MergeRevision {
-    head: String,
-    base: String,
+pub(crate) struct MergeRevision {
+    pub(crate) head: String,
+    pub(crate) base: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct Check {
-    name: String,
-    state: String,
-    revision: String,
-    complete: bool,
+pub(crate) struct Check {
+    pub(crate) name: String,
+    pub(crate) state: String,
+    pub(crate) revision: String,
+    pub(crate) complete: bool,
 }
 
 /// A local merge of `head` into `base`; `conflict` reports its conflicts
@@ -296,7 +302,7 @@ impl Snapshot {
     }
 
     /// Record each comment of `source` by its ID.
-    fn record_comments(&mut self, source: &str, result: Result<Vec<(String, String)>>) {
+    pub(crate) fn record_comments(&mut self, source: &str, result: Result<Vec<(String, String)>>) {
         match result {
             Ok(comments) => {
                 self.comments.extend(
@@ -330,9 +336,75 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
     activity_key(DISCUSSION, id)
 }
 
+impl ForgeRepo {
+    pub async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
+        self.kind.issue_activity(self, account, number).await
+    }
+
+    pub async fn activity(
+        &self,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        self.kind.pr_activity(self, account, number, branch).await
+    }
+}
+
+impl Snapshot {
+    /// A snapshot of an item in `state`, before anything else is recorded.
+    pub(crate) fn new(state: &str) -> Self {
+        Self {
+            state: state.into(),
+            ..Self::default()
+        }
+    }
+
+    /// An open PR's mergeability and the CI checks on its head commit. A
+    /// failed check lookup keeps the previous checks.
+    pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
+        self.conflict = pull.conflict;
+        self.conflict_at = MergeRevision {
+            head: pull.head_sha.clone().unwrap_or_default(),
+            base: pull.base_sha.clone().unwrap_or_default(),
+        };
+        match checks {
+            Ok(checks) => {
+                for check in checks {
+                    self.checks.insert(
+                        check.name.clone(),
+                        Check {
+                            complete: check.state != "Pending",
+                            state: check.state.into(),
+                            name: check.name,
+                            revision: pull.head_sha.clone().unwrap_or_default(),
+                        },
+                    );
+                }
+            }
+            Err(error) => {
+                self.errors.insert("CI".into(), format!("{error:#}"));
+            }
+        }
+    }
+
+    /// The checks as a PR status reports them.
+    pub(crate) fn check_results(&self) -> Vec<CheckResult> {
+        self.checks
+            .values()
+            .map(|check| CheckResult {
+                name: check.name.clone(),
+                result: check.state.to_ascii_lowercase(),
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::items::link::ItemKind;
+    use serde_json::json;
 
     #[test]
     fn activity_changes_report_finished_checks_without_waiting_for_the_set() {
@@ -562,5 +634,139 @@ mod tests {
                 )
                 .is_empty()
         );
+    }
+
+    /// An open Forgejo PR at `head` with `conflict` and `checks` recorded.
+    fn rest_snapshot(head: &str, conflict: bool, checks: &[(&str, &'static str)]) -> Snapshot {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": !conflict,
+            "head": {"ref": "topic", "sha": head}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        let checks = checks
+            .iter()
+            .map(|(name, state)| RestCheck {
+                name: (*name).into(),
+                state,
+            })
+            .collect();
+        let mut snapshot = Snapshot::default();
+        snapshot.record_checks(&pull, Ok(checks));
+        snapshot
+    }
+
+    #[test]
+    fn rest_checks_are_distinct_and_wake_when_they_complete() {
+        let mut snapshot = rest_snapshot(
+            "rev-1",
+            true,
+            &[
+                ("review/default", "Success"),
+                ("rust", "Pending"),
+                ("deploy", "Skipped"),
+            ],
+        );
+        snapshot.schedule_conflict_reports(&Snapshot::default());
+        let updates = Snapshot::default().changes(&snapshot, "pr");
+        assert_eq!(
+            updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
+            [
+                UpdateKind::CiCompleted,
+                UpdateKind::CiCompleted,
+                UpdateKind::MergeConflict
+            ]
+        );
+        let next = rest_snapshot(
+            "rev-1",
+            true,
+            &[
+                ("review/default", "Success"),
+                ("rust", "Failure"),
+                ("deploy", "Skipped"),
+            ],
+        );
+        let updates = snapshot.changes(&next, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].message, "rust: Failure");
+        assert_eq!(updates[0].check.as_ref().unwrap().result, "failure");
+    }
+
+    #[test]
+    fn rest_same_conclusion_on_a_new_head_wakes_again() {
+        let first = rest_snapshot("revision-one", false, &[("rust", "Success")]);
+        let second = rest_snapshot("revision-two", false, &[("rust", "Success")]);
+        let updates = first.changes(&second, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+    }
+
+    #[test]
+    fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
+        let before = rest_snapshot("rev-1", false, &[("review", "Success")]);
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
+            "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        let mut failed = Snapshot::default();
+        failed.record_checks(&pull, Err(anyhow::anyhow!("no status available")));
+        failed
+            .comments
+            .insert("discussion:1".into(), "new finding".into());
+        failed.retain_failed_checks(&before);
+        failed.schedule_conflict_reports(&before);
+        let updates = before.changes(&failed, "pr");
+        assert_eq!(
+            updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
+            [
+                UpdateKind::Comment,
+                UpdateKind::MergeConflict,
+                UpdateKind::LookupFailed
+            ]
+        );
+        assert_eq!(updates[2].message, "CI lookup failed: no status available");
+        assert!(failed.changes(&failed, "pr").is_empty());
+        let mut recovered = rest_snapshot("rev-1", true, &[("review", "Success")]);
+        recovered
+            .comments
+            .insert("discussion:1".into(), "new finding".into());
+        assert!(failed.changes(&recovered, "pr").is_empty());
+        let mut unknown = Snapshot::default();
+        unknown.schedule_conflict_reports(&recovered);
+        assert_eq!(unknown.conflict, Some(true));
+    }
+
+    #[test]
+    fn a_forgejo_conflict_is_reported_again_after_its_base_moves() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let observe = |previous: &Snapshot, head: &str, base: &str| {
+            let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
+                "head": {"ref": "topic", "sha": head}, "base": {"ref": "main", "sha": base}});
+            let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+            let mut snapshot = Snapshot::default();
+            snapshot.record_checks(&pull, Ok(Vec::new()));
+            snapshot.schedule_conflict_reports(previous);
+            let kinds = previous
+                .changes(&snapshot, "pr")
+                .iter()
+                .map(|update| update.kind)
+                .collect::<Vec<_>>();
+            (snapshot, kinds)
+        };
+        let (before, _) = observe(&Snapshot::default(), "rebased", "main-1");
+        let (returned, kinds) = observe(&before, "rebased", "main-2");
+        assert!(kinds.is_empty());
+        let (_, kinds) = observe(&returned, "rebased", "main-2");
+        assert_eq!(kinds, [UpdateKind::MergeConflict]);
+    }
+
+    #[test]
+    fn forgejo_drafts_report_no_conflicts() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "WIP: Fix", "state": "open", "mergeable": false,
+            "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        assert_eq!(pull.conflict, Some(false));
+        let mut snapshot = Snapshot::default();
+        snapshot.record_checks(&pull, Ok(Vec::new()));
+        assert!(Snapshot::default().changes(&snapshot, "pr").is_empty());
     }
 }

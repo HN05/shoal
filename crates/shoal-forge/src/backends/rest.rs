@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::Account,
     backends::Backend,
     items::{
@@ -13,8 +13,8 @@ use crate::{
         link::ItemKind,
         list,
     },
-    review::status::{Verdict, forgejo_reviews},
-    transport::api::Request,
+    review::status::{PrState, PrStatus, Verdict},
+    updates::{DISCUSSION, Snapshot},
 };
 
 /// A CI check in the states every REST forge is mapped to; `Pending` is the
@@ -25,107 +25,123 @@ pub(crate) struct RestCheck {
     pub state: &'static str,
 }
 
-impl ForgeRepo {
-    /// The CI checks on the PR's head commit.
-    pub(crate) async fn rest_checks(
+/// What the forges reached through their REST APIs each read their own way,
+/// for the activity and status they otherwise read alike.
+pub(crate) trait RestReads: Backend {
+    /// Each comment of the item's discussion by ID, with what changes when
+    /// it is added or edited. Every page: a comment missing from the set
+    /// reads as deleted.
+    async fn discussion(
         &self,
-        account: &Account,
-        pull: &Current,
-    ) -> Result<Vec<RestCheck>> {
-        let head = pull.head_sha.as_deref().context("PR has no head commit")?;
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => self.forgejo_checks(account, head).await,
-            ForgeKind::GitLab => self.gitlab_checks(account, head).await,
-            ForgeKind::Bitbucket => self.bitbucket_checks(account, pull.item.number).await,
-        }
-    }
-
-    /// Each submitted review's reviewer and verdict.
-    pub(crate) async fn rest_verdicts(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<Vec<(String, Verdict)>> {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => {
-                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-                forgejo_reviews(&self.pages(account, &endpoint).await?)
-            }
-            ForgeKind::GitLab => self.gitlab_verdicts(account, number).await,
-            ForgeKind::Bitbucket => self.bitbucket_verdicts(account, number).await,
-        }
-    }
-
-    /// Each comment by ID, with what changes when it is added or edited.
-    pub(crate) async fn rest_discussion(
-        &self,
+        repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => {
-                // Every page: a comment missing from the set reads as deleted.
-                let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
-                let comments = self.pages(account, &endpoint).await?;
-                fingerprints(&comments, &["body", "updated_at"])
-            }
-            ForgeKind::GitLab => {
-                let notes = self.gitlab_notes(account, kind, number).await?;
-                fingerprints(&notes, &["body", "updated_at", "resolved"])
-            }
-            ForgeKind::Bitbucket => {
-                let endpoint = format!("{}/comments", self.item_endpoint(kind, number));
-                let comments = self.pages(account, &endpoint).await?;
-                fingerprints(
-                    &comments,
-                    &["content", "updated_on", "deleted", "resolution"],
-                )
-            }
-        }
-    }
+    ) -> Result<Vec<(String, String)>>;
 
     /// Each review by ID with what changes when it is submitted, edited,
-    /// dismissed or answered.
-    pub(crate) async fn rest_review_activity(
+    /// dismissed or answered. By default inline comments are part of the
+    /// discussion and verdicts have no ID, so they change as one entry.
+    async fn review_activity(
         &self,
+        repo: &ForgeRepo,
         account: &Account,
         number: u64,
     ) -> Result<Vec<(String, String)>> {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => {
-                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-                let reviews = self.pages(account, &endpoint).await?;
-                fingerprints(
-                    &reviews,
-                    &[
-                        "body",
-                        "state",
-                        "comments_count",
-                        "stale",
-                        "dismissed",
-                        "updated_at",
-                    ],
-                )
-            }
-            // Inline comments are part of the discussion; verdicts have no
-            // ID, so they change as one entry.
-            ForgeKind::GitLab | ForgeKind::Bitbucket => Ok(vec![(
-                "verdicts".into(),
-                self.rest_verdicts(account, number)
-                    .await?
-                    .iter()
-                    .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
-                    .collect(),
-            )]),
-        }
+        Ok(vec![(
+            "verdicts".into(),
+            self.verdicts(repo, account, number)
+                .await?
+                .iter()
+                .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
+                .collect(),
+        )])
     }
 
-    async fn forgejo_checks(&self, account: &Account, head: &str) -> Result<Vec<RestCheck>> {
-        let endpoint = self.repo_endpoint(&format!("commits/{head}/status?limit=50"));
-        let combined = self.send(account, &Request::get(endpoint)).await?;
-        forgejo_statuses(&combined)
+    /// The CI checks on the PR's head commit.
+    async fn checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        pull: &Current,
+    ) -> Result<Vec<RestCheck>>;
+
+    /// Each submitted review's reviewer and verdict.
+    async fn verdicts(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, Verdict)>>;
+}
+
+/// An issue's state and discussion.
+pub(crate) async fn issue_activity(
+    reads: &impl RestReads,
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+) -> Result<Snapshot> {
+    async {
+        let issue = repo.read(account, ItemKind::Issue, number).await?;
+        let mut snapshot = Snapshot::new(issue.item.state.as_str());
+        let discussion = reads
+            .discussion(repo, account, ItemKind::Issue, number)
+            .await;
+        snapshot.record_comments(DISCUSSION, discussion);
+        Ok::<_, anyhow::Error>(snapshot)
     }
+    .await
+    .context(reads.login_hint())
+}
+
+/// A PR's state, discussion, reviews and, while it is open, mergeability
+/// and checks. The PR must have `branch` as its head when one is given.
+pub(crate) async fn pr_activity(
+    reads: &impl RestReads,
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    branch: Option<&str>,
+) -> Result<Snapshot> {
+    let pull = branch_pull(repo, account, number, branch).await?;
+    let mut snapshot = Snapshot::new(pull.item.state.as_str());
+    let discussion = reads.discussion(repo, account, ItemKind::Pr, number).await;
+    snapshot.record_comments(DISCUSSION, discussion);
+    let reviews = reads.review_activity(repo, account, number).await;
+    snapshot.record_comments("reviews", reviews);
+    if pull.item.state == ItemState::Open {
+        snapshot.record_checks(&pull, reads.checks(repo, account, &pull).await);
+    }
+    Ok(snapshot)
+}
+
+/// A PR's state, mergeability, checks and review state.
+pub(crate) async fn pr_status(
+    reads: &impl RestReads,
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    url: &str,
+) -> Result<PrStatus> {
+    async {
+        let pull = repo.read(account, ItemKind::Pr, number).await?;
+        let state = match pull.item.state {
+            ItemState::Open => PrState::Open,
+            ItemState::Merged => PrState::Merged,
+            ItemState::Closed => PrState::Closed,
+        };
+        let mut status = PrStatus::new(url.into(), Some(state));
+        if state == PrState::Open {
+            let mut snapshot = Snapshot::default();
+            snapshot.record_checks(&pull, reads.checks(repo, account, &pull).await);
+            status.record_snapshot(snapshot);
+        }
+        status.record_reviews(reads.verdicts(repo, account, number).await);
+        Ok::<_, anyhow::Error>(status)
+    }
+    .await
+    .context(reads.login_hint())
 }
 
 /// The commits of the PR once it has merged, or `None` before. The PR must
@@ -264,39 +280,6 @@ pub(crate) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(Stri
         .collect()
 }
 
-/// Forgejo's combined status; a commit without statuses has `"statuses": null`.
-fn forgejo_statuses(combined: &Value) -> Result<Vec<RestCheck>> {
-    let statuses = match &combined["statuses"] {
-        Value::Null => &[][..],
-        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
-    };
-    ensure!(
-        combined["total_count"].as_u64() == Some(statuses.len() as u64),
-        "Forgejo returned a partial page of CI statuses"
-    );
-    statuses
-        .iter()
-        .map(|status| {
-            let name = status["context"]
-                .as_str()
-                .context("Forgejo CI status has no context")?;
-            let state = match status["status"].as_str() {
-                Some("pending") => "Pending",
-                Some("success") => "Success",
-                Some("failure") => "Failure",
-                Some("warning") => "Warning",
-                Some("skipped") => "Skipped",
-                Some("error") => "Error",
-                _ => anyhow::bail!("unknown Forgejo CI state"),
-            };
-            Ok(RestCheck {
-                name: name.into(),
-                state,
-            })
-        })
-        .collect()
-}
-
 fn list_item(item: &Value, field: &str) -> Result<list::Item> {
     let number = item[field]
         .as_u64()
@@ -374,36 +357,6 @@ mod tests {
         );
         assert!(list_item(&json!({"number": 0, "title": "Bug"}), "number").is_err());
         assert!(list_item(&json!({"title": "Bug"}), "number").is_err());
-    }
-
-    #[test]
-    fn forgejo_statuses_need_every_status_and_known_states() {
-        let combined = json!({"total_count": 2, "statuses": [
-            {"context": "ci / rust", "status": "success"},
-            {"context": "review", "status": "pending"}
-        ]});
-        assert_eq!(
-            forgejo_statuses(&combined).unwrap(),
-            [
-                RestCheck {
-                    name: "ci / rust".into(),
-                    state: "Success"
-                },
-                RestCheck {
-                    name: "review".into(),
-                    state: "Pending"
-                },
-            ]
-        );
-        assert!(
-            forgejo_statuses(&json!({"total_count": 0, "statuses": null}))
-                .unwrap()
-                .is_empty()
-        );
-        let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
-        assert!(forgejo_statuses(&partial).is_err());
-        let unknown = json!({"total_count": 1, "statuses": [{"context": "x", "status": "later"}]});
-        assert!(forgejo_statuses(&unknown).is_err());
     }
 
     #[test]

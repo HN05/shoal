@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+mod activity;
 pub(crate) mod threads;
 
 use super::{
@@ -21,12 +22,15 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
-    review::thread::{Target, Thread},
+    review::{
+        status::PrStatus,
+        thread::{Target, Thread},
+    },
     transport::{
         api::{HttpMethod, Request, encode, full_page},
         programs,
     },
-    updates::DISCUSSION,
+    updates::{DISCUSSION, Snapshot},
 };
 
 #[derive(Clone, Copy)]
@@ -397,6 +401,37 @@ impl Backend for GitHub {
                 "variables": { "id": node },
             })),
         ))
+    }
+
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot> {
+        activity::issue_activity(repo, account, number)
+            .await
+            .context(self.login_hint())
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        activity::pr_activity(repo, account, number, branch).await
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
+        activity::pr_status(repo, account, number, url).await
     }
 }
 

@@ -1,7 +1,7 @@
 //! Forgejo, and Gitea, which serves the same API: GitHub's REST shapes
 //! under `/api/v1`, sent with the token fj saved for the host, else through
 //! tea's login, else anonymously.
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 pub(crate) mod threads;
@@ -14,6 +14,7 @@ use super::{
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
+    backends::rest::{RestCheck, RestReads, fingerprints},
     items::{
         action::{Edit, MergeMethod, draft_title},
         create::{NewIssue, NewPull},
@@ -22,11 +23,14 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
-    review::thread::{Target, Thread},
+    review::{
+        status::{PrStatus, Verdict, forgejo_reviews},
+        thread::{Target, Thread},
+    },
     transport::api::{
         HttpMethod, MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body,
     },
-    updates::DISCUSSION,
+    updates::{DISCUSSION, Snapshot},
 };
 
 /// Forgejo's default maximum page size.
@@ -249,11 +253,160 @@ impl Backend for Forgejo {
     ) -> Result<Request> {
         bail!("Forgejo review threads cannot be resolved through its API")
     }
+
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Snapshot> {
+        rest::issue_activity(self, repo, account, number).await
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        rest::pr_activity(self, repo, account, number, branch).await
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
+        rest::pr_status(self, repo, account, number, url).await
+    }
+}
+
+impl RestReads for Forgejo {
+    async fn discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _kind: ItemKind,
+        number: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
+        let comments = repo.pages(account, &endpoint).await?;
+        fingerprints(&comments, &["body", "updated_at"])
+    }
+
+    async fn review_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
+        let reviews = repo.pages(account, &endpoint).await?;
+        fingerprints(
+            &reviews,
+            &[
+                "body",
+                "state",
+                "comments_count",
+                "stale",
+                "dismissed",
+                "updated_at",
+            ],
+        )
+    }
+
+    async fn checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        pull: &Current,
+    ) -> Result<Vec<RestCheck>> {
+        let head = pull.head_sha.as_deref().context("PR has no head commit")?;
+        let endpoint = repo.repo_endpoint(&format!("commits/{head}/status?limit=50"));
+        let combined = repo.send(account, &Request::get(endpoint)).await?;
+        statuses(&combined)
+    }
+
+    async fn verdicts(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, Verdict)>> {
+        let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
+        forgejo_reviews(&repo.pages(account, &endpoint).await?)
+    }
+}
+
+/// Forgejo's combined status; a commit without statuses has `"statuses": null`.
+fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
+    let statuses = match &combined["statuses"] {
+        Value::Null => &[][..],
+        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
+    };
+    ensure!(
+        combined["total_count"].as_u64() == Some(statuses.len() as u64),
+        "Forgejo returned a partial page of CI statuses"
+    );
+    statuses
+        .iter()
+        .map(|status| {
+            let name = status["context"]
+                .as_str()
+                .context("Forgejo CI status has no context")?;
+            let state = match status["status"].as_str() {
+                Some("pending") => "Pending",
+                Some("success") => "Success",
+                Some("failure") => "Failure",
+                Some("warning") => "Warning",
+                Some("skipped") => "Skipped",
+                Some("error") => "Error",
+                _ => anyhow::bail!("unknown Forgejo CI state"),
+            };
+            Ok(RestCheck {
+                name: name.into(),
+                state,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forgejo_statuses_need_every_status_and_known_states() {
+        let combined = json!({"total_count": 2, "statuses": [
+            {"context": "ci / rust", "status": "success"},
+            {"context": "review", "status": "pending"}
+        ]});
+        assert_eq!(
+            statuses(&combined).unwrap(),
+            [
+                RestCheck {
+                    name: "ci / rust".into(),
+                    state: "Success"
+                },
+                RestCheck {
+                    name: "review".into(),
+                    state: "Pending"
+                },
+            ]
+        );
+        assert!(
+            statuses(&json!({"total_count": 0, "statuses": null}))
+                .unwrap()
+                .is_empty()
+        );
+        let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
+        assert!(statuses(&partial).is_err());
+        let unknown = json!({"total_count": 1, "statuses": [{"context": "x", "status": "later"}]});
+        assert!(statuses(&unknown).is_err());
+    }
 
     #[test]
     fn pages_end_at_a_short_page() {
