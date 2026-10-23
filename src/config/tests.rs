@@ -260,6 +260,18 @@ fn load_sets_overload_defaults_on_the_machine_only() {
 }
 
 #[test]
+fn keep_awake_is_an_opt_in_machine_setting() {
+    let paths = Paths::for_test("/home/test");
+    assert!(!Config::parse("", &paths).unwrap().keep_awake);
+    assert!(
+        Config::parse("keep_awake = true", &paths)
+            .unwrap()
+            .keep_awake
+    );
+    assert!(crate::config::repo::parse("keep_awake = true").is_err());
+}
+
+#[test]
 fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
     let config: Config = toml::from_str("").unwrap();
     assert_eq!(config.cleanup.auto.enabled, None);

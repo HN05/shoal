@@ -17,6 +17,7 @@ pub mod events;
 mod execution_connection;
 mod execution_recovery;
 pub(crate) mod handoff;
+mod keep_awake;
 pub mod links;
 pub(crate) mod log;
 pub mod notifications;
@@ -113,6 +114,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
     spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
+    spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
     spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
     spawn_supervised(&mut background, &manager, "chats", chats::run);
     spawn_supervised(

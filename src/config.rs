@@ -104,6 +104,8 @@ pub struct Config {
     pub max_agents: Option<AgentLimit>,
     /// How hard Shoal may load this machine; sets `[overload]` defaults.
     pub load: overload::Load,
+    /// Hold off sleep, including from a closed laptop lid, while agents have work.
+    pub keep_awake: bool,
     /// Whether new tabs and sessions take the terminal; unset follows the launch.
     pub focus: Option<bool>,
     pub codex: repo::Codex,

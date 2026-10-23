@@ -299,6 +299,23 @@ is registered; removal keeps them in its [removal record](#checkpoints-and-resto
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
+### Keeping the machine awake
+
+```toml
+keep_awake = true              # Opt in; global config only
+```
+
+With `keep_awake` set, the daemon keeps the machine from sleeping while an
+[agent's turn](#agent-state) is working, so closing a laptop's lid or leaving it
+idle does not suspend the work; it lets the machine sleep again once no turn is
+working. Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,
+which logind and idle daemons that honour its inhibitors obey; macOS runs
+`caffeinate -i -s`, which prevents idle sleep and, on AC power, system sleep,
+but a closed lid still sleeps a Mac that is not in closed-display mode. The
+inhibitor ends with the daemon. When it cannot start or ends on its own, such as
+when polkit refuses the lock, the daemon records a `keep_awake_failed`
+notification and tries again only once no turn is working or the config reloads.
+
 ## Workspaces
 
 `shoal rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
@@ -2289,7 +2306,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
-behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, and workspaces it removed or retained on its own through PR, merge, or
+behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a

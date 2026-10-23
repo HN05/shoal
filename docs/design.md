@@ -150,6 +150,13 @@ overload protection does and every other tracked execution as manual stop does,
 since any of them may be writing. Agents restore once space reaches the cleanup
 threshold, so restores cannot refill the disk at once; commands stay explicit. A failed reading authorizes nothing on its filesystem
 and blocks recovery; readings of other filesystems still protect them.
+Keeping the machine awake is opt-in and machine-wide: a laptop held awake with
+its lid closed drains its battery and heats up in a bag, so only its user can
+choose it. While enabled and an agent's turn is working, the daemon holds the
+platform's sleep inhibitor as a child process that lasts as long as a pipe only
+the daemon holds, so the inhibitor cannot outlive a daemon that crashes or is
+killed. A failed inhibitor notifies and waits for the work to end or the config
+to reload instead of retrying in a loop.
 Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first

@@ -58,6 +58,8 @@ states!(NotificationKind {
     CachesEmptied => "caches_emptied",
     /// A forge limits the requests Shoal sends it, so polling waits.
     ForgeLimited => "forge_limited",
+    /// The sleep inhibitor `keep_awake` holds could not start or ended.
+    KeepAwakeFailed => "keep_awake_failed",
 });
 
 impl NotificationKind {

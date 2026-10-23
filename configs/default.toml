@@ -6,7 +6,7 @@
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
 # for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
-# the shared resources, load and overload protection.
+# the shared resources, load, keep_awake and overload protection.
 
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
@@ -26,6 +26,10 @@ root_dir = "~/shoal"
 # "balanced", or "full" for one that only runs agents. It sets the default
 # CPU and memory thresholds in [overload] and dynamic agent admission.
 # load = "balanced"
+
+# Keep the machine from sleeping, including when a laptop's lid closes, while
+# an agent is working. macOS still sleeps on a closed lid without an external display.
+# keep_awake = false
 
 # `shoal add` focuses workspace shells and agents waiting for a prompt, and
 # starts agents with input in the background: a background Herdr tab, or a
