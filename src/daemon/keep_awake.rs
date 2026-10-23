@@ -17,7 +17,7 @@ use super::{
     notifications::NotificationKind,
     workspace::{Manager, TrackedAgents, agent_state, delegated},
 };
-use crate::state::AgentState;
+use crate::{config::Config, state::AgentState};
 
 /// Rechecks without a store change, such as after a failed lookup.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -40,9 +40,10 @@ const INHIBITOR: &[&str] = &[
 enum Hold {
     Released,
     Held(Box<Inhibitor>),
-    /// The inhibitor could not start or ended on its own. It is not retried
-    /// until agents run out of work or the config reloads.
-    Failed,
+    /// The inhibitor could not start or ended on its own under this config.
+    /// It is retried once agents run out of work or another config is in
+    /// effect, since a reload may fix what failed.
+    Failed(Arc<Config>),
 }
 
 impl Hold {
@@ -50,48 +51,39 @@ impl Hold {
     async fn ended(&mut self) -> anyhow::Error {
         match self {
             Self::Held(inhibitor) => inhibitor.ended().await,
-            Self::Released | Self::Failed => std::future::pending().await,
+            Self::Released | Self::Failed(_) => std::future::pending().await,
         }
     }
-}
-
-enum Wake {
-    Changed,
-    Reloaded,
-    Ended(anyhow::Error),
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut changed = manager.store.watch_changes();
-    let mut config = manager.watch_config();
+    let mut reloaded = manager.watch_config();
     let mut hold = Hold::Released;
     loop {
-        if let Some(wanted) = wanted(&manager).await {
-            hold = update(&manager, hold, wanted).await;
+        let config = manager.config();
+        if let Some(wanted) = wanted(&manager, &config).await {
+            hold = update(&manager, hold, wanted, &config, INHIBITOR).await;
         }
-        let wake = tokio::select! {
-            _ = changed.changed() => Wake::Changed,
-            _ = config.changed() => Wake::Reloaded,
-            error = hold.ended() => Wake::Ended(error),
-            () = tokio::time::sleep(SWEEP_INTERVAL) => Wake::Changed,
+        let ended = tokio::select! {
+            _ = changed.changed() => None,
+            _ = reloaded.changed() => None,
+            error = hold.ended() => Some(error),
+            () = tokio::time::sleep(SWEEP_INTERVAL) => None,
         };
-        match wake {
-            Wake::Changed => {}
-            // A reload may fix what made the inhibitor fail.
-            Wake::Reloaded if matches!(hold, Hold::Failed) => hold = Hold::Released,
-            Wake::Reloaded => {}
-            Wake::Ended(error) => hold = failed(&manager, error).await,
+        if let Some(error) = ended {
+            hold = failed(&manager, error, config).await;
         }
         tokio::time::sleep(SETTLE).await;
         changed.borrow_and_update();
-        config.borrow_and_update();
+        reloaded.borrow_and_update();
     }
 }
 
-/// Whether to hold the inhibitor, or `None` when the lookup failed and the
-/// current hold should stay.
-async fn wanted(manager: &Manager) -> Option<bool> {
-    if !manager.config().keep_awake {
+/// Whether to hold the inhibitor under `config`, or `None` when the lookup
+/// failed and the current hold should stay.
+async fn wanted(manager: &Manager, config: &Config) -> Option<bool> {
+    if !config.keep_awake {
         return Some(false);
     }
     match manager.agents_have_work().await {
@@ -140,24 +132,31 @@ fn receives_open_pr_activity(db: &Connection, id: &str, agents: &TrackedAgents) 
     Ok(false)
 }
 
-async fn update(manager: &Manager, hold: Hold, wanted: bool) -> Hold {
+async fn update(
+    manager: &Manager,
+    hold: Hold,
+    wanted: bool,
+    config: &Arc<Config>,
+    inhibitor: &[&str],
+) -> Hold {
     match (hold, wanted) {
-        (Hold::Released, true) => match Inhibitor::start(INHIBITOR) {
+        (Hold::Failed(failed), true) if Arc::ptr_eq(&failed, config) => Hold::Failed(failed),
+        (Hold::Released | Hold::Failed(_), true) => match Inhibitor::start(inhibitor) {
             Ok(inhibitor) => Hold::Held(Box::new(inhibitor)),
-            Err(error) => failed(manager, error).await,
+            Err(error) => failed(manager, error, config.clone()).await,
         },
-        (hold @ (Hold::Held(_) | Hold::Failed), true) => hold,
+        (hold @ Hold::Held(_), true) => hold,
         (_, false) => Hold::Released,
     }
 }
 
-async fn failed(manager: &Manager, error: anyhow::Error) -> Hold {
+async fn failed(manager: &Manager, error: anyhow::Error, config: Arc<Config>) -> Hold {
     let message = format!("Shoal could not keep this machine awake: {error:#}");
     log!("keep awake: {error:#}");
     manager
         .notify(None, NotificationKind::KeepAwakeFailed, message)
         .await;
-    Hold::Failed
+    Hold::Failed(config)
 }
 
 /// A running inhibitor, which ends once dropped: its input closes and its

@@ -115,6 +115,28 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
 }
 
 #[tokio::test]
+async fn a_failed_inhibitor_is_retried_under_another_config() {
+    let (_temp, manager) = manager().await;
+    // `cat` holds, reading the input the daemon keeps open.
+    let holds: &[&str] = &["sh", "-c", "$0"];
+    let config = manager.config();
+    let hold = Hold::Failed(config.clone());
+    let hold = update(&manager, hold, true, &config, holds).await;
+    assert!(matches!(hold, Hold::Failed(_)));
+    let reloaded = Arc::new(Config::default());
+    let hold = update(&manager, hold, true, &reloaded, holds).await;
+    assert!(matches!(hold, Hold::Held(_)));
+    let hold = update(&manager, hold, false, &reloaded, holds).await;
+    assert!(matches!(hold, Hold::Released));
+    // A failure to start notifies and waits for the next config.
+    let missing: &[&str] = &["/nonexistent/shoal-inhibitor"];
+    let hold = update(&manager, hold, true, &reloaded, missing).await;
+    assert!(matches!(hold, Hold::Failed(ref failed) if Arc::ptr_eq(failed, &reloaded)));
+    let notifications = manager.notifications(false, 10).await.unwrap();
+    assert_eq!(notifications[0].kind, NotificationKind::KeepAwakeFailed);
+}
+
+#[tokio::test]
 async fn an_inhibitor_lasts_until_its_input_closes() {
     // `cat` reads the input the daemon holds, then the script reports its end.
     let mut inhibitor = Inhibitor::start(&["sh", "-c", "$0; echo released >&2"]).unwrap();
