@@ -2119,12 +2119,19 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
 
 #[test]
 fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
-    for available in [true, false] {
+    for outcome in ["available", "unavailable", "external"] {
         let fixture = Fixture::new(Forge::Forgejo, "");
         let mut responses = failed_check_responses();
-        if !available {
-            responses["GET repos/team/project/actions/jobs/18345/logs"] =
-                json!({"status": 404, "body": {"message": "logs unavailable"}});
+        let statuses = "GET repos/team/project/commits/head/statuses?limit=50&page=1";
+        match outcome {
+            "unavailable" => {
+                responses["GET repos/team/project/actions/jobs/18345/logs"] =
+                    json!({"status": 404, "body": {"message": "logs unavailable"}});
+            }
+            "external" => {
+                responses[statuses]["body"][0]["target_url"] = json!("https://ci.example/build/1");
+            }
+            _ => {}
         }
         responses["GET repos/team/project/pulls/8"]["body"] = json!({
             "number": 8, "title": "Fix crash", "state": "open",
@@ -2157,12 +2164,14 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
             .find(|update| update["kind"] == "ci_completed")
             .unwrap();
         let message = ci["message"].as_str().unwrap();
-        assert!(message.starts_with("rust: Failure; "), "{message}");
-        assert!(message.contains("--check 'rust'"), "{message}");
-        if available {
-            assert!(message.contains("failed step: Main Test"), "{message}");
-        } else {
-            assert!(message.contains("log unavailable: HTTP 404"), "{message}");
+        match outcome {
+            "external" => assert_eq!(message, "rust: Failure"),
+            "available" => assert!(message.contains("failed step: Main Test"), "{message}"),
+            _ => assert!(message.contains("log unavailable: HTTP 404"), "{message}"),
+        }
+        if outcome != "external" {
+            assert!(message.starts_with("rust: Failure; "), "{message}");
+            assert!(message.contains("--check 'rust'"), "{message}");
         }
         assert_eq!(ci["check"], json!({"name": "rust", "result": "failure"}));
     }

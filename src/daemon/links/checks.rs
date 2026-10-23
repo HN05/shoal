@@ -5,14 +5,15 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         capability::Capability,
-        ci::checks::{CheckLog, validate_check_name},
+        ci::checks::{CheckLog, NoJobLog, validate_check_name},
         items::link::{ItemKind, Selection},
         updates::Update,
     },
 };
 
 impl Manager {
-    /// Log failures stay on their CI update and never hide other activity.
+    /// Log failures stay on their CI update and never hide other activity;
+    /// a check without a CI job gets no pointer to a log it does not have.
     pub(crate) async fn summarize_failed_checks(&self, workspace: &str, updates: &mut [Update]) {
         for index in 0..updates.len() {
             let update = &updates[index];
@@ -35,6 +36,7 @@ impl Manager {
                     .failed_step
                     .map(|step| format!("; failed step: {step}"))
                     .unwrap_or_default(),
+                Err(error) if error.downcast_ref::<NoJobLog>().is_some() => continue,
                 Err(error) => format!(
                     "; log unavailable: {}",
                     format!("{error:#}").chars().take(512).collect::<String>()
