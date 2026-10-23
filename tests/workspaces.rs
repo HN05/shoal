@@ -4618,16 +4618,24 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
 
 #[test]
 fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let workspace = fixture.add("quarantined");
     let path = Path::new(workspace["path"].as_str().unwrap());
+    let execution = crashed_execution(&mut fixture, "quarantined");
+    let execution = execution["id"].as_str().unwrap();
+    // The pause path clears the child identity before saving the handoff.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
+        [execution],
+    )
+    .unwrap();
     fs::write(
         path.join(".shoal.toml"),
         "[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "printf restored > restored\n").unwrap();
-    let execution = "quarantined-execution";
     let state = fixture
         .root
         .path()
@@ -4637,12 +4645,6 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     fs::write(
         state.join(format!("{execution}.recovery.json")),
         r#"{"agent":"claude"}"#,
-    )
-    .unwrap();
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    db.execute(
-        "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,'unknown')",
-        rusqlite::params![execution, workspace["id"].as_str().unwrap()],
     )
     .unwrap();
 
@@ -8715,21 +8717,20 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     );
 }
 
-#[test]
-fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records() {
-    let mut fixture = Fixture::new();
-    let workspace = fixture.add("crash");
-    let port = fixture.ok(&["port", "acquire", "web", "crash"]);
+/// Run a command in `workspace`, then crash the daemon, the wrapper and the
+/// command together. That leaves nothing to reattach, only the record, which
+/// the restarted daemon quarantines as unknown. Unlike a record without a
+/// wrapper, its wrapper born during the test keeps the runner's older
+/// processes with unreadable environments out of the evidence.
+fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value {
     let mut wrapper = fixture
         .command()
-        .args(["exec", "crash", "--", "sleep", "30"])
+        .args(["exec", workspace, "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let execution = wait_registered_execution(&fixture, "crash");
-    // A crash that takes the wrapper and its command along leaves nothing to
-    // reattach, only the record.
+    let execution = wait_registered_execution(fixture, workspace);
     fixture.daemon.child.kill().unwrap();
     fixture.daemon.child.wait().unwrap();
     wrapper.kill().unwrap();
@@ -8737,6 +8738,15 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records(
     let group = execution["child"]["pid"].as_i64().unwrap() as i32;
     unsafe { libc::kill(-group, libc::SIGKILL) };
     fixture.restart();
+    execution
+}
+
+#[test]
+fn doctor_recovers_daemon_crash_and_requires_acknowledgement_without_launch_identity() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("crash");
+    let port = fixture.ok(&["port", "acquire", "web", "crash"]);
+    let execution = crashed_execution(&mut fixture, "crash");
     let report = recovery_report(&fixture, &["doctor", "crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
     repaired_workspaces(
@@ -8744,10 +8754,15 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records(
         &["doctor", "crash", "--repair", "--acknowledge-stopped"],
     );
     assert_eq!(fixture.ok(&["port", "crash"])["reserved"][0], port);
+    // A wrapper that died before launching its command recorded no child or
+    // group.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
-        [workspace["id"].as_str().unwrap()],
+        "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
+        rusqlite::params![
+            workspace["id"].as_str().unwrap(),
+            execution["wrapper"].to_string()
+        ],
     )
     .unwrap();
     let report = recovery_report(&fixture, &["doctor", "crash", "--repair"]);
