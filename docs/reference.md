@@ -1720,11 +1720,12 @@ checkpoint, then restores it as `shoal restore` does; when that restore fails,
 `shoal restore <workspace>` retries it. On the machine that exported it, `shoal
 resume` continues each agent's reported session by ID, which Claude Code and
 Codex find from any directory; Shoal leaves the agents' session files alone.
-Every reopen, by import or `shoal restore`, trusts the workspace's path for the
-agents that resume there. An agent without a kept session `shoal resume` starts
-as `shoal claude` or `shoal codex` starts a new one, telling it the workspace
-moved, instead of running `[agent_resume]`. Workspace processes can neither
-export nor import.
+`--keep-sessions` keeps the sessions on any machine, such as one they were
+copied to, and `--new-sessions` on none. Every reopen, by import or `shoal
+restore`, trusts the workspace's path for the agents that resume there. An agent
+without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
+starts a new one, telling it the workspace moved, instead of running
+`[agent_resume]`. Workspace processes can neither export nor import.
 
 ### Assignment completion
 

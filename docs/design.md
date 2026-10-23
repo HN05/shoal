@@ -1296,8 +1296,8 @@ begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private files, and Shoal neither
 stores nor touches them. The export records the exporting machine's ID with the
 agents' sessions beside the moved records, which older importers read. An import
-on that machine keeps the session IDs, which the agents resume from any
-directory, and every reopen trusts the workspace's path for those agents, since
+on that machine, or one told to keep sessions, keeps the session IDs, which the
+agents resume from any directory, and every reopen trusts the workspace's path for those agents, since
 resuming skips the launch's trust setup. Otherwise moved recovery records drop
 their session, place and wrapper, and `shoal resume` starts them through the
 fresh-agent launch, with its trust setup and guidance, told the workspace moved.

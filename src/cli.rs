@@ -736,8 +736,9 @@ pub enum Command {
     ///
     /// Fetches the default branch when a file builds on commits the repository lacks. On the
     /// machine that exported it, shoal resume continues the stopped agents' sessions; elsewhere,
-    /// it starts new sessions, since the sessions stayed on the other machine. `-` reads from
-    /// standard input. A directory imports each .shoal file in it.
+    /// it starts new sessions, since the sessions stayed on the other machine. --keep-sessions
+    /// and --new-sessions override that. `-` reads from standard input. A directory imports each
+    /// .shoal file in it.
     Import {
         /// Export files or directories of them.
         #[arg(required = true)]
@@ -745,6 +746,13 @@ pub enum Command {
         /// Repository to import into, when it does not share the exported repository's origin.
         #[arg(long = "repo")]
         repository: Option<String>,
+        /// Continue the stopped agents' sessions on any machine, such as one the agents'
+        /// sessions were copied to.
+        #[arg(long, conflicts_with = "new_sessions")]
+        keep_sessions: bool,
+        /// Start new sessions even on the machine that exported the workspace.
+        #[arg(long, conflicts_with = "keep_sessions")]
+        new_sessions: bool,
     },
     /// Run an arbitrary command in a workspace.
     Exec {

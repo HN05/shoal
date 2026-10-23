@@ -563,7 +563,25 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             confirmation,
             ..
         }) => transfer::export(&ctx, workspace, output, confirmation.yes).await,
-        Command::Import { files, repository } => transfer::import(&ctx, files, repository).await,
+        Command::Import {
+            files,
+            repository,
+            keep_sessions,
+            new_sessions,
+        } => {
+            let sessions = if keep_sessions {
+                Some(true)
+            } else if new_sessions {
+                Some(false)
+            } else {
+                None
+            };
+            let options = transfer::ImportOptions {
+                repository,
+                sessions,
+            };
+            transfer::import(&ctx, files, options).await
+        }
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => {
             agents::run_named(&ctx, "claude", workspace, args).await

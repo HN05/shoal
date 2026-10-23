@@ -104,15 +104,17 @@ impl Manifest {
         })
     }
 
-    /// The removal record to import on `machine`. On the exporting machine,
-    /// each agent with a session keeps it; every other agent starts a new
-    /// session.
-    pub fn workspace_on(&self, machine: Option<&str>) -> RemovedWorkspace {
-        let Some(sessions) = self
-            .sessions
+    /// Whether `machine` exported this workspace.
+    pub fn exported_on(&self, machine: Option<&str>) -> bool {
+        self.sessions
             .as_ref()
-            .filter(|sessions| machine == Some(sessions.machine.as_str()))
-        else {
+            .is_some_and(|sessions| machine == Some(sessions.machine.as_str()))
+    }
+
+    /// The removal record to import. With `keep_sessions`, each agent with a
+    /// session keeps it; every other agent starts a new session.
+    pub fn workspace_keeping(&self, keep_sessions: bool) -> RemovedWorkspace {
+        let Some(sessions) = self.sessions.as_ref().filter(|_| keep_sessions) else {
             return self.workspace.clone();
         };
         let agents = sessions.agents.iter().cloned().map(|agent| {

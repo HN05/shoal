@@ -361,7 +361,8 @@ Shoal does when an agent exits or is stopped; `shoal restore <workspace> <number
 returns an existing workspace to one of them. `shoal export <workspace> -o <file>`
 removes a workspace and writes that checkpoint and record to a file, and `shoal
 import <file>` opens it on another machine, where its agents start new sessions, or
-on the same one, where `shoal resume` continues their sessions.
+on the same one, where `shoal resume` continues their sessions; `--keep-sessions`
+and `--new-sessions` choose either.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

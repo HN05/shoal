@@ -67,14 +67,23 @@ fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
+/// How `shoal import` opens each workspace.
+pub(super) struct ImportOptions {
+    /// The repository to import into instead of the one with the export's
+    /// origin.
+    pub repository: Option<String>,
+    /// Whether the stopped agents keep their sessions; `None` keeps them on
+    /// the machine that exported the workspace.
+    pub sessions: Option<bool>,
+}
+
 /// `shoal import`: open the workspaces exported to `files`, or to the
-/// `.shoal` files in the directories among them, in the repository with each
-/// one's origin, or in `repository`. A directory or several files import
-/// each workspace and report every result.
+/// `.shoal` files in the directories among them, as `options` says. A
+/// directory or several files import each workspace and report every result.
 pub(super) async fn import(
     ctx: &Context,
     files: Vec<PathBuf>,
-    repository: Option<String>,
+    options: ImportOptions,
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
@@ -83,22 +92,24 @@ pub(super) async fn import(
     if let [file] = files.as_slice()
         && !file.is_dir()
     {
-        let restored = import_workspace(ctx, file, repository).await?;
+        let restored = import_workspace(ctx, file, &options).await?;
         return super::restore::finish_reopen(ctx, restored, "Imported").await;
     }
     let files = import_files(files)?;
-    import_each(ctx, &files, repository).await.report(ctx)
+    import_each(ctx, &files, &options).await.report(ctx)
 }
 
 /// Record the workspace exported to `file` as removed in its repository, or
-/// in `repository`, and open it again there.
+/// in the one `options` names, and open it again there.
 async fn import_workspace(
     ctx: &Context,
     file: &Path,
-    repository: Option<String>,
+    options: &ImportOptions,
 ) -> Result<RestoredWorkspace> {
     let import = read_import(file)?;
-    let repository = repository
+    let repository = options
+        .repository
+        .clone()
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
     let method = Method::ImportWorkspace {
@@ -108,7 +119,7 @@ async fn import_workspace(
             .as_ref()
             .map(|bundle| bundle.path().to_owned()),
         prerequisite: import.manifest.prerequisite.clone(),
-        workspace: Box::new(workspace_here(&import.manifest)),
+        workspace: Box::new(workspace_here(&import.manifest, options.sessions)),
     };
     ctx.progress(
         "Importing workspace",
@@ -153,10 +164,10 @@ fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
 }
 
 /// Import each of `files`, going on after one fails.
-async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String>) -> ImportReport {
+async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) -> ImportReport {
     let mut report = ImportReport::default();
     for file in files {
-        match import_and_prepare(ctx, file, repository.clone()).await {
+        match import_and_prepare(ctx, file, options).await {
             Ok(reopened) => {
                 let workspace = reopened.workspace.clone();
                 report.imported(ctx, reopened);
@@ -178,9 +189,9 @@ async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String
 async fn import_and_prepare(
     ctx: &Context,
     file: &Path,
-    repository: Option<String>,
+    options: &ImportOptions,
 ) -> Result<Reopened> {
-    let restored = import_workspace(ctx, file, repository).await?;
+    let restored = import_workspace(ctx, file, options).await?;
     super::restore::prepare_reopened(ctx, restored)
         .await?
         .context("its setup did not finish")
@@ -230,10 +241,12 @@ impl ImportReport {
     }
 }
 
-/// The exported removal record for this machine: on the one that exported
-/// it, agents keep their sessions.
-fn workspace_here(manifest: &Manifest) -> RemovedWorkspace {
-    manifest.workspace_on(crate::process::machine::id().as_deref())
+/// The exported removal record to import here, whose agents keep their
+/// sessions as `sessions` says, or on the machine that exported it.
+fn workspace_here(manifest: &Manifest, sessions: Option<bool>) -> RemovedWorkspace {
+    let keep =
+        sessions.unwrap_or_else(|| manifest.exported_on(crate::process::machine::id().as_deref()));
+    manifest.workspace_keeping(keep)
 }
 
 /// Read the export in `file`, or on standard input for `-`.

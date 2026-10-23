@@ -4802,7 +4802,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
 }
 
 #[test]
-fn import_on_the_exporting_machine_continues_the_session() {
+fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("carried");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -4862,6 +4862,18 @@ fn import_on_the_exporting_machine_continues_the_session() {
         fs::read_to_string(path.join("resumed")).unwrap(),
         "carried-session"
     );
+
+    // --new-sessions starts the agent over on this machine too.
+    fs::remove_file(path.join("resumed")).unwrap();
+    fs::remove_file(file).unwrap();
+    let exported = fixture.ok(&["export", "carried", "-o", file]);
+    assert_eq!(
+        exported["manifest"]["sessions"]["last_session"]["session"], "carried-session",
+        "{exported}"
+    );
+    fixture.ok(&["import", file, "--repo", repo, "--new-sessions"]);
+    resume();
+    assert!(!path.join("resumed").exists());
 }
 
 #[test]
