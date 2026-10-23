@@ -702,9 +702,10 @@ trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
 sessions), so commands never name a tool. Other names add no tool-specific setup.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
-approvals and Claude runs with its own settings. Both trust the repository's shared
-Shoal workspaces directory, or an explicitly placed workspace or chat checkout
-outside it, in their user config before launch, creating the file if needed; Happy
+approvals and Claude runs with its own settings. Both trust the repository's checkout,
+which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
+directory, or an explicitly placed workspace outside it, in their user config before
+launch, creating the file if needed; Happy
 launches and Codex app handoffs do so too. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`

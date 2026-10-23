@@ -10550,14 +10550,16 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 }
 
 #[test]
-fn claude_launch_trusts_shared_repository_directory() {
+fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     let workspace = fixture.add("trusted");
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
     let repository = fixture.ok(&["repo", "list"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
-    let keys = [directory.as_path()];
+    // Claude Code keys a worktree's trust by the repository checkout.
+    let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
+    let keys = [checkout.as_path(), directory.as_path()];
     let bin = home.join("bin");
     install_test_script(bin.join("claude"), "#!/bin/sh\nexit 0\n");
     let config = home.join(".claude.json");
@@ -10572,7 +10574,6 @@ fn claude_launch_trusts_shared_repository_directory() {
         );
     }
     assert!(root["projects"][path.to_str().unwrap()].is_null());
-    assert!(root["projects"][fixture.repo.to_str().unwrap()].is_null());
     assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
@@ -10586,7 +10587,6 @@ fn claude_launch_trusts_shared_repository_directory() {
         );
     }
     assert!(root["projects"][path.to_str().unwrap()].is_null());
-    assert!(root["projects"][fixture.repo.to_str().unwrap()].is_null());
     assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     // An absolute CLAUDE_CONFIG_DIR selects that directory's config instead.
@@ -10609,7 +10609,6 @@ fn claude_launch_trusts_shared_repository_directory() {
         );
     }
     assert!(overridden["projects"][path.to_str().unwrap()].is_null());
-    assert!(overridden["projects"][fixture.repo.to_str().unwrap()].is_null());
     let untouched: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(untouched["projects"], serde_json::json!({}));
 
@@ -10625,7 +10624,7 @@ fn claude_launch_trusts_shared_repository_directory() {
 }
 
 #[test]
-fn codex_launches_trust_shared_repository_directory_and_external_workspace() {
+fn codex_launches_trust_checkout_shared_repository_directory_and_external_workspace() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     // An explicit path must not make its arbitrary parent a trust root.
@@ -10640,7 +10639,8 @@ fn codex_launches_trust_shared_repository_directory_and_external_workspace() {
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
     let repository = fixture.ok(&["repo", "list"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
-    let keys = [path.as_path(), directory.as_path()];
+    let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
+    let keys = [checkout.as_path(), path.as_path(), directory.as_path()];
     let bin = home.join("bin");
     // Inspect the config from the child so trust must precede the launch.
     install_test_script(
@@ -10684,11 +10684,6 @@ fn codex_launches_trust_shared_repository_directory_and_external_workspace() {
             assert!(
                 root["projects"]
                     .get(fixture.shoal_dir().to_str().unwrap())
-                    .is_none()
-            );
-            assert!(
-                root["projects"]
-                    .get(fixture.repo.to_str().unwrap())
                     .is_none()
             );
             assert_eq!(fs::read(&target).unwrap(), output.stdout);

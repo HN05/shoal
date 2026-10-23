@@ -509,10 +509,11 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 
 Override their `[commands]` entries to change the executable or flags; prompt
 templates, trust setup, and agent exit notifications still apply.
-Claude and Codex launches, including Happy's, trust the repository's shared Shoal
-workspaces directory before launch, creating the agent's user config if needed and
-preserving other settings. An explicitly placed workspace outside that directory
-gets its own trust entry.
+Claude and Codex launches, including Happy's, trust the repository's checkout and
+shared Shoal workspaces directory before launch, creating the agent's user config if
+needed and preserving other settings. Claude Code looks up a worktree's trust under
+the checkout, not under parent directories above the worktree. An explicitly placed
+workspace outside the workspaces directory gets its own trust entry.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
 failure warns and still launches the agent. Removing a repository removes its

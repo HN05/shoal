@@ -145,17 +145,25 @@ async fn workspace_trust_paths(
     }
 }
 
-/// Trust the shared workspaces directory for normal Shoal worktrees. An
-/// explicitly placed worktree outside it needs its own project entry.
+/// Trust the repository's checkout and the shared workspaces directory for
+/// normal Shoal worktrees. Claude Code keys every worktree's trust by the
+/// checkout and searches parents only up to the worktree root; the directory
+/// covers versions that search every parent. An explicitly placed worktree
+/// outside it needs its own project entry.
 fn repository_trust_paths(
     repository: &Repository,
     workspace: &std::path::Path,
 ) -> Vec<std::path::PathBuf> {
-    match &repository.workspaces_dir {
-        Some(directory) if workspace.starts_with(directory) => vec![directory.clone()],
-        Some(directory) => vec![directory.clone(), workspace.to_owned()],
-        None => vec![workspace.to_owned()],
+    let mut paths = vec![repository.path.clone()];
+    paths.extend(repository.workspaces_dir.iter().cloned());
+    let shared = repository
+        .workspaces_dir
+        .as_ref()
+        .is_some_and(|directory| workspace.starts_with(directory));
+    if !shared && !paths.iter().any(|path| path == workspace) {
+        paths.push(workspace.to_owned());
     }
+    paths
 }
 
 /// Record the workspace as trusted in Claude Code's `.claude.json` so
