@@ -84,7 +84,8 @@ impl Backend for Forgejo {
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
-            | Capability::ForkPrs => Support::Supported,
+            | Capability::ForkPrs
+            | Capability::Forks => Support::Supported,
         }
     }
 
@@ -240,6 +241,18 @@ impl Backend for Forgejo {
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, false)));
         (Request::get(endpoint), "/commit/id")
+    }
+
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        github_rest::pushable(repo, account).await
+    }
+
+    /// Forgejo refuses a second fork, so an existing one is looked up first.
+    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        match owned_fork(repo, account).await? {
+            Some(fork) => Ok(fork),
+            None => github_rest::create_fork(repo, account).await,
+        }
     }
 
     /// Forgejo keeps draft state in the title.
@@ -650,6 +663,24 @@ fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
         endpoint += &format!("&q={}", encode(text, false));
     }
     endpoint
+}
+
+/// `owner/repository` of the account's existing fork of the repository.
+async fn owned_fork(repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+    let user = repo.send(account, &Request::get("user".into())).await?;
+    let login = user["login"]
+        .as_str()
+        .context("the forge did not report your login")?;
+    let forks = repo.pages(account, &repo.repo_endpoint("forks")).await?;
+    forks
+        .iter()
+        .find(|fork| {
+            fork["owner"]["login"]
+                .as_str()
+                .is_some_and(|owner| owner.eq_ignore_ascii_case(login))
+        })
+        .map(github_rest::full_name)
+        .transpose()
 }
 
 #[cfg(test)]

@@ -274,6 +274,13 @@ pub(crate) trait Backend {
     /// in the response.
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str);
 
+    /// Whether `account` may push branches to the repository.
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
+
+    /// `owner/repository` of `account`'s fork of the repository, which the
+    /// forge creates when the account has none.
+    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
+
     /// The request that opens `pull`.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
 
@@ -681,6 +688,14 @@ impl Backend for ForgeKind {
 
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         dispatch!(self, backend => backend.branch_read(repo, branch))
+    }
+
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        dispatch!(self, backend => backend.pushable(repo, account).await)
+    }
+
+    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        dispatch!(self, backend => backend.fork(repo, account).await)
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

@@ -69,6 +69,9 @@ impl Backend for GitLab {
             Capability::ForkPrs => Support::Unsupported(Some(
                 "GitLab opens a fork's merge request in the fork project, so open it on GitLab",
             )),
+            Capability::Forks => Support::Unsupported(Some(
+                "Shoal cannot open merge requests from a GitLab fork, so it does not make one",
+            )),
             Capability::RebaseMerge => Support::Unsupported(Some(
                 "GitLab merges with the project's merge method, so use merge or squash",
             )),
@@ -347,6 +350,26 @@ impl Backend for GitLab {
         let endpoint =
             repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
         (Request::get(endpoint), "/commit/id")
+    }
+
+    /// Developers and above may push.
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        let project = repo
+            .send(
+                account,
+                &Request::get(format!("projects/{}", encode(&repo.path, false))),
+            )
+            .await
+            .context(self.login_hint())?;
+        let access = ["project_access", "group_access"]
+            .iter()
+            .filter_map(|scope| project["permissions"][scope]["access_level"].as_u64())
+            .max();
+        Ok(access.is_some_and(|level| level >= 30))
+    }
+
+    async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
+        Err(capability::unsupported(self, Capability::Forks))
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

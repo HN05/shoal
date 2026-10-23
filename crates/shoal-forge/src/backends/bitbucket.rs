@@ -79,6 +79,9 @@ impl Backend for Bitbucket {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::ForkPrs => Support::Supported,
+            Capability::Forks => Support::Unsupported(Some(
+                "fork it on Bitbucket, add the fork as a remote and set remote.pushDefault to it",
+            )),
         }
     }
 
@@ -330,6 +333,22 @@ impl Backend for Bitbucket {
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
         (Request::get(endpoint), "/target/hash")
+    }
+
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        let query = encode(
+            &format!("repository.full_name={}", literal(&repo.path)),
+            false,
+        );
+        let endpoint = format!("user/permissions/repositories?q={query}");
+        let grants = repo.pages(account, &endpoint).await?;
+        Ok(grants
+            .iter()
+            .any(|grant| matches!(grant["permission"].as_str(), Some("write" | "admin"))))
+    }
+
+    async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
+        Err(capability::unsupported(self, Capability::Forks))
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

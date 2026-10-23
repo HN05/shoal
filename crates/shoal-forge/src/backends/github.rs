@@ -82,7 +82,8 @@ impl Backend for GitHub {
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
-            | Capability::ForkPrs => Support::Supported,
+            | Capability::ForkPrs
+            | Capability::Forks => Support::Supported,
         }
     }
 
@@ -391,6 +392,15 @@ impl Backend for GitHub {
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, true)));
         (Request::get(endpoint), "/commit/sha")
+    }
+
+    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        github_rest::pushable(repo, account).await
+    }
+
+    /// GitHub answers with the account's existing fork when it has one.
+    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        github_rest::create_fork(repo, account).await
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

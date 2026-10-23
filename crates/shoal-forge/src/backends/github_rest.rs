@@ -214,6 +214,38 @@ pub(crate) fn has_head(pull: &Value, head: &Head<'_>) -> bool {
             .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))
 }
 
+/// Whether the repository's read grants `account` push access.
+pub(crate) async fn pushable(repo: &ForgeRepo, account: &crate::account::Account) -> Result<bool> {
+    let read = repo
+        .send(account, &Request::get(format!("repos/{}", repo.path)))
+        .await
+        .context(repo.kind.login_hint())?;
+    Ok(read["permissions"]["push"] == true)
+}
+
+/// Ask the forge to fork the repository into the account's namespace and
+/// return the fork's `owner/repository`.
+pub(crate) async fn create_fork(
+    repo: &ForgeRepo,
+    account: &crate::account::Account,
+) -> Result<String> {
+    let request = Request::new(
+        HttpMethod::Post,
+        repo.repo_endpoint("forks"),
+        Some(json!({})),
+    );
+    let fork = repo
+        .send(account, &request)
+        .await
+        .context("could not fork the repository")?;
+    full_name(&fork)
+}
+
+/// The `owner/repository` a repository read reports.
+pub(crate) fn full_name(repository: &Value) -> Result<String> {
+    text(&repository["full_name"]).context("the forge did not report the repository's name")
+}
+
 /// The `head` a new PR names: the branch, prefixed with its owner when it
 /// is in a fork.
 pub(crate) fn head_spec(pull: &NewPull) -> String {

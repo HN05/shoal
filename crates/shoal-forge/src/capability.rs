@@ -20,6 +20,7 @@ states!(Capability: Variants {
     RebaseMerge => "rebase_merge",
     SquashMerge => "squash_merge",
     ForkPrs => "fork_prs",
+    Forks => "forks",
 });
 
 impl Capability {
@@ -38,6 +39,7 @@ impl Capability {
             Self::RebaseMerge => "rebase and merge PRs",
             Self::SquashMerge => "squash and merge PRs",
             Self::ForkPrs => "open PRs from a fork",
+            Self::Forks => "fork repositories",
         }
     }
 

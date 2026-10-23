@@ -47,6 +47,19 @@ impl<'a> RemoteUrl<'a> {
         })
     }
 
+    /// The same URL naming the repository at `path` on the same host, keeping
+    /// the transport, user, port and `.git` suffix.
+    pub fn with_path(&self, path: &str) -> Option<String> {
+        let current = self.path?;
+        let start = current.as_ptr() as usize - self.source.as_ptr() as usize;
+        let end = start + current.len();
+        Some(format!(
+            "{}{path}{}",
+            &self.source[..start],
+            &self.source[end..]
+        ))
+    }
+
     /// Registration retains ports, path case, and permissive path syntax.
     pub fn registration_key(&self) -> String {
         if !matches!(self.transport, Transport::Other(_))
