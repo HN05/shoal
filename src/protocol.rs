@@ -41,6 +41,10 @@ pub mod timing {
     pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(3600);
     /// Allow daemon startup or shutdown to settle across repeated status requests.
     pub const DAEMON_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+    /// A long-lived wait that lost its daemon gives the next one this long to
+    /// listen and know the caller's scope again: the service manager's restart
+    /// throttle, the startup audit, and the wrapper's reattachment.
+    pub const DAEMON_RESTART_TIMEOUT: Duration = Duration::from_secs(120);
     /// Observe daemon transitions promptly without busy-polling the socket.
     pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
     /// A managed daemon restarts with an installed update once its running
@@ -106,6 +110,10 @@ pub mod timing {
         assert!(
             REATTACH_EXIT_TIMEOUT.as_millis()
                 > WORKSPACE_STOP_TIMEOUT.as_millis() + 2 * DAEMON_WAIT_TIMEOUT.as_millis()
+        );
+        assert!(
+            DAEMON_RESTART_TIMEOUT.as_millis()
+                > DAEMON_WAIT_TIMEOUT.as_millis() + REATTACH_RETRY_MAX.as_millis()
         );
     };
 }

@@ -1944,7 +1944,9 @@ reports existing activity; subsequent watches share a
 cursor per workspace and item across restarts. Pending updates replay until the
 CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait to 1–3600 seconds; without it, the wait is
-unbounded. Expiration returns an empty array and `timed_out: true`. A newer watch
+unbounded. A watch survives daemon restarts, waiting up to two minutes for a
+daemon that went away to return and know the caller's scope again, or 10 seconds
+for one that was not running. Expiration returns an empty array and `timed_out: true`. A newer watch
 in the same workspace
 supersedes a running one, which returns an empty array and `superseded: true`
 without taking updates; updates acknowledged while a newer watch runs stay pending
@@ -2207,7 +2209,10 @@ context after its next tool call or prompt. Delivering through the hook replaces
 the workspace, which ends with `superseded: true`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
 turn it waits up to a week for the next message or item activity, prints it and
-exits 2, so Claude Code starts the idle agent's next turn with it. Its command
+exits 2, so Claude Code starts the idle agent's next turn with it. A failed
+wait, such as one a restarted daemon refuses before the agent's wrapper
+reattaches, is tried again after a delay that doubles up to a minute, so the
+agent is never left idle without one. Its command
 passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the
 agent would otherwise leave the hook behind. Codex cannot
@@ -2251,8 +2256,9 @@ number no stored question holds, across workspaces; without a number,
 `answer` picks among open questions, showing each one's workspace, recommendation
 and choices, and refuses the answer if another question took the number meanwhile.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
-also delivers its message; it survives daemon restarts, waiting up to 10 seconds
-for a stopped daemon to return. Asking an identical
+also delivers its message; it survives daemon restarts, waiting up to two minutes
+for a daemon that went away to return and know the caller's scope again, or 10
+seconds for one that was not running. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
 interrupted `--wait` can be rerun; the same question with other details is refused.
 A listing returns the newest open questions that fit one response and counts the older

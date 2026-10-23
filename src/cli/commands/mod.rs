@@ -313,7 +313,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             no_comments,
             check,
         } => view::view(&ctx, items, no_comments, check).await,
-        Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
+        Command::Watch {
+            items,
+            timeout,
+            resume,
+        } => links::watch(&ctx, items, timeout, resume).await,
         Command::Labels { workspace } => labels::labels(&ctx, workspace).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready {

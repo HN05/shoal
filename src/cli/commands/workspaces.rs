@@ -2,10 +2,12 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
+use tokio::time::Instant;
 
 use crate::{
     agent::Agent,
@@ -1962,8 +1964,16 @@ pub(super) async fn watch_items(
     workspace: String,
     selection: crate::forge::items::link::Selection,
     timeout: Option<u64>,
+    resumed: bool,
 ) -> Result<i32> {
-    let body = wait_for_items(ctx, &workspace, selection, timeout).await?;
+    // The installed release continues the wait after an upgrade.
+    let executable = crate::cli::installed::Executable::current();
+    let deadline = timeout.map(|timeout| Instant::now() + Duration::from_secs(timeout));
+    let body = wait_for_items(ctx, &workspace, selection, deadline, resumed)
+        .await
+        .map_err(|error| {
+            executable.resume_or(error, || resume_watch_arguments(&workspace, deadline))
+        })?;
     let updates = crate::daemon::links::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
@@ -1999,59 +2009,61 @@ pub(super) async fn watch_items(
     Ok(0)
 }
 
-/// A daemon update closes the wait, and the replacement inherits the socket,
-/// so wait again there for the rest of the timeout. Waiting acknowledges
-/// nothing, and undelivered updates stay pending for the next wait.
+/// A daemon restart closes the wait, so wait again on the next daemon until
+/// `deadline`; `restarted` says the daemon restarted before this wait began.
+/// Waiting acknowledges nothing, and undelivered updates stay pending for the
+/// next wait.
 pub(super) async fn wait_for_items(
     ctx: &Context,
     workspace: &str,
     selection: Selection,
-    timeout: Option<u64>,
+    deadline: Option<Instant>,
+    restarted: bool,
 ) -> Result<Body> {
-    let executable = crate::cli::installed::Executable::current();
-    let deadline =
-        timeout.map(|timeout| std::time::Instant::now() + std::time::Duration::from_secs(timeout));
-    let mut timeout_secs = timeout;
-    loop {
-        let method = Method::WatchItems {
-            workspace: workspace.to_owned(),
-            selection: selection.clone(),
-            timeout_secs,
-        };
-        match client::open(&ctx.paths, method).await {
-            Ok((_stream, body)) => return Ok(body),
-            Err(error) if client::stream_closed(&error) => {
-                tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
-                // The daemon waits whole seconds, so less than one left ends here.
-                if let Some(deadline) = deadline {
-                    timeout_secs = Some(
-                        deadline
-                            .saturating_duration_since(std::time::Instant::now())
-                            .as_secs(),
-                    );
-                    if timeout_secs == Some(0) {
-                        return Ok(Body::PrUpdates(crate::daemon::links::wait::Updates {
-                            updates: Vec::new(),
-                            messages: Vec::new(),
-                            timed_out: true,
-                            superseded: false,
-                        }));
-                    }
-                }
-            }
-            // The installed release waits for the rest of the timeout.
-            Err(error) => {
-                return Err(executable.resume_or(error, || {
-                    crate::cli::installed::arguments_with("--timeout", timeout_secs)
-                }));
-            }
-        }
+    let method = || Method::WatchItems {
+        workspace: workspace.to_owned(),
+        selection: selection.clone(),
+        timeout_secs: seconds_left(deadline),
+    };
+    let reply = client::await_reply(&ctx.paths, method, restarted);
+    let Some(deadline) = deadline else {
+        return reply.await;
+    };
+    match tokio::time::timeout_at(deadline, reply).await {
+        Ok(reply) => reply,
+        Err(_) => Ok(Body::PrUpdates(crate::daemon::links::wait::Updates {
+            updates: Vec::new(),
+            messages: Vec::new(),
+            timed_out: true,
+            superseded: false,
+        })),
     }
+}
+
+/// The whole seconds the daemon waits before `deadline`, at least one.
+fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
+    let left = deadline?.saturating_duration_since(Instant::now());
+    Some((left.as_secs() + u64::from(left.subsec_nanos() > 0)).max(1))
+}
+
+/// This watch's arguments continuing its wait in `workspace` until `deadline`,
+/// as the installed release does after an upgrade restarted the daemon.
+fn resume_watch_arguments(workspace: &str, deadline: Option<Instant>) -> Vec<OsString> {
+    use crate::cli::installed::{arguments, replace_option};
+    let mut resumed = replace_option(arguments(), "--workspace", workspace);
+    if let Some(seconds) = seconds_left(deadline) {
+        resumed = replace_option(resumed, "--timeout", &seconds.to_string());
+    }
+    if !resumed.iter().any(|argument| argument == "--resume") {
+        resumed.push("--resume".into());
+    }
+    resumed
 }
 
 #[cfg(test)]
 mod tests {
     use super::editor;
+    use std::time::Duration;
 
     #[test]
     fn a_launch_in_a_workspace_opens_only_that_workspace() {
@@ -2101,20 +2113,25 @@ mod tests {
         }
     }
 
+    fn deadline(seconds: u64) -> tokio::time::Instant {
+        tokio::time::Instant::now() + Duration::from_secs(seconds)
+    }
+
     #[tokio::test]
     async fn item_wait_continues_on_the_replacement_daemon() {
         use crate::{
             cli::context::Context,
             daemon::links::wait::Updates,
             paths::Paths,
-            protocol::{self, Body, Method, Request, Response},
+            protocol::{self, Body, ErrorCode, Method, Request, Response},
         };
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let paths = Paths::for_test(root.path());
         paths.prepare().unwrap();
-        let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+        let socket = paths.socket.clone();
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
         let server = tokio::spawn(async move {
-            // The updating daemon drops the wait without a reply.
+            // The restarting daemon drops the wait without a reply.
             let (mut stream, _) = listener.accept().await.unwrap();
             let request: Request = protocol::read(&mut stream).await.unwrap();
             assert!(matches!(
@@ -2125,6 +2142,18 @@ mod tests {
                 }
             ));
             drop(stream);
+            // Its socket goes with it, and the next daemon listens a moment later.
+            drop(listener);
+            std::fs::remove_file(&socket).unwrap();
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+            // It knows the agent's scope once the agent's wrapper reattaches.
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request: Request = protocol::read(&mut stream).await.unwrap();
+            let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+            protocol::write(&mut stream, &Response::new(request.id, refused))
+                .await
+                .unwrap();
             let (mut stream, _) = listener.accept().await.unwrap();
             let request: Request = protocol::read(&mut stream).await.unwrap();
             let Method::WatchItems {
@@ -2152,8 +2181,8 @@ mod tests {
         });
         let ctx = Context::new(paths, true);
         let body = tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            super::wait_for_items(&ctx, "work", Default::default(), Some(600)),
+            Duration::from_secs(60),
+            super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(600)), false),
         )
         .await
         .unwrap()
@@ -2182,8 +2211,8 @@ mod tests {
         });
         let ctx = Context::new(paths, true);
         let body = tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            super::wait_for_items(&ctx, "work", Default::default(), Some(1)),
+            Duration::from_secs(60),
+            super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(1)), false),
         )
         .await
         .unwrap()

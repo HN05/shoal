@@ -154,3 +154,17 @@ fn watch_waits_without_a_default_timeout() {
     };
     assert_eq!(timeout, Some(60));
 }
+
+#[test]
+fn a_resumed_watch_names_its_workspace() {
+    let parse = |arguments: &[&str]| {
+        <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "pr"].iter().chain(arguments))
+    };
+    assert!(parse(&["--resume"]).is_err());
+    let cli = parse(&["--resume", "--workspace", "work"]).unwrap();
+    let Command::Watch { resume, items, .. } = cli.command.unwrap() else {
+        panic!("expected watch command");
+    };
+    assert!(resume);
+    assert_eq!(items.workspace.as_deref(), Some("work"));
+}

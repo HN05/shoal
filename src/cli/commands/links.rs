@@ -206,9 +206,14 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn watch(ctx: &Context, items: ItemArgs, timeout: Option<u64>) -> Result<i32> {
+pub(super) async fn watch(
+    ctx: &Context,
+    items: ItemArgs,
+    timeout: Option<u64>,
+    resumed: bool,
+) -> Result<i32> {
     let (workspace, selected) = select(ctx, items).await?;
-    workspaces::watch_items(ctx, workspace, selected, timeout).await
+    workspaces::watch_items(ctx, workspace, selected, timeout, resumed).await
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {

@@ -781,7 +781,10 @@ because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
 working agent accepts new context, and replaces a running watch so nothing is
 delivered twice. Claude Code also runs a background `Stop` hook that waits for
-the next update and wakes the idle agent with it through `asyncRewake`. Codex
+the next update and wakes the idle agent with it through `asyncRewake`. The hook
+tries a failed wait again instead of exiting, because a hook that ends leaves the
+idle agent with no wait until its next turn; waits outlast a daemon restart,
+including the time before the next daemon listens and knows the agent's scope. Codex
 has no hook that can start a turn, so its tracked wrapper types a fixed prompt
 into the zmx session it runs in once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. That is the only input

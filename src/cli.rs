@@ -189,6 +189,10 @@ pub enum Command {
         /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
         #[arg(long)]
         timeout: Option<u64>,
+        /// Continue a wait across a daemon restart, as the installed release
+        /// does after an upgrade restarted the daemon.
+        #[arg(long, hide = true, requires = "workspace")]
+        resume: bool,
     },
     /// Show linked items, one kind, or a selected issue or PR with status and discussion.
     View {

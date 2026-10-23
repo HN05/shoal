@@ -6,6 +6,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
+        installed::{Executable, arguments},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -73,21 +74,16 @@ async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
 
 /// Claude Code's `asyncRewake` `Stop` hook: wait for the next messages or
 /// item activity of the agent's workspace or chat, then exit 2, which starts
-/// the idle agent's next turn with them. A newer delivery, a failure or the
-/// exit of `agent`, the agent's process, ends it with 0 and leaves the agent
-/// idle.
+/// the idle agent's next turn with them. A failed wait is tried again, since
+/// without one the agent stays idle; a newer delivery or the exit of `agent`,
+/// the agent's process, ends it with 0 and leaves the agent idle.
 pub(super) async fn wake(ctx: &Context, agent: u32) -> Result<i32> {
     let next = tokio::select! {
-        next = next_updates(ctx) => next,
+        next = retry_next_updates(ctx) => next,
         () = agent_exit(agent) => return Ok(0),
     };
-    let (inbox, updates) = match next {
-        Ok(Some(next)) => next,
-        Ok(None) => return Ok(0),
-        Err(error) => {
-            eprintln!("shoal: waiting for agent updates failed: {error:#}");
-            return Ok(0);
-        }
+    let Some((inbox, updates)) = next else {
+        return Ok(0);
     };
     eprintln!("{}", inbox.hook_context(&updates));
     std::io::Write::flush(&mut std::io::stderr())?;
@@ -111,6 +107,33 @@ async fn agent_exit(agent: u32) {
     };
     while identity::alive(&agent).unwrap_or(false) {
         tokio::time::sleep(AGENT_POLL_INTERVAL).await;
+    }
+}
+
+/// The first retry of a failed wake wait; the delay doubles up to the cap.
+const WAKE_RETRY_INITIAL: std::time::Duration = std::time::Duration::from_secs(1);
+/// A lasting failure is tried again this often.
+const WAKE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// [`next_updates`], tried again after each failure, such as a daemon that
+/// has not come back or does not yet know the agent's scope. After an upgrade
+/// changed the daemon protocol, the installed release waits instead.
+async fn retry_next_updates(ctx: &Context) -> Option<(Inbox, Updates)> {
+    let executable = Executable::current();
+    let mut delay = WAKE_RETRY_INITIAL;
+    loop {
+        match next_updates(ctx).await {
+            Ok(next) => return next,
+            Err(error) => {
+                let error = executable.resume_or(error, arguments);
+                eprintln!(
+                    "shoal: waiting for agent updates failed; trying again in {}s: {error:#}",
+                    delay.as_secs()
+                );
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(WAKE_RETRY_MAX);
+            }
+        }
     }
 }
 
@@ -169,7 +192,8 @@ impl Inbox {
     async fn next(&self, ctx: &Context) -> Result<Updates> {
         match self {
             Self::Workspace(workspace) => Updates::try_from(
-                super::workspaces::wait_for_items(ctx, workspace, Default::default(), None).await?,
+                super::workspaces::wait_for_items(ctx, workspace, Default::default(), None, false)
+                    .await?,
             ),
             Self::Chat(chat) => wait_for_chat(ctx, chat).await,
         }
@@ -218,24 +242,12 @@ async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
     request(&ctx.paths, Method::ChatUpdates { chat }).await
 }
 
-/// The chat's next messages, waiting again when the daemon restarts and
-/// continuing in the installed release when an upgrade changes its protocol.
+/// The chat's next messages, waiting again when the daemon restarts.
 async fn wait_for_chat(ctx: &Context, chat: &str) -> Result<Updates> {
-    let executable = crate::cli::installed::Executable::current();
-    loop {
-        let method = Method::WaitChatMessages {
-            chat: chat.to_owned(),
-        };
-        match client::open(&ctx.paths, method).await {
-            Ok((_stream, body)) => return Updates::try_from(body),
-            Err(error) if client::stream_closed(&error) => {
-                tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
-            }
-            Err(error) => {
-                return Err(executable.resume_or(error, crate::cli::installed::arguments));
-            }
-        }
-    }
+    let method = || Method::WaitChatMessages {
+        chat: chat.to_owned(),
+    };
+    Updates::try_from(client::await_reply(&ctx.paths, method, false).await?)
 }
 
 /// What an agent hook tells the agent about `updates`, its messages under

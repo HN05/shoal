@@ -284,32 +284,59 @@ pub(crate) async fn reconnect(
 
 /// The reply to a long-lived request that waits for an event, across daemon
 /// restarts: a closed connection asks again at once, and an unreachable socket
-/// is retried for the normal daemon wait budget. After a restart, a scope
-/// refusal is retried within the same budget too, since a restarted daemon
-/// knows an execution's scope only once its wrapper reattaches; `restarted`
-/// says the daemon restarted before this wait began. Only for requests that
-/// are safe to repeat.
+/// is retried for the normal daemon wait budget, or the restart budget once
+/// the daemon went away. After a restart, a scope refusal is retried within
+/// the restart budget too, since a restarted daemon knows an execution's scope
+/// only once its wrapper reattaches; `restarted` says the daemon restarted
+/// before this wait began. Only for requests that are safe to repeat.
 pub(crate) async fn await_reply(
     paths: &Paths,
     method: impl Fn() -> Method,
     restarted: bool,
 ) -> Result<Body> {
-    // When the daemon last went away, or the socket was first found unreachable.
-    let mut outage = restarted.then(Instant::now);
+    let mut outage = restarted.then(Outage::restart);
     loop {
         let reply = open(paths, method()).await;
         match reply.and_then(|(_stream, body)| body.into_result()) {
             Ok(body) => return Ok(body),
-            Err(error) if stream_closed(&error) => outage = Some(Instant::now()),
+            Err(error) if stream_closed(&error) => outage = Some(Outage::restart()),
             Err(error) if is_unreachable(&error) || (outage.is_some() && scope_denied(&error)) => {
-                let since = *outage.get_or_insert_with(Instant::now);
-                if since.elapsed() >= timing::DAEMON_WAIT_TIMEOUT {
+                if outage.get_or_insert_with(Outage::start).over() {
                     return Err(error.context("daemon did not restart"));
                 }
             }
             Err(error) => return Err(error),
         }
         sleep(timing::DAEMON_POLL_INTERVAL).await;
+    }
+}
+
+/// A wait's time without a daemon to answer it.
+struct Outage {
+    /// When the daemon last went away, or the socket was first found unreachable.
+    since: Instant,
+    limit: Duration,
+}
+
+impl Outage {
+    /// A daemon that answered before gets time to restart and reattach wrappers.
+    fn restart() -> Self {
+        Self {
+            since: Instant::now(),
+            limit: timing::DAEMON_RESTART_TIMEOUT,
+        }
+    }
+
+    /// A daemon not reached yet gets the normal time to start.
+    fn start() -> Self {
+        Self {
+            since: Instant::now(),
+            limit: timing::DAEMON_WAIT_TIMEOUT,
+        }
+    }
+
+    fn over(&self) -> bool {
+        self.since.elapsed() >= self.limit
     }
 }
 
@@ -392,8 +419,9 @@ mod tests {
         drop(stream);
         drop(listener);
         std::fs::remove_file(&paths.socket)?;
-        // The paused clock lets the waiter retry the missing socket meanwhile.
-        sleep(timing::DAEMON_WAIT_TIMEOUT / 2).await;
+        // The paused clock lets the waiter retry the missing socket meanwhile,
+        // past the time a daemon not reached yet gets to start.
+        sleep(timing::DAEMON_WAIT_TIMEOUT * 2).await;
         assert!(!waiter.is_finished());
 
         // The restarted daemon refuses the scope until the wrapper reattaches.
@@ -433,13 +461,21 @@ mod tests {
         }
         assert!(matches!(resumed.await??, Body::Ok));
 
-        // A daemon that does not return ends the wait.
+        // A missing daemon ends a new wait once it had time to start, and a
+        // resumed one once it had time to restart.
         drop(listener);
         std::fs::remove_file(&paths.socket)?;
+        let started = Instant::now();
         let error = await_reply(&paths, || Method::Status, false)
             .await
             .unwrap_err();
         assert!(is_unreachable(&error), "{error:#}");
+        assert!(started.elapsed() < timing::DAEMON_RESTART_TIMEOUT);
+        let error = await_reply(&paths, || Method::Status, true)
+            .await
+            .unwrap_err();
+        assert!(is_unreachable(&error), "{error:#}");
+        assert!(started.elapsed() >= timing::DAEMON_RESTART_TIMEOUT);
         Ok(())
     }
 
