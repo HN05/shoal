@@ -219,6 +219,7 @@ impl Manager {
             &root,
             &repository::directory_name(repository::name(repo)),
             &repositories,
+            &[],
         )?;
         let id = repo.id.clone();
         let recorded = directory
@@ -327,7 +328,7 @@ async fn local_checkout_location(
         .map(Path::to_path_buf);
     let workspaces_dir = match placed {
         Some(directory) => directory,
-        None => reserve_directory(&root, directory_name, repositories)?,
+        None => reserve_directory(&root, directory_name, repositories, &[])?,
     };
     Ok((path, workspaces_dir))
 }
@@ -372,7 +373,7 @@ async fn clone_into_reserved_directory(
     if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
         crate::daemon::access::ensure_writable(parent).await?;
     }
-    let workspaces_dir = reserve_directory(&root, directory_name, repositories)?;
+    let workspaces_dir = reserve_directory(&root, directory_name, repositories, &[])?;
     let destination = match cloning.path {
         Some(path) => create_clone_directory(path),
         None => create_clone_directory(workspaces_dir.join(CHECKOUT_DIR)),
@@ -447,11 +448,13 @@ pub(super) async fn prepare_root<'a>(
 }
 
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)
-/// by creating it, so concurrent daemons cannot share one directory.
+/// by creating it, so concurrent daemons cannot share one directory. A
+/// candidate that is, holds or lies in one of `workspaces` is taken too.
 pub(super) fn reserve_directory(
     root: &Path,
     name: &str,
     repositories: &[Repository],
+    workspaces: &[PathBuf],
 ) -> Result<PathBuf> {
     for suffix in 1_u64.. {
         let path = root.join(if suffix == 1 {
@@ -463,6 +466,12 @@ pub(super) fn reserve_directory(
         if repositories
             .iter()
             .any(|repo| repo.path == path || repo.workspaces_dir.as_deref() == Some(&*path))
+        {
+            continue;
+        }
+        if workspaces
+            .iter()
+            .any(|workspace| workspace.starts_with(&path) || path.starts_with(workspace))
         {
             continue;
         }

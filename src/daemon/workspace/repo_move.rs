@@ -261,14 +261,21 @@ impl Manager {
         Ok(destination)
     }
 
-    /// Reserve the source directory's name in `root`, suffixed when taken.
+    /// Reserve the source directory's name in `root`, suffixed when taken,
+    /// including by a recorded workspace whose directory is gone.
     async fn reserve_destination(&self, root: &Path, source: &Path) -> Result<PathBuf> {
         let name = source
             .file_name()
             .context("repository directory has no name")?
             .to_str()
             .context("repository directory is not UTF-8")?;
-        registry::reserve_directory(root, name, &self.repositories().await?)
+        let workspaces: Vec<_> = self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .map(|workspace| workspace.path)
+            .collect();
+        registry::reserve_directory(root, name, &self.repositories().await?, &workspaces)
     }
 
     async fn repository_workspaces(&self, repository_id: &str) -> Result<Vec<Workspace>> {
@@ -790,6 +797,27 @@ mod tests {
 
         manager.finish_repository_moves().await?;
         manager.take_checkpoint(&workspace.id, None).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn the_destination_avoids_a_deleted_workspace_recorded_there() -> Result<()> {
+        let (_temp, manager, repo, _workspace, root) = cloned().await?;
+        // Where the moved workspace `feature` would otherwise land.
+        let placed = root.join("origin/feature");
+        manager
+            .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
+            .await?;
+        fs::remove_dir_all(root.join("origin"))?;
+
+        let moved = manager.move_repositories().await?;
+        let [moved] = moved.as_slice() else {
+            anyhow::bail!("expected one move: {moved:?}");
+        };
+        assert_eq!(
+            moved.repository.workspaces_dir.as_deref(),
+            Some(root.join("origin-2").as_path())
+        );
         Ok(())
     }
 
