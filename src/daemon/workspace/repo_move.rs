@@ -10,7 +10,7 @@ use crate::{
     daemon::{log, store},
     fsutil, git,
     model::{MovedRepository, Repository, Workspace},
-    process, seed,
+    process, repository, seed,
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
@@ -146,6 +146,7 @@ impl Manager {
             "repository directory {} is missing",
             directory.display()
         );
+        self.ensure_only_its_own(repo, directory).await?;
         let id = repo.id.clone();
         self.store
             .run(move |db| movable_records(db, &id).map(drop))
@@ -167,6 +168,41 @@ impl Manager {
                     workspace.name
                 );
             }
+        }
+        Ok(())
+    }
+
+    /// Refuse a directory holding Shoal's state or another repository's
+    /// checkout, directory or workspaces, whose records would not follow it.
+    async fn ensure_only_its_own(&self, repo: &Repository, directory: &Path) -> Result<()> {
+        ensure!(
+            !fs::canonicalize(&self.paths.state)?.starts_with(directory),
+            "{} contains Shoal's state directory",
+            directory.display()
+        );
+        for other in self.repositories().await? {
+            if other.id == repo.id {
+                continue;
+            }
+            let owned =
+                std::iter::once(other.path.as_path()).chain(other.workspaces_dir.as_deref());
+            for path in owned {
+                ensure!(
+                    !path.starts_with(directory),
+                    "{} contains {}, which belongs to the repository {}",
+                    directory.display(),
+                    path.display(),
+                    repository::name(&other)
+                );
+            }
+        }
+        for workspace in self.list_workspaces().await? {
+            ensure!(
+                workspace.repository_id == repo.id || !workspace.path.starts_with(directory),
+                "{} contains the workspace {} of another repository",
+                directory.display(),
+                workspace.name
+            );
         }
         Ok(())
     }
@@ -770,6 +806,19 @@ mod tests {
         );
         let root = fs::canonicalize(temp.path())?.join("new");
         test_support::configure(&manager, &format!("root_dir = {:?}\n", root)).await;
+
+        // Another checkout registered inside the directory keeps it in place.
+        let other = test_support::repository(&directory, "other");
+        let other = manager
+            .register_repository(other.to_str().context("path")?.into(), None, None)
+            .await?;
+        let error = manager
+            .move_repositories()
+            .await
+            .err()
+            .context("moved another repository's checkout")?;
+        assert!(format!("{error:#}").contains("belongs to the repository"));
+        manager.remove_repository(&other.id).await?;
 
         manager.move_repositories().await?;
         let moved = manager.repository(&repo.id).await?;

@@ -1355,8 +1355,9 @@ ask; `-y`/`--yes` skips the prompt and is required for scripts and `--json`, whi
 
 Every repository is checked before the first moves: none may have a running
 command, agent or chat, queued agent launches, a workspace in another lifecycle
-operation, a checkout leased as a repository resource, or a process whose working
-directory is inside it, so leave those
+operation, a checkout leased as a repository resource, another repository's
+checkout or workspace or Shoal's state inside its directory, or a process whose
+working directory is inside it, so leave those
 directories first. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `repo migrate` or daemon start
