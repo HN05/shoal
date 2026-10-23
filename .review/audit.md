@@ -49,6 +49,8 @@ by these areas, giving any path not listed to the closest one:
 - Tests, CI and release tooling: `tests`, `crates/shoal-subprocess`,
   `.forgejo`, `scripts`
 
+The audit workers belong to this workflow's review automation, which the
+`AGENTS.md` subagent approval rule exempts; workers must not delegate further.
 Reuse a worker for another area once it finishes. State any coverage
 limitations in the summary, and report an incomplete outcome if an area was not
 inspected.
