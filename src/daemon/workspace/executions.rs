@@ -176,6 +176,9 @@ impl ExecutionKind {
         workspace_id: &str,
         parent_execution: Option<&str>,
     ) -> Result<()> {
+        // Quarantine may have left a moving workspace failed, which setup
+        // would otherwise accept.
+        store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
             Self::Command | Self::Land => store::require_ready(tx, workspace_id)?,
             Self::Setup => {

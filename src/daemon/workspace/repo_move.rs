@@ -542,7 +542,10 @@ fn remove_recorded(path: &Path, identity: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{daemon::workspace::identity, test_support};
+    use crate::{
+        daemon::workspace::{ExecutionKind, identity},
+        test_support,
+    };
     use std::sync::Arc;
 
     /// A manager with a cloned repository and one workspace under the default
@@ -639,6 +642,22 @@ mod tests {
             .err()
             .context("chat started during a move")?;
         assert!(error.to_string().contains("repository move is incomplete"));
+        // Quarantine fails the reserved workspaces; setup must not revive one.
+        manager.store.quarantine_interrupted_operations().await?;
+        test_support::configure(
+            &manager,
+            &format!("root_dir = {root:?}\npre_setup_cmd = \"true\"\n"),
+        )
+        .await;
+        let error = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+            .await
+            .err()
+            .context("setup started during a move")?;
+        assert!(
+            format!("{error:#}").contains("repository move is incomplete"),
+            "{error:#}"
+        );
         fs::write(destination.join("partial"), "")?;
         manager.finish_repository_moves().await?;
         assert!(!destination.exists());
