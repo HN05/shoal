@@ -349,6 +349,17 @@ fn warn_without_daemon(ctx: &Context) -> bool {
     recorded
 }
 
+/// Keep `prompt` beside the session's other `files`, for the user to send
+/// when Happy cannot deliver it.
+fn save_prompt(files: &Path, prompt: &str) -> Result<PathBuf> {
+    let path = files.with_extension("prompt.md");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
+    Ok(path)
+}
+
 /// How a session's first message reaches it. Happy's Codex mode has no prompt
 /// argument: the prompt is kept in a file and, when this machine is logged in
 /// to Happy, delivered through Happy's server to a session Shoal creates for
@@ -375,12 +386,7 @@ impl Opening {
                 seeded: None,
             });
         };
-        let path = files.with_extension("prompt.md");
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("create {}", parent.display()))?;
-        }
-        std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
+        let path = save_prompt(files, prompt)?;
         let seeded = match happy::client::seed(&ctx.paths, directory, branch, agent).await {
             Ok(seeded) => Some(seeded),
             Err(error) => {
