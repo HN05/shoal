@@ -1,6 +1,11 @@
 //! Moving repository directories into a new `root_dir`. Intent is recorded
 //! before anything moves, so an interrupted move finishes or rolls back.
-use super::{GuardMode, Manager, registry};
+use super::{
+    GuardMode, Manager,
+    identity::{directory_identity, has_directory_identity},
+    paths::{is_real_directory, real_directory_identity},
+    registry,
+};
 use crate::{
     daemon::{log, store},
     fsutil, git,
@@ -21,6 +26,11 @@ struct Intent {
     repository_id: String,
     source: PathBuf,
     destination: PathBuf,
+    /// The source directory's identity, which a rename carries to the
+    /// destination.
+    source_id: String,
+    /// The identity of the reserved, empty destination.
+    destination_id: String,
     /// The state each workspace of the repository returns to.
     states: BTreeMap<String, WorkspaceState>,
     /// The records name the destination.
@@ -230,6 +240,9 @@ impl Manager {
     /// something started using the repository since it was checked.
     async fn record_move(&self, id: &str, source: &Path, destination: &Path) -> Result<()> {
         let id = id.to_owned();
+        let source_id =
+            real_directory_identity(source)?.context("repository directory is missing")?;
+        let destination_id = directory_identity(destination)?;
         let source = utf8(source)?;
         let destination = utf8(destination)?;
         self.store
@@ -268,9 +281,17 @@ impl Manager {
                     store::ensure_no_pending_rename(&tx, workspace)?;
                 }
                 tx.execute(
-                    "INSERT INTO repository_moves(repository_id,source,destination,states)
-                        VALUES (?1,?2,?3,?4)",
-                    params![id, source, destination, serde_json::to_string(&states)?],
+                    "INSERT INTO repository_moves
+                        (repository_id,source,destination,source_id,destination_id,states)
+                        VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![
+                        id,
+                        source,
+                        destination,
+                        source_id,
+                        destination_id,
+                        serde_json::to_string(&states)?
+                    ],
                 )?;
                 tx.execute(
                     "UPDATE workspaces SET state=?2 WHERE repository_id=?1",
@@ -324,29 +345,31 @@ impl Manager {
     }
 
     /// Roll back a move that did not complete, or finish one whose directory
-    /// reached its destination. Callers hold the repository's Git gate.
+    /// reached its destination. Only directories with their recorded identity
+    /// are deleted. Callers hold the repository's Git gate.
     async fn finish_repository_move(&self, id: &str) -> Result<()> {
         let Some(intent) = self.move_intent(id).await? else {
             return Ok(());
         };
-        if !intent.switched && intent.source.try_exists()? {
+        if !intent.switched && is_directory(&intent.source, &intent.source_id)? {
             // The rename did not happen or the copy is incomplete.
-            remove_directory(&intent.destination)?;
+            remove_recorded(&intent.destination, &intent.destination_id)?;
             return self.close_move(&intent).await;
         }
         if !intent.switched {
             ensure!(
-                fs::read_dir(&intent.destination)?.next().is_some(),
-                "repository directory is missing from both {} and {}",
+                is_directory(&intent.destination, &intent.source_id)?,
+                "repository directory {} is neither in place nor at {}",
                 intent.source.display(),
                 intent.destination.display()
             );
             self.switch_move(id, &intent.source, &intent.destination)
                 .await?;
         }
+        // A copy's original goes first: copied worktrees' Git links still
+        // resolve to it, and repair reconnects them only once it is gone.
+        remove_recorded(&intent.source, &intent.source_id)?;
         self.reconnect_worktrees(id).await?;
-        // What is left of the source is a complete copy's original.
-        remove_directory(&intent.source)?;
         self.close_move(&intent).await
     }
 
@@ -379,28 +402,35 @@ impl Manager {
             .run(move |db| {
                 let row = db
                     .query_row(
-                        "SELECT source,destination,states,switched FROM repository_moves
+                        "SELECT source,destination,source_id,destination_id,states,switched
+                            FROM repository_moves
                             WHERE repository_id=?1",
                         [&id],
                         |row| {
                             Ok((
                                 row.get::<_, String>(0)?,
                                 row.get::<_, String>(1)?,
-                                row.get::<_, String>(2)?,
+                                row.get(2)?,
                                 row.get(3)?,
+                                row.get::<_, String>(4)?,
+                                row.get(5)?,
                             ))
                         },
                     )
                     .optional()?;
-                row.map(|(source, destination, states, switched)| {
-                    Ok(Intent {
-                        repository_id: id,
-                        source: source.into(),
-                        destination: destination.into(),
-                        states: serde_json::from_str(&states)?,
-                        switched,
-                    })
-                })
+                row.map(
+                    |(source, destination, source_id, destination_id, states, switched)| {
+                        Ok(Intent {
+                            repository_id: id,
+                            source: source.into(),
+                            destination: destination.into(),
+                            source_id,
+                            destination_id,
+                            states: serde_json::from_str(&states)?,
+                            switched,
+                        })
+                    },
+                )
                 .transpose()
             })
             .await
@@ -459,13 +489,18 @@ fn ensure_not_leased(db: &rusqlite::Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn remove_directory(path: &Path) -> Result<()> {
-    match fs::remove_dir_all(path) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(error).with_context(|| format!("remove {}", path.display()))
-        }
-        _ => Ok(()),
+/// Whether `path` is still the real directory recorded as `identity`.
+fn is_directory(path: &Path, identity: &str) -> Result<bool> {
+    Ok(is_real_directory(path)? && has_directory_identity(path, identity)?)
+}
+
+/// Delete `path` when it is the directory recorded as `identity`, leaving a
+/// replacement alone.
+fn remove_recorded(path: &Path, identity: &str) -> Result<()> {
+    if is_directory(path, identity)? {
+        fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))?;
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -562,10 +597,13 @@ mod tests {
             WorkspaceState::Ready
         );
 
-        // A completed rename finishes when the daemon starts again.
+        // A completed rename finishes when the daemon starts again, leaving a
+        // directory created at the old path since.
         fs::create_dir_all(&destination)?;
         manager.record_move(&repo.id, &source, &destination).await?;
         fs::rename(&source, &destination)?;
+        fs::create_dir(&source)?;
+        fs::write(source.join("unrelated"), "keep")?;
         manager.store.quarantine_interrupted_operations().await?;
         manager.finish_repository_moves().await?;
         let workspace = manager.workspace(&workspace.id).await?;
@@ -573,6 +611,51 @@ mod tests {
         assert_eq!(workspace.state, WorkspaceState::Ready);
         assert_eq!(workspace.error, None);
         manager.verify_worktree(&workspace).await?;
+        assert_eq!(fs::read_to_string(source.join("unrelated"))?, "keep");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Result<()> {
+        let (_temp, manager, repo, workspace, root) = cloned().await?;
+        let source = repo.workspaces_dir.clone().context("no directory")?;
+        let destination = root.join("origin");
+        fs::create_dir_all(&destination)?;
+
+        // What a move to another filesystem leaves before the original goes.
+        manager.record_move(&repo.id, &source, &destination).await?;
+        let copied = std::process::Command::new("cp")
+            .arg("-pPR")
+            .arg(source.join("."))
+            .arg(&destination)
+            .status()?;
+        ensure!(copied.success(), "copy failed");
+        manager.switch_move(&repo.id, &source, &destination).await?;
+        manager.finish_repository_moves().await?;
+
+        assert!(!source.exists());
+        let workspace = manager.workspace(&workspace.id).await?;
+        assert_eq!(workspace.path, destination.join("feature"));
+        assert!(
+            workspace
+                .git_dir
+                .as_ref()
+                .is_some_and(|dir| dir.starts_with(&destination))
+        );
+        manager.verify_worktree(&workspace).await?;
+        assert_eq!(
+            git::head_branch(&workspace.path, false, git::run)
+                .await?
+                .as_deref(),
+            Some("feature")
+        );
+        let checkout = manager.repository(&repo.id).await?.path;
+        let trees = git::worktrees(&checkout, git::run).await?;
+        assert!(
+            trees
+                .iter()
+                .any(|tree| tree.path == workspace.path && !tree.prunable)
+        );
         Ok(())
     }
 

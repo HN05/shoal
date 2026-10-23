@@ -214,7 +214,8 @@ instead of the PR delivery guidance below.
 - A repository directory moves only whole into a new root while nothing uses it:
   reserve its workspaces and record the move first, switch records only once the
   directory arrived, and let recovery finish a completed move or roll back an
-  incomplete one; never delete the source before the records name the destination.
+  incomplete one; never delete the source before the records name the destination,
+  nor any directory whose identity differs from the recorded one.
 - Worktrunk compatibility is shared across creation and existing-branch selection:
   reserved names get a leaf suffix on creation and an error on opening; suffixes
   never change derived workspace names or directories. Adapter outcomes preserve

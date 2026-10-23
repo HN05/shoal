@@ -410,12 +410,15 @@ CREATE TABLE contribution_grace (
     claimed INTEGER NOT NULL CHECK(claimed IN (0, 1))
 );";
 
-/// A repository directory moving into a new root, with the state each of its
+/// A repository directory moving into a new root, with the identities that
+/// prove which directory recovery may delete and the state each of its
 /// workspaces returns to; `switched` once the records name the destination.
 const REPOSITORY_MOVES: &str = "CREATE TABLE repository_moves (
     repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
     source TEXT NOT NULL,
     destination TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    destination_id TEXT NOT NULL,
     states TEXT NOT NULL,
     switched INTEGER NOT NULL DEFAULT 0 CHECK(switched IN (0, 1))
 );";
