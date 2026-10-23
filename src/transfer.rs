@@ -111,10 +111,7 @@ impl Bundle {
 /// Write the header, `manifest` and `bundle` to a temporary file beside
 /// `path`, then move it there unless a file exists.
 fn write_new(path: &Path, manifest: &Manifest, bundle: Option<&Bundle>) -> Result<()> {
-    let directory = match path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
-    };
+    let directory = directory(path);
     let file = tempfile::NamedTempFile::new_in(directory)
         .with_context(|| format!("create a file in {}", directory.display()))?;
     let mut out = std::io::BufWriter::new(file.as_file());
@@ -129,6 +126,14 @@ fn write_new(path: &Path, manifest: &Manifest, bundle: Option<&Bundle>) -> Resul
     file.persist_noclobber(path)
         .with_context(|| format!("write {}", path.display()))?;
     Ok(())
+}
+
+/// The directory the export file `path` goes to.
+pub fn directory(path: &Path) -> &Path {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
 }
 
 /// An export read back: its manifest, and its bundle in a temporary file.

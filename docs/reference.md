@@ -1683,7 +1683,8 @@ shoal import moving                       # open every workspace exported to mov
 writes its removal record and checkpoint to a new file, or to standard output for
 `-`. The daemon writes the file, so it is complete even when the terminal closes
 with the workspace, as its Herdr tab does. It refuses before removing anything
-when the file exists or lies inside the workspace, when a checkpoint cannot keep
+when the file exists or lies inside the workspace, when the daemon cannot create
+a file in its directory within 30 seconds, when a checkpoint cannot keep
 the uncommitted files, or when `-` would stream from a Herdr tab that closes with
 the workspace, and asks before releasing holds unless given
 `--yes`. A workspace already removed is exported from its removal record without

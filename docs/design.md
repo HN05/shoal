@@ -1258,9 +1258,12 @@ expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
 Moving a workspace to another machine is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
-daemon, which outlives a terminal closing with the workspace, and import
-records both as a removal of this repository, the ref before the records, then
-runs the normal restore. Moving rather than copying keeps one workspace per
+daemon, which outlives a terminal closing with the workspace. Before removing
+anything, the daemon creates a file in the destination itself, under a time
+limit: its file access can differ from the terminal's, and on macOS opening a
+file on a volume it lacks access to can wait for a permission prompt no one
+sees. Import records both as a removal of this repository, the ref before the
+records, then runs the normal restore. Moving rather than copying keeps one workspace per
 branch, so two agents never push it or watch its PRs, and the source's removal
 stays restorable when the transfer fails. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the

@@ -183,6 +183,33 @@ async fn export_leaves_out_a_checkpoint_the_default_branch_has() {
     );
 }
 
+#[tokio::test]
+async fn export_the_daemon_cannot_write_keeps_the_workspace() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = exporting
+        .create_workspace(&source_repo.id, "kept".into(), None, None, None)
+        .await
+        .unwrap();
+    let blocked = source.path().join("file");
+    fs::write(&blocked, "").unwrap();
+
+    let error = exporting
+        .export_workspace(
+            &workspace.id,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            blocked.join("workspace.shoal"),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("the Shoal daemon cannot write to"),
+        "{error:#}"
+    );
+    assert!(exporting.workspace(&workspace.id).await.is_ok());
+    assert!(workspace.path.exists());
+}
+
 #[test]
 fn import_refuses_other_files_and_newer_formats() {
     let error = Import::read(&mut &b"not an export\n"[..]).err().unwrap();

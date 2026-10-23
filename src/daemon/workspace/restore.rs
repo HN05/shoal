@@ -154,7 +154,9 @@ impl Manager {
     /// Write a workspace for another Shoal to the new file `file`: remove it
     /// first when it exists, otherwise export the latest removal record with
     /// that name or ID. The daemon writes the file, so closing the caller's
-    /// terminal with the workspace cannot cut the export short.
+    /// terminal with the workspace cannot cut the export short; it checks that
+    /// it can before removing anything, since its file access can differ from
+    /// the caller's.
     pub async fn export_workspace(
         &self,
         selector: &str,
@@ -162,6 +164,7 @@ impl Manager {
         inspection: InspectionPolicy,
         file: std::path::PathBuf,
     ) -> Result<ExportedWorkspace> {
+        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
         let removal = match self.workspace(selector).await {
             Ok(workspace) => Some((
                 workspace.id.clone(),

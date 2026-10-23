@@ -1,5 +1,6 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
+pub mod access;
 pub mod agent_messages;
 pub(crate) mod agent_queue;
 pub mod allocation;
