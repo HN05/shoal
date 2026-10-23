@@ -515,10 +515,14 @@ impl Manager {
                 .proposed_pull()
                 .context("the PR proposal has no PR")?
                 .clone();
-            if !pull_current(workspace, &proposed).await? {
+            if !pull_current(workspace, &forge, &account, &proposed).await? {
                 return Err(self.outdate_pull(request).await?.into());
             }
-            if let Some(number) = forge.open_pull_for(&account, &workspace.branch).await? {
+            let head_repository = proposed.pull.head_repository.as_deref();
+            if let Some(number) = forge
+                .open_pull_for(&account, &workspace.branch, head_repository)
+                .await?
+            {
                 return self
                     .link_open_pull(workspace, &forge, &account, number)
                     .await;
@@ -735,17 +739,49 @@ async fn ensure_pull_head(
 }
 
 /// Whether the workspace still has the proposed branch at the proposed
-/// commit, both locally and where `pr open` pushed it, so approval opens
-/// only what the user saw.
-async fn pull_current(workspace: &Workspace, proposed: &PullSpecification) -> Result<bool> {
+/// commit, both locally and in the repository the PR comes from, and still
+/// pushes there, so approval opens only what the user saw. A fork's branch is
+/// read from the forge, which opens the PR from it whatever the push URL is.
+async fn pull_current(
+    workspace: &Workspace,
+    forge: &ForgeRepo,
+    account: &Account,
+    proposed: &PullSpecification,
+) -> Result<bool> {
     if proposed.pull.head != workspace.branch
         || super::pr::current_head(workspace).await? != proposed.commit
     {
         return Ok(false);
     }
-    let remote = crate::git::push_remote(&workspace.path, &workspace.branch).await?;
-    let pushed = crate::git::pushed_commit(&workspace.path, &remote, &workspace.branch).await?;
-    Ok(pushed.as_deref() == Some(proposed.commit.as_str()))
+    let head_repository =
+        super::actions::head_repository(&workspace.path, &workspace.branch, forge).await?;
+    if head_repository != proposed.pull.head_repository {
+        return Ok(false);
+    }
+    let head = head_commit(workspace, forge, account, head_repository.as_deref()).await?;
+    Ok(head.as_deref() == Some(proposed.commit.as_str()))
+}
+
+/// The commit the branch has in the repository a PR from it comes from: the
+/// fork as its forge reports it, else where the branch pushes.
+async fn head_commit(
+    workspace: &Workspace,
+    forge: &ForgeRepo,
+    account: &Account,
+    head_repository: Option<&str>,
+) -> Result<Option<String>> {
+    match head_repository {
+        Some(fork) => {
+            let fork = forge.sibling(fork);
+            fork.branch_commit(account, &workspace.branch)
+                .await
+                .map(Some)
+        }
+        None => {
+            let remote = crate::git::push_remote(&workspace.path, &workspace.branch).await?;
+            crate::git::pushed_commit(&workspace.path, &remote, &workspace.branch).await
+        }
+    }
 }
 
 /// The copies of `attachments` below `root`, in a directory named by the

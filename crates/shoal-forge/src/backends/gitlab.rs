@@ -15,7 +15,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
-        create::{NewIssue, NewPull},
+        create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
@@ -66,6 +66,9 @@ impl Backend for GitLab {
     fn support(&self, capability: Capability) -> Support {
         match capability {
             Capability::ReadJobLogs => Support::Unsupported(None),
+            Capability::ForkPrs => Support::Unsupported(Some(
+                "GitLab opens a fork's merge request in the fork project, so open it on GitLab",
+            )),
             Capability::RebaseMerge => Support::Unsupported(Some(
                 "GitLab merges with the project's merge method, so use merge or squash",
             )),
@@ -326,15 +329,24 @@ impl Backend for GitLab {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        branch: &str,
+        head: &Head<'_>,
     ) -> Result<Vec<Value>> {
-        let branch = encode(branch, false);
+        let branch = encode(head.branch, false);
         let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
         repo.pages(account, &repo.repo_endpoint(&endpoint)).await
     }
 
-    fn has_head(&self, _repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-        pull["source_branch"] == branch && pull["source_project_id"] == pull["target_project_id"]
+    /// Only merge requests within the project: a fork is another project.
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
+        head.repository.eq_ignore_ascii_case(&repo.path)
+            && pull["source_branch"] == head.branch
+            && pull["source_project_id"] == pull["target_project_id"]
+    }
+
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
+        let endpoint =
+            repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
+        (Request::get(endpoint), "/commit/id")
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

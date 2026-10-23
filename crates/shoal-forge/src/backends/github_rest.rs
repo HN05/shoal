@@ -11,6 +11,7 @@ use crate::{
     ForgeRepo,
     items::{
         action::Edit,
+        create::{Head, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
     },
@@ -205,12 +206,27 @@ pub(crate) fn set_state(repo: &ForgeRepo, item: &Item, state: ItemState) -> Requ
     )
 }
 
-/// Whether a listed PR's head is `branch` in the repository.
-pub(crate) fn has_head(repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-    pull["head"]["ref"] == branch
+/// Whether a listed PR's head is `head`.
+pub(crate) fn has_head(pull: &Value, head: &Head<'_>) -> bool {
+    pull["head"]["ref"] == head.branch
         && pull["head"]["repo"]["full_name"]
             .as_str()
-            .is_some_and(|name| name.eq_ignore_ascii_case(&repo.path))
+            .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))
+}
+
+/// The `head` a new PR names: the branch, prefixed with its owner when it
+/// is in a fork.
+pub(crate) fn head_spec(pull: &NewPull) -> String {
+    match &pull.head_repository {
+        Some(repository) => {
+            let head = Head {
+                repository,
+                branch: &pull.head,
+            };
+            format!("{}:{}", head.owner(), head.branch)
+        }
+        None => pull.head.clone(),
+    }
 }
 
 /// The URLs of the open issues an issue dependency list at `endpoint` names.

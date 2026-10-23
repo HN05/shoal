@@ -18,7 +18,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
-        create::{NewIssue, NewPull},
+        create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
@@ -77,7 +77,8 @@ impl Backend for Bitbucket {
             | Capability::DraftPrs
             | Capability::MergeCommit
             | Capability::RebaseMerge
-            | Capability::SquashMerge => Support::Supported,
+            | Capability::SquashMerge
+            | Capability::ForkPrs => Support::Supported,
         }
     }
 
@@ -309,24 +310,35 @@ impl Backend for Bitbucket {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        branch: &str,
+        head: &Head<'_>,
     ) -> Result<Vec<Value>> {
-        let query = encode(&format!("source.branch.name={}", literal(branch)), false);
+        let query = encode(
+            &format!("source.branch.name={}", literal(head.branch)),
+            false,
+        );
         let endpoint = format!("pullrequests?state=OPEN&q={query}");
         repo.pages(account, &repo.repo_endpoint(&endpoint)).await
     }
 
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-        pull["source"]["branch"]["name"] == branch
+    fn has_head(&self, _repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
+        pull["source"]["branch"]["name"] == head.branch
             && pull["source"]["repository"]["full_name"]
                 .as_str()
-                .is_some_and(|name| name.eq_ignore_ascii_case(&repo.path))
+                .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))
+    }
+
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
+        let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
+        (Request::get(endpoint), "/target/hash")
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        let mut source = json!({"branch": {"name": pull.head}});
+        if let Some(repository) = &pull.head_repository {
+            source["repository"] = json!({"full_name": repository});
+        }
         let body = json!({"title": pull.title, "description": pull.body, "draft": pull.draft,
-            "source": {"branch": {"name": pull.head}},
-            "destination": {"branch": {"name": pull.base}}});
+            "source": source, "destination": {"branch": {"name": pull.base}}});
         Request::new(
             HttpMethod::Post,
             repo.repo_endpoint("pullrequests"),

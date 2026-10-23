@@ -22,7 +22,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
-        create::{NewIssue, NewPull},
+        create::{Head, NewIssue, NewPull},
         issue::require_open,
         item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
@@ -81,7 +81,8 @@ impl Backend for GitHub {
             | Capability::Attachments
             | Capability::MergeCommit
             | Capability::RebaseMerge
-            | Capability::SquashMerge => Support::Supported,
+            | Capability::SquashMerge
+            | Capability::ForkPrs => Support::Supported,
         }
     }
 
@@ -372,10 +373,9 @@ impl Backend for GitHub {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        branch: &str,
+        head: &Head<'_>,
     ) -> Result<Vec<Value>> {
-        let owner = repo.path.split('/').next().unwrap_or_default();
-        let head = encode(&format!("{owner}:{branch}"), false);
+        let head = encode(&format!("{}:{}", head.owner(), head.branch), false);
         let endpoint = repo.repo_endpoint(&format!("pulls?state=open&head={head}"));
         repo.send(account, &Request::get(endpoint))
             .await?
@@ -384,12 +384,18 @@ impl Backend for GitHub {
             .context("the PR list is not a list")
     }
 
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-        github_rest::has_head(repo, pull, branch)
+    fn has_head(&self, _repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
+        github_rest::has_head(pull, head)
+    }
+
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
+        let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, true)));
+        (Request::get(endpoint), "/commit/sha")
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
-        let body = json!({"title": pull.title, "body": pull.body, "head": pull.head,
+        let head = github_rest::head_spec(pull);
+        let body = json!({"title": pull.title, "body": pull.body, "head": head,
             "base": pull.base, "draft": pull.draft});
         Request::new(HttpMethod::Post, repo.repo_endpoint("pulls"), Some(body))
     }

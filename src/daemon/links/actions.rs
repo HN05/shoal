@@ -365,14 +365,19 @@ impl Manager {
         let settings = self.workspace_settings(&workspace).await?;
         let required = &settings.pr.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        let existing = forge.open_pull_for(&account, &workspace.branch).await?;
+        let head_repository = head_repository(&workspace.path, &workspace.branch, &forge).await?;
+        let existing = forge
+            .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
+            .await?;
         let (item, body) = match existing {
             Some(number) => (forge.read(&account, ItemKind::Pr, number).await?.item, None),
             None => {
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
-                let pull =
-                    new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?;
+                let pull = NewPull {
+                    head_repository,
+                    ..new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?
+                };
                 if let Some(proposer) =
                     proposer.filter(|_| settings.approvals.pr_open == Opening::Propose)
                 {
@@ -565,6 +570,7 @@ async fn new_pull(
         title,
         body: description(options.body, issue),
         head: workspace.branch.clone(),
+        head_repository: None,
         base,
         draft: options.draft.unwrap_or(default_draft),
         labels: options.labels,
@@ -580,6 +586,30 @@ fn description(body: Option<String>, issue: Option<u64>) -> String {
     };
     let closing = format!("Closes #{number}");
     body.unwrap_or(closing)
+}
+
+/// `owner/repository` of the fork the branch's push remote names, or `None`
+/// when it pushes to the PR's own repository. A remote is named by where it
+/// fetches from, as `origin` is, whatever its push URL.
+pub(super) async fn head_repository(
+    worktree: &std::path::Path,
+    branch: &str,
+    forge: &ForgeRepo,
+) -> Result<Option<String>> {
+    let remote = crate::git::push_remote(worktree, branch).await?;
+    let url = crate::git::remote_url(worktree, &remote).await?;
+    let pushed = ForgeRepo::parse(url.trim())
+        .with_context(|| format!("the branch's push remote {remote} is not a forge repository"))?;
+    if pushed == *forge {
+        return Ok(None);
+    }
+    anyhow::ensure!(
+        pushed.host == forge.host,
+        "the branch's push remote {remote} is on {}, so a PR on {} cannot have it as its head",
+        pushed.host,
+        forge.host
+    );
+    Ok(Some(pushed.path))
 }
 
 pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
@@ -609,6 +639,43 @@ mod tests {
         assert_eq!(description(Some("Fix\n".into()), Some(7)), "Fix\n");
         assert_eq!(description(Some("Refs #7".into()), Some(7)), "Refs #7");
         assert_eq!(description(Some("".into()), Some(7)), "");
+    }
+
+    #[tokio::test]
+    async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
+        use crate::test_support::{git, repository};
+        let root = tempfile::tempdir().unwrap();
+        let path = repository(root.path(), "repo");
+        let forge = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+        let head = || head_repository(&path, "topic", &forge);
+        git(
+            &path,
+            &["remote", "add", "origin", "git@github.com:team/repo.git"],
+        );
+        assert_eq!(head().await.unwrap(), None);
+        git(
+            &path,
+            &["remote", "add", "fork", "git@github.com:someone/repo.git"],
+        );
+        git(&path, &["config", "remote.pushDefault", "fork"]);
+        assert_eq!(head().await.unwrap().as_deref(), Some("someone/repo"));
+        git(
+            &path,
+            &["remote", "set-url", "--push", "fork", "/elsewhere/repo.git"],
+        );
+        // A push URL elsewhere does not change which repository the remote is.
+        assert_eq!(head().await.unwrap().as_deref(), Some("someone/repo"));
+        git(
+            &path,
+            &[
+                "remote",
+                "set-url",
+                "fork",
+                "https://gitlab.com/someone/repo",
+            ],
+        );
+        let error = head().await.unwrap_err();
+        assert!(error.to_string().contains("gitlab.com"), "{error:#}");
     }
 
     #[tokio::test]

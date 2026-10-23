@@ -19,6 +19,7 @@ states!(Capability: Variants {
     MergeCommit => "merge_commit",
     RebaseMerge => "rebase_merge",
     SquashMerge => "squash_merge",
+    ForkPrs => "fork_prs",
 });
 
 impl Capability {
@@ -36,6 +37,7 @@ impl Capability {
             Self::MergeCommit => "merge PRs with a merge commit",
             Self::RebaseMerge => "rebase and merge PRs",
             Self::SquashMerge => "squash and merge PRs",
+            Self::ForkPrs => "open PRs from a fork",
         }
     }
 

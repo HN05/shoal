@@ -1897,7 +1897,10 @@ recorded branch, then pushes the branch without forcing to its push remote
 (`branch.<name>.pushRemote`, else `remote.pushDefault`, else `origin`), setting
 its upstream, as a tracked command with your Git configuration and hooks and
 its output on stderr. The daemon then links the open PR whose head is that
-branch in the repository, or opens one and links it. A new PR's title is
+branch in the repository the push remote names, or opens one in the `origin`
+repository and links it. A push remote on the same forge host other than
+`origin` is a fork the PR comes from; GitLab merge requests from a fork are
+refused. A new PR's title is
 `--title`, else the linked issue's title, else the last commit's subject; its
 description is the supplied `--body` or `--body-file`, or `Closes #<number>`
 when no body is supplied for a linked issue; its base is `--base`, else the base

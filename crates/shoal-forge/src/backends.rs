@@ -22,7 +22,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder},
-        create::{NewIssue, NewPull},
+        create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
@@ -258,17 +258,21 @@ pub(crate) trait Backend {
     /// Where activity records a reply in a review thread.
     fn reply_key(&self) -> (&'static str, &'static str);
 
-    /// The open PRs that may have `branch` as their head, filtered as far
+    /// The open PRs that may have `head` as their head, filtered as far
     /// as the forge can.
     async fn open_pulls_from(
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        branch: &str,
+        head: &Head<'_>,
     ) -> Result<Vec<Value>>;
 
-    /// Whether a listed PR's head is `branch` in the repository.
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool;
+    /// Whether a listed PR's head is `head`.
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool;
+
+    /// The request that reads `branch`, and the JSON pointer to its commit
+    /// in the response.
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str);
 
     /// The request that opens `pull`.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
@@ -666,13 +670,17 @@ impl Backend for ForgeKind {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        branch: &str,
+        head: &Head<'_>,
     ) -> Result<Vec<Value>> {
-        dispatch!(self, backend => backend.open_pulls_from(repo, account, branch).await)
+        dispatch!(self, backend => backend.open_pulls_from(repo, account, head).await)
     }
 
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-        dispatch!(self, backend => backend.has_head(repo, pull, branch))
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
+        dispatch!(self, backend => backend.has_head(repo, pull, head))
+    }
+
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
+        dispatch!(self, backend => backend.branch_read(repo, branch))
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

@@ -1466,6 +1466,45 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
 }
 
 #[test]
+fn pr_open_pushes_to_a_fork_and_opens_the_pr_from_it() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let root = fixture.root.path();
+    let fork = root.join("fork.git");
+    git(root, &["init", "--bare", "-q", fork.to_str().unwrap()]);
+    let config = |args: &[&str]| git(&fixture.repo, args);
+    config(&[
+        "remote",
+        "add",
+        "fork",
+        "https://github.com/someone/project",
+    ]);
+    config(&["config", "remote.fork.pushurl", fork.to_str().unwrap()]);
+    config(&["config", "remote.pushDefault", "fork"]);
+    let mut opened = pull(9, "open", "initial", &[]);
+    opened["head"]["repo"]["full_name"] = json!("someone/project");
+    fixture.respond(json!({
+        "GET repos/team/project/pulls?state=open&head=someone%3Atopic": {"body": []},
+        "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
+        "GET repos/team/project/pulls/9": {"body": opened},
+    }));
+    fixture.requests();
+
+    let result = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+    assert_eq!(result["created"], json!(true));
+    let created = fixture
+        .requests()
+        .into_iter()
+        .find(|request| request[0] == "POST repos/team/project/pulls")
+        .unwrap();
+    assert_eq!(created[1]["head"], "someone:topic");
+    let path = fixture.ok(&["inspect", "topic"])["workspace"]["path"].clone();
+    assert_eq!(
+        git(&fork, &["rev-parse", "refs/heads/topic"]),
+        git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
 fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let root = fixture.root.path();
@@ -2477,6 +2516,81 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         .map(|r| &r["status"])
         .collect();
     assert_eq!(statuses, ["outdated", "outdated"]);
+}
+
+#[test]
+fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
+    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let root = fixture.root.path();
+    let config = |args: &[&str]| git(&fixture.repo, args);
+    for owner in ["alice", "bob"] {
+        let bare = root.join(format!("{owner}.git"));
+        git(root, &["init", "--bare", "-q", bare.to_str().unwrap()]);
+        let url = format!("https://github.com/{owner}/project");
+        config(&["remote", "add", owner, &url]);
+        config(&[
+            "config",
+            &format!("remote.{owner}.pushurl"),
+            bare.to_str().unwrap(),
+        ]);
+    }
+    config(&["config", "remote.pushDefault", "alice"]);
+    let workspace = fixture.ok(&["inspect", "topic"])["workspace"].clone();
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
+    let mut opened = pull(9, "open", "Fix", &[]);
+    opened["head"]["repo"]["full_name"] = json!("alice/project");
+    let respond = |fork_commit: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/pulls?state=open&head=alice%3Atopic": {"body": []},
+            "GET repos/team/project/pulls?state=open&head=bob%3Atopic": {"body": []},
+            "GET repos/alice/project/branches/topic": {"body": {"commit": {"sha": fork_commit}}},
+            "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
+            "GET repos/team/project/pulls/9": {"body": opened},
+        }))
+    };
+    let outdated = |id: &Value| {
+        let stale = fixture.run(&["approve", &id.to_string()]);
+        assert!(
+            String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
+            "{stale:?}"
+        );
+        assert!(writes(&fixture).is_empty());
+    };
+    respond(&head);
+    let proposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    assert_eq!(
+        proposed["specification"]["pull"]["head_repository"],
+        "alice/project"
+    );
+
+    // The approved commit in another fork does not stand in for the proposed one.
+    let bob = root.join("bob.git");
+    git(
+        &path,
+        &["push", "-q", bob.to_str().unwrap(), "HEAD:refs/heads/topic"],
+    );
+    config(&["config", "remote.pushDefault", "bob"]);
+    // Proposing again from the other fork replaces the pending proposal.
+    let reproposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    assert_ne!(reproposed["id"], proposed["id"]);
+    assert_eq!(
+        reproposed["specification"]["pull"]["head_repository"],
+        "bob/project"
+    );
+    outdated(&proposed["id"]);
+    config(&["config", "remote.pushDefault", "alice"]);
+
+    // The fork's branch on the forge decides, whatever the push URL reached.
+    respond(&"0".repeat(40));
+    let proposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    outdated(&proposed["id"]);
+
+    respond(&head);
+    let proposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
+    fixture.ok(&["approve", &proposed["id"].to_string(), "--title", "Fix"]);
+    let created = writes(&fixture);
+    assert_eq!(created[0][1]["head"], "alice:topic", "{created:?}");
 }
 
 #[test]

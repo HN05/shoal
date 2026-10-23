@@ -48,6 +48,9 @@ pub struct NewPull {
     pub title: String,
     pub body: String,
     pub head: String,
+    /// `owner/repository` of the fork `head` is in; unset for this repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_repository: Option<String>,
     pub base: String,
     pub draft: bool,
     pub labels: Vec<String>,
@@ -68,17 +71,70 @@ impl NewPull {
     fn needs(&self) -> Vec<Capability> {
         let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
         let draft = self.draft.then_some(Capability::DraftPrs);
-        labels.into_iter().chain(draft).collect()
+        let fork = self
+            .head_repository
+            .is_some()
+            .then_some(Capability::ForkPrs);
+        labels.into_iter().chain(draft).chain(fork).collect()
+    }
+}
+
+/// A PR's head: a branch in the PR's repository or in a fork of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Head<'a> {
+    /// `owner/repository` of the repository the branch is in.
+    pub repository: &'a str,
+    pub branch: &'a str,
+}
+
+impl Head<'_> {
+    /// The owner of the repository the branch is in.
+    pub(crate) fn owner(&self) -> &str {
+        self.repository.split('/').next().unwrap_or_default()
     }
 }
 
 impl ForgeRepo {
-    /// The open PR whose head is `branch` in this repository.
-    pub async fn open_pull_for(&self, account: &Account, branch: &str) -> Result<Option<u64>> {
-        let pulls = self.kind.open_pulls_from(self, account, branch).await?;
+    /// Another repository on the same forge, such as a fork.
+    pub fn sibling(&self, path: &str) -> ForgeRepo {
+        ForgeRepo {
+            host: self.host.clone(),
+            path: path.to_owned(),
+            kind: self.kind,
+            web_scheme: self.web_scheme,
+        }
+    }
+
+    /// The commit `branch` points to, as the forge reports it: what a PR
+    /// with it as its head would contain.
+    pub async fn branch_commit(&self, account: &Account, branch: &str) -> Result<String> {
+        let (request, pointer) = self.kind.branch_read(self, branch);
+        let read = self
+            .send(account, &request)
+            .await
+            .with_context(|| format!("could not read branch {branch} of {}", self.path))?;
+        read.pointer(pointer)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .with_context(|| format!("the forge did not report the commit of branch {branch}"))
+    }
+
+    /// The open PR whose head is `branch` in `head_repository`, else in this
+    /// repository.
+    pub async fn open_pull_for(
+        &self,
+        account: &Account,
+        branch: &str,
+        head_repository: Option<&str>,
+    ) -> Result<Option<u64>> {
+        let head = Head {
+            repository: head_repository.unwrap_or(&self.path),
+            branch,
+        };
+        let pulls = self.kind.open_pulls_from(self, account, &head).await?;
         pulls
             .iter()
-            .find(|pull| self.kind.has_head(self, pull, branch))
+            .find(|pull| self.kind.has_head(self, pull, &head))
             .map(|pull| self.created_number(pull))
             .transpose()
     }
@@ -269,12 +325,22 @@ mod tests {
             gitlab.created_number(&json!({"iid": 4, "id": 90})).unwrap(),
             4
         );
+        let head = Head {
+            repository: "group/sub/repo",
+            branch: "topic",
+        };
         let listed =
             json!({"source_branch": "topic", "source_project_id": 1, "target_project_id": 1});
-        assert!(gitlab.kind.has_head(&gitlab, &listed, "topic"));
+        assert!(gitlab.kind.has_head(&gitlab, &listed, &head));
         let fork =
             json!({"source_branch": "topic", "source_project_id": 2, "target_project_id": 1});
-        assert!(!gitlab.kind.has_head(&gitlab, &fork, "topic"));
+        assert!(!gitlab.kind.has_head(&gitlab, &fork, &head));
+        let forked = Head {
+            repository: "someone/repo",
+            ..head
+        };
+        assert!(!gitlab.kind.has_head(&gitlab, &listed, &forked));
+        assert!(gitlab.require(Capability::ForkPrs).is_err());
     }
 
     #[test]
@@ -319,8 +385,30 @@ mod tests {
         assert_eq!(bitbucket.created_number(&json!({"id": 9})).unwrap(), 9);
         let listed = json!({"source": {"branch": {"name": "topic"},
             "repository": {"full_name": "Workspace/Repo"}}});
-        assert!(bitbucket.kind.has_head(&bitbucket, &listed, "topic"));
-        assert!(!bitbucket.kind.has_head(&bitbucket, &listed, "other"));
+        let head = |repository, branch| Head { repository, branch };
+        assert!(
+            bitbucket
+                .kind
+                .has_head(&bitbucket, &listed, &head("workspace/repo", "topic"))
+        );
+        assert!(
+            !bitbucket
+                .kind
+                .has_head(&bitbucket, &listed, &head("workspace/repo", "other"))
+        );
+        assert!(
+            !bitbucket
+                .kind
+                .has_head(&bitbucket, &listed, &head("someone/repo", "topic"))
+        );
+        let forked = NewPull {
+            head_repository: Some("someone/repo".into()),
+            ..pull
+        };
+        assert_eq!(
+            bitbucket.create_pull_request(&forked).body.unwrap()["source"],
+            json!({"branch": {"name": "topic"}, "repository": {"full_name": "someone/repo"}})
+        );
     }
 
     #[test]
@@ -349,6 +437,72 @@ mod tests {
             Some(
                 json!({"title": "WIP: Fix", "body": "Closes #3", "head": "topic", "base": "main"})
             )
+        );
+    }
+
+    #[test]
+    fn github_and_forgejo_name_a_fork_head_by_its_owner() {
+        let pull = NewPull {
+            title: "Fix".into(),
+            head: "topic".into(),
+            head_repository: Some("someone/repo".into()),
+            base: "main".into(),
+            ..NewPull::default()
+        };
+        for remote in [
+            "git@github.com:team/repo.git",
+            "https://forge.example/team/repo",
+        ] {
+            let forge = ForgeRepo::parse(remote).unwrap();
+            assert_eq!(
+                forge.create_pull_request(&pull).body.unwrap()["head"],
+                "someone:topic"
+            );
+            assert!(forge.require(Capability::ForkPrs).is_ok());
+            let listed = json!({"head": {"ref": "topic", "repo": {"full_name": "Someone/Repo"}}});
+            let head = |repository| Head {
+                repository,
+                branch: "topic",
+            };
+            assert!(forge.kind.has_head(&forge, &listed, &head("someone/repo")));
+            assert!(!forge.kind.has_head(&forge, &listed, &head("team/repo")));
+        }
+    }
+
+    #[test]
+    fn each_forge_reads_a_branch_commit_from_its_own_route() {
+        for (remote, endpoint, pointer) in [
+            (
+                "git@github.com:team/repo.git",
+                "repos/team/repo/branches/fix/a",
+                "/commit/sha",
+            ),
+            (
+                "https://forge.example/team/repo",
+                "repos/team/repo/branches/fix%2Fa",
+                "/commit/id",
+            ),
+            (
+                "git@gitlab.com:team/repo.git",
+                "projects/team%2Frepo/repository/branches/fix%2Fa",
+                "/commit/id",
+            ),
+            (
+                "git@bitbucket.org:team/repo.git",
+                "repositories/team/repo/refs/branches/fix%2Fa",
+                "/target/hash",
+            ),
+        ] {
+            let forge = ForgeRepo::parse(remote).unwrap();
+            let (request, read) = forge.kind.branch_read(&forge, "fix/a");
+            assert_eq!((request.endpoint.as_str(), read), (endpoint, pointer));
+        }
+        let fork = ForgeRepo::parse("https://github.com/team/repo")
+            .unwrap()
+            .sibling("someone/repo");
+        assert_eq!(
+            fork,
+            ForgeRepo::parse("https://github.com/someone/repo").unwrap()
         );
     }
 }

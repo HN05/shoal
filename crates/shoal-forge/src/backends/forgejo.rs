@@ -26,7 +26,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
-        create::{NewIssue, NewPull},
+        create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
@@ -83,7 +83,8 @@ impl Backend for Forgejo {
             | Capability::Attachments
             | Capability::MergeCommit
             | Capability::RebaseMerge
-            | Capability::SquashMerge => Support::Supported,
+            | Capability::SquashMerge
+            | Capability::ForkPrs => Support::Supported,
         }
     }
 
@@ -226,14 +227,19 @@ impl Backend for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        _branch: &str,
+        _head: &Head<'_>,
     ) -> Result<Vec<Value>> {
         repo.pages(account, &repo.repo_endpoint("pulls?state=open"))
             .await
     }
 
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
-        github_rest::has_head(repo, pull, branch)
+    fn has_head(&self, _repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
+        github_rest::has_head(pull, head)
+    }
+
+    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
+        let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, false)));
+        (Request::get(endpoint), "/commit/id")
     }
 
     /// Forgejo keeps draft state in the title.
@@ -243,7 +249,8 @@ impl Backend for Forgejo {
         } else {
             pull.title.clone()
         };
-        let body = json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base});
+        let head = github_rest::head_spec(pull);
+        let body = json!({"title": title, "body": pull.body, "head": head, "base": pull.base});
         Request::new(HttpMethod::Post, repo.repo_endpoint("pulls"), Some(body))
     }
 
