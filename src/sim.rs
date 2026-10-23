@@ -414,17 +414,7 @@ impl Manager {
                 profile.approval_lifetime,
                 request.reason.as_deref(),
             );
-            let pending = self
-                .store
-                .run(move |db| {
-                    let tx =
-                        db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                    let pending = crate::daemon::approvals::check(&tx, approval)?;
-                    tx.commit()?;
-                    Ok(pending)
-                })
-                .await?;
-            if let Some(pending) = pending {
+            if let Some(pending) = self.request_approval(approval).await? {
                 return Ok(Allocation::Approval(Box::new(pending)));
             }
         }
