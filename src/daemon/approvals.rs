@@ -410,7 +410,11 @@ impl ApprovalRequest {
                 format!("land {} at {}", land.branch, land.head)
             }
             (Target::IssueOpen, Specification::Issue(issue)) => {
-                format!("open issue \"{}\"", issue.issue.title)
+                let title = &issue.issue.title;
+                match &issue.repository {
+                    Some(repository) => format!("open issue \"{title}\" in {repository}"),
+                    None => format!("open issue \"{title}\""),
+                }
             }
             (Target::PrOpen, Specification::Pull(pull)) => format!(
                 "open PR \"{}\" from {} at {}",

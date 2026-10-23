@@ -75,11 +75,13 @@ impl std::fmt::Display for Moved {
 impl std::error::Error for Moved {}
 
 impl Manager {
-    /// Record `issue` for the user's approval instead of opening it.
+    /// Record `issue` for the user's approval instead of opening it, in the
+    /// repository at the URL `repository` when it is not the workspace's.
     pub(super) async fn propose_issue(
         &self,
         workspace: &Workspace,
         mut issue: NewIssue,
+        repository: Option<String>,
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
@@ -88,6 +90,7 @@ impl Manager {
         let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
         let specification = Specification::Issue(IssueSpecification {
             issue,
+            repository,
             link,
             branch: workspace.branch.clone(),
             commit: commit.trim().to_owned(),
@@ -315,6 +318,11 @@ impl Manager {
             _ => None,
         };
         let required = super::actions::required_labels(&settings, item.kind);
+        // The workspace's templates and labels do not apply to another repository.
+        let (body, required) = match request.proposed_issue() {
+            Some(issue) if issue.repository.is_some() => (None, &[][..]),
+            _ => (body, required),
+        };
         conventions::warnings(&forge, &account, &path, item, body, required).await
     }
 
@@ -641,10 +649,16 @@ impl Manager {
             original.key != request.key,
             "a proposal cannot duplicate itself"
         );
+        let repository = |request: &ApprovalRequest| {
+            request
+                .proposed_issue()
+                .map(|issue| issue.repository.clone())
+        };
         ensure!(
             original.target == Target::IssueOpen
                 && original.status == DecisionStatus::Pending
-                && original.repository_id == request.repository_id,
+                && original.repository_id == request.repository_id
+                && repository(&original) == repository(request),
             "approval request {number} is not a pending issue proposal in the same repository"
         );
         let finding = finding(request)?;
@@ -686,9 +700,26 @@ impl Manager {
         }
     }
 
-    /// The forge and agent account a proposal acts through: its workspace's
-    /// while it exists, otherwise its repository's.
+    /// The forge a proposal opens its item in, and the agent account it acts
+    /// as: an issue's other repository, or the proposer's.
     async fn proposal_forge_account(
+        &self,
+        request: &ApprovalRequest,
+        workspace: Option<&Workspace>,
+    ) -> Result<(ForgeRepo, Account)> {
+        let (forge, account) = self.proposer_forge_account(request, workspace).await?;
+        match request
+            .proposed_issue()
+            .and_then(|issue| issue.repository.as_deref())
+        {
+            Some(repository) => Ok((self.forge(repository).await?, account)),
+            None => Ok((forge, account)),
+        }
+    }
+
+    /// The forge and agent account of the proposer: its workspace's while it
+    /// exists, otherwise its repository's.
+    async fn proposer_forge_account(
         &self,
         request: &ApprovalRequest,
         workspace: Option<&Workspace>,
@@ -995,6 +1026,7 @@ mod tests {
         };
         let specification = Specification::Issue(IssueSpecification {
             issue,
+            repository: None,
             link: false,
             branch: "topic".into(),
             commit: "head".into(),
@@ -1044,6 +1076,7 @@ mod tests {
                 title: "Flaky".into(),
                 ..NewIssue::default()
             },
+            repository: None,
             link: false,
             branch: "topic".into(),
             commit: "head".into(),

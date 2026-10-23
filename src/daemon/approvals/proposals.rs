@@ -27,6 +27,10 @@ pub const ISSUE: &str = "issue";
 #[serde(deny_unknown_fields)]
 pub struct IssueSpecification {
     pub issue: NewIssue,
+    /// The URL of the repository the issue opens in, when it is not the
+    /// workspace's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
     /// Whether approval also assigns the issue to the workspace.
     pub link: bool,
     pub branch: String,
@@ -227,8 +231,11 @@ pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Resu
         .find(|r| {
             r.workspace_id == request.workspace_id
                 && r.status == DecisionStatus::Pending
-                && r.proposed_issue().map(|i| (&i.issue, i.link))
-                    == request.proposed_issue().map(|i| (&i.issue, i.link))
+                && r.proposed_issue()
+                    .map(|i| (&i.issue, &i.repository, i.link))
+                    == request
+                        .proposed_issue()
+                        .map(|i| (&i.issue, &i.repository, i.link))
         });
     if let Some(existing) = existing {
         return Ok((existing, false));

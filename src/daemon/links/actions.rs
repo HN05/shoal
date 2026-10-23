@@ -315,7 +315,7 @@ impl Manager {
         {
             forge.check_uploads(&account, &issue.attachments).await?;
             let proposed = self
-                .propose_issue(&workspace, issue, link, proposer)
+                .propose_issue(&workspace, issue, None, link, proposer)
                 .await?;
             return Ok(OpenOutcome::Proposed(proposed));
         }
