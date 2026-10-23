@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, LoginHint},
     items::{
         issue::require_open,
         item::{Current, Item, ItemState},
@@ -92,7 +92,7 @@ pub(crate) async fn issue_activity(
         Ok::<_, anyhow::Error>(snapshot)
     }
     .await
-    .context(reads.login_hint())
+    .hint_login(reads)
 }
 
 /// A PR's state, discussion, reviews and, while it is open, mergeability
@@ -141,7 +141,7 @@ pub(crate) async fn pr_status(
         Ok::<_, anyhow::Error>(status)
     }
     .await
-    .context(reads.login_hint())
+    .hint_login(reads)
 }
 
 /// The commits of the PR once it has merged, or `None` before. The PR must
@@ -160,7 +160,7 @@ pub(crate) async fn merged_commits(
     let commits = repo
         .pages(account, &endpoint)
         .await
-        .context(repo.kind.login_hint())?;
+        .hint_login(&repo.kind)?;
     commit_shas(&commits, repo.kind.commit_field()).map(Some)
 }
 
@@ -175,7 +175,7 @@ pub(crate) async fn branch_pull(
     let pull = repo
         .read(account, ItemKind::Pr, number)
         .await
-        .context(repo.kind.login_hint())?;
+        .hint_login(&repo.kind)?;
     if let Some(branch) = branch {
         ensure!(
             pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
@@ -242,7 +242,7 @@ async fn listed<T>(
         Ok(entries.len() < limit)
     })
     .await
-    .context(repo.kind.login_hint())?;
+    .hint_login(&repo.kind)?;
     entries.truncate(limit);
     Ok(entries)
 }
@@ -263,7 +263,7 @@ pub(crate) async fn issue_state(
     Ok(repo
         .read(account, ItemKind::Issue, number)
         .await
-        .context(repo.kind.login_hint())?
+        .hint_login(&repo.kind)?
         .item
         .state)
 }
@@ -277,7 +277,7 @@ pub(crate) async fn issue_details(
     let issue = repo
         .read(account, ItemKind::Issue, number)
         .await
-        .context(repo.kind.login_hint())?;
+        .hint_login(&repo.kind)?;
     require_open(issue.item.state)?;
     Ok((issue.item.title, issue.body))
 }

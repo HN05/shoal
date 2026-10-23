@@ -33,7 +33,7 @@ use crate::{
         thread::Thread,
         view::{Details, Review},
     },
-    transport::{api::Request, response::Response},
+    transport::{api::Request, resend::Transient, response::Response},
     updates::Snapshot,
 };
 use bitbucket::Bitbucket;
@@ -205,7 +205,7 @@ pub(crate) trait Backend {
     ) -> Result<(String, String, String)> {
         rest::pull_details(repo, account, number)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     /// Fail closed on changed output: only commits the merged PR lists can
@@ -459,6 +459,22 @@ pub(crate) trait Backend {
     /// item at most one label of its scope.
     fn exclusive_label(&self, _name: &str, _label: &Value) -> bool {
         false
+    }
+}
+
+/// Adds a backend's login hint to a failed read.
+pub(crate) trait LoginHint<T> {
+    /// This result, with `backend`'s login hint on a failure a login may
+    /// fix: not one that may pass, such as a refused connection.
+    fn hint_login(self, backend: &(impl Backend + ?Sized)) -> Result<T>;
+}
+
+impl<T> LoginHint<T> for Result<T> {
+    fn hint_login(self, backend: &(impl Backend + ?Sized)) -> Result<T> {
+        self.map_err(|error| match error.downcast_ref::<Transient>() {
+            Some(_) => error,
+            None => error.context(backend.login_hint()),
+        })
     }
 }
 
@@ -878,6 +894,21 @@ impl Backend for ForgeKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_failures_a_login_may_fix_carry_the_login_hint() {
+        let hinted = |error: anyhow::Error| {
+            let failed: Result<()> = Err(error.context("GET pulls/1"));
+            format!("{:#}", failed.hint_login(&ForgeKind::Forgejo).unwrap_err())
+        };
+        let refused = hinted(Transient::Unsent("curl failed (exit status: 7)".into()).into());
+        assert_eq!(refused, "GET pulls/1: curl failed (exit status: 7)");
+        let denied = hinted(anyhow::anyhow!("HTTP 404"));
+        assert_eq!(
+            denied,
+            format!("{}: GET pulls/1: HTTP 404", ForgeKind::Forgejo.login_hint())
+        );
+    }
 
     #[test]
     fn well_known_and_gitlab_named_hosts_are_recognized() {

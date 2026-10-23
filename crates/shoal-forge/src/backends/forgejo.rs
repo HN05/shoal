@@ -12,7 +12,7 @@ mod uploads;
 mod view;
 
 use super::{
-    Backend,
+    Backend, LoginHint,
     github_rest::{self, Dialect},
     image, rest, served_at,
 };
@@ -179,9 +179,7 @@ impl Backend for Forgejo {
             return rest::list_items(repo, account, kind, &endpoint, search).await;
         }
         let numbers = rest::listed_numbers(repo, account, &endpoint, search.limit).await?;
-        read_pulls(repo, account, numbers)
-            .await
-            .context(self.login_hint())
+        read_pulls(repo, account, numbers).await.hint_login(self)
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
@@ -373,7 +371,7 @@ impl Backend for Forgejo {
     ) -> Result<Details> {
         view::details(repo, account, kind, number)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn view_discussion(
@@ -387,7 +385,7 @@ impl Backend for Forgejo {
     ) -> Result<Option<Vec<Review>>> {
         view::discussion(repo, account, kind, number, details, errors)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn ci_checks(

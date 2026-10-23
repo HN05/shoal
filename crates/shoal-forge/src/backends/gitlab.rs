@@ -36,7 +36,7 @@ use crate::{
 
 pub(crate) mod glab;
 
-use super::{Backend, rest};
+use super::{Backend, LoginHint, rest};
 
 #[derive(Clone, Copy)]
 pub(crate) struct GitLab;
@@ -360,7 +360,7 @@ impl Backend for GitLab {
                 &Request::get(format!("projects/{}", encode(&repo.path, false))),
             )
             .await
-            .context(self.login_hint())?;
+            .hint_login(self)?;
         let access = ["project_access", "group_access"]
             .iter()
             .filter_map(|scope| project["permissions"][scope]["access_level"].as_u64())
@@ -452,7 +452,7 @@ impl Backend for GitLab {
                 &repo.repo_endpoint(&format!("issues/{number}/links")),
             )
             .await
-            .context(self.login_hint())?;
+            .hint_login(self)?;
         open_blocking(&links)
     }
 
@@ -495,7 +495,7 @@ impl Backend for GitLab {
     ) -> Result<Details> {
         view_details(repo, account, kind, number)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn view_discussion(
@@ -509,7 +509,7 @@ impl Backend for GitLab {
     ) -> Result<Option<Vec<Review>>> {
         view_discussion(repo, account, kind, number, details)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn ci_checks(

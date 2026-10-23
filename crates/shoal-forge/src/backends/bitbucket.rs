@@ -36,7 +36,7 @@ use crate::{
     updates::{DISCUSSION, Snapshot},
 };
 
-use super::{Backend, rest};
+use super::{Backend, LoginHint, rest};
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";
@@ -454,7 +454,7 @@ impl Backend for Bitbucket {
     ) -> Result<Details> {
         view_details(repo, account, kind, number)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn view_discussion(
@@ -468,7 +468,7 @@ impl Backend for Bitbucket {
     ) -> Result<Option<Vec<Review>>> {
         view_discussion(repo, account, kind, number, details)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     /// No CI job Shoal can act on, since it has no Pipelines support.

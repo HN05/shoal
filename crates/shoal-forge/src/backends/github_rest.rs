@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 use super::{
-    Backend as _,
+    LoginHint,
     forgejo::{draft_prefix, draft_title},
 };
 use crate::{
@@ -219,7 +219,7 @@ pub(crate) async fn pushable(repo: &ForgeRepo, account: &crate::account::Account
     let read = repo
         .send(account, &Request::get(format!("repos/{}", repo.path)))
         .await
-        .context(repo.kind.login_hint())?;
+        .hint_login(&repo.kind)?;
     Ok(read["permissions"]["push"] == true)
 }
 
@@ -270,7 +270,7 @@ pub(crate) async fn open_dependencies(
     let issues = repo
         .pages(account, &repo.repo_endpoint(endpoint))
         .await
-        .context(repo.kind.login_hint())?;
+        .hint_login(&repo.kind)?;
     open_urls(&issues)
 }
 

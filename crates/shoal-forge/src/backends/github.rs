@@ -9,7 +9,7 @@ pub(crate) mod threads;
 mod view;
 
 use super::{
-    Backend,
+    Backend, LoginHint,
     github_rest::{self, Dialect},
     image,
 };
@@ -477,7 +477,7 @@ impl Backend for GitHub {
     ) -> Result<Snapshot> {
         activity::issue_activity(repo, account, number)
             .await
-            .context(self.login_hint())
+            .hint_login(self)
     }
 
     async fn pr_activity(
