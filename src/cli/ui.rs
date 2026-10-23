@@ -922,7 +922,7 @@ fn tree_workspace_row(
 }
 
 fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (String, [Cell; 4]) {
-    let status = ListStatus::Running;
+    let status = ListStatus::ProcessRunning;
     (
         palette.paint(Style::Heading, "◆"),
         [
@@ -1435,7 +1435,7 @@ mod tests {
                 "● fix-login  stopped",
                 "✗ x          failed",
                 "◌ new        preparing",
-                "● busy       running           Refine the list view",
+                "● busy       process running   Refine the list view",
                 "● review     ready",
                 "● quiet      ready (outdated)",
                 "● asking     needs input",

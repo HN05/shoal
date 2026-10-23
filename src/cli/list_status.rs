@@ -20,7 +20,9 @@ pub enum ListStatus {
     Ready,
     Working,
     Waiting,
-    Running,
+    /// An agent or command without a reported turn state runs.
+    #[value(alias = "running")]
+    ProcessRunning,
     ReadyOutdated,
     Inactive,
     Queued,
@@ -30,7 +32,8 @@ pub enum ListStatus {
 impl ListStatus {
     /// The workspace's state unless ready, then stopped work, an agent
     /// that needs input, a current ready mark, the agent's other turn
-    /// states, a running agent or command, an outdated mark, or inactive.
+    /// states, an agent or command running without one, an outdated mark,
+    /// or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
@@ -46,7 +49,7 @@ impl ListStatus {
             WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::agent(state),
-                None if workspace.running => Self::Running,
+                None if workspace.running => Self::ProcessRunning,
                 None if outdated => Self::ReadyOutdated,
                 None => Self::Inactive,
             },
@@ -83,7 +86,7 @@ impl ListStatus {
             Self::Ready => "ready",
             Self::Working => "working",
             Self::Waiting => "waiting",
-            Self::Running => "running",
+            Self::ProcessRunning => "process running",
             Self::ReadyOutdated => "ready (outdated)",
             Self::Inactive => "inactive",
             Self::Queued => "queued",
@@ -95,7 +98,7 @@ impl ListStatus {
         match self {
             Self::Failed => Style::Error,
             Self::Ready => Style::Success,
-            Self::Working | Self::Waiting | Self::Running => Style::Heading,
+            Self::Working | Self::Waiting | Self::ProcessRunning => Style::Heading,
             Self::Inactive | Self::Queued => Style::Muted,
             Self::Preparing
             | Self::Stopping
@@ -129,5 +132,13 @@ mod tests {
                     .replace(' ', "-")
             );
         }
+    }
+
+    #[test]
+    fn the_former_running_name_still_filters() {
+        assert_eq!(
+            ListStatus::from_str("running", false),
+            Ok(ListStatus::ProcessRunning)
+        );
     }
 }

@@ -20039,7 +20039,11 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     assert_eq!(
         rows,
         [
-            vec![format!("◆ {name} chat").as_str(), "running", "claude"],
+            vec![
+                format!("◆ {name} chat").as_str(),
+                "process running",
+                "claude"
+            ],
             vec!["● └ chat-worker", "inactive"],
         ]
     );

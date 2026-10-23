@@ -407,7 +407,8 @@ a terminal's width. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `needs input`, `ready`, the other [agent states](#agent-state),
-`running` while an agent or command runs, `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
+`process running` while an agent without a reported state or a command runs,
+`ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
 the diff, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
@@ -421,7 +422,7 @@ lists only the chats. `work --repo <repository>`, with or without
 chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`);
-a chat's status is `running`.
+a chat's status is `process running`.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions,
 pending approval requests that no coordinating agent decides, including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose

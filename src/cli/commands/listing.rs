@@ -51,7 +51,7 @@ impl ListFilter {
 
     /// A chat's status is `running`.
     pub(super) fn keeps_chat(&self, chat: &Chat) -> bool {
-        self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::Running)
+        self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::ProcessRunning)
     }
 
     /// An item of `repository_id` without a workspace, such as an issue
