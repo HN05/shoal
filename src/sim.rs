@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-use audit::{CleanRequest, CleanRequestStatus};
+use audit::CleanRequest;
 use simctl::Inventory;
 
 use crate::{
@@ -358,33 +358,8 @@ impl Manager {
             self.notify_allocation(&workspace_name, outcome, "simulator: ")
                 .await;
         }
-        if let Some(mut audit) = audit {
-            audit.updated_at = unix_seconds();
-            match &result {
-                Ok(Allocation::Granted(sim)) => {
-                    audit.status = CleanRequestStatus::Acquired;
-                    audit.simulator_id = Some(sim.id.clone());
-                    audit.udid = sim.udid.clone();
-                }
-                Ok(Allocation::Busy(message)) => {
-                    audit.status = CleanRequestStatus::Busy;
-                    audit.error = Some(message.clone());
-                }
-                Ok(Allocation::Approval(request)) => {
-                    audit.status =
-                        if request.status == crate::daemon::approvals::DecisionStatus::Denied {
-                            CleanRequestStatus::Failed
-                        } else {
-                            CleanRequestStatus::Busy
-                        };
-                    audit.error = Some(format!("approval {} ({})", request.status, request.id));
-                }
-                Err(error) => {
-                    audit.status = CleanRequestStatus::Failed;
-                    audit.error = Some(format!("{error:#}"));
-                }
-            }
-            self.save_clean_request(&audit).await?;
+        if let Some(audit) = audit {
+            self.finish_clean_request(audit, &result).await?;
         }
         result
     }

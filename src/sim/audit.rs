@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
     sim::{SimRequest, Simulator},
     state::states,
@@ -83,6 +83,35 @@ impl CleanRequest {
             });
         }
     }
+
+    /// Record how the allocation ended. Only a busy outcome, including a
+    /// pending approval, lets the same request ID retry.
+    fn record_outcome(&mut self, result: &Result<Allocation<Box<Simulator>>>) {
+        self.updated_at = unix_seconds();
+        match result {
+            Ok(Allocation::Granted(sim)) => {
+                self.status = CleanRequestStatus::Acquired;
+                self.simulator_id = Some(sim.id.clone());
+                self.udid = sim.udid.clone();
+            }
+            Ok(Allocation::Busy(message)) => {
+                self.status = CleanRequestStatus::Busy;
+                self.error = Some(message.clone());
+            }
+            Ok(Allocation::Approval(request)) => {
+                self.status = if request.status == DecisionStatus::Denied {
+                    CleanRequestStatus::Failed
+                } else {
+                    CleanRequestStatus::Busy
+                };
+                self.error = Some(format!("approval {} ({})", request.status, request.id));
+            }
+            Err(error) => {
+                self.status = CleanRequestStatus::Failed;
+                self.error = Some(format!("{error:#}"));
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -156,6 +185,17 @@ impl Manager {
         // workspaces: deleting a worktree must not delete its accountability trail.
         self.save_clean_request(&audit).await?;
         Ok(audit)
+    }
+
+    /// Persist the allocation outcome of a clean request started by
+    /// `start_clean_request`.
+    pub(super) async fn finish_clean_request(
+        &self,
+        mut audit: CleanRequest,
+        result: &Result<Allocation<Box<Simulator>>>,
+    ) -> Result<()> {
+        audit.record_outcome(result);
+        self.save_clean_request(&audit).await
     }
 
     pub async fn save_clean_request(&self, audit: &CleanRequest) -> Result<()> {
