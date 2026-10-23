@@ -80,8 +80,15 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .insert(host.to_ascii_lowercase(), kind);
 }
 
-/// Make `pins` the types this process pins, replacing any it had.
+/// Make `pins` the types this process pins, replacing any it had and any
+/// [`learn_pins`] has yet to load.
 pub fn pin(pins: Vec<(String, ForgeKind)>) {
+    let mut pending = PINS.lock().unwrap_or_else(PoisonError::into_inner);
+    *pending = None;
+    replace_pins(pins);
+}
+
+fn replace_pins(pins: Vec<(String, ForgeKind)>) {
     *PINNED.write().unwrap_or_else(PoisonError::into_inner) = pins
         .into_iter()
         .map(|(host, kind)| (host.to_ascii_lowercase(), kind))
@@ -100,7 +107,7 @@ pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'stat
 pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
     let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(load) = pins.take() {
-        pin(load());
+        replace_pins(load());
     }
     drop(pins);
     let pinned = PINNED
@@ -144,6 +151,14 @@ mod tests {
             ForgeKind::detect("gitlab.pinned.example", None),
             ForgeKind::Forgejo
         );
+    }
+
+    #[test]
+    fn pins_set_outright_replace_the_ones_yet_to_load() {
+        let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        learn_pins(|| panic!("pins set outright replace these"));
+        pin(vec![("outright.pinned.example".into(), ForgeKind::Forgejo)]);
+        assert_eq!(learned("outright.pinned.example"), Some(ForgeKind::Forgejo));
     }
 
     #[test]
