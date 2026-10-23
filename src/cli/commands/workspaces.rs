@@ -679,7 +679,7 @@ async fn add_planned(
         )
         .await?;
     }
-    let navigate = terminal::follows_caller(ctx);
+    let navigate = enters_added(ctx, &opened.workspace, &agent).await?;
     let name = opened.workspace.name.clone();
     let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
         if let Some(entry) = &queue_entry {
@@ -694,6 +694,25 @@ async fn add_planned(
         crate::env::launch_queue_entry(entry);
     }
     agent.launch(ctx, workspace, issue, args).await
+}
+
+/// Whether the caller's shell enters the added `workspace`. An agent that
+/// runs in a session this terminal attaches to leaves it where it was, as
+/// detaching returns to that shell rather than to the workspace.
+async fn enters_added(
+    ctx: &Context,
+    workspace: &Workspace,
+    agent: &ResolvedAddAgent,
+) -> Result<bool> {
+    if !terminal::follows_caller(ctx) {
+        return Ok(false);
+    }
+    if agent.agent.is_none() {
+        return Ok(true);
+    }
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    Ok(!terminal::keeps_agents_in_sessions(ctx, &settings))
 }
 
 /// Link the PR a workspace was opened on and return the workspace with that

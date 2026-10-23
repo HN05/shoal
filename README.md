@@ -105,7 +105,7 @@ repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same template
 files in a repository root add instructions only Shoal's agents need.
 New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add`. With shell integration, `shoal add` enters the
-workspace.
+workspace unless its agent runs in a zmx session.
 
 Agent admission defaults to starting agents one at a time while measured CPU,
 memory and disk load leaves room; `load = "light"`, `"balanced"` or `"full"`

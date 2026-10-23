@@ -610,7 +610,8 @@ run through the tracked execution wrapper and, when run in place, return the
 agent's exit code, restoring OS terminal settings even after interruption. When
 `TERM` is nonempty and not `dumb`, it also resets emulator input modes for the shell;
 the workspace is retained even when launch fails. With shell
-integration, your shell enters the new workspace after the agent exits.
+integration, your shell enters the new workspace after an agent run in place
+exits; an agent in a zmx session leaves it where it was.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
 On a terminal, CLI agent launches (`shoal claude`, `shoal codex`, other AI

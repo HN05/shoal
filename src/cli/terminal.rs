@@ -474,6 +474,12 @@ pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
     ctx.place.as_ref().is_none_or(|place| place.keeps_shell())
 }
 
+/// Whether an agent launched here runs in a session this terminal attaches
+/// to, leaving the caller's shell where it was once the terminal detaches.
+pub(in crate::cli) fn keeps_agents_in_sessions(ctx: &Context, settings: &Effective) -> bool {
+    current(ctx, settings).keeps_agents_in_sessions()
+}
+
 /// Give a workspace added without an agent a shell at `cwd` in the place
 /// opened for it, which stays open while the shell runs. The caller's own
 /// terminal gets its shell back instead.
@@ -532,7 +538,7 @@ impl PromptSession {
 /// Whether an agent launched here runs in a session its wrapper can type a
 /// prompt into: a new one, or the session this process already runs in.
 pub(in crate::cli) fn agents_can_be_prompted(ctx: &Context, settings: &Effective) -> bool {
-    current(ctx, settings).keeps_agents_in_sessions() || PromptSession::current().is_some()
+    keeps_agents_in_sessions(ctx, settings) || PromptSession::current().is_some()
 }
 
 /// Whether a launch takes the caller's terminal or runs in the background.

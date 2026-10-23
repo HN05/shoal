@@ -20490,10 +20490,13 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     ];
     assert!(calls.iter().any(|call| call == &labels), "{calls:?}");
 
-    // An agent waiting for its first prompt attaches this terminal.
+    // An agent waiting for its first prompt attaches this terminal, which
+    // detaching returns to the caller's shell where it was.
+    let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
             .args(["add", repo, "focused", "--agent", "pi"]),
         "",
         true,
@@ -20504,6 +20507,23 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert_eq!(attach[..2], ["attach", "--labels"]);
     assert_eq!(attach[3], "focused");
     assert_eq!(runs(), "background tracked go\nfocused tracked \n");
+    assert!(!directive.exists(), "{transcript}");
+
+    // Without an agent the caller's shell enters the workspace.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .args(["add", repo, "shell-here", "--focus"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let workspace = fixture.ok(&["inspect", "shell-here"]);
+    assert_eq!(
+        fs::read_to_string(&directive).unwrap().trim(),
+        workspace["workspace"]["path"].as_str().unwrap()
+    );
 }
 
 #[test]
