@@ -3,7 +3,10 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
-use super::forgejo::{draft_prefix, draft_title};
+use super::{
+    Backend as _,
+    forgejo::{draft_prefix, draft_title},
+};
 use crate::{
     ForgeRepo,
     items::{
@@ -208,4 +211,48 @@ pub(crate) fn has_head(repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
         && pull["head"]["repo"]["full_name"]
             .as_str()
             .is_some_and(|name| name.eq_ignore_ascii_case(&repo.path))
+}
+
+/// The URLs of the open issues an issue dependency list at `endpoint` names.
+pub(crate) async fn open_dependencies(
+    repo: &ForgeRepo,
+    account: &crate::account::Account,
+    endpoint: &str,
+) -> Result<Vec<String>> {
+    let issues = repo
+        .pages(account, &repo.repo_endpoint(endpoint))
+        .await
+        .context(repo.kind.login_hint())?;
+    open_urls(&issues)
+}
+
+/// The URL of each listed issue that is open.
+fn open_urls(issues: &[Value]) -> Result<Vec<String>> {
+    issues
+        .iter()
+        .filter(|issue| issue["state"] == "open")
+        .map(|issue| {
+            issue["html_url"]
+                .as_str()
+                .map(str::to_owned)
+                .context("listed issue has no URL")
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dependencies_keep_open_issues() {
+        let issues = [
+            json!({"state": "open", "html_url": "https://forge.example/o/r/issues/1"}),
+            json!({"state": "closed", "html_url": "https://forge.example/o/r/issues/2"}),
+        ];
+        assert_eq!(
+            open_urls(&issues).unwrap(),
+            ["https://forge.example/o/r/issues/1"]
+        );
+    }
 }

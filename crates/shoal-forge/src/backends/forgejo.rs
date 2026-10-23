@@ -281,6 +281,16 @@ impl Backend for Forgejo {
         bail!("Forgejo review threads cannot be resolved through its API")
     }
 
+    async fn open_issue_dependencies(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<String>> {
+        github_rest::open_dependencies(repo, account, &format!("issues/{number}/dependencies"))
+            .await
+    }
+
     async fn issue_activity(
         &self,
         repo: &ForgeRepo,

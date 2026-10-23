@@ -158,6 +158,17 @@ pub(crate) trait Backend {
         rest::issue_details(repo, account, number).await
     }
 
+    /// The URLs of the open issues the forge records as blocking an issue.
+    /// A forge without issue dependencies records none.
+    async fn open_issue_dependencies(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _number: u64,
+    ) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     /// Title, head and base of a PR whose head branch is in the repository.
     async fn pull_details(
         &self,
@@ -554,6 +565,15 @@ impl Backend for ForgeKind {
         number: u64,
     ) -> Result<(String, String)> {
         dispatch!(self, backend => backend.issue_details(repo, account, number).await)
+    }
+
+    async fn open_issue_dependencies(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<String>> {
+        dispatch!(self, backend => backend.open_issue_dependencies(repo, account, number).await)
     }
 
     async fn pull_details(

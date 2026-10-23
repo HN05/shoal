@@ -372,6 +372,23 @@ impl Backend for GitLab {
         ))
     }
 
+    /// GitLab lists blocking issues among an issue's links.
+    async fn open_issue_dependencies(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<String>> {
+        let links = repo
+            .pages(
+                account,
+                &repo.repo_endpoint(&format!("issues/{number}/links")),
+            )
+            .await
+            .context(self.login_hint())?;
+        open_blocking(&links)
+    }
+
     async fn issue_activity(
         &self,
         repo: &ForgeRepo,
@@ -896,9 +913,37 @@ fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
     endpoint
 }
 
+/// The URLs of the open issues among `links` that block the linked issue.
+fn open_blocking(links: &[Value]) -> Result<Vec<String>> {
+    links
+        .iter()
+        .filter(|link| link["link_type"] == "is_blocked_by" && link["state"] == "opened")
+        .map(|link| {
+            link["web_url"]
+                .as_str()
+                .map(str::to_owned)
+                .context("linked issue has no URL")
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn open_blocking_issues_are_the_open_is_blocked_by_links() {
+        let links = [
+            json!({"link_type": "is_blocked_by", "state": "opened", "web_url": "https://gitlab.com/g/p/-/issues/1"}),
+            json!({"link_type": "is_blocked_by", "state": "closed", "web_url": "https://gitlab.com/g/p/-/issues/2"}),
+            json!({"link_type": "blocks", "state": "opened", "web_url": "https://gitlab.com/g/p/-/issues/3"}),
+            json!({"link_type": "relates_to", "state": "opened", "web_url": "https://gitlab.com/g/p/-/issues/4"}),
+        ];
+        assert_eq!(
+            open_blocking(&links).unwrap(),
+            ["https://gitlab.com/g/p/-/issues/1"]
+        );
+    }
 
     #[test]
     fn closed_merge_request_searches_list_all_to_include_merged_ones() {

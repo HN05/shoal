@@ -156,6 +156,16 @@ impl Backend for GitHub {
         reported_state(&output, number)
     }
 
+    async fn open_issue_dependencies(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<String>> {
+        let endpoint = format!("issues/{number}/dependencies/blocked_by");
+        github_rest::open_dependencies(repo, account, &endpoint).await
+    }
+
     async fn issue_details(
         &self,
         repo: &ForgeRepo,
