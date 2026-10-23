@@ -7818,6 +7818,23 @@ esac
         "{shown}"
     );
     assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+    // A workspace process cannot see them, even having cleared its token.
+    fixture.ok(&["notify", "agent only", "--workspace", "asker"]);
+    let cleared = fixture
+        .command()
+        .args(["exec", "asker", "--", "sh", "-c"])
+        // A second command keeps the scoped shell as the listing's parent.
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows notifications; exit $?"#)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(!cleared.status.success(), "{cleared:?}");
+    assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
+    assert_eq!(
+        fixture.ok(&["notifications"]).as_array().unwrap().len(),
+        1,
+        "the refused listing marked nothing read"
+    );
 
     // Inside a workspace with items, it starts searching for them.
     let path = Path::new(asker["path"].as_str().unwrap());

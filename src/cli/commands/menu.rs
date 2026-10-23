@@ -325,7 +325,7 @@ impl Row {
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
 /// the user, searching for the current workspace's items when it has any.
 pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice> {
-    let scoped = env::is_scoped();
+    let scoped = env::inherits_scope(&ctx.paths.state);
     let views = View::available(scoped);
     let (view, entries) = first_view(ctx, start, views, scoped).await?;
     let query = match start {
@@ -384,9 +384,15 @@ async fn first_view(
     Ok((last, rows(ctx, last, scoped).await?))
 }
 
-/// Print `view`'s rows for the picker to reload.
+/// Print `view`'s rows for the picker to reload, refusing the views a
+/// workspace process may not see, whatever variables it cleared.
 pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
-    for (id, label) in rows(ctx, view, env::is_scoped()).await? {
+    let scoped = env::inherits_scope(&ctx.paths.state);
+    ensure!(
+        View::available(scoped).contains(&view),
+        "workspace processes cannot see the inbox or notifications; ask the user"
+    );
+    for (id, label) in rows(ctx, view, scoped).await? {
         println!("{}", ui::picker_line(&id, &label));
     }
     Ok(0)
@@ -395,7 +401,7 @@ pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
 /// Print the fzf actions that switch from the view fzf shows, named by its
 /// prompt, to the next one.
 pub(super) fn print_next(ctx: &Context) -> Result<i32> {
-    let scoped = env::is_scoped();
+    let scoped = env::inherits_scope(&ctx.paths.state);
     let views = View::available(scoped);
     let prompt = std::env::var("FZF_PROMPT").unwrap_or_default();
     let next = View::after(&prompt, views);
