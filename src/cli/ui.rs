@@ -9,7 +9,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{
@@ -474,9 +474,26 @@ fn fzf_output(ctx: &Context, prompt: &str, entries: &Entries, extra: &[String]) 
     }
     drop(input);
     let output = picker.wait_with_output()?;
-    ensure!(output.status.success(), "selection canceled");
-    Ok(String::from_utf8(output.stdout)?)
+    // fzf exits 1 without a match and 130 when the user leaves; 2 is its own error.
+    match output.status.code() {
+        Some(0) => Ok(String::from_utf8(output.stdout)?),
+        Some(1 | 130) => Err(SelectionCanceled.into()),
+        _ => bail!("picker failed: {}", output.status),
+    }
 }
+
+/// The user left the picker without choosing. The CLI exits without an error
+/// message, as it does when Ctrl-C cancels a prompt.
+#[derive(Debug)]
+pub struct SelectionCanceled;
+
+impl std::fmt::Display for SelectionCanceled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("selection canceled")
+    }
+}
+
+impl std::error::Error for SelectionCanceled {}
 
 /// The id field of a line fzf printed.
 fn entry_id(line: &str) -> String {

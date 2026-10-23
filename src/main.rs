@@ -86,6 +86,9 @@ async fn run_commands(cli: Cli) {
     let json_output = cli.json;
     match cli::commands::run(cli).await {
         Ok(code) => std::process::exit(code),
+        Err(error) if error.downcast_ref::<cli::ui::SelectionCanceled>().is_some() => {
+            std::process::exit(130)
+        }
         Err(error) => {
             if json_output {
                 eprintln!(

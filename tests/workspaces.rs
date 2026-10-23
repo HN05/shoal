@@ -7729,8 +7729,8 @@ head -n 1 "$HOME/picker-input"
             assert_eq!(args.contains("tab:transform("), !scoped, "{args}");
             match key {
                 "cancel" => {
-                    assert!(!output.status.success());
-                    assert!(transcript.contains("selection canceled"), "{transcript}");
+                    assert_eq!(output.status.code(), Some(130), "{transcript}");
+                    assert!(!transcript.contains("canceled"), "{transcript}");
                 }
                 "ctrl-z" => {
                     assert!(!output.status.success());
@@ -11201,8 +11201,8 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             "",
         );
         if choice == "cancel" {
-            assert!(!output.status.success(), "{output:?}");
-            assert!(transcript.contains("selection canceled"), "{transcript}");
+            assert_eq!(output.status.code(), Some(130), "{output:?}");
+            assert!(!transcript.contains("canceled"), "{transcript}");
             assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
             continue;
         }
