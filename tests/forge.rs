@@ -1978,6 +1978,9 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["id"].to_string(), flaky);
+    let inbox = fixture.ok(&["inbox"]);
+    assert_eq!(inbox[0]["kind"], "approval", "{inbox}");
+    assert_eq!(inbox.as_array().unwrap().len(), 1);
     let comment = json!(["POST repos/team/project/issues/40/comments",
         {"body": finding("Flaky again", "\nAlso on CI\n")}]);
     let failed = fixture.run(&["approve", &flaky]);

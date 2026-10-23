@@ -110,12 +110,7 @@ impl Inbox {
         palette: Palette,
         width: Option<usize>,
     ) -> Vec<String> {
-        let repository = |item: &Item| {
-            self.workspaces
-                .iter()
-                .find(|w| w.id == item.workspace_id())
-                .map_or("", |w| w.repository_id.as_str())
-        };
+        let repository = |item| repository_of(&self.workspaces, item);
         let cells: Vec<[Cell; 5]> = self
             .items
             .iter()
@@ -140,6 +135,17 @@ impl Inbox {
 
 /// Open questions, then the pending approval requests the user decides, of
 /// `workspaces`; a coordinating agent decides the others.
+/// The repository of the item's workspace, or the one that owns a proposed
+/// issue whose workspace is gone.
+fn repository_of<'a>(workspaces: &'a [Workspace], item: &'a Item) -> &'a str {
+    workspaces
+        .iter()
+        .find(|w| w.id == item.workspace_id())
+        .map(|w| w.repository_id.as_str())
+        .or_else(|| item.repository_id())
+        .unwrap_or("")
+}
+
 fn decision_items(
     questions: Vec<Question>,
     requests: Vec<ApprovalRequest>,
@@ -152,10 +158,11 @@ fn decision_items(
         .map(|question| Item::Question { question });
     let requests = requests
         .into_iter()
+        // A proposed issue belongs to its repository and outlives its workspace.
         .filter(|request| {
             request.status == DecisionStatus::Pending
                 && request.decider.is_none()
-                && kept(&request.workspace_id)
+                && (kept(&request.workspace_id) || request.repository_id.is_some())
         })
         .map(|request| Item::Approval { request });
     questions.chain(requests).collect()
@@ -200,6 +207,15 @@ impl Item {
         }
     }
 
+    /// The repository that owns a proposed issue, which outlives the
+    /// workspace that proposed it.
+    fn repository_id(&self) -> Option<&str> {
+        match self {
+            Self::Approval { request } => request.repository_id.as_deref(),
+            _ => None,
+        }
+    }
+
     fn workspace_name(&self) -> &str {
         match self {
             Self::Question { question } => &question.workspace,
@@ -227,6 +243,7 @@ impl Item {
         let title = |w: &Workspace| w.links.issue_title.clone().unwrap_or_default();
         match self {
             Self::Question { question } => question.ask.question.clone(),
+            Self::Approval { request } if request.reason.is_empty() => request.subject(),
             Self::Approval { request } => format!("{}: {}", request.subject(), request.reason),
             Self::NeedsInput { workspace } => title(workspace),
             Self::Failed { workspace } => workspace

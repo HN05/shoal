@@ -403,7 +403,8 @@ repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`);
 a chat's status is `running`.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions,
-pending approval requests that no coordinating agent decides, workspaces whose
+pending approval requests that no coordinating agent decides, including issue
+[proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
 agent needs input, failed
 workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item. There Enter answers a question, approves or denies a request after
