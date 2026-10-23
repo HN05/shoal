@@ -32,7 +32,7 @@ pub struct Manifest {
     /// The removal record, with agents that start new sessions.
     pub workspace: RemovedWorkspace,
     /// The agents with their sessions, for an import on the exporting
-    /// machine, where the sessions remain.
+    /// machine, where the sessions remain, or one told to keep them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Sessions>,
 }
@@ -104,24 +104,36 @@ impl Manifest {
         })
     }
 
-    /// Whether `machine` exported this workspace.
-    pub fn exported_on(&self, machine: Option<&str>) -> bool {
-        self.sessions
+    /// The removal record to import on `machine`. Each agent with a session
+    /// keeps it as `keep_sessions` says, or on the exporting machine; on
+    /// another machine, it keeps no place or waiting wrapper there. Every
+    /// other agent starts a new session.
+    pub fn workspace_on(
+        &self,
+        machine: Option<&str>,
+        keep_sessions: Option<bool>,
+    ) -> RemovedWorkspace {
+        let exporting = self
+            .sessions
             .as_ref()
-            .is_some_and(|sessions| machine == Some(sessions.machine.as_str()))
-    }
-
-    /// The removal record to import. With `keep_sessions`, each agent with a
-    /// session keeps it; every other agent starts a new session.
-    pub fn workspace_keeping(&self, keep_sessions: bool) -> RemovedWorkspace {
-        let Some(sessions) = self.sessions.as_ref().filter(|_| keep_sessions) else {
+            .is_some_and(|sessions| machine == Some(sessions.machine.as_str()));
+        let Some(sessions) = self
+            .sessions
+            .as_ref()
+            .filter(|_| keep_sessions.unwrap_or(exporting))
+        else {
             return self.workspace.clone();
         };
         let agents = sessions.agents.iter().cloned().map(|agent| {
-            if agent.record.session.is_some() {
+            if agent.record.session.is_none() {
+                moved_agent(agent)
+            } else if exporting {
                 agent
             } else {
-                moved_agent(agent)
+                StoppedAgent {
+                    record: agent.record.elsewhere(),
+                    ..agent
+                }
             }
         });
         let last_session = sessions.last_session.clone().map(|last| {

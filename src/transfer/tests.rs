@@ -289,37 +289,37 @@ fn manifest_with_sessions() -> Manifest {
 }
 
 #[test]
-fn only_the_exporting_machine_exported_a_workspace() {
-    let manifest = manifest_with_sessions();
-    assert!(manifest.exported_on(Some("m1")));
-    assert!(!manifest.exported_on(Some("m2")));
-    assert!(!manifest.exported_on(None));
-    let older = Manifest {
-        sessions: None,
-        ..manifest
-    };
-    assert!(!older.exported_on(Some("m1")));
-}
-
-#[test]
-fn an_import_keeps_sessions_only_when_asked() {
+fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     let mut manifest = manifest_with_sessions();
-    let kept = manifest.workspace_keeping(true);
-    assert_eq!(kept.agents, manifest.sessions.as_ref().unwrap().agents);
-    assert!(!kept.agents[0].record.moved);
-    assert_eq!(kept.agents[0].record.place.as_deref(), Some("tab"));
-    let last = kept.last_session.unwrap();
+    let here = manifest.workspace_on(Some("m1"), None);
+    assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
+    assert!(!here.agents[0].record.moved);
+    assert_eq!(here.agents[0].record.place.as_deref(), Some("tab"));
+    let last = here.last_session.unwrap();
     assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
 
-    let new = manifest.workspace_keeping(false);
-    assert!(new.agents[0].record.moved);
-    assert_eq!(new.agents[0].record.session, None);
-    assert!(new.last_session.unwrap().moved);
+    for new in [
+        manifest.workspace_on(Some("m2"), None),
+        manifest.workspace_on(None, None),
+        manifest.workspace_on(Some("m1"), Some(false)),
+    ] {
+        assert!(new.agents[0].record.moved);
+        assert_eq!(new.agents[0].record.session, None);
+        assert!(new.last_session.unwrap().moved);
+    }
+
+    // Another machine told to keep the sessions keeps no terminal place of
+    // the exporting machine's.
+    let kept = manifest.workspace_on(Some("m2"), Some(true));
+    assert!(!kept.agents[0].record.moved);
+    assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(kept.agents[0].record.place, None);
+    assert!(!kept.last_session.unwrap().moved);
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();
     sessions.last_session.as_mut().unwrap().session = None;
-    let kept = manifest.workspace_keeping(true);
+    let kept = manifest.workspace_on(None, Some(true));
     assert!(!kept.agents[0].record.moved);
     assert!(kept.last_session.unwrap().moved);
 }

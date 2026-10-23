@@ -244,9 +244,7 @@ impl ImportReport {
 /// The exported removal record to import here, whose agents keep their
 /// sessions as `sessions` says, or on the machine that exported it.
 fn workspace_here(manifest: &Manifest, sessions: Option<bool>) -> RemovedWorkspace {
-    let keep =
-        sessions.unwrap_or_else(|| manifest.exported_on(crate::process::machine::id().as_deref()));
-    manifest.workspace_keeping(keep)
+    manifest.workspace_on(crate::process::machine::id().as_deref(), sessions)
 }
 
 /// Read the export in `file`, or on standard input for `-`.

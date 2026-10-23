@@ -220,10 +220,18 @@ impl Record {
     /// on another machine, and no wrapper waits to restore it.
     pub(crate) fn moved(self) -> Self {
         Self {
-            place: None,
-            waiting: None,
             session: None,
             moved: true,
+            ..self.elsewhere()
+        }
+    }
+
+    /// This record on another machine, where its place does not exist and no
+    /// wrapper waits to restore it, but its session may.
+    pub(crate) fn elsewhere(self) -> Self {
+        Self {
+            place: None,
+            waiting: None,
             ..self
         }
     }
