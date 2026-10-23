@@ -108,14 +108,14 @@ impl Delivery {
     fn instruction(self) -> &'static str {
         match self {
             Self::Pushed => {
-                "Shoal delivers their comments, reviews, CI results and merge\n   \
-                 conflicts to you as context after tool calls, and starts your next turn\n   \
-                 with them after you end one. Handle each delivery, then end your turn\n   \
-                 to wait for the next."
+                "Shoal delivers their comments, reviews, CI results and\n\
+                 merge conflicts to you as context after tool calls, and starts your next\n\
+                 turn with them after you end one. Handle each delivery, then end your\n\
+                 turn to wait for the next."
             }
             Self::Watched => {
-                "run `shoal watch pr`. Handle the reported\n   \
-                 comments, reviews, CI results and merge conflicts, then wait again; a\n   \
+                "run `shoal watch pr`. Handle the reported\n\
+                 comments, reviews, CI results and merge conflicts, then wait again; a\n\
                  timeout means no update."
             }
         }
@@ -166,7 +166,7 @@ mod tests {
         let workspace = workspace();
         let pushed = instructions(None, &workspace, Delivery::Pushed);
         assert!(
-            pushed.contains("end your turn\n   to wait for the next."),
+            pushed.contains("end your\nturn to wait for the next."),
             "{pushed}"
         );
         assert!(!pushed.contains("shoal watch pr"), "{pushed}");

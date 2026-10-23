@@ -1108,7 +1108,10 @@ Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
 Shoal's agent guidance is built in and precedes every worker template, so
-adding instructions never freezes or replaces it; `install` adds a missing
+adding instructions never freezes or replaces it. It holds only what the launch
+knows (the workspace, branch, path and how activity arrives) and the rules an
+agent needs before it loads the `shoal-worker` skill, which owns how to work with
+Shoal, so the two are never kept in step by hand; `install` adds a missing
 chat template from the bundled default and never touches existing files;
 rendering substitutes known fields once without evaluating their contents.
 The issue prompt is built in and states only the task, pointing to `shoal view`

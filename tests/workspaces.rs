@@ -16750,7 +16750,7 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 
 /// Every agent prompt starts with Shoal's guidance, which spans these lines.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
-const GUIDANCE_END: &str = "Do not end your session without running `shoal done`.";
+const GUIDANCE_END: &str = "Do not end your session without it.";
 
 /// Removes each argument, with the flag that introduces it, whose whole value is
 /// the guidance; guidance followed by additions stays for [`after_guidance`].
