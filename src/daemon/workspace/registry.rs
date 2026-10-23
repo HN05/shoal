@@ -449,7 +449,8 @@ pub(super) async fn prepare_root<'a>(
 
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)
 /// by creating it, so concurrent daemons cannot share one directory. A
-/// candidate that is, holds or lies in one of `workspaces` is taken too.
+/// candidate that is, holds or lies in a recorded checkout, repository
+/// directory or one of `workspaces` is taken, even when that is gone.
 pub(super) fn reserve_directory(
     root: &Path,
     name: &str,
@@ -463,15 +464,13 @@ pub(super) fn reserve_directory(
             format!("{name}-{suffix}")
         });
         // A missing directory still owns its recorded path.
-        if repositories
+        let recorded = repositories
             .iter()
-            .any(|repo| repo.path == path || repo.workspaces_dir.as_deref() == Some(&*path))
-        {
-            continue;
-        }
-        if workspaces
-            .iter()
-            .any(|workspace| workspace.starts_with(&path) || path.starts_with(workspace))
+            .flat_map(|repo| std::iter::once(&repo.path).chain(repo.workspaces_dir.as_ref()))
+            .chain(workspaces);
+        if recorded
+            .into_iter()
+            .any(|owned| owned.starts_with(&path) || path.starts_with(owned))
         {
             continue;
         }

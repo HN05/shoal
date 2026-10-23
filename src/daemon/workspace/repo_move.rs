@@ -821,6 +821,24 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = fs::canonicalize(temp.path())?;
+        let clone = Repository {
+            id: "clone".into(),
+            path: root.join("project/.checkout"),
+            source: "https://example.invalid/clone.git".into(),
+            last_used: 1,
+            name: None,
+            workspaces_dir: Some(root.join("elsewhere")),
+            contribution: false,
+        };
+        let reserved = registry::reserve_directory(&root, "project", &[clone], &[])?;
+        assert_eq!(reserved, root.join("project-2"));
+        Ok(())
+    }
+
     #[tokio::test]
     async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
         let (_temp, manager, repo, workspace, root) = cloned().await?;
