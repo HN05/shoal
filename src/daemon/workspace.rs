@@ -177,6 +177,9 @@ pub struct Manager {
     pub(super) seed_failures: std::sync::Mutex<HashMap<String, (String, String)>>,
     /// Running seed builds, which repository removal cancels and waits for.
     pub(super) seed_builds: std::sync::Mutex<HashMap<String, Arc<super::seed::SeedSlot>>>,
+    /// What forge responses taught, per account the daemon acts as.
+    pub(crate) forge_memories:
+        std::sync::Mutex<HashMap<String, crate::forge::transport::memory::Memory>>,
 }
 
 impl Manager {
@@ -226,6 +229,7 @@ impl Manager {
             cpu_usage: Default::default(),
             seed_failures: Default::default(),
             seed_builds: Default::default(),
+            forge_memories: Default::default(),
         }))
     }
 

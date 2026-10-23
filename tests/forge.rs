@@ -956,6 +956,38 @@ fn watches_do_not_report_the_agents_own_comments_back() {
 }
 
 #[test]
+fn watches_read_unchanged_items_as_not_modified() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let respond = |state: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+                "state": state, "body": "", "labels": [], "pull_request": null}},
+            "GET repos/team/project/issues/8/comments?limit=50&page=1":
+                {"body": [{"id": 1, "body": "first"}]},
+        }))
+    };
+    respond("open");
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+    let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+    fixture.requests();
+    // The remembered discussion stands for the one the forge did not send.
+    respond("closed");
+    let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    assert_eq!(closed["updates"].as_array().unwrap().len(), 1, "{closed}");
+    assert_eq!(closed["updates"][0]["kind"], "closed", "{closed}");
+    let log = fs::read_to_string(fixture.root.path().join("forge/requests.jsonl")).unwrap();
+    let discussion: Vec<Value> = log
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|request| request["key"].as_str().unwrap().contains("/comments"))
+        .map(|request| request["status"].clone())
+        .collect();
+    assert!(!discussion.is_empty());
+    assert!(discussion.iter().all(|status| status == 304), "{log}");
+}
+
+#[test]
 fn bare_numbers_select_the_issue_or_pr_they_name() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = json!({"number": 8, "title": "Issue", "state": "open", "body": "",

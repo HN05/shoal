@@ -13,6 +13,14 @@ pub(crate) struct Response {
 }
 
 impl Response {
+    /// The value of the header `name`, given in lowercase.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(header, _)| header == name)
+            .map(|(_, value)| value.as_str())
+    }
+
     /// The body of a successful response, or the error a failed one reports.
     pub fn success_body(&self) -> Result<&str> {
         http_body(self.status, &self.body)

@@ -19,6 +19,7 @@ use crate::{
             item::{Item, ItemState, Opened},
             link::ItemKind,
         },
+        transport::memory::Memory,
     },
     fsutil::expand_home,
     model::{Relation, ReviewMark, Workspace},
@@ -227,7 +228,7 @@ fn own_state(action: &Action) -> bool {
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket)
+        Account::user(&self.config().bitbucket).remembering(self.forge_memory("user"))
     }
 
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
@@ -251,7 +252,15 @@ impl Manager {
             fj: auth.fj.is_some(),
             tea: auth.tea.is_some(),
         };
-        Ok(Account::agent(logins, &config.bitbucket))
+        let identity = format!("agent {}", serde_json::to_string(auth)?);
+        Ok(Account::agent(logins, &config.bitbucket).remembering(self.forge_memory(&identity)))
+    }
+
+    /// The memory of forge responses to the account `identity` names.
+    fn forge_memory(&self, identity: &str) -> Memory {
+        let mut memories =
+            (self.forge_memories.lock()).unwrap_or_else(|poisoned| poisoned.into_inner());
+        memories.entry(identity.to_owned()).or_default().clone()
     }
 }
 

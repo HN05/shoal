@@ -2056,7 +2056,11 @@ workspaces; a watch also reports the activity its agent receives from
 [child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results are the commit statuses of the
-PR's head commit, read with fj's login for the host when it has one.
+PR's head commit, read with fj's login for the host when it has one. The daemon
+repeats a REST read as a conditional request with the `ETag` and `Last-Modified`
+of the last response it got for that URL as the same account, and takes a
+`304 Not Modified` to mean that response still holds; it keeps them in memory
+only. Reads through tea and GitHub's `gh pr view` are sent in full.
 Failed Forgejo checks include the failing step when the runner records it and
 a command to read the log; a log lookup failure stays on that check's update.
 

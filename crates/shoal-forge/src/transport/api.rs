@@ -59,6 +59,9 @@ pub(crate) struct Request {
     /// A file sent as the body instead of JSON.
     pub upload: Option<Upload>,
     pub resend: Resend,
+    /// Header lines that make a read conditional on the body remembered
+    /// for it.
+    pub conditions: Vec<String>,
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -83,6 +86,7 @@ impl Request {
             confirm: None,
             upload: None,
             resend: Resend::Never,
+            conditions: Vec::new(),
         }
     }
 
@@ -114,6 +118,14 @@ impl Request {
         self.confirm = Some(field);
         self
     }
+
+    /// This request, sent with the header lines `conditions`.
+    fn conditional(&self, conditions: Vec<String>) -> Self {
+        Self {
+            conditions,
+            ..self.clone()
+        }
+    }
 }
 
 impl ForgeRepo {
@@ -125,11 +137,7 @@ impl ForgeRepo {
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {
-            let body = resending(request.resend, || async {
-                let response = self.kind.send(self, account, request).await?;
-                json_body(response.success_body()?)
-            })
-            .await?;
+            let body = resending(request.resend, || self.exchange(account, request)).await?;
             if let Some(failure) = self.kind.reported_failure(&body) {
                 bail!("{failure}");
             }
@@ -146,6 +154,31 @@ impl ForgeRepo {
         }
         .await
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
+    }
+
+    /// The body of the response to `request`. A read the account made
+    /// before is conditional on the body it got, which stands for the
+    /// response when the forge reports it unchanged.
+    async fn exchange(&self, account: &Account, request: &Request) -> Result<Value> {
+        let read = request.method == HttpMethod::Get;
+        let url = format!("{}/{}", self.host, request.endpoint);
+        let memory = account.memory();
+        let recalled = read.then(|| memory.recall(&url)).flatten();
+        let response = match &recalled {
+            Some((conditions, _)) => {
+                let conditional = request.conditional(conditions.clone());
+                self.kind.send(self, account, &conditional).await?
+            }
+            None => self.kind.send(self, account, request).await?,
+        };
+        if let (304, Some((_, body))) = (response.status, recalled) {
+            return Ok(body);
+        }
+        let body = json_body(response.success_body()?)?;
+        if read {
+            memory.remember(&url, &response, &body);
+        }
+        Ok(body)
     }
 
     /// Send through `gh api` or `glab api`, which own their logins and
@@ -168,6 +201,9 @@ impl ForgeRepo {
                 &request.endpoint,
                 "--include",
             ]);
+        for condition in &request.conditions {
+            cli.args(["-H", condition]);
+        }
         let mut input = Vec::new();
         match &request.upload {
             // The CLIs cannot build a form, so its body is sent as given.
@@ -233,6 +269,9 @@ impl ForgeRepo {
                 "-D",
                 "/dev/stderr",
             ]);
+        for condition in &request.conditions {
+            curl.args(["-H", condition]);
+        }
         if let Some(upload) = &request.upload {
             curl.args(upload_args(upload)?);
         } else if let Some(body) = &request.body {
@@ -521,6 +560,74 @@ pub(crate) fn home_dir() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::account::{AgentLogins, Launch};
+
+    /// Finds the CLIs only in one directory.
+    struct Bin(PathBuf);
+
+    impl Launch for Bin {
+        fn apply(&self, command: &mut Command) {
+            command.env("PATH", &self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("log");
+        // Like gh, a 304 prints its head and exits with an error.
+        let gh = dir.path().join("gh");
+        std::fs::write(
+            &gh,
+            format!(
+                r#"#!/bin/sh
+echo "$*" >> '{log}'
+case "$*" in
+  *"If-None-Match: \"v1\""*) printf 'HTTP/2.0 304 Not Modified\n\n'; exit 1;;
+esac
+printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
+"#,
+                log = log.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let agent = || {
+            let logins = AgentLogins {
+                launch: Box::new(Bin(dir.path().to_owned())),
+                fj_home: None,
+                fj: false,
+                tea: false,
+            };
+            Account::agent(logins, &Default::default())
+        };
+        let memory = crate::transport::memory::Memory::default();
+        let account = || agent().remembering(memory.clone());
+        let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
+        let read = Request::get("repos/team/project/issues/7".into());
+        for _ in 0..2 {
+            let body = repo.send(&account(), &read).await.unwrap();
+            assert_eq!(body, serde_json::json!({"number": 7}));
+        }
+        let log = std::fs::read_to_string(log).unwrap();
+        let lines: Vec<_> = log.lines().collect();
+        assert_eq!(lines.len(), 2, "{log}");
+        assert!(!lines[0].contains("If-None-Match"), "{log}");
+        assert!(lines[1].ends_with("-H If-None-Match: \"v1\""), "{log}");
+        // A change is not conditional, and an account without the memory
+        // reads in full.
+        let edit = Request::new(HttpMethod::Patch, read.endpoint.clone(), None);
+        repo.send(&account(), &edit).await.unwrap();
+        repo.send(&agent(), &read).await.unwrap();
+        let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+        assert!(
+            log.lines()
+                .skip(2)
+                .all(|line| !line.contains("If-None-Match")),
+            "{log}"
+        );
+    }
 
     #[test]
     fn forgejo_responses_report_status_and_messages() {

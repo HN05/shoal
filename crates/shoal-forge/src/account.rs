@@ -11,7 +11,10 @@ use crate::{
         bitbucket::Credentials,
         forgejo::tea::{self, TeaLogin},
     },
-    transport::api::{fj_keys_at, fj_keys_path, fj_token},
+    transport::{
+        api::{fj_keys_at, fj_keys_path, fj_token},
+        memory::Memory,
+    },
 };
 /// Starts a forge CLI as someone other than the user, such as through
 /// their wrappers.
@@ -46,6 +49,8 @@ pub struct Account {
     bitbucket: Credentials,
     /// The Bitbucket authorization, fetched once for this account's requests.
     bitbucket_authorization: OnceCell<Option<Vec<u8>>>,
+    /// What earlier requests as this account taught.
+    memory: Memory,
 }
 
 /// How a Forgejo or Gitea request authenticates.
@@ -79,7 +84,18 @@ impl Account {
             tea: logins.tea,
             bitbucket: bitbucket.clone(),
             bitbucket_authorization: OnceCell::new(),
+            memory: Memory::default(),
         }
+    }
+
+    /// This account, sharing what its requests teach with every other
+    /// account given `memory`, which must act as the same account.
+    pub fn remembering(self, memory: Memory) -> Self {
+        Self { memory, ..self }
+    }
+
+    pub(crate) fn memory(&self) -> &Memory {
+        &self.memory
     }
 
     /// Select this account's CLI for a request.

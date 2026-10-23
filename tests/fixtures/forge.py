@@ -5,10 +5,13 @@ or a Forgejo API server with `serve <port-file>`.
 Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A list answers successive requests in turn, repeating
-its last entry. Each entry is {"status": 200, "body": ...}. Every request is
-appended to $HOME/forge/requests.jsonl with its body and credentials; an
-uploaded file's body is {"file": name, "type": content type, "bytes": size}.
+its last entry. Each entry is {"status": 200, "body": ...}. The server tags
+each successful body, and answers a request that names its tag in
+If-None-Match with 304. Every request is appended to
+$HOME/forge/requests.jsonl with its body, credentials and status; an uploaded
+file's body is {"file": name, "type": content type, "bytes": size}.
 """
+import hashlib
 import json
 import os
 import re
@@ -19,7 +22,7 @@ ROOT = os.path.join(os.environ["HOME"], "forge")
 LOG = os.path.join(ROOT, "requests.jsonl")
 
 
-def respond(key, body, auth=None, prefix=False):
+def respond(key, body, auth=None, prefix=False, tag=None):
     with open(os.path.join(ROOT, "responses.json")) as f:
         responses = json.load(f)
     if prefix:
@@ -29,12 +32,19 @@ def respond(key, body, auth=None, prefix=False):
     if os.path.exists(LOG):
         with open(LOG) as f:
             seen = sum(1 for line in f if json.loads(line)["key"] == key)
-    with open(LOG, "a") as f:
-        f.write(json.dumps({"key": key, "body": body, "auth": auth}) + "\n")
     answer = responses.get(key, {"status": 404, "body": {"message": "no fixture for " + key}})
     if isinstance(answer, list):
         answer = answer[min(seen, len(answer) - 1)]
-    return answer.get("status", 200), answer.get("body")
+    status, answer = answer.get("status", 200), answer.get("body")
+    if status == 200 and tag is not None and tag == etag(answer):
+        status, answer = 304, None
+    with open(LOG, "a") as f:
+        f.write(json.dumps({"key": key, "body": body, "auth": auth, "status": status}) + "\n")
+    return status, answer
+
+
+def etag(answer):
+    return '"' + hashlib.sha256(json.dumps(answer).encode()).hexdigest()[:16] + '"'
 
 
 def gh(args):
@@ -94,10 +104,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(data) if length else None
         path = self.path.removeprefix("/api/v1/")
         status, answer = respond(
-            f"{self.command} {path}", body, self.headers.get("Authorization")
+            f"{self.command} {path}",
+            body,
+            self.headers.get("Authorization"),
+            tag=self.headers.get("If-None-Match"),
         )
         data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
         self.send_response(status)
+        if status == 200:
+            self.send_header("ETag", etag(answer))
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

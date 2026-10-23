@@ -770,7 +770,12 @@ daemon keeps a separate activity snapshot for each item and appends an
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
 The same poll queues each change on the workspace's watch cursor and wakes a
-running watch, so an agent receives activity without watching for it.
+running watch, so an agent receives activity without watching for it. Polls
+read through the forge crate's shared request layer, which remembers each
+account's last response per URL in daemon memory and repeats the read as a
+conditional request, so an unchanged item costs a `304 Not Modified`, which
+GitHub does not count against its primary rate limit. The memory is not
+persisted: a restart reads everything once in full.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
