@@ -140,12 +140,7 @@ impl Backend for Forgejo {
             return rest::list_items(repo, account, kind, &endpoint, search).await;
         }
         let numbers = rest::listed_numbers(repo, account, &endpoint, search.limit).await?;
-        futures_util::stream::iter(numbers)
-            .map(|number| async move {
-                Ok::<_, anyhow::Error>(repo.read(account, ItemKind::Pr, number).await?.item)
-            })
-            .buffered(PULL_READS)
-            .try_collect()
+        read_pulls(repo, account, numbers)
             .await
             .context(self.login_hint())
     }
@@ -581,6 +576,17 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
     } else {
         bare.to_owned()
     }
+}
+
+/// The PRs numbered `numbers`, in order, read a few at a time.
+async fn read_pulls(repo: &ForgeRepo, account: &Account, numbers: Vec<u64>) -> Result<Vec<Item>> {
+    futures_util::stream::iter(numbers)
+        .map(|number| async move {
+            Ok::<_, anyhow::Error>(repo.read(account, ItemKind::Pr, number).await?.item)
+        })
+        .buffered(PULL_READS)
+        .try_collect()
+        .await
 }
 
 /// The issue list endpoint that runs `search` for items of `kind`.
