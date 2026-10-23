@@ -23,6 +23,45 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 #[cfg(test)]
 mod tests;
 
+/// What keeps a workspace from every unattended removal. Sweeps report it
+/// as a cleanup reason, and removal refuses with it at every stage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Retention {
+    Held,
+    Question,
+    /// A PR proposal waits for the user's approval.
+    PrProposal,
+    /// Workspaces split from this one remain.
+    Children,
+    /// An agent launch in the workspace waits in the agent queue or is starting.
+    QueuedAgent,
+}
+
+impl From<Retention> for CleanupReason {
+    fn from(retention: Retention) -> Self {
+        match retention {
+            Retention::Held => Self::Held,
+            Retention::Question => Self::Question,
+            Retention::PrProposal => Self::PrProposal,
+            Retention::Children => Self::Children,
+            Retention::QueuedAgent => Self::QueuedAgent,
+        }
+    }
+}
+
+/// Why removal refuses.
+impl std::fmt::Display for Retention {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Held => "workspace is held",
+            Self::Question => "a question waits for the user",
+            Self::PrProposal => "a PR proposal waits for approval",
+            Self::Children => "workspaces split from it remain",
+            Self::QueuedAgent => "an agent launch in it waits in the agent queue",
+        })
+    }
+}
+
 /// Who is removing the workspace, which decides how strict the checks are.
 #[derive(Clone, Copy)]
 enum Removal<'a> {
@@ -393,8 +432,8 @@ impl Manager {
     /// assignment state first, since their own cleanup paths decide removal,
     /// then commands and leases.
     async fn recorded_cleanup_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        if let Some(reason) = self.keep_reason(id).await? {
-            return Ok(Some(reason));
+        if let Some(retention) = self.keep_reason(id).await? {
+            return Ok(Some(retention.into()));
         }
         if let Some(reason) = self.assignment_reason(id).await? {
             return Ok(Some(reason));
@@ -402,26 +441,25 @@ impl Manager {
         self.usage_reason(id).await
     }
 
-    /// Holds, open questions, a PR proposal, child workspaces and queued
-    /// agent launches, which keep a workspace from every unattended removal,
-    /// completion and PR cleanup included.
-    pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+    /// What keeps the workspace from every unattended removal, completion
+    /// and PR cleanup included, read fresh on each call.
+    pub(crate) async fn keep_reason(&self, id: &str) -> Result<Option<Retention>> {
         if self.has_holds(id).await? {
-            return Ok(Some(CleanupReason::Held));
+            return Ok(Some(Retention::Held));
         }
         if self.has_open_questions(id).await? {
-            return Ok(Some(CleanupReason::Question));
+            return Ok(Some(Retention::Question));
         }
         if self.has_pending_pull_proposal(id).await? {
-            return Ok(Some(CleanupReason::PrProposal));
+            return Ok(Some(Retention::PrProposal));
         }
         if !self.workspace(id).await?.child_workspaces.is_empty() {
-            return Ok(Some(CleanupReason::Children));
+            return Ok(Some(Retention::Children));
         }
         Ok(self
             .has_queued_launch(id)
             .await?
-            .then_some(CleanupReason::QueuedAgent))
+            .then_some(Retention::QueuedAgent))
     }
 
     /// Assignment state whose own cleanup path decides removal.
@@ -765,31 +803,12 @@ impl Manager {
         let check = self
             .check_removal(&workspace.id, removal.inspection())
             .await?;
-        if removal.unattended() {
-            ensure!(
-                check.workspace.holds.is_empty(),
-                "workspace is held; retaining it"
-            );
-            // The reservation refuses new questions, so this covers one asked
-            // after the sweep's own check.
-            ensure!(
-                !self.has_open_questions(&workspace.id).await?,
-                "a question waits for the user; retaining workspace"
-            );
-            // The reservation refuses new PR proposals, so this covers one
-            // made after the sweep's own check.
-            ensure!(
-                !self.has_pending_pull_proposal(&workspace.id).await?,
-                "a PR proposal waits for approval; retaining workspace"
-            );
-            ensure!(
-                check.workspace.child_workspaces.is_empty(),
-                "workspaces split from it remain; retaining workspace"
-            );
-            ensure!(
-                !self.has_queued_launch(&workspace.id).await?,
-                "an agent launch in it waits in the agent queue; retaining workspace"
-            );
+        // The reservation refuses new questions and PR proposals, so this
+        // covers those made after the sweep's own check.
+        if removal.unattended()
+            && let Some(retention) = self.keep_reason(&workspace.id).await?
+        {
+            bail!("{retention}; retaining workspace");
         }
         removal.verify(&check, stage)?;
         match (removal, stage) {

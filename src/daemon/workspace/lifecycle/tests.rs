@@ -216,6 +216,38 @@ async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
 }
 
 #[tokio::test]
+async fn unattended_removal_refuses_retention_its_sweep_missed() {
+    let (_root, manager, workspace) = fixture().await;
+    let snapshot = manager
+        .cleanup_snapshot(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
+    manager
+        .acquire_hold(&workspace.id, "app".into(), None)
+        .await
+        .unwrap();
+    let removal = Removal::Automatic {
+        snapshot,
+        cause: EventCause::Idle,
+    };
+    let error = manager.remove(&workspace.id, removal).await.unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        format!("{}; retaining workspace", Retention::Held)
+    );
+    assert!(workspace.path.exists());
+
+    let unsaved = UnsavedWork::default();
+    let removal = Removal::Manual {
+        unsaved: &unsaved,
+        inspection: InspectionPolicy::GitOnly,
+    };
+    manager.remove(&workspace.id, removal).await.unwrap();
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
 async fn every_removal_mode_reverifies_ownership_after_hooks() {
     let script = r#"common=$(git rev-parse --path-format=absolute --git-common-dir)
 branch=$(git symbolic-ref --short HEAD)
