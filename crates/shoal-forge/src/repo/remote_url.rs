@@ -80,7 +80,7 @@ pub fn source_name(source: &str) -> &str {
     repository_path(source.rsplit(['/', ':']).next().unwrap_or(source))
 }
 
-fn repository_path(path: &str) -> &str {
+pub(crate) fn repository_path(path: &str) -> &str {
     let path = path.trim_end_matches('/');
     path.strip_suffix(".git").unwrap_or(path)
 }

@@ -145,6 +145,17 @@ impl ForgeRepo {
         Self::parse_linked(remote, Some(self.kind)).is_ok_and(|remote| remote == *self)
     }
 
+    /// The repository `input` names: a remote or web URL, on any forge, or
+    /// an `owner/repository` path on this repository's host.
+    pub async fn resolve_named(&self, input: &str, hosts: &impl HostTypes) -> Result<Self> {
+        if input.contains(':') {
+            return Self::resolve(input, hosts).await;
+        }
+        let path = repo::remote_url::repository_path(input);
+        Self::on(self.kind, self.host.clone(), path, self.web_scheme)
+            .with_context(|| format!("{input} names no repository"))
+    }
+
     /// `host` as a repository without a path, for asking it as `kind`.
     pub(crate) fn host(host: &str, web_scheme: &'static str, kind: ForgeKind) -> Self {
         Self {
@@ -394,6 +405,41 @@ mod tests {
             "https://example.com/team/repo/pulls/0",
         ] {
             assert!(repo.pull(url).is_err());
+        }
+    }
+
+    /// Every host serves Forgejo.
+    struct Forgejo;
+
+    impl HostTypes for Forgejo {
+        async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<HostType> {
+            Ok(HostType::Settled(ForgeKind::Forgejo))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_repository_is_a_url_or_a_path_on_the_same_host() {
+        let repo = ForgeRepo::parse("git@forge.example:team/repo.git").unwrap();
+        for (input, expected) in [
+            ("team/other", "https://forge.example/team/other"),
+            ("someone/tool.git", "https://forge.example/someone/tool"),
+            (
+                "https://elsewhere.example/them/tool",
+                "https://elsewhere.example/them/tool",
+            ),
+            (
+                "git@elsewhere.example:them/tool.git",
+                "https://elsewhere.example/them/tool",
+            ),
+        ] {
+            let named = repo.resolve_named(input, &Forgejo).await.unwrap();
+            assert_eq!(named.repository_url(), expected, "{input}");
+        }
+        for input in ["tool", "team/../tool", "team/tool/extra", ""] {
+            assert!(
+                repo.resolve_named(input, &Forgejo).await.is_err(),
+                "{input}"
+            );
         }
     }
 
