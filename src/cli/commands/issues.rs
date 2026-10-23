@@ -289,6 +289,7 @@ mod tests {
             last_used: 0,
             name: None,
             workspaces_dir: None,
+            contribution: false,
         };
         let repos = [
             repo("a", "https://github.com/team/repo.git"),

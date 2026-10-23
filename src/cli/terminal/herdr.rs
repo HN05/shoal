@@ -814,6 +814,7 @@ mod tests {
             last_used: 0,
             name: Some("shoal".into()),
             workspaces_dir: None,
+            contribution: false,
         };
         assert_eq!(tab_label(None, &repo, None, "topic"), "topic");
         assert_eq!(

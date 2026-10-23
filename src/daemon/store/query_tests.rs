@@ -217,6 +217,7 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
     .map(|table| {
         // Columns added after version 17 are absent before the upgrade.
         let columns = match table {
+            "repositories" => "id,path,source,last_used,name,workspaces_dir",
             "workspaces" => WORKSPACE_COLUMNS,
             "executions" => EXECUTION_COLUMNS,
             _ => "*",

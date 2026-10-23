@@ -21,6 +21,9 @@ pub struct Repository {
     /// `<root_dir>/<name>`: parent of this repository's workspaces and of its
     /// URL clone. Reserved once, never moved; `None` until first needed.
     pub workspaces_dir: Option<PathBuf>,
+    /// Registered by `shoal contribute`: removed once nothing of it is left.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub contribution: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

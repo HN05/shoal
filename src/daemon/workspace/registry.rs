@@ -13,6 +13,14 @@ use uuid::Uuid;
 /// workspace names never contain `.`, so no workspace can collide with it.
 pub const CHECKOUT_DIR: &str = ".checkout";
 
+/// What a registration is for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Registration {
+    Regular,
+    /// Removed once nothing of it is left.
+    Contribution,
+}
+
 impl Manager {
     pub async fn repositories(&self) -> Result<Vec<Repository>> {
         self.store
@@ -35,6 +43,29 @@ impl Manager {
         source: repository::Selector,
         name: Option<String>,
         clone_path: Option<PathBuf>,
+    ) -> Result<Repository> {
+        self.register(source, name, clone_path, Registration::Regular)
+            .await
+    }
+
+    /// `shoal contribute`: clone a repository URL as a contribution, which
+    /// pushes to the user's fork when the user cannot push to the repository.
+    /// An existing registration is returned as it is.
+    pub async fn register_contribution(
+        &self,
+        source: String,
+        name: Option<String>,
+    ) -> Result<Repository> {
+        self.register(source.into(), name, None, Registration::Contribution)
+            .await
+    }
+
+    async fn register(
+        &self,
+        source: repository::Selector,
+        name: Option<String>,
+        clone_path: Option<PathBuf>,
+        registration: Registration,
     ) -> Result<Repository> {
         if let Some(name) = &name {
             validate::name("repository", name)?;
@@ -79,12 +110,21 @@ impl Manager {
         let directory_name = name
             .clone()
             .unwrap_or_else(|| repository::directory_name(&source));
+        let contribution = registration == Registration::Contribution;
+        let fork = match registration {
+            Registration::Regular => None,
+            Registration::Contribution => self.contribution_fork(&source).await?,
+        };
         let (path, workspaces_dir) = if Path::new(&source).exists() {
             local_checkout_location(&source, &root, &state, &directory_name, &repositories).await?
         } else {
+            let cloning = Cloning {
+                source: &source,
+                fork: fork.as_deref(),
+                path: clone_path,
+            };
             clone_into_reserved_directory(
-                &source,
-                clone_path,
+                cloning,
                 &root,
                 &state,
                 &directory_name,
@@ -94,7 +134,7 @@ impl Manager {
             .await?
         };
         let repo = self
-            .insert_repository(path, source, Some(workspaces_dir))
+            .insert_repository(path, source, Some(workspaces_dir), contribution)
             .await?;
         match name {
             Some(name) => self.rename_repository(&repo.id, name).await,
@@ -102,11 +142,28 @@ impl Manager {
         }
     }
 
+    /// The URL of the user's fork of `source` to push to, created when the
+    /// user cannot push to `source` itself.
+    async fn contribution_fork(&self, source: &str) -> Result<Option<String>> {
+        ensure!(
+            !Path::new(source).exists(),
+            "a contribution clones a repository URL; {source} is a local path"
+        );
+        let forge = self.forge(source).await?;
+        let account = self.user_account();
+        if forge.pushable(&account).await? {
+            return Ok(None);
+        }
+        let fork = forge.fork(&account).await?;
+        fork.remote_like(source).map(Some)
+    }
+
     async fn insert_repository(
         &self,
         path: PathBuf,
         source: String,
         workspaces_dir: Option<PathBuf>,
+        contribution: bool,
     ) -> Result<Repository> {
         let path = path
             .to_str()
@@ -123,8 +180,8 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO repositories (id,path,source,last_used,workspaces_dir) VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(last_used), 0)+1 FROM repositories), ?4) ON CONFLICT(path) DO NOTHING",
-                    params![id, path, source, workspaces_dir],
+                    "INSERT INTO repositories (id,path,source,last_used,workspaces_dir,contribution) VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(last_used), 0)+1 FROM repositories), ?4, ?5) ON CONFLICT(path) DO NOTHING",
+                    params![id, path, source, workspaces_dir, contribution],
                 )?;
                 Ok(db.query_row(
                     &format!("SELECT {} FROM repositories WHERE path=?1", store::REPOSITORY_COLUMNS),
@@ -277,9 +334,16 @@ async fn local_checkout_location(
 
 /// Reserve a repository directory, clone into it, and release the reservation
 /// when any part of the clone attempt fails.
+/// The URL a registration clones, the fork it pushes to, and an exact
+/// directory requested for the clone.
+struct Cloning<'a> {
+    source: &'a str,
+    fork: Option<&'a str>,
+    path: Option<PathBuf>,
+}
+
 async fn clone_into_reserved_directory(
-    source: &str,
-    clone_path: Option<PathBuf>,
+    cloning: Cloning<'_>,
     root: &Path,
     state: &Path,
     directory_name: &str,
@@ -294,6 +358,7 @@ async fn clone_into_reserved_directory(
         }),
         "repository name is already in use"
     );
+    let source = cloning.source;
     ensure!(
         source.contains("://") || source.contains('@'),
         "repository path does not exist: {source}"
@@ -304,16 +369,16 @@ async fn clone_into_reserved_directory(
         repositories.iter().map(|repo| repo.path.as_path()),
     )
     .await?;
-    if let Some(parent) = clone_path.as_deref().and_then(Path::parent) {
+    if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
         crate::daemon::access::ensure_writable(parent).await?;
     }
     let workspaces_dir = reserve_directory(&root, directory_name, repositories)?;
-    let destination = match clone_path {
+    let destination = match cloning.path {
         Some(path) => create_clone_directory(path),
         None => create_clone_directory(workspaces_dir.join(CHECKOUT_DIR)),
     };
     let cloned = match destination {
-        Ok(destination) => clone(source, &destination).await,
+        Ok(destination) => clone(source, cloning.fork, &destination).await,
         Err(error) => Err(error),
     };
     match cloned {
@@ -326,8 +391,8 @@ async fn clone_into_reserved_directory(
     }
 }
 
-async fn clone(source: &str, destination: &Path) -> Result<PathBuf> {
-    if let Err(error) = git::clone(source, destination).await {
+async fn clone(source: &str, fork: Option<&str>, destination: &Path) -> Result<PathBuf> {
+    if let Err(error) = git::clone(source, destination, fork).await {
         // This directory belongs exclusively to this attempt.
         if destination.exists() {
             fs::remove_dir_all(destination).context("clean up failed repository clone")?;
@@ -418,4 +483,28 @@ fn check_clone_path(repo: &Repository, requested: Option<&Path>) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_support::{manager, repository};
+
+    #[tokio::test]
+    async fn a_contribution_clones_a_url_and_keeps_an_existing_registration() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let source = path.to_str().unwrap().to_owned();
+        let error = manager
+            .register_contribution(source.clone(), None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("local path"), "{error:#}");
+        let registered = manager
+            .register_repository(source.as_str().into(), None, None)
+            .await
+            .unwrap();
+        let again = manager.register_contribution(source, None).await.unwrap();
+        assert_eq!(again.id, registered.id);
+        assert!(!again.contribution);
+    }
 }

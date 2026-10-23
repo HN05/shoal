@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 65;
+const SCHEMA_VERSION: i64 = 66;
 
 #[cfg(test)]
 mod benchmark;
@@ -396,7 +396,13 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (63, include_str!("store/agent_queue_dependencies.sql"), None),
     (64, FORGE_HOSTS, None),
     (65, REPOSITORY_AGENT_ENVIRONMENTS, None),
+    (66, REPOSITORY_CONTRIBUTIONS, None),
 ];
+
+/// Repositories `shoal contribute` registered, which Shoal removes once
+/// nothing of them is left.
+const REPOSITORY_CONTRIBUTIONS: &str = "ALTER TABLE repositories
+    ADD COLUMN contribution INTEGER NOT NULL DEFAULT 0 CHECK(contribution IN (0,1));";
 
 /// The approval request a notification asks the user to decide, by its key,
 /// so withdrawing the request finds it though the user edited its text.
@@ -693,7 +699,7 @@ fn json_column<T: DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Resu
         .transpose()
 }
 
-pub const REPOSITORY_COLUMNS: &str = "id,path,source,last_used,name,workspaces_dir";
+pub const REPOSITORY_COLUMNS: &str = "id,path,source,last_used,name,workspaces_dir,contribution";
 
 pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     Ok(Repository {
@@ -705,6 +711,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
         workspaces_dir: row
             .get::<_, Option<String>>("workspaces_dir")?
             .map(PathBuf::from),
+        contribution: row.get("contribution")?,
     })
 }
 
@@ -1096,6 +1103,9 @@ mod tests {
         }
         if version >= 65 {
             db.execute_batch(REPOSITORY_AGENT_ENVIRONMENTS)?;
+        }
+        if version >= 66 {
+            db.execute_batch(REPOSITORY_CONTRIBUTIONS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 124;
+pub const VERSION: u32 = 125;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -152,6 +152,11 @@ pub enum Method {
         source: crate::repository::Selector,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
+    },
+    /// Clone a repository URL for `shoal contribute`.
+    RegisterContribution {
+        source: String,
+        name: Option<String>,
     },
     RenameRepository {
         repository: crate::repository::Selector,

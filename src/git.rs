@@ -252,12 +252,32 @@ pub fn push_command(remote: &str, branch: &str) -> Vec<OsString> {
     .collect()
 }
 
-/// Clone with the caller's normal Git configuration and hooks.
-pub async fn clone(source: &str, destination: &Path) -> Result<()> {
-    let mut command = Command::new(Tool::Git.program());
-    command.args(["clone", "--"]).arg(source).arg(destination);
-    subprocess::output(command).await?;
+/// The remote a contribution clone pushes its branches to.
+pub const FORK_REMOTE: &str = "fork";
+
+/// Clone with the caller's normal Git configuration and hooks. With `fork`,
+/// the clone pushes to that URL as the `fork` remote, whose fetch refspec
+/// lets a push record the branch as pushed.
+pub async fn clone(source: &str, destination: &Path, fork: Option<&str>) -> Result<()> {
+    subprocess::output(clone_command(source, destination, fork)).await?;
     Ok(())
+}
+
+/// The command [`clone`] runs.
+fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Command {
+    let mut command = Command::new(Tool::Git.program());
+    command.arg("clone");
+    if let Some(url) = fork {
+        for setting in [
+            format!("remote.{FORK_REMOTE}.url={url}"),
+            format!("remote.{FORK_REMOTE}.fetch=+refs/heads/*:refs/remotes/{FORK_REMOTE}/*"),
+            format!("remote.pushDefault={FORK_REMOTE}"),
+        ] {
+            command.arg("-c").arg(setting);
+        }
+    }
+    command.arg("--").arg(source).arg(destination);
+    command
 }
 
 /// The local branch named by HEAD. Detached HEAD remains a Git error; a
@@ -389,6 +409,62 @@ fn parse_worktrees(listing: &str) -> Vec<Worktree> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
+        use crate::test_support::{commit, git, repository};
+        let root = tempfile::tempdir().unwrap();
+        let upstream = repository(root.path(), "upstream");
+        let fork = root.path().join("fork.git");
+        git(
+            root.path(),
+            &[
+                "clone",
+                "--bare",
+                "--",
+                upstream.to_str().unwrap(),
+                fork.to_str().unwrap(),
+            ],
+        );
+        let clone_path = root.path().join("clone");
+        // The user's Git configuration and hooks stay out of the test.
+        let mut cloning = clone_command(
+            upstream.to_str().unwrap(),
+            &clone_path,
+            Some(fork.to_str().unwrap()),
+        );
+        cloning
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1");
+        subprocess::output(cloning).await.unwrap();
+        assert_eq!(
+            push_remote(&clone_path, "topic").await.unwrap(),
+            FORK_REMOTE
+        );
+        git(&clone_path, &["switch", "-c", "topic"]);
+        std::fs::write(clone_path.join("change"), "change\n").unwrap();
+        commit(&clone_path, "change");
+        assert_eq!(
+            status::unretained_commits(&clone_path, "HEAD", None)
+                .await
+                .unwrap(),
+            1
+        );
+        let push = push_command(FORK_REMOTE, "topic");
+        let args: Vec<&str> = push[1..].iter().map(|arg| arg.to_str().unwrap()).collect();
+        git(&clone_path, &args);
+        assert_eq!(
+            status::unretained_commits(&clone_path, "HEAD", None)
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(
+            !remote_has_branch(&clone_path, "origin", "topic")
+                .await
+                .unwrap()
+        );
+    }
 
     #[tokio::test]
     async fn value_queries_keep_arguments_and_runner_errors() {

@@ -271,6 +271,7 @@ mod tests {
             last_used: 0,
             name: name.map(str::to_owned),
             workspaces_dir: None,
+            contribution: false,
         }
     }
 
