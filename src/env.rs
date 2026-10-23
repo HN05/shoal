@@ -155,17 +155,39 @@ pub fn render_configured_environment(
         .collect()
 }
 
-pub fn codex_home() -> Result<Option<PathBuf>> {
-    absolute_dir_var(CODEX_HOME)
-}
-
 /// The configured Claude Code directory, if any; a relative override is an error.
 pub fn claude_config_dir() -> Result<Option<PathBuf>> {
     absolute_dir_var(CLAUDE_CONFIG_DIR)
 }
 
+/// [`claude_config_dir`] of a process whose environment adds `configured`
+/// to this one's.
+pub fn claude_config_dir_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
+    absolute_dir(
+        CLAUDE_CONFIG_DIR,
+        configured_var(configured, CLAUDE_CONFIG_DIR),
+    )
+}
+
+/// The configured Codex directory, if any, of a process whose environment
+/// adds `configured` to this one's; a relative override is an error.
+pub fn codex_home_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
+    absolute_dir(CODEX_HOME, configured_var(configured, CODEX_HOME))
+}
+
+fn configured_var(configured: &BTreeMap<String, OsString>, name: &str) -> Option<OsString> {
+    configured
+        .get(name)
+        .cloned()
+        .or_else(|| std::env::var_os(name))
+}
+
 fn absolute_dir_var(name: &str) -> Result<Option<PathBuf>> {
-    let Some(dir) = std::env::var_os(name) else {
+    absolute_dir(name, std::env::var_os(name))
+}
+
+fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> {
+    let Some(dir) = value else {
         return Ok(None);
     };
     let dir = PathBuf::from(dir);

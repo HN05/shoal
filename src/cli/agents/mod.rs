@@ -13,6 +13,7 @@ mod launch;
 mod trust;
 
 use std::{
+    collections::BTreeMap,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
@@ -136,6 +137,26 @@ pub(in crate::cli) struct Launch {
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
+}
+
+/// What a workspace's agent runs with, which says where its tool keeps its
+/// files: this process's environment with `configured`, the workspace's
+/// `[env]` for a tracked agent.
+pub(in crate::cli) struct AgentEnvironment<'a> {
+    pub home: &'a Path,
+    pub configured: &'a BTreeMap<String, OsString>,
+}
+
+impl<'a> AgentEnvironment<'a> {
+    /// This process's environment alone, which agents Shoal does not track,
+    /// such as chats and desktop apps, run with.
+    pub fn inherited(home: &'a Path) -> Self {
+        static NONE: BTreeMap<String, OsString> = BTreeMap::new();
+        Self {
+            home,
+            configured: &NONE,
+        }
+    }
 }
 
 /// How a launch relates to the agents around it.
@@ -369,8 +390,8 @@ pub(crate) fn wakes_by_prompt(name: &str) -> bool {
 }
 
 /// Trust the path of `workspace`, reopened from `removed`, for each agent
-/// whose session `shoal resume` continues there, since resuming does not
-/// trust it as a launch does. Failures only warn.
+/// whose session `shoal resume` continues there as a tracked agent, since
+/// resuming does not trust it as a launch does. Failures only warn.
 pub(in crate::cli) async fn trust_resumed(
     ctx: &Context,
     workspace: &Workspace,
@@ -390,7 +411,7 @@ pub(in crate::cli) async fn trust_resumed(
         .chain(last)
         .filter_map(|name| integration(name).trust_file())
     {
-        trust.trust_workspace(ctx, workspace).await;
+        trust.trust_tracked(ctx, workspace).await;
     }
 }
 

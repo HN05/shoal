@@ -734,7 +734,9 @@ approvals and Claude runs with its own settings. Both trust the repository's che
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
-launches and Codex app handoffs do so too. Agent guidance and templates become native
+launches and Codex app handoffs do so too. The user config is the one the agent
+reads: a tracked agent's follows the workspace's `[env]`, while the app and chats
+run with Shoal's environment. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.

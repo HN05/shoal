@@ -3,7 +3,7 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::trust::TrustFile;
+use super::{AgentEnvironment, trust::TrustFile};
 use crate::{
     cli::{
         client,
@@ -39,7 +39,14 @@ pub(super) async fn open_app(
     super::ensure_program(&format!("{program} app"), program)?;
     ensure!(workspace.path.is_dir(), "workspace directory is missing");
     if let Some(trust) = trust {
-        trust.trust_workspace(ctx, workspace).await;
+        // The app runs with this process's environment, not the workspace's.
+        trust
+            .trust_workspace(
+                ctx,
+                workspace,
+                &AgentEnvironment::inherited(&ctx.paths.home),
+            )
+            .await;
     }
     let status = tokio::process::Command::new(program)
         .arg("app")

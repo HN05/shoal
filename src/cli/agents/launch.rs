@@ -20,7 +20,7 @@ pub(super) async fn tracked(
 ) -> Result<i32> {
     ensure_available(&launch.name, &launch.settings)?;
     if let Some(trust) = integration.trust_file() {
-        trust.trust_workspace(ctx, &launch.workspace).await;
+        trust.trust_tracked(ctx, &launch.workspace).await;
     }
     let command = command(ctx, integration, &launch).await?;
     let Launch {

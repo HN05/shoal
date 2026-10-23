@@ -10817,6 +10817,43 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 }
 
 #[test]
+fn trust_entries_follow_the_config_directories_env_gives_agents() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    // Each workspace's agents get their own directories.
+    let config = home.join(".config/shoal/config.toml");
+    let mut text = fs::read_to_string(&config).unwrap();
+    text.push_str(&format!(
+        "[env]\nCLAUDE_CONFIG_DIR = '{0}/claude-{{workspace}}'\nCODEX_HOME = '{0}/codex-{{workspace}}'\n",
+        home.display()
+    ));
+    fs::write(&config, text).unwrap();
+    fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "configured",
+    ]);
+    fixture.add("trusted");
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
+    let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
+    install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
+
+    assert!(fixture.run(&["claude", "trusted"]).status.success());
+    let claude = home.join("claude-trusted/.claude.json");
+    let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
+    for key in [&checkout, &directory] {
+        assert_eq!(
+            root["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+    }
+    assert!(!home.join(".claude.json").exists());
+}
+
+#[test]
 fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let fixture = Fixture::new();
     let home = fixture.root.path();

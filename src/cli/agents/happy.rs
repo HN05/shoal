@@ -126,7 +126,7 @@ async fn start(
     super::ensure_available(&format!("happy-{}", agent.as_str()), settings)?;
     let (prompt, args) = session_input(settings, workspace, agent, prompt, args);
     if let Some(trust) = happy.trust_file() {
-        trust.trust_workspace(ctx, workspace).await;
+        trust.trust_tracked(ctx, workspace).await;
     }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();

@@ -3,8 +3,9 @@ use crate::fsutil::{self, Permissions, ReplaceOptions};
 use anyhow::{Context as _, Result};
 use serde_json::json;
 
+use super::AgentEnvironment;
 use crate::{
-    cli::{client, context::Context},
+    cli::{client, commands::workspaces, context::Context},
     env,
     model::{Repository, Workspace},
 };
@@ -15,7 +16,8 @@ use crate::{
 pub(in crate::cli) struct TrustFile {
     /// The tool's name in warnings.
     tool: &'static str,
-    config: fn(&Context) -> Result<std::path::PathBuf>,
+    /// The config file the tool reads when it runs with the environment.
+    config: fn(&AgentEnvironment) -> Result<std::path::PathBuf>,
     add: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
     remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
 }
@@ -35,20 +37,41 @@ pub(super) static CODEX: TrustFile = TrustFile {
 };
 
 impl TrustFile {
-    /// Trust the workspace's repository directories.
-    pub(super) async fn trust_workspace(&self, ctx: &Context, workspace: &Workspace) {
+    /// Trust the workspace's repository directories for the tool running
+    /// with `environment`.
+    pub(super) async fn trust_workspace(
+        &self,
+        ctx: &Context,
+        workspace: &Workspace,
+        environment: &AgentEnvironment<'_>,
+    ) {
         let paths = workspace_trust_paths(ctx, workspace, self.tool).await;
-        self.trust(ctx, &paths);
+        self.trust(environment, &paths);
     }
 
-    /// Trust a repository's checkout for a chat as workspace launches trust
-    /// theirs; repository removal clears the entries.
+    /// [`Self::trust_workspace`] for a tracked agent, which runs with the
+    /// workspace's `[env]`.
+    pub(super) async fn trust_tracked(&self, ctx: &Context, workspace: &Workspace) {
+        let configured = workspaces::agent_environment(ctx, workspace).await;
+        let environment = AgentEnvironment {
+            home: &ctx.paths.home,
+            configured: &configured,
+        };
+        self.trust_workspace(ctx, workspace, &environment).await;
+    }
+
+    /// Trust a repository's checkout for a chat, which runs with this
+    /// process's environment, as workspace launches trust theirs; repository
+    /// removal clears the entries.
     pub(super) fn trust_checkout(&self, ctx: &Context, repository: &Repository) {
-        self.trust(ctx, &repository_trust_paths(repository, &repository.path));
+        self.trust(
+            &AgentEnvironment::inherited(&ctx.paths.home),
+            &repository_trust_paths(repository, &repository.path),
+        );
     }
 
-    fn trust(&self, ctx: &Context, paths: &[std::path::PathBuf]) {
-        let config = match (self.config)(ctx) {
+    fn trust(&self, environment: &AgentEnvironment, paths: &[std::path::PathBuf]) {
+        let config = match (self.config)(environment) {
             Ok(config) => config,
             Err(error) => {
                 eprintln!(
@@ -71,7 +94,7 @@ impl TrustFile {
 
     /// Remove the entries for `paths` while preserving other project settings.
     pub(super) fn forget(&self, ctx: &Context, paths: &[std::path::PathBuf]) {
-        let config = match (self.config)(ctx) {
+        let config = match (self.config)(&AgentEnvironment::inherited(&ctx.paths.home)) {
             Ok(config) => config,
             Err(error) => {
                 eprintln!(
@@ -110,16 +133,16 @@ pub(super) fn repository_paths(
     paths
 }
 
-fn claude_config(ctx: &Context) -> Result<std::path::PathBuf> {
-    env::claude_config_dir().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.clone())
+fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
+    env::claude_config_dir_with(environment.configured).map(|dir| {
+        dir.unwrap_or_else(|| environment.home.to_owned())
             .join(".claude.json")
     })
 }
 
-fn codex_config(ctx: &Context) -> Result<std::path::PathBuf> {
-    env::codex_home().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
+fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
+    env::codex_home_with(environment.configured).map(|dir| {
+        dir.unwrap_or_else(|| environment.home.join(".codex"))
             .join("config.toml")
     })
 }
