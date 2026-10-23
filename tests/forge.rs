@@ -1981,6 +1981,12 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "approval", "{inbox}");
     assert_eq!(inbox.as_array().unwrap().len(), 1);
+    // Another repository's inbox leaves it out.
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let filtered = |repo: &Path| fixture.ok(&["inbox", "--repo", repo.to_str().unwrap()]);
+    assert_eq!(filtered(&other), json!([]));
+    assert_eq!(filtered(&fixture.repo).as_array().unwrap().len(), 1);
     // Invalid details are refused before the picker would ask which request.
     let blank = fixture.run(&["approve", "--title", " "]);
     assert!(

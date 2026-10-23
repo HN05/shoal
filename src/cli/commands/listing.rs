@@ -54,6 +54,13 @@ impl ListFilter {
         self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::Running)
     }
 
+    /// An item of `repository_id` without a workspace, such as an issue
+    /// proposal that outlived it: kept by the repository filter, but never
+    /// by a status filter, since it has no workspace status.
+    pub(super) fn keeps_detached(&self, repository_id: &str) -> bool {
+        self.keeps_repository(repository_id) && self.statuses.is_empty()
+    }
+
     fn keeps_repository(&self, repository_id: &str) -> bool {
         self.repository
             .as_deref()

@@ -89,6 +89,7 @@ impl Inbox {
         );
         let mut workspaces = client::workspaces(&ctx.paths).await?;
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
+        let existing: HashSet<String> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
         let questions = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace: None })
             .await?
@@ -96,7 +97,14 @@ impl Inbox {
         let requests =
             request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
                 .await?;
-        let mut items = decision_items(questions, requests, &workspaces);
+        let detached = |request: &ApprovalRequest| {
+            !existing.contains(&request.workspace_id)
+                && request
+                    .repository_id
+                    .as_deref()
+                    .is_some_and(|repository| filter.keeps_detached(repository))
+        };
+        let mut items = decision_items(questions, requests, &workspaces, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         Ok(Self { items, workspaces })
     }
@@ -146,10 +154,13 @@ fn repository_of<'a>(workspaces: &'a [Workspace], item: &'a Item) -> &'a str {
         .unwrap_or("")
 }
 
+/// Questions and approvals of the listed workspaces, and the requests
+/// `detached` keeps: issue proposals that outlived their workspace.
 fn decision_items(
     questions: Vec<Question>,
     requests: Vec<ApprovalRequest>,
     workspaces: &[Workspace],
+    detached: impl Fn(&ApprovalRequest) -> bool,
 ) -> Vec<Item> {
     let kept = |id: &str| workspaces.iter().any(|w| w.id == id);
     let questions = questions
@@ -158,11 +169,10 @@ fn decision_items(
         .map(|question| Item::Question { question });
     let requests = requests
         .into_iter()
-        // A proposed issue belongs to its repository and outlives its workspace.
         .filter(|request| {
             request.status == DecisionStatus::Pending
                 && request.decider.is_none()
-                && (kept(&request.workspace_id) || request.repository_id.is_some())
+                && (kept(&request.workspace_id) || detached(request))
         })
         .map(|request| Item::Approval { request });
     questions.chain(requests).collect()
