@@ -92,6 +92,20 @@ pub const CODEX_HOME: &str = "CODEX_HOME";
 /// removal to clean the trust entries.
 pub const AGENT_CONFIG_VARIABLES: [&str; 2] = [CLAUDE_CONFIG_DIR, CODEX_HOME];
 
+/// The [`AGENT_CONFIG_VARIABLES`] that `configured` sets; a value that is not
+/// UTF-8 cannot be kept.
+pub fn agent_config_environment(
+    configured: &BTreeMap<String, OsString>,
+) -> BTreeMap<String, String> {
+    AGENT_CONFIG_VARIABLES
+        .iter()
+        .filter_map(|&name| {
+            let value = configured.get(name)?.to_str()?;
+            Some((name.to_owned(), value.to_owned()))
+        })
+        .collect()
+}
+
 /// Validate names configured in `[env]` before they reach a process.
 pub fn validate_configured_environment(values: &BTreeMap<String, String>) -> Result<()> {
     for (name, value) in values {

@@ -144,7 +144,8 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 )
                 .await?;
             if result.repository_id == cleanup_repository.id {
-                agents::cleanup_repository_trust(ctx, &cleanup_repository, &result.workspace_paths);
+                agents::cleanup_repository_trust(ctx, &cleanup_repository, &result.workspace_paths)
+                    .await;
             }
             ctx.emit(
                 &format!(

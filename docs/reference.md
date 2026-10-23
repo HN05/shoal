@@ -544,7 +544,8 @@ and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` takes
 precedence over Shoal's environment; chats and desktop apps use Shoal's. A trust
 update failure warns and still launches the agent. Removing a repository removes
-its trust entries from these files while preserving other project settings.
+its trust entries from these files, and from those its workspaces' `[env]` selects,
+while preserving other project settings.
 
 `shoal edit [workspace] -- <args>` runs the `edit` command, such as
 `edit = ["zed", "{path}"]`. Without one it runs `$VISUAL`, otherwise `$EDITOR`, split on whitespace,

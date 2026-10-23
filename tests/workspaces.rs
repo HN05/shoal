@@ -10817,17 +10817,87 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 }
 
 #[test]
-fn trust_entries_follow_the_config_directories_env_gives_agents() {
+fn repository_removal_cleans_more_agent_configs_than_fit_in_a_frame() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
-    // Each workspace's agents get their own directories.
+    let repository = fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "many",
+    ]);
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    // Far more than one 64 KiB protocol frame of kept locations.
+    let mut db = rusqlite::Connection::open(home.join("state/state.db")).unwrap();
+    db.busy_timeout(Duration::from_secs(60)).unwrap();
+    let tx = db.transaction().unwrap();
+    for index in 0..2000 {
+        let environment = serde_json::json!({
+            "CLAUDE_CONFIG_DIR": home.join(format!("claude-{index:04}")),
+        });
+        tx.execute(
+            "INSERT INTO repository_agent_environments(repository_id,environment) VALUES (?1,?2)",
+            rusqlite::params![repository["id"].as_str().unwrap(), environment.to_string()],
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    let config = home.join("claude-1999/.claude.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(
+        &config,
+        serde_json::json!({"projects": {
+            checkout.to_str().unwrap(): {"hasTrustDialogAccepted": true},
+            "/keep": {"hasTrustDialogAccepted": true}
+        }})
+        .to_string(),
+    )
+    .unwrap();
+
+    fixture.ok(&["repo", "rm", "many", "--yes"]);
+    let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(
+        root["projects"],
+        serde_json::json!({"/keep": {"hasTrustDialogAccepted": true}})
+    );
+    // Cleaned, so the daemon forgets them.
+    let kept: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM repository_agent_environments",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(kept, 0);
+}
+
+#[test]
+fn trust_entries_follow_the_config_directories_env_gives_agents() {
+    // A launch can fail after trust is written, here at its diff base.
+    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['claude', '{diff_base}']\n"));
+    let home = fixture.root.path();
+    // Each workspace's agents get their own directories, from the global
+    // config and from the worktree's file.
     let config = home.join(".config/shoal/config.toml");
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(&format!(
-        "[env]\nCLAUDE_CONFIG_DIR = '{0}/claude-{{workspace}}'\nCODEX_HOME = '{0}/codex-{{workspace}}'\n",
+        "[env]\nCODEX_HOME = '{}/codex-{{workspace}}'\n",
         home.display()
     ));
     fs::write(&config, text).unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    install_test_script(
+        fixture.repo.join("pre-remove.sh"),
+        "#!/bin/sh\ntest ! -f fail-removal || exit 3\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        &format!(
+            "pre_remove_cmd = 'pre-remove.sh'\n[env]\nCLAUDE_CONFIG_DIR = '{}/claude-{{workspace}}'\n",
+            home.display()
+        ),
+    );
     fixture.ok(&[
         "repo",
         "add",
@@ -10835,15 +10905,33 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
         "--name",
         "configured",
     ]);
-    fixture.add("trusted");
+    fixture.add("early");
+    git(&fixture.repo, &["branch", "side"]);
+    fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "late",
+        "--base",
+        "side",
+    ]);
+    git(&fixture.repo, &["branch", "-D", "side"]);
+    let first = fixture.add("first");
+    let first_path = Path::new(first["path"].as_str().unwrap()).to_owned();
+    let second = fixture.add("second");
+    let second_path = Path::new(second["path"].as_str().unwrap());
     let repository = fixture.ok(&["repo", "list"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
     install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
 
-    assert!(fixture.run(&["claude", "trusted"]).status.success());
-    let claude = home.join("claude-trusted/.claude.json");
-    let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
+    for workspace in ["early", "first"] {
+        assert!(fixture.run(&["claude", workspace]).status.success());
+    }
+    assert!(!fixture.run(&["claude", "late"]).status.success());
+    assert!(home.join("claude-late/.claude.json").exists());
+    let root: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("claude-first/.claude.json")).unwrap())
+            .unwrap();
     for key in [&checkout, &directory] {
         assert_eq!(
             root["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
@@ -10851,6 +10939,56 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
         );
     }
     assert!(!home.join(".claude.json").exists());
+
+    // Removing the repository clears them there too, though one workspace
+    // went before and another in an earlier, failed attempt.
+    for workspace in ["early", "first"] {
+        let codex = home.join(format!("codex-{workspace}/config.toml"));
+        fs::create_dir_all(codex.parent().unwrap()).unwrap();
+        fs::write(
+            &codex,
+            format!(
+                "[projects]\n{} = {{ trust_level = 'trusted' }}\n{} = {{ trust_level = 'trusted' }}\n'/keep' = {{ trust_level = 'trusted' }}\n",
+                toml_edit::Key::new(checkout.to_str().unwrap()),
+                toml_edit::Key::new(directory.to_str().unwrap()),
+            ),
+        )
+        .unwrap();
+    }
+    // Removal cleans where the agents ran, not where `[env]` points now.
+    fs::write(
+        &config,
+        fs::read_to_string(&config)
+            .unwrap()
+            .replace("/codex-{workspace}", "/codex-changed-{workspace}"),
+    )
+    .unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    fixture.ok(&["rm", "early", "--yes"]);
+    fs::write(second_path.join("fail-removal"), "busy").unwrap();
+    assert!(
+        !fixture
+            .run(&["repo", "rm", "configured", "--yes"])
+            .status
+            .success()
+    );
+    assert!(!first_path.exists());
+    fs::remove_file(second_path.join("fail-removal")).unwrap();
+    fixture.ok(&["repo", "rm", "configured", "--yes"]);
+    for workspace in ["early", "first", "late"] {
+        let claude = home.join(format!("claude-{workspace}/.claude.json"));
+        let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
+        assert_eq!(root["projects"], serde_json::json!({}), "{workspace}");
+    }
+    for workspace in ["early", "first"] {
+        let codex = home.join(format!("codex-{workspace}/config.toml"));
+        let codex: toml::Value = toml::from_str(&fs::read_to_string(&codex).unwrap()).unwrap();
+        assert_eq!(
+            codex["projects"],
+            toml::toml! { "/keep" = { trust_level = "trusted" } }.into(),
+            "{workspace}"
+        );
+    }
 }
 
 #[test]

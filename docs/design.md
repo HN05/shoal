@@ -741,7 +741,12 @@ CLI instructions or a first-message prefix for Happy Codex; desktop handoffs car
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
 Successful repository removal drops those trust fields for the removed workspace
-directory and worktrees while preserving other project settings.
+directory and worktrees, in Shoal's user config and in each one its workspaces'
+`[env]` gave a tracked agent, while preserving other project settings. The daemon
+keeps each location from when the CLI trusts a workspace there, since a renamed or
+removed workspace, or a changed `[env]`, no longer resolves to it. The CLI reads
+the locations once removal has succeeded, when no agent can add one, and the
+daemon forgets them after cleanup.
 
 Issue-based workspace opening requires an open issue and persists its canonical
 URL before tracked setup or agent launch. Reopening first follows the issue

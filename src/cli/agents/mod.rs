@@ -32,7 +32,7 @@ use crate::{
     config::{Config, Effective, named_commands::Commands, templates::Delivery},
     fsutil,
     model::{RemovedWorkspace, Repository, Workspace},
-    protocol::ConfigTarget,
+    protocol::{ConfigTarget, Method},
     tools::Tool,
 };
 
@@ -424,23 +424,104 @@ pub(in crate::cli) fn trust_checkout(ctx: &Context, name: &str, repository: &Rep
 }
 
 /// Remove every integration's trust entries for a repository after its
-/// deletion succeeds. Cleanup is best effort and never fails the removal.
-pub(crate) fn cleanup_repository_trust(
+/// deletion succeeds, both where agents running with this process's
+/// environment keep them and where the daemon kept that its tracked agents
+/// ran with, which it then forgets. Cleanup is best effort and never fails
+/// the removal.
+pub(crate) async fn cleanup_repository_trust(
     ctx: &Context,
     repository: &Repository,
-    workspace_paths: &[std::path::PathBuf],
+    workspace_paths: &[PathBuf],
+) {
+    let agent_environments = agent_environments(ctx, repository).await;
+    forget_repository_trust(
+        ctx,
+        repository,
+        workspace_paths,
+        agent_environments.as_deref().unwrap_or_default(),
+    );
+    if agent_environments.is_some() {
+        forget_agent_environments(ctx, repository).await;
+    }
+}
+
+/// Where the removed repository's tracked agents kept their configuration;
+/// `None` with a warning when the daemon cannot say.
+async fn agent_environments(
+    ctx: &Context,
+    repository: &Repository,
+) -> Option<Vec<BTreeMap<String, String>>> {
+    client::pages(
+        &ctx.paths,
+        Method::AgentEnvironments {
+            repository_id: repository.id.clone(),
+        },
+    )
+    .await
+    .inspect_err(|error| {
+        eprintln!(
+            "warning: could not clean trust entries where [env] put agent configs: {error:#}"
+        );
+    })
+    .ok()
+}
+
+/// Have the daemon forget the removed repository's agent configs once their
+/// trust entries are clean. Failure only warns.
+async fn forget_agent_environments(ctx: &Context, repository: &Repository) {
+    let forgotten = client::call(
+        &ctx.paths,
+        Method::ForgetAgentEnvironments {
+            repository_id: repository.id.clone(),
+        },
+    )
+    .await;
+    if let Err(error) = forgotten {
+        eprintln!("warning: the daemon keeps the removed repository's agent configs: {error:#}");
+    }
+}
+
+/// [`cleanup_repository_trust`] in the configs of this process's environment
+/// and of `agent_environments`.
+fn forget_repository_trust(
+    ctx: &Context,
+    repository: &Repository,
+    workspace_paths: &[PathBuf],
+    agent_environments: &[BTreeMap<String, String>],
 ) {
     let paths = trust::repository_paths(repository, workspace_paths);
+    let configured = configured_environments(agent_environments);
+    let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(&ctx.paths.home))
+        .chain(configured.iter().map(|configured| AgentEnvironment {
+            home: &ctx.paths.home,
+            configured,
+        }))
+        .collect();
     let mut cleaned: Vec<&trust::TrustFile> = Vec::new();
     for (_, integration) in integrations() {
         let Some(trust) = integration.trust_file() else {
             continue;
         };
         if !cleaned.iter().any(|done| std::ptr::eq(*done, trust)) {
-            trust.forget(ctx, &paths);
+            trust.forget(&environments, &paths);
             cleaned.push(trust);
         }
     }
+}
+
+/// `agent_environments` as the `[env]` values agents run with.
+fn configured_environments(
+    agent_environments: &[BTreeMap<String, String>],
+) -> Vec<BTreeMap<String, OsString>> {
+    agent_environments
+        .iter()
+        .map(|environment| {
+            environment
+                .iter()
+                .map(|(name, value)| (name.clone(), value.into()))
+                .collect()
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -50,14 +50,38 @@ impl TrustFile {
     }
 
     /// [`Self::trust_workspace`] for a tracked agent, which runs with the
-    /// workspace's `[env]`.
+    /// workspace's `[env]`, after the daemon keeps where that puts the
+    /// tool's config for repository removal.
     pub(super) async fn trust_tracked(&self, ctx: &Context, workspace: &Workspace) {
         let configured = workspaces::agent_environment(ctx, workspace).await;
+        self.keep_config_location(ctx, workspace, &configured).await;
         let environment = AgentEnvironment {
             home: &ctx.paths.home,
             configured: &configured,
         };
         self.trust_workspace(ctx, workspace, &environment).await;
+    }
+
+    /// Have the daemon keep where `configured` puts the tool's config.
+    /// Failure only warns.
+    async fn keep_config_location(
+        &self,
+        ctx: &Context,
+        workspace: &Workspace,
+        configured: &std::collections::BTreeMap<String, std::ffi::OsString>,
+    ) {
+        let environment = env::agent_config_environment(configured);
+        if environment.is_empty() {
+            return;
+        }
+        if let Err(error) =
+            client::keep_agent_environment(&ctx.paths, &workspace.id, environment).await
+        {
+            eprintln!(
+                "warning: repository removal may leave {} trust entries behind: {error:#}",
+                self.tool
+            );
+        }
     }
 
     /// Trust a repository's checkout for a chat, which runs with this
@@ -92,25 +116,34 @@ impl TrustFile {
         }
     }
 
-    /// Remove the entries for `paths` while preserving other project settings.
-    pub(super) fn forget(&self, ctx: &Context, paths: &[std::path::PathBuf]) {
-        let config = match (self.config)(&AgentEnvironment::inherited(&ctx.paths.home)) {
-            Ok(config) => config,
-            Err(error) => {
+    /// Remove the entries for `paths` from the config file of each of
+    /// `environments`, while preserving other project settings.
+    pub(super) fn forget(&self, environments: &[AgentEnvironment], paths: &[std::path::PathBuf]) {
+        for config in self.configs(environments) {
+            if let Err(error) = (self.remove)(&config, paths) {
                 eprintln!(
+                    "warning: could not clean {} trust config {}: {error:#}",
+                    self.tool,
+                    config.display()
+                );
+            }
+        }
+    }
+
+    /// The distinct config files the tool reads with `environments`.
+    fn configs(&self, environments: &[AgentEnvironment]) -> Vec<std::path::PathBuf> {
+        let mut configs = Vec::new();
+        for environment in environments {
+            match (self.config)(environment) {
+                Ok(config) if !configs.contains(&config) => configs.push(config),
+                Ok(_) => {}
+                Err(error) => eprintln!(
                     "warning: could not clean {} trust config: {error:#}",
                     self.tool
-                );
-                return;
+                ),
             }
-        };
-        if let Err(error) = (self.remove)(&config, paths) {
-            eprintln!(
-                "warning: could not clean {} trust config {}: {error:#}",
-                self.tool,
-                config.display()
-            );
         }
+        configs
     }
 }
 
