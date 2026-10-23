@@ -587,6 +587,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             agent,
             pid,
         } => Body::Chat(manager.start_chat(repository, agent, pid).await?),
+        Method::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         Method::ListChats => Body::Chats(if caller.is_some() {
             Vec::new()
         } else {

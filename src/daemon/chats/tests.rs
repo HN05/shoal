@@ -114,3 +114,40 @@ async fn a_chat_needs_a_running_process() {
     assert!(error.to_string().contains("not running"), "{error:#}");
     assert!(manager.chats().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_moved_chat_lasts_while_its_new_process_runs() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "happy-claude".into(), std::process::id())
+        .await
+        .unwrap();
+    let mut process = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let moved = manager.move_chat(&chat.id, process.id()).await.unwrap();
+    assert_eq!(
+        moved,
+        Chat {
+            pid: process.id(),
+            ..chat.clone()
+        }
+    );
+    assert_eq!(manager.chats().await.unwrap(), [moved]);
+
+    // The recording process still runs, but the chat ends with the new one.
+    process.kill().unwrap();
+    process.wait().unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    let error = manager
+        .move_chat(&chat.id, std::process::id())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("unknown chat"), "{error:#}");
+}

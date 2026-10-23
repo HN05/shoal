@@ -43,6 +43,13 @@ impl Manager {
             .await
     }
 
+    /// Make process `pid` the one whose life a running chat lasts.
+    pub async fn move_chat(&self, chat: &str, pid: u32) -> Result<Chat> {
+        let process = identity::capture(pid)?.context("the chat process is not running")?;
+        let chat = chat.to_owned();
+        self.store.run(move |db| move_to(db, &chat, &process)).await
+    }
+
     /// Running chats in start order, after ending those whose process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.end_finished_chats().await?;
@@ -120,6 +127,18 @@ fn free_number(db: &Connection, repository: &str) -> Result<u32> {
         [repository],
         |row| row.get(0),
     )?)
+}
+
+fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
+    let moved = db.execute(
+        "UPDATE chats SET pid=?2,birth=?3 WHERE id=?1",
+        params![chat, process.pid, process.birth],
+    )?;
+    anyhow::ensure!(moved == 1, "unknown chat {chat}");
+    running(db)?
+        .into_iter()
+        .find(|running| running.id == chat)
+        .context("the chat ended")
 }
 
 fn running(db: &mut Connection) -> Result<Vec<Chat>> {

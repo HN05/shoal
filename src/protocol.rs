@@ -247,6 +247,12 @@ pub enum Method {
         agent: String,
         pid: u32,
     },
+    /// Record that `chat`'s agent now runs as process `pid`, for an agent
+    /// started detached instead of in place of the recording process.
+    MoveChat {
+        chat: String,
+        pid: u32,
+    },
     ListChats,
     // The agent queue under `max_agents`.
     QueueAdd {
