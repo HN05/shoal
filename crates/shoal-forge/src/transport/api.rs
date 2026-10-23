@@ -1,7 +1,6 @@
-//! Forge REST requests sent as an [`Account`]: GitHub through `gh api`, which
-//! owns its login, and Forgejo or Gitea through curl with the token fj saved
-//! for the host, read per request and passed on stdin, never placed on a
-//! command line, or else through tea's login for the host.
+//! REST requests and the ways backends send them as an [`Account`]: through
+//! a CLI's `api` command, which owns its login, or through curl with a token
+//! passed on stdin, never placed on a command line.
 use std::{
     path::{Path, PathBuf},
     time::Duration,
@@ -12,7 +11,7 @@ use serde_json::Value;
 use tokio::process::Command;
 
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::{Account, ForgejoLogin},
     backends::{Backend, tea},
     transport::programs,
@@ -21,13 +20,9 @@ use crate::{
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
-/// Forgejo's default maximum page size.
-const PAGE_SIZE: usize = 50;
-/// Bitbucket Cloud's API, which is not served from its web host.
-const BITBUCKET_API: &str = "https://api.bitbucket.org/2.0";
 const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 /// Bounds a JSON response read through a CLI, which curl's own limit cannot.
-const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HttpMethod {
@@ -157,12 +152,7 @@ impl ForgeRepo {
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {
-            let body = match self.kind {
-                ForgeKind::GitHub => self.github_send(account, request).await,
-                ForgeKind::Forgejo => self.forgejo_send(account, request).await,
-                ForgeKind::GitLab => self.passthrough(programs::GLAB, account, request).await,
-                ForgeKind::Bitbucket => self.bitbucket_send(account, request).await,
-            }?;
+            let body = self.kind.send(self, account, request).await?;
             if let Some(field) = request.confirm {
                 ensure!(
                     body[field] == true,
@@ -178,17 +168,8 @@ impl ForgeRepo {
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
 
-    async fn github_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        let body = self.passthrough(programs::GH, account, request).await?;
-        // GraphQL reports a failed mutation in a successful response.
-        if let Some(errors) = graphql_errors(&body) {
-            bail!("{errors}");
-        }
-        Ok(body)
-    }
-
     /// Send through `gh api` or `glab api`, which own their logins.
-    async fn passthrough(
+    pub(crate) async fn passthrough(
         &self,
         program: &'static str,
         account: &Account,
@@ -250,42 +231,9 @@ impl ForgeRepo {
         json_body(&stdout)
     }
 
-    async fn forgejo_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        match account.forgejo_login(&self.host).await? {
-            ForgejoLogin::Tea(login) => {
-                json_body(&tea::send(account, &login, request, MAX_RESPONSE_BYTES).await?)
-            }
-            ForgejoLogin::Token(token) => {
-                self.curl_send(
-                    &self.forgejo_url(request),
-                    Some(authorization(token)),
-                    request,
-                )
-                .await
-            }
-            ForgejoLogin::Anonymous => {
-                self.curl_send(&self.forgejo_url(request), None, request)
-                    .await
-            }
-        }
-    }
-
-    fn forgejo_url(&self, request: &Request) -> String {
-        format!(
-            "{}://{}/api/v1/{}",
-            self.web_scheme, self.host, request.endpoint
-        )
-    }
-
-    async fn bitbucket_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        let url = format!("{BITBUCKET_API}/{}", request.endpoint);
-        let authorization = account.bitbucket_authorization().await?;
-        self.curl_send(&url, authorization, request).await
-    }
-
     /// Send with curl, passing the authorization header on stdin so no
     /// command line shows it.
-    async fn curl_send(
+    pub(crate) async fn curl_send(
         &self,
         url: &str,
         authorization: Option<Vec<u8>>,
@@ -322,11 +270,7 @@ impl ForgeRepo {
     /// Every item of a paginated list endpoint, read as `account`.
     pub(crate) async fn pages(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
-        let (size, page_size) = match self.kind {
-            ForgeKind::Forgejo => ("limit", PAGE_SIZE),
-            ForgeKind::GitHub | ForgeKind::GitLab => ("per_page", 100),
-            ForgeKind::Bitbucket => ("pagelen", PAGE_SIZE),
-        };
+        let (size, page_size) = self.kind.page_size();
         let mut items = Vec::new();
         for page in 1.. {
             let request = Request::get(format!(
@@ -334,6 +278,7 @@ impl ForgeRepo {
             ));
             let response = self.send(account, &request).await?;
             let (batch, more) = self
+                .kind
                 .page(&response, page_size)
                 .with_context(|| format!("{endpoint} is not a list"))?;
             items.extend(batch.iter().cloned());
@@ -343,20 +288,12 @@ impl ForgeRepo {
         }
         Ok(items)
     }
+}
 
-    /// A page's items, and whether another page follows: Bitbucket links the
-    /// next page, and other forges return a full page until the last.
-    fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
-        match self.kind {
-            ForgeKind::Bitbucket => {
-                Some((response["values"].as_array()?, !response["next"].is_null()))
-            }
-            ForgeKind::GitHub | ForgeKind::Forgejo | ForgeKind::GitLab => {
-                let batch = response.as_array()?;
-                Some((batch, batch.len() >= size))
-            }
-        }
-    }
+/// A page that is a JSON array; another follows while pages are full.
+pub(crate) fn full_page(response: &Value, size: usize) -> Option<(&[Value], bool)> {
+    let batch = response.as_array()?;
+    Some((batch, batch.len() >= size))
 }
 
 /// Percent-encode `text` for a URL path or query, keeping `/` when `slash`.
@@ -373,25 +310,11 @@ pub(crate) fn encode(text: &str, slash: bool) -> String {
 }
 
 /// A JSON body, or null for an empty one.
-fn json_body(text: &str) -> Result<Value> {
+pub(crate) fn json_body(text: &str) -> Result<Value> {
     if text.trim().is_empty() {
         return Ok(Value::Null);
     }
     serde_json::from_str(text).context("invalid JSON response")
-}
-
-/// The messages of a GraphQL response's `errors`, when it has any.
-fn graphql_errors(body: &Value) -> Option<String> {
-    let errors = body["errors"]
-        .as_array()
-        .filter(|errors| !errors.is_empty())?;
-    Some(
-        errors
-            .iter()
-            .map(|error| error["message"].as_str().unwrap_or("GraphQL error"))
-            .collect::<Vec<_>>()
-            .join("; "),
-    )
 }
 
 /// The message a forge's JSON error body carries; GitLab reports invalid
@@ -572,38 +495,6 @@ mod tests {
         let error = curl_response("<html>busy</html>\n502").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
         assert!(curl_response("{}").is_err());
-    }
-
-    #[test]
-    fn graphql_errors_fail_a_successful_response() {
-        let failed = serde_json::json!({"data": null, "errors": [{"message": "not allowed"}, {}]});
-        assert_eq!(
-            graphql_errors(&failed).unwrap(),
-            "not allowed; GraphQL error"
-        );
-        assert_eq!(
-            graphql_errors(&serde_json::json!({"data": {}, "errors": []})),
-            None
-        );
-        assert_eq!(graphql_errors(&serde_json::json!([])), None);
-    }
-
-    #[test]
-    fn pages_end_at_a_short_page_or_without_a_next_link() {
-        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
-        let full = serde_json::json!([1, 2]);
-        assert!(forgejo.page(&full, 2).unwrap().1);
-        assert!(!forgejo.page(&full, 3).unwrap().1);
-        let bitbucket = ForgeRepo::parse("https://bitbucket.org/workspace/repo").unwrap();
-        let linked =
-            serde_json::json!({"values": [1], "next": "https://api.bitbucket.org/2.0/x?page=2"});
-        assert_eq!(
-            bitbucket.page(&linked, 50).unwrap(),
-            (&[1.into()][..], true)
-        );
-        let last = serde_json::json!({"values": [1]});
-        assert!(!bitbucket.page(&last, 1).unwrap().1);
-        assert!(bitbucket.page(&full, 2).is_none());
     }
 
     #[test]

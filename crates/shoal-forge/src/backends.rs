@@ -9,7 +9,10 @@ pub(crate) mod glab;
 pub(crate) mod rest;
 pub(crate) mod tea;
 
-use crate::{ForgeRepo, repo::locator::ItemRoute};
+use anyhow::Result;
+use serde_json::Value;
+
+use crate::{ForgeRepo, account::Account, repo::locator::ItemRoute, transport::api::Request};
 use bitbucket::Bitbucket;
 use forgejo::Forgejo;
 use github::GitHub;
@@ -65,6 +68,16 @@ pub(crate) trait Backend {
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
+
+    /// Send `request` as `account` and return the response body, or null
+    /// for an empty one.
+    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value>;
+
+    /// The query parameter that sizes a list page, and the size to ask for.
+    fn page_size(&self) -> (&'static str, usize);
+
+    /// A list page's items, and whether another page follows.
+    fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)>;
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -122,6 +135,18 @@ impl Backend for ForgeKind {
 
     fn login_hint(&self) -> &'static str {
         dispatch!(self, backend => backend.login_hint())
+    }
+
+    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+        dispatch!(self, backend => backend.send(repo, account, request).await)
+    }
+
+    fn page_size(&self) -> (&'static str, usize) {
+        dispatch!(self, backend => backend.page_size())
+    }
+
+    fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
+        dispatch!(self, backend => backend.page(response, size))
     }
 }
 

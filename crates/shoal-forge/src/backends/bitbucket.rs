@@ -28,6 +28,11 @@ use crate::{
 
 use super::Backend;
 
+/// Bitbucket Cloud's API, which is not served from its web host.
+const API: &str = "https://api.bitbucket.org/2.0";
+/// The page size Bitbucket's lists take by default.
+const PAGE_SIZE: usize = 50;
+
 #[derive(Clone, Copy)]
 pub(crate) struct Bitbucket;
 
@@ -62,6 +67,21 @@ impl Backend for Bitbucket {
 
     fn login_hint(&self) -> &'static str {
         "Bitbucket API request failed; private repositories need [bitbucket] token_command"
+    }
+
+    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+        let url = format!("{API}/{}", request.endpoint);
+        let authorization = account.bitbucket_authorization().await?;
+        repo.curl_send(&url, authorization, request).await
+    }
+
+    fn page_size(&self) -> (&'static str, usize) {
+        ("pagelen", PAGE_SIZE)
+    }
+
+    /// Bitbucket links the next page.
+    fn page<'a>(&self, response: &'a Value, _size: usize) -> Option<(&'a [Value], bool)> {
+        Some((response["values"].as_array()?, !response["next"].is_null()))
     }
 }
 
@@ -535,6 +555,17 @@ mod tests {
 
     fn bitbucket() -> ForgeRepo {
         ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap()
+    }
+
+    #[test]
+    fn pages_end_without_a_next_link() {
+        let linked = json!({"values": [1], "next": "https://api.bitbucket.org/2.0/x?page=2"});
+        assert_eq!(
+            Bitbucket.page(&linked, 50).unwrap(),
+            (&[1.into()][..], true)
+        );
+        assert!(!Bitbucket.page(&json!({"values": [1]}), 1).unwrap().1);
+        assert!(Bitbucket.page(&json!([1, 2]), 2).is_none());
     }
 
     #[test]

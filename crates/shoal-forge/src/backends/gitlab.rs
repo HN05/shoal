@@ -20,7 +20,10 @@ use crate::{
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
-    transport::api::{HttpMethod, Request, encode},
+    transport::{
+        api::{HttpMethod, Request, encode, full_page},
+        programs,
+    },
 };
 
 use super::Backend;
@@ -59,6 +62,18 @@ impl Backend for GitLab {
 
     fn login_hint(&self) -> &'static str {
         "GitLab API request failed; check `glab auth login` for the host"
+    }
+
+    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+        repo.passthrough(programs::GLAB, account, request).await
+    }
+
+    fn page_size(&self) -> (&'static str, usize) {
+        ("per_page", 100)
+    }
+
+    fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
+        full_page(response, size)
     }
 }
 
