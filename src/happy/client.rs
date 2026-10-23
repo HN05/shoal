@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use super::Agent;
 use super::crypto::{self, Variant};
-use crate::{model::Workspace, paths::Paths};
+use crate::paths::Paths;
 
 pub const SERVER_URL_ENV: &str = "HAPPY_SERVER_URL";
 const DEFAULT_SERVER_URL: &str = "https://api.cluster-fluster.com";
@@ -204,9 +204,15 @@ pub struct Seeded {
     pub session: Session,
 }
 
-/// Create a session for `agent` in `workspace` on Happy's server, encrypted
-/// the way happy-cli would have encrypted it for this account.
-pub async fn seed(paths: &Paths, workspace: &Workspace, agent: Agent) -> Result<Seeded> {
+/// Create a session for `agent` in `directory`, on `branch` when it has one,
+/// on Happy's server, encrypted the way happy-cli would have encrypted it for
+/// this account.
+pub async fn seed(
+    paths: &Paths,
+    directory: &Path,
+    branch: Option<&str>,
+    agent: Agent,
+) -> Result<Seeded> {
     let happy_home = super::home(&paths.home);
     let credentials = read_credentials(&happy_home)?;
     let settings = read_settings(&happy_home);
@@ -239,7 +245,7 @@ pub async fn seed(paths: &Paths, workspace: &Workspace, agent: Agent) -> Result<
         .map(|elapsed| elapsed.as_millis() as u64)
         .unwrap_or_default();
     let metadata = json!({
-        "path": workspace.path,
+        "path": directory,
         "host": hostname(),
         "version": "unknown",
         "os": platform(),
@@ -251,7 +257,7 @@ pub async fn seed(paths: &Paths, workspace: &Workspace, agent: Agent) -> Result<
         "lifecycleState": "running",
         "lifecycleStateSince": now_millis,
         "flavor": agent.as_str(),
-        "gitBranch": workspace.branch,
+        "gitBranch": branch,
     });
     let body = json!({
         "tag": Uuid::new_v4().to_string(),
