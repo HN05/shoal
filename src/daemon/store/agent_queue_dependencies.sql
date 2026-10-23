@@ -1,6 +1,7 @@
 -- Work a queued launch waits for: a workspace until it is done at its
 -- current HEAD or removed, a launch until it opens its workspace, which
--- replaces it, and an issue until a workspace that links it is done.
+-- replaces it, and an issue until it closes, which deletes the row, or a
+-- workspace that links it is done.
 CREATE TABLE IF NOT EXISTS agent_queue_dependencies (
     entry_id TEXT NOT NULL REFERENCES agent_queue(id) ON DELETE CASCADE,
     kind TEXT NOT NULL CHECK(kind IN ('workspace','launch','issue')),

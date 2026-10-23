@@ -220,6 +220,9 @@ async fn poll_item_activity(manager: Arc<Manager>) {
         if let Err(error) = manager.poll_linked_item_activity().await {
             log!("item activity: {error:#}");
         }
+        if let Err(error) = manager.poll_dependency_issues().await {
+            log!("agent queue dependencies: {error:#}");
+        }
     }
 }
 

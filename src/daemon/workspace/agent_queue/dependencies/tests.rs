@@ -103,20 +103,22 @@ async fn a_launch_dependency_follows_the_workspace_it_opens_until_removal() {
 }
 
 #[tokio::test]
-async fn issue_dependencies_wait_for_a_done_workspace_linking_them() {
+async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("max_agents = 'none'"));
-    let linked = "https://forge.example/team/repo/issues/2";
-    let launch = add_after(
-        &manager,
-        &repo,
-        "launch",
-        vec![Dependency::Issue(linked.into())],
-    )
-    .await;
-    assert_eq!(launch.waiting_for, [linked]);
+    let (closed, linked) = (
+        "https://forge.example/team/repo/issues/1",
+        "https://forge.example/team/repo/issues/2",
+    );
+    let after = vec![
+        Dependency::Issue(closed.into()),
+        Dependency::Issue(linked.into()),
+    ];
+    let launch = add_after(&manager, &repo, "launch", after).await;
+    assert_eq!(launch.waiting_for, [closed, linked]);
 
+    manager.forget_issue(closed.into()).await.unwrap();
     let fix = create(&manager, &repo, "fix").await;
     let (id, url) = (fix.id.clone(), linked.to_owned());
     manager

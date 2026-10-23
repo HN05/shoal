@@ -1,8 +1,8 @@
 //! The work a queued launch waits for. A launch starts once every workspace
 //! it depends on is done at its current HEAD or removed, every launch has
-//! opened its workspace, which then stands in for it, and every issue is
-//! done in a workspace of the repository that links it. It builds on the
-//! branch of the done dependency that contains the others.
+//! opened its workspace, which then stands in for it, and every issue has
+//! closed or is done in a workspace of the repository that links it. It
+//! builds on the branch of the done dependency that contains the others.
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
@@ -14,6 +14,7 @@ use crate::{
         store::{self, WORKSPACE_COLUMNS},
         workspace::Manager,
     },
+    forge::{ForgeRepo, account::Account},
     git,
     model::{Dependency, Workspace},
     state::{DependencyKind, QueueKind, QueueState},
@@ -232,6 +233,49 @@ impl Manager {
             _ => Ok(Progress::Waiting(workspace.name)),
         }
     }
+
+    /// Forget the issue dependencies that have closed.
+    pub(crate) async fn poll_dependency_issues(&self) -> Result<()> {
+        let urls = self
+            .store
+            .run(|db| {
+                Ok(db
+                    .prepare("SELECT DISTINCT target FROM agent_queue_dependencies WHERE kind=?1")?
+                    .query_map([DependencyKind::Issue], |row| row.get(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?)
+            })
+            .await?;
+        let account = self.user_account();
+        let mut failure = None;
+        for url in urls {
+            match issue_closed(&account, &url).await {
+                Ok(true) => self.forget_issue(url).await?,
+                Ok(false) => {}
+                Err(error) => {
+                    failure.get_or_insert(error.context(format!("look up issue {url}")));
+                }
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+
+    async fn forget_issue(&self, url: String) -> Result<()> {
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "DELETE FROM agent_queue_dependencies WHERE kind=?1 AND target=?2",
+                    params![DependencyKind::Issue, url],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+}
+
+async fn issue_closed(account: &Account, url: &str) -> Result<bool> {
+    let forge = ForgeRepo::from_issue_url(url)?;
+    let (number, _) = forge.issue(url)?;
+    forge.issue_closed(account, number).await
 }
 
 fn recorded_workspace<P: rusqlite::Params>(
