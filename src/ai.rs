@@ -278,10 +278,7 @@ fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<
     );
     let built_in_provider = PROVIDERS.iter().any(|provider| provider.name == name);
     ensure!(
-        built_in_provider
-            || !crate::cli::Cli::command()
-                .get_subcommands()
-                .any(|command| command.get_name() == name),
+        built_in_provider || !built_in_commands().iter().any(|command| command == name),
         "{name:?} is a built-in Shoal command; choose another name"
     );
     ensure!(
@@ -289,6 +286,25 @@ fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<
         "{name:?} is also defined in [commands]; keep one launcher"
     );
     named_commands::validate(&Commands::from([(name.to_owned(), argv.to_vec())]))
+}
+
+/// The names of Shoal's own subcommands. Building the CLI to read them
+/// takes more stack in a debug build than a worker thread has, so it is
+/// built once, on a thread of its own.
+fn built_in_commands() -> &'static [String] {
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        let names = std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(|| {
+                crate::cli::Cli::command()
+                    .get_subcommands()
+                    .map(|command| command.get_name().to_owned())
+                    .collect()
+            })
+            .expect("spawn a thread to build the CLI");
+        names.join().expect("building the CLI does not panic")
+    })
 }
 
 /// Arguments must name one of `placeholders` when there are any.
