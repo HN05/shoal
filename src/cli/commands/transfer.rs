@@ -157,26 +157,13 @@ async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String
     for file in files {
         match import_and_prepare(ctx, file, repository.clone()).await {
             Ok(reopened) => {
-                if !ctx.json {
-                    println!("{}", reopened.message(ctx, "Imported"));
-                }
-                if let Err(error) =
-                    super::workspaces::run_post_setup(ctx, &reopened.workspace).await
-                {
+                let workspace = reopened.workspace.clone();
+                report.imported(ctx, reopened);
+                if let Err(error) = super::workspaces::run_post_setup(ctx, &workspace).await {
                     eprintln!("warning: {error:#}");
                 }
-                report.imported.push(reopened);
             }
-            Err(error) => {
-                eprintln!(
-                    "{} cannot import {}: {error:#}",
-                    Palette::stderr(ctx.json).paint(Style::Error, "error:"),
-                    file.display()
-                );
-                report
-                    .failed
-                    .push(json!({"file": file, "error": format!("{error:#}")}));
-            }
+            Err(error) => report.failed(ctx, file, &error),
         }
     }
     report
@@ -203,6 +190,23 @@ struct ImportReport {
 }
 
 impl ImportReport {
+    fn imported(&mut self, ctx: &Context, reopened: Reopened) {
+        if !ctx.json {
+            println!("{}", reopened.message(ctx, "Imported"));
+        }
+        self.imported.push(reopened);
+    }
+
+    fn failed(&mut self, ctx: &Context, file: &Path, error: &anyhow::Error) {
+        eprintln!(
+            "{} cannot import {}: {error:#}",
+            Palette::stderr(ctx.json).paint(Style::Error, "error:"),
+            file.display()
+        );
+        self.failed
+            .push(json!({"file": file, "error": format!("{error:#}")}));
+    }
+
     fn report(self, ctx: &Context) -> Result<i32> {
         let imported = self.imported.len();
         let message = if self.failed.is_empty() {
@@ -547,30 +551,9 @@ async fn export_each(
     let mut report = ExportReport::default();
     for PlannedExport { check, output } in planned {
         let name = &check.workspace.name;
-        let file = output.file();
         match export_checked(ctx, &check, &output).await {
-            Ok(exported) => {
-                if !ctx.json {
-                    println!(
-                        "Exported {name} to {}",
-                        directory.shown_file(name).display()
-                    );
-                }
-                report.exported.push(json!({
-                    "file": file,
-                    "manifest": exported.manifest,
-                    "removal": exported.removal,
-                }));
-            }
-            Err(error) => {
-                eprintln!(
-                    "{} cannot export {name}: {error:#}",
-                    Palette::stderr(ctx.json).paint(Style::Error, "error:")
-                );
-                report
-                    .failed
-                    .push(json!({"workspace": name, "error": format!("{error:#}")}));
-            }
+            Ok(exported) => report.exported(ctx, name, directory, exported),
+            Err(error) => report.failed(ctx, name, &error),
         }
     }
     report
@@ -585,6 +568,35 @@ struct ExportReport {
 }
 
 impl ExportReport {
+    fn exported(
+        &mut self,
+        ctx: &Context,
+        name: &str,
+        directory: &ExportDirectory,
+        exported: ExportedWorkspace,
+    ) {
+        if !ctx.json {
+            println!(
+                "Exported {name} to {}",
+                directory.shown_file(name).display()
+            );
+        }
+        self.exported.push(json!({
+            "file": directory.file(name),
+            "manifest": exported.manifest,
+            "removal": exported.removal,
+        }));
+    }
+
+    fn failed(&mut self, ctx: &Context, name: &str, error: &anyhow::Error) {
+        eprintln!(
+            "{} cannot export {name}: {error:#}",
+            Palette::stderr(ctx.json).paint(Style::Error, "error:")
+        );
+        self.failed
+            .push(json!({"workspace": name, "error": format!("{error:#}")}));
+    }
+
     fn report(self, ctx: &Context, directory: &ExportDirectory) -> Result<i32> {
         let exported = self.exported.len();
         let shown = directory.shown.display();
