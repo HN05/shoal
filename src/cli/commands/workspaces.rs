@@ -2191,33 +2191,41 @@ mod tests {
         server.await.unwrap();
     }
 
-    #[tokio::test]
-    async fn item_wait_closed_with_under_a_second_left_times_out() {
+    #[tokio::test(start_paused = true)]
+    async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
         use crate::{
             cli::context::Context,
             daemon::links::wait::Updates,
             paths::Paths,
-            protocol::{self, Request},
+            protocol::{self, Method, Request},
         };
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let paths = Paths::for_test(root.path());
         paths.prepare().unwrap();
         let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+        // The daemon drops the wait and then accepts nothing more.
         let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let _: Request = protocol::read(&mut stream).await.unwrap();
+            let (mut stream, _) = listener.accept().await?;
+            let request: Request = protocol::read(&mut stream).await?;
             drop(stream);
-            listener
+            anyhow::Ok((request, listener))
         });
         let ctx = Context::new(paths, true);
-        let body = tokio::time::timeout(
-            Duration::from_secs(60),
-            super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(1)), false),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let started = tokio::time::Instant::now();
+        // The paused clock reaches the deadline only once nothing else can run.
+        let body =
+            super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(600)), false)
+                .await
+                .unwrap();
         assert!(Updates::try_from(body).unwrap().timed_out);
-        server.await.unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(600));
+        let (request, _listener) = server.await.unwrap().unwrap();
+        assert!(matches!(
+            request.method,
+            Method::WatchItems {
+                timeout_secs: Some(600),
+                ..
+            }
+        ));
     }
 }
