@@ -28,7 +28,10 @@ use crate::{
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
-    transport::api::{HttpMethod, Request, encode},
+    transport::{
+        api::{HttpMethod, Request, encode},
+        response::Response,
+    },
     updates::{DISCUSSION, Snapshot},
 };
 
@@ -79,7 +82,12 @@ impl Backend for Bitbucket {
         "Bitbucket API request failed; private repositories need [bitbucket] token_command"
     }
 
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response> {
         let url = format!("{API}/{}", request.endpoint);
         let authorization = account.bitbucket_authorization().await?;
         repo.curl_send(&url, authorization, request).await

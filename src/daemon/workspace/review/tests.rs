@@ -342,7 +342,8 @@ fn fake_gh(dir: &std::path::Path) -> std::path::PathBuf {
             r#"#!/bin/sh
 input=$(cat)
 echo "$*" >> '{log}'
-[ -e '{fail}' ] && {{ echo '{{"message":"forbidden"}}'; exit 1; }}
+[ -e '{fail}' ] && {{ printf 'HTTP/2.0 403 Forbidden\n\n{{"message":"forbidden"}}\n'; exit 1; }}
+printf 'HTTP/2.0 200 OK\n\n'
 case "$*" in
   *graphql*)
     case "$input" in

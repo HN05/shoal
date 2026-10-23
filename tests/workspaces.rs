@@ -12776,7 +12776,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("gh"),
-        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') cat \"$HOME/threads.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
+        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') printf 'HTTP/2.0 200 OK\\n\\n'; cat \"$HOME/threads.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
     );
     let root = fixture.root.path();
     // Longer than a protocol frame: lookups run in the CLI.
@@ -17797,8 +17797,9 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         install_test_script(
             bin.join("gh"),
             r#"#!/bin/sh
-if [ "$1" != api ]; then cat "$HOME/pr-$3"
-elif [ "$5" = GET ]; then cat "$HOME/rest-${6##*/}"
+if [ "$1" != api ]; then cat "$HOME/pr-$3"; exit; fi
+printf 'HTTP/2.0 200 OK\n\n'
+if [ "$5" = GET ]; then cat "$HOME/rest-${6##*/}"
 else echo "$5 $6 $(cat)" >> "$HOME/edits"; echo '{}'
 fi
 "#,

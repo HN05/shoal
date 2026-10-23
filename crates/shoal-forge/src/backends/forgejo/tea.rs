@@ -5,7 +5,11 @@ use tokio::process::Command;
 
 use crate::{
     account::Account,
-    transport::{api::Request, programs},
+    transport::{
+        api::Request,
+        programs,
+        response::{Response, last_head},
+    },
 };
 
 /// A tea login and the root URL of the forge it signs in to.
@@ -35,6 +39,17 @@ pub(crate) async fn send(
     request: &Request,
     limit: usize,
 ) -> Result<String> {
+    let response = exchange(account, login, request, limit).await?;
+    response.success_body().map(str::to_owned)
+}
+
+/// Send `request` as `login` and return the forge's response.
+pub(crate) async fn exchange(
+    account: &Account,
+    login: &TeaLogin,
+    request: &Request,
+    limit: usize,
+) -> Result<Response> {
     ensure!(
         request.upload.is_none(),
         "tea cannot upload files; save an fj login for the host with fj auth login"
@@ -67,10 +82,13 @@ pub(crate) async fn send(
         "tea failed: {}",
         shoal_subprocess::diagnostic(&output.stderr).trim()
     );
-    // tea reports HTTP failures with exit status zero; --include adds the status.
-    let status = status(&String::from_utf8_lossy(&output.stderr))?;
-    let body = String::from_utf8(output.stdout).context("tea output is not UTF-8")?;
-    crate::transport::api::http_body(status, &body).map(str::to_owned)
+    // tea reports HTTP failures with exit status zero; --include adds the head.
+    let head = String::from_utf8_lossy(&output.stderr);
+    Ok(Response {
+        status: status(&head)?,
+        headers: last_head(&head),
+        body: String::from_utf8(output.stdout).context("tea output is not UTF-8")?,
+    })
 }
 
 /// The login whose URL names `host`; an exact host and port wins over a

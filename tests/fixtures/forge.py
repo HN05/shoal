@@ -56,6 +56,8 @@ def gh(args):
                 "bytes": len(data),
             }
         status, answer = respond(f"{method} {endpoint}", body, os.environ.get("AGENT"))
+        if "--include" in args:
+            print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n\r")
         if answer is not None:
             print(json.dumps(answer))
         if status >= 400:

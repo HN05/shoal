@@ -28,6 +28,7 @@ use crate::{
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
         programs,
+        response::Response,
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -72,7 +73,12 @@ impl Backend for GitLab {
         "GitLab API request failed; check `glab auth login` for the host"
     }
 
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response> {
         repo.passthrough(programs::GLAB, account, request).await
     }
 

@@ -17,6 +17,7 @@ use crate::{
     transport::{
         programs,
         resend::{Resend, Transient, resending},
+        response::{Response, last_head},
     },
 };
 
@@ -124,7 +125,14 @@ impl ForgeRepo {
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {
-            let body = resending(request.resend, || self.kind.send(self, account, request)).await?;
+            let body = resending(request.resend, || async {
+                let response = self.kind.send(self, account, request).await?;
+                json_body(response.success_body()?)
+            })
+            .await?;
+            if let Some(failure) = self.kind.reported_failure(&body) {
+                bail!("{failure}");
+            }
             if let Some(field) = request.confirm {
                 ensure!(
                     body[field] == true,
@@ -140,13 +148,14 @@ impl ForgeRepo {
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
 
-    /// Send through `gh api` or `glab api`, which own their logins.
+    /// Send through `gh api` or `glab api`, which own their logins and
+    /// print the response head before its body.
     pub(crate) async fn passthrough(
         &self,
         program: &'static str,
         account: &Account,
         request: &Request,
-    ) -> Result<Value> {
+    ) -> Result<Response> {
         let mut cli = Command::new(program);
         cli.env("NO_COLOR", "1")
             .env("GH_PROMPT_DISABLED", "1")
@@ -157,6 +166,7 @@ impl ForgeRepo {
                 "-X",
                 request.method.as_str(),
                 &request.endpoint,
+                "--include",
             ]);
         let mut input = Vec::new();
         match &request.upload {
@@ -191,16 +201,13 @@ impl ForgeRepo {
             .capture()
             .await
             .with_context(|| format!("run {program}; is it installed?"))?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if !output.status.success() {
-            bail!(
-                "{}",
-                error_message(&stdout)
-                    .unwrap_or_else(|| shoal_subprocess::diagnostic(&output.stderr))
-                    .trim()
-            );
+        // The CLIs exit with an error for a failed response, which has a head.
+        match Response::included(&String::from_utf8_lossy(&output.stdout)) {
+            Err(_) if !output.status.success() => {
+                bail!("{}", shoal_subprocess::diagnostic(&output.stderr).trim())
+            }
+            response => response,
         }
-        json_body(&stdout)
     }
 
     /// Send with curl, passing the authorization header on stdin so no
@@ -210,7 +217,7 @@ impl ForgeRepo {
         url: &str,
         authorization: Option<Vec<u8>>,
         request: &Request,
-    ) -> Result<Value> {
+    ) -> Result<Response> {
         let mut curl = Command::new(programs::CURL);
         // -q first: a user .curlrc must not trace the token header.
         curl.args(["-q", "-sS", "--max-time"])
@@ -222,6 +229,9 @@ impl ForgeRepo {
                 "Accept: application/json",
                 "-w",
                 "\n%{http_code}",
+                // The head goes apart from the body, which ends with the status.
+                "-D",
+                "/dev/stderr",
             ]);
         if let Some(upload) = &request.upload {
             curl.args(upload_args(upload)?);
@@ -239,7 +249,13 @@ impl ForgeRepo {
         if !output.status.success() {
             return Err(curl_failure(&output));
         }
-        curl_response(std::str::from_utf8(&output.stdout).context("curl output is not UTF-8")?)
+        let text = String::from_utf8(output.stdout).context("curl output is not UTF-8")?;
+        let (status, body) = curl_status(&text)?;
+        Ok(Response {
+            status,
+            headers: last_head(&String::from_utf8_lossy(&output.stderr)),
+            body: body.to_owned(),
+        })
     }
 
     /// Every item of a paginated list endpoint, read as `account`.
@@ -368,25 +384,31 @@ fn curl_failure(output: &std::process::Output) -> anyhow::Error {
     }
 }
 
-/// curl's output ends with the status code `-w` appends on its own line.
-fn curl_response(text: &str) -> Result<Value> {
-    json_body(curl_body(text)?)
+/// The body of a successful curl response, or the error a failed one reports.
+pub(crate) fn curl_body(text: &str) -> Result<&str> {
+    let (status, body) = curl_status(text)?;
+    http_body(status, body)
 }
 
-pub(crate) fn curl_body(text: &str) -> Result<&str> {
+/// The status of curl's output, which ends with the one `-w` appends on its
+/// own line, and the body before it.
+fn curl_status(text: &str) -> Result<(u16, &str)> {
     let (body, status) = text.rsplit_once('\n').unwrap_or(("", text));
-    let status: u16 = status
+    let status = status
         .trim()
         .parse()
         .context("response has no HTTP status")?;
-    http_body(status, body)
+    Ok((status, body))
 }
 
 /// The body of a successful response, or the error a failed one reports.
 pub(crate) fn http_body(status: u16, body: &str) -> Result<&str> {
     if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
-        let message = format!("HTTP {status}: {}", detail.trim());
+        let message = match detail.trim() {
+            "" => format!("HTTP {status}"),
+            detail => format!("HTTP {status}: {detail}"),
+        };
         match Transient::from_status(status, message.clone()) {
             Some(transient) => return Err(transient.into()),
             None => bail!(message),
@@ -502,16 +524,14 @@ mod tests {
 
     #[test]
     fn forgejo_responses_report_status_and_messages() {
-        assert_eq!(
-            curl_response("{\"number\":7}\n201").unwrap(),
-            serde_json::json!({"number": 7})
-        );
-        assert_eq!(curl_response("\n204").unwrap(), Value::Null);
-        let error = curl_response("{\"message\":\"user does not exist\"}\n404").unwrap_err();
+        assert_eq!(curl_body("{\"number\":7}\n201").unwrap(), "{\"number\":7}");
+        assert_eq!(curl_body("\n204").unwrap(), "");
+        let error = curl_body("{\"message\":\"user does not exist\"}\n404").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 404: user does not exist");
-        let error = curl_response("<html>busy</html>\n502").unwrap_err();
+        let error = curl_body("<html>busy</html>\n502").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
-        assert!(curl_response("{}").is_err());
+        assert_eq!(format!("{:#}", curl_body("\n404").unwrap_err()), "HTTP 404");
+        assert!(curl_body("{}").is_err());
     }
 
     #[test]

@@ -36,6 +36,7 @@ use crate::{
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
         programs,
+        response::Response,
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -76,13 +77,18 @@ impl Backend for GitHub {
         "check `gh auth login` and repository access"
     }
 
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
-        let body = repo.passthrough(programs::GH, account, request).await?;
-        // GraphQL reports a failed mutation in a successful response.
-        if let Some(errors) = graphql_errors(&body) {
-            bail!("{errors}");
-        }
-        Ok(body)
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response> {
+        repo.passthrough(programs::GH, account, request).await
+    }
+
+    /// GraphQL reports a failed mutation in a successful response.
+    fn reported_failure(&self, body: &Value) -> Option<String> {
+        graphql_errors(body)
     }
 
     fn page_size(&self) -> (&'static str, usize) {

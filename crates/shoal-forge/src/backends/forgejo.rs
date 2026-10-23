@@ -36,9 +36,9 @@ use crate::{
         thread::{Target, Thread},
         view::{Details, Review},
     },
-    transport::api::{
-        HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page,
-        json_body,
+    transport::{
+        api::{HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page},
+        response::Response,
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -88,14 +88,19 @@ impl Backend for Forgejo {
         "Forgejo API request failed; private repositories need an fj or tea login"
     }
 
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response> {
         let url = format!(
             "{}://{}/api/v1/{}",
             repo.web_scheme, repo.host, request.endpoint
         );
         match account.forgejo_login(&repo.host).await? {
             ForgejoLogin::Tea(login) => {
-                json_body(&tea::send(account, &login, request, MAX_RESPONSE_BYTES).await?)
+                tea::exchange(account, &login, request, MAX_RESPONSE_BYTES).await
             }
             ForgejoLogin::Token(token) => {
                 repo.curl_send(&url, Some(authorization(token)), request)

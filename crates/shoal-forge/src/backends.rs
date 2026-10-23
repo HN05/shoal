@@ -32,7 +32,7 @@ use crate::{
         thread::Thread,
         view::{Details, Review},
     },
-    transport::api::Request,
+    transport::{api::Request, response::Response},
     updates::Snapshot,
 };
 use bitbucket::Bitbucket;
@@ -93,9 +93,19 @@ pub(crate) trait Backend {
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
 
-    /// Send `request` as `account` and return the response body, or null
-    /// for an empty one.
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value>;
+    /// Send `request` as `account` and return the forge's response, which
+    /// may report a failure.
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response>;
+
+    /// A failure the forge reports in the body of a successful response.
+    fn reported_failure(&self, _body: &Value) -> Option<String> {
+        None
+    }
 
     /// The query parameter that sizes a list page, and the size to ask for.
     fn page_size(&self) -> (&'static str, usize);
@@ -483,8 +493,17 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.login_hint())
     }
 
-    async fn send(&self, repo: &ForgeRepo, account: &Account, request: &Request) -> Result<Value> {
+    async fn send(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        request: &Request,
+    ) -> Result<Response> {
         dispatch!(self, backend => backend.send(repo, account, request).await)
+    }
+
+    fn reported_failure(&self, body: &Value) -> Option<String> {
+        dispatch!(self, backend => backend.reported_failure(body))
     }
 
     fn page_size(&self) -> (&'static str, usize) {
