@@ -205,14 +205,28 @@ impl Manager {
                 let url = target.clone();
                 let linked = self
                     .store
-                    .run(move |db| issue_workspace(db, &repository, &url))
+                    .run(move |db| issue_workspaces(db, &repository, &url))
                     .await?;
-                match linked {
-                    Some(workspace) => self.workspace_progress(workspace).await,
-                    None => Ok(Progress::Waiting(target)),
-                }
+                self.issue_progress(target, linked).await
             }
         }
+    }
+
+    /// An open issue is done once any workspace that links it is done; until
+    /// then it waits under those workspaces' names, or its URL without one.
+    async fn issue_progress(&self, url: String, linked: Vec<Workspace>) -> Result<Progress> {
+        let mut waiting = Vec::new();
+        for workspace in linked {
+            match self.workspace_progress(workspace).await? {
+                Progress::Waiting(name) => waiting.push(name),
+                done => return Ok(done),
+            }
+        }
+        Ok(Progress::Waiting(if waiting.is_empty() {
+            url
+        } else {
+            waiting.join(" or ")
+        }))
     }
 
     /// A workspace is done while its completion holds at its current HEAD.
@@ -295,13 +309,15 @@ fn workspace_by_id(db: &Connection, id: &str) -> Result<Option<Workspace>> {
     recorded_workspace(db, "id=?1", [id])
 }
 
-/// The workspace of `repository` that links the issue at `url`.
-fn issue_workspace(db: &Connection, repository: &str, url: &str) -> Result<Option<Workspace>> {
-    recorded_workspace(
-        db,
-        "repository_id=?1 AND id IN (SELECT workspace_id FROM workspace_issue WHERE url=?2)",
-        [repository, url],
-    )
+/// The workspaces of `repository` that link the issue at `url`, by name.
+fn issue_workspaces(db: &Connection, repository: &str, url: &str) -> Result<Vec<Workspace>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1
+             AND id IN (SELECT workspace_id FROM workspace_issue WHERE url=?2) ORDER BY name"
+        ))?
+        .query_map([repository, url], store::workspace)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn recorded_workspace<P: rusqlite::Params>(

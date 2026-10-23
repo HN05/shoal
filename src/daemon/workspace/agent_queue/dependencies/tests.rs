@@ -119,20 +119,27 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
     assert_eq!(launch.waiting_for, [closed, linked]);
 
     manager.forget_issue(closed.into()).await.unwrap();
+    // Several workspaces may link the issue; any one done completes it.
     let fix = create(&manager, &repo, "fix").await;
-    let (id, url) = (fix.id.clone(), linked.to_owned());
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
-                [id, url],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert_eq!(entry(&manager, &launch.id).await.waiting_for, ["fix"]);
+    let pending = create(&manager, &repo, "pending").await;
+    for workspace in [&fix, &pending] {
+        let (id, url) = (workspace.id.clone(), linked.to_owned());
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                    [id, url],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        entry(&manager, &launch.id).await.waiting_for,
+        ["fix or pending"]
+    );
     manager.mark_done(&fix.id, false).await.unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&launch.id));
