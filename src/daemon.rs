@@ -91,6 +91,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
     manager.store.quarantine_interrupted_operations().await?;
+    manager.learn_recorded_forge_hosts().await?;
     manager.audit_worktrees().await?;
     let listener = ownership.listen()?;
     let mut terminate = signal(SignalKind::terminate())?;

@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     daemon::{
+        forge_hosts::ForgeHosts,
         links::pr::current_head,
         store::{self, WORKSPACE_COLUMNS},
         workspace::Manager,
@@ -249,9 +250,10 @@ impl Manager {
     pub(crate) async fn poll_dependency_issues(&self) -> Result<()> {
         let urls = self.store.run(issue_dependencies).await?;
         let account = self.user_account();
+        let hosts = self.forge_hosts();
         let mut failure = None;
         for url in urls {
-            match issue_closed(&account, &url).await {
+            match issue_closed(&hosts, &account, &url).await {
                 Ok(true) => self.forget_issue(url).await?,
                 Ok(false) => {}
                 Err(error) => {
@@ -269,8 +271,8 @@ impl Manager {
     }
 }
 
-async fn issue_closed(account: &Account, url: &str) -> Result<bool> {
-    let forge = ForgeRepo::from_issue_url(url)?;
+async fn issue_closed(hosts: &ForgeHosts<'_>, account: &Account, url: &str) -> Result<bool> {
+    let forge = ForgeRepo::resolve_issue_url(url, hosts).await?;
     let (number, _) = forge.issue(url)?;
     forge.issue_closed(account, number).await
 }

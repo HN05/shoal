@@ -97,6 +97,15 @@ impl Manager {
         self.forge_type(&host.to_ascii_lowercase(), scheme).await
     }
 
+    /// Remember the recorded answers for this process, as the daemon starts,
+    /// so links of those hosts parse as their forges before a lookup.
+    pub(crate) async fn learn_recorded_forge_hosts(&self) -> Result<()> {
+        for (host, kind, _) in self.recorded_forge_hosts().await? {
+            hosts::learn(&host, kind);
+        }
+        Ok(())
+    }
+
     /// Ask `host` which forge it serves and record the answer.
     async fn ask_forge_type(&self, host: &str, scheme: &'static str) -> Result<ForgeKind> {
         let kind = hosts::probe(host, scheme, &self.user_account())
@@ -243,6 +252,22 @@ mod tests {
         drop(asking);
         // Asking the host itself would fail: it does not resolve.
         assert_eq!(waiting.await.unwrap().unwrap(), ForgeKind::GitHub);
+    }
+
+    #[tokio::test]
+    async fn recorded_hosts_parse_as_their_forge_once_the_daemon_learns_them() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let url = "https://ghe.recorded.example/team/repo/issues/7";
+        manager
+            .record_forge_host("ghe.recorded.example", ForgeKind::GitHub, "https")
+            .await
+            .unwrap();
+        manager.learn_recorded_forge_hosts().await.unwrap();
+        let repo = ForgeRepo::from_issue_url(url).unwrap();
+        assert_eq!(
+            repo.pull("8").unwrap().1,
+            "https://ghe.recorded.example/team/repo/pull/8"
+        );
     }
 
     #[tokio::test]
