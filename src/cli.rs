@@ -80,6 +80,25 @@ pub struct ExportArgs {
     pub confirmation: ConfirmationArgs,
 }
 
+/// `shoal import` arguments, outside the derived `Command` builder for the
+/// reason [`ExportArgs`] is.
+#[derive(Debug, Args)]
+pub struct ImportArgs {
+    /// Export files or directories of them.
+    #[arg(required = true)]
+    pub files: Vec<PathBuf>,
+    /// Repository to import into, when it does not share the exported repository's origin.
+    #[arg(long = "repo")]
+    pub repository: Option<String>,
+    /// Continue the stopped agents' sessions on any machine, such as one the agents'
+    /// sessions were copied to.
+    #[arg(long, conflicts_with = "new_sessions")]
+    pub keep_sessions: bool,
+    /// Start new sessions even on the machine that exported the workspace.
+    #[arg(long, conflicts_with = "keep_sessions")]
+    pub new_sessions: bool,
+}
+
 #[derive(Debug, Default, Args)]
 pub struct WorkspaceScope {
     pub workspace: Option<String>,
@@ -739,21 +758,7 @@ pub enum Command {
     /// it starts new sessions, since the sessions stayed on the other machine. --keep-sessions
     /// and --new-sessions override that. `-` reads from standard input. A directory imports each
     /// .shoal file in it.
-    Import {
-        /// Export files or directories of them.
-        #[arg(required = true)]
-        files: Vec<PathBuf>,
-        /// Repository to import into, when it does not share the exported repository's origin.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Continue the stopped agents' sessions on any machine, such as one the agents'
-        /// sessions were copied to.
-        #[arg(long, conflicts_with = "new_sessions")]
-        keep_sessions: bool,
-        /// Start new sessions even on the machine that exported the workspace.
-        #[arg(long, conflicts_with = "keep_sessions")]
-        new_sessions: bool,
-    },
+    Import(ImportArgs),
     /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,
