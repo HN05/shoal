@@ -4,6 +4,7 @@ mod actions;
 mod checks;
 mod ci;
 pub mod issue;
+mod listing;
 pub mod pr;
 mod stack;
 pub mod wait;

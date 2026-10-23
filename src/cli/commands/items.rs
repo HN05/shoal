@@ -1,13 +1,14 @@
-//! `shoal pr`, `shoal ci` and `shoal issue`: ask the daemon to open or change
-//! an item of the workspace's repository and report it as the forge now does.
+//! `shoal pr`, `shoal ci` and `shoal issue`: ask the daemon to list, open or
+//! change items of the workspace's repository and report them as the forge
+//! now does.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, PrCommand, client,
-        context::Context, ui,
+        AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
+        client, context::Context, ui,
     },
     forge::{
         ForgeRepo,
@@ -16,8 +17,9 @@ use crate::{
             action::{Action, Edit, ThreadChange},
             attach::{self, Attachment},
             create::{NewIssue, PullOptions},
-            item::{Item, Opened},
+            item::{Item, ItemState, Opened},
             link::{ItemKind, Selection},
+            list::Search,
         },
     },
     git,
@@ -27,6 +29,7 @@ use crate::{
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
+        PrCommand::List(args) => return list(ctx, ItemKind::Pr, args).await,
         PrCommand::Open {
             workspace,
             title,
@@ -148,6 +151,7 @@ pub(super) async fn ci(ctx: &Context, command: CiCommand) -> Result<i32> {
 
 pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
+        IssueCommand::List(args) => return list(ctx, ItemKind::Issue, args).await,
         IssueCommand::Open {
             workspace,
             title,
@@ -175,6 +179,61 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
         IssueCommand::Reopen { item } => (item, Action::Reopen, "Issue reopened"),
     };
     act(ctx, item, ItemKind::Issue, action, outcome).await
+}
+
+async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
+    let workspace =
+        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
+    let query = args.query.join(" ");
+    let search = Search {
+        state: args.state,
+        labels: args.labels,
+        author: args.author,
+        text: (!query.is_empty()).then_some(query),
+        limit: args.limit.into(),
+    };
+    let items: Vec<Item> = ctx
+        .progress(
+            "Searching",
+            client::request(
+                &ctx.paths,
+                Method::ListItems {
+                    workspace,
+                    kind,
+                    search,
+                },
+            ),
+        )
+        .await?;
+    ctx.show(&items, |items| render_list(kind, items))?;
+    Ok(0)
+}
+
+/// One line per item: its number, state, title and labels.
+fn render_list(kind: ItemKind, items: &[Item]) {
+    if items.is_empty() {
+        match kind {
+            ItemKind::Issue => println!("No issues"),
+            ItemKind::Pr => println!("No PRs"),
+        }
+        return;
+    }
+    let width = items
+        .iter()
+        .map(|item| item.number.to_string().len())
+        .max()
+        .unwrap_or(0);
+    for item in items {
+        let state = match &item.pr {
+            Some(pr) if pr.draft && item.state == ItemState::Open => "draft",
+            _ => item.state.as_str(),
+        };
+        let mut line = format!("#{:<width$}  {state:<6}  {}", item.number, item.title);
+        if !item.labels.is_empty() {
+            line += &format!("  [{}]", item.labels.join(", "));
+        }
+        println!("{line}");
+    }
 }
 
 async fn act(

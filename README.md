@@ -172,6 +172,7 @@ shoal pr comment --body Done  # Comment on the linked PR; close and reopen work 
 shoal pr comment --attach demo.mp4 # Upload an image or video and show it in a comment
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
+shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal labels                  # The repository's labels and what each one means

@@ -606,6 +606,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
+        Method::ListItems {
+            workspace,
+            kind,
+            search,
+        } => Body::Items(
+            manager
+                .list_items(&workspace, kind, &search, caller.is_some())
+                .await?,
+        ),
         Method::SelectItems {
             workspace,
             selection,

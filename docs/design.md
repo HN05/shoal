@@ -851,7 +851,13 @@ user's Bitbucket credentials until a separate agent token is configurable. Forge
 state in the title, so callers see the same item either way. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Review
-threads are named by any of their comments' IDs. Shoal does not sign in to a
+threads are named by any of their comments' IDs. Listing issues and PRs also
+runs in the daemon, so a scoped caller's search goes out as the agent account
+and anyone else's as the user's own logins; it uses each forge's own search and
+reads pages only until the limit is met. Forgejo's issue search lists PRs
+without their branches, so each listed PR is read in full, and GitLab keeps
+merged merge requests apart from closed ones, so listing closed ones reads all
+and drops the open ones. Shoal does not sign in to a
 forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
 endpoint for it. Resolving a thread nobody has answered needs confirmation,
 because the reply tells the reviewer why. Attached images and videos are read

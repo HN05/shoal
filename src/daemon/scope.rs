@@ -107,6 +107,7 @@ pub async fn authorize(
         | Method::Checkpoint { workspace, .. }
         | Method::Checkpoints { workspace, .. }
         | Method::RestoreCheckpoint { workspace, .. }
+        | Method::ListItems { workspace, .. }
         | Method::SelectItems { workspace, .. }
         | Method::CheckLog { workspace, .. }
         | Method::CiAction { workspace, .. }

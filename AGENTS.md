@@ -56,7 +56,7 @@ when behavior changes, distinguishing decisions from proposals.
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue/PR links and watches, merge
   acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
-  sync, opening and changing issues and PRs of the own repository, and rerunning
+  sync, listing, opening and changing issues and PRs of the own repository, and rerunning
   or cancelling their CI jobs are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon

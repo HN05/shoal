@@ -771,6 +771,8 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
+    /// List or search the workspace repository's PRs, newest first.
+    List(ListArgs),
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
@@ -906,6 +908,8 @@ pub struct CiChecks {
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
+    /// List or search the workspace repository's issues, newest first.
+    List(ListArgs),
     /// Open an issue in the workspace's repository.
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
@@ -951,6 +955,29 @@ pub enum IssueCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
+}
+
+/// Which issues or PRs of the workspace's repository to list.
+#[derive(Debug, Args)]
+pub struct ListArgs {
+    /// Text the forge searches for in titles and descriptions.
+    #[arg(value_name = "TEXT")]
+    pub query: Vec<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+    /// Which items to list; closed includes merged PRs.
+    #[arg(long, value_enum, default_value_t = crate::forge::items::list::StateFilter::Open)]
+    pub state: crate::forge::items::list::StateFilter,
+    /// List only items with this label; repeat for items with every one.
+    #[arg(long = "label", value_name = "LABEL")]
+    pub labels: Vec<String>,
+    /// List only items this login opened.
+    #[arg(long, value_name = "LOGIN")]
+    pub author: Option<String>,
+    /// List at most this many items.
+    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u16).range(1..=1000))]
+    pub limit: u16,
 }
 
 /// An issue or PR of the workspace's repository.

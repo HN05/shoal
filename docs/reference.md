@@ -1788,6 +1788,8 @@ shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
 shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr close 12                   # reopen works the same way
 shoal pr merge --method rebase --delete-branch
+shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
+shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 shoal labels                        # the repository's labels with their descriptions
@@ -1841,6 +1843,16 @@ Forgejo and Gitea have no API for thread resolution, so `resolve` and
 `unresolve` fail there without sending anything.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
+`issue list` and `pr list` list the repository's issues or PRs, newest first,
+through the forge's own search: words after the command are text it searches for
+in titles and descriptions, repeated `--label` keeps items with every label,
+`--author` those a login opened, and `--state open|closed|all` defaults to open,
+with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
+30 by default. Workspace processes search as the agent account, anyone else
+with your own logins. Each line shows an item's number, state (`draft` for an
+open draft PR), title and labels; JSON lists the items with the fields every
+other item command reports. Bitbucket has no labels and refuses `--label`; its
+`--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Its JSON

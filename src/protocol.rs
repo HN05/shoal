@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 118;
+pub const VERSION: u32 = 119;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -394,6 +394,12 @@ pub enum Method {
     },
     WorkspaceStatus {
         workspace: String,
+    },
+    /// Issues or PRs of the workspace's repository that `search` matches.
+    ListItems {
+        workspace: String,
+        kind: crate::forge::items::link::ItemKind,
+        search: crate::forge::items::list::Search,
     },
     /// Linked items, or an explicit one, for the CLI to look up.
     SelectItems {
@@ -838,6 +844,7 @@ response_bodies! {
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),
     Item(crate::forge::items::item::Item),
+    Items(Vec<crate::forge::items::item::Item>),
     Opened(crate::forge::items::item::Opened),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),

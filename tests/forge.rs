@@ -1208,6 +1208,89 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
 }
 
 #[test]
+fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    fixture.respond(json!({
+        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky watch":
+            {"body": [{"number": 40, "title": "Flaky watch", "state": "OPEN",
+                "labels": [{"name": "bug"}]}]},
+    }));
+    let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
+    assert_eq!(
+        listed,
+        json!([{"kind": "issue", "number": 40, "url": format!("{}/issues/40", fixture.web),
+            "title": "Flaky watch", "state": "open", "labels": ["bug"]}])
+    );
+    let output = fixture.run(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "#40  open    Flaky watch  [bug]\n"
+    );
+
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    // Forgejo's issue search lists PRs without their branches, so each is read.
+    let search = "GET repos/team/project/issues?type=pulls&state=closed&labels=bug&created_by=dev&q=crash&limit=50&page=1";
+    fixture.respond(json!({
+        search: {"body": [{"number": 8, "pull_request": {}}, {"number": 9, "pull_request": {}}]},
+        "GET repos/team/project/pulls/8": {"body": pull(8, "merged", "Fix crash", &["bug"])},
+        "GET repos/team/project/pulls/9": {"body": pull(9, "closed", "Crash", &["bug"])},
+    }));
+    let listed = fixture.ok(&[
+        "pr",
+        "list",
+        "--workspace",
+        "topic",
+        "--state",
+        "closed",
+        "--label",
+        "bug",
+        "--author",
+        "dev",
+        "--limit",
+        "1",
+        "crash",
+    ]);
+    assert_eq!(listed.as_array().unwrap().len(), 1, "{listed}");
+    assert_eq!(listed[0]["state"], "merged");
+    assert_eq!(
+        listed[0]["pr"],
+        json!({"head": "topic", "base": "main", "draft": false})
+    );
+    let requests = fixture.requests();
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    assert!(
+        requests
+            .iter()
+            .all(|request| request[2] == "token usertoken")
+    );
+
+    let scope = fixture.ok(&["env", "topic"])["SHOAL_SCOPE_TOKEN"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let method = json!({"list_items": {"workspace": "topic", "kind": "pr",
+        "search": {"state": "closed", "labels": ["bug"], "author": "dev", "text": "crash",
+            "limit": 5}}});
+    let result = fixture.request_as(method, Some(&scope));
+    assert_eq!(result["type"], "items", "{result}");
+    assert_eq!(result["data"].as_array().unwrap().len(), 2);
+    let requests = fixture.requests();
+    assert_eq!(requests.len(), 3, "{requests:?}");
+    assert!(
+        requests
+            .iter()
+            .all(|request| request[2] == "token agenttoken")
+    );
+}
+
+#[test]
 fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({

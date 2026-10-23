@@ -82,7 +82,7 @@ instead of the PR delivery guidance below.
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
-  assignment completion and its withdrawal, opening and changing issues and PRs
+  assignment completion and its withdrawal, listing, opening and changing issues and PRs
   of the own repository except merging, rerunning or cancelling their CI jobs,
   own-repository sync and
   effective-configuration reads are allowed;
