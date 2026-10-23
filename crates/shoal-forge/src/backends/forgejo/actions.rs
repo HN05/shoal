@@ -88,7 +88,16 @@ pub(crate) async fn failed_check_log(
     let job_id = job_id(&jobs, job_index, run_id)?;
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
     let log = job_log(repo, account, &endpoint).await?;
-    Ok(CheckLog::from_text(url, name, &log))
+    Ok(CheckLog::from_text(url, name, &log).with_job(job_url(repo, target)))
+}
+
+/// Forgejo links a job by its path on the host.
+fn job_url(repo: &ForgeRepo, target: &str) -> String {
+    if target.starts_with('/') {
+        format!("{}://{}{target}", repo.web_scheme, repo.host)
+    } else {
+        target.into()
+    }
 }
 
 /// The API ID of the run numbered `number` in the repository, which must
@@ -228,6 +237,10 @@ mod tests {
         ] {
             assert!(job_location(&forge, target).is_err(), "{target}");
         }
+        assert_eq!(
+            job_url(&http, "/team/repo/actions/runs/2765/jobs/1"),
+            "http://forge.example/team/repo/actions/runs/2765/jobs/1"
+        );
         let runs =
             json!({"workflow_runs": [{"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}]});
         assert_eq!(run_id(&runs, 2765, "head").unwrap(), 9331);

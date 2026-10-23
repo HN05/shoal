@@ -1789,6 +1789,10 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     let result = fixture.request_as(method.clone(), Some(scope));
     assert_eq!(result["type"], "check_log", "{result}");
     assert_eq!(result["data"]["failed_step"], "Main Test");
+    assert_eq!(
+        result["data"]["job_url"],
+        format!("{}/actions/runs/2765/jobs/1", fixture.web)
+    );
     assert_eq!(result["data"]["truncated"], false);
     assert!(
         result["data"]["text"]

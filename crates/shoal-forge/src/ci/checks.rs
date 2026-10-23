@@ -6,11 +6,17 @@ use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capabili
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
 pub const TAIL_BYTES: usize = 8192;
+/// The longest job URL a [`CheckLog`] keeps, in bytes.
+pub const JOB_URL_BYTES: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckLog {
+    /// The PR's.
     pub url: String,
     pub name: String,
+    /// The web page of the check's job, unless longer than [`JOB_URL_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_url: Option<String>,
     pub text: String,
     pub truncated: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,9 +54,17 @@ impl CheckLog {
         Self {
             url: url.into(),
             name: name.into(),
+            job_url: None,
             text: text[start..].into(),
             truncated: start > 0,
             failed_step,
+        }
+    }
+
+    pub(crate) fn with_job(self, job_url: String) -> Self {
+        Self {
+            job_url: Some(job_url).filter(|url| url.len() <= JOB_URL_BYTES),
+            ..self
         }
     }
 }
@@ -89,5 +103,8 @@ mod tests {
         assert!(!CheckLog::from_text("pr", "rust", "short").truncated);
         let long = CheckLog::from_text("pr", "rust", &"\0".repeat(TAIL_BYTES * 2));
         assert_eq!(long.text.len(), TAIL_BYTES);
+        let job = |length| CheckLog::from_text("pr", "rust", "").with_job("j".repeat(length));
+        assert!(job(JOB_URL_BYTES).job_url.is_some());
+        assert!(job(JOB_URL_BYTES + 1).job_url.is_none());
     }
 }
