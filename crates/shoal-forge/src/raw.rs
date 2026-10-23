@@ -44,8 +44,12 @@ impl ForgeRepo {
             !path.contains("://") && !path.chars().any(|c| c.is_whitespace() || c.is_control()),
             "the API path must be relative to the forge's API root, without spaces"
         );
+        // A server may decode `%2e` before it removes dot segments.
         ensure!(
-            route.split('/').all(|part| !matches!(part, "." | "..")),
+            route.split('/').all(|part| !matches!(
+                part.to_ascii_lowercase().replace("%2e", ".").as_str(),
+                "." | ".."
+            )),
             "the API path must not contain `.` or `..` segments"
         );
         let (owner, repo) = self.path.rsplit_once('/').unwrap_or(("", &self.path));
@@ -157,6 +161,8 @@ mod tests {
             "https://other.example/api/v1/user",
             "repos/../../user/settings",
             "repos/./team",
+            "repos/%2e%2E/user",
+            "repos/.%2e",
             "repos/team/repo issues",
             "repos/team\n",
         ] {

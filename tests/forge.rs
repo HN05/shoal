@@ -3188,6 +3188,27 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         ]
     );
 
+    // curl sends braces and brackets as given instead of expanding them.
+    fixture.respond(json!({"GET repos/team/project/{a,b}[1-2]": {"body": {"one": true}}}));
+    let globbed = fixture.ok(&[
+        "api",
+        "repos/{owner}/{repo}/{a,b}[1-2]",
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(globbed, json!({"one": true}));
+    assert_eq!(
+        fixture.requests(),
+        [json!([
+            "GET repos/team/project/{a,b}[1-2]",
+            null,
+            "token usertoken"
+        ])]
+    );
+    fixture.respond(json!({
+        "GET repos/team/project/branches?limit=400": {"body": branches},
+    }));
+
     // The agent reads as itself, and writes only when the repository lets it.
     assert_eq!(scoped(&fixture, &["api", path]), json!(branches));
     assert_eq!(

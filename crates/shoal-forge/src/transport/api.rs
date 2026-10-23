@@ -293,8 +293,9 @@ impl ForgeRepo {
         request: &Request,
     ) -> Result<Response> {
         let mut curl = Command::new(programs::CURL);
-        // -q first: a user .curlrc must not trace the token header.
-        curl.args(["-q", "-sS", "--max-time"])
+        // -q first: a user .curlrc must not trace the token header. Without
+        // globbing, braces and brackets in a path send one request, as given.
+        curl.args(["-q", "-sS", "--globoff", "--max-time"])
             .arg(request.timeout().as_secs().to_string())
             .args([
                 "-X",
