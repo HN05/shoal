@@ -4802,6 +4802,76 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
 }
 
 #[test]
+fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
+    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("carried");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; exit 0; fi\n\
+             printf '{{\"session_id\":\"carried-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "carried"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    // Claude Code keeps the session in the project folder of the directory
+    // the workspace had before.
+    let projects = fixture.root.path().join(".claude/projects");
+    let old = projects.join("-old-workspace");
+    fs::create_dir_all(&old).unwrap();
+    fs::write(old.join("carried-session.jsonl"), "conversation\n").unwrap();
+    let file = fixture.root.path().join("carried.shoal");
+    let file = file.to_str().unwrap();
+    let exported = fixture.ok(&["export", "carried", "-o", file]);
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.ok(&["import", file, "--repo", repo]);
+    assert_eq!(imported["warnings"], serde_json::json!([]));
+
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .arg("resume")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    // A machine without an ID cannot tell it exported the workspace.
+    if exported["manifest"]["sessions"].is_null() {
+        assert!(!path.join("resumed").exists());
+        return;
+    }
+    assert_eq!(
+        fs::read_to_string(path.join("resumed")).unwrap(),
+        "carried-session"
+    );
+    let folder: String = fs::canonicalize(path)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() {
+                char
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    assert_eq!(
+        fs::read_to_string(projects.join(folder).join("carried-session.jsonl")).unwrap(),
+        "conversation\n"
+    );
+}
+
+#[test]
 fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("quarantined");

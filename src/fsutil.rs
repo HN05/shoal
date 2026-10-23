@@ -54,6 +54,30 @@ fn copy_entry(source: &Path, destination: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Copy `source` to `destination` recursively, keeping every entry that
+/// `destination` already has. Symbolic links are copied as links.
+pub fn copy_missing(source: &Path, destination: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.is_dir() {
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            copy_missing(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        return Ok(());
+    }
+    match fs::symlink_metadata(destination) {
+        Ok(_) => return Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    if metadata.is_symlink() {
+        std::os::unix::fs::symlink(fs::read_link(source)?, destination)
+    } else {
+        fs::copy(source, destination).map(drop)
+    }
+}
+
 fn remove_existing(path: &Path) -> io::Result<()> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() => {

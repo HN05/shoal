@@ -1717,10 +1717,13 @@ workspace it opened and exits 1 naming each file it could not import or whose
 `post_setup_cmd` failed. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal restore` does; when that restore fails,
-`shoal restore <workspace>` retries it. Agent sessions stay on the exporting
-machine, so `shoal resume` starts each stopped agent as `shoal claude` or
-`shoal codex` starts a new one, telling it the workspace moved, instead of
-running `[agent_resume]`. Workspace processes can neither export nor import.
+`shoal restore <workspace>` retries it. On the machine that exported it, `shoal
+resume` continues each agent's reported session; Shoal trusts the new path for
+the agent and copies a Claude Code session's project folder to the new path's
+folder. An agent whose session is not available, such as on another machine,
+`shoal resume` starts as `shoal claude` or `shoal codex` starts a new one,
+telling it the workspace moved, instead of running `[agent_resume]`. Workspace
+processes can neither export nor import.
 
 ### Assignment completion
 

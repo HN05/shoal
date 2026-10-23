@@ -3,8 +3,9 @@
 //! directory's project folder holds the sessions that ran there.
 mod sessions;
 
-use std::ffi::OsString;
+use std::{ffi::OsString, path::Path};
 
+use anyhow::Result;
 use serde_json::{Value, json};
 
 use super::{
@@ -42,6 +43,11 @@ impl Integration for Claude {
         sessions::projects(ctx)
             .and_then(|projects| sessions::find(&projects, session))
             .is_ok_and(|folder| folder.is_some())
+    }
+
+    /// Claude Code resumes only sessions in the directory's project folder.
+    fn carry_session(&self, ctx: &Context, session: &str, directory: &Path) -> Result<()> {
+        sessions::carry(&sessions::projects(ctx)?, session, directory)
     }
 }
 

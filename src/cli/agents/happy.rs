@@ -1,5 +1,5 @@
 //! Detached Happy sessions and their tool-specific prompt delivery.
-use std::ffi::OsString;
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
@@ -44,6 +44,10 @@ impl Integration for Happy {
 
     fn has_session(&self, ctx: &Context, session: &str) -> bool {
         self.inner().has_session(ctx, session)
+    }
+
+    fn carry_session(&self, ctx: &Context, session: &str, directory: &Path) -> Result<()> {
+        self.inner().carry_session(ctx, session, directory)
     }
 
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {

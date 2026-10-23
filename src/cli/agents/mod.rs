@@ -30,7 +30,7 @@ use crate::{
     },
     config::{Config, Effective, named_commands::Commands, templates::Delivery},
     fsutil,
-    model::{Repository, Workspace},
+    model::{RemovedWorkspace, Repository, Workspace},
     protocol::ConfigTarget,
     tools::Tool,
 };
@@ -68,6 +68,12 @@ pub(in crate::cli) trait Integration: Sync {
     /// the agent finds by ID from any directory needs no check.
     fn has_session(&self, _ctx: &Context, _session: &str) -> bool {
         true
+    }
+
+    /// Make `session` resumable from `directory`, where its workspace moved
+    /// from another directory on this machine.
+    fn carry_session(&self, _ctx: &Context, _session: &str, _directory: &Path) -> Result<()> {
+        Ok(())
     }
 
     /// Whether its wrapper wakes the idle agent by typing a prompt into its
@@ -377,6 +383,42 @@ pub(crate) fn wakes_by_prompt(name: &str) -> bool {
 /// Whether agent `name`'s session `session` is on this machine.
 pub(in crate::cli) fn has_session(ctx: &Context, name: &str, session: &str) -> bool {
     integration(name).has_session(ctx, session)
+}
+
+/// Make the sessions that `workspace`, reopened from `removed` at a new path,
+/// keeps for `shoal resume` resumable there, trusting the path for their
+/// agents. Failures only warn.
+pub(in crate::cli) async fn carry_sessions(
+    ctx: &Context,
+    workspace: &Workspace,
+    removed: &RemovedWorkspace,
+) {
+    let agents = removed.agents.iter().map(|agent| {
+        (
+            &agent.record.agent,
+            &agent.record.session,
+            agent.record.moved,
+        )
+    });
+    let last = removed
+        .last_session
+        .iter()
+        .map(|last| (&last.agent, &last.session, last.moved));
+    for (agent, session, moved) in agents.chain(last) {
+        let Some(session) = session.as_deref().filter(|_| !moved) else {
+            continue;
+        };
+        let integration = integration(agent);
+        if let Some(trust) = integration.trust_file() {
+            trust.trust_workspace(ctx, workspace).await;
+        }
+        if let Err(error) = integration.carry_session(ctx, session, &workspace.path) {
+            eprintln!(
+                "warning: cannot make {agent} session {session} resumable in {}: {error:#}",
+                workspace.path.display()
+            );
+        }
+    }
 }
 
 /// Trust a repository's checkout for a chat of agent `name` as workspace
