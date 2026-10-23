@@ -892,8 +892,9 @@ each answer in its state and asks recorded hosts again from `doctor`, which
 otherwise changes no state without `--repair`; a global `[forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
-parse the same way. A pasted link of a host not yet resolved is classified
-without a request by the forge its routes name, such as `/pull/` for GitHub
+parse the same way, and the CLI starts out knowing the pinned ones. A pasted
+link of a host not yet resolved is classified without a request by the forge
+its routes name, such as `/pull/` for GitHub
 and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
 form several forges share, falls back to the name: GitLab for a `gitlab` name
 label or a glab login, and otherwise Forgejo. Host types describe hosts rather than

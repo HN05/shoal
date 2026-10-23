@@ -32,6 +32,14 @@ impl Forges {
         self.pinned(host).or_else(|| ForgeKind::named(host))
     }
 
+    /// Each pinned host and its type.
+    pub fn pins(&self) -> Vec<(String, ForgeKind)> {
+        self.0
+            .iter()
+            .map(|(host, forge)| (host.clone(), forge.kind))
+            .collect()
+    }
+
     pub fn validate(&self) -> Result<()> {
         for host in self.0.keys() {
             ensure!(

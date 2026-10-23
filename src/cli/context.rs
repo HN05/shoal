@@ -39,6 +39,18 @@ impl Context {
         Ok(crate::forge::account::Account::user(&config.bitbucket))
     }
 
+    /// Classify pasted links of the forge hosts the global config pins as
+    /// their forges, reading the config only once a forge link is parsed. A
+    /// config that does not load reports itself to the command that reads it.
+    pub fn learn_pinned_forges(&self) {
+        let paths = self.paths.clone();
+        crate::forge::hosts::learn_pins(move || {
+            crate::config::Config::load(&paths)
+                .map(|config| config.forges.pins())
+                .unwrap_or_default()
+        });
+    }
+
     /// What the global config and the daemon say each forge host serves.
     pub fn forge_hosts(&self) -> Result<super::forge_hosts::ForgeHosts<'_>> {
         let config = crate::config::Config::load(&self.paths)?;

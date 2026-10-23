@@ -181,7 +181,8 @@ instead of the PR delivery guidance below.
   host's own answer to each forge's version or metadata endpoint, asked with
   only the logins saved for that host and never gh's or glab's environment
   tokens, which the daemon records so the host is asked once and `doctor` asks
-  again; a pasted link of a host not yet resolved is classified by the forge
+  again; a pasted link of a host not yet resolved is classified by its pin,
+  else by the forge its routes name.
   its routes name.
   Views automatically include failed Actions logs, read by the daemon as the
   workspace's agent account, resolving web indices to API IDs and validating the PR head before returning

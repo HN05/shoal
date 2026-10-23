@@ -381,7 +381,8 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[forges.\"GHE.invalid\"]\ntype = \"github\"\n",
+        "[forges.\"GHE.invalid\"]\ntype = \"github\"\n\
+         [forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
         &fixture.repo,
@@ -403,6 +404,20 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
             .iter()
             .all(|request| request[0] != "GET meta")
     );
+
+    // A pin outranks the name guess for a pasted link, too.
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@gitlab.invalid:team/project.git",
+        ],
+    );
+    let url = "https://gitlab.invalid/team/project/issues/7";
+    let linked = fixture.ok(&["link", url, "related", "--workspace", "topic"]);
+    assert_eq!(linked["registered"], true, "{linked}");
 
     git(
         &fixture.repo,

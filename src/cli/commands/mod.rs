@@ -252,6 +252,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     }
     let mut ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
     ctx.need = cli.need;
+    ctx.learn_pinned_forges();
     let command = match picker_start(&ctx, cli.command.as_ref()) {
         Some(start) => match menu::choose(&ctx, start).await? {
             menu::Choice::Run(command) => *command,

@@ -6,7 +6,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    sync::{LazyLock, PoisonError, RwLock},
+    sync::{LazyLock, Mutex, PoisonError, RwLock},
 };
 
 use anyhow::{Result, anyhow};
@@ -18,6 +18,11 @@ use crate::{
 };
 
 static LEARNED: LazyLock<RwLock<HashMap<String, ForgeKind>>> = LazyLock::new(Default::default);
+
+/// The hosts the caller pins, read the first time a host's forge is needed.
+type Pins = Box<dyn FnOnce() -> Vec<(String, ForgeKind)> + Send>;
+
+static PINS: Mutex<Option<Pins>> = Mutex::new(None);
 
 /// Where the forge of a host comes from: settings, a recorded answer, or
 /// [`probe`].
@@ -70,8 +75,18 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .insert(host.to_ascii_lowercase(), kind);
 }
 
+/// Learn the hosts `pins` returns the first time this process needs a
+/// host's forge, so a caller that never parses a forge link never reads them.
+pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'static) {
+    *PINS.lock().unwrap_or_else(PoisonError::into_inner) = Some(Box::new(pins));
+}
+
 /// What this process learned `host` serves.
 pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
+    let pins = PINS.lock().unwrap_or_else(PoisonError::into_inner).take();
+    for (pinned, kind) in pins.map(|pins| pins()).unwrap_or_default() {
+        learn(&pinned, kind);
+    }
     LEARNED
         .read()
         .unwrap_or_else(PoisonError::into_inner)
