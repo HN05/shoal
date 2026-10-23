@@ -4,7 +4,6 @@ use anyhow::Result;
 use crate::{
     daemon::workspace::Manager,
     forge::{
-        ForgeRepo,
         ci::checks::{CheckLog, validate_check_name},
         items::link::{ItemKind, Selection},
         updates::Update,
@@ -18,7 +17,9 @@ impl Manager {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
             if !matches!(check.result.as_str(), "failure" | "error")
-                || !ForgeRepo::from_pull_url(&update.url)
+                || !self
+                    .pull_forge(&update.url)
+                    .await
                     .is_ok_and(|forge| forge.supports_check_logs())
             {
                 continue;
@@ -72,7 +73,7 @@ impl Manager {
                 "select one PR to read a check log; use shoal view pr <number> --check <name>"
             );
         };
-        let forge = super::actions::workspace_forge(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
         let account = self.agent_account(&workspace).await?;
         forge.failed_check_log(&account, url, name).await
     }

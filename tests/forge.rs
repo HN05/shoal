@@ -261,6 +261,96 @@ fn item_actions_send_rest_requests_and_record_events() {
     }
 }
 
+/// Add the label `ready` to PR 8 of the workspace's repository.
+fn label_pr(fixture: &Fixture) -> Value {
+    fixture.request(
+        json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+        "action": {"action": "edit", "add_labels": ["ready"]}}}),
+    )
+}
+
+#[test]
+fn unknown_hosts_are_asked_once_which_forge_they_serve() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@ghe.invalid:team/project.git",
+        ],
+    );
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        "GET meta": {"body": {"installed_version": "3.14.0"}},
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["bug"])},
+        "PUT repos/team/project/issues/8/labels": {"body": []},
+    }));
+    let response = label_pr(&fixture);
+    assert_eq!(response["type"], "item", "{response}");
+    assert_eq!(
+        response["data"]["url"],
+        "https://ghe.invalid/team/project/pull/8"
+    );
+    let keys = |fixture: &Fixture| -> Vec<Value> {
+        fixture
+            .requests()
+            .into_iter()
+            .map(|request| request[0].clone())
+            .collect()
+    };
+    assert_eq!(keys(&fixture)[0], "GET meta");
+    assert_eq!(label_pr(&fixture)["type"], "item");
+    assert!(!keys(&fixture).contains(&json!("GET meta")));
+}
+
+#[test]
+fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
+    let fixture = Fixture::new(
+        Forge::GitHub,
+        "[forges.\"GHE.invalid\"]\ntype = \"github\"\n",
+    );
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@ghe.invalid:team/project.git",
+        ],
+    );
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &["bug"])},
+        "PUT repos/team/project/issues/8/labels": {"body": []},
+    }));
+    assert_eq!(label_pr(&fixture)["type"], "item");
+    assert!(
+        fixture
+            .requests()
+            .iter()
+            .all(|request| request[0] != "GET meta")
+    );
+
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@unknown.invalid:team/project.git",
+        ],
+    );
+    let refused = label_pr(&fixture);
+    assert_eq!(refused["type"], "error");
+    let message = refused["data"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("unknown.invalid answers as none of")
+            && message.contains("[forges.\"unknown.invalid\"]"),
+        "{message}"
+    );
+}
+
 #[test]
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {

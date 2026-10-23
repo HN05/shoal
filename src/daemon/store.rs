@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 63;
+const SCHEMA_VERSION: i64 = 64;
 
 #[cfg(test)]
 mod benchmark;
@@ -394,6 +394,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (61, CHAT_MESSAGE_SENDERS, None),
     (62, NOTIFICATION_SUBJECTS, None),
     (63, include_str!("store/agent_queue_dependencies.sql"), None),
+    (64, FORGE_HOSTS, None),
 ];
 
 /// The approval request a notification asks the user to decide, by its key,
@@ -411,6 +412,14 @@ const NOTIFICATION_SENDERS: &str = "ALTER TABLE notifications ADD COLUMN workspa
 
 /// Whether the asking agent withdrew a closed question.
 const QUESTION_WITHDRAWN: &str = "ALTER TABLE questions ADD COLUMN withdrawn INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn IN (0,1));";
+
+/// The forge each host answered as when Shoal last asked it, and the
+/// scheme it was asked over.
+const FORGE_HOSTS: &str = "CREATE TABLE forge_hosts (
+    host TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    scheme TEXT NOT NULL
+);";
 
 /// The existing workspace a queued launch opens, apart from the workspace a
 /// starting launch reports it opened.
@@ -1070,6 +1079,9 @@ mod tests {
         }
         if version >= 63 {
             db.execute_batch(include_str!("store/agent_queue_dependencies.sql"))?;
+        }
+        if version >= 64 {
+            db.execute_batch(FORGE_HOSTS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

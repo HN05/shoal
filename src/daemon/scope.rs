@@ -60,6 +60,7 @@ pub async fn authorize(
         | Method::ListChats
         | Method::FindWorkspaces { .. }
         | Method::ListRepositories
+        | Method::ForgeType { .. }
         | Method::SimCatalog => None,
         Method::HoldList { workspace }
         | Method::SetBaseWorkspace { workspace, .. }

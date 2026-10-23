@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 122;
+pub const VERSION: u32 = 123;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -494,6 +494,12 @@ pub enum Method {
         checkpoint: u64,
     },
     Diagnose,
+    /// The forge `host` serves, asking it over `scheme` once when neither
+    /// the global config nor a recorded answer says.
+    ForgeType {
+        host: String,
+        scheme: String,
+    },
     Doctor {
         workspace: Option<String>,
         options: ReconcileOptions,
@@ -890,6 +896,7 @@ response_bodies! {
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),
     RestoredCheckpoint(crate::model::RestoredCheckpoint),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
+    ForgeType(crate::forge::backends::ForgeKind),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),

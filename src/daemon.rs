@@ -17,6 +17,7 @@ pub mod doctor;
 pub mod events;
 mod execution_connection;
 mod execution_recovery;
+pub(crate) mod forge_hosts;
 pub(crate) mod handoff;
 mod keep_awake;
 pub mod links;
@@ -839,6 +840,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?,
         ),
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
+        Method::ForgeType { host, scheme } => {
+            Body::ForgeType(manager.requested_forge_type(&host, &scheme).await?)
+        }
         Method::Doctor { workspace, options } => Body::Doctor(
             manager
                 .reconcile_workspaces(workspace.as_deref(), options)

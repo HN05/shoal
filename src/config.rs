@@ -1,4 +1,5 @@
 pub mod edit;
+pub mod forges;
 pub mod named_commands;
 pub mod overload;
 pub(crate) mod placeholders;
@@ -82,6 +83,8 @@ pub struct Config {
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub bitbucket: crate::forge::backends::bitbucket::Credentials,
+    /// Forge hosts whose type is set instead of asked.
+    pub forges: forges::Forges,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
     pub copy_ignored: Option<bool>,
@@ -646,6 +649,7 @@ impl Config {
         config.git.validate()?;
         config.agent_auth.validate()?;
         config.bitbucket.validate()?;
+        config.forges.validate()?;
         for &kind in crate::hooks::HookKind::ALL {
             if kind.allows_global() {
                 kind.validate(kind.global_command(&config))?;

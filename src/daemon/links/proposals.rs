@@ -706,7 +706,7 @@ impl Manager {
         let config = self.config();
         let settings = self.repository_settings_from(&config, repository).await?;
         let account = self.agent_account_from(&config, &settings)?;
-        Ok((ForgeRepo::parse(&remote)?, account))
+        Ok((self.forge(&remote).await?, account))
     }
 }
 

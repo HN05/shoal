@@ -16,7 +16,6 @@ use crate::{
         agent_messages::AgentMessage, notifications::NotificationKind, store, workspace::Manager,
     },
     forge::{
-        ForgeRepo,
         items::{
             item::ItemState,
             link::{ItemKind, Selection},
@@ -414,7 +413,7 @@ impl Manager {
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?
             .context("watch needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
+        let forge = self.forge(&remote).await?;
         let account = self.user_account();
         let mut observations = Vec::new();
         for (url, kind) in items {
@@ -594,7 +593,7 @@ impl Manager {
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?
             .context("item lookup needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
+        let forge = self.forge(&remote).await?;
         let kind = selection.kind.context("explicit items need a kind")?;
         let (_, url) = match kind {
             ItemKind::Pr => forge.pull(input)?,

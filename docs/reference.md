@@ -1807,9 +1807,20 @@ confirmation and includes them in its JSON result; `--yes` skips confirmation.
 ### Forges
 
 Shoal reads and changes the issues and PRs of the forge serving a repository's
-`origin`. `github.com` is GitHub and `bitbucket.org` is Bitbucket Cloud;
-`gitlab.com`, a host with a `gitlab` name label and a host `glab` has a login for
-are GitLab; any other host is Forgejo or Gitea, which share an API. Lookups use
+`origin`. `github.com` is GitHub, `gitlab.com` GitLab and `bitbucket.org`
+Bitbucket Cloud. The daemon asks any other host once which API it serves, through
+GitHub's `meta` with `gh`, GitLab's `version` with `glab`, and Forgejo's or
+Gitea's `version` with the login below, and records the answer; GitHub Enterprise
+Server and self-hosted GitLab need the CLI logged in to the host. A host that
+answers as none of them fails until you set its type, which also stops Shoal
+asking it:
+
+```toml
+[forges."git.example.com"]
+type = "gitlab"   # or "github", "forgejo" (also Gitea) or "bitbucket"
+```
+
+Lookups use
 your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
 saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
 token `[bitbucket]` configures. Without a login, only public repositories are

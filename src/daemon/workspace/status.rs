@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use super::Manager;
 use crate::{
     daemon::{
+        forge_hosts::ForgeHosts,
         links::{pr, wait::linked_items},
         store,
     },
@@ -34,13 +35,15 @@ impl Manager {
             Err(error) => (None, Some(format!("{error:#}"))),
         };
         let account = self.user_account();
+        let hosts = self.forge_hosts();
         let (prs, issue_status) = tokio::join!(
             pr::watched(
+                &hosts,
                 &account,
                 &inspection.workspace,
                 inspection.pr_cleanup.as_ref()
             ),
-            issue_status(&account, &inspection)
+            issue_status(&hosts, &account, &inspection)
         );
         let unread_notifications = self.unread_notifications().await?;
         let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
@@ -68,14 +71,18 @@ impl Manager {
     }
 }
 
-async fn issue_status(account: &Account, inspection: &Inspection) -> Option<IssueStatus> {
+async fn issue_status(
+    hosts: &ForgeHosts<'_>,
+    account: &Account,
+    inspection: &Inspection,
+) -> Option<IssueStatus> {
     let url = &inspection.issue.as_ref()?.url;
     let path = &inspection.workspace.path;
     let closed = async {
         let remote = repository::remote_url_from_path(path)
             .await?
             .context("issue lookup needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
+        let forge = ForgeRepo::resolve(&remote, hosts).await?;
         let (number, _) = forge.issue(url)?;
         forge.issue_closed(account, number).await
     }

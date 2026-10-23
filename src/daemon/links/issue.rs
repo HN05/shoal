@@ -174,7 +174,7 @@ impl Manager {
         let remote = crate::repository::remote_url_from_path(&workspace.path)
             .await?
             .context("issue lookup needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
+        let forge = self.forge(&remote).await?;
         let (number, url) = forge.issue(input)?;
         Ok((forge, number, url))
     }

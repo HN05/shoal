@@ -7,6 +7,7 @@ use crate::daemon::log;
 use crate::{
     daemon::{
         events::{self, EventKind},
+        forge_hosts::ForgeHosts,
         notifications::NotificationKind,
         store,
         workspace::{Manager, review},
@@ -306,7 +307,7 @@ impl Manager {
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?
             .context("PR lookup needs an origin remote")?;
-        let forge = ForgeRepo::parse(&remote)?;
+        let forge = self.forge(&remote).await?;
         let (number, url) = forge.pull(input)?;
         Ok((forge, number, url))
     }
@@ -622,6 +623,7 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
 
 /// Look up each watched PR concurrently; a failure stays on its PR.
 pub(crate) async fn watched(
+    hosts: &ForgeHosts<'_>,
     account: &Account,
     workspace: &Workspace,
     registration: Option<&Registration>,
@@ -637,7 +639,7 @@ pub(crate) async fn watched(
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?
             .context("PR lookup needs an origin remote")?;
-        ForgeRepo::parse(&remote)
+        ForgeRepo::resolve(&remote, hosts).await
     }
     .await;
     match forge {

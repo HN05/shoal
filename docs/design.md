@@ -882,10 +882,17 @@ merge) and planned per forge as REST requests: `gh api` and `glab api`, which
 own GitHub's and GitLab's logins, or curl with the token fj saved for a Forgejo
 host, since fj has no API passthrough, or the configured Bitbucket token. Gitea shares Forgejo's API; a host fj has no login for uses tea's
 login through `tea api`, which owns that token, and otherwise reads anonymously.
-The forge is selected from the remote's host and the user's local logins, without
-probing the host or requiring configuration: well-known hosts by name, a host glab
-has a login for or whose name has a `gitlab` label as GitLab, and any other as
-Forgejo or Gitea. GitLab-only concepts such as approval rules and merge trains
+The forge is selected from the remote's host without requiring configuration:
+well-known hosts by name, and any other by asking it once through each forge's
+version or metadata endpoint with the user's login, since a name cannot tell a
+GitHub Enterprise Server or a self-hosted GitLab from Forgejo. The daemon records
+each answer in its state; a global `[forges."<host>"] type` pins one instead and
+is never asked, and a host that answers as none fails with a message naming that
+setting. Each process remembers the answers it resolved, so links of the host
+parse the same way; a link of a host not yet resolved is classified by name, as
+GitLab for a `gitlab` name label or a glab login and otherwise as Forgejo, until
+its repository is looked up. Host types describe hosts rather than
+repositories, so they are global only, like `[bitbucket]`. GitLab-only concepts such as approval rules and merge trains
 stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as
 `[secrets]` commands do, and Shoal still stores no token; agents act with the

@@ -38,7 +38,7 @@ impl Manager {
         action.validate(kind)?;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        let forge = workspace_forge(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
         let input = match input {
             Some(input) => input,
             None => linked(&workspace, kind)?,
@@ -72,7 +72,7 @@ impl Manager {
         if urls.is_empty() {
             return Ok(());
         }
-        let forge = workspace_forge(workspace).await?;
+        let forge = self.workspace_forge(workspace).await?;
         let account = self.agent_account(workspace).await?;
         let action = Action::Edit(Edit {
             draft: Some(draft),
@@ -119,12 +119,20 @@ impl Manager {
         }
     }
 
+    /// The forge of the workspace's `origin`.
+    pub(super) async fn workspace_forge(&self, workspace: &Workspace) -> Result<ForgeRepo> {
+        let remote = crate::repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("forge actions need an origin remote")?;
+        self.forge(&remote).await
+    }
+
     pub(super) async fn workspace_forge_account(
         &self,
         workspace: &Workspace,
     ) -> Result<(ForgeRepo, Account)> {
         Ok((
-            workspace_forge(workspace).await?,
+            self.workspace_forge(workspace).await?,
             self.agent_account(workspace).await?,
         ))
     }
@@ -572,14 +580,6 @@ fn description(body: Option<String>, issue: Option<u64>) -> String {
     };
     let closing = format!("Closes #{number}");
     body.unwrap_or(closing)
-}
-
-/// The forge of the workspace's `origin`.
-pub(super) async fn workspace_forge(workspace: &Workspace) -> Result<ForgeRepo> {
-    let remote = crate::repository::remote_url_from_path(&workspace.path)
-        .await?
-        .context("forge actions need an origin remote")?;
-    ForgeRepo::parse(&remote)
 }
 
 pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {

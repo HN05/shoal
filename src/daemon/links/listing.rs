@@ -20,7 +20,7 @@ impl Manager {
     ) -> Result<Vec<Item>> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        let forge = super::actions::workspace_forge(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
         let account = if scoped {
             self.agent_account(&workspace).await?
         } else {

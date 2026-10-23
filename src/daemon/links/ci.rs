@@ -2,7 +2,7 @@
 //! as the workspace's agent account.
 use anyhow::{Context, Result};
 
-use super::actions::{linked, workspace_forge};
+use super::actions::linked;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
@@ -26,7 +26,7 @@ impl Manager {
         }
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        let forge = workspace_forge(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
         let input = match item {
             Some(input) => input,
             None => linked(&workspace, ItemKind::Pr)?,

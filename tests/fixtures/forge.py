@@ -11,6 +11,8 @@ each successful body, and answers a request that names its tag in
 If-None-Match with 304. Every request is appended to
 $HOME/forge/requests.jsonl with its body, credentials and status; an uploaded
 file's body is {"file": name, "type": content type, "bytes": size}.
+The server reports a Forgejo version, unlogged, when no response names
+"GET version", so Shoal recognizes it as Forgejo.
 """
 import hashlib
 import json
@@ -23,9 +25,13 @@ ROOT = os.path.join(os.environ["HOME"], "forge")
 LOG = os.path.join(ROOT, "requests.jsonl")
 
 
-def respond(key, body, auth=None, prefix=False, tag=None):
+def load_responses():
     with open(os.path.join(ROOT, "responses.json")) as f:
-        responses = json.load(f)
+        return json.load(f)
+
+
+def respond(key, body, auth=None, prefix=False, tag=None):
+    responses = load_responses()
     if prefix:
         matches = [k for k in responses if key == k or key.startswith(k + " ")]
         key = max(matches, key=len) if matches else key
@@ -105,12 +111,16 @@ class Handler(BaseHTTPRequestHandler):
         else:
             body = json.loads(data) if length else None
         path = self.path.removeprefix("/api/v1/")
-        status, answer, headers = respond(
-            f"{self.command} {path}",
-            body,
-            self.headers.get("Authorization"),
-            tag=self.headers.get("If-None-Match"),
-        )
+        key = f"{self.command} {path}"
+        if key == "GET version" and key not in load_responses():
+            status, answer, headers = 200, {"version": "11.0.0+gitea-1.22.0"}, {}
+        else:
+            status, answer, headers = respond(
+                key,
+                body,
+                self.headers.get("Authorization"),
+                tag=self.headers.get("If-None-Match"),
+            )
         data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
         self.send_response(status)
         if status == 200:

@@ -93,6 +93,12 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
 # email = "you@example.com"
 
+# The API a forge host serves, set instead of letting the daemon ask the host
+# once: "github", "gitlab", "forgejo" (also Gitea) or "bitbucket".
+# See docs/reference.md#forges.
+# [forges."git.example.com"]
+# type = "gitlab"
+
 # Additional AI tools: command runs one as `shoal droid`, and
 # shoal skill install adds <skill>/SKILL.md beneath skill_dir.
 # [ai.droid]
