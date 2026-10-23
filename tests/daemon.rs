@@ -99,6 +99,18 @@ fn daemon_guard_reaps_child_when_a_test_panics() {
     );
 }
 
+/// A failed test shows how its daemon ended and everything it logged.
+#[test]
+fn daemon_guard_reports_the_daemon_exit_and_log() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let mut daemon = DaemonGuard::start(root.path(), &mut command(root.path()));
+    daemon.child.kill().unwrap();
+    daemon.child.wait().unwrap();
+    let report = daemon.report();
+    assert!(report.starts_with("daemon exited (signal: 9"), "{report}");
+    assert!(report.contains("shoal daemon listening on"), "{report}");
+}
+
 #[test]
 fn cli_connects_to_daemon_and_stops_it() {
     let mut daemon = Daemon::start();
@@ -158,6 +170,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
         .stderr(log.try_clone().unwrap());
     let mut daemon = DaemonGuard {
         child: launch.spawn().unwrap(),
+        stderr: Some(log),
     };
     wait_until("daemon startup", || {
         assert!(
@@ -249,6 +262,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
         .stderr(Stdio::null());
     let mut daemon = DaemonGuard {
         child: launch.spawn().unwrap(),
+        stderr: None,
     };
     // A nonblocking writer opens only once the daemon is reading.
     let mut writer = None;

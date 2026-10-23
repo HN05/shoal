@@ -19774,6 +19774,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         .stderr(Stdio::null());
     let mut daemon = DaemonGuard {
         child: launch.spawn().unwrap(),
+        stderr: None,
     };
     let shoal = || cli(root.path());
     wait_until("daemon startup", || {
