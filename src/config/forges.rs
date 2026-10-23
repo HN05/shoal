@@ -6,11 +6,11 @@ use serde::Deserialize;
 
 use crate::forge::backends::ForgeKind;
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct Forges(BTreeMap<String, Forge>);
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Forge {
     /// The forge's API, pinned so the host is never asked.
@@ -41,7 +41,12 @@ impl Forges {
     }
 
     pub fn validate(&self) -> Result<()> {
+        let mut seen = std::collections::BTreeSet::new();
         for host in self.0.keys() {
+            ensure!(
+                seen.insert(host.to_ascii_lowercase()),
+                "forges.{host:?} names a host another [forges] entry already names in other letter case"
+            );
             ensure!(
                 !host.is_empty()
                     && host
@@ -76,5 +81,10 @@ mod tests {
         let url: Forges =
             toml::from_str("[\"https://git.example.com\"]\ntype = \"github\"\n").unwrap();
         assert!(url.validate().is_err());
+        let twice: Forges = toml::from_str(
+            "[\"Git.example.com\"]\ntype = \"github\"\n[\"git.example.com\"]\ntype = \"gitlab\"\n",
+        )
+        .unwrap();
+        assert!(twice.validate().is_err());
     }
 }
