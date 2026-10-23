@@ -287,13 +287,21 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
 
 /// Hand `chat` to `session`'s process, stopping the session when the daemon
 /// cannot record it, since the chat would end with this process.
-async fn hand_over(ctx: &Context, chat: &Chat, mut session: Child) -> Result<Chat> {
+async fn hand_over(ctx: &Context, chat: &Chat, session: Child) -> Result<Chat> {
     let moved = client::move_chat(&ctx.paths, chat, session.id()).await;
     if moved.is_err() {
-        let _ = session.kill();
-        let _ = session.wait();
+        stop_session(session);
     }
     moved
+}
+
+/// Stop a session started by [`spawn_session`] with the agent it started:
+/// the session leads its own process group.
+fn stop_session(mut session: Child) {
+    // SAFETY: killpg takes no pointers. The leader is not reaped yet, so its
+    // ID still names this group alone.
+    unsafe { libc::killpg(session.id() as libc::pid_t, libc::SIGKILL) };
+    let _ = session.wait();
 }
 
 /// Start `command` in its own session at the checkout with the chat's
@@ -448,6 +456,50 @@ impl Opening {
             (Some(_), true) => "\nPrompt delivered to the session",
             (Some(_), false) => "\nPrompt saved for you to send from the app",
             (None, _) => "",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        os::unix::process::CommandExt,
+        time::{Duration, Instant},
+    };
+
+    use super::*;
+
+    #[test]
+    fn stopping_a_session_stops_the_agent_it_started() {
+        let directory = tempfile::tempdir().unwrap();
+        let agent_pid = directory.path().join("agent.pid");
+        let session = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 600 & echo $! > \"$1\"; wait")
+            .arg("session")
+            .arg(&agent_pid)
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let agent = loop {
+            if let Ok(pid) = std::fs::read_to_string(&agent_pid)
+                && let Ok(pid) = pid.trim().parse::<libc::pid_t>()
+            {
+                break pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the session never started its agent"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        stop_session(session);
+        // The orphaned agent is reaped by init once it dies.
+        // SAFETY: kill takes no pointers; signal 0 only checks the process exists.
+        while unsafe { libc::kill(agent, 0) } == 0 {
+            assert!(Instant::now() < deadline, "the agent outlived its session");
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
 }
