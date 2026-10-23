@@ -8,7 +8,7 @@ use crate::{
     agent::Agent,
     cli::{ItemArgs, RelationArgs, client, context::Context, ui},
     forge::{
-        ForgeRepo, IssueInput, PullRequest,
+        IssueInput, PullRequest,
         items::link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
@@ -351,7 +351,7 @@ pub(super) async fn add(
             Some(link) => super::issues::registered_remote(
                 ctx,
                 &mut repos,
-                ForgeRepo::parse(&link.repository.repository_url())?,
+                link.repository.clone(),
                 "shoal add <link> --repo <repository>",
             )
             .await?

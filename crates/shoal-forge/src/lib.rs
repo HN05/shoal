@@ -43,7 +43,7 @@ impl IssueInput {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ForgeRepo {
     pub host: String,
     pub path: String,
@@ -133,6 +133,12 @@ impl ForgeRepo {
             path: path.into(),
             web_scheme,
         })
+    }
+
+    /// Whether `remote` names this repository, read as a remote of the same
+    /// forge, so a nested GitLab project matches before its host resolves.
+    pub fn is_remote(&self, remote: &str) -> bool {
+        Self::parse_linked(remote, Some(self.kind)).is_ok_and(|remote| remote == *self)
     }
 
     /// `host` as a repository without a path, for asking it as `kind`.

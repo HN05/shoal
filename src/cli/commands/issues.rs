@@ -110,7 +110,7 @@ async fn repository_with_remote<'a>(
         let Some(remote) = repository::remote_url_from_source(&repo.source).await? else {
             continue;
         };
-        if ForgeRepo::parse(&remote).is_ok_and(|remote| remote == forge) {
+        if forge.is_remote(&remote) {
             matches.push(repo);
         }
     }
@@ -294,9 +294,18 @@ mod tests {
             repo("a", "https://github.com/team/repo.git"),
             repo("b", "git@forge.example:team/repo.git"),
             repo("c", "ssh://git@forge.example:2222/team/repo"),
+            repo("d", "git@code.example:group/sub/repo.git"),
         ];
         let url = "https://github.com/team/repo/issues/7#issuecomment-1";
         assert_eq!(repository_for(&repos, url).await.unwrap().id, "a");
+        // A nested GitLab project matches by its link's routes, before its
+        // host is resolved.
+        let url = "https://code.example/group/sub/repo/-/issues/7";
+        assert_eq!(repository_for(&repos, url).await.unwrap().id, "d");
+        let pull =
+            ForgeRepo::from_pull_url("https://code.example/group/sub/repo/-/merge_requests/3");
+        let pull = repository_with_remote(&repos, pull.unwrap(), "retry").await;
+        assert_eq!(pull.unwrap().id, "d");
         let error = repository_for(&repos, "https://forge.example/team/repo/issues/7")
             .await
             .unwrap_err()
