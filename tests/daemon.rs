@@ -860,6 +860,7 @@ fn doctor_reports_a_stopped_daemon_without_creating_state() {
             "cleanup",
             "root_dir",
             "checkout:*",
+            "forge:*",
             "worktrees:*",
             "workspaces"
         ]

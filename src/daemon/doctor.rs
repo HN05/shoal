@@ -1,4 +1,5 @@
-//! Read-only daemon diagnostics, separate from workspace recovery mutations.
+//! Daemon diagnostics, separate from workspace recovery mutations. They
+//! change no work; asking forge hosts again records their answers.
 use std::{collections::HashSet, ffi::OsStr, path::PathBuf};
 
 use anyhow::Result;
@@ -116,6 +117,7 @@ pub fn unavailable_checks() -> Vec<Check> {
             "cleanup".to_owned(),
             ROOT_DIR_CHECK.to_owned(),
             checkout_check_name("*"),
+            crate::daemon::forge_hosts::forge_check_name("*"),
             worktrees_check_name("*"),
             "workspaces".to_owned(),
         ])
@@ -134,6 +136,7 @@ impl Manager {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
         checks.push(self.cleanup_check());
         checks.push(root_dir(self.config().root_dir(&self.paths)).await);
+        checks.extend(self.forge_host_checks().await?);
         for repo in self.repositories().await? {
             checks.push(checkout(&repo).await);
             let Some(root) = &repo.workspaces_dir else {

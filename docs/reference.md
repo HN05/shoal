@@ -1811,9 +1811,9 @@ Shoal reads and changes the issues and PRs of the forge serving a repository's
 Bitbucket Cloud. The daemon asks any other host once which API it serves, through
 GitHub's `meta` with `gh`, GitLab's `version` with `glab`, and Forgejo's or
 Gitea's `version` with the login below, and records the answer; GitHub Enterprise
-Server and self-hosted GitLab need the CLI logged in to the host. A host that
-answers as none of them fails until you set its type, which also stops Shoal
-asking it:
+Server and self-hosted GitLab need the CLI logged in to the host. `shoal doctor`
+asks recorded hosts again. A host that answers as none of them fails until you
+set its type, which also stops Shoal asking it:
 
 ```toml
 [forges."git.example.com"]
@@ -2575,10 +2575,14 @@ the daemon's PATH, whether the daemon can create a file in `root_dir`,
 registered checkouts whose Git config sets `core.bare`
 although they have a working tree, Git worktrees under registered repository
 roots that Shoal does not track, and shell integration in the calling shell.
-They run regardless of the workspace selection and only diagnose, even with
-`--repair`. An unavailable or mismatched daemon leaves its checks marked as
-skipped (`dependency:<tool>`, `checkout:*` and `worktrees:*` when repository
-names are unavailable); doctor never starts or restarts it.
+Each forge host the daemon recorded is asked again which API it serves
+(`forge:<host>`): a new answer replaces the recorded one, and a host that
+cannot be asked keeps it with a warning; a host whose type is set in
+`[forges]` is not asked. They run regardless of the workspace selection and
+otherwise only diagnose, even with `--repair`. An unavailable or mismatched
+daemon leaves its checks marked as skipped (`dependency:<tool>`, `checkout:*`,
+`forge:*` and `worktrees:*` when repository names are unavailable); doctor
+never starts or restarts it.
 When current checks find no issues, reports show the recorded failure and repair guidance.
 `doctor` is unavailable inside scoped executions. Before accepting requests or
 running cleanup, daemon startup atomically marks unfinished simulator cleans

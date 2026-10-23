@@ -886,8 +886,9 @@ The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
 version or metadata endpoint with the user's login, since a name cannot tell a
 GitHub Enterprise Server or a self-hosted GitLab from Forgejo. The daemon records
-each answer in its state; a global `[forges."<host>"] type` pins one instead and
-is never asked, and a host that answers as none fails with a message naming that
+each answer in its state and asks recorded hosts again from `doctor`, which
+otherwise changes no state without `--repair`; a global `[forges."<host>"] type`
+pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
 parse the same way; a link of a host not yet resolved is classified by name, as
 GitLab for a `gitlab` name label or a glab login and otherwise as Forgejo, until

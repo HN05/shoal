@@ -8,7 +8,10 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::{
     config::forges,
-    daemon::workspace::Manager,
+    daemon::{
+        doctor::{Check, CheckStatus},
+        workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         backends::ForgeKind,
@@ -28,6 +31,9 @@ impl HostTypes for ForgeHosts<'_> {
         self.0.forge_type(host, scheme)
     }
 }
+
+/// A recorded answer: the host, its forge, and the scheme it was asked over.
+type Recorded = (String, ForgeKind, String);
 
 impl Manager {
     pub(crate) fn forge_hosts(&self) -> ForgeHosts<'_> {
@@ -104,6 +110,17 @@ impl Manager {
             .await
     }
 
+    async fn recorded_forge_hosts(&self) -> Result<Vec<Recorded>> {
+        self.store
+            .run(|db| {
+                Ok(db
+                    .prepare("SELECT host,kind,scheme FROM forge_hosts ORDER BY host")?
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
     async fn record_forge_host(&self, host: &str, kind: ForgeKind, scheme: &str) -> Result<()> {
         let (host, scheme) = (host.to_owned(), scheme.to_owned());
         self.store
@@ -117,4 +134,49 @@ impl Manager {
             })
             .await
     }
+
+    /// Ask every recorded host again, recording each new answer; a pinned
+    /// host is not asked.
+    pub(crate) async fn forge_host_checks(&self) -> Result<Vec<Check>> {
+        let recorded = self.recorded_forge_hosts().await?;
+        Ok(futures_util::future::join_all(
+            recorded
+                .iter()
+                .map(|(host, kind, scheme)| self.recheck_forge_host(host, *kind, scheme)),
+        )
+        .await)
+    }
+
+    async fn recheck_forge_host(&self, host: &str, recorded: ForgeKind, scheme: &str) -> Check {
+        let name = forge_check_name(host);
+        if let Some(kind) = self.config().forges.pinned(host) {
+            return Check::new(
+                name,
+                CheckStatus::Ok,
+                format!("Pinned to {kind} by the global config"),
+            );
+        }
+        let scheme = if scheme == "http" { "http" } else { "https" };
+        match self.ask_forge_type(host, scheme).await {
+            Ok(kind) if kind == recorded => {
+                Check::new(name, CheckStatus::Ok, format!("Answers as {kind}"))
+            }
+            Ok(kind) => Check::new(
+                name,
+                CheckStatus::Warning,
+                format!(
+                    "Now answers as {kind} instead of {recorded}; Shoal uses {kind} from now on"
+                ),
+            ),
+            Err(error) => Check::new(
+                name,
+                CheckStatus::Warning,
+                format!("Could not ask it again, so Shoal keeps using {recorded}: {error:#}"),
+            ),
+        }
+    }
+}
+
+pub fn forge_check_name(host: &str) -> String {
+    format!("forge:{host}")
 }
