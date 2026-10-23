@@ -1,17 +1,18 @@
 //! Cooperative TCP port reservations owned by a worktree.
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{TransactionBehavior, params};
+use rusqlite::{Connection, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    ops::RangeInclusive,
 };
 
 use crate::{
-    config::repo::ConflictPolicy,
+    config::{Ports, repo::ConflictPolicy},
     daemon::{
         allocation::Allocation,
-        approvals::{self, ApprovalRequest, PortSpecification, Specification, Target},
+        approvals::{self, ApprovalRequest, Lifetime, PortSpecification, Specification, Target},
         notifications::NotificationKind,
         scope::Caller,
         store,
@@ -124,128 +125,21 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
-        let range = self.workspace_settings(&workspace).await?.ports;
-        let definition = range.definitions.get(&name).cloned().unwrap_or_default();
-        let preferred = request.port.or(definition.port);
-        let env_var = request.env_var.clone().or(definition.env);
-        let reason = request.reason.clone().or(definition.reason);
-        let policy = request
-            .on_conflict
-            .or(definition.on_conflict)
-            .unwrap_or(range.on_conflict);
-        validate::lowercase_name("port", &name)?;
-        ensure!(preferred != Some(0), "port zero cannot be reserved");
-        validate::reason("port", reason.as_deref())?;
-        let default_env = default_env_var(&name);
-        if let Some(env_var) = &env_var {
-            validate_env_var(env_var, &default_env)?;
-        }
+        let ports = self.workspace_settings(&workspace).await?.ports;
+        let claim =
+            PortClaim::resolve(workspace.id.clone(), name, request, ports, caller.is_some())?;
         self.touch(&workspace.id).await;
-        let workspace_name = workspace.name.clone();
-        let scoped = caller.is_some();
-        let (outcome, conflict) = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &workspace.id)?;
-                let existing = store::ports(&tx, Some(&workspace.id))?;
-                if let Some(reservation) = existing.iter().find(|p| p.name == name) {
-                    ensure!(
-                        request.port.is_none_or(|port| port == reservation.port)
-                            && request
-                                .env_var
-                                .as_ref()
-                                .is_none_or(|env| env == &reservation.env_var),
-                        "port name already reserved with different settings; release it first"
-                    );
-                    let mut reservation = reservation.clone();
-                    if let Some(reason) = request.reason {
-                        tx.execute(
-                            "UPDATE ports SET reason=?3 WHERE workspace_id=?1 AND name=?2",
-                            params![workspace.id, name, reason],
-                        )?;
-                        reservation.reason = Some(reason);
-                    }
-                    tx.commit()?;
-                    return Ok((Acquisition::Allocation(Allocation::Granted(reservation)), None));
-                }
-                let env_var = env_var.unwrap_or(default_env);
-                ensure!(
-                    !existing.iter().any(|p| p.env_var == env_var),
-                    "environment variable already assigned to another port"
-                );
-                if scoped && definition.requires_approval {
-                    let bound = PortSpecification { env: env_var.clone(), on_conflict: policy, preferred,
-                        range: [range.start, range.end] };
-                    let approval = ApprovalRequest::new(&workspace.id, Target::Port(name.clone()), &name,
-                        Specification::Port(bound), definition.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = approvals::check(&tx, approval)? {
-                        tx.commit()?;
-                        return Ok((Acquisition::Allocation(Allocation::Approval(Box::new(approval))), None));
-                    }
-                }
-                let reserved = store::ports(&tx, None)?;
-                let port = match preferred {
-                    Some(port) if !reserved.iter().any(|p| p.port == port) && available(port)? => port,
-                    _ => {
-                        let selected = first_available(&reserved, range.start..=range.end, available)?;
-                        let Some(port) = selected else {
-                            bail!(
-                                "no available TCP ports in {}..={}",
-                                range.start,
-                                range.end
-                            );
-                        };
-                        if let Some(requested_port) = preferred
-                            && matches!(policy, ConflictPolicy::Suggest)
-                        {
-                            let conflict =
-                                format!("port {name}: {requested_port} is in use; suggested {port}");
-                            return Ok((
-                                Acquisition::Suggested(PortSuggestion {
-                                    workspace_id: workspace.id,
-                                    name,
-                                    requested_port,
-                                    suggested_port: port,
-                                    env_var,
-                                    reason,
-                                }),
-                                Some(conflict),
-                            ));
-                        }
-                        port
-                    }
-                };
-                let conflict = preferred.filter(|requested| *requested != port).map(|requested| {
-                    format!("port {name}: {requested} is in use; reserved {port} instead")
-                });
-                tx.execute(
-                    "INSERT INTO ports (workspace_id,name,port,env_var,reason) VALUES (?1,?2,?3,?4,?5)",
-                    params![workspace.id, name, port, env_var, reason],
-                )?;
-                tx.commit()?;
-                Ok((
-                    Acquisition::Allocation(Allocation::Granted(PortReservation {
-                        workspace_id: workspace.id,
-                        name,
-                        port,
-                        env_var,
-                        reason,
-                    })),
-                    conflict,
-                ))
-            })
-            .await?;
+        let (outcome, conflict) = self.store.run(move |db| claim_port(db, claim)).await?;
         if let Some(conflict) = conflict {
             self.notify(
-                Some(&workspace_name),
+                Some(&workspace.name),
                 NotificationKind::PortConflict,
                 conflict,
             )
             .await;
         }
         if let Acquisition::Allocation(allocation) = &outcome {
-            self.notify_allocation(&workspace_name, allocation, "")
+            self.notify_allocation(&workspace.name, allocation, "")
                 .await;
         }
         Ok(outcome)
@@ -292,4 +186,213 @@ impl Manager {
             })
             .await
     }
+}
+
+/// A named port request resolved against the repository's port settings:
+/// caller overrides win over the port's definition, then the range defaults.
+struct PortClaim {
+    workspace_id: String,
+    name: String,
+    /// The caller's explicit settings, which an existing reservation must match.
+    request: PortRequest,
+    preferred: Option<u16>,
+    env_var: String,
+    reason: Option<String>,
+    policy: ConflictPolicy,
+    range: RangeInclusive<u16>,
+    /// Set when the caller is scoped and the port requires approval.
+    approval: Option<Lifetime>,
+}
+
+impl PortClaim {
+    fn resolve(
+        workspace_id: String,
+        name: String,
+        request: PortRequest,
+        ports: Ports,
+        scoped: bool,
+    ) -> Result<Self> {
+        validate::lowercase_name("port", &name)?;
+        let definition = ports.definitions.get(&name).cloned().unwrap_or_default();
+        let preferred = request.port.or(definition.port);
+        ensure!(preferred != Some(0), "port zero cannot be reserved");
+        let reason = request.reason.clone().or(definition.reason);
+        validate::reason("port", reason.as_deref())?;
+        let default_env = default_env_var(&name);
+        let env_var = match request.env_var.clone().or(definition.env) {
+            Some(env_var) => {
+                validate_env_var(&env_var, &default_env)?;
+                env_var
+            }
+            None => default_env,
+        };
+        let policy = request
+            .on_conflict
+            .or(definition.on_conflict)
+            .unwrap_or(ports.on_conflict);
+        Ok(Self {
+            workspace_id,
+            name,
+            request,
+            preferred,
+            env_var,
+            reason,
+            policy,
+            range: ports.start..=ports.end,
+            approval: (scoped && definition.requires_approval)
+                .then_some(definition.approval_lifetime),
+        })
+    }
+
+    fn conflict(&self, requested: u16, outcome: &str) -> String {
+        format!("port {}: {requested} is in use; {outcome}", self.name)
+    }
+}
+
+/// The port a new reservation takes, or the free port it may only suggest
+/// when its preferred port is taken.
+enum Selection {
+    Reserve(u16),
+    Suggest { requested: u16, suggested: u16 },
+}
+
+/// Claim or renew atomically, returning the outcome and any port conflict to
+/// report. Grants and approval requests commit; a suggestion changes nothing.
+fn claim_port(db: &mut Connection, claim: PortClaim) -> Result<(Acquisition, Option<String>)> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    store::require_ready(&tx, &claim.workspace_id)?;
+    let existing = store::ports(&tx, Some(&claim.workspace_id))?;
+    if let Some(reservation) = existing.iter().find(|p| p.name == claim.name) {
+        let renewed = renew_reservation(tx, reservation, claim.request)?;
+        return Ok((Acquisition::Allocation(Allocation::Granted(renewed)), None));
+    }
+    ensure!(
+        !existing.iter().any(|p| p.env_var == claim.env_var),
+        "environment variable already assigned to another port"
+    );
+    if let Some(lifetime) = claim.approval {
+        let bound = PortSpecification {
+            env: claim.env_var.clone(),
+            on_conflict: claim.policy,
+            preferred: claim.preferred,
+            range: [*claim.range.start(), *claim.range.end()],
+        };
+        let approval = ApprovalRequest::new(
+            &claim.workspace_id,
+            Target::Port(claim.name.clone()),
+            &claim.name,
+            Specification::Port(bound),
+            lifetime,
+            claim.request.reason.as_deref(),
+        );
+        if let Some(approval) = approvals::check(&tx, approval)? {
+            tx.commit()?;
+            return Ok((
+                Acquisition::Allocation(Allocation::Approval(Box::new(approval))),
+                None,
+            ));
+        }
+    }
+    let port = match select_port(&tx, &claim)? {
+        Selection::Reserve(port) => port,
+        Selection::Suggest {
+            requested,
+            suggested,
+        } => {
+            let conflict = claim.conflict(requested, &format!("suggested {suggested}"));
+            let suggestion = PortSuggestion {
+                workspace_id: claim.workspace_id,
+                name: claim.name,
+                requested_port: requested,
+                suggested_port: suggested,
+                env_var: claim.env_var,
+                reason: claim.reason,
+            };
+            return Ok((Acquisition::Suggested(suggestion), Some(conflict)));
+        }
+    };
+    let conflict = claim
+        .preferred
+        .filter(|requested| *requested != port)
+        .map(|requested| claim.conflict(requested, &format!("reserved {port} instead")));
+    let reservation = PortReservation {
+        workspace_id: claim.workspace_id,
+        name: claim.name,
+        port,
+        env_var: claim.env_var,
+        reason: claim.reason,
+    };
+    insert_reservation(&tx, &reservation)?;
+    tx.commit()?;
+    Ok((
+        Acquisition::Allocation(Allocation::Granted(reservation)),
+        conflict,
+    ))
+}
+
+/// An existing reservation with the same name is returned again, refreshing
+/// its reason, as long as the request does not contradict it.
+fn renew_reservation(
+    tx: Transaction<'_>,
+    existing: &PortReservation,
+    request: PortRequest,
+) -> Result<PortReservation> {
+    ensure!(
+        request.port.is_none_or(|port| port == existing.port)
+            && request
+                .env_var
+                .as_ref()
+                .is_none_or(|env| env == &existing.env_var),
+        "port name already reserved with different settings; release it first"
+    );
+    let mut reservation = existing.clone();
+    if let Some(reason) = request.reason {
+        tx.execute(
+            "UPDATE ports SET reason=?3 WHERE workspace_id=?1 AND name=?2",
+            params![reservation.workspace_id, reservation.name, reason],
+        )?;
+        reservation.reason = Some(reason);
+    }
+    tx.commit()?;
+    Ok(reservation)
+}
+
+/// The preferred port when no reservation holds it and it is free, otherwise
+/// the first free port in the range, which the conflict policy may only suggest.
+fn select_port(tx: &Transaction<'_>, claim: &PortClaim) -> Result<Selection> {
+    let reserved = store::ports(tx, None)?;
+    if let Some(port) = claim.preferred
+        && !reserved.iter().any(|p| p.port == port)
+        && available(port)?
+    {
+        return Ok(Selection::Reserve(port));
+    }
+    let Some(port) = first_available(&reserved, claim.range.clone(), available)? else {
+        bail!(
+            "no available TCP ports in {}..={}",
+            claim.range.start(),
+            claim.range.end()
+        );
+    };
+    Ok(match (claim.preferred, claim.policy) {
+        (Some(requested), ConflictPolicy::Suggest) => Selection::Suggest {
+            requested,
+            suggested: port,
+        },
+        _ => Selection::Reserve(port),
+    })
+}
+
+fn insert_reservation(tx: &Transaction<'_>, reservation: &PortReservation) -> Result<()> {
+    tx.execute(
+        "INSERT INTO ports (workspace_id,name,port,env_var,reason) VALUES (?1,?2,?3,?4,?5)",
+        params![
+            reservation.workspace_id,
+            reservation.name,
+            reservation.port,
+            reservation.env_var,
+            reservation.reason
+        ],
+    )?;
+    Ok(())
 }
