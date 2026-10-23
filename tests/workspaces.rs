@@ -873,6 +873,64 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
+fn export_all_checks_every_workspace_before_removing_any() {
+    let fixture = Fixture::new();
+    let paths: Vec<_> = ["first", "second"]
+        .into_iter()
+        .map(|name| {
+            let workspace = fixture.add(name);
+            let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+            fs::write(path.join("notes"), format!("{name}\n")).unwrap();
+            path
+        })
+        .collect();
+    fixture.ok(&["hold", "acquire", "second", "--name", "review"]);
+    let repo = fixture.repo.to_str().unwrap();
+    let directory = fixture.root.path().join("exports");
+    let export = |extra: &[&str]| {
+        let mut args = vec!["export", "--repo", repo, "--all", "-o"];
+        args.push(directory.to_str().unwrap());
+        args.extend(extra);
+        fixture.run(&args)
+    };
+
+    // The hold on one workspace keeps both.
+    let refused = export(&[]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("pass --yes"),
+        "{refused:?}"
+    );
+    assert!(paths.iter().all(|path| path.exists()));
+    assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+    // So does a file that one of them would overwrite.
+    fs::write(directory.join("first.shoal"), "").unwrap();
+    let refused = export(&["--yes"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("first: ") && stderr.contains("exists"),
+        "{stderr}"
+    );
+    assert!(paths.iter().all(|path| path.exists()));
+    fs::remove_file(directory.join("first.shoal")).unwrap();
+
+    let exported = export(&["--yes", "--json"]);
+    assert!(exported.status.success(), "{exported:?}");
+    let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
+    let names: Vec<_> = exported["exported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|export| export["manifest"]["workspace"]["name"].clone())
+        .collect();
+    assert_eq!(names, ["first", "second"]);
+    assert_eq!(exported["failed"], serde_json::json!([]));
+    assert!(paths.iter().all(|path| !path.exists()));
+    assert!(directory.join("first.shoal").exists() && directory.join("second.shoal").exists());
+}
+
+#[test]
 fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("tabbed");

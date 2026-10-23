@@ -14,7 +14,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::RestoredWorkspace,
+    model::{RestoredWorkspace, Workspace},
     protocol::Method,
     removal::{RemovalCheck, UnsavedWork},
     transfer::{ExportedWorkspace, Import},
@@ -31,13 +31,34 @@ pub(super) async fn export(
     file: PathBuf,
     yes: bool,
 ) -> Result<i32> {
+    ensure_unscoped_export(ctx)?;
+    let output = Output::reserve(&file)?;
+    let exported = export_workspace(ctx, workspace, yes, &output).await?;
+    output.report(ctx, &exported)
+}
+
+/// `shoal export --all`: export every workspace of `repository` to a file of
+/// its own in `directory`, once each one can be exported, so a workspace that
+/// cannot be leaves every other one in place.
+pub(super) async fn export_all(
+    ctx: &Context,
+    repository: String,
+    directory: PathBuf,
+    yes: bool,
+) -> Result<i32> {
+    ensure_unscoped_export(ctx)?;
+    let workspaces = repository_workspaces(ctx, repository).await?;
+    let directory = export_directory(&directory)?;
+    let planned = check_exports(ctx, &workspaces, &directory, yes).await?;
+    export_each(ctx, planned).await.report(ctx, &directory)
+}
+
+fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot export workspaces; ask the user to run shoal export"
     );
-    let output = Output::reserve(&file)?;
-    let exported = export_workspace(ctx, workspace, yes, &output).await?;
-    output.report(ctx, &exported)
+    Ok(())
 }
 
 /// `shoal import`: open the workspace exported to `file` in the repository
@@ -164,21 +185,39 @@ async fn export_workspace(
     yes: bool,
     output: &Output,
 ) -> Result<ExportedWorkspace> {
-    let method = |workspace, unsaved| Method::ExportWorkspace {
-        workspace,
-        unsaved,
-        caller_pid: std::process::id(),
-        file: output.file(),
-    };
     if let Some(selector) = &workspace
         && !workspace_exists(ctx, selector).await?
     {
-        let method = method(selector.clone(), UnsavedWork::default());
+        let method = Method::ExportWorkspace {
+            workspace: selector.clone(),
+            unsaved: UnsavedWork::default(),
+            caller_pid: std::process::id(),
+            file: output.file(),
+        };
         return request::<ExportedWorkspace>(&ctx.paths, method).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check = check_export(ctx, &workspace, yes, output).await?;
-    let method = method(workspace, UnsavedWork::confirming(&check));
+    let check = check_export(ctx, &workspace, output).await?;
+    let action = format!(
+        "Export workspace: {}\nRemoves it here and releases its holds:",
+        check.workspace.name
+    );
+    confirm_holds(ctx, yes, action, &[&check])?;
+    export_checked(ctx, &check, output).await
+}
+
+/// Remove the workspace `check` describes and export it to `output`.
+async fn export_checked(
+    ctx: &Context,
+    check: &RemovalCheck,
+    output: &Output,
+) -> Result<ExportedWorkspace> {
+    let method = Method::ExportWorkspace {
+        workspace: check.workspace.id.clone(),
+        unsaved: UnsavedWork::confirming(check),
+        caller_pid: std::process::id(),
+        file: output.file(),
+    };
     let exported = super::workspaces::leaving(
         ctx,
         &check.workspace,
@@ -203,14 +242,8 @@ async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
 }
 
 /// What removing the workspace for an export would delete, refusing unsaved
-/// files a checkpoint cannot keep and an output the removal would cut off,
-/// after the user lets its holds go.
-async fn check_export(
-    ctx: &Context,
-    workspace: &str,
-    yes: bool,
-    output: &Output,
-) -> Result<RemovalCheck> {
+/// files a checkpoint cannot keep and an output the removal would cut off.
+async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result<RemovalCheck> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
         Method::CheckRemoval {
@@ -235,23 +268,31 @@ async fn check_export(
             "this tab closes when the export removes the workspace, ending the stream; export to a file with -o, or from another tab"
         ),
     }
-    if !yes && !check.workspace.holds.is_empty() {
-        confirm_holds(ctx, &check)?;
-    }
     Ok(check)
 }
 
-/// Ask before releasing the holds external sessions keep on the workspace.
-fn confirm_holds(ctx: &Context, check: &RemovalCheck) -> Result<()> {
-    let mut action = format!(
-        "Export workspace: {}\nRemoves it here and releases its holds:",
-        check.workspace.name
-    );
-    for hold in &check.workspace.holds {
-        action.push_str("\n  ");
-        action.push_str(&hold.name);
-        if let Some(reason) = &hold.reason {
-            action.push_str(&format!(" ({reason})"));
+/// Ask with `action`, unless `yes` confirms it, before releasing the holds
+/// external sessions keep on the workspaces `checks` describe, naming each
+/// hold's workspace when there are several.
+fn confirm_holds(
+    ctx: &Context,
+    yes: bool,
+    mut action: String,
+    checks: &[&RemovalCheck],
+) -> Result<()> {
+    if yes || checks.iter().all(|check| check.workspace.holds.is_empty()) {
+        return Ok(());
+    }
+    for check in checks {
+        for hold in &check.workspace.holds {
+            action.push_str("\n  ");
+            if checks.len() > 1 {
+                action.push_str(&format!("{}: ", check.workspace.name));
+            }
+            action.push_str(&hold.name);
+            if let Some(reason) = &hold.reason {
+                action.push_str(&format!(" ({reason})"));
+            }
         }
     }
     ensure!(
@@ -259,4 +300,150 @@ fn confirm_holds(ctx: &Context, check: &RemovalCheck) -> Result<()> {
         "workspace export canceled"
     );
     Ok(())
+}
+
+/// The workspaces of `repository`, by name.
+async fn repository_workspaces(ctx: &Context, repository: String) -> Result<Vec<Workspace>> {
+    let repositories = client::repositories(&ctx.paths).await?;
+    let repo =
+        crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
+    let mut workspaces: Vec<Workspace> = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .filter(|workspace| workspace.repository_id == repo.id)
+        .collect();
+    ensure!(
+        !workspaces.is_empty(),
+        "{} has no workspaces to export",
+        crate::repository::name(repo)
+    );
+    workspaces.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(workspaces)
+}
+
+/// The directory an export of every workspace goes to, created when missing.
+fn export_directory(directory: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(directory)
+        .with_context(|| format!("create the directory {}", directory.display()))?;
+    std::fs::canonicalize(directory)
+        .with_context(|| format!("find the directory {}", directory.display()))
+}
+
+/// A workspace that passed its export check, with the file it goes to.
+struct PlannedExport {
+    check: RemovalCheck,
+    output: Output,
+}
+
+/// Check every workspace before exporting any, refusing with each one that
+/// cannot be exported, then let the user release all of their holds at once.
+async fn check_exports(
+    ctx: &Context,
+    workspaces: &[Workspace],
+    directory: &Path,
+    yes: bool,
+) -> Result<Vec<PlannedExport>> {
+    let mut planned = Vec::new();
+    let mut refusals = Vec::new();
+    for workspace in workspaces {
+        match plan_export(ctx, workspace, directory).await {
+            Ok(export) => planned.push(export),
+            Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
+        }
+    }
+    ensure!(
+        refusals.is_empty(),
+        "no workspace was exported, since some cannot be:\n  {}",
+        refusals.join("\n  ")
+    );
+    let action = format!(
+        "Export {} workspaces to {}\nRemoves them here and releases these holds:",
+        planned.len(),
+        directory.display()
+    );
+    let held: Vec<&RemovalCheck> = planned
+        .iter()
+        .map(|export| &export.check)
+        .filter(|check| !check.workspace.holds.is_empty())
+        .collect();
+    confirm_holds(ctx, yes, action, &held)?;
+    Ok(planned)
+}
+
+/// Reserve the workspace's file in `directory` and check its removal. The
+/// export goes on from this terminal after each removal, so it must not
+/// close with any of the workspaces.
+async fn plan_export(
+    ctx: &Context,
+    workspace: &Workspace,
+    directory: &Path,
+) -> Result<PlannedExport> {
+    let output = Output::reserve(&directory.join(format!("{}.shoal", workspace.name)))?;
+    let check = check_export(ctx, &workspace.id, &output).await?;
+    ensure!(
+        !crate::cli::terminal::closes_with(&ctx.paths, &workspace.id),
+        "this tab closes when the export removes the workspace, ending the export of the others; export from another tab"
+    );
+    Ok(PlannedExport { check, output })
+}
+
+/// Export each planned workspace, going on after one fails.
+async fn export_each(ctx: &Context, planned: Vec<PlannedExport>) -> ExportReport {
+    let mut report = ExportReport::default();
+    for PlannedExport { check, output } in planned {
+        let name = &check.workspace.name;
+        let file = output.file();
+        match export_checked(ctx, &check, &output).await {
+            Ok(exported) => {
+                if !ctx.json {
+                    println!("Exported {name} to {}", file.display());
+                }
+                report.exported.push(json!({
+                    "file": file,
+                    "manifest": exported.manifest,
+                    "removal": exported.removal,
+                }));
+            }
+            Err(error) => {
+                eprintln!("error: cannot export {name}: {error:#}");
+                report
+                    .failed
+                    .push(json!({"workspace": name, "error": format!("{error:#}")}));
+            }
+        }
+    }
+    report
+}
+
+/// What an export of every workspace wrote, and the workspaces it could not
+/// export.
+#[derive(Default)]
+struct ExportReport {
+    exported: Vec<serde_json::Value>,
+    failed: Vec<serde_json::Value>,
+}
+
+impl ExportReport {
+    fn report(self, ctx: &Context, directory: &Path) -> Result<i32> {
+        let exported = self.exported.len();
+        let message = if self.failed.is_empty() {
+            format!(
+                "Exported {exported} workspaces to {}; shoal import {} opens them on another machine",
+                directory.display(),
+                directory.display()
+            )
+        } else {
+            format!(
+                "Exported {exported} of {} workspaces to {}; {} failed",
+                exported + self.failed.len(),
+                directory.display(),
+                self.failed.len()
+            )
+        };
+        ctx.emit(
+            &message,
+            json!({"directory": directory, "exported": self.exported, "failed": self.failed}),
+        )?;
+        Ok(if self.failed.is_empty() { 0 } else { 1 })
+    }
 }

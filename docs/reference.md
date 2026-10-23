@@ -1675,6 +1675,7 @@ archive_max_mb = 50
 shoal export topic -o topic.shoal         # remove topic and write it to a file
 shoal import topic.shoal                  # open it in the repository with the same origin
 shoal export topic -o - | ssh other shoal import -
+shoal export --repo app --all -o moving   # remove every workspace of app, a file each
 ```
 
 `shoal export [workspace] -o <file>` removes the workspace as `shoal rm` does and
@@ -1689,6 +1690,15 @@ another removal. The checkpoint travels as a Git bundle without the commits of
 the default remote's default branch; a checkpoint that branch already has
 travels without one. Ignored files, leases, permits, approvals, grants and holds
 stay behind; setup rebuilds what the workspace needs.
+
+`shoal export --repo <repository> --all -o <directory>` exports every workspace
+of the repository to `<workspace>.shoal` in the directory, creating it when
+missing. It checks every workspace as a single export does, and that the
+terminal does not close with one of them, before removing any: when one cannot
+be exported, it lists each refusal and removes nothing. It asks once before
+releasing all of their holds, then exports each workspace and lists the files it
+wrote; a failure there leaves the remaining ones to export, and the command
+exits 1 naming each failed workspace.
 
 `shoal import <file>` reads an export, or standard input for `-`, and opens it in
 the registered repository with the exported repository's origin, or the one

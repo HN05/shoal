@@ -168,6 +168,7 @@ shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal restore fix-login 3     # Return the workspace to checkpoint 3
 shoal export fix-login -o - | ssh other shoal import - # Move the workspace to another machine
+shoal export --repo app --all -o moving # Export every workspace of app, a file each
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too

@@ -58,8 +58,8 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        ApprovalsCommand, Cli, Command, ConfigCommand, InternalCommand, NotificationsCommand,
-        QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
+        ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, InternalCommand,
+        NotificationsCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -534,11 +534,19 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             checkpoint,
         } => restore::run(&ctx, workspace, checkpoint).await,
-        Command::Export {
-            workspace,
+        Command::Export(ExportArgs {
+            repository: Some(repository),
             output,
             confirmation,
-        } => transfer::export(&ctx, workspace, output, confirmation.yes).await,
+            ..
+        }) => transfer::export_all(&ctx, repository, output, confirmation.yes).await,
+        Command::Export(ExportArgs {
+            workspace,
+            repository: None,
+            output,
+            confirmation,
+            ..
+        }) => transfer::export(&ctx, workspace, output, confirmation.yes).await,
         Command::Import { file, repository } => transfer::import(&ctx, file, repository).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => {

@@ -50,6 +50,25 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
+/// `shoal export` arguments, outside the derived `Command` builder, whose stack
+/// frame in debug builds grows with every inline argument (#997).
+#[derive(Debug, Args)]
+pub struct ExportArgs {
+    #[arg(conflicts_with = "all")]
+    pub workspace: Option<String>,
+    /// Export every workspace of the repository --repo names.
+    #[arg(long, requires = "repository")]
+    pub all: bool,
+    /// Repository whose workspaces --all exports.
+    #[arg(long = "repo", requires = "all")]
+    pub repository: Option<String>,
+    /// File to write, or with --all, the directory to write a file per workspace in.
+    #[arg(short, long)]
+    pub output: PathBuf,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
+}
+
 #[derive(Debug, Default, Args)]
 pub struct WorkspaceScope {
     pub workspace: Option<String>,
@@ -700,14 +719,10 @@ pub enum Command {
     ///
     /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
     /// default branch, and the workspace's base, links and stopped agents. A removed workspace
-    /// is exported without another removal. `-` writes to standard output.
-    Export {
-        workspace: Option<String>,
-        #[arg(short, long)]
-        output: PathBuf,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
-    },
+    /// is exported without another removal. `-` writes to standard output. With --all, every
+    /// workspace of the repository goes to its own file in the directory -o names, once each
+    /// one can be exported.
+    Export(ExportArgs),
     /// Open a workspace shoal export wrote, in the repository with the same origin.
     ///
     /// Fetches the default branch when the file builds on commits the repository lacks. Stopped
