@@ -106,6 +106,11 @@ impl Paths {
         self.state.join("proposals")
     }
 
+    /// The workspaces each command last acted on, which `-` selects from.
+    pub fn recent_workspaces(&self) -> PathBuf {
+        self.state.join("recent-workspaces.json")
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

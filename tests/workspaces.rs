@@ -7813,6 +7813,27 @@ fn cd_previous_cannot_escape_execution_scope() {
 }
 
 #[test]
+fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
+    let fixture = Fixture::new();
+    fixture.add("first");
+    fixture.add("second");
+    fixture.ok(&["status", "first"]);
+    assert!(fixture.run(&["diff", "second"]).status.success());
+    assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
+    let unsupported = fixture.run(&["inspect", "-"]);
+    assert!(!unsupported.status.success());
+    assert!(String::from_utf8_lossy(&unsupported.stderr).contains("does not accept -"));
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let scoped = fixture
+        .command()
+        .args(["exec", "first", "--", binary, "--json", "status", "-"])
+        .output()
+        .unwrap();
+    assert!(!scoped.status.success());
+    assert!(String::from_utf8_lossy(&scoped.stderr).contains("no previous workspace"));
+}
+
+#[test]
 fn menu_bindings_preserve_enter_inspect_cancel_and_scope() {
     let fixture = Fixture::new();
     let workspace = fixture.add("menu-worker");

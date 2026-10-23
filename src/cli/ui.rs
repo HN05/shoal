@@ -19,6 +19,7 @@ use crate::{
         context::Context,
         list_status::ListStatus,
         output::{Palette, Style},
+        recent,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     execution::recovery,
@@ -541,9 +542,20 @@ pub async fn select_workspace(
     explicit: Option<String>,
     fallback: Fallback,
 ) -> Result<String> {
-    match resolve_workspace(ctx, explicit, fallback).await? {
-        Resolution::Workspace(id) => Ok(id),
-        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await,
+    let workspace = match resolve_workspace(ctx, explicit, fallback).await? {
+        Resolution::Workspace(id) => id,
+        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await?,
+    };
+    recent::record(ctx, &workspace).await;
+    Ok(workspace)
+}
+
+/// The workspace an explicit argument names, where `-` is the previous one.
+pub async fn explicit_workspace(ctx: &Context, selector: String) -> Result<String> {
+    if selector == recent::PREVIOUS {
+        recent::previous(ctx).await
+    } else {
+        Ok(selector)
     }
 }
 
@@ -679,7 +691,9 @@ async fn resolve_workspace(
     fallback: Fallback,
 ) -> Result<Resolution> {
     if let Some(selector) = explicit {
-        return Ok(Resolution::Workspace(selector));
+        return Ok(Resolution::Workspace(
+            explicit_workspace(ctx, selector).await?,
+        ));
     }
     // A scoped caller lists its own workspace first, then the workspaces
     // split from it, which the current directory selects.

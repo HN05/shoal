@@ -274,6 +274,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             None => unreachable!("bare shoal opens the picker"),
         },
     };
+    ctx.recent = command.recent_name();
     ensure!(
         !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),
         "workspace processes cannot administer Shoal; ask the user to run this command"

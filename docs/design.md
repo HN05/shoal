@@ -624,6 +624,10 @@ and other refused arguments fail without fallback, before any prompt for the
 omitted ones; `add` asks the daemon to check its creation request first.
 Noninteractive and JSON calls without a current workspace require a target.
 Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations retain their scope.
+A `-` target selects from a per-command history of workspace IDs that the CLI keeps
+in the state directory, shared across terminals so `attach -` works from a new pane;
+it only saves typing a name, so it never fails a command or authorizes anything, and
+scoped callers neither read nor write it.
 `resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with nothing to resume anywhere it reports

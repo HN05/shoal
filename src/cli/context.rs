@@ -20,6 +20,9 @@ pub struct Context {
     pub json: bool,
     /// What the command needs of the workspace a picker offers.
     pub(in crate::cli) need: Need,
+    /// The name under which the command remembers the workspaces it acts on,
+    /// for `-`; `None` for commands without that history.
+    pub(in crate::cli) recent: Option<String>,
 }
 
 impl Context {
@@ -66,6 +69,7 @@ impl Context {
             json,
             place: None,
             need: Need::Any,
+            recent: None,
         }
     }
 

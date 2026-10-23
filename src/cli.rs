@@ -11,6 +11,7 @@ pub mod internal;
 pub mod list_status;
 pub mod output;
 mod progress;
+pub mod recent;
 pub(crate) mod terminal;
 pub mod ui;
 pub mod workspace_context;
@@ -1234,6 +1235,28 @@ impl Cli {
 }
 
 impl Command {
+    /// The name under which the command remembers the workspaces it acts on,
+    /// so `-` selects the previous one; `None` for commands that keep no history.
+    pub fn recent_name(&self) -> Option<String> {
+        Some(match self {
+            Command::Attach { .. } => "attach".into(),
+            Command::Edit { .. } => "edit".into(),
+            Command::Diff { .. } => "diff".into(),
+            Command::Status { .. } => "status".into(),
+            Command::Exec { .. } => "exec".into(),
+            Command::Claude { .. } => "claude".into(),
+            Command::Codex { .. } => "codex".into(),
+            Command::T3 { .. } => "t3".into(),
+            #[cfg(feature = "happy")]
+            Command::Happy { .. } => "happy".into(),
+            Command::Run {
+                name: Some(name), ..
+            } => name.clone(),
+            Command::Custom(words) => words.first()?.to_str()?.to_owned(),
+            _ => return None,
+        })
+    }
+
     /// Lifecycle and service administration is denied to scoped workspace
     /// processes; everything else is ordinary workspace work.
     pub fn is_administrative(&self) -> bool {
