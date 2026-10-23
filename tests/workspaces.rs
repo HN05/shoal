@@ -2332,6 +2332,33 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
 }
 
 #[test]
+fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
+    let mut fixture = Fixture::new();
+    let url = format!("file://{}", fixture.repo.display());
+    let blocked = fixture.root.path().join("file");
+    fs::write(&blocked, "").unwrap();
+    let clone = blocked.join("clone");
+    let output = fixture.run(&["repo", "add", &url, "--path", clone.to_str().unwrap()]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains(&format!(
+        "the Shoal daemon cannot write to {}",
+        blocked.display()
+    )));
+    let config = fixture.root.path().join(".config/shoal/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "root_dir = \"~/file\"\n").unwrap();
+    fixture.restart();
+    let output = fixture.run(&["repo", "add", &url]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("the Shoal daemon cannot write to"),
+        "{stderr}"
+    );
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn root_directory_normalizes_missing_components_before_creation() {
     let fixture = Fixture::with_config(Some("root_dir = \"~/missing/../clones\"\n"));
     let workspace = fixture.add("normalized-root");

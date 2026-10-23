@@ -1174,7 +1174,9 @@ registrations; symlinks and `..` are resolved before checking and creating the r
 even across missing components. Existing registrations keep their paths, as do
 workspaces created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
 directory (relative to the current directory; `~/` allowed). Re-registering a URL
-with its existing path is fine; a different path is rejected.
+with its existing path is fine; a different path is rejected. Registering, and
+creating a workspace, fail when the daemon cannot create a file in the directory
+it would write within 30 seconds, as on a volume macOS has not given it access to.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs

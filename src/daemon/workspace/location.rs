@@ -14,7 +14,7 @@ impl Manager {
     /// Choose a new workspace's directory: a validated explicit path, or its
     /// name inside the repository's reserved directory, resolved so overlap
     /// checks compare real locations. Any existing entry, including a
-    /// dangling symlink, is refused.
+    /// dangling symlink, or a directory the daemon cannot write is refused.
     pub(super) async fn new_workspace_path(
         &self,
         repo: &Repository,
@@ -26,6 +26,7 @@ impl Manager {
             None => canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?.join(name),
         };
         ensure_unused(&path)?;
+        crate::daemon::access::ensure_writable(&path).await?;
         Ok(path)
     }
 

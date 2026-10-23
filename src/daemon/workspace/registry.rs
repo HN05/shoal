@@ -156,7 +156,8 @@ impl Manager {
             &self.config().root_dir(&self.paths)?,
             &fs::canonicalize(&self.paths.state)?,
             repositories.iter().map(|repo| repo.path.as_path()),
-        )?;
+        )
+        .await?;
         let directory = reserve_directory(
             &root,
             &repository::directory_name(repository::name(repo)),
@@ -253,7 +254,8 @@ async fn local_checkout_location(
             .iter()
             .map(|repo| repo.path.as_path())
             .chain([path.as_path()]),
-    )?;
+    )
+    .await?;
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
     // directory, unless `<x>` is itself a checkout or another repository's.
     let placed = path
@@ -300,7 +302,11 @@ async fn clone_into_reserved_directory(
         root,
         state,
         repositories.iter().map(|repo| repo.path.as_path()),
-    )?;
+    )
+    .await?;
+    if let Some(parent) = clone_path.as_deref().and_then(Path::parent) {
+        crate::daemon::access::ensure_writable(parent).await?;
+    }
     let workspaces_dir = reserve_directory(&root, directory_name, repositories)?;
     let destination = match clone_path {
         Some(path) => create_clone_directory(path),
@@ -347,9 +353,10 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
 }
 
 /// The canonical, existing `root_dir`. Worktrees must stay out of Shoal's
-/// state and of every checkout, so a root inside either is refused before
-/// anything is created.
-fn prepare_root<'a>(
+/// state and of every checkout, and the daemon must be able to write there,
+/// so a root it cannot write or inside either is refused before anything is
+/// created.
+async fn prepare_root<'a>(
     root: &Path,
     state: &Path,
     checkouts: impl IntoIterator<Item = &'a Path>,
@@ -368,6 +375,7 @@ fn prepare_root<'a>(
             checkout.display()
         );
     }
+    crate::daemon::access::ensure_writable(&intended).await?;
     fs::create_dir_all(&intended)
         .with_context(|| format!("create repository root directory {}", root.display()))?;
     Ok(fs::canonicalize(&intended)?)
