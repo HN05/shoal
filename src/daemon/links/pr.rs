@@ -1,6 +1,6 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use anyhow::{Context, Result, ensure};
-use rusqlite::OptionalExtension;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::daemon::log;
@@ -9,7 +9,7 @@ use crate::{
         events::{self, EventKind},
         notifications::NotificationKind,
         store,
-        workspace::Manager,
+        workspace::{Manager, review},
     },
     forge::{ForgeRepo, account::Account, review::status::PrStatus},
     git,
@@ -222,80 +222,58 @@ impl Manager {
             Err(_) if matches!(action, Action::Clear) => None,
             Err(error) => return Err(error),
         };
-        let previously_watched = match previous {
-            Some(Registration {
-                kind: RegistrationKind::Watch { urls, .. },
-                ..
-            }) => urls,
-            _ => Vec::new(),
-        };
         let kind = match action {
             Action::Clear => None,
             Action::Unwatch { url } => self.without_pr_watch(&workspace, &url).await?,
-            Action::Watch { url: input } => {
-                current_head(&workspace).await?;
-                let (forge, number, url) = self.pr_forge(&workspace, &input).await?;
-                // Detect missing tools/login, wrong branches and invalid PRs now.
-                if check == WatchCheck::Lookup {
-                    forge
-                        .merged_commits(&self.user_account(), number, &workspace.branch)
-                        .await?;
-                }
-                let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
-                    Some(Registration {
-                        kind: RegistrationKind::Watch { urls, merged_head },
-                        ..
-                    }) => (urls, merged_head),
-                    _ => (Vec::new(), None),
-                };
-                if !urls.contains(&url) {
-                    urls.push(url);
-                    merged_head = None;
-                }
-                Some(RegistrationKind::Watch { urls, merged_head })
-            }
+            Action::Watch { url } => Some(self.with_pr_watch(&workspace, &url, check).await?),
             Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
                 head: current_head(&workspace).await?,
             }),
         };
-        let registration = kind.map(|kind| Registration { kind, error: None });
-        let watched = match &registration {
-            Some(Registration {
-                kind: RegistrationKind::Watch { urls, .. },
-                ..
-            }) => urls.clone(),
-            _ => Vec::new(),
-        };
-        let added = watched
-            .iter()
-            .filter(|url| !previously_watched.contains(url))
-            .cloned()
-            .collect::<Vec<_>>();
-        let removed = previously_watched
-            .into_iter()
-            .filter(|url| !watched.contains(url))
-            .collect::<Vec<_>>();
+        let change = RegistrationChange::new(
+            previous.as_ref(),
+            kind.map(|kind| Registration { kind, error: None }),
+        );
         let id = workspace.id;
-        self.store.run(move |db| {
-            let tx = db.transaction()?;
-            store::require_ready(&tx, &id)?;
-            tx.execute("DELETE FROM pr_activity WHERE workspace_id=?1 AND url IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&removed)?])?;
-            tx.execute("DELETE FROM workspace_item_activity WHERE workspace_id=?1 AND url IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&removed)?])?;
-            crate::daemon::workspace::review::forget(&tx, &id, &removed)?;
-            if let Some(registration) = registration {
-                tx.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2) ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record", rusqlite::params![id, serde_json::to_string(&registration)?])?;
-            } else { tx.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [&id])?; }
-            for url in &removed {
-                events::record_link(&tx, &id, EventKind::Unlinked, crate::model::Relation::Assigned, crate::forge::items::link::ItemKind::Pr, url)?;
-            }
-            for url in &added {
-                events::record_link(&tx, &id, EventKind::Linked, crate::model::Relation::Assigned, crate::forge::items::link::ItemKind::Pr, url)?;
-            }
-            tx.commit()?;
-            Ok(())
-        }).await?;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &id)?;
+                change.apply(&tx, &id)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
         self.cleanup_notify.notify_one();
         Ok(())
+    }
+
+    async fn with_pr_watch(
+        &self,
+        workspace: &Workspace,
+        input: &str,
+        check: WatchCheck,
+    ) -> Result<RegistrationKind> {
+        current_head(workspace).await?;
+        let (forge, number, url) = self.pr_forge(workspace, input).await?;
+        // Detect missing tools/login, wrong branches and invalid PRs now.
+        if check == WatchCheck::Lookup {
+            forge
+                .merged_commits(&self.user_account(), number, &workspace.branch)
+                .await?;
+        }
+        let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
+            Some(Registration {
+                kind: RegistrationKind::Watch { urls, merged_head },
+                ..
+            }) => (urls, merged_head),
+            _ => (Vec::new(), None),
+        };
+        if !urls.contains(&url) {
+            urls.push(url);
+            merged_head = None;
+        }
+        Ok(RegistrationKind::Watch { urls, merged_head })
     }
 
     async fn without_pr_watch(
@@ -532,6 +510,103 @@ impl Manager {
         );
         Ok(true)
     }
+}
+
+/// A workspace's PR registration replacing its previous one.
+struct RegistrationChange {
+    registration: Option<Registration>,
+    added: Vec<String>,
+    removed: Vec<String>,
+}
+
+impl RegistrationChange {
+    fn new(previous: Option<&Registration>, registration: Option<Registration>) -> Self {
+        let before = watched_urls(previous);
+        let after = watched_urls(registration.as_ref());
+        let added = after
+            .iter()
+            .filter(|url| !before.contains(url))
+            .cloned()
+            .collect();
+        let removed = before
+            .iter()
+            .filter(|url| !after.contains(url))
+            .cloned()
+            .collect();
+        Self {
+            registration,
+            added,
+            removed,
+        }
+    }
+
+    /// Store the registration within the caller's transaction. A dropped watch
+    /// takes its replay cursors and review mark with it, and every watch added
+    /// or dropped is journaled as an assigned PR link change.
+    fn apply(&self, db: &Connection, id: &str) -> Result<()> {
+        forget_activity(db, id, &self.removed)?;
+        review::forget(db, id, &self.removed)?;
+        store_registration(db, id, self.registration.as_ref())?;
+        for url in &self.removed {
+            record_pr_link(db, id, EventKind::Unlinked, url)?;
+        }
+        for url in &self.added {
+            record_pr_link(db, id, EventKind::Linked, url)?;
+        }
+        Ok(())
+    }
+}
+
+fn watched_urls(registration: Option<&Registration>) -> &[String] {
+    match registration {
+        Some(Registration {
+            kind: RegistrationKind::Watch { urls, .. },
+            ..
+        }) => urls,
+        _ => &[],
+    }
+}
+
+/// Drop the replay cursors of PRs that are no longer watched.
+fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
+    let urls = serde_json::to_string(urls)?;
+    for table in ["pr_activity", "workspace_item_activity"] {
+        db.execute(
+            &format!(
+                "DELETE FROM {table} WHERE workspace_id=?1
+                 AND url IN (SELECT value FROM json_each(?2))"
+            ),
+            rusqlite::params![id, urls],
+        )?;
+    }
+    Ok(())
+}
+
+fn store_registration(
+    db: &Connection,
+    id: &str,
+    registration: Option<&Registration>,
+) -> Result<()> {
+    match registration {
+        Some(registration) => db.execute(
+            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)
+             ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record",
+            rusqlite::params![id, serde_json::to_string(registration)?],
+        )?,
+        None => db.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [id])?,
+    };
+    Ok(())
+}
+
+fn record_pr_link(db: &Connection, id: &str, kind: EventKind, url: &str) -> Result<()> {
+    events::record_link(
+        db,
+        id,
+        kind,
+        crate::model::Relation::Assigned,
+        crate::forge::items::link::ItemKind::Pr,
+        url,
+    )
 }
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
