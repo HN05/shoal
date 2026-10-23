@@ -1189,8 +1189,9 @@ already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
 directory and every checkout; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
-even across missing components. Existing registrations keep their paths, as do
-workspaces created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
+even across missing components. Existing registrations keep their paths until
+[`repo migrate`](#move-repositories-to-a-new-root) moves them, as do workspaces
+created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
 directory (relative to the current directory; `~/` allowed). Re-registering a URL
 with its existing path is fine; a different path is rejected. Registering, and
 creating a workspace, fail when the daemon cannot create a file in the directory
@@ -1335,6 +1336,30 @@ Git config sets `core.bare` although it has a working tree, and deletions
 that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.
+
+### Move repositories to a new root
+
+```sh
+shoal repo migrate /Volumes/Work/shoal -y  # Save root_dir, then move
+shoal repo migrate -y                      # Move into the configured root_dir
+```
+
+Moves each repository directory outside `root_dir` into it whole, with its URL
+clone, workspaces, seed and shared caches, keeping its name or suffixing it when
+taken. A root on another filesystem is copied, then the original is deleted. A
+checkout or workspace placed outside the repository directory stays where it is.
+A path argument is saved as the global `root_dir` and the daemon reloads it first.
+Interactive calls list the directories to move before asking; `-y`/`--yes` skips
+the prompt and is required for scripts and `--json`, which returns each moved
+`repository`, its old directory as `from` and its old `workspace_paths`.
+
+Every repository is checked before the first moves: none may have a running
+command, agent or chat, queued agent launches, a workspace in another lifecycle
+operation, or a process whose working directory is inside it, so leave those
+directories first. The move is recorded before anything moves; a failed or
+interrupted move rolls back, or finishes once the directory has arrived, and the
+repository refuses other changes until the next `repo migrate` or daemon start
+completes it. Agent trust for the old paths is removed.
 
 ### Merge into your workspace branch
 

@@ -1465,6 +1465,14 @@ pub enum RepoCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Move every repository directory, with its workspaces and clone, into root_dir.
+    Migrate {
+        /// New root directory, saved as root_dir first; omit to use the configured one.
+        #[arg(value_hint = clap::ValueHint::DirPath)]
+        root: Option<PathBuf>,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
+    },
     /// Delete a repository checkout and all its Shoal workspaces and resources.
     ///
     /// Uncommitted and unpushed work is permanently lost.

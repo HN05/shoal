@@ -58,7 +58,8 @@ without one, [run the daemon in the foreground](docs/reference.md#daemon).
 ## Create a workspace
 
 Register a local repository or Git clone URL once, then create a task. Each
-repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`:
+repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
+`shoal repo migrate <dir>` moves them all to a new root:
 
 ```sh
 shoal repo add /path/to/project --name my-project

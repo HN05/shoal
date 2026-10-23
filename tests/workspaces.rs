@@ -2356,6 +2356,50 @@ fn root_directory_normalizes_missing_components_before_creation() {
 }
 
 #[test]
+fn migrate_moves_workspaces_into_a_saved_root() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("moving");
+    let old = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    let root = fs::canonicalize(fixture.root.path()).unwrap().join("moved");
+
+    let output = fixture.run(&["repo", "migrate", "~/moved"]);
+    assert!(!output.status.success(), "moved without confirmation");
+    assert!(old.exists());
+
+    let moved = fixture.ok(&["repo", "migrate", "~/moved", "--yes"]);
+    let [moved] = moved.as_array().unwrap().as_slice() else {
+        panic!("expected one move: {moved}");
+    };
+    let directory = Path::new(moved["repository"]["workspaces_dir"].as_str().unwrap());
+    assert_eq!(directory.parent(), Some(root.as_path()));
+    assert!(!old.exists());
+    let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
+    assert!(
+        config.contains(&format!(
+            "root_dir = {:?}",
+            fixture.root.path().join("moved")
+        )),
+        "{config}"
+    );
+
+    // The moved workspace still runs commands, and new ones go to the new root.
+    let path = directory.join(old.file_name().unwrap());
+    let output = fixture.run(&["exec", "moving", "--", "git", "status", "--short"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(path.join("tracked").exists());
+    let next = fixture.add("next");
+    assert!(Path::new(next["path"].as_str().unwrap()).starts_with(directory));
+    assert_eq!(
+        fixture.ok(&["repo", "migrate", "--yes"]),
+        serde_json::json!([])
+    );
+}
+
+#[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
     let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");
