@@ -148,7 +148,7 @@ impl ForgeRepo {
         if comments {
             let discussion = self
                 .kind
-                .view_discussion(self, account, kind, number, &mut details)
+                .view_discussion(self, account, kind, number, &mut details, errors)
                 .await;
             match discussion {
                 Ok(Some(reviews)) => details.reviews = Some(reviews),

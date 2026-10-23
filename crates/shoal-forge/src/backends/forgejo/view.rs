@@ -8,8 +8,8 @@ use crate::{
     account::Account,
     items::link::ItemKind,
     review::view::{
-        Comment, Details, PrDetails, Review, labels, login, required, review_comment, review_state,
-        text_field,
+        Comment, Details, PrDetails, Review, ReviewComment, labels, login, required,
+        review_comment, review_state, text_field,
     },
     transport::api::Request,
 };
@@ -26,13 +26,15 @@ pub(crate) async fn details(
     parse_details(&item, kind, number)
 }
 
-/// Fills the item's comments and returns a PR's reviews.
+/// Fills the item's comments and returns a PR's reviews, recording in
+/// `errors` each review whose inline comments could not be read.
 pub(crate) async fn discussion(
     repo: &ForgeRepo,
     account: &Account,
     kind: ItemKind,
     number: u64,
     details: &mut Details,
+    errors: &mut Vec<String>,
 ) -> Result<Option<Vec<Review>>> {
     let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
     let comments = repo.send(account, &Request::get(endpoint)).await?;
@@ -40,7 +42,7 @@ pub(crate) async fn discussion(
     if kind == ItemKind::Issue {
         return Ok(None);
     }
-    parse_reviews(&review_comments(repo, account, number).await?).map(Some)
+    parse_reviews(&review_comments(repo, account, number).await?, errors).map(Some)
 }
 
 fn parse_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
@@ -95,38 +97,25 @@ fn parse_comments(comments: &Value) -> Result<Vec<Comment>> {
 }
 
 /// Each review with the inline comments Forgejo lists under it, replies
-/// included, each in its review's thread on the same lines.
-fn parse_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
+/// included, each in its review's thread on the same lines. A review whose
+/// comments could not be read keeps its body, and `errors` names it.
+fn parse_reviews(
+    reviews: &[(Value, Result<Value>)],
+    errors: &mut Vec<String>,
+) -> Result<Vec<Review>> {
     let mut result = Vec::new();
     for (review, comments) in reviews {
         let Some(state) = review_state(review["state"].as_str())? else {
             continue;
         };
         let id = review["id"].as_u64().unwrap_or_default();
-        let comments: Vec<(u64, &Value)> = comments
-            .as_array()
-            .context("Forgejo review comments are not a list")?
-            .iter()
-            .map(|comment| (id, comment))
-            .collect();
-        let threads = threads(&comments);
-        let comments = comments
-            .iter()
-            .map(|&(review, comment)| {
-                let id = comment["id"].as_u64().unwrap_or_default();
-                let (thread, resolved) = threads
-                    .get(&thread_key(review, comment))
-                    .copied()
-                    .unwrap_or((id, false));
-                review_comment(
-                    comment,
-                    &comment["position"],
-                    &comment["original_position"],
-                    thread,
-                    Some(resolved),
-                )
-            })
-            .collect();
+        let comments = match comments {
+            Ok(comments) => parse_review_comments(id, comments)?,
+            Err(error) => {
+                errors.push(format!("comments lookup failed for review {id}: {error:#}"));
+                Vec::new()
+            }
+        };
         result.push(Review {
             author: login(&review["user"]),
             state,
@@ -138,10 +127,38 @@ fn parse_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
     Ok(result)
 }
 
+/// The inline comments of review `review`, each in its thread.
+fn parse_review_comments(review: u64, comments: &Value) -> Result<Vec<ReviewComment>> {
+    let comments: Vec<(u64, &Value)> = comments
+        .as_array()
+        .context("Forgejo review comments are not a list")?
+        .iter()
+        .map(|comment| (review, comment))
+        .collect();
+    let threads = threads(&comments);
+    Ok(comments
+        .iter()
+        .map(|&(review, comment)| {
+            let id = comment["id"].as_u64().unwrap_or_default();
+            let (thread, resolved) = threads
+                .get(&thread_key(review, comment))
+                .copied()
+                .unwrap_or((id, false));
+            review_comment(
+                comment,
+                &comment["position"],
+                &comment["original_position"],
+                thread,
+                Some(resolved),
+            )
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::review::view::ReviewComment;
+    use anyhow::anyhow;
     use serde_json::json;
 
     #[test]
@@ -170,28 +187,30 @@ mod tests {
         let reviews = [
             (
                 json!({"id": 1, "user": {"login": "bot"}, "state": "COMMENT", "body": "Blocker", "submitted_at": "t1"}),
-                json!([
+                Ok(json!([
                     {"id": 20, "user": {"login": "bot"}, "path": "a.py", "position": 182, "original_position": 0,
                         "body": "Fetch first", "created_at": "t1", "resolver": {"login": "dev"}},
                     {"id": 21, "user": {"login": "dev"}, "path": "a.py", "position": 182, "original_position": 0,
                         "body": "Done", "created_at": "t2", "resolver": null},
                     {"id": 22, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
                         "body": "Old", "created_at": "t3", "resolver": null}
-                ]),
+                ])),
             ),
             (
                 json!({"id": 2, "user": {"login": "x"}, "state": "REQUEST_REVIEW", "body": ""}),
-                json!([]),
+                Ok(json!([])),
             ),
             (
                 json!({"id": 3, "user": {"login": "dev"}, "state": "COMMENT", "body": "", "submitted_at": "t4"}),
-                json!([
+                Ok(json!([
                     {"id": 23, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
                         "body": "Reply", "created_at": "t4", "resolver": null}
-                ]),
+                ])),
             ),
         ];
-        let reviews = parse_reviews(&reviews).unwrap();
+        let mut errors = Vec::new();
+        let reviews = parse_reviews(&reviews, &mut errors).unwrap();
+        assert!(errors.is_empty());
         assert_eq!(reviews.len(), 2);
         assert_eq!(reviews[0].state, "commented");
         let comments = &reviews[0].comments;
@@ -211,5 +230,37 @@ mod tests {
                 .author,
             "a"
         );
+    }
+
+    #[test]
+    fn a_review_whose_comments_fail_keeps_its_body_and_the_others() {
+        let reviews = [
+            (
+                json!({"id": 4, "user": {"login": "bot"}, "state": "COMMENT", "body": "Findings", "submitted_at": "t1"}),
+                Err(anyhow!(
+                    "GET pulls/7/reviews/4/comments: connection refused"
+                )),
+            ),
+            (
+                json!({"id": 5, "user": {"login": "bot"}, "state": "APPROVED", "body": "Fine", "submitted_at": "t2"}),
+                Ok(
+                    json!([{"id": 30, "user": {"login": "bot"}, "path": "a.py", "position": 1,
+                    "original_position": 0, "body": "Nit", "created_at": "t2", "resolver": null}]),
+                ),
+            ),
+        ];
+        let mut errors = Vec::new();
+        let reviews = parse_reviews(&reviews, &mut errors).unwrap();
+        assert_eq!(
+            errors,
+            [
+                "comments lookup failed for review 4: GET pulls/7/reviews/4/comments: connection refused"
+            ]
+        );
+        assert_eq!(
+            (reviews[0].body.as_str(), reviews[0].comments.len()),
+            ("Findings", 0)
+        );
+        assert_eq!(reviews[1].comments[0].id, 30);
     }
 }

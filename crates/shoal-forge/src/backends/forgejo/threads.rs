@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use futures_util::future::try_join_all;
+use futures_util::future::join_all;
 use serde_json::Value;
 
 use crate::{
@@ -13,25 +13,49 @@ use crate::{
     transport::api::Request,
 };
 
-/// Each review of a PR with its inline comments.
+/// Each review of a PR with its inline comments, or why they could not be
+/// read.
 pub(crate) async fn review_comments(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-) -> Result<Vec<(Value, Value)>> {
+) -> Result<Vec<(Value, Result<Value>)>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
     let reviews = repo.pages(account, &endpoint).await?;
-    try_join_all(reviews.into_iter().map(|review| async move {
-        let id = review["id"].as_u64().context("Forgejo review has no ID")?;
-        let comments = if review["comments_count"].as_u64().unwrap_or_default() > 0 {
-            let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
-            repo.send(account, &Request::get(endpoint)).await?
-        } else {
-            Value::Array(Vec::new())
-        };
-        Ok::<_, anyhow::Error>((review, comments))
+    Ok(join_all(reviews.into_iter().map(|review| async move {
+        let comments = inline_comments_of(repo, account, number, &review).await;
+        (review, comments)
     }))
-    .await
+    .await)
+}
+
+/// Each review of a PR with its inline comments, failing when any could
+/// not be read.
+pub(crate) async fn all_review_comments(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+) -> Result<Vec<(Value, Value)>> {
+    review_comments(repo, account, number)
+        .await?
+        .into_iter()
+        .map(|(review, comments)| Ok((review, comments?)))
+        .collect()
+}
+
+/// The inline comments Forgejo lists under `review`.
+async fn inline_comments_of(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    review: &Value,
+) -> Result<Value> {
+    let id = review["id"].as_u64().context("Forgejo review has no ID")?;
+    if review["comments_count"].as_u64().unwrap_or_default() == 0 {
+        return Ok(Value::Array(Vec::new()));
+    }
+    let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
+    repo.send(account, &Request::get(endpoint)).await
 }
 
 /// The Forgejo thread with `comment`.

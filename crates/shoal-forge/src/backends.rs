@@ -350,7 +350,8 @@ pub(crate) trait Backend {
         comments: bool,
     ) -> Result<Details>;
 
-    /// Fills the comments `details` lacks and returns a PR's reviews.
+    /// Fills the comments `details` lacks and returns a PR's reviews,
+    /// recording in `errors` the parts it could not read.
     async fn view_discussion(
         &self,
         repo: &ForgeRepo,
@@ -358,6 +359,7 @@ pub(crate) trait Backend {
         kind: ItemKind,
         number: u64,
         details: &mut Details,
+        errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>>;
 
     /// Each check's latest attempt on `head`.
@@ -781,8 +783,9 @@ impl Backend for ForgeKind {
         kind: ItemKind,
         number: u64,
         details: &mut Details,
+        errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
-        dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details).await)
+        dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details, errors).await)
     }
 
     async fn ci_checks(

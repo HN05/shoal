@@ -285,7 +285,7 @@ impl Backend for Forgejo {
         number: u64,
         comment: u64,
     ) -> Result<Option<Thread>> {
-        let reviews = threads::review_comments(repo, account, number).await?;
+        let reviews = threads::all_review_comments(repo, account, number).await?;
         Ok(threads::thread(&reviews, comment))
     }
 
@@ -383,8 +383,9 @@ impl Backend for Forgejo {
         kind: ItemKind,
         number: u64,
         details: &mut Details,
+        errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
-        view::discussion(repo, account, kind, number, details)
+        view::discussion(repo, account, kind, number, details, errors)
             .await
             .context(self.login_hint())
     }

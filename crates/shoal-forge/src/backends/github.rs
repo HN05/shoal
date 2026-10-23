@@ -519,6 +519,7 @@ impl Backend for GitHub {
         kind: ItemKind,
         number: u64,
         _details: &mut Details,
+        _errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
         view::reviews(repo, account, kind, number).await
     }

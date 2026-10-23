@@ -464,6 +464,7 @@ impl Backend for Bitbucket {
         kind: ItemKind,
         number: u64,
         details: &mut Details,
+        _errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
         view_discussion(repo, account, kind, number, details)
             .await
