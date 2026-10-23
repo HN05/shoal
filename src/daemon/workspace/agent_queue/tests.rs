@@ -548,6 +548,9 @@ async fn await_restore(
     waiting
 }
 
+/// A process group ID above every system's PID limit, so no process has it.
+const ABSENT_GROUP: u32 = i32::MAX as u32;
+
 fn publish_recovery(manager: &Manager) {
     let epoch = manager
         .recovery_epoch
@@ -627,9 +630,10 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
             ("second".into(), Restore, Queued),
         ]
     );
-    // The restored agent registers and takes over the slot it kept.
+    // The restored agent registers and takes over the slot it kept. Its group
+    // must not exist, or discarding it later finds survivors and keeps the slot.
     let register =
-        |execution: &str| manager.record_execution_child(execution.to_owned(), None, 4242);
+        |execution: &str| manager.record_execution_child(execution.to_owned(), None, ABSENT_GROUP);
     register(&agents[0].0).await.unwrap();
     publish_recovery(&manager);
     manager.dispatch_queue().await.unwrap();
