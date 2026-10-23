@@ -13,6 +13,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
+        recent,
         ui::{self, Fallback},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -157,7 +158,9 @@ pub(crate) async fn run(
                     .context("repository-only commands require a current or explicit workspace")
                     .context(unknown_command(name)));
             }
-            ui::pick_workspace(ctx, defining).await?
+            let workspace = ui::pick_workspace(ctx, defining).await?;
+            recent::record(ctx, &workspace).await;
+            workspace
         }
         workspace => workspace?,
     };

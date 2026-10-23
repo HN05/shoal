@@ -14467,6 +14467,9 @@ fn repository_commands_pick_a_workspace_that_defines_them() {
     assert_eq!(output.stdout, b"repository command");
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
+    let previous = fixture.run(&["local-check", "-"]);
+    assert!(previous.status.success(), "{previous:?}");
+    assert_eq!(previous.stdout, b"repository command");
     let (output, rows) = fixture.pick(&["lsit"], id, "");
     assert!(!output.status.success());
     assert!(rows.is_empty(), "{rows:?}");
