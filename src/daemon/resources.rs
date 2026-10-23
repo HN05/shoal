@@ -680,45 +680,17 @@ impl Manager {
             GuardMode::Shared
         };
         let _resources = self.resource_guard(&workspace.id, mode).await?;
-        let id = workspace.id.clone();
+        let (id, lookup_pool, lookup_name) = (workspace.id.clone(), pool.clone(), name.clone());
         let owned = self
             .store
-            .run(move |db| {
-                store::require_ready(db, &id)?;
-                leases(db, Some(&id))
-            })
+            .run(move |db| releasable_lease(db, &id, &lookup_pool, &lookup_name))
             .await?;
-        if let Some(lease) = owned
-            .iter()
-            .find(|lease| lease.pool == pool && lease.name == name)
-        {
+        if let Some(lease) = &owned {
             self.run_resource_release_hook(&workspace, lease, hook.as_deref())
                 .await?;
         }
-        // Release must work even after a definition is edited or deleted.
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &workspace.id)?;
-                let mut released = false;
-                for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
-                    let target = Target::Resource {
-                        scope,
-                        pool: pool.clone(),
-                    };
-                    released |= approvals::release(&tx, &workspace.id, &target, &name)?;
-                }
-                ensure!(
-                    tx.execute(
-                        "DELETE FROM resource_leases WHERE workspace_id=?1 AND pool=?2 AND name=?3",
-                        params![workspace.id, pool, name]
-                    )? == 1
-                        || released,
-                    "unknown resource lease or approval request"
-                );
-                tx.commit()?;
-                Ok(())
-            })
+            .run(move |db| release_lease(db, &workspace, &pool, &name))
             .await
     }
 
@@ -775,6 +747,47 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The workspace's lease a release would delete, once the workspace is ready.
+fn releasable_lease(
+    db: &Connection,
+    workspace: &str,
+    pool: &str,
+    name: &str,
+) -> Result<Option<ResourceLease>> {
+    store::require_ready(db, workspace)?;
+    named_lease(db, workspace, pool, name)
+}
+
+/// Delete a lease and end its approval atomically, in either scope, so
+/// release works even after the pool definition is edited or deleted.
+fn release_lease(
+    db: &mut Connection,
+    workspace: &crate::model::Workspace,
+    pool: &str,
+    name: &str,
+) -> Result<()> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    store::require_ready(&tx, &workspace.id)?;
+    let mut released = false;
+    for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
+        let target = Target::Resource {
+            scope,
+            pool: pool.to_owned(),
+        };
+        released |= approvals::release(&tx, &workspace.id, &target, name)?;
+    }
+    ensure!(
+        tx.execute(
+            "DELETE FROM resource_leases WHERE workspace_id=?1 AND pool=?2 AND name=?3",
+            params![workspace.id, pool, name]
+        )? == 1
+            || released,
+        "unknown resource lease or approval request"
+    );
+    tx.commit()?;
+    Ok(())
 }
 
 /// The workspace asking for a lease and its standing.
