@@ -42,6 +42,9 @@ struct Fixture {
 /// Global config without a cleanup grace period, at the root so the rest of a
 /// test's config follows unchanged.
 const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
+/// The scripted forges serve Forgejo's API without answering which one they
+/// serve; `tests/forge.rs` covers asking.
+const FORGEJO_HOST: &str = "forges.\"forge.example\".type = \"forgejo\"\n";
 
 impl Fixture {
     fn new() -> Self {
@@ -63,7 +66,7 @@ impl Fixture {
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
         fs::write(
             root.path().join(".config/shoal/config.toml"),
-            format!("{NO_GRACE}{}", config.unwrap_or_default()),
+            format!("{NO_GRACE}{FORGEJO_HOST}{}", config.unwrap_or_default()),
         )
         .unwrap();
         if fake_sim {

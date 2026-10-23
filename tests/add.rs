@@ -20,12 +20,12 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         (vec!["add", url], vec![], "issue number must be positive"),
         (
             vec!["add", "--issue", url, "--agent", "custom"],
-            vec!["list_repositories", "layered_config test"],
+            vec!["list_repositories", "layered_config test", "forge_type"],
             "issue number must be positive",
         ),
         (
             vec!["add", "0", "--repo", "test"],
-            vec!["layered_config test", "list_repositories"],
+            vec!["layered_config test", "list_repositories", "forge_type"],
             "issue number must be positive",
         ),
         (
@@ -267,6 +267,8 @@ impl FakeDaemon {
                     "check_dependencies" => json!({"type": "error", "data": {
                         "code": "test", "message": "missing is neither a workspace nor a queued agent"
                     }}),
+                    // The forge an issue's host serves, before its number is read.
+                    "forge_type" => json!({"type": "forge_type", "data": "forgejo"}),
                     "queue_add" => json!({"type": "queue_admission", "data": {
                         "start": true, "entry": null, "waiting": 0
                     }}),
