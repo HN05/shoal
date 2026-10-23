@@ -259,6 +259,11 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
 
+## Shoal feedback
+
+When Shoal misbehaves, or something would make your workflow with it better,
+file an issue.
+
 ## Subagent approval
 
 Do not spawn subagents, delegate work, or launch additional agent sessions without
