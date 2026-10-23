@@ -5,6 +5,7 @@ use crate::{
     cli::{
         ItemArgs, client,
         context::Context,
+        forge_hosts::ForgeHosts,
         output::{Palette, Style},
     },
     forge::{
@@ -54,8 +55,9 @@ pub(super) async fn view(
     .await?;
     let views = ctx
         .progress("Reading items", async {
-            let mut views = read(&selected, &ctx.forge_account()?, !no_comments).await?;
-            read_failed_logs(ctx, &workspace, &mut views).await;
+            let hosts = ctx.forge_hosts()?;
+            let mut views = read(&selected, &hosts, &ctx.forge_account()?, !no_comments).await?;
+            read_failed_logs(ctx, &hosts, &workspace, &mut views).await;
             Ok::<_, anyhow::Error>(views)
         })
         .await?;
@@ -72,11 +74,16 @@ pub(super) async fn view(
 }
 
 /// Each item as the forge reports it now, in selection order.
-async fn read(selected: &Selected, account: &Account, comments: bool) -> Result<Vec<ItemView>> {
+async fn read(
+    selected: &Selected,
+    hosts: &ForgeHosts<'_>,
+    account: &Account,
+    comments: bool,
+) -> Result<Vec<ItemView>> {
     let remote = repository::remote_url_from_path(&selected.path)
         .await?
         .context("item lookup needs an origin remote")?;
-    let forge = ForgeRepo::parse(&remote)?;
+    let forge = ForgeRepo::resolve(&remote, hosts).await?;
     Ok(futures_util::future::join_all(
         selected
             .items
@@ -86,9 +93,17 @@ async fn read(selected: &Selected, account: &Account, comments: bool) -> Result<
     .await)
 }
 
-async fn read_failed_logs(ctx: &Context, workspace: &str, views: &mut [ItemView]) {
+async fn read_failed_logs(
+    ctx: &Context,
+    hosts: &ForgeHosts<'_>,
+    workspace: &str,
+    views: &mut [ItemView],
+) {
     for view in views {
-        if !ForgeRepo::from_pull_url(&view.url).is_ok_and(|forge| forge.supports_check_logs()) {
+        if !ForgeRepo::resolve_pull_url(&view.url, hosts)
+            .await
+            .is_ok_and(|forge| forge.supports_check_logs())
+        {
             continue;
         }
         let Some(pr) = view

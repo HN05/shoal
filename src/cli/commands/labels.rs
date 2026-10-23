@@ -23,7 +23,7 @@ pub(super) async fn labels(ctx: &Context, workspace: Option<String>) -> Result<i
     let remote = repository::remote_url_from_path(&workspace.path)
         .await?
         .context("labels need an origin remote")?;
-    let forge = ForgeRepo::parse(&remote)?;
+    let forge = ForgeRepo::resolve(&remote, &ctx.forge_hosts()?).await?;
     let labels = ctx
         .progress("Reading labels", forge.labels(&ctx.forge_account()?))
         .await?;

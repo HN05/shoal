@@ -4,6 +4,7 @@ pub mod client;
 pub mod commands;
 pub mod completion;
 pub mod context;
+pub mod forge_hosts;
 mod help;
 mod installed;
 pub mod internal;

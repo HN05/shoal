@@ -315,10 +315,7 @@ pub(super) async fn add(
     };
     // Look the issue up before any other picker or handoff, so its failures end here.
     let issue = match issue.or(picked) {
-        Some(input) => Some(
-            super::issues::load(&ctx.forge_account()?, target.repository(ctx).await?, &input)
-                .await?,
-        ),
+        Some(input) => Some(super::issues::load(ctx, target.repository(ctx).await?, &input).await?),
         None => None,
     };
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
@@ -392,7 +389,7 @@ async fn after_dependencies(
     for input in after {
         dependencies.push(match IssueInput::parse(input) {
             IssueInput::Number | IssueInput::Url => {
-                Dependency::Issue(super::issues::url(repo, input).await?)
+                Dependency::Issue(super::issues::url(ctx, repo, input).await?)
             }
             IssueInput::Invalid => Dependency::Work(input.clone()),
         });
@@ -435,8 +432,7 @@ async fn issue_blockers(
     issue: &super::issues::Issue,
 ) -> Result<Vec<Dependency>> {
     let repo = target.repository(ctx).await?;
-    let account = ctx.forge_account()?;
-    match super::issues::open_dependencies(&account, repo, issue).await {
+    match super::issues::open_dependencies(ctx, repo, issue).await {
         Ok(urls) => Ok(urls.into_iter().map(Dependency::Issue).collect()),
         Err(error) => {
             eprintln!(
@@ -612,11 +608,9 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         repositories: tokio::sync::OnceCell::new(),
     };
     let issue = match &plan.issue {
-        Some(url) => async {
-            super::issues::load(&ctx.forge_account()?, target.repository(ctx).await?, url).await
-        }
-        .await
-        .map(Some),
+        Some(url) => async { super::issues::load(ctx, target.repository(ctx).await?, url).await }
+            .await
+            .map(Some),
         None => Ok(None),
     };
     // A queued start reports a failed lookup as it reports any other failure.
@@ -951,7 +945,7 @@ async fn pick_add_source(
         Source::Existing => creation.existing = Some(pick_add_branch(ctx, target).await?),
         Source::Issue => {
             let repo = target.repository(ctx).await?;
-            let issues = super::issues::origin_forge(repo)
+            let issues = super::issues::origin_forge(ctx, repo)
                 .await?
                 .open_issues(&ctx.forge_account()?)
                 .await?;
@@ -959,7 +953,7 @@ async fn pick_add_source(
         }
         Source::Pull => {
             let repo = target.repository(ctx).await?;
-            let forge = super::issues::origin_forge(repo).await?;
+            let forge = super::issues::origin_forge(ctx, repo).await?;
             let account = ctx.forge_account()?;
             let pulls = forge.open_pulls(&account).await?;
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?;

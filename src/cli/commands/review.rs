@@ -187,7 +187,8 @@ async fn pull_request(
     let remote = crate::repository::remote_url_from_path(&repo.path)
         .await?
         .context("PR review needs an origin remote")?;
-    let pull = ForgeRepo::parse(&remote)?
+    let pull = ForgeRepo::resolve(&remote, &ctx.forge_hosts()?)
+        .await?
         .pull_request(&ctx.forge_account()?, input)
         .await?;
     let owner = client::workspaces(&ctx.paths)
@@ -260,7 +261,7 @@ async fn issue(
         !matches!(reviewer, Reviewer::Manual),
         "an issue review needs an agent; drop --manual"
     );
-    let issue = super::issues::load(&ctx.forge_account()?, repo, input).await?;
+    let issue = super::issues::load(ctx, repo, input).await?;
     let workspace = match issue_workspace(ctx, repo, &issue).await? {
         Some(workspace) => workspace,
         None => {

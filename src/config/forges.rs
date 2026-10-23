@@ -27,6 +27,11 @@ impl Forges {
             .map(|(_, forge)| forge.kind)
     }
 
+    /// The type set for `host`, else its well-known one.
+    pub fn settled(&self, host: &str) -> Option<ForgeKind> {
+        self.pinned(host).or_else(|| ForgeKind::named(host))
+    }
+
     pub fn validate(&self) -> Result<()> {
         for host in self.0.keys() {
             ensure!(

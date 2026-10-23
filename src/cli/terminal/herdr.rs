@@ -153,7 +153,7 @@ async fn start_add(
         let repo = crate::repository::select(&repos, &plan.repository).await?;
         // A queued start has only the issue's URL; the template may name it.
         let found = match (issue, plan.issue_url()) {
-            (None, Some(url)) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),
+            (None, Some(url)) => Some(issues::load(ctx, repo, url).await?),
             _ => None,
         };
         plan.tab_name = Some(PlaceName::new(template, repo, issue.or(found.as_ref())));
@@ -298,7 +298,7 @@ async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Worksp
             .find(|repo| repo.id == workspace.repository_id)
             .context("repository is no longer registered")?;
         let issue = match &workspace.links.issue {
-            Some(url) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),
+            Some(url) => Some(issues::load(ctx, repo, url).await?),
             None => None,
         };
         anyhow::Ok(tab_label(

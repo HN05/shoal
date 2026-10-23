@@ -423,7 +423,7 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
     let [item] = selected.items.as_slice() else {
         return Ok(());
     };
-    let forge = ForgeRepo::from_pull_url(&item.url)?;
+    let forge = ForgeRepo::resolve_pull_url(&item.url, &ctx.forge_hosts()?).await?;
     forge.ensure_resolves_threads()?;
     let (number, _) = forge.pull(&item.url)?;
     let thread = ctx

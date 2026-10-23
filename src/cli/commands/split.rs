@@ -180,7 +180,7 @@ async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
         .into_iter()
         .find(|repository| repository.id == workspace.repository_id)
         .context("the parent workspace's repository is not registered")?;
-    super::issues::load(&ctx.forge_account()?, &repository, input).await
+    super::issues::load(ctx, &repository, input).await
 }
 
 /// The parent and child workspaces, when the workspace has any.

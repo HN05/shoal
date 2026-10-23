@@ -39,6 +39,15 @@ impl Context {
         Ok(crate::forge::account::Account::user(&config.bitbucket))
     }
 
+    /// What the global config and the daemon say each forge host serves.
+    pub fn forge_hosts(&self) -> Result<super::forge_hosts::ForgeHosts<'_>> {
+        let config = crate::config::Config::load(&self.paths)?;
+        Ok(super::forge_hosts::ForgeHosts {
+            paths: &self.paths,
+            forges: config.forges,
+        })
+    }
+
     pub fn new(paths: Paths, json: bool) -> Self {
         Self {
             paths,

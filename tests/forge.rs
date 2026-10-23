@@ -284,15 +284,10 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     let endpoint = "repos/team/project/pulls/8";
     fixture.respond(json!({
         "GET meta": {"body": {"installed_version": "3.14.0"}},
+        "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["bug"])},
         "PUT repos/team/project/issues/8/labels": {"body": []},
     }));
-    let response = label_pr(&fixture);
-    assert_eq!(response["type"], "item", "{response}");
-    assert_eq!(
-        response["data"]["url"],
-        "https://ghe.invalid/team/project/pull/8"
-    );
     let keys = |fixture: &Fixture| -> Vec<Value> {
         fixture
             .requests()
@@ -300,8 +295,21 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
             .map(|request| request[0].clone())
             .collect()
     };
-    assert_eq!(keys(&fixture)[0], "GET meta");
-    assert_eq!(label_pr(&fixture)["type"], "item");
+    // The CLI asks the daemon, which asks the host and records its answer.
+    assert_eq!(fixture.ok(&["labels", "--workspace", "topic"])[0]["name"], "bug");
+    assert_eq!(
+        keys(&fixture),
+        [
+            "GET meta",
+            "GET repos/team/project/labels?per_page=100&page=1"
+        ]
+    );
+    let response = label_pr(&fixture);
+    assert_eq!(response["type"], "item", "{response}");
+    assert_eq!(
+        response["data"]["url"],
+        "https://ghe.invalid/team/project/pull/8"
+    );
     assert!(!keys(&fixture).contains(&json!("GET meta")));
 }
 

@@ -46,7 +46,7 @@ impl Manager {
 
     /// The forge `host` serves, asking it over `scheme` when nothing says.
     pub(crate) async fn forge_type(&self, host: &str, scheme: &'static str) -> Result<ForgeKind> {
-        if let Some(kind) = self.settled_forge_type(host) {
+        if let Some(kind) = self.config().forges.settled(host) {
             return Ok(kind);
         }
         if let Some(kind) = self.recorded_forge_type(host).await? {
@@ -71,14 +71,6 @@ impl Manager {
             "invalid forge host {host:?}"
         );
         self.forge_type(&host.to_ascii_lowercase(), scheme).await
-    }
-
-    /// The type the global config pins for `host`, else its well-known one.
-    fn settled_forge_type(&self, host: &str) -> Option<ForgeKind> {
-        self.config()
-            .forges
-            .pinned(host)
-            .or_else(|| ForgeKind::named(host))
     }
 
     /// Ask `host` which forge it serves and record the answer.

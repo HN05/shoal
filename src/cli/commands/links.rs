@@ -37,7 +37,7 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
         Some(kind) => kind,
         None => {
             let repo = workspace_repository(ctx, workspace).await?;
-            super::issues::origin_forge(&repo)
+            super::issues::origin_forge(ctx, &repo)
                 .await?
                 .item_kind(&ctx.forge_account()?, number)
                 .await?
@@ -127,11 +127,7 @@ fn link_outcome(kind: ItemKind, relation: Relation) -> &'static str {
 async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<String> {
     let title = async {
         let repo = workspace_repository(ctx, workspace).await?;
-        anyhow::Ok(
-            super::issues::load(&ctx.forge_account()?, &repo, input)
-                .await?
-                .title,
-        )
+        anyhow::Ok(super::issues::load(ctx, &repo, input).await?.title)
     };
     match title.await {
         Ok(title) => Some(title),
@@ -175,7 +171,7 @@ async fn pick_open_item(
         )?,
     };
     let repo = workspace_repository(ctx, workspace).await?;
-    let forge = super::issues::origin_forge(&repo).await?;
+    let forge = super::issues::origin_forge(ctx, &repo).await?;
     let number = match kind {
         ItemKind::Issue => {
             let issues = forge.open_issues(&ctx.forge_account()?).await?;
@@ -380,7 +376,7 @@ pub(super) async fn add(
         )
         .await;
     }
-    let forge = super::issues::origin_forge(repo).await?;
+    let forge = super::issues::origin_forge(ctx, repo).await?;
     ensure!(
         link.as_ref().is_some_and(|link| link.repository == forge),
         "link belongs to a different repository"
