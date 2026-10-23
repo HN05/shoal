@@ -74,6 +74,9 @@ pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
+/// Set to `1` to let a debug build change user-level files, for tests that run
+/// in a temporary home.
+pub const DEV_USER_FILES: &str = "SHOAL_DEV_USER_FILES";
 /// Runtime override for the packaged skills directory.
 pub const SKILLS_DIR: &str = "SHOAL_SKILLS_DIR";
 /// Build-time fallback for the packaged skills directory; the macro requires a

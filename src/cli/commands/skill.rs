@@ -61,6 +61,11 @@ pub(super) fn run(
         !crate::env::inherits_scope(&Paths::state_dir(state_dir)?),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
+    ensure!(
+        crate::build::changes_user_files(),
+        "development builds cannot install user-level skills; set {}=1 in a temporary HOME to test installation",
+        crate::env::DEV_USER_FILES
+    );
     let home = crate::fsutil::home_dir()?;
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
@@ -126,7 +131,7 @@ pub(super) fn run(
 /// Bring skills Shoal installed earlier up to date with this version, so an
 /// upgrade needs no `shoal skill install`. Never fails the calling command.
 pub(super) fn refresh_installed(state: &Path, json_output: bool) {
-    if crate::env::inherits_scope(state) {
+    if crate::env::inherits_scope(state) || !crate::build::changes_user_files() {
         return;
     }
     let warn = |error: anyhow::Error| {

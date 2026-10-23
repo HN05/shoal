@@ -443,7 +443,10 @@ configured command for another agent, plus proven child
   so stable prefixes follow upgrades. Shoal changes or removes only skills that
   still match its per-directory record, plus unrecorded files from earlier
   versions, never other files in skill directories. Unscoped commands other than
-  the daemon refresh only directories that still hold a Shoal skill.
+  the daemon refresh only directories that still hold a Shoal skill. Code that
+  changes user-level files outside the state directory checks
+  `build::changes_user_files`, which debug builds fail unless
+  `SHOAL_DEV_USER_FILES=1`.
 - Tests run in temporary state directories and repositories without the launching
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.

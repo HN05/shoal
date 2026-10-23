@@ -1025,7 +1025,10 @@ Shoal owns a skill only while it matches that record, so it updates or removes
 only those, and treats files from before the record as its own. Unscoped
 commands other than the daemon refresh directories that still hold a Shoal
 skill, so upgrades need no reinstall; the daemon may not share the user's tool
-environment. A changed or removed skill stays as the user left it until an
+environment. Debug builds are development builds that share the user's home
+with the installed Shoal, so they change no user-level files outside their
+state directory, skills included, unless tests in a temporary home set
+`SHOAL_DEV_USER_FILES=1`. A changed or removed skill stays as the user left it until an
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with
 `--force` replaces them. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe

@@ -13,6 +13,7 @@ fn cli(home: &Path) -> Command {
     let mut command = support::cli(home);
     command
         .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("SHOAL_DEV_USER_FILES", "1")
         // Skill delivery must not depend on socket path length or daemon setup.
         .env("SHOAL_STATE_DIR", home.join("x".repeat(150)));
     command
@@ -94,6 +95,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
         let deleted = home.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
         let output = support::isolated(home.path(), "bash")
+            .env("SHOAL_DEV_USER_FILES", "1")
             .args([
                 "--noprofile",
                 "--norc",
@@ -124,6 +126,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     // The next command copies the upgraded package's skills.
     success(
         support::isolated(home.path(), bin.join("shoal"))
+            .env("SHOAL_DEV_USER_FILES", "1")
             .arg("skill")
             .output()
             .unwrap(),
@@ -133,6 +136,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     // The explicit runtime source still overrides the adjacent package link.
     success(
         support::isolated(home.path(), bin.join("shoal"))
+            .env("SHOAL_DEV_USER_FILES", "1")
             .env("SHOAL_SKILLS_DIR", package.join("skills"))
             .args(["skill", "install", "codex"])
             .output()
@@ -178,6 +182,7 @@ fn relative_packaged_skill_link_installs_copies_that_follow_homebrew_upgrades() 
         .unwrap();
         success(
             support::isolated(home.path(), &launcher)
+                .env("SHOAL_DEV_USER_FILES", "1")
                 .args(args)
                 .output()
                 .unwrap(),
@@ -331,6 +336,40 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
     let output = run(None, &["completions", "bash"]);
     assert!(output.stderr.is_empty(), "{output:?}");
     assert!(!home.path().join(".claude").exists());
+}
+
+#[test]
+fn development_builds_leave_installed_skills_alone() {
+    let home = tempfile::tempdir().unwrap();
+    let installed = home.path().join(".agents/skills");
+    fs::create_dir_all(installed.join("shoal-worker")).unwrap();
+    fs::write(installed.join("shoal-worker/SKILL.md"), "version one").unwrap();
+    let run = |args: &[&str]| {
+        cli(home.path())
+            .env_remove("SHOAL_DEV_USER_FILES")
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    // Printing a skill refreshes installed ones in a release build.
+    success(run(&["skill"]));
+    let install = run(&["skill", "install", "codex"]);
+    assert!(!install.status.success());
+    assert!(
+        String::from_utf8_lossy(&install.stderr)
+            .contains("development builds cannot install user-level skills")
+    );
+    let mut entries: Vec<_> = fs::read_dir(&installed)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    entries.sort();
+    assert_eq!(entries, ["shoal-worker"]);
+    assert_eq!(
+        fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
+        "version one"
+    );
+    assert!(!home.path().join(".codex").exists());
 }
 
 #[test]
