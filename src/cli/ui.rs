@@ -1425,11 +1425,14 @@ mod tests {
         workspaces[4].review = vec![mark(false)];
         workspaces[5].review = vec![mark(true)];
         let agent = |state| Some(crate::model::AgentStatus { state, since: 0 });
-        // Needing input outranks a current mark; other turn states do not.
+        // Needing input outranks completion, which outranks a current mark
+        // and other turn states.
         workspaces.extend([
             workspace("a", "asking", "asking", WorkspaceState::Ready),
             workspace("a", "marked", "marked", WorkspaceState::Ready),
             workspace("a", "agent", "agent", WorkspaceState::Ready),
+            workspace("a", "done", "done", WorkspaceState::Ready),
+            workspace("a", "follow-up", "follow-up", WorkspaceState::Ready),
         ]);
         workspaces[6].review = vec![mark(false)];
         workspaces[6].agent_state = agent(AgentState::Waiting);
@@ -1437,6 +1440,11 @@ mod tests {
         workspaces[7].agent_state = agent(AgentState::Working);
         workspaces[8].running = true;
         workspaces[8].agent_state = agent(AgentState::Idle);
+        workspaces[9].done = true;
+        workspaces[9].review = vec![mark(false)];
+        workspaces[9].agent_state = agent(AgentState::Idle);
+        workspaces[10].done = true;
+        workspaces[10].agent_state = agent(AgentState::Waiting);
         assert_eq!(
             workspace_rows(
                 &workspaces,
@@ -1455,6 +1463,8 @@ mod tests {
                 "● asking     needs input",
                 "● marked     ready",
                 "○ agent      waiting",
+                "○ done       finished",
+                "● follow-up  needs input",
             ]
         );
         let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];

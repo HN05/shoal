@@ -18,6 +18,7 @@ pub enum ListStatus {
     Failed,
     Stopped,
     NeedsInput,
+    Finished,
     Ready,
     Working,
     Waiting,
@@ -32,7 +33,7 @@ pub enum ListStatus {
 
 impl ListStatus {
     /// The workspace's state unless ready, then stopped work, an agent
-    /// that needs input, a current ready mark, the agent's other turn
+    /// that needs input, a recorded completion, a current ready mark, the agent's other turn
     /// states, an agent or command running without one, an outdated mark,
     /// or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
@@ -47,6 +48,7 @@ impl ListStatus {
             WorkspaceState::Failed => Self::Failed,
             WorkspaceState::Ready if stopped => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
+            WorkspaceState::Ready if workspace.done => Self::Finished,
             WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::agent(state),
@@ -84,6 +86,7 @@ impl ListStatus {
             Self::Failed => "failed",
             Self::Stopped => "stopped",
             Self::NeedsInput => "needs input",
+            Self::Finished => "finished",
             Self::Ready => "ready",
             Self::Working => "working",
             Self::Waiting => "waiting",
@@ -99,6 +102,7 @@ impl ListStatus {
         match self {
             Self::Failed => Style::Error,
             Self::Ready => Style::Success,
+            Self::Finished => Style::Done,
             Self::Working => Style::Heading,
             Self::Waiting => Style::Idle,
             Self::ProcessRunning => Style::Active,
@@ -132,7 +136,11 @@ impl ListStatus {
         match self {
             Self::NeedsInput | Self::Ready | Self::Stopped => Group::YourTurn,
             Self::Working | Self::ProcessRunning => Group::Busy,
-            Self::Waiting | Self::ReadyOutdated | Self::Inactive | Self::Queued => Group::Quiet,
+            Self::Waiting
+            | Self::Finished
+            | Self::ReadyOutdated
+            | Self::Inactive
+            | Self::Queued => Group::Quiet,
             Self::Preparing
             | Self::Stopping
             | Self::Removing

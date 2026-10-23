@@ -407,7 +407,7 @@ rows span several, its status and the linked issue's title, cut with `…` to fi
 a terminal's width. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
-`needs input`, `ready`, the other [agent states](#agent-state),
+`needs input`, `finished` after `shoal done` until `shoal undone`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 The header names the keys the list binds, most used first, on as many lines as

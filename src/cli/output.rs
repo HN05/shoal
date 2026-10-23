@@ -54,6 +54,8 @@ pub enum Style {
     Active,
     /// An agent waits for a turn.
     Idle,
+    /// Work is complete and needs nothing more.
+    Done,
 }
 
 #[derive(Clone, Copy)]
@@ -111,6 +113,7 @@ impl Palette {
             Style::Attention => "1;33",
             Style::Active => "36",
             Style::Idle => "34",
+            Style::Done => "2;32",
         };
         format!("\x1b[{code}m{value}\x1b[0m")
     }
