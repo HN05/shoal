@@ -216,14 +216,8 @@ def resume(version):
     publish(version, False, merged_commit=sha)
 
 
-def release_all(requested):
-    current = versions((ROOT / "Cargo.toml").read_text(), (ROOT / "Cargo.lock").read_text())
-    if requested and parts(requested) == parts(current):
-        resume(requested)
-        return
-    repository = os.environ["RELEASE_REPOSITORY"]
-    pr = prepare(requested, False, automated=True)
-    number = pr["number"]
+def merge_release_pr(repository, number):
+    """Merge the release PR at the checked-out validated commit and return the server's PR."""
     # Pin the merge to the exact validated release commit and respect branch
     # protection. Never use force_merge or merge an unexpected branch update.
     merge = {"Do": "rebase", "head_commit_id": git("rev-parse", "HEAD"),
@@ -238,7 +232,17 @@ def release_all(requested):
             if error.code != 405 or attempt == 29:
                 raise
             time.sleep(2)
-    merged = api(f"/repos/{repository}/pulls/{number}")
+    return api(f"/repos/{repository}/pulls/{number}")
+
+
+def release_all(requested):
+    current = versions((ROOT / "Cargo.toml").read_text(), (ROOT / "Cargo.lock").read_text())
+    if requested and parts(requested) == parts(current):
+        resume(requested)
+        return
+    repository = os.environ["RELEASE_REPOSITORY"]
+    number = prepare(requested, False, automated=True)["number"]
+    merged = merge_release_pr(repository, number)
     publish_merged(merged, repository, number)
 
 

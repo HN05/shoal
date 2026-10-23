@@ -50,24 +50,56 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.merged_release(invalid, "HN05/shoal", 7)
 
-    def test_one_click_release_pins_merge_and_only_publishes_after_success(self):
+    def test_one_click_release_publishes_only_after_the_merge(self):
         with patch.dict(release.os.environ, {"RELEASE_REPOSITORY": "HN05/shoal"}), \
                 patch.object(release, "versions", return_value="0.1.0"), \
                 patch.object(release, "prepare", return_value={"number": 7}) as prepare, \
-                patch.object(release, "git", return_value="a" * 40), \
-                patch.object(release, "api", side_effect=[None, {"merged": True}]) as api, \
+                patch.object(release, "merge_release_pr", return_value={"merged": True}) as merge, \
                 patch.object(release, "publish_merged") as publish:
             release.release_all(None)
             prepare.assert_called_once_with(None, False, automated=True)
-            self.assertEqual(api.call_args_list[0].args[1], {
-                "Do": "rebase", "head_commit_id": "a" * 40, "delete_branch_after_merge": True,
-            })
+            merge.assert_called_once_with("HN05/shoal", 7)
             publish.assert_called_once_with({"merged": True}, "HN05/shoal", 7)
-            api.side_effect = ValueError("merge blocked")
+            merge.side_effect = ValueError("merge blocked")
             publish.reset_mock()
             with self.assertRaises(ValueError):
                 release.release_all("0.2.0")
             publish.assert_not_called()
+
+    def test_merge_release_pr_pins_the_validated_commit(self):
+        with patch.object(release, "git", return_value="a" * 40), \
+                patch.object(release, "api", side_effect=[None, {"merged": True}]) as api:
+            self.assertEqual(release.merge_release_pr("HN05/shoal", 7), {"merged": True})
+        self.assertEqual(api.call_args_list, [
+            call("/repos/HN05/shoal/pulls/7/merge", {
+                "Do": "rebase", "head_commit_id": "a" * 40, "delete_branch_after_merge": True,
+            }),
+            call("/repos/HN05/shoal/pulls/7"),
+        ])
+
+    def test_merge_release_pr_retries_only_while_not_mergeable(self):
+        def refusal(code):
+            return HTTPError("url", code, "refused", {}, BytesIO())
+
+        with patch.object(release, "git", return_value="a" * 40), \
+                patch.object(release.time, "sleep") as sleep, \
+                patch.object(release, "api",
+                             side_effect=[refusal(405), None, {"merged": True}]) as api:
+            self.assertEqual(release.merge_release_pr("HN05/shoal", 7), {"merged": True})
+        self.assertEqual(api.call_count, 3)
+        sleep.assert_called_once_with(2)
+        with patch.object(release, "git", return_value="a" * 40), \
+                patch.object(release.time, "sleep"), \
+                patch.object(release, "api", side_effect=[refusal(409)]) as api, \
+                self.assertRaises(HTTPError):
+            release.merge_release_pr("HN05/shoal", 7)
+        api.assert_called_once()
+        with patch.object(release, "git", return_value="a" * 40), \
+                patch.object(release.time, "sleep"), \
+                patch.object(release, "api", side_effect=refusal(405)) as api, \
+                self.assertRaises(HTTPError):
+            release.merge_release_pr("HN05/shoal", 7)
+        self.assertEqual(api.call_count, 30)
 
     def test_one_click_release_resumes_current_explicit_version(self):
         with patch.object(release, "versions", return_value="0.2.0"), \
