@@ -55,11 +55,16 @@ fn settings(turn_state: bool) -> std::io::Result<Vec<OsString>> {
 }
 
 /// Each Claude Code hook event with the group that reports its state. A
+/// session that starts, resumes or clears waits for its first turn. A
 /// finished tool call, failed or not, means a permission prompt or question
 /// was answered. No hook follows an interrupted turn, so Claude Code's notice
 /// that its prompt has waited for input reports the turn finished.
 fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     vec![
+        (
+            "SessionStart",
+            hooks::state(shoal, Some(hooks::SESSION_START), AgentState::Idle),
+        ),
         (
             "UserPromptSubmit",
             hooks::state(shoal, None, AgentState::Working),
@@ -137,6 +142,7 @@ mod tests {
         assert_eq!(
             states,
             [
+                expected("SessionStart", Some("startup|resume|clear"), "idle"),
                 expected("UserPromptSubmit", None, "working"),
                 expected("PostToolUse", None, "working"),
                 expected("PostToolUseFailure", None, "working"),

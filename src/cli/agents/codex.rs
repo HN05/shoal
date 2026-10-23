@@ -128,11 +128,16 @@ fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
         .collect())
 }
 
-/// Each Codex hook event with the group that reports its state. Codex has no
+/// Each Codex hook event with the group that reports its state. A session
+/// that starts, resumes or clears waits for its first turn. Codex has no
 /// notice that its prompt waits for input, so an interrupted turn stays
 /// working until its next turn ends.
 fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     vec![
+        (
+            "SessionStart",
+            hooks::state(shoal, Some(hooks::SESSION_START), AgentState::Idle),
+        ),
         (
             "UserPromptSubmit",
             hooks::state(shoal, None, AgentState::Working),
@@ -166,7 +171,12 @@ mod tests {
             .collect();
         assert_eq!(
             hooks.keys().collect::<Vec<_>>(),
-            ["hooks.PostToolUse", "hooks.Stop", "hooks.UserPromptSubmit"]
+            [
+                "hooks.PostToolUse",
+                "hooks.SessionStart",
+                "hooks.Stop",
+                "hooks.UserPromptSubmit"
+            ]
         );
         for event in hooks::MESSAGE_EVENTS {
             let groups = &hooks[&format!("hooks.{event}")];
@@ -185,6 +195,10 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(stop.contains(" agent-state idle "), "{stop}");
+        let start = &hooks["hooks.SessionStart"][0];
+        assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
+        let start = start["hooks"][0]["command"].as_str().unwrap();
+        assert!(start.contains(" agent-state idle "), "{start}");
         let chat = Codex.chat_hook_args().unwrap();
         assert!(
             chat.iter()

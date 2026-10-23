@@ -10,6 +10,10 @@ use crate::state::AgentState;
 /// after each tool call, and when the user submits a prompt.
 pub const MESSAGE_EVENTS: [&str; 2] = ["PostToolUse", "UserPromptSubmit"];
 
+/// The session start sources that leave an agent waiting for its first turn:
+/// a restart to compact the context happens mid-turn.
+pub const SESSION_START: &str = "startup|resume|clear";
+
 /// This Shoal executable quoted for hook shell text. The hooks inherit the
 /// execution's scope and state directory.
 pub fn shoal() -> std::io::Result<String> {

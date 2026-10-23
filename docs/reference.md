@@ -2300,6 +2300,8 @@ Agent hooks report the agent's turn state with this command, and integrations
 read it instead of each inferring it from the terminal. Shoal's terminal
 Claude Code and Codex launches, including `add --agent` and resumed sessions, register
 the hooks with the [message hooks](#agent-messages); Happy sessions do not.
+A session that starts, resumes or clears reports `idle`, so a new agent shows
+`waiting` until its first turn.
 Neither agent has a hook for an interrupted turn: Claude Code shows `working` until
 it notifies that its prompt is waiting for input, and Codex until its next turn
 ends. Codex has no hook for a permission prompt, so it reports `working`
