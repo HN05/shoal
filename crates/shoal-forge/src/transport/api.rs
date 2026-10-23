@@ -10,7 +10,15 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use crate::{ForgeRepo, account::Account, backends::Backend, transport::programs};
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    transport::{
+        programs,
+        resend::{Resend, Transient, resending},
+    },
+};
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending an attached file, which may be a large video.
@@ -49,6 +57,7 @@ pub(crate) struct Request {
     pub confirm: Option<&'static str>,
     /// A file sent as the body instead of JSON.
     pub upload: Option<Upload>,
+    pub resend: Resend,
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -72,15 +81,24 @@ impl Request {
             body,
             confirm: None,
             upload: None,
+            resend: Resend::Never,
         }
     }
 
-    /// POST the file `upload` names.
+    /// POST the file `upload` names, again if the forge did not get it.
     pub fn upload(endpoint: String, upload: Upload) -> Self {
         Self {
             upload: Some(upload),
+            resend: Resend::Unreceived,
             ..Self::new(HttpMethod::Post, endpoint, None)
         }
+    }
+
+    /// Send again after any failure that may pass, since sending it twice
+    /// does no more than sending it once.
+    pub fn repeatable(mut self) -> Self {
+        self.resend = Resend::Always;
+        self
     }
 
     fn timeout(&self) -> Duration {
@@ -106,7 +124,7 @@ impl ForgeRepo {
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {
-            let body = self.kind.send(self, account, request).await?;
+            let body = resending(request.resend, || self.kind.send(self, account, request)).await?;
             if let Some(field) = request.confirm {
                 ensure!(
                     body[field] == true,
@@ -215,10 +233,13 @@ impl ForgeRepo {
         let output = shoal_subprocess::Run::new(curl)
             .input(authorization.unwrap_or_default())
             .timeout(request.timeout())
-            .output()
+            .capture()
             .await
-            .context("curl is required for Forgejo, Gitea and Bitbucket API requests")?;
-        curl_response(&output)
+            .map_err(curl_unrun)?;
+        if !output.status.success() {
+            return Err(curl_failure(&output));
+        }
+        curl_response(std::str::from_utf8(&output.stdout).context("curl output is not UTF-8")?)
     }
 
     /// Every item of a paginated list endpoint, read as `account`.
@@ -324,6 +345,29 @@ fn error_message(text: &str) -> Option<String> {
     })
 }
 
+/// Why curl did not run to its end: a timeout may pass, a missing curl will
+/// not.
+fn curl_unrun(error: std::io::Error) -> anyhow::Error {
+    if error.kind() == std::io::ErrorKind::TimedOut {
+        return Transient::Interrupted(error.to_string()).into();
+    }
+    anyhow::Error::new(error)
+        .context("curl is required for Forgejo, Gitea and Bitbucket API requests")
+}
+
+/// The failure curl's exit reports, marked when it may pass.
+fn curl_failure(output: &std::process::Output) -> anyhow::Error {
+    let message = format!(
+        "curl failed ({}): {}",
+        output.status,
+        shoal_subprocess::diagnostic(&output.stderr).trim()
+    );
+    match Transient::from_curl(output.status.code(), message.clone()) {
+        Some(transient) => transient.into(),
+        None => anyhow::anyhow!(message),
+    }
+}
+
 /// curl's output ends with the status code `-w` appends on its own line.
 fn curl_response(text: &str) -> Result<Value> {
     json_body(curl_body(text)?)
@@ -342,7 +386,11 @@ pub(crate) fn curl_body(text: &str) -> Result<&str> {
 pub(crate) fn http_body(status: u16, body: &str) -> Result<&str> {
     if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
-        bail!("HTTP {status}: {}", detail.trim());
+        let message = format!("HTTP {status}: {}", detail.trim());
+        if Transient::busy_status(status) {
+            return Err(Transient::Busy(message).into());
+        }
+        bail!(message);
     }
     Ok(body)
 }

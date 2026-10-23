@@ -1835,7 +1835,9 @@ body file's directory or the working directory, and otherwise after the body;
 GitLab keep uploads with the repository. Forgejo and Gitea keep them with the
 item or comment, so a new comment or item is first posted naming the files,
 then updated to show them; Shoal first refuses a file the instance's attachment
-settings would refuse, by type or size. GitHub needs write access to the repository and Forgejo
+settings would refuse, by type or size, and resends an upload or a comment's update
+up to three times while the connection fails or the forge answers 429 or 5xx.
+GitHub needs write access to the repository and Forgejo
 an fj login; Bitbucket has no API for attachments and refuses them before
 sending anything.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review

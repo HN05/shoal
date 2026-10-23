@@ -747,6 +747,51 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     );
 }
 
+#[test]
+fn forgejo_sends_a_comments_files_again_while_the_forge_is_busy() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let [_, image, _] = attachment_files(&fixture);
+    let comments = "repos/team/project/issues/comments/70";
+    let busy = json!({"status": 503, "body": {"message": "busy"}});
+    fixture.respond(json!({
+        "GET settings/attachment": attachment_settings(true, "", 1),
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
+        format!("POST {comments}/assets?name=login.png"): [busy,
+            {"status": 201, "body": {"browser_download_url": "/attachments/1"}}],
+        format!("PATCH {comments}"): [busy, {"body": {}}],
+    }));
+    fixture.ok(&[
+        "pr",
+        "comment",
+        "8",
+        "--workspace",
+        "topic",
+        "--body",
+        "Seen",
+        "--attach",
+        &image,
+    ]);
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| request[0].clone())
+        .collect();
+    let upload = json!(format!("POST {comments}/assets?name=login.png"));
+    let edit = json!(format!("PATCH {comments}"));
+    assert_eq!(
+        sent,
+        [
+            json!("POST repos/team/project/issues/8/comments"),
+            upload.clone(),
+            upload,
+            edit.clone(),
+            edit,
+        ]
+    );
+}
+
 fn attachment_settings(enabled: bool, allowed_types: &str, max_size: u64) -> Value {
     json!({"body": {"enabled": enabled, "allowed_types": allowed_types,
         "max_size": max_size, "max_files": 5}})

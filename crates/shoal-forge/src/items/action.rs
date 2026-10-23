@@ -271,8 +271,8 @@ impl ForgeRepo {
         let body = self
             .attach(account, holder, &pending.body, &pending.attachments)
             .await?;
-        self.send(account, &self.kind.edit_comment(self, id, &body)?)
-            .await?;
+        let edit = self.kind.edit_comment(self, id, &body)?.repeatable();
+        self.send(account, &edit).await?;
         Ok(())
     }
 

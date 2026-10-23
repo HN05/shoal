@@ -865,7 +865,14 @@ because the reply tells the reviewer why. Attached images and videos are read
 by the daemon from paths the CLI checked, anywhere on disk: a body file can
 already come from anywhere and scope is cooperative, while recordings kept in the
 worktree would be untracked files that hold up cleanup. GitHub's REST API has no
-upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Each action
+upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Forgejo
+takes a comment's files only once it is posted, so a failure there would leave it
+without them: Shoal refuses what the instance's attachment settings refuse before
+posting, and resends the uploads and the comment's update after failures that may
+pass. An upload is resent only when the forge did not get it or answered that it is
+busy, since a second copy would stay on the comment; the update also after a
+broken connection. A comment whose files still fail stays posted, neither deleted
+nor finished later, and its error says so. Each action
 returns the item as the forge reports it afterwards and records an
 `item_changed` event for integrations. A new issue is recorded as opened and
 assigned only on request: a workspace's assigned issue is its work, while an issue
