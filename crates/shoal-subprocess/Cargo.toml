@@ -9,9 +9,9 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-tokio = { workspace = true, features = ["io-util", "process", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "time"] }
 
 [dev-dependencies]
 libc.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

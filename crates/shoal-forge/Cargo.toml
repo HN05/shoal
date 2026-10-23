@@ -22,9 +22,9 @@ rusqlite = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 shoal-subprocess.workspace = true
-tokio = { workspace = true, features = ["io-util", "process", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 tempfile.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
