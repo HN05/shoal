@@ -25,7 +25,6 @@ pub struct Effective {
     #[serde(skip)]
     pub arguments: BTreeMap<String, crate::ai::Arguments>,
     pub agent_resume: named_commands::Commands,
-    pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -121,6 +120,19 @@ impl Stack {
         Ok(entries)
     }
 
+    /// Warnings for the settings each layer sets that Shoal no longer reads.
+    pub fn warnings(&self) -> Vec<String> {
+        self.layers
+            .iter()
+            .flat_map(|(config, layer)| {
+                config
+                    .retired_settings()
+                    .into_iter()
+                    .map(move |warning| format!("{layer}: {warning}"))
+            })
+            .collect()
+    }
+
     /// The entries of one named table with the layer each came from.
     pub fn named<T: Clone>(
         &self,
@@ -186,7 +198,6 @@ impl Effective {
             providers: Default::default(),
             arguments: Default::default(),
             agent_resume: merged.agent_resume,
-            issue_template: merged.issue_template,
             agent_template: merged.agent_template,
             chat_template: merged.chat_template,
             agent_auth: merged.agent_auth,
@@ -314,7 +325,6 @@ fn built_in() -> RepoConfig {
     let restore = Restore::default();
     RepoConfig {
         max_agents: Some(config::AgentLimit::Dynamic),
-        issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
         chat_template: Some(config::templates::CHAT_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
@@ -623,11 +633,6 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         named!("commands", commands),
         named!("agent_resume", agent_resume),
         Box::new(Template(Scalar {
-            key: "issue_template",
-            get: |config| &config.issue_template,
-            get_mut: |config| &mut config.issue_template,
-        })),
-        Box::new(Template(Scalar {
             key: "agent_template",
             get: |config| &config.agent_template,
             get_mut: |config| &mut config.agent_template,
@@ -710,7 +715,7 @@ mod tests {
     /// value that does not survive layering. Adding a field to `RepoConfig`
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
-issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
+agent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
@@ -737,9 +742,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 
     #[test]
     fn templates_append_one_repository_value_and_report_the_composed_text() {
-        for key in ["issue_template", "agent_template", "chat_template"] {
+        for key in ["agent_template", "chat_template"] {
             let default = match key {
-                "issue_template" => Some(config::templates::ISSUE_DEFAULT),
                 "chat_template" => Some(config::templates::CHAT_DEFAULT),
                 _ => None,
             };
@@ -947,7 +951,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         let RepoConfig {
             commands,
             agent_resume,
-            issue_template,
+            // Retired, so no layer passes it on.
+            retired_issue_template: _,
             agent_template,
             chat_template,
             agent_auth,
@@ -1006,7 +1011,6 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
                 && !seed.paths.is_empty()
         );
         for present in [
-            issue_template.is_some(),
             agent_template.is_some(),
             chat_template.is_some(),
             agent_auth.fj.is_some(),

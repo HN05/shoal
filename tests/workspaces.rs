@@ -11342,7 +11342,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
-fn issue_templates_append_saved_or_worktree_context_to_global() {
+fn the_built_in_issue_prompt_ignores_retired_issue_templates() {
     let fixture = Fixture::new();
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
@@ -11366,75 +11366,60 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
         install_test_script_with_mode(&path, script, 0o700);
     }
     fixture.add_github_origin();
-    for (index, expected) in [
-        "global 44: Literal {body} $(false)",
-        "global 44: Literal {body} $(false)\n\nrepo Literal {body}",
-        "global 44: Literal {body} $(false)\n\nsaved $(false)",
-        "global 44: Literal {body} $(false)",
-        "",
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        if index == 4 {
-            fs::write(config_dir.join("issue-template.md"), "").unwrap();
-        }
-        if index == 1 {
-            fs::write(fixture.repo.join("issue-template.md"), "repo {title}").unwrap();
-            git(&fixture.repo, &["add", "issue-template.md"]);
-            git(
-                &fixture.repo,
-                &[
-                    "-c",
-                    "user.name=Test",
-                    "-c",
-                    "user.email=test@example.invalid",
-                    "commit",
-                    "-m",
-                    "Add template",
-                ],
-            );
-        }
-        if index >= 2 {
-            let local = fixture.root.path().join("local.toml");
-            fs::write(
-                &local,
-                if index == 2 {
-                    "issue_template = 'saved {body}'"
-                } else {
-                    "issue_template = ''"
-                },
-            )
-            .unwrap();
-            fixture.ok(&[
-                "repo",
-                "config",
-                fixture.repo.to_str().unwrap(),
-                "--file",
-                local.to_str().unwrap(),
-            ]);
-        }
-        let output = fixture
-            .command()
-            .args([
-                "--json",
-                "add",
-                fixture.repo.to_str().unwrap(),
-                &format!("template-{index}"),
-                "--base",
-                "HEAD",
-                "--issue",
-                "44",
-                "--agent",
-                "claude",
-            ])
-            .env("PATH", fixture.restricted_path(&bin))
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{output:?}");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let args = strip_shoal_arguments(stdout.split_once('\n').unwrap().1, '\0');
-        assert_eq!(args.split('\0').next(), Some(expected));
+    let local = fixture.root.path().join("local.toml");
+    fs::write(&local, "issue_template = 'saved {body}'").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        local.to_str().unwrap(),
+    ]);
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "template",
+            "--base",
+            "HEAD",
+            "--issue",
+            "44",
+            "--agent",
+            "claude",
+        ])
+        .env("PATH", fixture.restricted_path(&bin))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let args = strip_shoal_arguments(stdout.split_once('\n').unwrap().1, '\0');
+    let prompt = args.split('\0').next().unwrap();
+    assert!(
+        prompt.starts_with("Work on issue #44: Literal {body}\n"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("\nIssue description:\n$(false)\n"),
+        "{prompt}"
+    );
+    assert!(
+        !prompt.contains("global") && !prompt.contains("saved"),
+        "{prompt}"
+    );
+    let output = fixture
+        .command()
+        .args(["--json", "config", "show", "template"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    for layer in ["global config", "saved repository config"] {
+        assert!(
+            stderr.contains(&format!("warning: {layer}: issue_template")),
+            "{stderr}"
+        );
     }
 }
 
@@ -13821,11 +13806,6 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(config_dir.join("agent-template.md"), "General {workspace}").unwrap();
-    fs::write(
-        config_dir.join("issue-template.md"),
-        "Issue {title}: {body}",
-    )
-    .unwrap();
     let record = install_fake_happy(&fixture);
     let gh = fixture.root.path().join("bin/gh");
     let title = "Fix API timeout";
@@ -13916,7 +13896,12 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             let prompt = fs::read_to_string(&prompt_file).unwrap();
             assert_eq!(
                 after_guidance(&prompt),
-                format!("General 34-fix-api-timeout\n\nIssue {title}: {body}")
+                format!(
+                    "General 34-fix-api-timeout\n\nWork on issue #34: {title}\n\
+                     https://github.com/team/project/issues/34\n\n\
+                     Issue description:\n{body}\n\n\
+                     `shoal view` shows the issue with its comments and later edits."
+                )
             );
             assert_eq!(launch["prompt_delivered"], false);
             assert_eq!(launch["happy_session_id"], Value::Null);
@@ -15741,7 +15726,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'helper'\nagent_template = 'Follow {branch}'\nissue_template = '{title}: {body}'\n[commands]\nhelper = ['missing-global-launcher']\n",
+        "default_agent = 'helper'\nagent_template = 'Follow {branch}'\n[commands]\nhelper = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -15795,7 +15780,10 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert_eq!(
         remove_guidance(&args),
         format!(
-            "--prompt=Follow {branch}\n\nLiteral {{branch}}: $(false)\0literal {{prompt}}\0{branch}\0"
+            "--prompt=Follow {branch}\n\nWork on issue #37: Literal {{branch}}\n\
+             https://github.com/team/project/issues/37\n\nIssue description:\n$(false)\n\n\
+             `shoal view` shows the issue with its comments and later edits.\0\
+             literal {{prompt}}\0{branch}\0"
         )
     );
     assert_eq!(

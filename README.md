@@ -19,7 +19,7 @@ Homebrew installs the additional tools for workspace management and interactive
 menus. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal install`.
 `shoal install` starts the per-user
-daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
+daemon and writes missing config and chat template defaults in `~/.config/shoal/`;
 `shoal skill install` installs the worker and orchestrator skills into each
 [AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
@@ -99,8 +99,7 @@ tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
 Issue additions also use `default_agent = "codex"` from the repository or global
-config. Edit `~/.config/shoal/issue-template.md`
-to customize issue prompts, `agent-template.md` to add general instructions and
+config. Edit `~/.config/shoal/agent-template.md` to add general instructions and
 `chat-template.md` for `shoal chat`; put those files in a repository root to
 append project-specific guidance.
 New workspaces branch from the repository's default branch unless `--base REF`

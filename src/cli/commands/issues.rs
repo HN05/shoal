@@ -161,16 +161,19 @@ impl Issue {
         format!("{}#{}", crate::repository::name(repo), self.number)
     }
 
-    pub fn prompt(&self, template: Option<&str>) -> String {
-        crate::config::templates::render(
-            template.unwrap_or(crate::config::templates::ISSUE_DEFAULT),
-            &[
-                ("{number}", &self.number.to_string()),
-                ("{title}", &self.title),
-                ("{url}", &self.url),
-                ("{body}", &self.details),
-            ],
-        )
+    /// The task an issue workspace's agent starts with; the body is the
+    /// issue's description when the workspace was created.
+    pub fn prompt(&self) -> String {
+        let mut prompt = format!(
+            "Work on issue #{}: {}\n{}\n",
+            self.number, self.title, self.url
+        );
+        let details = self.details.trim();
+        if !details.is_empty() {
+            prompt.push_str(&format!("\nIssue description:\n{details}\n"));
+        }
+        prompt.push_str("\n`shoal view` shows the issue with its comments and later edits.");
+        prompt
     }
 }
 
@@ -373,6 +376,12 @@ mod tests {
         assert_eq!(issue.branch_name(), "34-fix");
         issue.title = "日本語 to the".into();
         assert_eq!(issue.branch_name(), "issue-34");
-        assert!(issue.prompt(None).contains("url\n\nIssue details:\nbody"));
+        assert!(
+            issue
+                .prompt()
+                .contains("url\n\nIssue description:\nbody\n\n`shoal view`")
+        );
+        issue.details = " \n".into();
+        assert!(!issue.prompt().contains("Issue description"));
     }
 }

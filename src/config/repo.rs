@@ -53,7 +53,10 @@ states!(
 pub struct RepoConfig {
     pub commands: crate::config::named_commands::Commands,
     pub agent_resume: crate::config::named_commands::Commands,
-    pub issue_template: Option<String>,
+    /// Retired with issue templates; kept so configs written by earlier
+    /// versions still load and `config show` can say it is unused.
+    #[serde(rename = "issue_template")]
+    pub retired_issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -218,9 +221,11 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         }
         None => RepoConfig::default(),
     };
-    if config.issue_template.is_none() {
-        config.issue_template =
-            crate::config::templates::read(workspace_dir, crate::config::templates::ISSUE_FILE)?;
+    if config.retired_issue_template.is_none() {
+        config.retired_issue_template = crate::config::templates::read(
+            workspace_dir,
+            crate::config::templates::RETIRED_ISSUE_FILE,
+        )?;
     }
     if config.agent_template.is_none() {
         config.agent_template =
@@ -231,6 +236,24 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
             crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
     }
     Ok(config)
+}
+
+impl RepoConfig {
+    /// What this layer sets that Shoal no longer reads, with what replaces it.
+    pub fn retired_settings(&self) -> Vec<&'static str> {
+        let mut retired = Vec::new();
+        if self
+            .retired_issue_template
+            .as_deref()
+            .is_some_and(crate::config::templates::is_custom_issue_template)
+        {
+            retired.push(
+                "issue_template and issue-template.md are no longer used; \
+                 move their instructions to agent_template",
+            );
+        }
+        retired
+    }
 }
 
 pub fn parse(text: &str) -> Result<RepoConfig> {

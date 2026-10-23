@@ -7,8 +7,13 @@ use crate::{config::Config, paths::Paths};
 
 pub use super::placeholders::render;
 
-pub const ISSUE_FILE: &str = "issue-template.md";
-pub const ISSUE_DEFAULT: &str = include_str!("templates/issue.md");
+/// Retired with issue templates, now that the issue prompt is built in; read
+/// only to warn about instructions it still holds.
+pub const RETIRED_ISSUE_FILE: &str = "issue-template.md";
+/// What `install` used to seed as the issue template, which holds no
+/// instructions of the user's.
+const RETIRED_ISSUE_DEFAULT: &str =
+    "Work on issue #{number}: {title}\n{url}\n\nIssue details:\n{body}";
 pub const AGENT_FILE: &str = "agent-template.md";
 /// Sent to every agent launch ahead of the user's `agent_template` additions.
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
@@ -25,22 +30,26 @@ pub fn install(paths: &Paths) -> Result<()> {
     install_at(config.parent().context("config has no directory")?)
 }
 
-/// Seed missing templates; an existing file belongs to the user.
+/// Seed the missing chat template; an existing file belongs to the user.
 fn install_at(directory: &Path) -> Result<()> {
     fs::create_dir_all(directory)?;
-    for (name, contents) in [(ISSUE_FILE, ISSUE_DEFAULT), (CHAT_FILE, CHAT_DEFAULT)] {
-        let path = directory.join(name);
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => file.write_all(contents.as_bytes())?,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error).with_context(|| format!("create {}", path.display())),
-        }
+    let path = directory.join(CHAT_FILE);
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(mut file) => file.write_all(CHAT_DEFAULT.as_bytes())?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error).with_context(|| format!("create {}", path.display())),
     }
     Ok(())
+}
+
+/// Whether a retired issue template holds instructions the user wrote.
+pub fn is_custom_issue_template(template: &str) -> bool {
+    let template = template.trim();
+    !template.is_empty() && template != RETIRED_ISSUE_DEFAULT
 }
 
 /// Chat `instructions` sent as an agent's first message, which starts a turn
@@ -109,14 +118,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn install_seeds_missing_templates_and_preserves_edits() {
+    fn install_seeds_the_chat_template_and_preserves_edits() {
         let directory = tempfile::tempdir().unwrap();
         install_at(directory.path()).unwrap();
-        let path = directory.path().join(ISSUE_FILE);
-        assert_eq!(fs::read_to_string(&path).unwrap(), ISSUE_DEFAULT);
-        let chat = directory.path().join(CHAT_FILE);
-        assert_eq!(fs::read_to_string(chat).unwrap(), CHAT_DEFAULT);
+        let path = directory.path().join(CHAT_FILE);
+        assert_eq!(fs::read_to_string(&path).unwrap(), CHAT_DEFAULT);
         assert!(!directory.path().join(AGENT_FILE).exists());
+        assert!(!directory.path().join(RETIRED_ISSUE_FILE).exists());
         fs::write(&path, "custom").unwrap();
         install_at(directory.path()).unwrap();
         assert_eq!(fs::read_to_string(path).unwrap(), "custom");
@@ -149,6 +157,16 @@ mod tests {
             instructions(Some("Babysit {branch}."), &workspace, Delivery::Watched),
             format!("{guidance}\n\nBabysit topic.")
         );
+    }
+
+    #[test]
+    fn only_an_edited_retired_issue_template_holds_instructions() {
+        assert!(!is_custom_issue_template(&format!(
+            "{RETIRED_ISSUE_DEFAULT}\n"
+        )));
+        assert!(is_custom_issue_template(&format!(
+            "{RETIRED_ISSUE_DEFAULT}\n\nPlan first."
+        )));
     }
 
     fn workspace() -> crate::model::Workspace {

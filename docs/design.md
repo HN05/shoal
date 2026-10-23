@@ -1102,15 +1102,19 @@ One option table defines both the merge and its provenance, so a reported layer
 is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
 Prompt templates select repository additions by saved/worktree precedence and
-append them to global guidance, using the bundled issue or chat template when
+append them to global guidance, using the bundled chat template when
 no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
 Shoal's agent guidance is built in and precedes every agent template, so
-adding instructions never freezes or replaces it; `install` adds missing issue
-and chat templates from the bundled defaults and never touches existing files;
+adding instructions never freezes or replaces it; `install` adds a missing
+chat template from the bundled default and never touches existing files;
 rendering substitutes known fields once without evaluating their contents.
+The issue prompt is built in and states only the task, pointing to `shoal view`
+for the rest: a seeded issue template froze the default for whoever had a copy,
+and instructions for issue work belong in the agent template. A retired setting
+still loads, and `config show` and `doctor` warn when it holds the user's text.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine

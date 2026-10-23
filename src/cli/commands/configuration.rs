@@ -86,7 +86,10 @@ pub(super) fn reload_message(message: String, reloaded: bool) -> String {
 
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let target = target(ctx, workspace).await?;
-    let entries = config::report::load(&ctx.paths, target).await?;
+    let (entries, warnings) = config::report::load(&ctx.paths, target).await?;
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
     ctx.show(&entries, |entries| {
         let palette = Palette::stdout(ctx.json);
         for entry in entries {

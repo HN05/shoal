@@ -706,12 +706,13 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
             .unwrap()
             .contains("# default_agent = \"codex\"")
     );
-    let template = config.with_file_name("issue-template.md");
+    let template = config.with_file_name("chat-template.md");
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
-        include_str!("../src/config/templates/issue.md")
+        include_str!("../src/config/templates/chat.md")
     );
-    fs::write(&template, "custom issue template").unwrap();
+    assert!(!config.with_file_name("issue-template.md").exists());
+    fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
     assert!(!config.with_file_name("agent-template.md").exists());
     fs::write(&config, "default_agent = 'claude'\n").unwrap();
@@ -719,7 +720,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(output["config_created"], false);
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
-        "custom issue template"
+        "custom chat template"
     );
     assert_eq!(
         fs::read_to_string(&config).unwrap(),

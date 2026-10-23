@@ -78,7 +78,10 @@ pub struct Config {
     pub ai: crate::ai::Agents,
     pub commands: named_commands::Commands,
     pub agent_resume: named_commands::Commands,
-    pub issue_template: Option<String>,
+    /// Retired with issue templates; read so configs written by earlier
+    /// versions still load and `config show` can say it is unused.
+    #[serde(rename = "issue_template")]
+    pub retired_issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -558,8 +561,9 @@ impl Config {
         let mut config = Self::load(paths)?;
         let directory = Self::path(paths);
         let directory = directory.parent().context("config has no directory")?;
-        if config.issue_template.is_none() {
-            config.issue_template = templates::read(directory, templates::ISSUE_FILE)?;
+        if config.retired_issue_template.is_none() {
+            config.retired_issue_template =
+                templates::read(directory, templates::RETIRED_ISSUE_FILE)?;
         }
         if config.agent_template.is_none() {
             config.agent_template = templates::read(directory, templates::AGENT_FILE)?;
@@ -581,7 +585,7 @@ impl Config {
                 .chain(crate::ai::commands(&self.ai))
                 .collect(),
             agent_resume: self.agent_resume.clone(),
-            issue_template: self.issue_template.clone(),
+            retired_issue_template: self.retired_issue_template.clone(),
             agent_template: self.agent_template.clone(),
             chat_template: self.chat_template.clone(),
             agent_auth: self.agent_auth.clone(),

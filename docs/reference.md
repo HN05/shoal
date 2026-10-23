@@ -80,8 +80,8 @@ current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
-and installs the [bundled issue template](../src/config/templates/issue.md) and
-chat template beside it, never touching an existing file; `--dry-run` writes
+and installs the [bundled chat template](../src/config/templates/chat.md) beside
+it, never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command. `shoal config
@@ -349,9 +349,10 @@ interactive repository picker. An existing association
 reopens its workspace; otherwise the derived local branch reopens as `--existing`
 would. Lookup and ownership failures create nothing. The command starts
 `--agent`, else the configured `default_agent`, else an interactive agent picker.
-Choosing “No agent” creates the workspace without a launch. Issue prompts use
-`issue-template.md`, substituting `{number}`, `{title}`, `{url}` and `{body}`
-once; options after `--` go to the agent. Codex uses CLI mode for issue prompts.
+Choosing “No agent” creates the workspace without a launch. The issue prompt
+names the issue's number, title and URL, includes its description when it has
+one, and points to `shoal view` for comments and later edits; options after
+`--` go to the agent. Codex uses CLI mode for issue prompts.
 
 PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
@@ -1005,17 +1006,19 @@ ends a lease grant.
 
 ### Prompt templates
 
-`issue_template`, `agent_template` and `chat_template` in the saved repository
-TOML win over the worktree's TOML values or `issue-template.md`,
-`agent-template.md` and `chat-template.md` in the repository root.
+`agent_template` and `chat_template` in the saved repository
+TOML win over the worktree's TOML values or `agent-template.md` and
+`chat-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository
 value suppresses local additions while preserving global guidance; an empty
-global value suppresses its base text. Without a global issue or chat template,
+global value suppresses its base text. Without a global chat template,
 Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
-read at launch without a daemon restart.
+read at launch without a daemon restart. The issue prompt is built in:
+`issue_template` and `issue-template.md` still load but are unused, and
+`config show` and `doctor` warn when one holds instructions of yours.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
 followed by the agent template, which holds only your additions and cannot

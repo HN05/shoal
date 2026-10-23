@@ -254,7 +254,7 @@ instead of the PR delivery guidance below.
   complete asset sets. Homebrew releases install checksummed binaries after
   both release hosts publish assets; only `--HEAD` builds from source with Rust.
 - Prompt templates append the selected saved/worktree repository value to global
-  guidance, falling back to the bundled issue template for an omitted global base.
+  guidance, falling back to the bundled chat template for an omitted global base.
   Empty repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
   Shoal's built-in agent guidance precedes every agent template, which holds

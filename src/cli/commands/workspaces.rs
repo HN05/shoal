@@ -1162,14 +1162,7 @@ impl ResolvedAddAgent {
         let Some(agent) = self.agent else {
             return terminal::open_shell(ctx, &workspace.path).await;
         };
-        // Use the ready worktree's settings: setup may have changed its template.
-        let prompt = if let Some(issue) = issue {
-            let settings =
-                client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-            Some(issue.prompt(settings.issue_template.as_deref()))
-        } else {
-            None
-        };
+        let prompt = issue.map(|issue| issue.prompt());
         let options = agents::LaunchOptions {
             tracked: self.tracked,
             ..Default::default()
