@@ -280,29 +280,37 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                let rebase = |column: &str| {
+                let inside = |column: &str| {
+                    format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')")
+                };
+                let rebased = |column: &str| {
                     format!(
-                        "{column}=CASE WHEN {column}=?2 THEN ?3
-                            WHEN substr({column},1,length(?2)+1)=?2||'/'
-                                THEN ?3||substr({column},length(?2)+1)
-                            ELSE {column} END"
+                        "CASE WHEN {} THEN ?3||substr({column},length(?2)+1) ELSE {column} END",
+                        inside(column)
                     )
                 };
-                for (table, columns) in [
-                    ("repositories", vec!["path", "workspaces_dir"]),
-                    ("workspaces", vec!["path", "git_dir"]),
-                ] {
-                    let key = if table == "repositories" {
-                        "id"
-                    } else {
-                        "repository_id"
-                    };
-                    let columns: Vec<_> = columns.into_iter().map(rebase).collect();
-                    tx.execute(
-                        &format!("UPDATE {table} SET {} WHERE {key}=?1", columns.join(",")),
-                        params![id, source, destination],
-                    )?;
-                }
+                // A local registration's source names its checkout, perhaps
+                // spelled differently; a URL source stays.
+                tx.execute(
+                    &format!(
+                        "UPDATE repositories SET path={}, workspaces_dir={},
+                            source=CASE WHEN substr(source,1,1)='/' AND {} THEN {} ELSE source END
+                            WHERE id=?1",
+                        rebased("path"),
+                        rebased("workspaces_dir"),
+                        inside("path"),
+                        rebased("path")
+                    ),
+                    params![id, source, destination],
+                )?;
+                tx.execute(
+                    &format!(
+                        "UPDATE workspaces SET path={}, git_dir={} WHERE repository_id=?1",
+                        rebased("path"),
+                        rebased("git_dir")
+                    ),
+                    params![id, source, destination],
+                )?;
                 tx.execute(
                     "UPDATE repository_moves SET switched=1 WHERE repository_id=?1",
                     [&id],
@@ -670,6 +678,30 @@ mod tests {
                 .iter()
                 .any(|tree| tree.path == workspace.path && !tree.prunable)
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()> {
+        let (temp, manager) = test_support::manager().await;
+        let directory = temp.path().join("shoal/project");
+        fs::create_dir_all(&directory)?;
+        let checkout = test_support::repository(&directory, "checkout");
+        let repo = manager
+            .register_repository(checkout.to_str().context("path")?.into(), None, None)
+            .await?;
+        assert_eq!(
+            repo.workspaces_dir.as_deref(),
+            Some(fs::canonicalize(&directory)?.as_path())
+        );
+        let root = fs::canonicalize(temp.path())?.join("new");
+        test_support::configure(&manager, &format!("root_dir = {:?}\n", root)).await;
+
+        manager.move_repositories().await?;
+        let moved = manager.repository(&repo.id).await?;
+        let expected = root.join("project/checkout");
+        assert_eq!(moved.path, expected);
+        assert_eq!(Path::new(&moved.source), expected);
         Ok(())
     }
 
