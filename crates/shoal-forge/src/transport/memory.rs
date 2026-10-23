@@ -1,7 +1,7 @@
 //! What a long-lived caller, such as Shoal's daemon, remembers about one
 //! account's forge responses between requests: the last body of each read,
 //! with the validators that let the forge answer `304 Not Modified` instead
-//! of sending it again.
+//! of sending it again, and until when each forge limits its requests.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -9,7 +9,10 @@ use std::{
 
 use serde_json::Value;
 
-use crate::transport::response::Response;
+use crate::transport::{
+    limits::{Limit, RateLimited, limit},
+    response::Response,
+};
 
 /// Reads remembered before the least recently used is forgotten.
 const REMEMBERED_READS: usize = 512;
@@ -25,6 +28,8 @@ struct State {
     reads: HashMap<String, Read>,
     /// Counts recalls and reads, ordering them by last use.
     uses: u64,
+    /// Unix seconds until which each host limits requests.
+    limits: HashMap<String, u64>,
 }
 
 struct Read {
@@ -35,13 +40,47 @@ struct Read {
 }
 
 impl Memory {
+    /// Refuse a request to `host` at `now` while the forge limits them.
+    pub(crate) fn check_limit(&self, host: &str, now: u64) -> Result<(), RateLimited> {
+        let mut state = self.lock();
+        match state.limits.get(host) {
+            Some(&until) if until > now => Err(RateLimited {
+                host: host.to_owned(),
+                until,
+            }),
+            Some(_) => {
+                state.limits.remove(host);
+                Ok(())
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// Record the limit `response` from `host` reports at `now`, and refuse
+    /// the response when the forge refused the request.
+    pub(crate) fn observe_limit(
+        &self,
+        host: &str,
+        response: &Response,
+        now: u64,
+    ) -> Result<(), RateLimited> {
+        let Some(limit) = limit(response, now) else {
+            return Ok(());
+        };
+        self.lock().limits.insert(host.to_owned(), limit.until());
+        match limit {
+            Limit::Refused(until) => Err(RateLimited {
+                host: host.to_owned(),
+                until,
+            }),
+            Limit::Exhausted(_) => Ok(()),
+        }
+    }
+
     /// The conditional headers for the read of `url`, and the body the
     /// forge last sent for it.
     pub(crate) fn recall(&self, url: &str) -> Option<(Vec<String>, Value)> {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = self.lock();
         state.uses += 1;
         let used = state.uses;
         let read = state.reads.get_mut(url)?;
@@ -52,10 +91,7 @@ impl Memory {
     /// Remember `body`, which a successful read of `url` sent in `response`,
     /// when the forge gave validators for it.
     pub(crate) fn remember(&self, url: &str, response: &Response, body: &Value) {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = self.lock();
         let conditions = conditions(response);
         if conditions.is_empty() || response.body.len() > MAX_REMEMBERED_BYTES {
             state.reads.remove(url);
@@ -78,6 +114,14 @@ impl Memory {
         {
             state.reads.remove(&oldest);
         }
+    }
+}
+
+impl Memory {
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -134,6 +178,36 @@ mod tests {
         );
         memory.remember("a", &response(&[]), &json!({"n": 2}));
         assert_eq!(memory.recall("a"), None);
+    }
+
+    #[test]
+    fn requests_wait_until_a_refusal_or_exhausted_limit_resets() {
+        let memory = Memory::default();
+        let now = 1_800_000_000;
+        let mut refused = response(&[("retry-after", "30")]);
+        refused.status = 429;
+        let limited = RateLimited {
+            host: "forge.example".into(),
+            until: now + 30,
+        };
+        assert_eq!(
+            memory.observe_limit("forge.example", &refused, now),
+            Err(limited.clone())
+        );
+        assert_eq!(memory.check_limit("forge.example", now + 29), Err(limited));
+        assert_eq!(memory.check_limit("other.example", now), Ok(()));
+        assert_eq!(memory.check_limit("forge.example", now + 30), Ok(()));
+        // The last request before the reset succeeds; the next one waits.
+        let exhausted = response(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "60")]);
+        assert_eq!(
+            memory.observe_limit("forge.example", &exhausted, now),
+            Ok(())
+        );
+        assert!(memory.check_limit("forge.example", now + 59).is_err());
+        assert_eq!(
+            memory.observe_limit("forge.example", &response(&[]), now),
+            Ok(())
+        );
     }
 
     #[test]

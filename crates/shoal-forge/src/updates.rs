@@ -10,6 +10,7 @@ use crate::{
     backends::{Backend, rest::RestCheck},
     items::item::Current,
     review::status::CheckResult,
+    transport::limits::{RateLimited, rate_limited},
 };
 
 /// How long a lookup may keep failing with the same error before it is
@@ -77,6 +78,10 @@ pub struct Snapshot {
     /// Unix seconds when each failing source was last reported.
     #[serde(default)]
     pub(crate) reported: BTreeMap<String, u64>,
+    /// The rate limit a source's lookup ran into, which leaves the snapshot
+    /// incomplete without that source having failed.
+    #[serde(skip)]
+    pub(crate) limited: Option<RateLimited>,
 }
 
 /// The commits a merge check compares; empty when the forge does not say.
@@ -311,9 +316,26 @@ impl Snapshot {
                         .map(|(id, comment)| (format!("{source}:{id}"), comment)),
                 );
             }
-            Err(error) => {
+            Err(error) => self.record_error(source, error),
+        }
+    }
+
+    /// Record `error` as the failure of `source`, unless a rate limit
+    /// caused it.
+    fn record_error(&mut self, source: &str, error: anyhow::Error) {
+        match rate_limited(&error) {
+            Some(limit) => self.limited = Some(limit.clone()),
+            None => {
                 self.errors.insert(source.into(), format!("{error:#}"));
             }
+        }
+    }
+
+    /// This snapshot, or the rate limit that left it incomplete.
+    fn complete(mut self) -> Result<Self> {
+        match self.limited.take() {
+            Some(limit) => Err(limit.into()),
+            None => Ok(self),
         }
     }
 }
@@ -338,7 +360,10 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
 
 impl ForgeRepo {
     pub async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
-        self.kind.issue_activity(self, account, number).await
+        self.kind
+            .issue_activity(self, account, number)
+            .await?
+            .complete()
     }
 
     pub async fn activity(
@@ -347,7 +372,10 @@ impl ForgeRepo {
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
-        self.kind.pr_activity(self, account, number, branch).await
+        self.kind
+            .pr_activity(self, account, number, branch)
+            .await?
+            .complete()
     }
 }
 
@@ -382,9 +410,7 @@ impl Snapshot {
                     );
                 }
             }
-            Err(error) => {
-                self.errors.insert("CI".into(), format!("{error:#}"));
-            }
+            Err(error) => self.record_error("CI", error),
         }
     }
 
@@ -529,6 +555,22 @@ mod tests {
         one.record_comments(DISCUSSION, Ok(vec![("1".into(), "hi".into())]));
         assert_eq!(both.changes(&one, "pr")[0].kind, UpdateKind::Comment);
         assert!(one.changes(&one, "pr").is_empty());
+    }
+
+    #[test]
+    fn a_rate_limited_lookup_leaves_the_snapshot_incomplete_without_failing() {
+        let limit = RateLimited {
+            host: "forge.example".into(),
+            until: 1,
+        };
+        let mut snapshot = Snapshot::default();
+        let error = anyhow::Error::new(limit.clone()).context("GET comments");
+        snapshot.record_comments(DISCUSSION, Err(error));
+        snapshot.record_comments("reviews", Err(anyhow::anyhow!("HTTP 500")));
+        assert_eq!(snapshot.errors.keys().collect::<Vec<_>>(), ["reviews"]);
+        let error = snapshot.complete().unwrap_err();
+        assert_eq!(rate_limited(&error), Some(&limit));
+        assert!(Snapshot::default().complete().is_ok());
     }
 
     #[test]

@@ -15,6 +15,7 @@ use crate::{
     account::Account,
     backends::Backend,
     transport::{
+        limits::unix_seconds,
         programs,
         resend::{Resend, Transient, resending},
         response::{Response, last_head},
@@ -156,13 +157,16 @@ impl ForgeRepo {
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
 
-    /// The body of the response to `request`. A read the account made
-    /// before is conditional on the body it got, which stands for the
+    /// The body of the response to `request`, refused without sending it
+    /// while the forge limits the account's requests. A read the account
+    /// made before is conditional on the body it got, which stands for the
     /// response when the forge reports it unchanged.
     async fn exchange(&self, account: &Account, request: &Request) -> Result<Value> {
         let read = request.method == HttpMethod::Get;
         let url = format!("{}/{}", self.host, request.endpoint);
         let memory = account.memory();
+        let now = unix_seconds();
+        memory.check_limit(&self.host, now)?;
         let recalled = read.then(|| memory.recall(&url)).flatten();
         let response = match &recalled {
             Some((conditions, _)) => {
@@ -171,6 +175,7 @@ impl ForgeRepo {
             }
             None => self.kind.send(self, account, request).await?,
         };
+        memory.observe_limit(&self.host, &response, now)?;
         if let (304, Some((_, body))) = (response.status, recalled) {
             return Ok(body);
         }
