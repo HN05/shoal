@@ -139,7 +139,9 @@ impl Manager {
             directory.display()
         );
         let id = repo.id.clone();
-        self.store.run(move |db| ensure_not_leased(db, &id)).await?;
+        self.store
+            .run(move |db| movable_records(db, &id).map(drop))
+            .await?;
         let processes = process::in_directory(directory).await?;
         ensure!(
             processes.is_empty(),
@@ -148,15 +150,6 @@ impl Manager {
             processes.join(", ")
         );
         for workspace in self.repository_workspaces(&repo.id).await? {
-            ensure!(
-                matches!(
-                    workspace.state,
-                    WorkspaceState::Ready | WorkspaceState::Failed
-                ),
-                "workspace {} is {}; wait for it to finish",
-                workspace.name,
-                workspace.state
-            );
             if workspace.path.exists() {
                 self.verify_worktree(&workspace).await?;
             } else {
@@ -181,12 +174,7 @@ impl Manager {
             .workspaces_dir
             .clone()
             .context("repository has no directory")?;
-        let destination = self.reserve_destination(root, &source).await?;
-        if let Err(error) = self.record_move(&repo.id, &source, &destination).await {
-            // The reservation belongs exclusively to this attempt.
-            let _ = fs::remove_dir(&destination);
-            return Err(error);
-        }
+        let destination = self.begin_move(&repo.id, root, &source).await?;
         let moved = async {
             fsutil::move_directory(&source, &destination).await?;
             self.switch_move(&repo.id, &source, &destination).await
@@ -215,6 +203,18 @@ impl Manager {
             );
         }
         Ok(guards)
+    }
+
+    /// Reserve the destination in `root` and record the move, giving up the
+    /// reservation when the move cannot be recorded.
+    async fn begin_move(&self, id: &str, root: &Path, source: &Path) -> Result<PathBuf> {
+        let destination = self.reserve_destination(root, source).await?;
+        if let Err(error) = self.record_move(id, source, &destination).await {
+            // The reservation belongs exclusively to this attempt.
+            let _ = fs::remove_dir(&destination);
+            return Err(error);
+        }
+        Ok(destination)
     }
 
     /// Reserve the source directory's name in `root`, suffixed when taken.
@@ -248,38 +248,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                ensure_not_leased(&tx, &id)?;
-                ensure!(
-                    !store::repository_has_executions(&tx, &id)?,
-                    "a command or agent is running in a workspace of the repository; stop it first"
-                );
-                for (table, what) in [
-                    ("chats", "a chat is running in the repository"),
-                    (
-                        "agent_queue",
-                        "agent launches are queued for the repository",
-                    ),
-                ] {
-                    ensure!(
-                        !store::exists(
-                            &tx,
-                            &format!("SELECT 1 FROM {table} WHERE repository_id=?1"),
-                            [&id]
-                        )?,
-                        "{what}; wait for it to finish"
-                    );
-                }
-                let states = tx
-                    .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
-                    .query_map([&id], |row| Ok((row.get(0)?, row.get(1)?)))?
-                    .collect::<rusqlite::Result<BTreeMap<String, WorkspaceState>>>()?;
-                for (workspace, state) in &states {
-                    ensure!(
-                        matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
-                        "a workspace of the repository is {state}; wait for it to finish"
-                    );
-                    store::ensure_no_pending_rename(&tx, workspace)?;
-                }
+                let states = movable_records(&tx, &id)?;
                 tx.execute(
                     "INSERT INTO repository_moves
                         (repository_id,source,destination,source_id,destination_id,states)
@@ -481,8 +450,13 @@ fn utf8(path: &Path) -> Result<String> {
         .to_owned())
 }
 
-/// Refuse moving a checkout that a resource lease handed to a caller.
-fn ensure_not_leased(db: &rusqlite::Connection, id: &str) -> Result<()> {
+/// Refuse a repository whose records show it in use: a lease that handed its
+/// checkout to a caller, a command, agent, chat or queued launch, or a
+/// workspace in another lifecycle operation. Returns each workspace's state.
+fn movable_records(
+    db: &rusqlite::Connection,
+    id: &str,
+) -> Result<BTreeMap<String, WorkspaceState>> {
     ensure!(
         !store::exists(
             db,
@@ -491,7 +465,38 @@ fn ensure_not_leased(db: &rusqlite::Connection, id: &str) -> Result<()> {
         )?,
         "the repository checkout is leased as a resource; release it first"
     );
-    Ok(())
+    ensure!(
+        !store::repository_has_executions(db, id)?,
+        "a command or agent is running in a workspace of the repository; stop it first"
+    );
+    for (table, what) in [
+        ("chats", "a chat is running in the repository"),
+        (
+            "agent_queue",
+            "agent launches are queued for the repository",
+        ),
+    ] {
+        ensure!(
+            !store::exists(
+                db,
+                &format!("SELECT 1 FROM {table} WHERE repository_id=?1"),
+                [id]
+            )?,
+            "{what}; wait for it to finish"
+        );
+    }
+    let states = db
+        .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
+        .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<BTreeMap<String, WorkspaceState>>>()?;
+    for (workspace, state) in &states {
+        ensure!(
+            matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
+            "a workspace of the repository is {state}; wait for it to finish"
+        );
+        store::ensure_no_pending_rename(db, workspace)?;
+    }
+    Ok(states)
 }
 
 /// Whether `path` is still the real directory recorded as `identity`.
