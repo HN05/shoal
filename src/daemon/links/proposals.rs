@@ -10,6 +10,7 @@ use std::{
 };
 
 use crate::{
+    config::resolve::Effective,
     daemon::{
         approvals::{
             ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
@@ -23,6 +24,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
+        conventions,
         items::action::{Action, Edit, Sent},
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
@@ -268,6 +270,8 @@ impl Manager {
             }
             _ => bail!("approval request {} is not a proposal", request.id),
         };
+        let warnings = self.convention_warnings(&request, workspace, &item).await;
+        request.warnings.extend(warnings);
         request.status = DecisionStatus::Approved;
         request.decided_at = Some(crate::time::unix_seconds());
         request.url = Some(item.url.clone());
@@ -279,6 +283,51 @@ impl Manager {
             item.url
         );
         Ok((request, message))
+    }
+
+    /// What the opened item leaves out of the repository's conventions, as
+    /// `issue open` and `pr open` warn once the item exists. The labels the
+    /// conventions require were checked when the item was proposed; refusing
+    /// now would leave the user no way to add them. A failed lookup leaves
+    /// its warnings out.
+    async fn convention_warnings(
+        &self,
+        request: &ApprovalRequest,
+        workspace: Option<&Workspace>,
+        item: &Item,
+    ) -> Vec<String> {
+        let Ok((forge, account)) = self.proposal_forge_account(request, workspace).await else {
+            return Vec::new();
+        };
+        let Ok((settings, path)) = self.proposal_settings(request, workspace).await else {
+            return Vec::new();
+        };
+        let body = match &request.specification {
+            Specification::Issue(issue) => Some(issue.issue.body.as_str()),
+            Specification::Pull(pull) => Some(pull.pull.body.as_str()),
+            _ => None,
+        };
+        let required = super::actions::required_labels(&settings, item.kind);
+        conventions::warnings(&forge, &account, &path, item, body, required).await
+    }
+
+    /// The settings a proposal opens under and the checkout whose templates
+    /// apply: its workspace's while it exists, otherwise its repository's.
+    async fn proposal_settings(
+        &self,
+        request: &ApprovalRequest,
+        workspace: Option<&Workspace>,
+    ) -> Result<(Effective, PathBuf)> {
+        if let Some(workspace) = workspace {
+            let settings = self.workspace_settings(workspace).await?;
+            return Ok((settings, workspace.path.clone()));
+        }
+        let repository = request
+            .repository_id
+            .as_deref()
+            .context("the workspace that made the proposal is gone")?;
+        let settings = self.repository_settings(repository).await?;
+        Ok((settings, self.repository(repository).await?.path))
     }
 
     /// Open the proposed issue as the agent account, through the workspace

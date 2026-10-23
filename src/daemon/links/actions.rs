@@ -454,7 +454,7 @@ async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) ->
 }
 
 /// The labels `[pr]` or `[issue]` requires of an item of `kind`.
-fn required_labels(settings: &Effective, kind: ItemKind) -> &[String] {
+pub(super) fn required_labels(settings: &Effective, kind: ItemKind) -> &[String] {
     match kind {
         ItemKind::Issue => &settings.issue.required_labels,
         ItemKind::Pr => &settings.pr.required_labels,

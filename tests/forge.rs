@@ -2312,3 +2312,24 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
     );
     assert_eq!(fixture.ok(&["approvals"]), json!([]));
 }
+
+#[test]
+fn approving_a_proposal_warns_about_the_repository_conventions() {
+    let fixture = Fixture::new(
+        Forge::GitHub,
+        "[approvals]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
+    );
+    // The forge reports the opened issue without the label it was given.
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+    }));
+    let open = ["issue", "open", "--title", "Flaky", "--label", "type/bug"];
+    let id = scoped(&fixture, &open)["proposed"]["id"].to_string();
+    let approved = fixture.ok(&["approve", &id]);
+    assert!(
+        approved["warnings"][0].as_str().unwrap().contains("type/"),
+        "{approved}"
+    );
+}
