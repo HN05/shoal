@@ -1187,7 +1187,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
-directory and every checkout; daemon reload required) changes the parent for new
+directory, every checkout and every repository directory; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
 [`repo migrate`](#move-repositories-to-a-new-root) moves them, as do workspaces

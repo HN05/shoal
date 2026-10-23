@@ -834,8 +834,16 @@ mod tests {
             workspaces_dir: Some(root.join("elsewhere")),
             contribution: false,
         };
-        let reserved = registry::reserve_directory(&root, "project", &[clone], &[])?;
+        let reserved =
+            registry::reserve_directory(&root, "project", std::slice::from_ref(&clone), &[])?;
         assert_eq!(reserved, root.join("project-2"));
+
+        // A root inside a recorded directory has no free name at all.
+        let nested = root.join("elsewhere/nested");
+        let error = registry::reserve_directory(&nested, "project", &[clone], &[])
+            .err()
+            .context("reserved inside a recorded directory")?;
+        assert!(error.to_string().contains("already records"), "{error:#}");
         Ok(())
     }
 

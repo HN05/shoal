@@ -457,6 +457,20 @@ pub(super) fn reserve_directory(
     repositories: &[Repository],
     workspaces: &[PathBuf],
 ) -> Result<PathBuf> {
+    let recorded = || {
+        repositories
+            .iter()
+            .flat_map(|repo| std::iter::once(&repo.path).chain(repo.workspaces_dir.as_ref()))
+            .chain(workspaces)
+    };
+    // Every candidate would lie in it, whatever the suffix.
+    if let Some(owner) = recorded().find(|owned| root.starts_with(owned)) {
+        bail!(
+            "root_dir {} is inside {}, which Shoal already records",
+            root.display(),
+            owner.display()
+        );
+    }
     for suffix in 1_u64.. {
         let path = root.join(if suffix == 1 {
             name.to_owned()
@@ -464,14 +478,7 @@ pub(super) fn reserve_directory(
             format!("{name}-{suffix}")
         });
         // A missing directory still owns its recorded path.
-        let recorded = repositories
-            .iter()
-            .flat_map(|repo| std::iter::once(&repo.path).chain(repo.workspaces_dir.as_ref()))
-            .chain(workspaces);
-        if recorded
-            .into_iter()
-            .any(|owned| owned.starts_with(&path) || path.starts_with(owned))
-        {
+        if recorded().any(|owned| owned.starts_with(&path) || path.starts_with(owned)) {
             continue;
         }
         match fs::create_dir(&path) {

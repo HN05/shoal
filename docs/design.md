@@ -233,7 +233,8 @@ branch labels are accepted only for matching repository and exact PR identity.
 Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
 default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
-checkout, and outside the state directory; a root inside either is refused.
+checkout, and outside the state directory; a root inside either, or inside a
+recorded repository directory, is refused.
 Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
 differ from the terminal's, and on macOS opening a file on a volume it lacks

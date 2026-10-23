@@ -140,7 +140,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces there by default,
   explicit workspace paths must not overlap state, checkouts, or other ownership.
   URL clones live as `.checkout` and move only with their repository directory into
-  a new root; refuse roots inside state or checkouts.
+  a new root; refuse roots inside state, checkouts or repository directories.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged; serialize allocation per repo. Existing branches,
