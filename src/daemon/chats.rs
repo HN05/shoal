@@ -93,6 +93,8 @@ fn insert(
         !crate::daemon::store::repository_removing(&tx, &repository)?,
         "the repository is being removed"
     );
+    // A chat edits the checkout, which a move may be copying.
+    crate::daemon::store::ensure_repository_not_moving(&tx, &repository)?;
     let number = free_number(&tx, &repository)?;
     let chat = Chat {
         id: Uuid::new_v4().to_string(),

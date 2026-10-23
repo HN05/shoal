@@ -625,6 +625,12 @@ mod tests {
             .err()
             .context("removal reserved during a move")?;
         assert!(error.to_string().contains("repository move is incomplete"));
+        let error = manager
+            .start_chat(repo.id.clone().into(), "codex".into(), std::process::id())
+            .await
+            .err()
+            .context("chat started during a move")?;
+        assert!(error.to_string().contains("repository move is incomplete"));
         fs::write(destination.join("partial"), "")?;
         manager.finish_repository_moves().await?;
         assert!(!destination.exists());

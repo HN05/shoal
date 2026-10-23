@@ -37,14 +37,7 @@ impl Manager {
                     !store::repository_removing(db, &id)?,
                     "repository removal is incomplete; retry shoal repo rm --yes"
                 );
-                ensure!(
-                    !store::exists(
-                        db,
-                        "SELECT 1 FROM repository_moves WHERE repository_id=?1",
-                        [&id]
-                    )?,
-                    "repository move is incomplete; run shoal repo migrate again"
-                );
+                store::ensure_repository_not_moving(db, &id)?;
                 Ok(())
             })
             .await

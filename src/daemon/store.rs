@@ -682,6 +682,19 @@ pub fn ensure_no_pending_move(db: &Connection, workspace_id: &str) -> Result<()>
     Ok(())
 }
 
+/// Refuse new users of a repository whose directory is moving.
+pub fn ensure_repository_not_moving(db: &Connection, repository_id: &str) -> Result<()> {
+    ensure!(
+        !exists(
+            db,
+            "SELECT 1 FROM repository_moves WHERE repository_id=?1",
+            [repository_id]
+        )?,
+        "repository move is incomplete; run shoal repo migrate again"
+    );
+    Ok(())
+}
+
 const REPOSITORY_WORKSPACES_QUERY: &str = "SELECT 1 FROM workspaces WHERE repository_id=?1";
 
 pub fn repository_has_workspaces(db: &Connection, repository_id: &str) -> Result<bool> {
