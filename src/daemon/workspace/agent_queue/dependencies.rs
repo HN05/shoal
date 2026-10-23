@@ -129,88 +129,62 @@ pub(super) fn replace_launch(db: &Connection, entry: &str, workspace: &str) -> R
 impl Manager {
     /// The readiness of each waiting launch with dependencies, by entry ID.
     pub(super) async fn dependency_readiness(&self) -> Result<HashMap<String, Readiness>> {
-        let recorded = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT d.entry_id,q.repository_id,d.kind,d.target
-                         FROM agent_queue_dependencies d JOIN agent_queue q ON q.id=d.entry_id
-                         WHERE q.state=?1 ORDER BY q.seq,d.rowid",
-                    )?
-                    .query_map([QueueState::Queued], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            Recorded {
-                                repository: row.get(1)?,
-                                kind: row.get(2)?,
-                                target: row.get(3)?,
-                            },
-                        ))
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
-            .await?;
-        let mut progress = HashMap::new();
-        let mut entries: HashMap<String, Vec<Progress>> = HashMap::new();
-        for (entry, dependency) in recorded {
-            let known = match progress.get(&dependency) {
-                Some(known) => known,
-                None => {
-                    let found = self.progress(&dependency).await?;
-                    progress.entry(dependency).or_insert(found)
-                }
-            };
-            entries.entry(entry).or_default().push(known.clone());
-        }
+        let recorded = self.store.run(waiting_dependencies).await?;
         let mut readiness = HashMap::new();
-        for (entry, progress) in entries {
+        for (entry, progress) in self.entry_progress(recorded).await? {
             readiness.insert(entry, readiness_of(progress).await?);
         }
         Ok(readiness)
     }
 
+    /// The progress of each entry's dependencies, looking each one up once.
+    async fn entry_progress(
+        &self,
+        recorded: Vec<(String, Recorded)>,
+    ) -> Result<HashMap<String, Vec<Progress>>> {
+        let mut known = HashMap::new();
+        let mut entries: HashMap<String, Vec<Progress>> = HashMap::new();
+        for (entry, dependency) in recorded {
+            let progress = match known.get(&dependency) {
+                Some(progress) => progress,
+                None => {
+                    let found = self.progress(&dependency).await?;
+                    known.entry(dependency).or_insert(found)
+                }
+            };
+            entries.entry(entry).or_default().push(progress.clone());
+        }
+        Ok(entries)
+    }
+
     async fn progress(&self, dependency: &Recorded) -> Result<Progress> {
-        let (repository, target) = (dependency.repository.clone(), dependency.target.clone());
-        match dependency.kind {
+        let Recorded {
+            repository,
+            kind,
+            target,
+        } = dependency.clone();
+        match kind {
             DependencyKind::Launch => {
-                let name = self
-                    .store
-                    .run(move |db| {
-                        Ok(db
-                            .query_row(
-                                "SELECT name FROM agent_queue WHERE id=?1",
-                                [target],
-                                |row| row.get(0),
-                            )
-                            .optional()?)
-                    })
-                    .await?;
+                let name = self.store.run(move |db| launch_name(db, &target)).await?;
                 Ok(name.map_or(Progress::Complete, Progress::Waiting))
             }
             DependencyKind::Workspace => {
-                let workspace = self
+                match self
                     .store
-                    .run(move |db| recorded_workspace(db, "id=?1", [target]))
-                    .await?;
-                match workspace {
+                    .run(move |db| workspace_by_id(db, &target))
+                    .await?
+                {
                     Some(workspace) => self.workspace_progress(workspace).await,
                     None => Ok(Progress::Complete),
                 }
             }
             DependencyKind::Issue => {
                 let url = target.clone();
-                let workspace = self
+                let linked = self
                     .store
-                    .run(move |db| {
-                        recorded_workspace(
-                            db,
-                            "repository_id=?1 AND id IN (SELECT workspace_id FROM workspace_issue WHERE url=?2)",
-                            [repository, url],
-                        )
-                    })
+                    .run(move |db| issue_workspace(db, &repository, &url))
                     .await?;
-                match workspace {
+                match linked {
                     Some(workspace) => self.workspace_progress(workspace).await,
                     None => Ok(Progress::Waiting(target)),
                 }
@@ -236,15 +210,7 @@ impl Manager {
 
     /// Forget the issue dependencies that have closed.
     pub(crate) async fn poll_dependency_issues(&self) -> Result<()> {
-        let urls = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare("SELECT DISTINCT target FROM agent_queue_dependencies WHERE kind=?1")?
-                    .query_map([DependencyKind::Issue], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?)
-            })
-            .await?;
+        let urls = self.store.run(issue_dependencies).await?;
         let account = self.user_account();
         let mut failure = None;
         for url in urls {
@@ -261,13 +227,7 @@ impl Manager {
 
     async fn forget_issue(&self, url: String) -> Result<()> {
         self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM agent_queue_dependencies WHERE kind=?1 AND target=?2",
-                    params![DependencyKind::Issue, url],
-                )?;
-                Ok(())
-            })
+            .run(move |db| forget_issue_dependency(db, &url))
             .await
     }
 }
@@ -276,6 +236,49 @@ async fn issue_closed(account: &Account, url: &str) -> Result<bool> {
     let forge = ForgeRepo::from_issue_url(url)?;
     let (number, _) = forge.issue(url)?;
     forge.issue_closed(account, number).await
+}
+
+/// Each dependency of the waiting launches with its entry, in queue order.
+fn waiting_dependencies(db: &mut Connection) -> Result<Vec<(String, Recorded)>> {
+    Ok(db
+        .prepare(
+            "SELECT d.entry_id,q.repository_id,d.kind,d.target
+             FROM agent_queue_dependencies d JOIN agent_queue q ON q.id=d.entry_id
+             WHERE q.state=?1 ORDER BY q.seq,d.rowid",
+        )?
+        .query_map([QueueState::Queued], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                Recorded {
+                    repository: row.get(1)?,
+                    kind: row.get(2)?,
+                    target: row.get(3)?,
+                },
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// The name of queue entry `id`, while it is queued or starting.
+fn launch_name(db: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT name FROM agent_queue WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
+}
+
+fn workspace_by_id(db: &Connection, id: &str) -> Result<Option<Workspace>> {
+    recorded_workspace(db, "id=?1", [id])
+}
+
+/// The workspace of `repository` that links the issue at `url`.
+fn issue_workspace(db: &Connection, repository: &str, url: &str) -> Result<Option<Workspace>> {
+    recorded_workspace(
+        db,
+        "repository_id=?1 AND id IN (SELECT workspace_id FROM workspace_issue WHERE url=?2)",
+        [repository, url],
+    )
 }
 
 fn recorded_workspace<P: rusqlite::Params>(
@@ -290,6 +293,22 @@ fn recorded_workspace<P: rusqlite::Params>(
             store::workspace,
         )
         .optional()?)
+}
+
+/// The URLs of the issues queued launches wait for.
+fn issue_dependencies(db: &mut Connection) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT DISTINCT target FROM agent_queue_dependencies WHERE kind=?1")?
+        .query_map([DependencyKind::Issue], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?)
+}
+
+fn forget_issue_dependency(db: &Connection, url: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM agent_queue_dependencies WHERE kind=?1 AND target=?2",
+        params![DependencyKind::Issue, url],
+    )?;
+    Ok(())
 }
 
 /// Ready when nothing is waiting, on the branch of the done dependency whose
