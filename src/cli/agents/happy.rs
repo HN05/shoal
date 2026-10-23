@@ -78,6 +78,38 @@ pub(in crate::cli) async fn shortcut(
     start(ctx, &Happy(agent), &workspace, &settings, prompt, args).await
 }
 
+/// The first message and arguments of a session of `agent`, which runs
+/// without Shoal's hooks. An agent that takes instructions apart from its
+/// prompt gets them as arguments; Happy's Codex mode takes no arguments, so
+/// they lead its first message.
+fn session_input(
+    settings: &Effective,
+    workspace: &Workspace,
+    agent: Agent,
+    prompt: Option<String>,
+    args: Vec<OsString>,
+) -> (Option<String>, Vec<OsString>) {
+    let instructions = templates::instructions(
+        settings.agent_template.as_deref(),
+        workspace,
+        templates::Delivery::Watched,
+    );
+    let instruction_args = settings
+        .arguments(agent.as_str())
+        .instruction_args(&instructions)
+        .filter(|_| happy::accepts_prompt(agent));
+    match instruction_args {
+        Some(instruction_args) => (prompt, instruction_args.into_iter().chain(args).collect()),
+        None => {
+            let prompt = match prompt {
+                Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
+                _ => instructions,
+            };
+            (Some(prompt), args)
+        }
+    }
+}
+
 /// Start a Happy session the way Happy's own daemon does, so it registers with
 /// that daemon and appears in the app, but detached from this terminal and
 /// tracked like any other workspace command. The CLI returns once the launch
@@ -88,33 +120,11 @@ async fn start(
     workspace: &Workspace,
     settings: &Effective,
     prompt: Option<String>,
-    mut args: Vec<OsString>,
+    args: Vec<OsString>,
 ) -> Result<i32> {
     let agent = happy.0;
     super::ensure_available(&format!("happy-{}", agent.as_str()), settings)?;
-    // Happy sessions run without Shoal's hooks. An agent that takes
-    // instructions apart from its prompt gets them as arguments; Happy's
-    // Codex mode takes no arguments, so they lead its first message.
-    let instructions = templates::instructions(
-        settings.agent_template.as_deref(),
-        workspace,
-        templates::Delivery::Watched,
-    );
-    let instruction_args = settings
-        .arguments(agent.as_str())
-        .instruction_args(&instructions)
-        .filter(|_| happy::accepts_prompt(agent));
-    let prompt = match instruction_args {
-        Some(mut configured) => {
-            configured.append(&mut args);
-            args = configured;
-            prompt
-        }
-        None => Some(match prompt {
-            Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
-            _ => instructions,
-        }),
-    };
+    let (prompt, args) = session_input(settings, workspace, agent, prompt, args);
     if let Some(trust) = happy.trust_file() {
         trust.trust_workspace(ctx, workspace).await;
     }
