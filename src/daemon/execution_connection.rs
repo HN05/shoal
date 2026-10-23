@@ -14,12 +14,12 @@ use super::{
     approvals::Undecided,
     execution_recovery,
     scope::Caller,
-    workspace::{ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution},
+    workspace::{ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution, StopRequest},
 };
 use crate::{
     model::Workspace,
     process::identity::Identity,
-    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response},
+    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
 };
 
 pub(super) struct ExecutionContext {
@@ -280,7 +280,14 @@ async fn relay(
         stop,
         ..
     } = execution;
-    let (kind, recover, reattach) = (*kind, *recover, *reattach);
+    let reattach = *reattach;
+    let stopping = Stopping {
+        execution_id: execution_id.as_str(),
+        kind: *kind,
+        agent: agent.is_some(),
+        recover: *recover,
+        reattach,
+    };
     let mut awaiting_started = !*started;
     // A wrapper that reattached while waiting continues its pause here.
     let mut resumed_pause = std::mem::take(awaiting_restore);
@@ -300,31 +307,13 @@ async fn relay(
                     changed = stop.changed(), if !sent_stop => {
                         changed?;
                         if *stop.borrow_and_update() {
-                            let control = if let Some(protection) = manager.agent_overload(execution_id).await {
-                                // Read the policy now, so a reload applies to running agents.
-                                recovering = recover && manager.config().overload.recovery.enabled;
-                                let hold = manager.take_update_hold(execution_id).await;
-                                if recovering && unattachable.is_none() {
-                                    *unattachable = hold;
+                            let PreparedStop { control, recovery } = prepare_stop(manager, stopping).await;
+                            if let Some(recovery) = recovery {
+                                recovering = recovery.recovering;
+                                if unattachable.is_none() {
+                                    *unattachable = recovery.update_hold;
                                 }
-                                Control::OverloadStop {
-                                    recover: recovering,
-                                    reason: protection.reason,
-                                    resumes_when: protection.resumes_when,
-                                }
-                            } else if reattach && manager.shutting_down() {
-                                Control::Detach
-                            } else {
-                                match manager.stop_request(execution_id).await {
-                                    Some(request) if kind == ExecutionKind::Command && request.saves(agent.is_some()) => {
-                                        Control::Pause {
-                                            removed: request.save == Save::RemovedAgents,
-                                            reason: Some(request.reason),
-                                        }
-                                    }
-                                    request => Control::Stop { reason: request.map(|request| request.reason) },
-                                }
-                            };
+                            }
                             protocol::write(writer, &control).await?;
                             if matches!(control, Control::Detach) {
                                 return Ok(Ended::Detached);
@@ -398,6 +387,92 @@ async fn relay(
                 }
             }
         }
+    }
+}
+
+/// What decides the control a stop sends to a connected execution.
+#[derive(Clone, Copy)]
+struct Stopping<'a> {
+    execution_id: &'a str,
+    kind: ExecutionKind,
+    /// The execution runs a tracked agent.
+    agent: bool,
+    recover: bool,
+    reattach: bool,
+}
+
+/// The control a stop sends and, for an overload stop, its recovery.
+struct PreparedStop {
+    control: Control,
+    recovery: Option<OverloadRecovery>,
+}
+
+/// Whether an overload stop's agent waits to be restored.
+struct OverloadRecovery {
+    recovering: bool,
+    /// The update hold protection took, passed to the connection only while
+    /// the agent recovers so an update waits for the restore.
+    update_hold: Option<OwnedRwLockReadGuard<()>>,
+}
+
+/// Choose the control for a stop: an overload stop, a detach for a daemon
+/// shutdown the wrapper outlives, or the execution's stop request.
+async fn prepare_stop(manager: &Manager, stopping: Stopping<'_>) -> PreparedStop {
+    if let Some(protection) = manager.agent_overload(stopping.execution_id).await {
+        return prepare_overload_stop(manager, stopping, protection).await;
+    }
+    let control = if stopping.reattach && manager.shutting_down() {
+        Control::Detach
+    } else {
+        requested_stop(manager.stop_request(stopping.execution_id).await, stopping)
+    };
+    PreparedStop {
+        control,
+        recovery: None,
+    }
+}
+
+/// Stop an overloaded agent, recovering it when the execution and current
+/// policy allow. A stop without recovery releases protection's update hold.
+async fn prepare_overload_stop(
+    manager: &Manager,
+    stopping: Stopping<'_>,
+    protection: Protection,
+) -> PreparedStop {
+    // Read the policy now, so a reload applies to running agents.
+    let recovering = stopping.recover && manager.config().overload.recovery.enabled;
+    let update_hold = manager
+        .take_update_hold(stopping.execution_id)
+        .await
+        .filter(|_| recovering);
+    PreparedStop {
+        control: Control::OverloadStop {
+            recover: recovering,
+            reason: protection.reason,
+            resumes_when: protection.resumes_when,
+        },
+        recovery: Some(OverloadRecovery {
+            recovering,
+            update_hold,
+        }),
+    }
+}
+
+/// Pause a command whose stop request saves it for `shoal resume`, and stop
+/// anything else.
+fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Control {
+    match request {
+        Some(request)
+            if stopping.kind == ExecutionKind::Command && request.saves(stopping.agent) =>
+        {
+            Control::Pause {
+                removed: request.save == Save::RemovedAgents,
+                reason: Some(request.reason),
+            }
+        }
+        request => Control::Stop {
+            reason: request.map(|request| request.reason),
+        },
     }
 }
 
