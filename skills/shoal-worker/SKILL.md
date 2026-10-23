@@ -124,11 +124,11 @@ When a linked PR is ready to merge (checks pass, review findings handled, no
 conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
-unless `[ready] undraft = false`; new commits make the mark outdated, so run it
-again after later fixes, and `shoal unready` withdraws it (`--draft` also
-returns the PR to draft). To tell the user about status without finishing,
-such as a PR that is ready, run `shoal notify "<one-line message>"`; if it stops
-applying before the user reads it, withdraw it with
+unless `[ready] undraft = false`. When something new needs fixing, run
+`shoal unready` before fixing it (`--draft` also returns the PR to draft), and
+`shoal ready` again once it is fixed. To tell the user about status without
+finishing, run `shoal notify "<one-line message>"`; if it stops applying before
+the user reads it, withdraw it with
 `shoal notifications withdraw <number>`, using the number it printed. Neither
 affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
 Questions).
