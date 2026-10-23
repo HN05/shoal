@@ -316,6 +316,52 @@ impl Backend for GitLab {
     fn has_labels(&self) -> bool {
         true
     }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let discussions = repo.pages(account, &format!("{pr}/discussions")).await?;
+        Ok(find_thread(&discussions, comment))
+    }
+
+    fn resolves_threads(&self) -> bool {
+        true
+    }
+
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+        let Target::GitLab { discussion } = &thread.target else {
+            bail!("not a GitLab review thread");
+        };
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        Ok(Request::new(
+            HttpMethod::Post,
+            format!("{pr}/discussions/{discussion}/notes"),
+            Some(json!({ "body": body })),
+        ))
+    }
+
+    fn resolution(
+        &self,
+        repo: &ForgeRepo,
+        number: u64,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request> {
+        let Target::GitLab { discussion } = &thread.target else {
+            bail!("not a GitLab review thread");
+        };
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        Ok(Request::new(
+            HttpMethod::Put,
+            format!("{pr}/discussions/{discussion}"),
+            Some(json!({ "resolved": resolved })),
+        ))
+    }
 }
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
@@ -573,7 +619,7 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The discussion with note `comment`, which replies and resolution name.
-pub(crate) fn gitlab_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
+fn find_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
     discussions.iter().find_map(|discussion| {
         let notes = notes(discussion);
         notes.iter().find(|note| note["id"] == comment)?;
@@ -785,7 +831,7 @@ mod tests {
             {"id": "d2", "notes": [{"id": 4, "resolved": true}]}
         ]);
         let listed = listed.as_array().unwrap();
-        let thread = gitlab_thread(listed, 3).unwrap();
+        let thread = find_thread(listed, 3).unwrap();
         assert_eq!(
             (thread.first, thread.replies, thread.resolved),
             (2, 1, Some(false))
@@ -796,9 +842,9 @@ mod tests {
                 discussion: "d1".into()
             }
         );
-        assert_eq!(gitlab_thread(listed, 4).unwrap().resolved, Some(true));
+        assert_eq!(find_thread(listed, 4).unwrap().resolved, Some(true));
         // System notes are events, not comments.
-        assert!(gitlab_thread(listed, 1).is_none());
+        assert!(find_thread(listed, 1).is_none());
     }
 
     #[test]

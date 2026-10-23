@@ -3,6 +3,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+pub(crate) mod threads;
+
 use super::{
     Backend,
     github_rest::{self, Dialect},
@@ -19,6 +21,7 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
+    review::thread::{Target, Thread},
     transport::{
         api::{HttpMethod, Request, encode, full_page},
         programs,
@@ -340,6 +343,60 @@ impl Backend for GitHub {
 
     fn has_labels(&self) -> bool {
         true
+    }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>> {
+        Ok(threads::thread(
+            &threads::threads(repo, account, number).await?,
+            comment,
+        ))
+    }
+
+    fn resolves_threads(&self) -> bool {
+        true
+    }
+
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+        let endpoint =
+            repo.repo_endpoint(&format!("pulls/{number}/comments/{}/replies", thread.first));
+        Ok(Request::new(
+            HttpMethod::Post,
+            endpoint,
+            Some(json!({ "body": body })),
+        ))
+    }
+
+    fn resolution(
+        &self,
+        _repo: &ForgeRepo,
+        _number: u64,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request> {
+        let Target::GitHub { node } = &thread.target else {
+            bail!("not a GitHub review thread");
+        };
+        let mutation = if resolved {
+            "resolveReviewThread"
+        } else {
+            "unresolveReviewThread"
+        };
+        Ok(Request::new(
+            HttpMethod::Post,
+            "graphql".into(),
+            Some(json!({
+                "query": format!(
+                    "mutation($id: ID!) {{ {mutation}(input: {{threadId: $id}}) {{ thread {{ isResolved }} }} }}"
+                ),
+                "variables": { "id": node },
+            })),
+        ))
     }
 }
 

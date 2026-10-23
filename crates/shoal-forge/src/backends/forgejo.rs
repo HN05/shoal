@@ -1,8 +1,10 @@
 //! Forgejo, and Gitea, which serves the same API: GitHub's REST shapes
 //! under `/api/v1`, sent with the token fj saved for the host, else through
 //! tea's login, else anonymously.
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde_json::{Value, json};
+
+pub(crate) mod threads;
 
 use super::{
     Backend,
@@ -20,6 +22,7 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
+    review::thread::{Target, Thread},
     transport::api::{
         HttpMethod, MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body,
     },
@@ -195,6 +198,56 @@ impl Backend for Forgejo {
 
     fn has_labels(&self) -> bool {
         true
+    }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>> {
+        let reviews = threads::review_comments(repo, account, number).await?;
+        Ok(threads::thread(&reviews, comment))
+    }
+
+    fn resolves_threads(&self) -> bool {
+        false
+    }
+
+    /// A reply is a comment of the thread's review on the first comment's
+    /// lines.
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+        let Target::Forgejo {
+            review,
+            path,
+            line,
+            extra_lines,
+        } = &thread.target
+        else {
+            bail!("not a Forgejo review thread");
+        };
+        let side = if *line < 0 {
+            "old_position"
+        } else {
+            "new_position"
+        };
+        Ok(Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint(&format!("pulls/{number}/reviews/{review}/comments")),
+            Some(json!({ "body": body, "path": path, side: line.abs(),
+                "extra_lines_count": extra_lines })),
+        ))
+    }
+
+    fn resolution(
+        &self,
+        _repo: &ForgeRepo,
+        _number: u64,
+        _thread: &Thread,
+        _resolved: bool,
+    ) -> Result<Request> {
+        bail!("Forgejo review threads cannot be resolved through its API")
     }
 }
 

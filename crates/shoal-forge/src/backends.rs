@@ -2,7 +2,7 @@
 //! [`ForgeKind`] names the one a repository uses and forwards each call to
 //! it, so a new forge implements the trait and adds its variant here.
 pub mod bitbucket;
-mod forgejo;
+pub(crate) mod forgejo;
 pub(crate) mod github;
 mod github_rest;
 pub(crate) mod gitlab;
@@ -26,6 +26,7 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
+    review::thread::Thread,
     transport::api::Request,
 };
 use bitbucket::Bitbucket;
@@ -221,6 +222,30 @@ pub(crate) trait Backend {
 
     /// Whether the forge has labels.
     fn has_labels(&self) -> bool;
+
+    /// The review thread of `comment` on PR `number`, when it is in one.
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>>;
+
+    /// Whether the forge's API can resolve review threads.
+    fn resolves_threads(&self) -> bool;
+
+    /// The request that replies in `thread` on PR `number`.
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request>;
+
+    /// The request that resolves or unresolves `thread` on PR `number`.
+    fn resolution(
+        &self,
+        repo: &ForgeRepo,
+        number: u64,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request>;
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -418,6 +443,34 @@ impl Backend for ForgeKind {
 
     fn has_labels(&self) -> bool {
         dispatch!(self, backend => backend.has_labels())
+    }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>> {
+        dispatch!(self, backend => backend.thread(repo, account, number, comment).await)
+    }
+
+    fn resolves_threads(&self) -> bool {
+        dispatch!(self, backend => backend.resolves_threads())
+    }
+
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+        dispatch!(self, backend => backend.reply(repo, number, thread, body))
+    }
+
+    fn resolution(
+        &self,
+        repo: &ForgeRepo,
+        number: u64,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request> {
+        dispatch!(self, backend => backend.resolution(repo, number, thread, resolved))
     }
 }
 

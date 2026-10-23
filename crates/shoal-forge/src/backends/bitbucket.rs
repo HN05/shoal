@@ -309,6 +309,51 @@ impl Backend for Bitbucket {
     fn has_labels(&self) -> bool {
         false
     }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        comment: u64,
+    ) -> Result<Option<Thread>> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let comments = repo.pages(account, &format!("{pr}/comments")).await?;
+        Ok(find_thread(&comments, comment))
+    }
+
+    fn resolves_threads(&self) -> bool {
+        true
+    }
+
+    fn reply(&self, repo: &ForgeRepo, number: u64, thread: &Thread, body: &str) -> Result<Request> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        Ok(Request::new(
+            HttpMethod::Post,
+            format!("{pr}/comments"),
+            Some(json!({ "content": { "raw": body }, "parent": { "id": thread.first } })),
+        ))
+    }
+
+    fn resolution(
+        &self,
+        repo: &ForgeRepo,
+        number: u64,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number);
+        let method = if resolved {
+            HttpMethod::Post
+        } else {
+            HttpMethod::Delete
+        };
+        Ok(Request::new(
+            method,
+            format!("{pr}/comments/{}/resolve", thread.first),
+            None,
+        ))
+    }
 }
 
 /// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
@@ -584,7 +629,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// The thread with `comment`, named by its first comment.
-pub(crate) fn bitbucket_thread(comments: &[Value], comment: u64) -> Option<Thread> {
+fn find_thread(comments: &[Value], comment: u64) -> Option<Thread> {
     let comments = listed(comments);
     let root = roots(&comments);
     comments.iter().find(|value| value["id"] == comment)?;
@@ -813,13 +858,13 @@ mod tests {
             {"id": 6}
         ]);
         let listed = listed.as_array().unwrap();
-        let thread = bitbucket_thread(listed, 4).unwrap();
+        let thread = find_thread(listed, 4).unwrap();
         assert_eq!(
             (thread.first, thread.replies, thread.resolved),
             (2, 2, Some(true))
         );
-        assert_eq!(bitbucket_thread(listed, 6).unwrap().resolved, Some(false));
-        assert!(bitbucket_thread(listed, 5).is_none());
+        assert_eq!(find_thread(listed, 6).unwrap().resolved, Some(false));
+        assert!(find_thread(listed, 5).is_none());
     }
 
     #[test]

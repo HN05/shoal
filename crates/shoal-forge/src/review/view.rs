@@ -1,7 +1,6 @@
 //! An issue's or PR's content, status and discussion, read on request so
 //! callers need not know whether the forge is GitHub or Forgejo.
 use anyhow::{Context, Result, ensure};
-use futures_util::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -10,13 +9,14 @@ use crate::{
     account::Account,
     backends::{
         Backend,
-        github::{Query, gh},
+        forgejo::threads::{review_comments, thread_key, threads as forgejo_threads},
+        github::{
+            Query, gh,
+            threads::{GitHubThread, threads as github_threads},
+        },
     },
     items::link::ItemKind,
-    review::{
-        status::{CheckResult, PrStatus, ReviewState},
-        thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
-    },
+    review::status::{CheckResult, PrStatus, ReviewState},
     transport::api::Request,
 };
 
@@ -252,7 +252,7 @@ impl ForgeRepo {
         let (reviews, comments, threads) = tokio::try_join!(
             pages("reviews"),
             pages("comments"),
-            self.github_threads(account, number)
+            github_threads(self, account, number)
         )?;
         github_reviews(&reviews, &comments, &threads).map(Some)
     }
@@ -283,28 +283,7 @@ impl ForgeRepo {
         if kind == ItemKind::Issue {
             return Ok(None);
         }
-        forgejo_reviews(&self.forgejo_review_comments(account, number).await?).map(Some)
-    }
-
-    /// Each review of a PR with its inline comments.
-    pub(crate) async fn forgejo_review_comments(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<Vec<(Value, Value)>> {
-        let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        let reviews = self.pages(account, &endpoint).await?;
-        try_join_all(reviews.into_iter().map(|review| async move {
-            let id = review["id"].as_u64().context("Forgejo review has no ID")?;
-            let comments = if review["comments_count"].as_u64().unwrap_or_default() > 0 {
-                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
-                self.send(account, &Request::get(endpoint)).await?
-            } else {
-                Value::Array(Vec::new())
-            };
-            Ok::<_, anyhow::Error>((review, comments))
-        }))
-        .await
+        forgejo_reviews(&review_comments(self, account, number).await?).map(Some)
     }
 }
 
@@ -486,7 +465,7 @@ fn forgejo_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
             .map(|&(review, comment)| {
                 let id = comment["id"].as_u64().unwrap_or_default();
                 let (thread, resolved) = threads
-                    .get(&forgejo_thread_key(review, comment))
+                    .get(&thread_key(review, comment))
                     .copied()
                     .unwrap_or((id, false));
                 review_comment(
