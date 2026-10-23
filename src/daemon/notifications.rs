@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::daemon::log;
 use crate::{
     daemon::workspace::{Manager, Source},
+    model::Workspace,
     state::states,
 };
 
@@ -151,6 +152,30 @@ pub(crate) fn retract(
     Ok(deleted > 0)
 }
 
+/// Delete the unread message `id` that `workspace` sent the user.
+fn withdraw_message(
+    tx: &rusqlite::Transaction<'_>,
+    workspace: &Workspace,
+    id: i64,
+) -> Result<Notification> {
+    let notification = tx
+        .query_row(
+            &format!(
+                "SELECT {COLUMNS} FROM notifications WHERE id=?1 AND workspace=?2 AND kind=?3"
+            ),
+            params![id, workspace.name, NotificationKind::AgentMessage],
+            row,
+        )
+        .optional()?
+        .with_context(|| format!("workspace {} sent no notification {id}", workspace.name))?;
+    ensure!(
+        !notification.read,
+        "notification {id} was already shown; send a correction with shoal notify"
+    );
+    tx.execute("DELETE FROM notifications WHERE id=?1", [id])?;
+    Ok(notification)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {
     pub id: i64,
@@ -227,24 +252,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let notification = tx
-                    .query_row(
-                        &format!(
-                            "SELECT {COLUMNS} FROM notifications
-                                WHERE id=?1 AND workspace=?2 AND kind=?3"
-                        ),
-                        params![id, workspace.name, NotificationKind::AgentMessage],
-                        row,
-                    )
-                    .optional()?
-                    .with_context(|| {
-                        format!("workspace {} sent no notification {id}", workspace.name)
-                    })?;
-                ensure!(
-                    !notification.read,
-                    "notification {id} was already shown; send a correction with shoal notify"
-                );
-                tx.execute("DELETE FROM notifications WHERE id=?1", [id])?;
+                let notification = withdraw_message(&tx, &workspace, id)?;
                 tx.commit()?;
                 Ok(notification)
             })
