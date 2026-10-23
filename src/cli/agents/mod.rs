@@ -64,6 +64,12 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
+    /// Whether the agent's session `session` is on this machine. A session
+    /// the agent finds by ID from any directory needs no check.
+    fn has_session(&self, _ctx: &Context, _session: &str) -> bool {
+        true
+    }
+
     /// Whether its wrapper wakes the idle agent by typing a prompt into its
     /// session, for agents without a hook that can start their turn.
     fn wakes_by_prompt(&self) -> bool {
@@ -366,6 +372,11 @@ pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString
 /// Whether agent `name`'s wrapper wakes it by typing a prompt.
 pub(crate) fn wakes_by_prompt(name: &str) -> bool {
     integration(name).wakes_by_prompt()
+}
+
+/// Whether agent `name`'s session `session` is on this machine.
+pub(in crate::cli) fn has_session(ctx: &Context, name: &str, session: &str) -> bool {
+    integration(name).has_session(ctx, session)
 }
 
 /// Trust a repository's checkout for a chat of agent `name` as workspace

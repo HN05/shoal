@@ -793,8 +793,8 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(imported["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
-    // The agent starts as a new agent does, told the workspace moved,
-    // instead of resuming a session this machine does not have.
+    // The agent never reported a session, so it starts as a new agent
+    // does, told the workspace moved.
     let record = fixture
         .root
         .path()

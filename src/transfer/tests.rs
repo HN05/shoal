@@ -3,7 +3,7 @@ use std::{fs, path::Path, sync::Arc};
 use super::*;
 use crate::{
     daemon::workspace::Manager,
-    execution::recovery::{self, Record},
+    execution::recovery::{self, LastSession, Record},
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{commit, git, manager, repository},
 };
@@ -163,7 +163,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
         .unwrap();
     assert_eq!(checkpoints.len(), 1);
     assert_eq!(checkpoints[0].repository_id, target_repo.id);
-    // The stopped agent starts a new session here.
+    // The stopped agent starts a new session on another machine.
     let saved = recovery::Saved::load(&importing.paths, &restored.opened.workspace.id).unwrap();
     assert_eq!(saved.agents.len(), 1);
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
@@ -228,6 +228,90 @@ fn import_refuses_other_files_and_newer_formats() {
         .err()
         .unwrap();
     assert!(error.to_string().contains("newer format"), "{error}");
+}
+
+/// An export's manifest with one stopped agent and a last session, both with
+/// sessions, made on machine `m1`.
+fn manifest_with_sessions() -> Manifest {
+    let record: Record = serde_json::from_value(serde_json::json!({
+        "agent": "claude",
+        "session": "s1",
+        "place": "tab",
+    }))
+    .unwrap();
+    let agent = StoppedAgent {
+        execution: "execution".into(),
+        record,
+        stopped_at: 1,
+    };
+    let last = LastSession {
+        agent: "codex".into(),
+        session: Some("s2".into()),
+        moved: false,
+    };
+    let workspace: RemovedWorkspace = serde_json::from_value(serde_json::json!({
+        "workspace_id": "w1",
+        "repository_id": "r1",
+        "name": "topic",
+        "checkpoint": {
+            "workspace_id": "w1",
+            "repository_id": "r1",
+            "number": 1,
+            "cause": "removal",
+            "branch": "topic",
+            "head": "h",
+            "commit": "h",
+            "files_omitted": false,
+            "created_at": 1,
+            "expires_at": 2,
+        },
+        "base_ref": null,
+        "base_commit": null,
+        "links": {"issue": null, "prs": []},
+        "agents": [agent],
+        "last_session": last,
+        "cause": "manual",
+        "removed_at": 1,
+        "expires_at": 2,
+    }))
+    .unwrap();
+    Manifest {
+        remote_url: None,
+        prerequisite: None,
+        bundle: false,
+        sessions: Some(Sessions {
+            machine: "m1".into(),
+            agents: workspace.agents.clone(),
+            last_session: workspace.last_session.clone(),
+        }),
+        workspace: moved(workspace),
+    }
+}
+
+#[test]
+fn an_import_keeps_sessions_only_on_the_exporting_machine_where_they_remain() {
+    let manifest = manifest_with_sessions();
+    let here = manifest.workspace_on(Some("m1"), |_, _| true);
+    assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
+    assert!(!here.agents[0].record.moved);
+    assert_eq!(here.agents[0].record.place.as_deref(), Some("tab"));
+    let last = here.last_session.unwrap();
+    assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
+
+    // Claude's session is gone; Codex's remains.
+    let partly = manifest.workspace_on(Some("m1"), |agent, _| agent == "codex");
+    assert!(partly.agents[0].record.moved);
+    assert_eq!(partly.agents[0].record.session, None);
+    assert!(!partly.last_session.unwrap().moved);
+
+    for elsewhere in [
+        manifest.workspace_on(Some("m2"), |_, _| true),
+        manifest.workspace_on(None, |_, _| true),
+    ] {
+        assert!(elsewhere.agents[0].record.moved);
+        assert_eq!(elsewhere.agents[0].record.session, None);
+        assert!(elsewhere.last_session.unwrap().moved);
+    }
 }
 
 #[test]

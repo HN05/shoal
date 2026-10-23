@@ -58,17 +58,17 @@ pub struct Record {
     /// resume by ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
-    /// The workspace moved from another machine, where the agent's sessions
-    /// stayed, so the agent starts a new one.
+    /// The workspace moved where the agent's session is not available, such
+    /// as from another machine, so the agent starts a new one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
 }
 
-/// What a new agent of a workspace that moved from another machine is told,
-/// followed by `handoff`.
+/// What a new agent of a workspace that moved where its earlier session is
+/// not available is told, followed by `handoff`.
 pub(crate) fn moved_prompt(handoff: Option<&str>) -> String {
     let mut prompt = String::from(
-        "Shoal moved this workspace from another machine, where your earlier session stayed. Continue working on the unfinished assignment: read its linked issue and PRs, its commits and its uncommitted changes to see where it stands.",
+        "Shoal moved this workspace, and your earlier session is not available here. Continue working on the unfinished assignment: read its linked issue and PRs, its commits and its uncommitted changes to see where it stands.",
     );
     if let Some(handoff) = handoff {
         prompt.push_str("\n\n");
@@ -216,8 +216,8 @@ impl Record {
         }
     }
 
-    /// This record for another machine, where neither its sessions nor its
-    /// place exist and no wrapper waits to restore it.
+    /// This record where neither its session nor its place exists, such as
+    /// on another machine, and no wrapper waits to restore it.
     pub(crate) fn moved(self) -> Self {
         Self {
             place: None,
@@ -417,13 +417,13 @@ pub struct LastSession {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
-    /// The workspace moved from another machine, where the session stayed.
+    /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
 }
 
 impl LastSession {
-    /// This session for another machine, which starts a new one.
+    /// This session where it is not available, which starts a new one.
     pub(crate) fn moved(self) -> Self {
         Self {
             session: None,

@@ -1,5 +1,8 @@
 //! Claude Code: its hooks deliver updates, report its turn state and wake it
-//! when idle, and `.claude.json` records the directories it trusts.
+//! when idle, `.claude.json` records the directories it trusts, and each
+//! directory's project folder holds the sessions that ran there.
+mod sessions;
+
 use std::ffi::OsString;
 
 use serde_json::{Value, json};
@@ -33,6 +36,12 @@ impl Integration for Claude {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CLAUDE_CODE)
+    }
+
+    fn has_session(&self, ctx: &Context, session: &str) -> bool {
+        sessions::projects(ctx)
+            .and_then(|projects| sessions::find(&projects, session))
+            .is_ok_and(|folder| folder.is_some())
     }
 }
 

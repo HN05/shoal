@@ -103,6 +103,45 @@ impl Manifest {
             sessions,
         })
     }
+
+    /// The removal record to import on `machine`. On the exporting machine,
+    /// each agent keeps its session when `available` finds the agent's
+    /// session there; every other agent starts a new session.
+    pub fn workspace_on(
+        &self,
+        machine: Option<&str>,
+        available: impl Fn(&str, &str) -> bool,
+    ) -> RemovedWorkspace {
+        let Some(sessions) = self
+            .sessions
+            .as_ref()
+            .filter(|sessions| machine == Some(sessions.machine.as_str()))
+        else {
+            return self.workspace.clone();
+        };
+        let kept = |agent: &str, session: Option<&str>| {
+            session.is_some_and(|session| available(agent, session))
+        };
+        let agents = sessions.agents.iter().cloned().map(|agent| {
+            if kept(&agent.record.agent, agent.record.session.as_deref()) {
+                agent
+            } else {
+                moved_agent(agent)
+            }
+        });
+        let last_session = sessions.last_session.clone().map(|last| {
+            if kept(&last.agent, last.session.as_deref()) {
+                last
+            } else {
+                last.moved()
+            }
+        });
+        RemovedWorkspace {
+            agents: agents.collect(),
+            last_session,
+            ..self.workspace.clone()
+        }
+    }
 }
 
 /// A Git bundle of an export's checkpoint, in a directory of its own because
@@ -216,16 +255,16 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
 /// The record for another machine, where its agents' sessions do not exist.
 fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
     RemovedWorkspace {
-        agents: removed
-            .agents
-            .into_iter()
-            .map(|agent| StoppedAgent {
-                record: agent.record.moved(),
-                ..agent
-            })
-            .collect(),
+        agents: removed.agents.into_iter().map(moved_agent).collect(),
         last_session: removed.last_session.map(|last| last.moved()),
         ..removed
+    }
+}
+
+fn moved_agent(agent: StoppedAgent) -> StoppedAgent {
+    StoppedAgent {
+        record: agent.record.moved(),
+        ..agent
     }
 }
 

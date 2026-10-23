@@ -42,6 +42,10 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
+    fn has_session(&self, ctx: &Context, session: &str) -> bool {
+        self.inner().has_session(ctx, session)
+    }
+
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {
         (!settings.happy.enabled).then_some(
             "Happy sessions are off; set happy.enabled = true in the repository or global config",

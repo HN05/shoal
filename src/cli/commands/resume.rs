@@ -147,8 +147,8 @@ async fn continue_last_session(
     launch(ctx, workspace, recovery, vec![path]).await
 }
 
-/// Start `agent` as a new agent is started, since its sessions stayed on the
-/// machine the workspace moved from, telling it the workspace moved; it
+/// Start `agent` as a new agent is started, since its session is not
+/// available where the workspace moved, telling it the workspace moved; it
 /// consumes `records` once it has started.
 async fn start_moved(
     ctx: &Context,

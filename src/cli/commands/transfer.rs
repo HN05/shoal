@@ -10,16 +10,17 @@ use serde_json::json;
 
 use crate::{
     cli::{
+        agents,
         client::{self, request},
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    model::{RestoredWorkspace, Workspace},
+    model::{RemovedWorkspace, RestoredWorkspace, Workspace},
     protocol::Method,
     removal::{RemovalCheck, UnsavedWork},
     state::WorkspaceState,
-    transfer::{ExportedWorkspace, Import},
+    transfer::{ExportedWorkspace, Import, Manifest},
 };
 
 use super::restore::Reopened;
@@ -108,7 +109,7 @@ async fn import_workspace(
             .as_ref()
             .map(|bundle| bundle.path().to_owned()),
         prerequisite: import.manifest.prerequisite.clone(),
-        workspace: Box::new(import.manifest.workspace.clone()),
+        workspace: Box::new(workspace_here(ctx, &import.manifest)),
     };
     ctx.progress(
         "Importing workspace",
@@ -228,6 +229,15 @@ impl ImportReport {
         )?;
         Ok(if self.failed.is_empty() { 0 } else { 1 })
     }
+}
+
+/// The exported removal record for this machine: on the one that exported
+/// it, agents keep the sessions still there.
+fn workspace_here(ctx: &Context, manifest: &Manifest) -> RemovedWorkspace {
+    let machine = crate::process::machine::id();
+    manifest.workspace_on(machine.as_deref(), |agent, session| {
+        agents::has_session(ctx, agent, session)
+    })
 }
 
 /// Read the export in `file`, or on standard input for `-`.

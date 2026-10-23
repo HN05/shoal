@@ -734,9 +734,10 @@ pub enum Command {
     Export(ExportArgs),
     /// Open workspaces shoal export wrote, in the repository with the same origin.
     ///
-    /// Fetches the default branch when a file builds on commits the repository lacks. Stopped
-    /// agents start new sessions with shoal resume, since their sessions stayed on the other
-    /// machine. `-` reads from standard input. A directory imports each .shoal file in it.
+    /// Fetches the default branch when a file builds on commits the repository lacks. On the
+    /// machine that exported it, shoal resume continues the stopped agents' sessions; elsewhere,
+    /// it starts new sessions, since the sessions stayed on the other machine. `-` reads from
+    /// standard input. A directory imports each .shoal file in it.
     Import {
         /// Export files or directories of them.
         #[arg(required = true)]
