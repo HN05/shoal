@@ -197,16 +197,11 @@ impl Manager {
 }
 
 /// Make `pins` the forge types this process parses links of their hosts
-/// as, forgetting the hosts only `previous` pinned; their next lookup
-/// learns what they serve.
-pub(super) fn learn_forge_pins(previous: Option<&Forges>, pins: &Forges) {
-    for (host, _) in previous.map(Forges::pins).unwrap_or_default() {
-        if pins.pinned(&host).is_none() {
-            hosts::forget(&host);
-        }
-    }
-    for (host, kind) in pins.pins() {
-        hosts::learn(&host, kind);
+/// as when they differ from `previous`, the pins it had; a host whose pin
+/// went is parsed as what it was learned to serve.
+pub(super) fn learn_forge_pins(previous: &Forges, pins: &Forges) {
+    if pins != previous {
+        hosts::pin(pins.pins());
     }
 }
 
@@ -260,7 +255,11 @@ mod tests {
         };
         manager.publish_config(config);
         assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_ok());
+        // An answer a probe resolved before the reload does not replace it.
+        crate::forge::hosts::learn("gitlab.reload.example", ForgeKind::GitLab);
+        assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_ok());
         manager.publish_config(Config::default());
+        // Without the pin, the host parses as what it was learned to serve.
         assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_err());
     }
 }

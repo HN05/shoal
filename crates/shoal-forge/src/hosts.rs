@@ -17,7 +17,12 @@ use crate::{
     backends::{Backend, ForgeKind},
 };
 
+/// The answers this process resolved.
 static LEARNED: LazyLock<RwLock<HashMap<String, ForgeKind>>> = LazyLock::new(Default::default);
+
+/// The types the caller pins, which outrank answers so that one resolved
+/// before the pin changed never replaces it.
+static PINNED: LazyLock<RwLock<HashMap<String, ForgeKind>>> = LazyLock::new(Default::default);
 
 /// The hosts the caller pins, read the first time a host's forge is needed.
 type Pins = Box<dyn FnOnce() -> Vec<(String, ForgeKind)> + Send>;
@@ -75,43 +80,53 @@ pub fn learn(host: &str, kind: ForgeKind) {
         .insert(host.to_ascii_lowercase(), kind);
 }
 
-/// Forget what this process learned `host` serves, as when its pin goes.
-pub fn forget(host: &str) {
-    LEARNED
-        .write()
-        .unwrap_or_else(PoisonError::into_inner)
-        .remove(&host.to_ascii_lowercase());
+/// Make `pins` the types this process pins, replacing any it had.
+pub fn pin(pins: Vec<(String, ForgeKind)>) {
+    *PINNED.write().unwrap_or_else(PoisonError::into_inner) = pins
+        .into_iter()
+        .map(|(host, kind)| (host.to_ascii_lowercase(), kind))
+        .collect();
 }
 
-/// Learn the hosts `pins` returns the first time this process needs a
-/// host's forge, so a caller that never parses a forge link never reads them.
+/// [`pin`] what `pins` returns the first time this process needs a host's
+/// forge, so a caller that never parses a forge link never reads them.
 pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'static) {
     *PINS.lock().unwrap_or_else(PoisonError::into_inner) = Some(Box::new(pins));
 }
 
-/// What this process learned `host` serves, once the caller's pins are
-/// learned; a concurrent first reader waits for them.
+/// The type pinned for `host`, else what this process learned it serves,
+/// once the caller's pins are loaded; a concurrent first reader waits for
+/// them.
 pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
     let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(load) = pins.take() {
-        for (pinned, kind) in load() {
-            learn(&pinned, kind);
-        }
+        pin(load());
     }
     drop(pins);
-    LEARNED
+    let pinned = PINNED
         .read()
         .unwrap_or_else(PoisonError::into_inner)
         .get(host)
-        .copied()
+        .copied();
+    pinned.or_else(|| {
+        LEARNED
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(host)
+            .copied()
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Serializes the tests that replace this process's pins.
+    static PIN_TESTS: Mutex<()> = Mutex::new(());
+
     #[test]
     fn readers_wait_for_the_pins_another_reader_is_loading() {
+        let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let (loading, started) = std::sync::mpsc::channel();
         let (proceed, waiting) = std::sync::mpsc::channel::<()>();
         learn_pins(move || {
@@ -129,6 +144,16 @@ mod tests {
             ForgeKind::detect("gitlab.pinned.example", None),
             ForgeKind::Forgejo
         );
+    }
+
+    #[test]
+    fn pins_outrank_answers_learned_after_them() {
+        let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        pin(vec![("Pinned.Answer.Example".into(), ForgeKind::Forgejo)]);
+        learn("pinned.answer.example", ForgeKind::GitLab);
+        assert_eq!(learned("pinned.answer.example"), Some(ForgeKind::Forgejo));
+        pin(Vec::new());
+        assert_eq!(learned("pinned.answer.example"), Some(ForgeKind::GitLab));
     }
 
     #[test]
