@@ -524,17 +524,24 @@ impl Backend for GitHub {
         view::reviews(repo, account, kind, number).await
     }
 
-    /// Only each check's latest attempt, not those reruns replaced.
+    /// Only each check's latest attempt, not those reruns replaced, and
+    /// each commit status, which reports no Actions job.
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         head: &str,
     ) -> Result<Vec<CiCheck>> {
-        let endpoint = repo.repo_endpoint(&format!(
+        let runs = Request::get(repo.repo_endpoint(&format!(
             "commits/{head}/check-runs?filter=latest&per_page=100"
-        ));
-        actions::checks(&repo.send(account, &Request::get(endpoint)).await?)
+        )));
+        let statuses =
+            Request::get(repo.repo_endpoint(&format!("commits/{head}/status?per_page=100")));
+        let (runs, statuses) =
+            tokio::try_join!(repo.send(account, &runs), repo.send(account, &statuses))?;
+        let mut checks = actions::checks(&runs)?;
+        checks.extend(github_rest::commit_statuses(&statuses, Dialect::GitHub)?);
+        Ok(checks)
     }
 
     fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {

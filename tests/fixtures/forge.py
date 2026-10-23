@@ -58,8 +58,12 @@ def etag(answer):
 
 def gh(args):
     if args[:1] == ["api"]:
-        index = args.index("-X")
-        method, endpoint = args[index + 1], args[index + 2]
+        if "-X" in args:
+            index = args.index("-X")
+            method, endpoint = args[index + 1], args[index + 2]
+        else:
+            # A read such as `gh api --hostname HOST ENDPOINT --paginate`.
+            method, endpoint = "GET", args[args.index("--hostname") + 2]
         source = args[args.index("--input") + 1] if "--input" in args else None
         header = args[args.index("-H") + 1] if "-H" in args else ""
         if source == "-" and "multipart/form-data" in header:
