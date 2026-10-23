@@ -11,6 +11,7 @@ use crate::{
     backends::rest::RestCheck,
     items::{
         action::{Edit, MergeMethod},
+        create::{NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
@@ -270,6 +271,50 @@ impl Backend for GitLab {
 
     fn reply_key(&self) -> (&'static str, &'static str) {
         (DISCUSSION, "id")
+    }
+
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        branch: &str,
+    ) -> Result<Vec<Value>> {
+        let branch = encode(branch, false);
+        let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
+        repo.pages(account, &repo.repo_endpoint(&endpoint)).await
+    }
+
+    fn has_head(&self, _repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+        pull["source_branch"] == branch && pull["source_project_id"] == pull["target_project_id"]
+    }
+
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        let title = if pull.draft {
+            draft_title(&pull.title, true)
+        } else {
+            pull.title.clone()
+        };
+        let body = json!({"title": title, "description": pull.body,
+            "source_branch": pull.head, "target_branch": pull.base});
+        Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint("merge_requests"),
+            Some(body),
+        )
+    }
+
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request {
+        let body = json!({ "title": issue.title, "description": issue.body,
+            "labels": issue.labels.join(",") });
+        Request::new(HttpMethod::Post, repo.repo_endpoint("issues"), Some(body))
+    }
+
+    fn labels_issue_after_opening(&self) -> bool {
+        false
+    }
+
+    fn has_labels(&self) -> bool {
+        true
     }
 }
 

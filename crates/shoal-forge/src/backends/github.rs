@@ -12,6 +12,7 @@ use crate::{
     account::Account,
     items::{
         action::{Edit, MergeMethod},
+        create::{NewIssue, NewPull},
         issue::require_open,
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -300,6 +301,45 @@ impl Backend for GitHub {
 
     fn reply_key(&self) -> (&'static str, &'static str) {
         ("inline", "id")
+    }
+
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        branch: &str,
+    ) -> Result<Vec<Value>> {
+        let owner = repo.path.split('/').next().unwrap_or_default();
+        let head = encode(&format!("{owner}:{branch}"), false);
+        let endpoint = repo.repo_endpoint(&format!("pulls?state=open&head={head}"));
+        repo.send(account, &Request::get(endpoint))
+            .await?
+            .as_array()
+            .cloned()
+            .context("the PR list is not a list")
+    }
+
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+        github_rest::has_head(repo, pull, branch)
+    }
+
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        let body = json!({"title": pull.title, "body": pull.body, "head": pull.head,
+            "base": pull.base, "draft": pull.draft});
+        Request::new(HttpMethod::Post, repo.repo_endpoint("pulls"), Some(body))
+    }
+
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request {
+        let body = json!({ "title": issue.title, "body": issue.body, "labels": issue.labels });
+        Request::new(HttpMethod::Post, repo.repo_endpoint("issues"), Some(body))
+    }
+
+    fn labels_issue_after_opening(&self) -> bool {
+        false
+    }
+
+    fn has_labels(&self) -> bool {
+        true
     }
 }
 

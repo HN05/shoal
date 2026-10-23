@@ -200,3 +200,11 @@ pub(crate) fn set_state(repo: &ForgeRepo, item: &Item, state: ItemState) -> Requ
         Some(json!({ "state": state })),
     )
 }
+
+/// Whether a listed PR's head is `branch` in the repository.
+pub(crate) fn has_head(repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+    pull["head"]["ref"] == branch
+        && pull["head"]["repo"]["full_name"]
+            .as_str()
+            .is_some_and(|name| name.eq_ignore_ascii_case(&repo.path))
+}

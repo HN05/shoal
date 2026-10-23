@@ -2,19 +2,19 @@
 //! open PR.
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::Account,
-    backends::{Backend, gitlab},
+    backends::Backend,
     items::{
-        action::{Action, Edit, draft_title},
+        action::{Action, Edit},
         attach::{Attachment, Pending},
         item::Item,
         link::ItemKind,
     },
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::Request,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,61 +57,12 @@ pub struct NewPull {
 impl ForgeRepo {
     /// The open PR whose head is `branch` in this repository.
     pub async fn open_pull_for(&self, account: &Account, branch: &str) -> Result<Option<u64>> {
-        let pulls = match self.kind {
-            ForgeKind::GitHub => {
-                let owner = self.path.split('/').next().unwrap_or_default();
-                let head = encode(&format!("{owner}:{branch}"), false);
-                let endpoint = self.repo_endpoint(&format!("pulls?state=open&head={head}"));
-                self.send(account, &Request::get(endpoint))
-                    .await?
-                    .as_array()
-                    .cloned()
-                    .context("the PR list is not a list")?
-            }
-            // Forgejo cannot filter its list by head branch.
-            ForgeKind::Forgejo => {
-                self.pages(account, &self.repo_endpoint("pulls?state=open"))
-                    .await?
-            }
-            ForgeKind::GitLab => {
-                let branch = encode(branch, false);
-                let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
-                self.pages(account, &self.repo_endpoint(&endpoint)).await?
-            }
-            ForgeKind::Bitbucket => {
-                let literal = branch.replace('\\', "\\\\").replace('"', "\\\"");
-                let query = encode(&format!("source.branch.name=\"{literal}\""), false);
-                let endpoint = format!("pullrequests?state=OPEN&q={query}");
-                self.pages(account, &self.repo_endpoint(&endpoint)).await?
-            }
-        };
+        let pulls = self.kind.open_pulls_from(self, account, branch).await?;
         pulls
             .iter()
-            .find(|pull| self.has_head(pull, branch))
+            .find(|pull| self.kind.has_head(self, pull, branch))
             .map(|pull| self.created_number(pull))
             .transpose()
-    }
-
-    /// Whether the listed PR's head is `branch` in this repository.
-    fn has_head(&self, pull: &Value, branch: &str) -> bool {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => {
-                pull["head"]["ref"] == branch
-                    && pull["head"]["repo"]["full_name"]
-                        .as_str()
-                        .is_some_and(|name| name.eq_ignore_ascii_case(&self.path))
-            }
-            ForgeKind::GitLab => {
-                pull["source_branch"] == branch
-                    && pull["source_project_id"] == pull["target_project_id"]
-            }
-            ForgeKind::Bitbucket => {
-                pull["source"]["branch"]["name"] == branch
-                    && pull["source"]["repository"]["full_name"]
-                        .as_str()
-                        .is_some_and(|name| name.eq_ignore_ascii_case(&self.path))
-            }
-        }
     }
 
     /// Open the PR and return it as the forge reports it.
@@ -148,34 +99,7 @@ impl ForgeRepo {
     }
 
     fn create_pull_request(&self, pull: &NewPull) -> Request {
-        let title = match self.kind {
-            ForgeKind::Forgejo if pull.draft => draft_title(&pull.title, true),
-            ForgeKind::GitLab if pull.draft => gitlab::draft_title(&pull.title, true),
-            _ => pull.title.clone(),
-        };
-        let (resource, body) = match self.kind {
-            ForgeKind::GitHub => (
-                "pulls",
-                json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base,
-                    "draft": pull.draft}),
-            ),
-            ForgeKind::Forgejo => (
-                "pulls",
-                json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base}),
-            ),
-            ForgeKind::GitLab => (
-                "merge_requests",
-                json!({"title": title, "description": pull.body,
-                    "source_branch": pull.head, "target_branch": pull.base}),
-            ),
-            ForgeKind::Bitbucket => (
-                "pullrequests",
-                json!({"title": title, "description": pull.body, "draft": pull.draft,
-                    "source": {"branch": {"name": pull.head}},
-                    "destination": {"branch": {"name": pull.base}}}),
-            ),
-        };
-        Request::new(HttpMethod::Post, self.repo_endpoint(resource), Some(body))
+        self.kind.new_pull(self, pull)
     }
 
     /// Open the issue and return it as the forge reports it.
@@ -194,10 +118,10 @@ impl ForgeRepo {
             .await
             .context("could not open the issue")?;
         let number = self.created_number(&created)?;
-        // Forgejo takes only label IDs on creation; the label set takes names.
-        let add_labels = match self.kind {
-            ForgeKind::Forgejo => issue.labels,
-            _ => Vec::new(),
+        let add_labels = if self.kind.labels_issue_after_opening() {
+            issue.labels
+        } else {
+            Vec::new()
         };
         let follow_up = Edit {
             add_labels,
@@ -214,24 +138,13 @@ impl ForgeRepo {
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {
-        let body = match self.kind {
-            ForgeKind::GitHub => {
-                json!({ "title": issue.title, "body": issue.body, "labels": issue.labels })
-            }
-            ForgeKind::Forgejo => json!({ "title": issue.title, "body": issue.body }),
-            ForgeKind::GitLab => json!({ "title": issue.title, "description": issue.body,
-                "labels": issue.labels.join(",") }),
-            ForgeKind::Bitbucket => {
-                json!({ "title": issue.title, "content": { "raw": issue.body } })
-            }
-        };
-        Request::new(HttpMethod::Post, self.repo_endpoint("issues"), Some(body))
+        self.kind.new_issue(self, issue)
     }
 
     /// Refuse labels where the forge has none, before creating anything.
     fn ensure_labels(&self, labels: &[String]) -> Result<()> {
         anyhow::ensure!(
-            labels.is_empty() || self.kind != ForgeKind::Bitbucket,
+            labels.is_empty() || self.kind.has_labels(),
             "Bitbucket has no labels"
         );
         Ok(())
@@ -260,6 +173,8 @@ fn pending_edit(pending: Option<Pending>) -> Edit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::api::HttpMethod;
+    use serde_json::json;
 
     #[test]
     fn issues_carry_labels_on_github_and_label_afterwards_on_forgejo() {
@@ -322,10 +237,10 @@ mod tests {
         );
         let listed =
             json!({"source_branch": "topic", "source_project_id": 1, "target_project_id": 1});
-        assert!(gitlab.has_head(&listed, "topic"));
+        assert!(gitlab.kind.has_head(&gitlab, &listed, "topic"));
         let fork =
             json!({"source_branch": "topic", "source_project_id": 2, "target_project_id": 1});
-        assert!(!gitlab.has_head(&fork, "topic"));
+        assert!(!gitlab.kind.has_head(&gitlab, &fork, "topic"));
     }
 
     #[test]
@@ -366,8 +281,8 @@ mod tests {
         assert_eq!(bitbucket.created_number(&json!({"id": 9})).unwrap(), 9);
         let listed = json!({"source": {"branch": {"name": "topic"},
             "repository": {"full_name": "Workspace/Repo"}}});
-        assert!(bitbucket.has_head(&listed, "topic"));
-        assert!(!bitbucket.has_head(&listed, "other"));
+        assert!(bitbucket.kind.has_head(&bitbucket, &listed, "topic"));
+        assert!(!bitbucket.kind.has_head(&bitbucket, &listed, "other"));
     }
 
     #[test]

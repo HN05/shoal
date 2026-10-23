@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeKind, ForgeRepo, account::Account};
+use crate::{ForgeKind, ForgeRepo, account::Account, backends::Backend};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
@@ -18,7 +18,7 @@ pub struct Label {
 impl ForgeRepo {
     /// Every label of the repository, in the forge's order; Bitbucket has none.
     pub async fn labels(&self, account: &Account) -> Result<Vec<Label>> {
-        if self.kind == ForgeKind::Bitbucket {
+        if !self.kind.has_labels() {
             return Ok(Vec::new());
         }
         let listed = self.pages(account, &self.repo_endpoint("labels")).await?;

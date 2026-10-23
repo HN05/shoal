@@ -20,6 +20,7 @@ use crate::{
     account::Account,
     items::{
         action::{Edit, MergeMethod},
+        create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
@@ -195,6 +196,31 @@ pub(crate) trait Backend {
 
     /// Where activity records a reply in a review thread.
     fn reply_key(&self) -> (&'static str, &'static str);
+
+    /// The open PRs that may have `branch` as their head, filtered as far
+    /// as the forge can.
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        branch: &str,
+    ) -> Result<Vec<Value>>;
+
+    /// Whether a listed PR's head is `branch` in the repository.
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool;
+
+    /// The request that opens `pull`.
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
+
+    /// The request that opens `issue`.
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request;
+
+    /// Whether a new issue's labels are added after opening it, because
+    /// opening it cannot set them by name.
+    fn labels_issue_after_opening(&self) -> bool;
+
+    /// Whether the forge has labels.
+    fn has_labels(&self) -> bool;
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -363,6 +389,35 @@ impl Backend for ForgeKind {
 
     fn reply_key(&self) -> (&'static str, &'static str) {
         dispatch!(self, backend => backend.reply_key())
+    }
+
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        branch: &str,
+    ) -> Result<Vec<Value>> {
+        dispatch!(self, backend => backend.open_pulls_from(repo, account, branch).await)
+    }
+
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+        dispatch!(self, backend => backend.has_head(repo, pull, branch))
+    }
+
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        dispatch!(self, backend => backend.new_pull(repo, pull))
+    }
+
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request {
+        dispatch!(self, backend => backend.new_issue(repo, issue))
+    }
+
+    fn labels_issue_after_opening(&self) -> bool {
+        dispatch!(self, backend => backend.labels_issue_after_opening())
+    }
+
+    fn has_labels(&self) -> bool {
+        dispatch!(self, backend => backend.has_labels())
     }
 }
 

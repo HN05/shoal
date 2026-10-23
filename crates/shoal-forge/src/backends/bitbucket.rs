@@ -14,6 +14,7 @@ use crate::{
     backends::rest::RestCheck,
     items::{
         action::{Edit, MergeMethod},
+        create::{NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
@@ -24,7 +25,7 @@ use crate::{
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, encode},
     updates::DISCUSSION,
 };
 
@@ -264,6 +265,49 @@ impl Backend for Bitbucket {
 
     fn reply_key(&self) -> (&'static str, &'static str) {
         (DISCUSSION, "id")
+    }
+
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        branch: &str,
+    ) -> Result<Vec<Value>> {
+        let literal = branch.replace('\\', "\\\\").replace('"', "\\\"");
+        let query = encode(&format!("source.branch.name=\"{literal}\""), false);
+        let endpoint = format!("pullrequests?state=OPEN&q={query}");
+        repo.pages(account, &repo.repo_endpoint(&endpoint)).await
+    }
+
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+        pull["source"]["branch"]["name"] == branch
+            && pull["source"]["repository"]["full_name"]
+                .as_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case(&repo.path))
+    }
+
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        let body = json!({"title": pull.title, "description": pull.body, "draft": pull.draft,
+            "source": {"branch": {"name": pull.head}},
+            "destination": {"branch": {"name": pull.base}}});
+        Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint("pullrequests"),
+            Some(body),
+        )
+    }
+
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request {
+        let body = json!({ "title": issue.title, "content": { "raw": issue.body } });
+        Request::new(HttpMethod::Post, repo.repo_endpoint("issues"), Some(body))
+    }
+
+    fn labels_issue_after_opening(&self) -> bool {
+        false
+    }
+
+    fn has_labels(&self) -> bool {
+        false
     }
 }
 

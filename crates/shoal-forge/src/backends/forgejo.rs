@@ -13,7 +13,8 @@ use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, draft_title},
+        create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
@@ -153,6 +154,47 @@ impl Backend for Forgejo {
     /// Forgejo counts a reply in its review.
     fn reply_key(&self) -> (&'static str, &'static str) {
         ("reviews", "pull_request_review_id")
+    }
+
+    /// Forgejo cannot filter its list by head branch.
+    async fn open_pulls_from(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _branch: &str,
+    ) -> Result<Vec<Value>> {
+        repo.pages(account, &repo.repo_endpoint("pulls?state=open"))
+            .await
+    }
+
+    fn has_head(&self, repo: &ForgeRepo, pull: &Value, branch: &str) -> bool {
+        github_rest::has_head(repo, pull, branch)
+    }
+
+    /// Forgejo keeps draft state in the title.
+    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
+        let title = if pull.draft {
+            draft_title(&pull.title, true)
+        } else {
+            pull.title.clone()
+        };
+        let body = json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base});
+        Request::new(HttpMethod::Post, repo.repo_endpoint("pulls"), Some(body))
+    }
+
+    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request {
+        let body = json!({ "title": issue.title, "body": issue.body });
+        Request::new(HttpMethod::Post, repo.repo_endpoint("issues"), Some(body))
+    }
+
+    /// Forgejo takes only label IDs when opening an issue; the label set
+    /// takes names.
+    fn labels_issue_after_opening(&self) -> bool {
+        true
+    }
+
+    fn has_labels(&self) -> bool {
+        true
     }
 }
 
