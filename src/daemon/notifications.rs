@@ -99,12 +99,14 @@ pub(crate) struct Recorded {
     pub new: bool,
 }
 
-/// The workspace a notification is about: its name at the time, and its
-/// identity, which withdrawal matches since names change and are reused.
+/// What a notification is about: the workspace's name at the time and its
+/// identity, which withdrawal matches since names change and are reused, and
+/// the key of a request it asks the user to decide.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct About {
     pub name: Option<String>,
     pub id: Option<String>,
+    pub subject: Option<String>,
 }
 
 impl About {
@@ -121,6 +123,7 @@ impl About {
         Ok(Self {
             name: name.map(str::to_owned),
             id,
+            subject: None,
         })
     }
 }
@@ -137,8 +140,8 @@ pub(crate) fn insert(
         let pending: Option<i64> = tx
             .query_row(
                 "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1
-                    AND workspace_id IS ?2 AND kind=?3 AND message=?4",
-                params![about.name, about.id, kind, message],
+                    AND workspace_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5",
+                params![about.name, about.id, about.subject, kind, message],
                 |row| row.get(0),
             )
             .optional()?;
@@ -147,12 +150,13 @@ pub(crate) fn insert(
         }
     }
     tx.execute(
-        "INSERT INTO notifications(created_at,workspace,workspace_id,kind,message)
-            VALUES (?1,?2,?3,?4,?5)",
+        "INSERT INTO notifications(created_at,workspace,workspace_id,subject,kind,message)
+            VALUES (?1,?2,?3,?4,?5,?6)",
         params![
             i64::try_from(crate::time::unix_seconds())?,
             about.name,
             about.id,
+            about.subject,
             kind,
             message
         ],
@@ -177,6 +181,20 @@ pub(crate) fn retract(
     let deleted = tx.execute(
         "DELETE FROM notifications WHERE read=0 AND workspace_id=?1 AND kind=?2 AND message=?3",
         params![workspace_id, kind, message],
+    )?;
+    Ok(deleted > 0)
+}
+
+/// Delete the unread notification of `kind` about the request `subject`.
+/// Returns whether there was one.
+pub(crate) fn retract_about(
+    tx: &rusqlite::Transaction<'_>,
+    kind: NotificationKind,
+    subject: &str,
+) -> Result<bool> {
+    let deleted = tx.execute(
+        "DELETE FROM notifications WHERE read=0 AND kind=?1 AND subject=?2",
+        params![kind, subject],
     )?;
     Ok(deleted > 0)
 }
@@ -305,9 +323,26 @@ impl Manager {
             return Ok(None);
         }
         let id = self
-            .record_user_notification(workspace, kind, message)
+            .record_user_notification(workspace, kind, message, None)
             .await?;
         Ok(Some(id))
+    }
+
+    /// Ask the user to decide the request `subject` about the workspace. As
+    /// with [`Manager::notify`], failures are logged, never returned.
+    pub(crate) async fn notify_about(
+        &self,
+        workspace: &str,
+        kind: NotificationKind,
+        message: String,
+        subject: String,
+    ) {
+        let recorded = self
+            .record_user_notification(Some(workspace), kind, message, Some(subject))
+            .await;
+        if let Err(error) = recorded {
+            log!("notification not recorded: {error:#}");
+        }
     }
 
     /// Record an event for the user, wake watchers when it is new, and return
@@ -317,13 +352,17 @@ impl Manager {
         workspace: Option<&str>,
         kind: NotificationKind,
         message: String,
+        subject: Option<String>,
     ) -> Result<i64> {
         let workspace = workspace.map(str::to_owned);
         let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let about = About::named(&tx, workspace.as_deref())?;
+                let about = About {
+                    subject,
+                    ..About::named(&tx, workspace.as_deref())?
+                };
                 let recorded = insert(&tx, &about, kind, &message)?;
                 tx.commit()?;
                 Ok(recorded)

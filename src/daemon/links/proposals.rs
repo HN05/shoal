@@ -1026,6 +1026,13 @@ mod tests {
             .unwrap();
         manager.notify_approval(&workspace.name, &proposed).await;
         assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
+        // An approval that failed to open it kept the user's edited title.
+        let mut edited = proposed.clone();
+        edited.edit(&ProposalDecision {
+            title: Some("Flaky test".into()),
+            ..ProposalDecision::default()
+        });
+        manager.save_proposal(edited).await.unwrap();
 
         let withdrawn = manager
             .withdraw_approval(&workspace.name, proposed.id)

@@ -175,6 +175,7 @@ pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i6
             let about = About {
                 name: Some(row.get(0)?),
                 id: row.get(1)?,
+                subject: None,
             };
             Ok((about, row.get(2)?, row.get(3)?))
         })?

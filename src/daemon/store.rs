@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 61;
+const SCHEMA_VERSION: i64 = 62;
 
 #[cfg(test)]
 mod benchmark;
@@ -392,7 +392,12 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (59, QUESTION_WITHDRAWN, None),
     (60, NOTIFICATION_SENDERS, None),
     (61, CHAT_MESSAGE_SENDERS, None),
+    (62, NOTIFICATION_SUBJECTS, None),
 ];
+
+/// The approval request a notification asks the user to decide, by its key,
+/// so withdrawing the request finds it though the user edited its text.
+const NOTIFICATION_SUBJECTS: &str = "ALTER TABLE notifications ADD COLUMN subject TEXT;";
 
 /// The workspace a chat's message is about, by identity, which the user's
 /// notification keeps when the chat ends first. Earlier messages name none.
@@ -1058,6 +1063,9 @@ mod tests {
         }
         if version >= 61 {
             db.execute_batch(CHAT_MESSAGE_SENDERS)?;
+        }
+        if version >= 62 {
+            db.execute_batch(NOTIFICATION_SUBJECTS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

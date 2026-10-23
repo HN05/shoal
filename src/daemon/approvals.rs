@@ -801,11 +801,10 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let request = withdraw(&tx, &selected)?;
-                let retracted = notifications::retract(
+                let retracted = notifications::retract_about(
                     &tx,
-                    &request.workspace_id,
                     NotificationKind::ApprovalRequested,
-                    &request.notification(),
+                    &request.key,
                 )?;
                 tx.commit()?;
                 Ok((request, retracted))
@@ -1119,10 +1118,11 @@ impl Manager {
     }
 
     async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
-        self.notify(
-            Some(workspace),
+        self.notify_about(
+            workspace,
             NotificationKind::ApprovalRequested,
             request.notification(),
+            request.key.clone(),
         )
         .await;
     }
