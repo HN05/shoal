@@ -11,6 +11,7 @@ mod chat;
 mod cleanup;
 mod configuration;
 pub(crate) mod configured;
+mod contribute;
 mod events;
 mod holds;
 mod inbox;
@@ -359,6 +360,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Contribute(args) => contribute::contribute(&ctx, args).await,
         Command::Pr { command } => items::pr(&ctx, command).await,
         Command::Ci { command } => items::ci(&ctx, command).await,
         Command::Issue { command } => items::issue(&ctx, command).await,

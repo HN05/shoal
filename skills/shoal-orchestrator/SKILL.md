@@ -25,10 +25,13 @@ shoal --json add https://github.com/owner/repo/issues/34 --agent happy-codex
 shoal --json add my-project fix-login --agent happy-claude
 shoal --json add my-project fix-ui --base fix-login --agent happy-claude
 shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
+shoal --json contribute https://github.com/other/repo/issues/12 --agent happy-claude
 ```
 
 `add` accepts a registered repository and branch, or an issue, PR or branch URL;
-an issue becomes the agent's prompt. Happy agents (`happy-codex`, `happy-claude`)
+an issue becomes the agent's prompt. For a repository the user does not maintain,
+`contribute` takes the same URLs: it clones the repository, forks it when the
+user cannot push there, and removes the clone once nothing of it is left. Happy agents (`happy-codex`, `happy-claude`)
 run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
 the current terminal until they exit, so use them only when the user asks. A
 `--base` naming another workspace's branch stacks the new workspace on it; `work`

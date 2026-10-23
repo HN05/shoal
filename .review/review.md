@@ -43,6 +43,12 @@ instead of the PR delivery guidance below.
   Repository IDs and sources win before path lookup. Names survive unrelated
   caller-path collisions; a name and path
   matching different registrations are ambiguous and list both candidates.
+  Automatic removal of a contribution repository waits the cleanup grace period,
+  then rechecks, under the gates workspace creation takes and in the transaction
+  that records the removal, that no workspace, queued agent, chat, pending issue
+  proposal, kept branch, borrowed resource, unexpired checkpoint or removal
+  record, or checkout work the remotes' advertised branches and tags lack remains;
+  removing one with any of them is a blocker.
   Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted
   entries. Doctor environment and untracked-worktree
@@ -214,6 +220,9 @@ instead of the PR delivery guidance below.
   their remote head remains the original branch. Reserve intent before changing Git;
   no execution other than the scoped caller may be recorded.
   explicit repair reconciles interrupted intent without replaying the mutation.
+- `pr open` pushes to the branch's push remote and opens the PR in `origin`'s
+  repository; a push remote on the same forge host is a fork the PR comes from,
+  and contribution clones keep `origin` as the repository itself.
 - Pasted links select repositories by origin identity: `add` opens issue, PR or
   branch links; `link`/`unlink` manage issue and PR completion associations. `watch`
   defaults to linked items, supports kind filters and explicit items without

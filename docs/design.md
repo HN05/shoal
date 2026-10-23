@@ -255,6 +255,18 @@ require disambiguation.
 its source and checkout path. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
 directory only when that directory is empty.
+A contribution is a URL clone registered for work in a repository the user does
+not maintain. `origin` stays the repository itself, so issues, PRs and syncs use
+it; when the user's login cannot push there, the user's fork, created or reused,
+becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
+cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
+left for the unattended grace period: no workspace, queued agent, chat, pending
+issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
+use, and no work in its checkout that the remotes' advertised branches and tags
+lack. The final
+check records the removal in the same transaction, under the gates creation
+takes, and queue and chat records refuse a repository being removed. An existing
+registration is never turned into one.
 
 A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed
@@ -948,8 +960,9 @@ assigned only on request: a workspace's assigned issue is its work, while an iss
 an agent opens is usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
 
-`shoal pr open` pushes, then finds or opens the branch's PR and assigns it in one
-daemon request, so a PR Shoal opens is left unlinked only when removal started
+`shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
+PR and assigns it in one daemon request; a push remote on the origin's forge host
+other than `origin` is a fork the PR comes from, so a PR Shoal opens is left unlinked only when removal started
 after its check, which the result reports as a warning; a PR it creates is also
 recorded as opened. A new PR is ready
 unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is

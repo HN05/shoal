@@ -194,6 +194,12 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Create a workspace in someone else's repository for a PR.
+    ///
+    /// Shoal clones the repository and, when you cannot push to it, forks it
+    /// and pushes your branches to the fork. Once nothing of it is left, it
+    /// removes the clone.
+    Contribute(ContributeArgs),
     /// Create a child workspace on a new branch for work in its own PR.
     ///
     /// The parent workspace's agent works on the child and receives its
@@ -1278,6 +1284,7 @@ impl Command {
         matches!(
             self,
             Command::Doctor { .. }
+                | Command::Contribute(_)
                 | Command::Branch { .. }
                 | Command::Install { .. }
                 | Command::Update
@@ -1296,6 +1303,32 @@ impl Command {
                 }
         )
     }
+}
+
+/// What `shoal contribute` takes, apart so its arguments build in a stack
+/// frame of their own.
+#[derive(Debug, Args)]
+pub struct ContributeArgs {
+    /// Run in the current pane instead of opening a Herdr tab.
+    #[arg(long)]
+    pub here: bool,
+    /// Give the new tab or session the terminal, overriding the `focus` setting;
+    /// its agent starts now, as with --now.
+    #[arg(long, conflicts_with = "here")]
+    pub focus: bool,
+    /// Repository URL, or an issue, PR or branch URL.
+    pub target: String,
+    /// Git branch name; a portable workspace name is derived from it.
+    pub branch: Option<String>,
+    /// Start a built-in agent or a configured command after worktree creation.
+    #[arg(long, value_parser = AgentParser)]
+    pub agent: Option<Agent>,
+    /// Start the agent now even when max_agents is reached, instead of queuing it.
+    #[arg(long)]
+    pub now: bool,
+    /// Arguments forwarded to the agent.
+    #[arg(last = true)]
+    pub args: Vec<OsString>,
 }
 
 /// An issue or PR argument, where `#42` means `42`.
@@ -2148,6 +2181,13 @@ mod tests {
             let command = Cli::try_parse_from(args).unwrap().command.unwrap();
             assert!(command.is_administrative());
         }
+    }
+
+    #[test]
+    fn registering_a_contribution_is_administrative() {
+        let args = ["shoal", "contribute", "https://github.com/owner/repo"];
+        let command = Cli::try_parse_from(args).unwrap().command.unwrap();
+        assert!(command.is_administrative());
     }
 
     #[test]

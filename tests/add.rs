@@ -62,6 +62,17 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec!["layered_config test", "queue_add", "create_workspace"],
             "creation reached",
         ),
+        // A contribution refuses a missing agent before it forks or clones.
+        (
+            vec![
+                "contribute",
+                "https://forge.example/other/repo",
+                "--agent",
+                "missing",
+            ],
+            vec![],
+            "unknown agent",
+        ),
         // Work to wait for is refused before the agent or any picker.
         (
             vec![

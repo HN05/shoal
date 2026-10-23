@@ -545,7 +545,8 @@ agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` tak
 precedence over Shoal's environment; chats and desktop apps use Shoal's. A trust
 update failure warns and still launches the agent. Removing a repository removes
 its trust entries from these files, and from those its workspaces' `[env]` selects,
-while preserving other project settings.
+while preserving other project settings. When the daemon removes a
+[contribution](#contributions), Shoal's environment is the daemon's.
 
 `shoal edit [workspace] -- <args>` runs the `edit` command, such as
 `edit = ["zed", "{path}"]`. Without one it runs `$VISUAL`, otherwise `$EDITOR`, split on whitespace,
@@ -1200,6 +1201,33 @@ checked with `config show` and `setup` and then committed. It runs in the
 repository's `shoal-setup` workspace, opening one on that branch when none
 exists. The agent is `--agent`, else `default_agent`, else one chosen from the
 agent picker; arguments after `--` go to the agent.
+
+### Contributions
+
+```sh
+shoal contribute https://github.com/owner/repo/issues/68  # Work on an issue
+shoal contribute https://github.com/owner/repo fix-typo --agent claude
+```
+
+`shoal contribute <url> [branch]` creates a workspace in a repository you do not
+maintain. The URL names the repository, or an issue, PR or branch in it, which
+opens as `shoal add <link>` does; `--agent`, `--here`, `--focus` and `--now` work
+as for `add`. A repository that is already registered is used as it is.
+Otherwise Shoal clones it as a contribution, first checking whether your forge
+login can push to it. When it cannot, Shoal forks it into your account, reusing
+an existing fork, and the clone gets the fork as its `fork` remote with
+`remote.pushDefault` set to it, so [`pr open`](#issue-and-pr-actions) pushes
+there and opens the PR from the fork. Forking needs GitHub, Forgejo or Gitea.
+
+The cleanup sweep removes a contribution repository as `repo rm` does once it has
+had no workspace, queued agent, chat, pending issue proposal, kept branch or
+resource another repository's workspace borrows, no unexpired
+[checkpoint](#checkpoints-and-restore) or removal record, and no changed files,
+stash, Git operation under way or commits in its checkout that no branch or tag
+its remotes advertise has, for
+`[cleanup] grace_minutes`, then records a `repository_removed` notification.
+From the start of the removal, new workspaces, queued agents and chats in it are
+refused.
 
 ### Git profiles
 
