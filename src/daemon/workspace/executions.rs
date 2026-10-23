@@ -19,7 +19,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::atomic::Ordering,
     time::Duration,
@@ -314,19 +314,16 @@ impl Manager {
             &ports,
             &caches,
         );
-        let (sender, receiver) = watch::channel(false);
-        connections.insert(id.clone(), sender);
-        self.issue_scope(
-            scope_token.clone(),
-            Caller {
-                execution: Some(ScopedExecution {
-                    id: id.clone(),
-                    kind,
-                }),
-                workspace_id: workspace.id.clone(),
-            },
-        )
-        .await;
+        let receiver = self
+            .connect_execution(
+                &mut connections,
+                &id,
+                kind,
+                &workspace.id,
+                scope_token.clone(),
+                false,
+            )
+            .await;
         Ok(RegisteredExecution {
             id,
             workspace,
@@ -594,34 +591,7 @@ impl Manager {
                 .is_some_and(|sender| !sender.is_closed()),
             "execution is already connected"
         );
-        let verified = request.clone();
-        let workspace_id = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let execution = store::find_execution(&tx, &verified.execution)?
-                    .context("execution record is missing")?;
-                let token: Option<String> = tx.query_row(
-                    "SELECT scope_token FROM executions WHERE id=?1",
-                    [&verified.execution],
-                    |row| row.get(0),
-                )?;
-                ensure!(
-                    token.as_deref() == Some(verified.scope_token.as_str()),
-                    "execution scope token does not match"
-                );
-                ensure!(
-                    reattaching_identity_matches(&execution, &verified),
-                    "execution process identity does not match its record"
-                );
-                tx.execute(
-                    "UPDATE executions SET state=?2 WHERE id=?1",
-                    params![verified.execution, ExecutionState::Running],
-                )?;
-                tx.commit()?;
-                Ok(execution.workspace_id)
-            })
-            .await?;
+        let workspace_id = self.authorize_reattachment(request).await?;
         let workspace = self.workspace(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
@@ -629,19 +599,16 @@ impl Manager {
             self.discard_undelivered_stop(&workspace, &request.execution);
         }
         // A stopped agent stays stopped until its restore.
-        let (sender, stop) = watch::channel(request.awaiting_restore.is_some());
-        connections.insert(request.execution.clone(), sender);
-        self.issue_scope(
-            request.scope_token.clone(),
-            Caller {
-                execution: Some(ScopedExecution {
-                    id: request.execution.clone(),
-                    kind: ExecutionKind::Command,
-                }),
-                workspace_id: workspace.id.clone(),
-            },
-        )
-        .await;
+        let stop = self
+            .connect_execution(
+                &mut connections,
+                &request.execution,
+                ExecutionKind::Command,
+                &workspace.id,
+                request.scope_token.clone(),
+                request.awaiting_restore.is_some(),
+            )
+            .await;
         drop(connections);
         // A restore whose agent runs again ended, even if the previous daemon
         // stopped before removing it.
@@ -665,6 +632,67 @@ impl Manager {
         }
         self.touch(&workspace.id).await;
         Ok(ReattachedExecution { workspace, stop })
+    }
+
+    /// Check a reattaching wrapper against its execution record and the scope
+    /// token issued at launch, then mark the execution running, returning its
+    /// workspace ID. The caller holds the connections lock until it connects
+    /// the wrapper, so no other wrapper connects in between.
+    async fn authorize_reattachment(&self, request: &Reattach) -> Result<String> {
+        let request = request.clone();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                let execution = store::find_execution(&tx, &request.execution)?
+                    .context("execution record is missing")?;
+                let token: Option<String> = tx.query_row(
+                    "SELECT scope_token FROM executions WHERE id=?1",
+                    [&request.execution],
+                    |row| row.get(0),
+                )?;
+                ensure!(
+                    token.as_deref() == Some(request.scope_token.as_str()),
+                    "execution scope token does not match"
+                );
+                ensure!(
+                    reattaching_identity_matches(&execution, &request),
+                    "execution process identity does not match its record"
+                );
+                tx.execute(
+                    "UPDATE executions SET state=?2 WHERE id=?1",
+                    params![request.execution, ExecutionState::Running],
+                )?;
+                tx.commit()?;
+                Ok(execution.workspace_id)
+            })
+            .await
+    }
+
+    /// Give a wrapper its stop channel, starting as `stopped`, and let its
+    /// scope token act for the execution. Runs under the connections lock.
+    async fn connect_execution(
+        &self,
+        connections: &mut HashMap<String, watch::Sender<bool>>,
+        id: &str,
+        kind: ExecutionKind,
+        workspace_id: &str,
+        scope_token: String,
+        stopped: bool,
+    ) -> watch::Receiver<bool> {
+        let (sender, stop) = watch::channel(stopped);
+        connections.insert(id.to_owned(), sender);
+        self.issue_scope(
+            scope_token,
+            Caller {
+                execution: Some(ScopedExecution {
+                    id: id.to_owned(),
+                    kind,
+                }),
+                workspace_id: workspace_id.to_owned(),
+            },
+        )
+        .await;
+        stop
     }
 
     /// A reattaching wrapper still runs its command, so a stop the previous
