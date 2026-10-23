@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::Connection;
 use tokio::{
     io::AsyncReadExt,
-    process::{Child, ChildStdin, Command},
+    process::{Child, ChildStderr, ChildStdin, Command},
 };
 
 use super::{
@@ -23,6 +23,8 @@ use crate::{config::Config, state::AgentState};
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// Lets a burst of state changes settle into one pass.
 const SETTLE: Duration = Duration::from_millis(500);
+/// How long an ended inhibitor's remaining stderr may take to arrive.
+const REMAINDER_GUARD: Duration = Duration::from_secs(1);
 
 /// The platform's inhibitor, which holds sleep off while the command it is
 /// given, `cat` reading the daemon's pipe, runs.
@@ -164,6 +166,10 @@ async fn failed(manager: &Manager, error: anyhow::Error, config: Arc<Config>) ->
 struct Inhibitor {
     program: String,
     child: Child,
+    /// Drained while the inhibitor runs, so it never blocks on a full pipe.
+    stderr: Option<ChildStderr>,
+    /// The start of what it wrote to stderr, kept for the failure message.
+    said: Vec<u8>,
     /// Closing it lets `cat`, and so the inhibitor, finish.
     _input: Option<ChildStdin>,
 }
@@ -180,28 +186,63 @@ impl Inhibitor {
             .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("start {program}"))?;
-        let input = child.stdin.take();
         Ok(Self {
             program: (*program).into(),
+            stderr: child.stderr.take(),
+            _input: child.stdin.take(),
             child,
-            _input: input,
+            said: Vec::new(),
         })
     }
 
-    /// Wait for the inhibitor to end on its own, with what it said.
+    /// Wait for the inhibitor to end on its own, with what it said. Dropping
+    /// the wait keeps what was read for the next one.
     async fn ended(&mut self) -> anyhow::Error {
-        let status = match self.child.wait().await {
+        let status = loop {
+            let mut chunk = [0; 1024];
+            tokio::select! {
+                status = self.child.wait() => break status,
+                read = read_some(&mut self.stderr, &mut chunk) => self.keep(read, &chunk),
+            }
+        };
+        // `cat` shares the pipe and can outlive the inhibitor, so the rest is
+        // read only while it comes promptly.
+        let _ = tokio::time::timeout(REMAINDER_GUARD, self.read_remainder()).await;
+        let status = match status {
             Ok(status) => status,
             Err(error) => return anyhow!(error).context(format!("wait for {}", self.program)),
         };
-        let mut output = String::new();
-        if let Some(mut stderr) = self.child.stderr.take() {
-            let _ = stderr.read_to_string(&mut output).await;
-        }
-        match output.trim() {
+        match crate::subprocess::diagnostic(&self.said).trim() {
             "" => anyhow!("{} ended ({status})", self.program),
-            output => anyhow!("{} ended ({status}): {output}", self.program),
+            said => anyhow!("{} ended ({status}): {said}", self.program),
         }
+    }
+
+    async fn read_remainder(&mut self) {
+        let mut chunk = [0; 1024];
+        while self.stderr.is_some() {
+            let read = read_some(&mut self.stderr, &mut chunk).await;
+            self.keep(read, &chunk);
+        }
+    }
+
+    /// Keep the start of a read from stderr, closing it at its end.
+    fn keep(&mut self, read: std::io::Result<usize>, chunk: &[u8]) {
+        match read {
+            Ok(0) | Err(_) => self.stderr = None,
+            Ok(read) => {
+                let room = crate::subprocess::MAX_DIAGNOSTIC_CHARS.saturating_sub(self.said.len());
+                self.said.extend_from_slice(&chunk[..read.min(room)]);
+            }
+        }
+    }
+}
+
+/// Read what the pipe has, or wait forever once it is closed.
+async fn read_some(pipe: &mut Option<ChildStderr>, chunk: &mut [u8]) -> std::io::Result<usize> {
+    match pipe {
+        Some(pipe) => pipe.read(chunk).await,
+        None => std::future::pending().await,
     }
 }
 

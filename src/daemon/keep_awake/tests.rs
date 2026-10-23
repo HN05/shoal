@@ -160,3 +160,20 @@ async fn a_failed_inhibitor_reports_why() {
         "{missing:#}"
     );
 }
+
+#[tokio::test]
+async fn an_inhibitor_writing_past_the_pipe_is_drained_and_bounded() {
+    // More than a pipe holds: an undrained inhibitor would block before exiting.
+    let script = "yes denied | head -c 1000000 >&2; exit 3";
+    let mut inhibitor = Inhibitor::start(&["sh", "-c", script]).unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(60), inhibitor.ended())
+        .await
+        .expect("the inhibitor's exit is seen")
+        .to_string();
+    assert!(ended.contains("exit status: 3"), "{ended}");
+    assert!(
+        ended.len() < crate::subprocess::MAX_DIAGNOSTIC_CHARS + 100,
+        "{}",
+        ended.len()
+    );
+}
