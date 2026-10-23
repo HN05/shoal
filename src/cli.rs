@@ -187,7 +187,7 @@ pub enum Command {
         #[command(flatten)]
         items: ItemArgs,
         /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
-        #[arg(long)]
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=3600))]
         timeout: Option<u64>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.

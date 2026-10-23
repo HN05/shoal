@@ -153,6 +153,15 @@ fn watch_waits_without_a_default_timeout() {
         panic!("expected watch command");
     };
     assert_eq!(timeout, Some(60));
+
+    // The client's own deadline would otherwise turn an invalid timeout into
+    // an expired wait.
+    for invalid in ["0", "3601"] {
+        assert!(
+            <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "--timeout", invalid])
+                .is_err()
+        );
+    }
 }
 
 #[test]
