@@ -243,9 +243,8 @@ impl Manager {
         patience: Duration,
     ) -> anyhow::Result<Pause> {
         let record = self
-            .inspect_workspace(workspace_id)
+            .workspace_executions(workspace_id)
             .await?
-            .executions
             .into_iter()
             .find(|execution| execution.id == id)
             .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
