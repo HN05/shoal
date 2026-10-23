@@ -8,7 +8,6 @@ use serde_json::Value;
 use crate::{
     cli::{ApiArgs, client, context::Context, ui},
     forge::raw::{HttpMethod, RawRequest},
-    protocol::Method,
 };
 
 pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
@@ -25,12 +24,12 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
         path: args.path,
         body,
     };
-    let method = Method::ForgeApi { workspace, request };
-    let pieces = ctx
-        .progress("Requesting", client::pages::<String>(&ctx.paths, method))
+    let response = ctx
+        .progress(
+            "Requesting",
+            client::forge_api(&ctx.paths, workspace, request),
+        )
         .await?;
-    let response: Value =
-        serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")?;
     ctx.show(&response, |response| {
         println!("{response:#}");
     })?;

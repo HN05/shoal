@@ -180,6 +180,17 @@ where
     }
 }
 
+/// The forge's JSON response to `request` in `workspace`'s repository,
+/// reassembled from the pieces the daemon sends it in.
+pub async fn forge_api(
+    paths: &Paths,
+    workspace: String,
+    request: crate::forge::raw::RawRequest,
+) -> Result<serde_json::Value> {
+    let pieces = pages::<String>(paths, Method::ForgeApi { workspace, request }).await?;
+    serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
+}
+
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
 pub async fn settings(
