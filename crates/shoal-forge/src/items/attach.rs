@@ -223,7 +223,7 @@ impl ForgeRepo {
             return Ok(false);
         }
         check_all(attachments)?;
-        self.kind.check_uploads(self, account).await
+        self.kind.check_uploads(self, account, attachments).await
     }
 
     /// The body to post `body` with, its checked files uploaded to the

@@ -436,7 +436,12 @@ impl Backend for Bitbucket {
         bail!("check {} is not a CI job Shoal can act on", job.name)
     }
 
-    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+    async fn check_uploads(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _attachments: &[Attachment],
+    ) -> Result<bool> {
         bail!("Bitbucket has no API for attaching files")
     }
 

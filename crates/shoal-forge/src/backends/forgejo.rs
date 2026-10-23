@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 mod actions;
 pub(crate) mod tea;
 pub(crate) mod threads;
+mod uploads;
 mod view;
 
 use super::{
@@ -405,14 +406,25 @@ impl Backend for Forgejo {
         actions::failed_check_log(repo, account, url, name).await
     }
 
-    /// tea cannot send a file, so uploads need fj's token.
-    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+    /// tea cannot send a file, so uploads need fj's token. The instance's
+    /// settings are checked here, since an upload they refuse would fail only
+    /// after its comment or item is posted.
+    async fn check_uploads(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        attachments: &[Attachment],
+    ) -> Result<bool> {
         let login = account.forgejo_login(&repo.host).await?;
         ensure!(
             !matches!(login, ForgejoLogin::Tea(_)),
             "tea cannot upload files; save an fj login for {} with fj auth login",
             repo.host
         );
+        let settings = uploads::Settings::read(repo, account).await?;
+        for attachment in attachments {
+            settings.check(attachment)?;
+        }
         Ok(true)
     }
 

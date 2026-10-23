@@ -361,10 +361,15 @@ pub(crate) trait Backend {
         anyhow::bail!("check logs currently require Forgejo Actions")
     }
 
-    /// Refuse uploads the forge or `account` cannot make, before anything
-    /// is posted. Returns whether the forge keeps uploads with the item or
-    /// comment that shows them rather than with the repository.
-    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
+    /// Refuse `attachments` the forge or `account` cannot upload, before
+    /// anything is posted. Returns whether the forge keeps uploads with the
+    /// item or comment that shows them rather than with the repository.
+    async fn check_uploads(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        attachments: &[Attachment],
+    ) -> Result<bool>;
 
     /// The repository's numeric ID, where the forge's uploads name it.
     async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
@@ -749,8 +754,13 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
     }
 
-    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
-        dispatch!(self, backend => backend.check_uploads(repo, account).await)
+    async fn check_uploads(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        attachments: &[Attachment],
+    ) -> Result<bool> {
+        dispatch!(self, backend => backend.check_uploads(repo, account, attachments).await)
     }
 
     async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {

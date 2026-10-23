@@ -624,6 +624,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     let url = |id: u64| format!("{host}/attachments/{id}");
     let comments = "repos/team/project/issues/comments/70";
     fixture.respond(json!({
+        "GET settings/attachment": attachment_settings(true, ".png,video/*", 1),
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
         format!("POST {comments}/assets?name=login.png"):
@@ -744,6 +745,48 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
             json!({"body": format!("Seen with ![login.png]({})", url(4))}),
         ]
     );
+}
+
+fn attachment_settings(enabled: bool, allowed_types: &str, max_size: u64) -> Value {
+    json!({"body": {"enabled": enabled, "allowed_types": allowed_types,
+        "max_size": max_size, "max_files": 5}})
+}
+
+#[test]
+fn forgejo_refuses_files_its_settings_refuse_before_posting() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let [_, image, video] = attachment_files(&fixture);
+    for (settings, file, refusal) in [
+        (
+            attachment_settings(false, "", 1),
+            &image,
+            "does not accept attached files",
+        ),
+        (
+            attachment_settings(true, ".png", 1),
+            &video,
+            "accepts only these attached files: .png",
+        ),
+    ] {
+        fixture.respond(json!({"GET settings/attachment": settings}));
+        for args in [
+            &["pr", "comment", "8", "--body", "Seen"][..],
+            &["issue", "open", "--title", "Flaky"],
+        ] {
+            let refused =
+                fixture.run(&[args, &["--workspace", "topic", "--attach", file]].concat());
+            assert!(
+                String::from_utf8_lossy(&refused.stderr).contains(refusal),
+                "{refused:?}"
+            );
+            let sent: Vec<_> = fixture
+                .requests()
+                .into_iter()
+                .map(|request| request[0].clone())
+                .collect();
+            assert_eq!(sent, [json!("GET settings/attachment")]);
+        }
+    }
 }
 
 #[test]

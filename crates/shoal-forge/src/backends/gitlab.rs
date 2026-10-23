@@ -460,7 +460,12 @@ impl Backend for GitLab {
         Ok((Operation::Post(endpoint), vec![job.name.clone()]))
     }
 
-    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+    async fn check_uploads(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _attachments: &[Attachment],
+    ) -> Result<bool> {
         Ok(false)
     }
 

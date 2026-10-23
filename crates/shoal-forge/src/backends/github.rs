@@ -490,7 +490,12 @@ impl Backend for GitHub {
         actions::operation(jobs, selected, job, action)
     }
 
-    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+    async fn check_uploads(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _attachments: &[Attachment],
+    ) -> Result<bool> {
         Ok(false)
     }
 
