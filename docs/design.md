@@ -869,9 +869,9 @@ upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Forgejo
 takes a comment's files only once it is posted, so a failure there would leave it
 without them: Shoal refuses what the instance's attachment settings refuse before
 posting, and resends the uploads and the comment's update after failures that may
-pass. An upload is resent only when the forge did not get it or answered that it is
-busy, since a second copy would stay on the comment; the update also after a
-broken connection. A comment whose files still fail stays posted, neither deleted
+pass. An upload is resent only when the forge did not get it or answered 429 or 503,
+since a second copy would stay on the comment and a proxy's other 5xx may follow a
+stored one; the update also after those. A comment whose files still fail stays posted, neither deleted
 nor finished later, and its error says so. Each action
 returns the item as the forge reports it afterwards and records an
 `item_changed` event for integrations. A new issue is recorded as opened and

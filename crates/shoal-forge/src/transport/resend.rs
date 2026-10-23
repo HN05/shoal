@@ -27,9 +27,10 @@ pub(crate) enum Resend {
 pub(crate) enum Transient {
     /// The connection failed before the request was sent.
     Unsent(String),
-    /// The connection broke or timed out after the request may have arrived.
+    /// The connection broke or timed out, or a server or proxy failed, after
+    /// the request may have arrived.
     Interrupted(String),
-    /// The forge answered that it is busy or failing.
+    /// The forge answered that it did not act on the request for now.
     Busy(String),
 }
 
@@ -54,9 +55,15 @@ impl Transient {
         }
     }
 
-    /// Whether an HTTP `status` asks the client to try again.
-    pub(crate) fn busy_status(status: u16) -> bool {
-        status == 429 || (500..600).contains(&status)
+    /// The failure an HTTP `status` reports, if it may pass. Only 429 and 503
+    /// say the request was not acted on; a proxy may answer another 5xx after
+    /// the forge did.
+    pub(crate) fn from_status(status: u16, message: String) -> Option<Self> {
+        match status {
+            429 | 503 => Some(Self::Busy(message)),
+            500..600 => Some(Self::Interrupted(message)),
+            _ => None,
+        }
     }
 }
 
@@ -161,6 +168,21 @@ mod tests {
             assert!(result.is_err(), "{resend:?}");
             assert_eq!((attempts, waited), (1, Duration::ZERO), "{resend:?}");
         }
+    }
+
+    #[test]
+    fn only_statuses_that_refuse_for_now_are_busy() {
+        let kind = |status| match Transient::from_status(status, String::new()) {
+            Some(Transient::Busy(_)) => "busy",
+            Some(Transient::Interrupted(_)) => "interrupted",
+            Some(Transient::Unsent(_)) => "unsent",
+            None => "permanent",
+        };
+        assert_eq!(kind(429), "busy");
+        assert_eq!(kind(503), "busy");
+        assert_eq!(kind(502), "interrupted");
+        assert_eq!(kind(504), "interrupted");
+        assert_eq!(kind(422), "permanent");
     }
 
     #[tokio::test(start_paused = true)]

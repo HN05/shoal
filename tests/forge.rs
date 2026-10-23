@@ -759,7 +759,9 @@ fn forgejo_sends_a_comments_files_again_while_the_forge_is_busy() {
         "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
         format!("POST {comments}/assets?name=login.png"): [busy,
             {"status": 201, "body": {"browser_download_url": "/attachments/1"}}],
-        format!("PATCH {comments}"): [busy, {"body": {}}],
+        // A proxy's 502 may follow a change the forge made, which only the
+        // update is safe to repeat.
+        format!("PATCH {comments}"): [{"status": 502, "body": "bad gateway"}, {"body": {}}],
     }));
     fixture.ok(&[
         "pr",

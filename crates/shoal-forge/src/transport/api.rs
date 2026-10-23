@@ -387,10 +387,10 @@ pub(crate) fn http_body(status: u16, body: &str) -> Result<&str> {
     if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
         let message = format!("HTTP {status}: {}", detail.trim());
-        if Transient::busy_status(status) {
-            return Err(Transient::Busy(message).into());
+        match Transient::from_status(status, message.clone()) {
+            Some(transient) => return Err(transient.into()),
+            None => bail!(message),
         }
-        bail!(message);
     }
     Ok(body)
 }
