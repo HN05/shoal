@@ -1020,7 +1020,9 @@ read at launch without a daemon restart. The issue prompt is built in:
 `issue_template` and `issue-template.md` still load but are unused, and
 `config show` and `doctor` warn when one holds instructions of yours. The
 former names `agent_template` and `agent-template.md` still work with a
-rename warning; one level setting both names fails.
+rename warning; one level setting both names fails. They also warn when a worker
+template repeats the opening of Shoal's guidance, as a copy of an earlier
+default does.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
 followed by the worker template, which holds only your additions and cannot

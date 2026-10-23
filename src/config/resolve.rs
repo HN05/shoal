@@ -79,27 +79,28 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub struct Stack {
     layers: [(RepoConfig, Layer); 4],
-    /// Settings a layer sets under a former name or that Shoal no longer reads.
+    /// Settings a layer sets under a former name, that Shoal no longer reads
+    /// or that repeat its guidance.
     warnings: Vec<String>,
 }
 
 impl Stack {
     pub fn new(global: &Config, repository: &ConfigLayers) -> Self {
         let mut warnings = Vec::new();
-        let mut retire = |mut config: RepoConfig, layer: Layer| {
-            let retired = config.retire();
+        let mut normalize = |mut config: RepoConfig, layer: Layer| {
             warnings.extend(
-                retired
+                config
+                    .normalize()
                     .into_iter()
                     .map(|warning| format!("{layer}: {warning}")),
             );
             (config, layer)
         };
         let layers = [
-            retire(built_in(), Layer::BuiltInDefault),
-            retire(global.repository_layer(), Layer::GlobalConfig),
-            retire(repository.worktree_file.clone(), Layer::WorktreeFile),
-            retire(
+            normalize(built_in(), Layer::BuiltInDefault),
+            normalize(global.repository_layer(), Layer::GlobalConfig),
+            normalize(repository.worktree_file.clone(), Layer::WorktreeFile),
+            normalize(
                 repository.saved_repository_config.clone(),
                 Layer::SavedRepositoryConfig,
             ),
@@ -131,8 +132,8 @@ impl Stack {
         Ok(entries)
     }
 
-    /// Warnings for the settings each layer sets under a former name or that
-    /// Shoal no longer reads.
+    /// Warnings for the settings each layer sets under a former name, that
+    /// Shoal no longer reads or that repeat its guidance.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
     }
@@ -778,6 +779,22 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             std::fs::write(directory.path().join(name), name).unwrap();
         }
         assert!(config::repo::load(directory.path()).is_err());
+    }
+
+    #[test]
+    fn a_worker_template_repeating_the_guidance_warns() {
+        let stack = stack(
+            "worker_template = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'",
+            "worker_template = 'Babysit {branch}.'",
+            "",
+        );
+        assert_eq!(
+            stack.warnings(),
+            [
+                "global config: worker_template repeats Shoal's built-in guidance, which \
+              every launch already receives; keep only your additions"
+            ]
+        );
     }
 
     #[test]

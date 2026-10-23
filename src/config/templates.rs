@@ -77,6 +77,13 @@ fn install_at(directory: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Whether a worker template repeats the opening of Shoal's guidance, as a
+/// copy of an earlier default does, although every launch already receives it.
+pub fn repeats_guidance(template: &str) -> bool {
+    let opening = AGENT_GUIDANCE.lines().next().unwrap_or_default();
+    template.lines().any(|line| line.trim() == opening)
+}
+
 /// Whether a retired issue template holds instructions the user wrote.
 pub fn is_custom_issue_template(template: &str) -> bool {
     let template = template.trim();
@@ -198,6 +205,14 @@ mod tests {
         assert!(is_custom_issue_template(&format!(
             "{RETIRED_ISSUE_DEFAULT}\n\nPlan first."
         )));
+    }
+
+    #[test]
+    fn a_copy_of_the_guidance_opening_repeats_it() {
+        let earlier_default = "You are working in Shoal workspace {workspace} on branch {branch} at {path}.\n\
+             Follow the repository's instructions.";
+        assert!(repeats_guidance(earlier_default));
+        assert!(!repeats_guidance("Babysit {branch}."));
     }
 
     fn workspace() -> crate::model::Workspace {

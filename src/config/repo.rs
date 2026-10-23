@@ -243,13 +243,14 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 }
 
 impl RepoConfig {
-    /// Move settings set under a former name to their current one, warning
-    /// for each and for what this layer sets that Shoal no longer reads.
-    pub fn retire(&mut self) -> Vec<&'static str> {
-        let mut retired = Vec::new();
+    /// Move settings set under a former name to their current one, and warn
+    /// about each, about settings Shoal no longer reads, and about a worker
+    /// template that repeats the built-in guidance.
+    pub fn normalize(&mut self) -> Vec<&'static str> {
+        let mut warnings = Vec::new();
         if let Some(template) = self.renamed_agent_template.take() {
             self.worker_template = Some(template);
-            retired.push(
+            warnings.push(
                 "agent_template and agent-template.md are now named \
                  worker_template and worker-template.md",
             );
@@ -259,12 +260,22 @@ impl RepoConfig {
             .as_deref()
             .is_some_and(crate::config::templates::is_custom_issue_template)
         {
-            retired.push(
+            warnings.push(
                 "issue_template and issue-template.md are no longer used; \
                  move their instructions to worker_template",
             );
         }
-        retired
+        if self
+            .worker_template
+            .as_deref()
+            .is_some_and(crate::config::templates::repeats_guidance)
+        {
+            warnings.push(
+                "worker_template repeats Shoal's built-in guidance, which every launch \
+                 already receives; keep only your additions",
+            );
+        }
+        warnings
     }
 }
 

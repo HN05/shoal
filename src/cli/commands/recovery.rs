@@ -17,16 +17,16 @@ use crate::{
     protocol::Method,
 };
 
-/// Whether the global config still sets something Shoal no longer reads;
-/// `config show` reports the repository layers too.
+/// Whether the global config sets something Shoal no longer reads or already
+/// says; `config show` reports the repository layers too.
 fn global_config_check(ctx: &Context) -> Check {
     let retired = crate::config::Config::load_with_templates(&ctx.paths)
-        .map(|config| config.repository_layer().retire());
+        .map(|config| config.repository_layer().normalize());
     match retired {
         Ok(retired) if retired.is_empty() => Check::new(
             "global_config",
             CheckStatus::Ok,
-            "The global config sets no retired settings".to_owned(),
+            "The global config sets no retired or redundant settings".to_owned(),
         ),
         Ok(retired) => Check::new("global_config", CheckStatus::Warning, retired.join("; ")),
         Err(error) => Check::new(
