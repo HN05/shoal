@@ -5,30 +5,93 @@ async fn has_work(manager: &Manager) -> bool {
     manager.store.run(agents_have_work).await.unwrap()
 }
 
-#[tokio::test]
-async fn only_a_working_agent_has_work() {
-    let (temp, manager) = manager().await;
+async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager
+    manager
         .create_workspace(&repo.id, "agent".into(), None, None, None)
         .await
+        .unwrap()
+}
+
+async fn report(manager: &Manager, workspace: &crate::model::Workspace, state: AgentState) {
+    manager
+        .set_agent_state(&workspace.name, state, None, None)
+        .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_working_agent_has_work() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
     assert!(!has_work(&manager).await);
     for (state, work) in [
         (AgentState::Working, true),
         (AgentState::Waiting, false),
         (AgentState::Idle, false),
     ] {
+        report(&manager, &workspace, state).await;
+        assert_eq!(has_work(&manager).await, work, "{state}");
+    }
+}
+
+#[tokio::test]
+async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    report(&manager, &workspace, AgentState::Idle).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, r#"{"url":"https://example.com/o/r/pulls/1"}"#],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // A PR no poll has seen yet is open.
+    assert!(has_work(&manager).await);
+    for (state, work) in [("open", true), ("merged", false), ("closed", false)] {
+        let id = workspace.id.clone();
+        let mut snapshot = crate::forge::updates::Snapshot::default();
+        snapshot.adopt_state(state);
+        let record = serde_json::to_string(&snapshot).unwrap();
         manager
-            .set_agent_state(&workspace.name, state, None, None)
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT OR REPLACE INTO workspace_item_activity(workspace_id,url,record)
+                     VALUES (?1,'https://example.com/o/r/pulls/1',?2)",
+                    rusqlite::params![id, record],
+                )?;
+                Ok(())
+            })
             .await
             .unwrap();
         assert_eq!(has_work(&manager).await, work, "{state}");
     }
+    // An agent waiting for the user cannot take the PR's activity.
+    report(&manager, &workspace, AgentState::Waiting).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "DELETE FROM workspace_item_activity WHERE workspace_id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(!has_work(&manager).await);
 }
 
 #[tokio::test]

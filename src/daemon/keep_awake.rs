@@ -11,7 +11,9 @@ use tokio::{
     process::{Child, ChildStdin, Command},
 };
 
-use super::{log, notifications::NotificationKind, workspace::Manager};
+use super::{
+    links::wait::watches_open_pr, log, notifications::NotificationKind, workspace::Manager,
+};
 use crate::state::AgentState;
 
 /// Rechecks without a store change, such as after a failed lookup.
@@ -98,13 +100,24 @@ async fn wanted(manager: &Manager) -> Option<bool> {
     }
 }
 
-/// Whether an agent is working on a turn.
+/// Whether an agent is working on a turn, or has finished one while it
+/// watches an open PR, whose activity Shoal delivers as its next turn.
 fn agents_have_work(db: &mut Connection) -> Result<bool> {
-    Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM workspace_agent_state WHERE state=?1)",
-        [AgentState::Working],
-        |row| row.get(0),
-    )?)
+    let agents = db
+        .prepare("SELECT workspace_id,state FROM workspace_agent_state")?
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<(String, AgentState)>>>()?;
+    for (id, state) in agents {
+        let work = match state {
+            AgentState::Working => true,
+            AgentState::Idle => watches_open_pr(db, &id)?,
+            AgentState::Waiting => false,
+        };
+        if work {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn update(manager: &Manager, hold: Hold, wanted: bool) -> Hold {

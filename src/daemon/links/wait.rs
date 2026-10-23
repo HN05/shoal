@@ -17,7 +17,10 @@ use crate::{
     },
     forge::{
         ForgeRepo,
-        items::link::{ItemKind, Selection},
+        items::{
+            item::ItemState,
+            link::{ItemKind, Selection},
+        },
         transport::limits::rate_limited,
         updates::{MergeCheck, Snapshot, Update},
     },
@@ -1094,6 +1097,29 @@ pub(crate) fn linked_items(
         items.extend(url.into_iter().map(|url| (url, ItemKind::Issue)));
     }
     Ok(items)
+}
+
+/// Whether the workspace watches a PR that no poll has seen merged or
+/// closed, so its activity is still to come.
+pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<bool> {
+    for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
+        let record: Option<String> = db
+            .query_row(
+                "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+                params![id, url],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(record) = record else {
+            return Ok(true);
+        };
+        let snapshot: Snapshot = serde_json::from_str(&record)?;
+        let state = snapshot.state();
+        if state != ItemState::Merged.as_str() && state != ItemState::Closed.as_str() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 impl Updates {

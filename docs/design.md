@@ -152,7 +152,8 @@ threshold, so restores cannot refill the disk at once; commands stay explicit. A
 and blocks recovery; readings of other filesystems still protect them.
 Keeping the machine awake is opt-in and machine-wide: a laptop held awake with
 its lid closed drains its battery and heats up in a bag, so only its user can
-choose it. While enabled and an agent's turn is working, the daemon holds the
+choose it. While enabled and an agent's turn is working, or an idle agent
+watches an open PR whose activity will start its next turn, the daemon holds the
 platform's sleep inhibitor as a child process that lasts as long as a pipe only
 the daemon holds, so the inhibitor cannot outlive a daemon that crashes or is
 killed. A failed inhibitor notifies and waits for the work to end or the config

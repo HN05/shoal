@@ -28,7 +28,8 @@ root_dir = "~/shoal"
 # load = "balanced"
 
 # Keep the machine from sleeping, including when a laptop's lid closes, while
-# an agent is working. macOS still sleeps on a closed lid without an external display.
+# an agent is working or waits on a watched open PR. macOS still sleeps on a
+# closed lid without an external display.
 # keep_awake = false
 
 # `shoal add` focuses workspace shells and agents waiting for a prompt, and
