@@ -5,7 +5,8 @@ or a Forgejo API server with `serve <port-file>`.
 Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A list answers successive requests in turn, repeating
-its last entry. Each entry is {"status": 200, "body": ...}. The server tags
+its last entry. Each entry is {"status": 200, "body": ...}, and may add
+"headers" to send. The server tags
 each successful body, and answers a request that names its tag in
 If-None-Match with 304. Every request is appended to
 $HOME/forge/requests.jsonl with its body, credentials and status; an uploaded
@@ -35,12 +36,13 @@ def respond(key, body, auth=None, prefix=False, tag=None):
     answer = responses.get(key, {"status": 404, "body": {"message": "no fixture for " + key}})
     if isinstance(answer, list):
         answer = answer[min(seen, len(answer) - 1)]
-    status, answer = answer.get("status", 200), answer.get("body")
+    status, headers = answer.get("status", 200), answer.get("headers", {})
+    answer = answer.get("body")
     if status == 200 and tag is not None and tag == etag(answer):
         status, answer = 304, None
     with open(LOG, "a") as f:
         f.write(json.dumps({"key": key, "body": body, "auth": auth, "status": status}) + "\n")
-    return status, answer
+    return status, answer, headers
 
 
 def etag(answer):
@@ -65,7 +67,7 @@ def gh(args):
                 "type": header.removeprefix("Content-Type: "),
                 "bytes": len(data),
             }
-        status, answer = respond(f"{method} {endpoint}", body, os.environ.get("AGENT"))
+        status, answer, _ = respond(f"{method} {endpoint}", body, os.environ.get("AGENT"))
         if "--include" in args:
             print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n\r")
         if answer is not None:
@@ -74,7 +76,7 @@ def gh(args):
             print(f"gh: HTTP {status}", file=sys.stderr)
             sys.exit(1)
         return
-    status, answer = respond(" ".join(args), None, os.environ.get("AGENT"), prefix=True)
+    status, answer, _ = respond(" ".join(args), None, os.environ.get("AGENT"), prefix=True)
     if answer is not None:
         print(answer if isinstance(answer, str) else json.dumps(answer))
     sys.exit(0 if status < 400 else 1)
@@ -103,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             body = json.loads(data) if length else None
         path = self.path.removeprefix("/api/v1/")
-        status, answer = respond(
+        status, answer, headers = respond(
             f"{self.command} {path}",
             body,
             self.headers.get("Authorization"),
@@ -113,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         if status == 200:
             self.send_header("ETag", etag(answer))
+        for name, value in headers.items():
+            self.send_header(name, value)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

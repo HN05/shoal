@@ -12,10 +12,13 @@ use tokio::sync::Notify;
 
 use super::pr::{RegistrationKind, current_head};
 use crate::{
-    daemon::{agent_messages::AgentMessage, store, workspace::Manager},
+    daemon::{
+        agent_messages::AgentMessage, notifications::NotificationKind, store, workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         items::link::{ItemKind, Selection},
+        transport::limits::rate_limited,
         updates::{MergeCheck, Snapshot, Update},
     },
     model::{ConflictCheck, Workspace},
@@ -388,6 +391,7 @@ impl Manager {
                     .record_observed(id, observations, selection, observed_at)
                     .await?;
                 if updates.is_empty() {
+                    self.notify_rate_limit(&error).await;
                     return Err(error);
                 }
                 Ok(updates)
@@ -446,9 +450,14 @@ impl Manager {
             if items.is_empty() {
                 continue;
             }
-            if let Err(error) = self.poll_workspace_item_activity(&workspace, items).await
-                && failure.is_none()
-            {
+            let Err(error) = self.poll_workspace_item_activity(&workspace, items).await else {
+                continue;
+            };
+            // The limit is the forge's, not the workspace's; a later poll retries.
+            if self.notify_rate_limit(&error).await {
+                continue;
+            }
+            if failure.is_none() {
                 failure = Some(error.context(format!(
                     "background item activity for workspace {}",
                     workspace.name
@@ -460,6 +469,22 @@ impl Manager {
         } else {
             Ok(())
         }
+    }
+
+    /// Tell the user when `error` is a forge's rate limit, and whether it is.
+    async fn notify_rate_limit(&self, error: &anyhow::Error) -> bool {
+        let Some(limit) = rate_limited(error) else {
+            return false;
+        };
+        let until = i64::try_from(limit.until).unwrap_or(i64::MAX);
+        let message = format!(
+            "{} is limiting Shoal's requests until {}; polling waits until then",
+            limit.host,
+            crate::time::local_minutes(until)
+        );
+        self.notify(None, NotificationKind::ForgeLimited, message)
+            .await;
+        true
     }
 
     async fn poll_workspace_item_activity(
@@ -1100,7 +1125,8 @@ fn watches_branch(selection: &Selection, items: &[(String, ItemKind)]) -> bool {
         && !items.iter().any(|(_, kind)| *kind == ItemKind::Pr)
 }
 
-/// Poll every [`POLL_INTERVAL`], and at once whenever `queued` changes.
+/// Poll every [`POLL_INTERVAL`], or once a forge's rate limit ends, and at
+/// once whenever `queued` changes.
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     seconds: Option<u64>,
     queued: &mut tokio::sync::watch::Receiver<u64>,
@@ -1111,9 +1137,9 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     loop {
         // A cancelled poll may already have committed a pending delivery. The
         // next wait replays it, so the advertised timeout can remain strict.
-        let updates = match deadline {
+        let polled = match deadline {
             Some(deadline) => match tokio::time::timeout_at(deadline, poll()).await {
-                Ok(updates) => updates?,
+                Ok(polled) => polled,
                 Err(_) => {
                     return Ok(Updates {
                         updates: Vec::new(),
@@ -1123,8 +1149,9 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                     });
                 }
             },
-            None => poll().await?,
+            None => poll().await,
         };
+        let (updates, interval) = limited_poll(polled)?;
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
@@ -1143,14 +1170,29 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                     superseded: false,
                 });
             }
-            POLL_INTERVAL.min(deadline - now)
+            interval.min(deadline - now)
         } else {
-            POLL_INTERVAL
+            interval
         };
         // A closed channel only disables the early wake.
         tokio::select! {
             () = tokio::time::sleep(sleep_for) => {}
             Ok(()) = queued.changed() => {}
+        }
+    }
+}
+
+/// The updates of a poll and how long to wait before the next one: the
+/// poll interval, or until a forge that refused the poll accepts requests.
+fn limited_poll(polled: Result<Vec<Update>>) -> Result<(Vec<Update>, Duration)> {
+    match polled {
+        Ok(updates) => Ok((updates, POLL_INTERVAL)),
+        Err(error) => {
+            let Some(limit) = rate_limited(&error) else {
+                return Err(error);
+            };
+            let wait = limit.until.saturating_sub(crate::time::unix_seconds());
+            Ok((Vec::new(), POLL_INTERVAL.max(Duration::from_secs(wait))))
         }
     }
 }
@@ -1163,6 +1205,31 @@ mod tests {
         test_support::{manager, repository},
     };
     use serde_json::{Value, json};
+
+    #[tokio::test(start_paused = true)]
+    async fn a_rate_limited_poll_waits_for_the_limit_instead_of_failing() {
+        let limit = |seconds: u64| crate::forge::transport::limits::RateLimited {
+            host: "forge.example".into(),
+            until: crate::time::unix_seconds() + seconds,
+        };
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let started = tokio::time::Instant::now();
+        let result = wait_for_updates(None, &mut tokio::sync::watch::channel(0).1, || async {
+            match attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) {
+                0 => Err(anyhow::Error::new(limit(600)).context("GET issues/8")),
+                _ => Err(anyhow::anyhow!("HTTP 500")),
+            }
+        })
+        .await;
+        assert_eq!(format!("{:#}", result.unwrap_err()), "HTTP 500");
+        // The limit's end is read from the wall clock, which may tick once.
+        let waited = (tokio::time::Instant::now() - started).as_secs();
+        assert!((599..=600).contains(&waited), "{waited}");
+        // A limit that ends sooner still waits the poll interval.
+        let (updates, interval) = limited_poll(Err(limit(1).into())).unwrap();
+        assert!(updates.is_empty());
+        assert_eq!(interval, POLL_INTERVAL);
+    }
 
     #[tokio::test(start_paused = true)]
     async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {

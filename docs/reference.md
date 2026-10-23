@@ -2054,7 +2054,12 @@ without taking updates; updates acknowledged while a newer watch runs stay pendi
 for it. Scoped callers can watch only in their own workspace and its child
 workspaces; a watch also reports the activity its agent receives from
 [child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
-that keeps failing with the same error is reported again every 10 minutes. Forgejo
+that keeps failing with the same error is reported again every 10 minutes. A
+forge that refuses a request for its rate limit (`429`, or `403` with
+`Retry-After` or no requests remaining), or reports no requests remaining, is
+not asked again as that account until its `Retry-After` or reset time, at most
+an hour away. Polls wait until then instead of reporting lookup failures, and
+the daemon records a `forge_limited` notification. Forgejo
 comment and review changes are grouped; CI results are the commit statuses of the
 PR's head commit, read with fj's login for the host when it has one. The daemon
 repeats a REST read as a conditional request with the `ETag` and `Last-Modified`

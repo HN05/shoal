@@ -988,6 +988,50 @@ fn watches_read_unchanged_items_as_not_modified() {
 }
 
 #[test]
+fn a_rate_limited_forge_slows_watches_instead_of_failing_lookups() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+            "state": "open", "body": "", "labels": [], "pull_request": null}},
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": {"status": 429,
+            "headers": {"Retry-After": "3000"}, "body": {"message": "slow down"}},
+    }));
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+    let mut watch = fixture
+        .command()
+        .args(["--json", "watch", "issue", "--workspace", "topic"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let limited = || {
+        let notifications = fixture.ok(&["notifications", "--keep-unread"]);
+        notifications
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|notification| notification["kind"] == "forge_limited")
+    };
+    support::wait::wait_until("the forge limit to be noticed", limited);
+    let running = watch.try_wait().unwrap().is_none();
+    watch.kill().unwrap();
+    let output = watch.wait_with_output().unwrap();
+    assert!(running, "{}", String::from_utf8_lossy(&output.stdout));
+    // The forge is asked once; until the limit ends, no request goes out.
+    let discussion = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().contains("/comments"))
+        .count();
+    assert_eq!(discussion, 1);
+    let failures = fixture
+        .events()
+        .into_iter()
+        .filter(|event| event.to_string().contains("lookup_failed"))
+        .count();
+    assert_eq!(failures, 0);
+}
+
+#[test]
 fn bare_numbers_select_the_issue_or_pr_they_name() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = json!({"number": 8, "title": "Issue", "state": "open", "body": "",

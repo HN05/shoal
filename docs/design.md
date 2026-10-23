@@ -775,7 +775,10 @@ read through the forge crate's shared request layer, which remembers each
 account's last response per URL in daemon memory and repeats the read as a
 conditional request, so an unchanged item costs a `304 Not Modified`, which
 GitHub does not count against its primary rate limit. The memory is not
-persisted: a restart reads everything once in full.
+persisted: a restart reads everything once in full. The same layer reads each
+forge's rate-limit headers and sends nothing to a forge that limits the account
+until the limit ends; polls wait for it and the user gets one notification,
+because a lookup failure would ask an agent to act on what only time fixes.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of

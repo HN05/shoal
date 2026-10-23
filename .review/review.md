@@ -111,7 +111,11 @@ instead of the PR delivery guidance below.
   Own-workspace PR waits poll activity independently of cleanup and share persistent
   cursors, returning separate completed CI contexts as well as discussion, conflict
   and PR state changes. Lookup failures must not masquerade as successful checks
-  or mergeability; agents handle updates and wait again. Pending deliveries remain
+  or mergeability; agents handle updates and wait again. Repeated reads are
+  conditional on the validators of the account's last response, and a 304 only
+  stands for a body remembered for that account and URL. A forge's rate limit
+  holds back that account's requests until it ends and slows polls with a
+  notification instead of producing lookup failures. Pending deliveries remain
   replayable until CLI output succeeds and is acknowledged.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;

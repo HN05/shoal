@@ -51,6 +51,8 @@ states!(NotificationKind {
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.
     CachesEmptied => "caches_emptied",
+    /// A forge limits the requests Shoal sends it, so polling waits.
+    ForgeLimited => "forge_limited",
 });
 
 impl NotificationKind {
