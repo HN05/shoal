@@ -160,7 +160,11 @@ async fn import_each(ctx: &Context, files: &[PathBuf], repository: Option<String
                 let workspace = reopened.workspace.clone();
                 report.imported(ctx, reopened);
                 if let Err(error) = super::workspaces::run_post_setup(ctx, &workspace).await {
-                    eprintln!("warning: {error:#}");
+                    let error = error.context(format!(
+                        "imported {}, but its post_setup_cmd failed",
+                        workspace.name
+                    ));
+                    report.failed(ctx, file, &error);
                 }
             }
             Err(error) => report.failed(ctx, file, &error),
@@ -178,7 +182,7 @@ async fn import_and_prepare(
     let restored = import_workspace(ctx, file, repository).await?;
     super::restore::prepare_reopened(ctx, restored)
         .await?
-        .context("setup failed and the workspace was deleted")
+        .context("its setup did not finish")
 }
 
 /// The workspaces an import of several files opened, and the files it could
@@ -213,8 +217,7 @@ impl ImportReport {
             format!("Imported {imported} workspaces")
         } else {
             format!(
-                "Imported {imported} of {} workspaces; {} failed",
-                imported + self.failed.len(),
+                "Imported {imported} workspaces; {} failed",
                 self.failed.len()
             )
         };

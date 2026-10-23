@@ -238,7 +238,7 @@ impl Reopened {
 }
 
 /// Print the reopening's warnings, set the workspace up and link its PRs
-/// again; `None` when its setup failed and the user deleted it.
+/// again; `None` when its setup did not finish.
 pub(super) async fn prepare_reopened(
     ctx: &Context,
     restored: RestoredWorkspace,

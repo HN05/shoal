@@ -1705,7 +1705,8 @@ exits 1 naming each failed workspace.
 the registered repository with the exported repository's origin, or the one
 `--repo` names. Given several files, or a directory, whose `.shoal` files it
 reads in name order, it imports each one, going on after a failure, lists every
-workspace it opened and exits 1 naming each file it could not import. It fetches the default branch when the repository lacks the
+workspace it opened and exits 1 naming each file it could not import or whose
+`post_setup_cmd` failed. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal restore` does; when that restore fails,
 `shoal restore <workspace>` retries it. Agent sessions stay on the exporting

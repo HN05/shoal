@@ -875,6 +875,16 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 #[test]
 fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let fixture = Fixture::new();
+    // Once the test arms it, the post-setup hook fails in the second workspace.
+    let armed = fixture.root.path().join("fail-post-setup");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        format!(
+            "#!/bin/sh\nif [ -e '{}' ]; then case \"$PWD\" in */second) exit 3;; esac; fi\n",
+            armed.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "post_setup_cmd = 'post-setup.sh'\n");
     let paths: Vec<_> = ["first", "second"]
         .into_iter()
         .map(|name| {
@@ -929,8 +939,10 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     assert!(paths.iter().all(|path| !path.exists()));
     assert!(directory.join("first.shoal").exists() && directory.join("second.shoal").exists());
 
-    // A file that is no export fails alone; the others import.
+    // A file that is no export fails alone; the others import, and a failed
+    // post-setup hook fails its file without removing the workspace.
     fs::write(directory.join("broken.shoal"), "not an export\n").unwrap();
+    fs::write(&armed, "").unwrap();
     let imported = fixture
         .command()
         .args([
@@ -951,13 +963,24 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         .map(|import| import["workspace"]["name"].clone())
         .collect();
     assert_eq!(names, ["first", "second"]);
-    let failed = imported["failed"].as_array().unwrap();
-    assert_eq!(failed.len(), 1, "{imported}");
+    let failed: Vec<_> = imported["failed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|failure| {
+            Path::new(failure["file"].as_str().unwrap())
+                .file_name()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(failed, ["broken.shoal", "second.shoal"], "{imported}");
     assert!(
-        failed[0]["file"]
+        imported["failed"][1]["error"]
             .as_str()
             .unwrap()
-            .ends_with("broken.shoal")
+            .contains("imported second, but its post_setup_cmd failed"),
+        "{imported}"
     );
     for (path, name) in paths.iter().zip(["first", "second"]) {
         assert_eq!(
