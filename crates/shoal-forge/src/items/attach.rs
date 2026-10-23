@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend};
+use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
 
 /// The largest image Shoal uploads, which is GitHub's limit.
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
@@ -222,6 +222,7 @@ impl ForgeRepo {
         if attachments.is_empty() {
             return Ok(false);
         }
+        self.require(Capability::Attachments)?;
         check_all(attachments)?;
         self.kind.check_uploads(self, account, attachments).await
     }

@@ -3,8 +3,8 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, capability::Capability,
-    items::action::ThreadChange, transport::api::Request,
+    ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
+    transport::api::Request,
 };
 
 /// A review thread, found from any of its comments.
@@ -57,7 +57,6 @@ impl ForgeRepo {
     ) -> Result<Vec<Request>> {
         let resolution = match change.resolve {
             Some(resolved) => {
-                self.require(Capability::ResolveThreads)?;
                 ensure!(
                     thread.resolved != Some(resolved),
                     "thread {} is already {}",

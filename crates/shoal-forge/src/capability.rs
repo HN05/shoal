@@ -135,6 +135,13 @@ impl ForgeRepo {
         require(&self.kind, capability)
     }
 
+    /// Refuse a request that needs any of `capabilities` the forge lacks.
+    pub fn require_all(&self, capabilities: impl IntoIterator<Item = Capability>) -> Result<()> {
+        capabilities
+            .into_iter()
+            .try_for_each(|capability| self.require(capability))
+    }
+
     pub fn supports(&self, capability: Capability) -> bool {
         self.kind.support(capability) == Support::Supported
     }

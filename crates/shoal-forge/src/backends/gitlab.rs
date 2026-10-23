@@ -9,7 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
-    capability::{Capability, Support},
+    capability::{self, Capability, Support},
     ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
     conventions::Lookup,
     items::{
@@ -67,7 +67,7 @@ impl Backend for GitLab {
         match capability {
             Capability::ReadJobLogs => Support::Unsupported(None),
             Capability::RebaseMerge => Support::Unsupported(Some(
-                "GitLab merges with the project's merge method; use merge or squash",
+                "GitLab merges with the project's merge method, so use merge or squash",
             )),
             Capability::ResolveThreads
             | Capability::RerunJobs
@@ -360,10 +360,6 @@ impl Backend for GitLab {
 
     fn labels_issue_after_opening(&self) -> bool {
         false
-    }
-
-    fn has_labels(&self) -> bool {
-        true
     }
 
     async fn thread(
@@ -684,10 +680,9 @@ const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "W
 
 /// GitLab merges with the project's merge method, optionally squashing.
 fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Result<Request> {
-    ensure!(
-        method != MergeMethod::Rebase,
-        "GitLab merges with the project's merge method; use merge or squash"
-    );
+    if method == MergeMethod::Rebase {
+        return Err(capability::unsupported(&GitLab, Capability::merge(method)));
+    }
     Ok(Request::new(
         HttpMethod::Put,
         endpoint,

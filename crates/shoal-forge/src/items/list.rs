@@ -7,6 +7,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
+    capability::Capability,
     items::{
         item::{Item, ItemState},
         link::ItemKind,
@@ -77,13 +78,9 @@ impl Search {
         Ok(())
     }
 
-    fn validate(&self, has_labels: bool) -> Result<()> {
-        self.check()?;
-        ensure!(
-            self.labels.is_empty() || has_labels,
-            "this forge has no labels"
-        );
-        Ok(())
+    /// The capabilities the forge needs for the search.
+    fn needs(&self) -> Option<Capability> {
+        (!self.labels.is_empty()).then_some(Capability::Labels)
     }
 }
 
@@ -95,7 +92,8 @@ impl ForgeRepo {
         kind: ItemKind,
         search: &Search,
     ) -> Result<Vec<Item>> {
-        search.validate(self.kind.has_labels())?;
+        search.check()?;
+        self.require_all(search.needs())?;
         let mut items = self.kind.list_items(self, account, kind, search).await?;
         items.retain(|item| search.includes(item.state));
         items.truncate(search.limit);
@@ -125,7 +123,8 @@ mod tests {
         search.state = StateFilter::Closed;
         assert!(search.includes(ItemState::Merged));
         assert!(!search.includes(ItemState::Open));
-        assert!(search.validate(false).is_ok());
+        assert!(search.check().is_ok());
+        assert_eq!(search.needs(), None);
 
         for change in [
             |search: &mut Search| search.limit = 0,
@@ -136,10 +135,10 @@ mod tests {
         ] {
             let mut search = Search::open(30);
             change(&mut search);
-            assert!(search.validate(true).is_err(), "{search:?}");
+            assert!(search.check().is_err(), "{search:?}");
         }
         search.labels = vec!["bug".into()];
-        assert!(search.validate(true).is_ok());
-        assert!(search.validate(false).is_err());
+        assert!(search.check().is_ok());
+        assert_eq!(search.needs(), Some(Capability::Labels));
     }
 }

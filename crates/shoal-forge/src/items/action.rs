@@ -10,6 +10,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
+    capability::Capability,
     items::{
         attach::{Attachment, Holder, Pending},
         item::{Current, Item, ItemState},
@@ -129,6 +130,23 @@ impl Action {
         }
     }
 
+    /// The capabilities the forge needs for the action on an item of `kind`,
+    /// besides attachments, which uploads check.
+    pub fn needs(&self, kind: ItemKind) -> Vec<Capability> {
+        match self {
+            Self::Edit(edit) => {
+                let labels = (!edit.add_labels.is_empty() || !edit.remove_labels.is_empty())
+                    .then_some(Capability::Labels);
+                let draft = edit.draft.map(|_| Capability::DraftPrs);
+                labels.into_iter().chain(draft).collect()
+            }
+            Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
+            Self::Merge { method, .. } => vec![Capability::merge(*method)],
+            Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],
+            _ => Vec::new(),
+        }
+    }
+
     /// Refuse what no forge can do with an item of `kind`.
     pub fn validate(&self, kind: ItemKind) -> Result<()> {
         let pr_only = |what: &str| -> Result<()> {
@@ -203,6 +221,7 @@ impl ForgeRepo {
     ) -> Result<Acted> {
         action.validate(kind)?;
         // Refused before anything is read or posted.
+        self.require_all(action.needs(kind))?;
         let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
         let (action, pending) = self
@@ -780,5 +799,35 @@ mod tests {
                 .is_err()
         );
         assert_eq!(thread(None, Some(false)).name(), "unresolve");
+    }
+
+    #[test]
+    fn actions_need_the_capabilities_they_use() -> Result<()> {
+        let rebase = Action::Merge {
+            method: MergeMethod::Rebase,
+            delete_branch: false,
+        };
+        assert_eq!(rebase.needs(ItemKind::Pr), [Capability::RebaseMerge]);
+        assert_eq!(Action::Reopen.needs(ItemKind::Pr), [Capability::ReopenPrs]);
+        assert!(Action::Reopen.needs(ItemKind::Issue).is_empty());
+        let labels = Action::Edit(Edit {
+            remove_labels: vec!["bug".into()],
+            draft: Some(true),
+            ..Edit::default()
+        });
+        assert_eq!(
+            labels.needs(ItemKind::Pr),
+            [Capability::Labels, Capability::DraftPrs]
+        );
+        let gitlab = ForgeRepo::parse("https://gitlab.com/group/project")?;
+        let refused = gitlab.require_all(rebase.needs(ItemKind::Pr)).unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            "Shoal cannot rebase and merge PRs on GitLab; GitLab merges with the project's merge method, so use merge or squash"
+        );
+        let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
+        assert!(bitbucket.require_all(labels.needs(ItemKind::Pr)).is_err());
+        assert!(bitbucket.require_all(rebase.needs(ItemKind::Pr)).is_ok());
+        Ok(())
     }
 }

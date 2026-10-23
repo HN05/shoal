@@ -280,9 +280,6 @@ pub(crate) trait Backend {
     /// opening it cannot set them by name.
     fn labels_issue_after_opening(&self) -> bool;
 
-    /// Whether the forge has labels.
-    fn has_labels(&self) -> bool;
-
     /// The review thread of `comment` on PR `number`, when it is in one.
     async fn thread(
         &self,
@@ -688,10 +685,6 @@ impl Backend for ForgeKind {
 
     fn labels_issue_after_opening(&self) -> bool {
         dispatch!(self, backend => backend.labels_issue_after_opening())
-    }
-
-    fn has_labels(&self) -> bool {
-        dispatch!(self, backend => backend.has_labels())
     }
 
     async fn thread(

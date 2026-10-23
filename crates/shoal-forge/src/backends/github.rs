@@ -403,10 +403,6 @@ impl Backend for GitHub {
         false
     }
 
-    fn has_labels(&self) -> bool {
-        true
-    }
-
     async fn thread(
         &self,
         repo: &ForgeRepo,

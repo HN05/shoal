@@ -12,7 +12,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
-    capability::{Capability, Support},
+    capability::{self, Capability, Support},
     ci::{CiAction, CiCheck, Job, Location, Operation},
     conventions::Lookup,
     items::{
@@ -210,10 +210,9 @@ impl Backend for Bitbucket {
     /// One update of the changed fields. Bitbucket has no labels, keeps
     /// draft state as a flag, and replaces reviewers by Atlassian account ID.
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        ensure!(
-            edit.add_labels.is_empty() && edit.remove_labels.is_empty(),
-            "Bitbucket has no labels"
-        );
+        if !edit.add_labels.is_empty() || !edit.remove_labels.is_empty() {
+            return Err(capability::unsupported(self, Capability::Labels));
+        }
         let item = &current.item;
         // A pull request update needs its title even when it keeps it.
         let mut fields = json!({ "title": edit.title.as_deref().unwrap_or(&item.title) });
@@ -267,7 +266,7 @@ impl Backend for Bitbucket {
         let endpoint = repo.item_endpoint(item.kind, item.number);
         Ok(match (item.kind, state) {
             (ItemKind::Pr, ItemState::Open) => {
-                bail!("Bitbucket cannot reopen a declined pull request")
+                return Err(capability::unsupported(self, Capability::ReopenPrs));
             }
             (ItemKind::Pr, _) => {
                 Request::new(HttpMethod::Post, format!("{endpoint}/decline"), None)
@@ -341,10 +340,6 @@ impl Backend for Bitbucket {
     }
 
     fn labels_issue_after_opening(&self) -> bool {
-        false
-    }
-
-    fn has_labels(&self) -> bool {
         false
     }
 
@@ -474,7 +469,7 @@ impl Backend for Bitbucket {
         _account: &Account,
         _attachments: &[Attachment],
     ) -> Result<bool> {
-        bail!("Bitbucket has no API for attaching files")
+        Err(capability::unsupported(self, Capability::Attachments))
     }
 
     fn upload(
@@ -484,7 +479,7 @@ impl Backend for Bitbucket {
         _attachment: &Attachment,
         _repository: Option<u64>,
     ) -> Result<Request> {
-        bail!("Bitbucket has no API for attaching files")
+        Err(capability::unsupported(self, Capability::Attachments))
     }
 
     fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {

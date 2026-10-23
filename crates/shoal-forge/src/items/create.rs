@@ -8,6 +8,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
+    capability::Capability,
     items::{
         action::{Action, Edit},
         attach::{Attachment, Pending},
@@ -54,6 +55,23 @@ pub struct NewPull {
     pub attachments: Vec<Attachment>,
 }
 
+impl NewIssue {
+    /// The capabilities the forge needs to open the issue, besides
+    /// attachments, which uploads check.
+    fn needs(&self) -> Option<Capability> {
+        (!self.labels.is_empty()).then_some(Capability::Labels)
+    }
+}
+
+impl NewPull {
+    /// The capabilities the forge needs to open the PR, besides attachments.
+    fn needs(&self) -> Vec<Capability> {
+        let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
+        let draft = self.draft.then_some(Capability::DraftPrs);
+        labels.into_iter().chain(draft).collect()
+    }
+}
+
 impl ForgeRepo {
     /// The open PR whose head is `branch` in this repository.
     pub async fn open_pull_for(&self, account: &Account, branch: &str) -> Result<Option<u64>> {
@@ -75,7 +93,7 @@ impl ForgeRepo {
     /// Post the PR and return its number with the edit that finishes it: its
     /// labels, reviewers and files the forge keeps with the item.
     pub async fn post_pull(&self, account: &Account, pull: &NewPull) -> Result<(u64, Edit)> {
-        self.ensure_labels(&pull.labels)?;
+        self.require_all(pull.needs())?;
         let per_item = self.check_uploads(account, &pull.attachments).await?;
         let (body, pending) = self
             .new_body(account, &pull.body, &pull.attachments, per_item)
@@ -112,7 +130,7 @@ impl ForgeRepo {
     /// Forgejo's labels, which it takes only by ID on creation, and files the
     /// forge keeps with the item.
     pub async fn post_issue(&self, account: &Account, issue: &NewIssue) -> Result<(u64, Edit)> {
-        self.ensure_labels(&issue.labels)?;
+        self.require_all(issue.needs())?;
         let per_item = self.check_uploads(account, &issue.attachments).await?;
         let (body, pending) = self
             .new_body(account, &issue.body, &issue.attachments, per_item)
@@ -164,15 +182,6 @@ impl ForgeRepo {
 
     fn issue_request(&self, issue: &NewIssue) -> Request {
         self.kind.new_issue(self, issue)
-    }
-
-    /// Refuse labels where the forge has none, before creating anything.
-    fn ensure_labels(&self, labels: &[String]) -> Result<()> {
-        anyhow::ensure!(
-            labels.is_empty() || self.kind.has_labels(),
-            "Bitbucket has no labels"
-        );
-        Ok(())
     }
 
     /// The number of the item a creation or list response describes.
@@ -301,8 +310,12 @@ mod tests {
             bitbucket.issue_request(&issue).body,
             Some(json!({"title": "Flaky", "content": {"raw": "Seen twice"}}))
         );
-        assert!(bitbucket.ensure_labels(&["bug".into()]).is_err());
-        assert!(bitbucket.ensure_labels(&[]).is_ok());
+        assert!(bitbucket.require_all(issue.needs()).is_ok());
+        let labeled = NewIssue {
+            labels: vec!["bug".into()],
+            ..issue
+        };
+        assert!(bitbucket.require_all(labeled.needs()).is_err());
         assert_eq!(bitbucket.created_number(&json!({"id": 9})).unwrap(), 9);
         let listed = json!({"source": {"branch": {"name": "topic"},
             "repository": {"full_name": "Workspace/Repo"}}});

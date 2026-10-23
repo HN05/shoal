@@ -258,10 +258,6 @@ impl Backend for Forgejo {
         true
     }
 
-    fn has_labels(&self) -> bool {
-        true
-    }
-
     async fn thread(
         &self,
         repo: &ForgeRepo,
