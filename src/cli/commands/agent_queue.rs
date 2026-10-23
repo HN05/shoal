@@ -13,7 +13,7 @@ use crate::{
         output::Palette,
         terminal, ui,
     },
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{Dependency, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
     protocol::Method,
     state::{QueueKind, QueueState},
@@ -23,45 +23,63 @@ use crate::{
 const HOLD_RETRY: Duration = Duration::from_secs(1);
 
 pub(super) enum Admission {
-    /// Start now; the entry, when one tracks the slot.
-    Start(Option<String>),
+    /// Start now; the entry, when one tracks the slot, and the branch of a
+    /// done dependency to build on.
+    Start {
+        entry: Option<String>,
+        base: Option<String>,
+    },
     /// Wait in the queue behind this many entries in total.
     Queued(Box<QueueEntry>, usize),
 }
 
-/// Ask the daemon for a slot for `agent`, which `plan` starts in workspace `name`.
-pub(super) async fn admit(
-    ctx: &Context,
-    plan: &AddPlan,
-    agent: String,
-    name: String,
-    issue_title: Option<String>,
-    now: bool,
-) -> Result<Admission> {
+/// An agent launch to admit.
+pub(super) struct Launch {
+    pub agent: String,
+    /// The workspace the launch opens.
+    pub name: String,
+    pub issue_title: Option<String>,
+    pub now: bool,
+    pub after: Vec<Dependency>,
+}
+
+/// Ask the daemon for a slot for `launch`, which `plan` starts.
+pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Result<Admission> {
     let request = QueueRequest {
         repository: plan.repository.clone(),
-        name,
-        agent,
-        issue_title,
+        name: launch.name,
+        agent: launch.agent,
+        issue_title: launch.issue_title,
         plan: serde_json::to_string(plan)?,
         env: terminal::environment(),
-        now,
+        now: launch.now,
         workspace: None,
-        after: Vec::new(),
+        after: launch.after,
     };
     let admission =
         client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
     Ok(match (admission.start, admission.entry) {
-        (true, entry) => Admission::Start(entry.map(|entry| entry.id)),
+        (true, entry) => Admission::Start {
+            base: entry.as_ref().and_then(|entry| entry.base.clone()),
+            entry: entry.map(|entry| entry.id),
+        },
         (false, Some(entry)) => Admission::Queued(Box::new(entry), admission.waiting),
         (false, None) => anyhow::bail!("the daemon queued the agent without an entry"),
     })
 }
 
 pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {
+    let start = match entry.waiting_for.as_slice() {
+        [] => "when an agent slot is free".to_owned(),
+        [work] => format!("once {work} is complete and an agent slot is free"),
+        work => format!(
+            "once {} are complete and an agent slot is free",
+            work.join(", ")
+        ),
+    };
     ctx.emit(
         &format!(
-            "Queued {} (position {} of {waiting}); it starts when an agent slot is free",
+            "Queued {} (position {} of {waiting}); it starts {start}",
             entry.name,
             entry.position.unwrap_or(waiting)
         ),
@@ -198,6 +216,8 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
                 workspace.name
             );
         }
+        let mut plan = plan;
+        plan.creation.build_on(queued.entry.base.clone());
         super::workspaces::start_queued(ctx, plan, &queued.entry.name).await
     }
     .await;

@@ -137,6 +137,10 @@ pub enum Command {
         /// Start the agent now even when max_agents is reached, instead of queuing it.
         #[arg(long)]
         now: bool,
+        /// Queue the agent until this workspace, queued agent or issue is complete;
+        /// repeat for more. An issue's agent also waits for the issues blocking it.
+        #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
+        after: Vec<String>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

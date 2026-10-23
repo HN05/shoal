@@ -614,6 +614,7 @@ fn add() -> Command {
         git_profile: None,
         agent: None,
         now: false,
+        after: vec![],
         args: vec![],
     }
 }

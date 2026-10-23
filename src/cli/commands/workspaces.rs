@@ -29,8 +29,8 @@ use crate::{
     git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
     model::{
-        Chat, Completion, ConflictCheck, DiffBase, OpenedWorkspace, Repository, Workspace,
-        WorkspaceStatus, WorkspaceTarget,
+        Chat, Completion, ConflictCheck, Dependency, DiffBase, OpenedWorkspace, Repository,
+        Workspace, WorkspaceStatus, WorkspaceTarget,
     },
     protocol::{Body, ConfigTarget, Method},
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
@@ -241,8 +241,18 @@ pub(in crate::cli) struct Creation {
     pub pr: Option<String>,
 }
 
+impl Creation {
+    /// Build a new branch on `base`, the branch of a done dependency, unless
+    /// the addition names its own base or opens an existing branch.
+    pub(super) fn build_on(&mut self, base: Option<String>) {
+        if self.base.is_none() && self.existing.is_none() {
+            self.base = base;
+        }
+    }
+}
+
 /// How `shoal add` runs once its workspace is planned.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct AddOptions {
     /// Run in the current pane instead of opening a Herdr tab.
     pub here: bool,
@@ -250,12 +260,14 @@ pub(super) struct AddOptions {
     pub focus: bool,
     /// Start the agent even when `max_agents` is reached.
     pub now: bool,
+    /// Workspaces, queued agents and issues the agent waits for.
+    pub after: Vec<String>,
 }
 
 impl AddOptions {
     /// Whether the agent skips the queue: a focused launch is one the user
     /// waits for, so it starts at once as `--now` does.
-    fn starts_now(self) -> bool {
+    fn starts_now(&self) -> bool {
         self.now || self.focus
     }
 }
@@ -328,13 +340,25 @@ pub(super) async fn add(
         chat: env::chat(),
         workspace: None,
     };
+    ensure!(
+        options.after.is_empty() || plan.agent_name().is_some(),
+        "--after queues an agent; name one with --agent"
+    );
     if let Some(agent) = plan.agent_name() {
         let title = issue.as_ref().map(|issue| issue.title.clone());
         let name = planned_workspace_name(ctx, &target, &plan.creation).await?;
-        match super::agent_queue::admit(ctx, &plan, agent, name, title, options.starts_now())
-            .await?
-        {
-            super::agent_queue::Admission::Start(entry) => plan.queue_entry = entry,
+        let launch = super::agent_queue::Launch {
+            agent,
+            name,
+            issue_title: title,
+            now: options.starts_now(),
+            after: launch_dependencies(ctx, &target, issue.as_ref(), &options).await?,
+        };
+        match super::agent_queue::admit(ctx, &plan, launch).await? {
+            super::agent_queue::Admission::Start { entry, base } => {
+                plan.queue_entry = entry;
+                plan.creation.build_on(base);
+            }
             super::agent_queue::Admission::Queued(entry, waiting) => {
                 return super::agent_queue::report_queued(ctx, &entry, waiting);
             }
@@ -350,6 +374,56 @@ pub(super) async fn add(
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
+}
+
+/// The work a launch waits for: what `--after` names, and the open issues
+/// the forge records as blocking its issue. A launch that starts now waits
+/// for nothing.
+async fn launch_dependencies(
+    ctx: &Context,
+    target: &AddTarget,
+    issue: Option<&super::issues::Issue>,
+    options: &AddOptions,
+) -> Result<Vec<Dependency>> {
+    if options.starts_now() || options.after.is_empty() && issue.is_none() {
+        return Ok(Vec::new());
+    }
+    let repo = target.repository(ctx).await?;
+    let mut dependencies = Vec::new();
+    for input in &options.after {
+        dependencies.push(match IssueInput::parse(input) {
+            IssueInput::Number | IssueInput::Url => {
+                Dependency::Issue(super::issues::url(repo, input).await?)
+            }
+            IssueInput::Invalid => Dependency::Work(input.clone()),
+        });
+    }
+    if let Some(issue) = issue {
+        dependencies.extend(issue_blockers(ctx, target, issue).await?);
+    }
+    Ok(dependencies)
+}
+
+/// The open issues the forge records as blocking `issue`. A forge that
+/// cannot list them, such as a repository with dependencies turned off,
+/// leaves a warning and none.
+async fn issue_blockers(
+    ctx: &Context,
+    target: &AddTarget,
+    issue: &super::issues::Issue,
+) -> Result<Vec<Dependency>> {
+    let repo = target.repository(ctx).await?;
+    let account = ctx.forge_account()?;
+    match super::issues::open_dependencies(&account, repo, issue).await {
+        Ok(urls) => Ok(urls.into_iter().map(Dependency::Issue).collect()),
+        Err(error) => {
+            eprintln!(
+                "warning: cannot list the issues blocking #{}, so the agent does not wait for them: {error:#}",
+                issue.number
+            );
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// Start `plan` beside this terminal, focused or in the background, unless

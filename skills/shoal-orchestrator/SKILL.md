@@ -45,6 +45,10 @@ With `max_agents` configured (the default starts agents one at a time while meas
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
 daemon starts it when a slot frees; `shoal --json work --queue` lists entries, and
 `--now` or `--focus` starts one regardless only when the user asks.
+`--after <workspace|queued agent|issue>` (repeatable) queues an agent until that
+work is done; an issue's agent also waits for the issues its forge records as
+blocking it. The agent then starts on the done workspace's branch, stacked on
+it, and the entry lists what it still waits for in `waiting_for`.
 
 ## Follow progress
 

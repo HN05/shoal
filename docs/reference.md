@@ -790,6 +790,7 @@ shoal config set max_agents 2 --repo shoal    # And at most two of them in this 
 shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
+shoal add <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
 shoal work --queue                            # Waiting and starting entries
 shoal rm 612-add-queue-cmd                    # Removes a waiting launch
 ```
@@ -842,11 +843,31 @@ restore removes the entry and keeps the recovery record. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 
+`--after` names work the launch waits for: a workspace or queued agent of the
+repository, or an issue number or URL; repeat it for more. An issue launch also
+waits for the open issues its forge records as blocking it: Forgejo and GitHub
+issue dependencies and GitLab "is blocked by" links; when the forge cannot list
+them, such as with dependencies turned off, Shoal warns and the agent does not
+wait for them. Such a launch queues even without a limit and starts once every
+workspace it waits for is done at its current HEAD, every queued agent has
+opened its workspace and that workspace is, and every issue is closed or done in
+a workspace of the repository that links it; a removed workspace or queued agent
+leaves nothing to wait for. A commit after `shoal done` makes the workspace wait
+again; issue state is read every 30 seconds. A new branch then starts from the
+done dependency's branch and is stacked on that workspace, as with `--base`, so
+the agent builds on the finished work before it merges. With several done
+dependencies it takes the one whose HEAD contains the others, and while they are
+on separate branches it waits until all but one have merged and their workspaces
+are gone. `--base` and `--existing` keep their own starting point, and `--now`
+and `--focus` cannot wait for work.
+
 `shoal work` lists entries after the workspaces as `queued, position N` or
-`starting`, a restore with its agent; `work --queue` lists only them (`--json`
-gives the entries with their `kind`, `launch` or `restore`, while `work --json`
-stays a list of workspaces). `shoal rm` removes a waiting launch by name or ID,
-and only by ID when a workspace has the same name; a starting one belongs to its
+`starting`, followed by the work a waiting launch is after, a restore with its
+agent; `work --queue` lists only them (`--json` gives the entries with their
+`kind`, `launch` or `restore`, `waiting_for` while dependencies remain and
+`base` once a launch starts on a dependency's branch, while `work --json` stays
+a list of workspaces). `shoal rm` removes a waiting launch by name or ID, and
+only by ID when a workspace has the same name; a starting one belongs to its
 workspace. Scoped callers see no entries.
 
 ### Agent accounts

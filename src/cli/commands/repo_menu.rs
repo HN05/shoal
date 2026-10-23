@@ -53,6 +53,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             git_profile: None,
             agent: None,
             now: false,
+            after: vec![],
             args: vec![],
         },
         RepoMenuAction::Rename => repo(RepoCommand::Rename {

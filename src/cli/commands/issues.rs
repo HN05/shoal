@@ -218,6 +218,29 @@ pub(in crate::cli) async fn load(
     })
 }
 
+/// The URL of the issue `input` names: a number in the repository, or a URL.
+pub(in crate::cli) async fn url(repo: &Repository, input: &str) -> Result<String> {
+    let forge = match crate::forge::IssueInput::parse(input) {
+        crate::forge::IssueInput::Url => ForgeRepo::from_issue_url(input)?,
+        _ => origin_forge(repo).await?,
+    };
+    Ok(forge.issue(input)?.1)
+}
+
+/// The URLs of the open issues the forge records as blocking `issue`.
+pub(in crate::cli) async fn open_dependencies(
+    account: &Account,
+    repo: &Repository,
+    issue: &Issue,
+) -> Result<Vec<String>> {
+    let forge = origin_forge(repo).await?;
+    let mut urls = Vec::new();
+    for url in forge.open_issue_dependencies(account, issue.number).await? {
+        urls.push(ForgeRepo::from_issue_url(&url)?.issue(&url)?.1);
+    }
+    Ok(urls)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

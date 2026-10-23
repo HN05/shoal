@@ -305,6 +305,9 @@ instead of the PR delivery guidance below.
   entries, excluding done workspaces, never from a separate counter. A starting
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.
+  A launch with dependencies queues without a limit and starts only once each
+  is done at its current HEAD, removed or closed, on the branch of the done one
+  that contains the others; `--now` never waits.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked

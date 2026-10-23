@@ -317,6 +317,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             git_profile,
             agent,
             now,
+            after,
             args,
         } => {
             links::add(
@@ -336,7 +337,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 },
                 agent,
                 args,
-                workspaces::AddOptions { here, focus, now },
+                workspaces::AddOptions {
+                    here,
+                    focus,
+                    now,
+                    after,
+                },
             )
             .await
         }

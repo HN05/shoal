@@ -112,7 +112,9 @@ repository to a fixed limit
 (`shoal config set max_agents 3`, `--repo my-project`), `dynamic`, or `none` to
 disable queuing for that layer. `shoal add` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
-<name>` drops a queued one. See the [agent queue](docs/reference.md#agent-queue).
+<name>` drops a queued one. `--after <workspace|issue>` holds an agent until
+that work is done and starts it on the finished branch; an issue's agent also
+waits for the issues blocking it. See the [agent queue](docs/reference.md#agent-queue).
 
 ## Everyday commands
 

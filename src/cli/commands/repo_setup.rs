@@ -93,6 +93,7 @@ async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
             here: true,
             focus: false,
             now: false,
+            after: Vec::new(),
         },
     )
     .await

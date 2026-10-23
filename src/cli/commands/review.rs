@@ -225,6 +225,7 @@ async fn pull_request(
                     here: true,
                     focus: false,
                     now: false,
+                    after: Vec::new(),
                 },
             )
             .await?;
@@ -282,6 +283,7 @@ async fn issue(
                     here: true,
                     focus: false,
                     now: false,
+                    after: Vec::new(),
                 },
             )
             .await?;

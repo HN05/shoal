@@ -603,6 +603,15 @@ a detached zmx session whose shell is given the worker, because zmx gives
 commands it runs itself no terminal input. That shell is zmx's bash, so the
 session ends once its agent or workspace shell has run, whatever the exit
 status, and only a failed start replaces it with the user's login shell.
+A queued launch may depend on workspaces, queued launches and issues, including
+the blockers its issue's forge records, and admission passes it over until they
+are complete. Complete means done at the current HEAD, not merged: the launch
+branches from the done dependency and stacks on it, so dependent agents start
+before review, and the existing restack on merge carries them to the default
+branch. A commit after `done` is new work and holds them again. One launch builds
+on one branch, so done dependencies on separate branches wait until all but one
+merge. A launch's dependency becomes its workspace once it opens one, and
+removed work counts as complete, since nothing is left to wait for.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

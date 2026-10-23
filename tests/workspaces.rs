@@ -10741,7 +10741,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
     let bin = fixture.root.path().join("issue-bin");
     install_test_script_with_mode(
         bin.join("gh"),
-        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
+        "#!/bin/sh\n# The issue has no blocking issues.\n[ \"$1\" = api ] && { printf 'HTTP/2.0 200 OK\\n\\n[]'; exit; }\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
         0o700,
     );
     install_forgejo_curl(&bin);
@@ -10785,6 +10785,11 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
                 &format!("repos/team/project/issues/{number}"),
                 &serde_json::json!({"number": number, "title": title, "body": body,
                     "state": "open", "labels": [], "pull_request": null}),
+            );
+            forgejo_api(
+                fixture.root.path(),
+                &format!("repos/team/project/issues/{number}/dependencies?limit=50&page=1"),
+                &serde_json::json!([]),
             );
         }
         let input = if as_url {
@@ -10830,7 +10835,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             assert!(invocation.contains("--repo\0github.com/team/project\0"));
         } else {
             let urls = fs::read_to_string(fixture.root.path().join("curl-urls")).unwrap();
-            assert!(urls.ends_with(&format!(
+            assert!(urls.contains(&format!(
                 "https://forge.example/api/v1/repos/team/project/issues/{number}\n"
             )));
         }
@@ -10990,7 +10995,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
     let gh = bin.join("gh");
     install_test_script_with_mode(
         &gh,
-        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
+        "#!/bin/sh\n# The issue has no blocking issues.\n[ \"$1\" = api ] && { printf 'HTTP/2.0 200 OK\\n\\n[]'; exit; }\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
         0o700,
     );
     for tool in ["codex", "claude"] {

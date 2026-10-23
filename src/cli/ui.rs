@@ -953,10 +953,13 @@ fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
 
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
-    let text = match entry.position {
+    let mut text = match entry.position {
         Some(position) => format!("{}, position {position}", status.label()),
         None => status.label().into(),
     };
+    if !entry.waiting_for.is_empty() {
+        text += &format!(", after {}", entry.waiting_for.join(", "));
+    }
     (text, Some(status.style()))
 }
 
@@ -1221,6 +1224,31 @@ mod tests {
             branch.into(),
             state,
         )
+    }
+
+    #[test]
+    fn queue_status_names_the_work_a_launch_waits_for() {
+        let mut entry = QueueEntry {
+            id: "entry".into(),
+            kind: QueueKind::Launch,
+            repository_id: "repo".into(),
+            name: "ui".into(),
+            agent: "claude".into(),
+            issue_title: None,
+            state: crate::state::QueueState::Queued,
+            position: Some(2),
+            created_at: 0,
+            workspace_id: None,
+            opens: None,
+            waiting_for: Vec::new(),
+            base: None,
+        };
+        assert_eq!(queue_status_cell(&entry).0, "queued, position 2");
+        entry.waiting_for = vec!["api".into(), "https://forge.example/o/r/issues/7".into()];
+        assert_eq!(
+            queue_status_cell(&entry).0,
+            "queued, position 2, after api, https://forge.example/o/r/issues/7"
+        );
     }
 
     #[test]
