@@ -51,6 +51,15 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
+/// The workspace whose repository `shoal labels` and `shoal capabilities`
+/// read, outside the derived `Command` builder for the same reason (#997).
+#[derive(Debug, Args)]
+pub struct RepositoryArgs {
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
 /// `shoal export` arguments, outside the derived `Command` builder, whose stack
 /// frame in debug builds grows with every inline argument (#997).
 #[derive(Debug, Args)]
@@ -230,17 +239,9 @@ pub enum Command {
         check: Option<String>,
     },
     /// List the repository's labels with their descriptions.
-    Labels {
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-    },
+    Labels(RepositoryArgs),
     /// List what the repository's forge supports.
-    Capabilities {
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-    },
+    Capabilities(RepositoryArgs),
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]
