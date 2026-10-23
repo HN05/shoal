@@ -1,12 +1,21 @@
 //! GitHub, through `gh`, which owns the login: its CLI reports items and
 //! activity as structured data, and `gh api` sends REST and GraphQL requests.
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
-use super::Backend;
+use super::{
+    Backend,
+    github_rest::{self, Dialect},
+};
 use crate::{
-    ForgeRepo,
+    ForgeRepo, MERGED_HINT,
     account::Account,
+    items::{
+        issue::require_open,
+        item::{Current, ItemState},
+        link::ItemKind,
+        list,
+    },
     repo::locator::ItemRoute,
     transport::{
         api::{Request, full_page},
@@ -66,6 +75,242 @@ impl Backend for GitHub {
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
         full_page(response, size)
     }
+
+    fn current(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        value: &Value,
+    ) -> Result<Current> {
+        github_rest::current(repo, kind, number, value, Dialect::GitHub)
+    }
+
+    fn numbers_items_together(&self) -> bool {
+        true
+    }
+
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>> {
+        let noun = match kind {
+            ItemKind::Issue => "issue",
+            ItemKind::Pr => "pr",
+        };
+        let repo = format!("{}/{}", repo.host, repo.path);
+        let args = [
+            noun,
+            "list",
+            "--repo",
+            &repo,
+            "--state",
+            "open",
+            "--limit",
+            "200",
+            "--json",
+            "number,title",
+        ];
+        let text = gh(account, &args, Query::List).await?;
+        serde_json::from_str(&text).with_context(|| format!("invalid gh {noun} list response"))
+    }
+
+    async fn issue_state(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<ItemState> {
+        let id = number.to_string();
+        let repo = format!("{}/{}", repo.host, repo.path);
+        let args = [
+            "issue",
+            "view",
+            &id,
+            "--repo",
+            &repo,
+            "--json",
+            "number,state",
+        ];
+        let output = gh(account, &args, Query::Issue).await?;
+        reported_state(&output, number)
+    }
+
+    async fn issue_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String)> {
+        let id = number.to_string();
+        let repo = format!("{}/{}", repo.host, repo.path);
+        let args = [
+            "issue",
+            "view",
+            &id,
+            "--repo",
+            &repo,
+            "--json",
+            "number,title,body,state",
+        ];
+        let text = gh(account, &args, Query::Issue).await?;
+        require_open(reported_state(&text, number)?)?;
+        #[derive(serde::Deserialize)]
+        struct GitHubIssue {
+            number: u64,
+            title: String,
+            body: Option<String>,
+        }
+        let issue: GitHubIssue =
+            serde_json::from_str(&text).context("invalid gh issue response")?;
+        ensure!(issue.number == number, "gh returned a different issue");
+        Ok((issue.title, issue.body.unwrap_or_default()))
+    }
+
+    async fn pull_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String, String)> {
+        let id = number.to_string();
+        let repo = format!("{}/{}", repo.host, repo.path);
+        let fields = "number,title,headRefName,baseRefName,isCrossRepository";
+        let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Pull {
+            number: u64,
+            title: String,
+            head_ref_name: String,
+            base_ref_name: String,
+            is_cross_repository: bool,
+        }
+        let output = gh(account, &args, Query::Pull("")).await?;
+        let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
+        ensure!(pull.number == number, "gh returned a different PR");
+        ensure!(
+            !pull.is_cross_repository,
+            "PR #{number} comes from a fork; only branches in this repository can be opened"
+        );
+        Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
+    }
+
+    async fn merged_commits(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: &str,
+    ) -> Result<Option<Vec<String>>> {
+        let number = number.to_string();
+        let output = gh(
+            account,
+            &[
+                "pr",
+                "view",
+                &number,
+                "--repo",
+                &format!("{}/{}", repo.host, repo.path),
+                "--json",
+                "number,state,headRefName,commits",
+            ],
+            Query::Pull(MERGED_HINT),
+        )
+        .await?;
+        #[derive(serde::Deserialize)]
+        struct Commit {
+            oid: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct Pull {
+            number: u64,
+            state: String,
+            #[serde(rename = "headRefName")]
+            branch: String,
+            commits: Vec<Commit>,
+        }
+        let pull: Pull = serde_json::from_str(&output)?;
+        ensure!(
+            pull.number.to_string() == number && pull.branch == branch,
+            "PR does not match the workspace branch"
+        );
+        ensure!(
+            matches!(pull.state.as_str(), "OPEN" | "CLOSED" | "MERGED"),
+            "unknown PR state"
+        );
+        Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
+    }
+}
+
+/// What a `gh` read is for, which decides its timeout and error guidance.
+#[derive(Clone, Copy)]
+pub(crate) enum Query {
+    Issue,
+    Pull(&'static str),
+    List,
+    /// Reading an issue or PR for `shoal view`.
+    View,
+}
+
+/// Run `gh` as `account`, the CLI that reads GitHub's items.
+pub(crate) async fn gh(account: &Account, args: &[&str], query: Query) -> Result<String> {
+    let tool = programs::GH;
+    let mut command = tokio::process::Command::new(tool);
+    command.args(args).env("NO_COLOR", "1");
+    account.apply(&mut command);
+    let seconds = match query {
+        Query::Issue | Query::List | Query::View => 30,
+        Query::Pull(_) => 20,
+    };
+    let output = shoal_subprocess::Run::new(command)
+        .timeout(std::time::Duration::from_secs(seconds))
+        .capture()
+        .await;
+    query.response(tool, output)
+}
+
+impl Query {
+    fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
+        match self {
+            Self::Issue => {
+                shoal_subprocess::checked_output(tool, output).with_context(|| {
+                    format!("{tool} issue lookup failed; install it and check `{tool} auth login` and repository access before using --issue")
+                })
+            }
+            Self::Pull(hint) => shoal_subprocess::checked_output(tool, output)
+                .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
+            Self::List => shoal_subprocess::checked_output(tool, output).with_context(|| {
+                format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
+            }),
+            Self::View => shoal_subprocess::checked_output(tool, output).with_context(|| {
+                format!("{tool} lookup failed; install it and check `{tool} auth login` and repository access")
+            }),
+        }
+    }
+}
+
+/// The state `gh issue view --json number,state` reports.
+fn reported_state(output: &str, number: u64) -> Result<ItemState> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "UPPERCASE")]
+    enum State {
+        Open,
+        Closed,
+    }
+    #[derive(serde::Deserialize)]
+    struct Issue {
+        number: u64,
+        state: State,
+    }
+    let issue: Issue = serde_json::from_str(output).context("invalid gh issue response")?;
+    ensure!(issue.number == number, "gh returned a different issue");
+    Ok(match issue.state {
+        State::Open => ItemState::Open,
+        State::Closed => ItemState::Closed,
+    })
 }
 
 /// The messages of a GraphQL response's `errors`, when it has any.
@@ -85,6 +330,82 @@ fn graphql_errors(body: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn query_errors_preserve_login_guidance_and_diagnostic_limits() {
+        use std::{io, os::unix::process::ExitStatusExt, process::Output};
+
+        for tool in ["gh", "fj"] {
+            for (query, limit, hint) in [
+                (
+                    Query::Issue,
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "auth login",
+                ),
+                (
+                    Query::Pull(MERGED_HINT),
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "shoal done",
+                ),
+                (
+                    Query::Pull(""),
+                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "existing login",
+                ),
+            ] {
+                let missing = query
+                    .response(tool, Err(io::Error::from(io::ErrorKind::NotFound)))
+                    .unwrap_err();
+                let missing = format!("{missing:#}");
+                assert!(missing.contains(tool), "{missing}");
+                assert!(missing.contains(hint), "{missing}");
+
+                let failed = query
+                    .response(
+                        tool,
+                        Ok(Output {
+                            status: std::process::ExitStatus::from_raw(256),
+                            stdout: b"ignored".to_vec(),
+                            stderr: format!("{}END", "é".repeat(limit)).into_bytes(),
+                        }),
+                    )
+                    .unwrap_err();
+                let failed = format!("{failed:#}");
+                assert!(failed.contains(tool), "{failed}");
+                assert!(failed.contains(hint), "{failed}");
+                assert!(failed.ends_with(&"é".repeat(limit)));
+                assert!(!failed.contains("END"));
+
+                let invalid = query
+                    .response(
+                        tool,
+                        Ok(Output {
+                            status: std::process::ExitStatus::from_raw(0),
+                            stdout: vec![0xff],
+                            stderr: Vec::new(),
+                        }),
+                    )
+                    .unwrap_err();
+                assert!(format!("{invalid:#}").contains("output is not UTF-8"));
+            }
+        }
+    }
+
+    #[test]
+    fn github_requires_matching_number_and_known_state() {
+        for (state, expected) in [("OPEN", ItemState::Open), ("CLOSED", ItemState::Closed)] {
+            let output = serde_json::json!({"number": 316, "state": state}).to_string();
+            assert_eq!(reported_state(&output, 316).unwrap(), expected);
+            assert!(reported_state(&output, 1).is_err());
+        }
+        for output in [
+            r#"{"number":316,"state":"MERGED"}"#,
+            r#"{"number":316}"#,
+            "",
+        ] {
+            assert!(reported_state(output, 316).is_err());
+        }
+    }
 
     #[test]
     fn graphql_errors_fail_a_successful_response() {

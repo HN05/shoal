@@ -1,8 +1,7 @@
 //! Open issues and PRs, for choosing one interactively.
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::backends::Backend;
-use crate::{ForgeKind, ForgeRepo, Query, account::Account, gh, items::link::ItemKind};
+use crate::{ForgeRepo, account::Account, backends::Backend, items::link::ItemKind};
 
 /// An open issue or PR.
 #[derive(Debug, PartialEq, serde::Deserialize)]
@@ -13,51 +12,10 @@ pub struct Item {
 
 impl ForgeRepo {
     pub async fn open_issues(&self, account: &Account) -> Result<Vec<Item>> {
-        self.kind.open_items(self, account, "issue").await
+        self.kind.open_items(self, account, ItemKind::Issue).await
     }
 
     pub async fn open_pulls(&self, account: &Account) -> Result<Vec<Item>> {
-        self.kind.open_items(self, account, "pr").await
-    }
-}
-
-impl ForgeKind {
-    /// `noun` is the `issue` or `pr` subcommand of `gh`.
-    async fn open_items(
-        self,
-        repo: &ForgeRepo,
-        account: &Account,
-        noun: &str,
-    ) -> Result<Vec<Item>> {
-        match self {
-            Self::GitHub => {
-                let repo = format!("{}/{}", repo.host, repo.path);
-                let args = [
-                    noun,
-                    "list",
-                    "--repo",
-                    &repo,
-                    "--state",
-                    "open",
-                    "--limit",
-                    "200",
-                    "--json",
-                    "number,title",
-                ];
-                let text = gh(account, &args, Query::List).await?;
-                serde_json::from_str(&text)
-                    .with_context(|| format!("invalid gh {noun} list response"))
-            }
-            Self::Forgejo | Self::GitLab | Self::Bitbucket => {
-                let kind = if noun == "pr" {
-                    ItemKind::Pr
-                } else {
-                    ItemKind::Issue
-                };
-                repo.rest_open_items(account, kind)
-                    .await
-                    .context(self.login_hint())
-            }
-        }
+        self.kind.open_items(self, account, ItemKind::Pr).await
     }
 }

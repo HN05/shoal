@@ -8,6 +8,7 @@ use crate::{
     account::Account,
     backends::Backend,
     items::{
+        issue::require_open,
         item::{Current, ItemState},
         link::ItemKind,
         list,
@@ -25,82 +26,6 @@ pub(crate) struct RestCheck {
 }
 
 impl ForgeRepo {
-    /// The commits of the PR once it has merged, or `None` before. The PR must
-    /// have `branch` as its head.
-    pub(crate) async fn rest_merged_commits(
-        &self,
-        account: &Account,
-        number: u64,
-        branch: &str,
-    ) -> Result<Option<Vec<String>>> {
-        let pull = self.rest_branch_pull(account, number, Some(branch)).await?;
-        if pull.item.state != ItemState::Merged {
-            return Ok(None);
-        }
-        let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
-        let commits = self
-            .pages(account, &endpoint)
-            .await
-            .context(self.kind.login_hint())?;
-        commit_shas(&commits, self.kind.commit_field()).map(Some)
-    }
-
-    /// The PR, which must have `branch` as its head when one is given. Only a
-    /// failed request suggests logging in.
-    pub(crate) async fn rest_branch_pull(
-        &self,
-        account: &Account,
-        number: u64,
-        branch: Option<&str>,
-    ) -> Result<Current> {
-        let pull = self
-            .read(account, ItemKind::Pr, number)
-            .await
-            .context(self.kind.login_hint())?;
-        if let Some(branch) = branch {
-            ensure!(
-                pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
-                "PR does not match the workspace branch"
-            );
-        }
-        Ok(pull)
-    }
-
-    /// Title, head and base of a PR whose head branch is in this repository.
-    pub(crate) async fn rest_pull_details(
-        &self,
-        account: &Account,
-        number: u64,
-    ) -> Result<(String, String, String)> {
-        let pull = self.read(account, ItemKind::Pr, number).await?;
-        self.branches(pull)
-    }
-
-    pub(crate) async fn rest_open_items(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-    ) -> Result<Vec<list::Item>> {
-        let endpoint = match (self.kind, kind) {
-            (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Issue) => {
-                "issues?state=open&type=issues"
-            }
-            (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Pr) => "pulls?state=open",
-            (ForgeKind::GitLab, ItemKind::Issue) => "issues?state=opened",
-            (ForgeKind::GitLab, ItemKind::Pr) => "merge_requests?state=opened",
-            // state="new" OR state="open" OR state="on hold"
-            (ForgeKind::Bitbucket, ItemKind::Issue) => {
-                "issues?q=state%3D%22new%22%20OR%20state%3D%22open%22%20OR%20state%3D%22on%20hold%22"
-            }
-            (ForgeKind::Bitbucket, ItemKind::Pr) => "pullrequests?state=OPEN",
-        };
-        let items = self.pages(account, &self.repo_endpoint(endpoint)).await?;
-        items
-            .iter()
-            .map(|item| list_item(item, self.kind.number_field()))
-            .collect()
-    }
-
     /// The CI checks on the PR's head commit.
     pub(crate) async fn rest_checks(
         &self,
@@ -201,18 +126,113 @@ impl ForgeRepo {
         let combined = self.send(account, &Request::get(endpoint)).await?;
         forgejo_statuses(&combined)
     }
+}
 
-    fn branches(&self, pull: Current) -> Result<(String, String, String)> {
-        let number = pull.item.number;
-        // A deleted fork leaves no head repository.
-        ensure!(
-            pull.head_repository
-                .is_some_and(|repository| repository.eq_ignore_ascii_case(&self.path)),
-            "PR #{number} comes from a fork; only branches in this repository can be opened"
-        );
-        let pr = pull.item.pr.context("not a PR")?;
-        Ok((pull.item.title, pr.head, pr.base))
+/// The commits of the PR once it has merged, or `None` before. The PR must
+/// have `branch` as its head.
+pub(crate) async fn merged_commits(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    branch: &str,
+) -> Result<Option<Vec<String>>> {
+    let pull = branch_pull(repo, account, number, Some(branch)).await?;
+    if pull.item.state != ItemState::Merged {
+        return Ok(None);
     }
+    let endpoint = format!("{}/commits", repo.item_endpoint(ItemKind::Pr, number));
+    let commits = repo
+        .pages(account, &endpoint)
+        .await
+        .context(repo.kind.login_hint())?;
+    commit_shas(&commits, repo.kind.commit_field()).map(Some)
+}
+
+/// The PR, which must have `branch` as its head when one is given. Only a
+/// failed request suggests logging in.
+pub(crate) async fn branch_pull(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    branch: Option<&str>,
+) -> Result<Current> {
+    let pull = repo
+        .read(account, ItemKind::Pr, number)
+        .await
+        .context(repo.kind.login_hint())?;
+    if let Some(branch) = branch {
+        ensure!(
+            pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
+            "PR does not match the workspace branch"
+        );
+    }
+    Ok(pull)
+}
+
+/// Title, head and base of a PR whose head branch is in this repository.
+pub(crate) async fn pull_details(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+) -> Result<(String, String, String)> {
+    let pull = repo.read(account, ItemKind::Pr, number).await?;
+    branches(repo, pull)
+}
+
+/// The open items a list endpoint under the repository returns.
+pub(crate) async fn open_items(
+    repo: &ForgeRepo,
+    account: &Account,
+    endpoint: &str,
+) -> Result<Vec<list::Item>> {
+    let items = repo
+        .pages(account, &repo.repo_endpoint(endpoint))
+        .await
+        .context(repo.kind.login_hint())?;
+    items
+        .iter()
+        .map(|item| list_item(item, repo.kind.number_field()))
+        .collect()
+}
+
+/// An issue's state, read from its REST item.
+pub(crate) async fn issue_state(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+) -> Result<ItemState> {
+    Ok(repo
+        .read(account, ItemKind::Issue, number)
+        .await
+        .context(repo.kind.login_hint())?
+        .item
+        .state)
+}
+
+/// An open issue's title and description.
+pub(crate) async fn issue_details(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+) -> Result<(String, String)> {
+    let issue = repo
+        .read(account, ItemKind::Issue, number)
+        .await
+        .context(repo.kind.login_hint())?;
+    require_open(issue.item.state)?;
+    Ok((issue.item.title, issue.body))
+}
+
+fn branches(repo: &ForgeRepo, pull: Current) -> Result<(String, String, String)> {
+    let number = pull.item.number;
+    // A deleted fork leaves no head repository.
+    ensure!(
+        pull.head_repository
+            .is_some_and(|repository| repository.eq_ignore_ascii_case(&repo.path)),
+        "PR #{number} comes from a fork; only branches in this repository can be opened"
+    );
+    let pr = pull.item.pr.context("not a PR")?;
+    Ok((pull.item.title, pr.head, pr.base))
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.
@@ -325,11 +345,11 @@ mod tests {
     fn only_branches_of_this_repository_can_be_opened() {
         let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
         assert_eq!(
-            forge.branches(pull(Some("Team/Repo"))).unwrap(),
+            branches(&forge, pull(Some("Team/Repo"))).unwrap(),
             ("Fix".into(), "topic".into(), "main".into())
         );
         for fork in [Some("someone/repo"), None] {
-            let error = forge.branches(pull(fork)).unwrap_err();
+            let error = branches(&forge, pull(fork)).unwrap_err();
             assert!(error.to_string().contains("fork"), "{error}");
         }
     }

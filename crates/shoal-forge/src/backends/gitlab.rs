@@ -13,6 +13,7 @@ use crate::{
         action::{Edit, MergeMethod},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
+        list,
     },
     repo::locator::ItemRoute,
     review::{
@@ -26,7 +27,7 @@ use crate::{
     },
 };
 
-use super::Backend;
+use super::{Backend, rest};
 
 #[derive(Clone, Copy)]
 pub(crate) struct GitLab;
@@ -75,18 +76,11 @@ impl Backend for GitLab {
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
         full_page(response, size)
     }
-}
 
-/// Merge statuses during which GitLab has not yet decided mergeability.
-const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
-
-/// Title prefixes that make a merge request a draft, including the former `WIP:`.
-const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
-
-impl ForgeRepo {
     /// An issue or merge request as GitLab reports it.
-    pub(crate) fn gitlab_current(
+    fn current(
         &self,
+        repo: &ForgeRepo,
         kind: ItemKind,
         number: u64,
         value: &Value,
@@ -129,14 +123,14 @@ impl ForgeRepo {
             item: Item {
                 kind,
                 number,
-                url: self.item_url(kind, number)?,
+                url: repo.item_url(kind, number)?,
                 title: text(&value["title"]).context("item has no title")?,
                 state,
                 labels: labels(&value["labels"]),
                 pr,
             },
             node_id: None,
-            head_repository: (kind == ItemKind::Pr && same_project).then(|| self.path.clone()),
+            head_repository: (kind == ItemKind::Pr && same_project).then(|| repo.path.clone()),
             body: text(&value["description"]).unwrap_or_default(),
             head_sha: text(&value["sha"]),
             base_sha: None,
@@ -145,7 +139,30 @@ impl ForgeRepo {
             user_ids: reviewers.into_iter().collect(),
         })
     }
+
+    fn numbers_items_together(&self) -> bool {
+        false
+    }
+
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>> {
+        let endpoint = match kind {
+            ItemKind::Issue => "issues?state=opened",
+            ItemKind::Pr => "merge_requests?state=opened",
+        };
+        rest::open_items(repo, account, endpoint).await
+    }
 }
+
+/// Merge statuses during which GitLab has not yet decided mergeability.
+const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
+
+/// Title prefixes that make a merge request a draft, including the former `WIP:`.
+const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
 
 impl ForgeRepo {
     /// Look up the IDs of the users `names` that `current` has none for.

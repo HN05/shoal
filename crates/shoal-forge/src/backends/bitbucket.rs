@@ -16,6 +16,7 @@ use crate::{
         action::{Edit, MergeMethod},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
+        list,
     },
     repo::locator::ItemRoute,
     review::{
@@ -26,7 +27,7 @@ use crate::{
     transport::api::{HttpMethod, Request},
 };
 
-use super::Backend;
+use super::{Backend, rest};
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";
@@ -82,6 +83,87 @@ impl Backend for Bitbucket {
     /// Bitbucket links the next page.
     fn page<'a>(&self, response: &'a Value, _size: usize) -> Option<(&'a [Value], bool)> {
         Some((response["values"].as_array()?, !response["next"].is_null()))
+    }
+
+    /// An issue or pull request as Bitbucket reports it.
+    fn current(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        value: &Value,
+    ) -> Result<Current> {
+        let state = match (kind, value["state"].as_str()) {
+            (ItemKind::Pr, Some("OPEN")) => ItemState::Open,
+            (ItemKind::Pr, Some("MERGED")) => ItemState::Merged,
+            (ItemKind::Pr, Some("DECLINED" | "SUPERSEDED")) => ItemState::Closed,
+            (ItemKind::Issue, Some("new" | "open" | "on hold")) => ItemState::Open,
+            (
+                ItemKind::Issue,
+                Some("resolved" | "invalid" | "duplicate" | "wontfix" | "closed"),
+            ) => ItemState::Closed,
+            (_, state) => bail!("unrecognized Bitbucket state {state:?}"),
+        };
+        let pr = match kind {
+            ItemKind::Issue => None,
+            ItemKind::Pr => Some(PrSummary {
+                head: text(&value["source"]["branch"]["name"])
+                    .context("pull request has no source branch")?,
+                base: text(&value["destination"]["branch"]["name"])
+                    .context("pull request has no destination branch")?,
+                draft: value["draft"].as_bool().unwrap_or_default(),
+            }),
+        };
+        let body = match kind {
+            ItemKind::Issue => &value["content"]["raw"],
+            ItemKind::Pr => &value["description"],
+        };
+        Ok(Current {
+            item: Item {
+                kind,
+                number,
+                url: repo.item_url(kind, number)?,
+                title: text(&value["title"]).context("item has no title")?,
+                state,
+                labels: Vec::new(),
+                pr,
+            },
+            node_id: None,
+            head_repository: text(&value["source"]["repository"]["full_name"]),
+            body: text(body).unwrap_or_default(),
+            head_sha: text(&value["source"]["commit"]["hash"]),
+            base_sha: None,
+            // Bitbucket does not report whether a pull request conflicts.
+            conflict: None,
+            reviewers: value["reviewers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|user| text(&user["account_id"]))
+                .collect(),
+            user_ids: Default::default(),
+        })
+    }
+
+    fn numbers_items_together(&self) -> bool {
+        false
+    }
+
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>> {
+        let endpoint = match kind {
+            ItemKind::Issue =>
+            // state="new" OR state="open" OR state="on hold"
+            {
+                "issues?q=state%3D%22new%22%20OR%20state%3D%22open%22%20OR%20state%3D%22on%20hold%22"
+            }
+            ItemKind::Pr => "pullrequests?state=OPEN",
+        };
+        rest::open_items(repo, account, endpoint).await
     }
 }
 
@@ -153,67 +235,6 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
         None => format!("Bearer {token}"),
     };
     Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
-}
-
-impl ForgeRepo {
-    /// An issue or pull request as Bitbucket reports it.
-    pub(crate) fn bitbucket_current(
-        &self,
-        kind: ItemKind,
-        number: u64,
-        value: &Value,
-    ) -> Result<Current> {
-        let state = match (kind, value["state"].as_str()) {
-            (ItemKind::Pr, Some("OPEN")) => ItemState::Open,
-            (ItemKind::Pr, Some("MERGED")) => ItemState::Merged,
-            (ItemKind::Pr, Some("DECLINED" | "SUPERSEDED")) => ItemState::Closed,
-            (ItemKind::Issue, Some("new" | "open" | "on hold")) => ItemState::Open,
-            (
-                ItemKind::Issue,
-                Some("resolved" | "invalid" | "duplicate" | "wontfix" | "closed"),
-            ) => ItemState::Closed,
-            (_, state) => bail!("unrecognized Bitbucket state {state:?}"),
-        };
-        let pr = match kind {
-            ItemKind::Issue => None,
-            ItemKind::Pr => Some(PrSummary {
-                head: text(&value["source"]["branch"]["name"])
-                    .context("pull request has no source branch")?,
-                base: text(&value["destination"]["branch"]["name"])
-                    .context("pull request has no destination branch")?,
-                draft: value["draft"].as_bool().unwrap_or_default(),
-            }),
-        };
-        let body = match kind {
-            ItemKind::Issue => &value["content"]["raw"],
-            ItemKind::Pr => &value["description"],
-        };
-        Ok(Current {
-            item: Item {
-                kind,
-                number,
-                url: self.item_url(kind, number)?,
-                title: text(&value["title"]).context("item has no title")?,
-                state,
-                labels: Vec::new(),
-                pr,
-            },
-            node_id: None,
-            head_repository: text(&value["source"]["repository"]["full_name"]),
-            body: text(body).unwrap_or_default(),
-            head_sha: text(&value["source"]["commit"]["hash"]),
-            base_sha: None,
-            // Bitbucket does not report whether a pull request conflicts.
-            conflict: None,
-            reviewers: value["reviewers"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|user| text(&user["account_id"]))
-                .collect(),
-            user_ids: Default::default(),
-        })
-    }
 }
 
 impl ForgeRepo {

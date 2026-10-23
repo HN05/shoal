@@ -6,10 +6,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ForgeKind, ForgeRepo, Query,
+    ForgeKind, ForgeRepo,
     account::Account,
-    backends::Backend,
-    gh,
+    backends::{
+        Backend,
+        github::{Query, gh},
+    },
     items::link::ItemKind,
     review::{
         status::{CheckResult, PrStatus, ReviewState},

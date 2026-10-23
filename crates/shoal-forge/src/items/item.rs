@@ -1,12 +1,12 @@
 //! An issue or PR as one REST read reports it, in the same shape for every
 //! forge: what an action returns and what planning an action reads.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::backends::Backend;
 use crate::state::states;
-use crate::{ForgeKind, ForgeRepo, items::link::ItemKind};
+use crate::{ForgeRepo, items::link::ItemKind};
 
 /// Forgejo treats a PR whose title starts with one of these as a draft.
 pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
@@ -89,11 +89,7 @@ impl ForgeRepo {
             value[self.kind.number_field()] == number,
             "the forge returned a different item than #{number}"
         );
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => self.github_current(kind, number, value),
-            ForgeKind::GitLab => self.gitlab_current(kind, number, value),
-            ForgeKind::Bitbucket => self.bitbucket_current(kind, number, value),
-        }
+        self.kind.current(self, kind, number, value)
     }
 
     /// The URL Shoal records for the item.
@@ -103,77 +99,6 @@ impl ForgeRepo {
             ItemKind::Issue => self.issue(&number)?.1,
             ItemKind::Pr => self.pull(&number)?.1,
         })
-    }
-
-    /// GitHub's REST shape, which Forgejo shares.
-    fn github_current(&self, kind: ItemKind, number: u64, value: &Value) -> Result<Current> {
-        if kind == ItemKind::Issue {
-            ensure!(
-                value["pull_request"].is_null(),
-                "#{number} is a PR; use shoal pr"
-            );
-        }
-        let url = self.item_url(kind, number)?;
-        let title = text(&value["title"]).context("item has no title")?;
-        let merged =
-            value["merged"].as_bool().unwrap_or_default() || value["merged_at"].as_str().is_some();
-        let state = match (text(&value["state"]).as_deref(), merged) {
-            (_, true) => ItemState::Merged,
-            (Some("open"), _) => ItemState::Open,
-            (Some("closed"), _) => ItemState::Closed,
-            (state, _) => anyhow::bail!("unrecognized item state {state:?}"),
-        };
-        let labels = value["labels"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|label| text(&label["name"]))
-            .collect();
-        let pr = match kind {
-            ItemKind::Issue => None,
-            ItemKind::Pr => Some(PrSummary {
-                head: self.head_branch(number, value)?,
-                base: text(&value["base"]["ref"]).context("PR has no base branch")?,
-                draft: if self.kind == ForgeKind::Forgejo {
-                    draft_prefix(&title).is_some()
-                } else {
-                    value["draft"].as_bool().unwrap_or_default()
-                },
-            }),
-        };
-        let conflict = pr
-            .as_ref()
-            .zip(value["mergeable"].as_bool())
-            .map(|(pr, mergeable)| !pr.draft && !mergeable);
-        Ok(Current {
-            item: Item {
-                kind,
-                number,
-                url,
-                title,
-                state,
-                labels,
-                pr,
-            },
-            node_id: text(&value["node_id"]),
-            head_repository: text(&value["head"]["repo"]["full_name"]),
-            body: text(&value["body"]).unwrap_or_default(),
-            head_sha: text(&value["head"]["sha"]),
-            base_sha: text(&value["base"]["sha"]),
-            conflict,
-            reviewers: Vec::new(),
-            user_ids: Default::default(),
-        })
-    }
-
-    /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
-    /// head and keeps the branch name only as the head's label.
-    fn head_branch(&self, number: u64, value: &Value) -> Result<String> {
-        let head = text(&value["head"]["ref"]).context("PR has no head branch")?;
-        if self.kind == ForgeKind::Forgejo && head == format!("refs/pull/{number}/head") {
-            return text(&value["head"]["label"]).context("PR has no head branch");
-        }
-        Ok(head)
     }
 }
 

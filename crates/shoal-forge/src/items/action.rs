@@ -10,7 +10,7 @@ use crate::state::states;
 use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    backends::{bitbucket, gitlab::gitlab_merge},
+    backends::{Backend, bitbucket, gitlab::gitlab_merge},
     items::{
         attach::{Attachment, Holder, Pending},
         item::{Current, Item, ItemState, draft_prefix},
@@ -316,7 +316,7 @@ impl ForgeRepo {
     /// in one sequence can tell; elsewhere the caller names the kind.
     pub async fn item_kind(&self, account: &Account, number: u64) -> Result<ItemKind> {
         ensure!(
-            matches!(self.kind, ForgeKind::GitHub | ForgeKind::Forgejo),
+            self.kind.numbers_items_together(),
             "this forge numbers issues and PRs separately; put issue or pr before #{number}"
         );
         let value = self

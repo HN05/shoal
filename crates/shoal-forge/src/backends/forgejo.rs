@@ -4,10 +4,15 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use super::{Backend, tea};
+use super::{
+    Backend,
+    github_rest::{self, Dialect},
+    rest, tea,
+};
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
+    items::{item::Current, link::ItemKind, list},
     repo::locator::ItemRoute,
     transport::api::{MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body},
 };
@@ -74,6 +79,33 @@ impl Backend for Forgejo {
 
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
         full_page(response, size)
+    }
+
+    fn current(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        value: &Value,
+    ) -> Result<Current> {
+        github_rest::current(repo, kind, number, value, Dialect::Forgejo)
+    }
+
+    fn numbers_items_together(&self) -> bool {
+        true
+    }
+
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>> {
+        let endpoint = match kind {
+            ItemKind::Issue => "issues?state=open&type=issues",
+            ItemKind::Pr => "pulls?state=open",
+        };
+        rest::open_items(repo, account, endpoint).await
     }
 }
 

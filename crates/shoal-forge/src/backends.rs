@@ -3,7 +3,8 @@
 //! it, so a new forge implements the trait and adds its variant here.
 pub mod bitbucket;
 mod forgejo;
-mod github;
+pub(crate) mod github;
+mod github_rest;
 pub(crate) mod gitlab;
 pub(crate) mod glab;
 pub(crate) mod rest;
@@ -12,7 +13,19 @@ pub(crate) mod tea;
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::{ForgeRepo, account::Account, repo::locator::ItemRoute, transport::api::Request};
+use anyhow::Context;
+
+use crate::{
+    ForgeRepo, MERGED_HINT,
+    account::Account,
+    items::{
+        item::{Current, ItemState},
+        link::ItemKind,
+        list,
+    },
+    repo::locator::ItemRoute,
+    transport::api::Request,
+};
 use bitbucket::Bitbucket;
 use forgejo::Forgejo;
 use github::GitHub;
@@ -78,6 +91,74 @@ pub(crate) trait Backend {
 
     /// A list page's items, and whether another page follows.
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)>;
+
+    /// The item an item endpoint returned as `value`; an issue read that
+    /// returns a PR is refused.
+    fn current(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        value: &Value,
+    ) -> Result<Current>;
+
+    /// Whether issues and PRs share one sequence, so a number names one item.
+    fn numbers_items_together(&self) -> bool;
+
+    /// The repository's open issues or PRs.
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>>;
+
+    /// An issue's state; a PR's number is refused.
+    async fn issue_state(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<ItemState> {
+        rest::issue_state(repo, account, number).await
+    }
+
+    /// An open issue's title and description.
+    async fn issue_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String)> {
+        rest::issue_details(repo, account, number).await
+    }
+
+    /// Title, head and base of a PR whose head branch is in the repository.
+    async fn pull_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String, String)> {
+        rest::pull_details(repo, account, number)
+            .await
+            .context(self.login_hint())
+    }
+
+    /// Fail closed on changed output: only commits the merged PR lists can
+    /// authorize cleanup, including squash and rebase merges. None while the
+    /// PR, which must have `branch` as its head, is unmerged.
+    async fn merged_commits(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: &str,
+    ) -> Result<Option<Vec<String>>> {
+        rest::merged_commits(repo, account, number, branch)
+            .await
+            .context(MERGED_HINT.trim_start_matches("; ").to_owned())
+    }
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -147,6 +228,66 @@ impl Backend for ForgeKind {
 
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
         dispatch!(self, backend => backend.page(response, size))
+    }
+
+    fn current(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        value: &Value,
+    ) -> Result<Current> {
+        dispatch!(self, backend => backend.current(repo, kind, number, value))
+    }
+
+    fn numbers_items_together(&self) -> bool {
+        dispatch!(self, backend => backend.numbers_items_together())
+    }
+
+    async fn open_items(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+    ) -> Result<Vec<list::Item>> {
+        dispatch!(self, backend => backend.open_items(repo, account, kind).await)
+    }
+
+    async fn issue_state(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<ItemState> {
+        dispatch!(self, backend => backend.issue_state(repo, account, number).await)
+    }
+
+    async fn issue_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String)> {
+        dispatch!(self, backend => backend.issue_details(repo, account, number).await)
+    }
+
+    async fn pull_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<(String, String, String)> {
+        dispatch!(self, backend => backend.pull_details(repo, account, number).await)
+    }
+
+    async fn merged_commits(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        branch: &str,
+    ) -> Result<Option<Vec<String>>> {
+        dispatch!(self, backend => backend.merged_commits(repo, account, number, branch).await)
     }
 }
 

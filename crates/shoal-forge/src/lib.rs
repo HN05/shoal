@@ -115,7 +115,9 @@ impl ForgeRepo {
         account: &account::Account,
         number: u64,
     ) -> Result<(String, String)> {
-        self.kind.issue_details(self, account, number).await
+        let (title, details) = self.kind.issue_details(self, account, number).await?;
+        ensure!(!title.trim().is_empty(), "issue title is empty");
+        Ok((title, details))
     }
 
     /// The repository an issue URL belongs to.
@@ -145,111 +147,10 @@ impl ForgeRepo {
         number: u64,
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
-        match self.kind {
-            ForgeKind::GitHub => github_merged_commits(self, account, number, branch).await,
-            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
-                .rest_merged_commits(account, number, branch)
-                .await
-                .context(MERGED_HINT.trim_start_matches("; ").to_owned()),
-        }
+        self.kind
+            .merged_commits(self, account, number, branch)
+            .await
     }
-}
-
-async fn github_merged_commits(
-    repo: &ForgeRepo,
-    account: &account::Account,
-    number: u64,
-    branch: &str,
-) -> Result<Option<Vec<String>>> {
-    let number = number.to_string();
-    let output = gh(
-        account,
-        &[
-            "pr",
-            "view",
-            &number,
-            "--repo",
-            &format!("{}/{}", repo.host, repo.path),
-            "--json",
-            "number,state,headRefName,commits",
-        ],
-        Query::Pull(MERGED_HINT),
-    )
-    .await?;
-    #[derive(serde::Deserialize)]
-    struct Commit {
-        oid: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct Pull {
-        number: u64,
-        state: String,
-        #[serde(rename = "headRefName")]
-        branch: String,
-        commits: Vec<Commit>,
-    }
-    let pull: Pull = serde_json::from_str(&output)?;
-    ensure!(
-        pull.number.to_string() == number && pull.branch == branch,
-        "PR does not match the workspace branch"
-    );
-    ensure!(
-        matches!(pull.state.as_str(), "OPEN" | "CLOSED" | "MERGED"),
-        "unknown PR state"
-    );
-    Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
-}
-
-impl ForgeKind {
-    async fn issue_details(
-        self,
-        repo: &ForgeRepo,
-        account: &account::Account,
-        number: u64,
-    ) -> Result<(String, String)> {
-        let (title, details) = match self {
-            Self::GitHub => github_issue_details(repo, account, number).await?,
-            Self::Forgejo | Self::GitLab | Self::Bitbucket => {
-                let issue = repo
-                    .read(account, items::link::ItemKind::Issue, number)
-                    .await
-                    .context(self.login_hint())?;
-                items::issue::require_open(issue.item.state)?;
-                (issue.item.title, issue.body)
-            }
-        };
-        ensure!(!title.trim().is_empty(), "issue title is empty");
-        Ok((title, details))
-    }
-}
-
-async fn github_issue_details(
-    repo: &ForgeRepo,
-    account: &account::Account,
-    number: u64,
-) -> Result<(String, String)> {
-    let id = number.to_string();
-    let repo = format!("{}/{}", repo.host, repo.path);
-    let args = [
-        "issue",
-        "view",
-        &id,
-        "--repo",
-        &repo,
-        "--json",
-        "number,title,body,state",
-    ];
-    let text = gh(account, &args, Query::Issue).await?;
-    items::issue::require_open(items::issue::github_state(&text, number)?)?;
-    #[derive(serde::Deserialize)]
-    struct GitHubIssue {
-        number: u64,
-        title: String,
-        body: Option<String>,
-    }
-    let issue: GitHubIssue = serde_json::from_str(&text).context("invalid gh issue response")?;
-    ensure!(issue.number == number, "gh returned a different issue");
-    Ok((issue.title, issue.body.unwrap_or_default()))
 }
 
 /// A PR's branches, for checking it out locally.
@@ -298,98 +199,7 @@ impl ForgeRepo {
     }
 }
 
-impl ForgeKind {
-    async fn pull_details(
-        self,
-        repo: &ForgeRepo,
-        account: &account::Account,
-        number: u64,
-    ) -> Result<(String, String, String)> {
-        match self {
-            Self::GitHub => github_pull_details(repo, account, number).await,
-            Self::Forgejo | Self::GitLab | Self::Bitbucket => repo
-                .rest_pull_details(account, number)
-                .await
-                .context(self.login_hint()),
-        }
-    }
-}
-
-async fn github_pull_details(
-    repo: &ForgeRepo,
-    account: &account::Account,
-    number: u64,
-) -> Result<(String, String, String)> {
-    let id = number.to_string();
-    let repo = format!("{}/{}", repo.host, repo.path);
-    let fields = "number,title,headRefName,baseRefName,isCrossRepository";
-    let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Pull {
-        number: u64,
-        title: String,
-        head_ref_name: String,
-        base_ref_name: String,
-        is_cross_repository: bool,
-    }
-    let output = gh(account, &args, Query::Pull("")).await?;
-    let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
-    ensure!(pull.number == number, "gh returned a different PR");
-    ensure!(
-        !pull.is_cross_repository,
-        "PR #{number} comes from a fork; only branches in this repository can be opened"
-    );
-    Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
-}
-
-const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
-
-#[derive(Clone, Copy)]
-enum Query {
-    Issue,
-    Pull(&'static str),
-    List,
-    /// Reading an issue or PR for `shoal view`.
-    View,
-}
-
-/// Run `gh` as `account`, the CLI that reads GitHub's items.
-async fn gh(account: &account::Account, args: &[&str], query: Query) -> Result<String> {
-    let tool = transport::programs::GH;
-    let mut command = tokio::process::Command::new(tool);
-    command.args(args).env("NO_COLOR", "1");
-    account.apply(&mut command);
-    let seconds = match query {
-        Query::Issue | Query::List | Query::View => 30,
-        Query::Pull(_) => 20,
-    };
-    let output = shoal_subprocess::Run::new(command)
-        .timeout(std::time::Duration::from_secs(seconds))
-        .capture()
-        .await;
-    query.response(tool, output)
-}
-
-impl Query {
-    fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
-        match self {
-            Self::Issue => {
-                shoal_subprocess::checked_output(tool, output).with_context(|| {
-                    format!("{tool} issue lookup failed; install it and check `{tool} auth login` and repository access before using --issue")
-                })
-            }
-            Self::Pull(hint) => shoal_subprocess::checked_output(tool, output)
-                .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
-            Self::List => shoal_subprocess::checked_output(tool, output).with_context(|| {
-                format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
-            }),
-            Self::View => shoal_subprocess::checked_output(tool, output).with_context(|| {
-                format!("{tool} lookup failed; install it and check `{tool} auth login` and repository access")
-            }),
-        }
-    }
-}
+pub(crate) const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
 
 #[cfg(test)]
 mod tests {
@@ -423,66 +233,6 @@ mod tests {
         }
         assert_eq!(IssueInput::parse("001"), IssueInput::Number);
         assert_eq!(repo.issue("001").unwrap().0, 1);
-    }
-
-    #[test]
-    fn query_errors_preserve_login_guidance_and_diagnostic_limits() {
-        use std::{io, os::unix::process::ExitStatusExt, process::Output};
-
-        for tool in ["gh", "fj"] {
-            for (query, limit, hint) in [
-                (
-                    Query::Issue,
-                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
-                    "auth login",
-                ),
-                (
-                    Query::Pull(MERGED_HINT),
-                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
-                    "shoal done",
-                ),
-                (
-                    Query::Pull(""),
-                    shoal_subprocess::MAX_DIAGNOSTIC_CHARS,
-                    "existing login",
-                ),
-            ] {
-                let missing = query
-                    .response(tool, Err(io::Error::from(io::ErrorKind::NotFound)))
-                    .unwrap_err();
-                let missing = format!("{missing:#}");
-                assert!(missing.contains(tool), "{missing}");
-                assert!(missing.contains(hint), "{missing}");
-
-                let failed = query
-                    .response(
-                        tool,
-                        Ok(Output {
-                            status: std::process::ExitStatus::from_raw(256),
-                            stdout: b"ignored".to_vec(),
-                            stderr: format!("{}END", "é".repeat(limit)).into_bytes(),
-                        }),
-                    )
-                    .unwrap_err();
-                let failed = format!("{failed:#}");
-                assert!(failed.contains(tool), "{failed}");
-                assert!(failed.contains(hint), "{failed}");
-                assert!(failed.ends_with(&"é".repeat(limit)));
-                assert!(!failed.contains("END"));
-
-                let invalid = query
-                    .response(
-                        tool,
-                        Ok(Output {
-                            status: std::process::ExitStatus::from_raw(0),
-                            stdout: vec![0xff],
-                            stderr: Vec::new(),
-                        }),
-                    )
-                    .unwrap_err();
-                assert!(format!("{invalid:#}").contains("output is not UTF-8"));
-            }
-        }
     }
 
     #[test]

@@ -1,9 +1,12 @@
 use super::{Check, MergeRevision, Snapshot};
 use crate::{
-    ForgeKind, ForgeRepo, Query,
+    ForgeKind, ForgeRepo,
     account::Account,
-    backends::{Backend, rest::RestCheck},
-    gh,
+    backends::{
+        Backend,
+        github::{Query, gh},
+        rest::RestCheck,
+    },
     items::{
         item::{Current, ItemState},
         link::ItemKind,
@@ -136,7 +139,7 @@ impl ForgeRepo {
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
-        let pull = self.rest_branch_pull(account, number, branch).await?;
+        let pull = crate::backends::rest::branch_pull(self, account, number, branch).await?;
         let mut snapshot = Snapshot {
             state: pull.item.state.as_str().into(),
             ..Default::default()
