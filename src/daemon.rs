@@ -545,6 +545,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?;
             Body::Ok
         }
+        Method::CheckDependencies { repository, after } => {
+            manager.check_dependencies(&repository, after).await?;
+            Body::Ok
+        }
         Method::AdoptWorkspace {
             repository,
             path,

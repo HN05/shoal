@@ -74,6 +74,16 @@ pub(super) fn record(
     Ok(())
 }
 
+/// Refuse the workspaces and queued launches of `after` that `repository` lacks.
+fn ensure_work_exists(db: &Connection, repository: &str, after: &[Dependency]) -> Result<()> {
+    for dependency in after {
+        if let Dependency::Work(selector) = dependency {
+            work(db, "", repository, selector)?;
+        }
+    }
+    Ok(())
+}
+
 /// The workspace or queued launch of `repository` other than `entry` that
 /// `selector` names. A launch that already opened its workspace stands for
 /// that workspace.
@@ -127,6 +137,19 @@ pub(super) fn replace_launch(db: &Connection, entry: &str, workspace: &str) -> R
 }
 
 impl Manager {
+    /// Refuse `after` when it names work of `repository` that a queued
+    /// launch could not wait for.
+    pub async fn check_dependencies(
+        &self,
+        repository: &crate::repository::Selector,
+        after: Vec<Dependency>,
+    ) -> Result<()> {
+        let repository = self.repository(repository).await?.id;
+        self.store
+            .run(move |db| ensure_work_exists(db, &repository, &after))
+            .await
+    }
+
     /// The readiness of each waiting launch with dependencies, by entry ID.
     pub(super) async fn dependency_readiness(&self) -> Result<HashMap<String, Readiness>> {
         let recorded = self.store.run(waiting_dependencies).await?;

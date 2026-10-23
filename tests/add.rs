@@ -62,6 +62,14 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec!["layered_config test", "queue_add", "create_workspace"],
             "creation reached",
         ),
+        // Work to wait for is refused before the agent or any picker.
+        (
+            vec![
+                "add", "test", "new", "--agent", "codex", "--after", "missing",
+            ],
+            vec!["list_repositories", "check_dependencies"],
+            "neither a workspace nor a queued agent",
+        ),
     ] {
         let daemon = FakeDaemon::start();
         // Agent launches are refused before creation when the agent is missing.
@@ -256,6 +264,9 @@ impl FakeDaemon {
                             }}),
                         }
                     }
+                    "check_dependencies" => json!({"type": "error", "data": {
+                        "code": "test", "message": "missing is neither a workspace nor a queued agent"
+                    }}),
                     "queue_add" => json!({"type": "queue_admission", "data": {
                         "start": true, "entry": null, "waiting": 0
                     }}),

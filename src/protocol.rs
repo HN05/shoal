@@ -219,6 +219,12 @@ pub enum Method {
         git_profile: Option<String>,
         path: Option<std::path::PathBuf>,
     },
+    /// Refuse the work `after` names that a queued launch in `repository`
+    /// could not wait for, without queuing anything.
+    CheckDependencies {
+        repository: crate::repository::Selector,
+        after: Vec<crate::model::Dependency>,
+    },
     AdoptWorkspace {
         repository: crate::repository::Selector,
         path: std::path::PathBuf,

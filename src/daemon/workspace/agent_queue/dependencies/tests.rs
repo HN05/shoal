@@ -218,6 +218,18 @@ async fn dependencies_name_existing_work_other_than_the_launch() {
         assert!(format!("{error:#}").contains("neither a workspace nor a queued agent"));
     }
     assert!(manager.queue_entries().await.unwrap().is_empty());
+    // The CLI checks them before any prompt.
+    let selector = crate::repository::Selector::from(repo.id.as_str());
+    let error = manager
+        .check_dependencies(&selector, vec![work("missing")])
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("neither a workspace nor a queued agent"));
+    create(&manager, &repo, "present").await;
+    manager
+        .check_dependencies(&selector, vec![work("present")])
+        .await
+        .unwrap();
     let error = manager
         .queue_add(QueueRequest {
             after: vec![work("missing")],

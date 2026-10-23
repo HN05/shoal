@@ -295,6 +295,7 @@ pub(super) async fn add(
         .transpose()?;
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
     check_add_creation(ctx, &target, &creation).await?;
+    let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings {
         ctx,
         repository: &target.selector,
@@ -352,7 +353,7 @@ pub(super) async fn add(
             name,
             issue_title: title,
             now: options.starts_now(),
-            after: launch_dependencies(ctx, &target, issue.as_ref(), &options).await?,
+            after: launch_dependencies(ctx, &target, issue.as_ref(), &options, after).await?,
         };
         match super::agent_queue::admit(ctx, &plan, launch).await? {
             super::agent_queue::Admission::Start { entry, base } => {
@@ -376,21 +377,19 @@ pub(super) async fn add(
     execute_add_with_target(ctx, plan, target, issue).await
 }
 
-/// The work a launch waits for: what `--after` names, and the open issues
-/// the forge records as blocking its issue. A launch that starts now waits
-/// for nothing.
-async fn launch_dependencies(
+/// The work `--after` names, refused before any prompt when the repository
+/// has no such workspace, queued agent or issue.
+async fn after_dependencies(
     ctx: &Context,
     target: &AddTarget,
-    issue: Option<&super::issues::Issue>,
-    options: &AddOptions,
+    after: &[String],
 ) -> Result<Vec<Dependency>> {
-    if options.starts_now() || options.after.is_empty() && issue.is_none() {
+    if after.is_empty() {
         return Ok(Vec::new());
     }
     let repo = target.repository(ctx).await?;
     let mut dependencies = Vec::new();
-    for input in &options.after {
+    for input in after {
         dependencies.push(match IssueInput::parse(input) {
             IssueInput::Number | IssueInput::Url => {
                 Dependency::Issue(super::issues::url(repo, input).await?)
@@ -398,10 +397,33 @@ async fn launch_dependencies(
             IssueInput::Invalid => Dependency::Work(input.clone()),
         });
     }
-    if let Some(issue) = issue {
-        dependencies.extend(issue_blockers(ctx, target, issue).await?);
-    }
+    request::<()>(
+        &ctx.paths,
+        Method::CheckDependencies {
+            repository: target.selector.clone(),
+            after: dependencies.clone(),
+        },
+    )
+    .await?;
     Ok(dependencies)
+}
+
+/// The work a launch waits for: `after`, and the open issues the forge
+/// records as blocking its issue. A launch that starts now waits for nothing.
+async fn launch_dependencies(
+    ctx: &Context,
+    target: &AddTarget,
+    issue: Option<&super::issues::Issue>,
+    options: &AddOptions,
+    mut after: Vec<Dependency>,
+) -> Result<Vec<Dependency>> {
+    if options.starts_now() {
+        return Ok(Vec::new());
+    }
+    if let Some(issue) = issue {
+        after.extend(issue_blockers(ctx, target, issue).await?);
+    }
+    Ok(after)
 }
 
 /// The open issues the forge records as blocking `issue`. A forge that
