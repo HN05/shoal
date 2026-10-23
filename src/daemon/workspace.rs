@@ -646,6 +646,7 @@ impl Manager {
                     None,
                 )?;
                 store::ensure_path_unrecorded(&tx, &record.path)?;
+                store::ensure_path_outside_moves(&tx, &record.path)?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;

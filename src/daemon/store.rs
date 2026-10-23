@@ -613,6 +613,23 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
     Ok(())
 }
 
+/// Refuse a workspace path that overlaps where a repository directory is
+/// moving: a failed move deletes its destination.
+pub fn ensure_path_outside_moves(db: &Connection, path: &std::path::Path) -> Result<()> {
+    let destinations = db
+        .prepare("SELECT destination FROM repository_moves")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for destination in destinations.iter().map(std::path::Path::new) {
+        ensure!(
+            !path.starts_with(destination) && !destination.starts_with(path),
+            "workspace path overlaps {}, where a repository directory is moving",
+            destination.display()
+        );
+    }
+    Ok(())
+}
+
 /// Refuse a workspace name another workspace or an unfinished rename holds.
 pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
     ensure!(

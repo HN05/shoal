@@ -294,12 +294,17 @@ impl Manager {
         let source_id =
             real_directory_identity(source)?.context("repository directory is missing")?;
         let destination_id = directory_identity(destination)?;
+        let claimed = destination.to_owned();
         let source = utf8(source)?;
         let destination = utf8(destination)?;
         self.store
             .run(move |db| {
-                let tx = db.transaction()?;
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let states = movable_records(&tx, &id)?;
+                // A workspace recorded there since the reservation would be
+                // deleted with the destination if the move failed.
+                store::ensure_path_unrecorded(&tx, &claimed)
+                    .context("a workspace was placed where the repository directory would move")?;
                 tx.execute(
                     "INSERT INTO repository_moves
                         (repository_id,source,destination,source_id,destination_id,states)
@@ -844,6 +849,55 @@ mod tests {
             .err()
             .context("reserved inside a recorded directory")?;
         assert!(error.to_string().contains("already records"), "{error:#}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<()> {
+        let (temp, manager, repo, _workspace, root) = cloned().await?;
+        let source = repo.workspaces_dir.clone().context("no directory")?;
+
+        // A workspace placed in the destination after its reservation keeps
+        // the move from being recorded.
+        let taken = root.join("origin");
+        fs::create_dir_all(&taken)?;
+        manager
+            .create_workspace(
+                &repo.id,
+                "placed".into(),
+                None,
+                None,
+                Some(taken.join("placed")),
+            )
+            .await?;
+        let error = manager
+            .record_move(&repo.id, &source, &taken)
+            .await
+            .err()
+            .context("recorded a move over a workspace")?;
+        assert!(format!("{error:#}").contains("placed where the repository directory"));
+
+        // While a move is recorded, no repository places a workspace there.
+        let destination = root.join("origin-2");
+        fs::create_dir_all(&destination)?;
+        manager.record_move(&repo.id, &source, &destination).await?;
+        let other = test_support::repository(temp.path(), "other");
+        let other = manager
+            .register_repository(other.to_str().context("path")?.into(), None, None)
+            .await?;
+        let error = manager
+            .create_workspace(
+                &other.id,
+                "intruder".into(),
+                None,
+                None,
+                Some(destination.join("intruder")),
+            )
+            .await
+            .err()
+            .context("placed a workspace in a move destination")?;
+        assert!(format!("{error:#}").contains("where a repository directory is moving"));
+        manager.finish_repository_moves().await?;
         Ok(())
     }
 
