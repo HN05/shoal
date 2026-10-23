@@ -1151,7 +1151,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             },
             None => poll().await,
         };
-        let (updates, interval) = limited_poll(polled)?;
+        let (updates, interval) = limited_poll(polled, crate::time::unix_seconds())?;
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
@@ -1182,16 +1182,17 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     }
 }
 
-/// The updates of a poll and how long to wait before the next one: the
-/// poll interval, or until a forge that refused the poll accepts requests.
-fn limited_poll(polled: Result<Vec<Update>>) -> Result<(Vec<Update>, Duration)> {
+/// The updates of a poll and how long to wait before the next one at `now`
+/// in Unix seconds: the poll interval, or until a forge that refused the
+/// poll accepts requests.
+fn limited_poll(polled: Result<Vec<Update>>, now: u64) -> Result<(Vec<Update>, Duration)> {
     match polled {
         Ok(updates) => Ok((updates, POLL_INTERVAL)),
         Err(error) => {
             let Some(limit) = rate_limited(&error) else {
                 return Err(error);
             };
-            let wait = limit.until.saturating_sub(crate::time::unix_seconds());
+            let wait = limit.until.saturating_sub(now);
             Ok((Vec::new(), POLL_INTERVAL.max(Duration::from_secs(wait))))
         }
     }
@@ -1206,29 +1207,41 @@ mod tests {
     };
     use serde_json::{Value, json};
 
-    #[tokio::test(start_paused = true)]
-    async fn a_rate_limited_poll_waits_for_the_limit_instead_of_failing() {
-        let limit = |seconds: u64| crate::forge::transport::limits::RateLimited {
-            host: "forge.example".into(),
-            until: crate::time::unix_seconds() + seconds,
+    #[test]
+    fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {
+        let limit = |until| {
+            anyhow::Error::new(crate::forge::transport::limits::RateLimited {
+                host: "forge.example".into(),
+                until,
+            })
+            .context("GET issues/8")
         };
+        let (updates, interval) = limited_poll(Err(limit(1_600)), 1_000).unwrap();
+        assert!(updates.is_empty());
+        assert_eq!(interval, Duration::from_secs(600));
+        let (_, interval) = limited_poll(Err(limit(1_001)), 1_000).unwrap();
+        assert_eq!(interval, POLL_INTERVAL);
+        let error = limited_poll(Err(anyhow::anyhow!("HTTP 500")), 1_000).unwrap_err();
+        assert_eq!(format!("{error:#}"), "HTTP 500");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_rate_limited_watch_keeps_polling_after_the_limit() {
         let attempts = std::sync::atomic::AtomicUsize::new(0);
-        let started = tokio::time::Instant::now();
         let result = wait_for_updates(None, &mut tokio::sync::watch::channel(0).1, || async {
             match attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) {
-                0 => Err(anyhow::Error::new(limit(600)).context("GET issues/8")),
+                0 => Err(anyhow::Error::new(
+                    crate::forge::transport::limits::RateLimited {
+                        host: "forge.example".into(),
+                        until: 0,
+                    },
+                )),
                 _ => Err(anyhow::anyhow!("HTTP 500")),
             }
         })
         .await;
         assert_eq!(format!("{:#}", result.unwrap_err()), "HTTP 500");
-        // The limit's end is read from the wall clock, which may tick once.
-        let waited = (tokio::time::Instant::now() - started).as_secs();
-        assert!((599..=600).contains(&waited), "{waited}");
-        // A limit that ends sooner still waits the poll interval.
-        let (updates, interval) = limited_poll(Err(limit(1).into())).unwrap();
-        assert!(updates.is_empty());
-        assert_eq!(interval, POLL_INTERVAL);
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     #[tokio::test(start_paused = true)]
