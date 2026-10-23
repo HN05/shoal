@@ -487,27 +487,11 @@ impl Manager {
         plan: planning::Plan<'_>,
         audit: &mut Option<CleanRequest>,
     ) -> Result<Allocation<Box<Simulator>>> {
-        let limits = &config.simulators;
-        let records = self.list_simulators(None).await?;
-        for sim in plan.unowned_candidates.iter().copied().chain(plan.reusable) {
-            planning::check_unowned_record(sim, &records)?;
-        }
-        let mut inventory = simctl::inventory().await?;
-        if let Some(sim) = plan.reusable {
-            ensure!(
-                sim.device(&inventory).is_some_and(|d| d.is_available),
-                "planned simulator is no longer available"
-            );
-        }
-        // External devices count toward the budget but are never shut down.
-        for sim in &plan.unowned_candidates {
-            if planning::has_running_capacity(&inventory, limits.max_booted, plan.reusable) {
-                break;
-            }
-            self.shutdown_sim(sim).await?;
-            inventory = simctl::inventory().await?;
-        }
-        if !planning::has_running_capacity(&inventory, limits.max_booted, plan.reusable) {
+        let inventory = self.recheck_plan(&plan).await?;
+        if !self
+            .free_running_capacity(&plan, config.simulators.max_booted, inventory)
+            .await?
+        {
             return Ok(Allocation::Busy(
                 "simulator running limit reached; active leases or external simulators occupy all slots".into(),
             ));
@@ -536,6 +520,45 @@ impl Manager {
         self.save_sim(&sim).await?;
         result?;
         Ok(Allocation::Granted(Box::new(sim)))
+    }
+
+    /// A plan is not ownership evidence: confirm its devices are still unowned
+    /// and the reused one still exists. Returns the inventory it checked.
+    async fn recheck_plan(&self, plan: &planning::Plan<'_>) -> Result<Inventory> {
+        let records = self.list_simulators(None).await?;
+        for sim in plan.unowned_candidates.iter().copied().chain(plan.reusable) {
+            planning::check_unowned_record(sim, &records)?;
+        }
+        let inventory = simctl::inventory().await?;
+        if let Some(sim) = plan.reusable {
+            ensure!(
+                sim.device(&inventory).is_some_and(|d| d.is_available),
+                "planned simulator is no longer available"
+            );
+        }
+        Ok(inventory)
+    }
+
+    /// Shut down unowned devices until one can boot; false when none can.
+    /// External devices count toward the budget but are never shut down.
+    async fn free_running_capacity(
+        &self,
+        plan: &planning::Plan<'_>,
+        max_booted: usize,
+        mut inventory: Inventory,
+    ) -> Result<bool> {
+        for sim in &plan.unowned_candidates {
+            if planning::has_running_capacity(&inventory, max_booted, plan.reusable) {
+                break;
+            }
+            self.shutdown_sim(sim).await?;
+            inventory = simctl::inventory().await?;
+        }
+        Ok(planning::has_running_capacity(
+            &inventory,
+            max_booted,
+            plan.reusable,
+        ))
     }
 
     /// Delete an idle device to make room, auditing it first for a clean request.
