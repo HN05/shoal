@@ -90,11 +90,11 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let descriptors = connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let manager = Manager::open(paths.clone()).await?;
-    // Before quarantine, which would leave the moving workspaces failed.
+    manager.store.quarantine_interrupted_operations().await?;
+    // Finishing a move restores the states quarantine failed.
     if let Err(error) = manager.finish_repository_moves().await {
         log!("{error:#}");
     }
-    manager.store.quarantine_interrupted_operations().await?;
     manager.learn_recorded_forge_hosts().await?;
     manager.audit_worktrees().await?;
     let listener = ownership.listen()?;
