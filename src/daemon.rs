@@ -402,7 +402,25 @@ async fn serve(
             Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
         },
     };
-    protocol::write(&mut stream, &Response::new(request.id, body)).await
+    reply(&mut stream, request.id, body).await
+}
+
+/// Write the reply to `request_id`, or an error saying it does not fit in a
+/// frame; the oversized reply still fails the connection, for the log.
+async fn reply(
+    stream: &mut (impl tokio::io::AsyncWrite + Unpin),
+    request_id: u64,
+    body: Body,
+) -> Result<()> {
+    let Err(error) = protocol::write(stream, &Response::new(request_id, body)).await else {
+        return Ok(());
+    };
+    if let Some(too_large) = error.downcast_ref::<protocol::FrameTooLarge>() {
+        let message = format!("the daemon cannot send its response: {too_large}");
+        let body = Body::error(ErrorCode::OperationFailed, message);
+        protocol::write(stream, &Response::new(request_id, body)).await?;
+    }
+    Err(error)
 }
 
 /// Request/response operations. Errors become `operation_failed` replies.
@@ -1220,6 +1238,29 @@ mod tests {
         })
         .await;
         assert_eq!(runs.into_inner(), 3);
+    }
+
+    #[tokio::test]
+    async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
+        let (mut writer, reader) = tokio::io::duplex(4 * protocol::MAX_FRAME);
+        let env = [("VALUE".to_owned(), "x".repeat(protocol::MAX_FRAME))].into();
+        let error = reply(&mut writer, 7, Body::WorkspaceEnv(env))
+            .await
+            .unwrap_err();
+        assert!(error.is::<protocol::FrameTooLarge>(), "{error:#}");
+        drop(writer);
+        let response: Response = protocol::read(&mut tokio::io::BufReader::new(reader))
+            .await
+            .unwrap();
+        assert_eq!(response.id, 7);
+        let Body::Error { code, message } = response.body else {
+            panic!("expected an error reply");
+        };
+        assert_eq!(code, ErrorCode::OperationFailed);
+        assert!(
+            message.contains("exceeds the 65536-byte protocol frame"),
+            "{message}"
+        );
     }
 
     #[test]

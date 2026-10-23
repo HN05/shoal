@@ -1112,10 +1112,30 @@ pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
     Ok(pages)
 }
 
+/// A message longer than [`MAX_FRAME`]; none of it was written.
+#[derive(Debug)]
+pub struct FrameTooLarge {
+    pub bytes: usize,
+}
+
+impl std::fmt::Display for FrameTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the {}-byte message exceeds the {MAX_FRAME}-byte protocol frame",
+            self.bytes
+        )
+    }
+}
+
+impl std::error::Error for FrameTooLarge {}
+
 pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: &T) -> Result<()> {
     let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
-    ensure!(bytes.len() <= MAX_FRAME, "protocol response is too large");
+    if bytes.len() > MAX_FRAME {
+        return Err(FrameTooLarge { bytes: bytes.len() }.into());
+    }
     stream.write_all(&bytes).await?;
     stream.flush().await?;
     Ok(())

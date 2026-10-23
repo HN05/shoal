@@ -46,6 +46,8 @@ without managing the integrated tool.
 One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
+Each protocol message is one frame of at most 64 KiB, and the daemon answers a
+reply that would not fit with an error saying so.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup. Connections reading a request
