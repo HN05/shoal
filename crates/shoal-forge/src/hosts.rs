@@ -81,12 +81,16 @@ pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'stat
     *PINS.lock().unwrap_or_else(PoisonError::into_inner) = Some(Box::new(pins));
 }
 
-/// What this process learned `host` serves.
+/// What this process learned `host` serves, once the caller's pins are
+/// learned; a concurrent first reader waits for them.
 pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
-    let pins = PINS.lock().unwrap_or_else(PoisonError::into_inner).take();
-    for (pinned, kind) in pins.map(|pins| pins()).unwrap_or_default() {
-        learn(&pinned, kind);
+    let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(load) = pins.take() {
+        for (pinned, kind) in load() {
+            learn(&pinned, kind);
+        }
     }
+    drop(pins);
     LEARNED
         .read()
         .unwrap_or_else(PoisonError::into_inner)
@@ -97,6 +101,23 @@ pub(crate) fn learned(host: &str) -> Option<ForgeKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readers_wait_for_the_pins_another_reader_is_loading() {
+        let (loading, started) = std::sync::mpsc::channel();
+        learn_pins(move || {
+            loading.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            vec![("gitlab.pinned.example".into(), ForgeKind::Forgejo)]
+        });
+        let first = std::thread::spawn(|| learned("other.pinned.example"));
+        started.recv().unwrap();
+        assert_eq!(
+            ForgeKind::detect("gitlab.pinned.example", None),
+            ForgeKind::Forgejo
+        );
+        assert_eq!(first.join().unwrap(), None);
+    }
 
     #[test]
     fn learned_hosts_override_names_and_guesses() {
