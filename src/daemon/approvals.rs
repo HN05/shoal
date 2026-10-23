@@ -8,10 +8,12 @@ use crate::{
     config::repo::ConflictPolicy,
     daemon::{
         log,
+        notifications::{self, NotificationKind},
         resources::{Definition, LockMode, Scope},
         store,
         workspace::Manager,
     },
+    model::Workspace,
     sim::Profile,
     state::{states, text_key},
 };
@@ -34,6 +36,8 @@ states!(DecisionStatus {
     Approved => "approved",
     Denied => "denied",
     Outdated => "outdated",
+    /// The requesting agent no longer needed it.
+    Withdrawn => "withdrawn",
 });
 
 /// What a decision authorizes; one active request per workspace, target and
@@ -416,6 +420,28 @@ impl ApprovalRequest {
         }
     }
 
+    /// What the user is told about a request no coordinator decides,
+    /// including how to approve it.
+    fn notification(&self) -> String {
+        format!(
+            "approval {}: {}{}; approve with shoal approve {}",
+            self.id,
+            self.subject(),
+            reason_suffix(self),
+            self.id
+        )
+    }
+
+    /// What its decider is told about a withdrawn request whose
+    /// notification was already shown.
+    fn withdrawal_notification(&self) -> String {
+        format!(
+            "approval {}: {} was withdrawn; no decision needed",
+            self.id,
+            self.subject()
+        )
+    }
+
     /// The agent message naming a decision and what the requesting agent does next.
     fn decision_message(&self) -> String {
         let next = match self.status {
@@ -513,13 +539,50 @@ fn route(
 /// removed: its number is never reused for a newer request, and deciding it
 /// is refused.
 pub fn retire(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
-    let mut request = request.clone();
-    request.status = DecisionStatus::Outdated;
+    close(tx, request.clone(), DecisionStatus::Outdated)?;
+    Ok(())
+}
+
+/// Keep `request` undecidable with `status` until its workspace is removed.
+fn close(
+    tx: &Transaction<'_>,
+    mut request: ApprovalRequest,
+    status: DecisionStatus,
+) -> Result<ApprovalRequest> {
+    request.status = status;
+    request.active = false;
     tx.execute(
         "UPDATE access_requests SET record=?2,active=0 WHERE id=?1",
         params![request.key, serde_json::to_string(&request)?],
     )?;
-    Ok(())
+    Ok(request)
+}
+
+/// Close the workspace's pending request `id`, which its agent no longer
+/// needs. A proposed issue goes as a decided one does, since it would
+/// outlive the workspace; any other request stays as withdrawn, like an
+/// outdated one.
+fn withdraw(tx: &Transaction<'_>, workspace: &Workspace, id: i64) -> Result<ApprovalRequest> {
+    let request = by_number(tx, id)?
+        .filter(|request| request.workspace_id == workspace.id)
+        .with_context(|| format!("workspace {} has no approval request {id}", workspace.name))?;
+    ensure!(
+        request.status == DecisionStatus::Pending,
+        "approval request {id} is {}; only pending requests can be withdrawn",
+        request.status
+    );
+    if let Some(url) = &request.url {
+        bail!("approval request {id} already opened {url}");
+    }
+    if request.target != Target::IssueOpen {
+        return close(tx, request, DecisionStatus::Withdrawn);
+    }
+    proposals::remove(tx, &request.key)?;
+    Ok(ApprovalRequest {
+        status: DecisionStatus::Withdrawn,
+        active: false,
+        ..request
+    })
 }
 
 /// Cancel requests or end lease grants; retain approved workspace grants.
@@ -584,9 +647,13 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
     store::require_ready(tx, &request.workspace_id)?;
     ensure!(
-        request.status != DecisionStatus::Outdated,
-        "approval request {} is outdated: it no longer applies",
-        request.id
+        !matches!(
+            request.status,
+            DecisionStatus::Outdated | DecisionStatus::Withdrawn
+        ),
+        "approval request {} is {}: it no longer applies",
+        request.id,
+        request.status
     );
     let status = if approve {
         DecisionStatus::Approved
@@ -704,6 +771,64 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    /// Withdraw the workspace's pending request `id`, which its agent no
+    /// longer needs, and take back its notification while unread; once
+    /// shown, its decider is told instead.
+    pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
+        let workspace = self.workspace(selector).await?;
+        let proposal = self
+            .approval_request(id)
+            .await?
+            .is_some_and(|request| request.target.is_proposal());
+        // Deciding a proposal opens its item under this gate before
+        // forgetting the request, which withdrawal must not split.
+        let _gate = match proposal {
+            true => Some(self.pr_gate.lock().await),
+            false => None,
+        };
+        let (request, retracted) = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let request = withdraw(&tx, &workspace, id)?;
+                let retracted = notifications::retract(
+                    &tx,
+                    &request.workspace,
+                    NotificationKind::ApprovalRequested,
+                    &request.notification(),
+                )?;
+                tx.commit()?;
+                Ok((request, retracted))
+            })
+            .await?;
+        if request.target.is_proposal() {
+            self.prune_proposal_files().await;
+        }
+        if !retracted {
+            self.announce_withdrawal(&request).await;
+        }
+        Ok(request)
+    }
+
+    /// Tell the decider of a withdrawn request that it needs no decision:
+    /// the coordinating agent it was routed to, or else the user.
+    async fn announce_withdrawal(&self, request: &ApprovalRequest) {
+        let message = request.withdrawal_notification();
+        if let Some(decider) = &request.decider
+            && self
+                .tell_agent(decider, format!("{}: {message}", request.workspace))
+                .await
+        {
+            return;
+        }
+        self.notify(
+            Some(&request.workspace),
+            NotificationKind::ApprovalWithdrawn,
+            message,
+        )
+        .await;
     }
 
     /// [`retire`] in its own transaction, such as for a stale request.
@@ -988,14 +1113,8 @@ impl Manager {
     async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
         self.notify(
             Some(workspace),
-            crate::daemon::notifications::NotificationKind::ApprovalRequested,
-            format!(
-                "approval {}: {}{}; approve with shoal approve {}",
-                request.id,
-                request.subject(),
-                reason_suffix(request),
-                request.id
-            ),
+            NotificationKind::ApprovalRequested,
+            request.notification(),
         )
         .await;
     }
@@ -1249,6 +1368,104 @@ mod tests {
                 Ok(())
             })
             .await
+    }
+
+    #[tokio::test]
+    async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications() {
+        let (root, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "asker".into(), None, None, None)
+            .await
+            .unwrap();
+        let other = manager
+            .create_workspace(&repo.id, "other".into(), None, None, None)
+            .await
+            .unwrap();
+        let request = async || {
+            let request = manager
+                .request_approval(sample(&workspace.id, Target::Port("web".into())))
+                .await
+                .unwrap()
+                .unwrap();
+            manager.notify_approval(&workspace.name, &request).await;
+            request
+        };
+        let unseen = request().await;
+        let error = manager
+            .withdraw_approval(&other.name, unseen.id)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("has no approval request"),
+            "{error:#}"
+        );
+
+        let withdrawn = manager
+            .withdraw_approval(&workspace.name, unseen.id)
+            .await
+            .unwrap();
+        assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
+        assert!(!withdrawn.active);
+        assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+        let default = proposals::ProposalDecision::default;
+        for error in [
+            manager
+                .decide_approval(unseen.id, true, None, default())
+                .await
+                .unwrap_err(),
+            manager
+                .withdraw_approval(&workspace.name, unseen.id)
+                .await
+                .unwrap_err(),
+        ] {
+            assert!(error.to_string().contains("is withdrawn"), "{error:#}");
+        }
+
+        // Requesting again asks anew under another number; once the user saw
+        // that one, withdrawing it tells them.
+        let shown = request().await;
+        assert_ne!(shown.id, unseen.id);
+        let notifications = manager.notifications(true, 50).await.unwrap();
+        manager
+            .mark_notifications_read(notifications.iter().map(|n| n.id).collect())
+            .await
+            .unwrap();
+        manager
+            .withdraw_approval(&workspace.name, shown.id)
+            .await
+            .unwrap();
+        let unread = manager.notifications(true, 50).await.unwrap();
+        assert_eq!(unread.len(), 1);
+        assert_eq!(unread[0].kind, NotificationKind::ApprovalWithdrawn);
+        assert_eq!(
+            unread[0].message,
+            format!(
+                "approval {}: port/web / default (workspace) was withdrawn; no decision needed",
+                shown.id
+            )
+        );
+
+        // Workspace processes withdraw only their own requests.
+        let caller = crate::daemon::scope::Caller {
+            workspace_id: workspace.id.clone(),
+            execution: None,
+        };
+        manager.issue_scope("scope".into(), caller).await;
+        for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
+            let mut method = crate::protocol::Method::WithdrawApproval {
+                workspace: target.clone(),
+                id: shown.id,
+            };
+            let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_ok();
+            assert_eq!(authorized, allowed);
+        }
     }
 
     #[test]

@@ -887,6 +887,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Questions(manager.questions(workspace.as_deref()).await?)
         }
         Method::ShowQuestion { id } => Body::Question(manager.question(id).await?),
+        Method::WithdrawApproval { workspace, id } => {
+            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&workspace, id).await?))
+        }
         Method::WithdrawQuestion { workspace, id } => {
             Body::Question(manager.withdraw_question(&workspace, id).await?)
         }

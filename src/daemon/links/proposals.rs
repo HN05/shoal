@@ -160,7 +160,7 @@ impl Manager {
 
     /// Delete copied files no pending proposal attaches any more. Failure
     /// only logs. The caller holds the PR gate.
-    async fn prune_proposal_files(&self) {
+    pub(crate) async fn prune_proposal_files(&self) {
         if let Err(error) = self.remove_unattached_files().await {
             crate::daemon::log::log!("proposal files not pruned: {error:#}");
         }
@@ -989,5 +989,52 @@ mod tests {
             format!("{error:#}").contains("changed while it waited"),
             "{error:#}"
         );
+    }
+    #[tokio::test]
+    async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "topic".into(), None, None, None)
+            .await
+            .unwrap();
+        let specification = Specification::Issue(IssueSpecification {
+            issue: NewIssue {
+                title: "Flaky".into(),
+                ..NewIssue::default()
+            },
+            link: false,
+            branch: "topic".into(),
+            commit: "head".into(),
+            agent: None,
+            duplicates: Vec::new(),
+            follow_up: None,
+        });
+        let request = proposal(
+            &workspace,
+            Target::IssueOpen,
+            proposals::ISSUE,
+            specification,
+        );
+        let (proposed, _) = manager
+            .store_proposal(request, proposals::propose_issue)
+            .await
+            .unwrap();
+        manager.notify_approval(&workspace.name, &proposed).await;
+        assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
+
+        let withdrawn = manager
+            .withdraw_approval(&workspace.name, proposed.id)
+            .await
+            .unwrap();
+        assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
+        // It would outlive the workspace, so it goes as a decided one does.
+        assert!(manager.approval_requests(None).await.unwrap().is_empty());
+        assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+        assert!(manager.pending_proposal(proposed).await.is_err());
     }
 }

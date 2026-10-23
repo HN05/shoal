@@ -573,6 +573,12 @@ pub enum Method {
     ShowQuestion {
         id: i64,
     },
+    /// Withdraw the workspace's pending approval request `id`, which its
+    /// agent no longer needs.
+    WithdrawApproval {
+        workspace: String,
+        id: i64,
+    },
     /// Close the workspace's open question `id`, which its agents no longer
     /// need answered.
     WithdrawQuestion {

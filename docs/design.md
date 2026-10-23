@@ -847,7 +847,10 @@ holds, because the user types them; their records keep a separate internal key
 that is never shown. A wait follows its question's number and text, so a later
 question reusing the number cannot answer it, and a keep or land request that no
 longer applies stays as outdated until the workspace goes, so its number is never
-reused and a decision meant for it cannot approve a newer commit.
+reused and a decision meant for it cannot approve a newer commit. An agent may
+withdraw a pending request it no longer needs, as it may a question: it stays as
+withdrawn on the same terms, except a proposed issue, which would outlive the
+workspace and goes as a decided proposal does.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
