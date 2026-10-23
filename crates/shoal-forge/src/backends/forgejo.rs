@@ -11,7 +11,7 @@ mod view;
 use super::{
     Backend,
     github_rest::{self, Dialect},
-    rest, tea,
+    image, rest, served_at, tea,
 };
 use crate::{
     ForgeRepo,
@@ -20,6 +20,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     items::{
         action::{Edit, MergeMethod, draft_title},
+        attach::{Attachment, Holder, Media},
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -32,7 +33,8 @@ use crate::{
         view::{Details, Review},
     },
     transport::api::{
-        HttpMethod, MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body,
+        HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page,
+        json_body,
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -386,6 +388,60 @@ impl Backend for Forgejo {
         name: &str,
     ) -> Result<CheckLog> {
         actions::failed_check_log(repo, account, url, name).await
+    }
+
+    /// tea cannot send a file, so uploads need fj's token.
+    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        let login = account.forgejo_login(&repo.host).await?;
+        ensure!(
+            !matches!(login, ForgejoLogin::Tea(_)),
+            "tea cannot upload files; save an fj login for {} with fj auth login",
+            repo.host
+        );
+        Ok(true)
+    }
+
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        _repository: Option<u64>,
+    ) -> Result<Request> {
+        let name = encode(attachment.name(), false);
+        let endpoint = match holder {
+            Holder::Item(number) => format!("issues/{number}/assets?name={name}"),
+            Holder::Comment(id) => format!("issues/comments/{id}/assets?name={name}"),
+            Holder::Repository => bail!("Forgejo keeps attached files with items and comments"),
+        };
+        Ok(Request::upload(
+            repo.repo_endpoint(&endpoint),
+            Upload {
+                path: attachment.path.clone(),
+                content_type: attachment.content_type()?,
+                field: Some("attachment"),
+            },
+        ))
+    }
+
+    fn uploaded_url(&self, response: &Value) -> Result<String> {
+        served_at(response, "browser_download_url")
+    }
+
+    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
+        match attachment.media() {
+            Media::Video => format!("<video src=\"{url}\" controls></video>"),
+            Media::Image => image(alt, url),
+        }
+    }
+
+    fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
+        let endpoint = repo.repo_endpoint(&format!("issues/comments/{id}"));
+        Ok(Request::new(
+            HttpMethod::Patch,
+            endpoint,
+            Some(json!({ "body": body })),
+        ))
     }
 }
 

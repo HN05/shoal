@@ -15,6 +15,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, Location, Operation},
     items::{
         action::{Edit, MergeMethod},
+        attach::{Attachment, Holder},
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
@@ -436,6 +437,20 @@ impl Backend for Bitbucket {
         _action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
         bail!("check {} is not a CI job Shoal can act on", job.name)
+    }
+
+    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+        bail!("Bitbucket has no API for attaching files")
+    }
+
+    fn upload(
+        &self,
+        _repo: &ForgeRepo,
+        _holder: Holder,
+        _attachment: &Attachment,
+        _repository: Option<u64>,
+    ) -> Result<Request> {
+        bail!("Bitbucket has no API for attaching files")
     }
 }
 

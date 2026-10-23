@@ -11,6 +11,7 @@ mod view;
 use super::{
     Backend,
     github_rest::{self, Dialect},
+    image,
 };
 use crate::{
     ForgeRepo, MERGED_HINT,
@@ -18,6 +19,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, Location, Operation},
     items::{
         action::{Edit, MergeMethod},
+        attach::{Attachment, Holder, Media},
         create::{NewIssue, NewPull},
         issue::require_open,
         item::{Current, Item, ItemState},
@@ -31,7 +33,7 @@ use crate::{
         view::{Details, Review},
     },
     transport::{
-        api::{HttpMethod, Request, encode, full_page},
+        api::{HttpMethod, Request, Upload, encode, full_page},
         programs,
     },
     updates::{DISCUSSION, Snapshot},
@@ -490,6 +492,59 @@ impl Backend for GitHub {
         action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
         actions::operation(jobs, selected, job, action)
+    }
+
+    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// GitHub uploads name the repository by its numeric ID.
+    async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
+        let repository = repo
+            .send(account, &Request::get(format!("repos/{}", repo.path)))
+            .await?;
+        repository["id"]
+            .as_u64()
+            .context("GitHub did not report the repository's ID")
+            .map(Some)
+    }
+
+    /// GitHub's REST API has no upload endpoint, so this uses the one gh
+    /// itself uses.
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        repository: Option<u64>,
+    ) -> Result<Request> {
+        ensure!(
+            holder == Holder::Repository,
+            "GitHub cannot attach files to {holder:?}"
+        );
+        let repository = repository.context("GitHub uploads need the repository's ID")?;
+        let content_type = attachment.content_type()?;
+        let name = encode(attachment.name(), false);
+        let content = encode(content_type, false);
+        Ok(Request::upload(
+            format!(
+                "https://uploads.{}/user-attachments/assets?name={name}&content_type={content}&repository_id={repository}",
+                repo.host
+            ),
+            Upload {
+                path: attachment.path.clone(),
+                content_type,
+                field: None,
+            },
+        ))
+    }
+
+    /// GitHub shows a video's bare URL as a player.
+    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
+        match attachment.media() {
+            Media::Video => url.to_owned(),
+            Media::Image => image(alt, url),
+        }
     }
 }
 

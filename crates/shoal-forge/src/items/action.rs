@@ -4,7 +4,6 @@ use std::borrow::Cow;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::state::states;
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
         item::{Current, Item, ItemState, draft_prefix},
         link::ItemKind,
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::Request,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,16 +246,9 @@ impl ForgeRepo {
         let body = self
             .attach(account, holder, &pending.body, &pending.attachments)
             .await?;
-        self.send(account, &self.comment_edit_request(id, &body))
+        self.send(account, &self.kind.edit_comment(self, id, &body)?)
             .await?;
         Ok(())
-    }
-
-    /// Replace the body of the discussion comment `id`, which only Forgejo,
-    /// keeping files with comments, needs.
-    fn comment_edit_request(&self, id: u64, body: &str) -> Request {
-        let endpoint = self.repo_endpoint(&format!("issues/comments/{id}"));
-        Request::new(HttpMethod::Patch, endpoint, Some(json!({ "body": body })))
     }
 
     /// The activity key of what `action` posted, from its response: the
@@ -382,7 +374,7 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
 mod tests {
     use super::*;
     use crate::{backends::ForgeKind, items::item::PrSummary};
-    use serde_json::Value;
+    use serde_json::{Value, json};
 
     fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         Current {

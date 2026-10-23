@@ -8,13 +8,8 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::{
-    ForgeKind, ForgeRepo,
-    account::{Account, ForgejoLogin},
-    transport::api::{Request, Upload, encode},
-};
+use crate::{ForgeRepo, account::Account, backends::Backend};
 
 /// The largest image Shoal uploads, which is GitHub's limit.
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
@@ -213,19 +208,7 @@ impl ForgeRepo {
             return Ok(false);
         }
         check_all(attachments)?;
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::GitLab => Ok(false),
-            ForgeKind::Forgejo => {
-                let login = account.forgejo_login(&self.host).await?;
-                ensure!(
-                    !matches!(login, ForgejoLogin::Tea(_)),
-                    "tea cannot upload files; save an fj login for {} with fj auth login",
-                    self.host
-                );
-                Ok(true)
-            }
-            ForgeKind::Bitbucket => bail!("Bitbucket has no API for attaching files"),
-        }
+        self.kind.check_uploads(self, account).await
     }
 
     /// The body to post `body` with, its checked files uploaded to the
@@ -265,95 +248,19 @@ impl ForgeRepo {
         body: &str,
         attachments: &[Attachment],
     ) -> Result<String> {
-        let repository = match self.kind {
-            ForgeKind::GitHub => Some(self.repository_id(account).await?),
-            _ => None,
-        };
+        let repository = self.kind.repository_id(self, account).await?;
         let mut urls = Vec::new();
         for attachment in attachments {
-            let request = self.upload_request(holder, attachment, repository)?;
+            let request = self.kind.upload(self, holder, attachment, repository)?;
             let response = self
                 .send(account, &request)
                 .await
                 .with_context(|| format!("could not upload {}", attachment.path.display()))?;
-            urls.push(self.uploaded_url(&response)?);
+            urls.push(self.kind.uploaded_url(&response)?);
         }
         Ok(embed(body, attachments, |index, alt| {
-            self.markup(&attachments[index], alt, &urls[index])
+            self.kind.markup(&attachments[index], alt, &urls[index])
         }))
-    }
-
-    /// GitHub uploads name the repository by its numeric ID.
-    async fn repository_id(&self, account: &Account) -> Result<u64> {
-        let repository = self
-            .send(account, &Request::get(format!("repos/{}", self.path)))
-            .await?;
-        repository["id"]
-            .as_u64()
-            .context("GitHub did not report the repository's ID")
-    }
-
-    fn upload_request(
-        &self,
-        holder: Holder,
-        attachment: &Attachment,
-        repository: Option<u64>,
-    ) -> Result<Request> {
-        let content_type = attachment.content_type()?;
-        let name = encode(attachment.name(), false);
-        let upload = |field| Upload {
-            path: attachment.path.clone(),
-            content_type,
-            field,
-        };
-        Ok(match (self.kind, holder) {
-            (ForgeKind::GitHub, Holder::Repository) => {
-                let repository = repository.context("GitHub uploads need the repository's ID")?;
-                let content = encode(content_type, false);
-                Request::upload(
-                    format!(
-                        "https://uploads.{}/user-attachments/assets?name={name}&content_type={content}&repository_id={repository}",
-                        self.host
-                    ),
-                    upload(None),
-                )
-            }
-            (ForgeKind::GitLab, Holder::Repository) => {
-                Request::upload(self.repo_endpoint("uploads"), upload(Some("file")))
-            }
-            (ForgeKind::Forgejo, Holder::Item(number)) => Request::upload(
-                self.repo_endpoint(&format!("issues/{number}/assets?name={name}")),
-                upload(Some("attachment")),
-            ),
-            (ForgeKind::Forgejo, Holder::Comment(id)) => Request::upload(
-                self.repo_endpoint(&format!("issues/comments/{id}/assets?name={name}")),
-                upload(Some("attachment")),
-            ),
-            _ => bail!("this forge cannot attach files to {holder:?}"),
-        })
-    }
-
-    /// Where the upload's response says the file is served.
-    fn uploaded_url(&self, response: &Value) -> Result<String> {
-        let field = match self.kind {
-            ForgeKind::Forgejo => "browser_download_url",
-            _ => "url",
-        };
-        response[field]
-            .as_str()
-            .filter(|url| !url.is_empty())
-            .map(str::to_owned)
-            .context("the forge did not report where it saved the file")
-    }
-
-    /// The Markdown that shows the uploaded file: an image, or a video player
-    /// as each forge renders one.
-    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
-        match (attachment.media(), self.kind) {
-            (Media::Video, ForgeKind::GitHub) => url.to_owned(),
-            (Media::Video, ForgeKind::Forgejo) => format!("<video src=\"{url}\" controls></video>"),
-            _ => format!("![{}]({url})", alt.replace(['[', ']'], "")),
-        }
     }
 }
 
@@ -604,35 +511,39 @@ mod tests {
         let video = attachment("/t/c.mp4", None);
         let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
         let request = gitlab
-            .upload_request(Holder::Repository, &png, None)
+            .kind
+            .upload(&gitlab, Holder::Repository, &png, None)
             .unwrap();
         assert_eq!(request.endpoint, "projects/group%2Frepo/uploads");
         assert_eq!(request.upload.unwrap().field, Some("file"));
         assert_eq!(
-            gitlab.markup(&video, "c", "/uploads/x/c.mp4"),
+            gitlab.kind.markup(&video, "c", "/uploads/x/c.mp4"),
             "![c](/uploads/x/c.mp4)"
         );
 
         let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
         assert!(
             github
-                .upload_request(Holder::Repository, &png, None)
+                .kind
+                .upload(&github, Holder::Repository, &png, None)
                 .is_err()
         );
         let request = github
-            .upload_request(Holder::Repository, &png, Some(42))
+            .kind
+            .upload(&github, Holder::Repository, &png, Some(42))
             .unwrap();
         assert_eq!(
             request.endpoint,
             "https://uploads.github.com/user-attachments/assets?name=a%20b.png&content_type=image%2Fpng&repository_id=42"
         );
         assert_eq!(request.upload.unwrap().field, None);
-        assert_eq!(github.markup(&png, "a [b]", "u"), "![a b](u)");
+        assert_eq!(github.kind.markup(&png, "a [b]", "u"), "![a b](u)");
 
         let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
         assert!(
             forgejo
-                .upload_request(Holder::Repository, &png, None)
+                .kind
+                .upload(&forgejo, Holder::Repository, &png, None)
                 .is_err()
         );
     }

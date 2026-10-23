@@ -12,6 +12,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
     items::{
         action::{Edit, MergeMethod},
+        attach::{Attachment, Holder},
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
@@ -24,7 +25,7 @@ use crate::{
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::{
-        api::{HttpMethod, Request, encode, full_page},
+        api::{HttpMethod, Request, Upload, encode, full_page},
         programs,
     },
     updates::{DISCUSSION, Snapshot},
@@ -456,6 +457,31 @@ impl Backend for GitLab {
             CiAction::Cancel => format!("jobs/{id}/cancel"),
         };
         Ok((Operation::Post(endpoint), vec![job.name.clone()]))
+    }
+
+    async fn check_uploads(&self, _repo: &ForgeRepo, _account: &Account) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        _repository: Option<u64>,
+    ) -> Result<Request> {
+        ensure!(
+            holder == Holder::Repository,
+            "GitLab cannot attach files to {holder:?}"
+        );
+        Ok(Request::upload(
+            repo.repo_endpoint("uploads"),
+            Upload {
+                path: attachment.path.clone(),
+                content_type: attachment.content_type()?,
+                field: Some("file"),
+            },
+        ))
     }
 }
 

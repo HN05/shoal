@@ -21,6 +21,7 @@ use crate::{
     ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
     items::{
         action::{Edit, MergeMethod},
+        attach::{Attachment, Holder},
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -354,6 +355,55 @@ pub(crate) trait Backend {
     ) -> Result<CheckLog> {
         anyhow::bail!("check logs currently require Forgejo Actions")
     }
+
+    /// Refuse uploads the forge or `account` cannot make, before anything
+    /// is posted. Returns whether the forge keeps uploads with the item or
+    /// comment that shows them rather than with the repository.
+    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
+
+    /// The repository's numeric ID, where the forge's uploads name it.
+    async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
+        Ok(None)
+    }
+
+    /// The request that uploads `attachment` to `holder`.
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        repository: Option<u64>,
+    ) -> Result<Request>;
+
+    /// Where an upload's response says the file is served.
+    fn uploaded_url(&self, response: &Value) -> Result<String> {
+        served_at(response, "url")
+    }
+
+    /// The Markdown that shows an uploaded file.
+    fn markup(&self, _attachment: &Attachment, alt: &str, url: &str) -> String {
+        image(alt, url)
+    }
+
+    /// The request that replaces the body of the discussion comment `id`,
+    /// where the forge keeps uploads with comments.
+    fn edit_comment(&self, _repo: &ForgeRepo, _id: u64, _body: &str) -> Result<Request> {
+        anyhow::bail!("this forge keeps attached files with the repository")
+    }
+}
+
+/// The URL in an upload response's `field`.
+fn served_at(response: &Value, field: &str) -> Result<String> {
+    response[field]
+        .as_str()
+        .filter(|url| !url.is_empty())
+        .map(str::to_owned)
+        .context("the forge did not report where it saved the file")
+}
+
+/// The Markdown image of `url`.
+fn image(alt: &str, url: &str) -> String {
+    format!("![{}]({url})", alt.replace(['[', ']'], ""))
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -681,6 +731,36 @@ impl Backend for ForgeKind {
         name: &str,
     ) -> Result<CheckLog> {
         dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
+    }
+
+    async fn check_uploads(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
+        dispatch!(self, backend => backend.check_uploads(repo, account).await)
+    }
+
+    async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
+        dispatch!(self, backend => backend.repository_id(repo, account).await)
+    }
+
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        repository: Option<u64>,
+    ) -> Result<Request> {
+        dispatch!(self, backend => backend.upload(repo, holder, attachment, repository))
+    }
+
+    fn uploaded_url(&self, response: &Value) -> Result<String> {
+        dispatch!(self, backend => backend.uploaded_url(response))
+    }
+
+    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
+        dispatch!(self, backend => backend.markup(attachment, alt, url))
+    }
+
+    fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
+        dispatch!(self, backend => backend.edit_comment(repo, id, body))
     }
 }
 
