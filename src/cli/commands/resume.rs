@@ -74,7 +74,7 @@ pub async fn run(
         return Ok(0);
     }
     let _commands = claim_commands(&mut saved.commands);
-    let selected = match saved.agents.as_slice() {
+    let (selected_id, selected) = match saved.agents.as_slice() {
         [] => {
             let report = report_commands(ctx, workspace, &saved.commands)?;
             ctx.show(&report, |_| {})?;
@@ -82,18 +82,12 @@ pub async fn run(
         }
         agents => select_agent(ctx, agents)?,
     };
-    let selected_id = selected
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(".recovery.json"))
-        .context("invalid recovery filename")?;
     ensure!(
-        !active(selected_id),
+        !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
     let _claim = claim(&selected)?;
-    let recorded: Record =
-        serde_json::from_slice(&std::fs::read(&selected)?).context("read recovery record")?;
+    let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
     if let Some(reason) = &recorded.stop_reason {
         eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
     }
@@ -229,11 +223,11 @@ async fn launch(
     .await
 }
 
-/// The stopped agent's recovery record to restore: the only one, or one picked
-/// on a terminal.
-fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<PathBuf> {
+/// The stopped agent's execution ID and recovery record to restore: the only
+/// one, or one picked on a terminal.
+fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<(String, PathBuf)> {
     match agents {
-        [(_, path)] => Ok(path.clone()),
+        [agent] => Ok(agent.clone()),
         agents if ctx.interactive() => {
             let labels = agents
                 .iter()
@@ -241,8 +235,8 @@ fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<PathBuf> 
                 .collect::<Vec<_>>();
             let choices = agents
                 .iter()
-                .zip(&labels)
-                .map(|((_, path), label)| (path.clone(), label.as_str()))
+                .cloned()
+                .zip(labels.iter().map(String::as_str))
                 .collect::<Vec<_>>();
             ui::pick_choice(ctx, "Resume agent> ", &choices)
         }
