@@ -383,6 +383,96 @@ impl Backend for Bitbucket {
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
     }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        _comments: bool,
+    ) -> Result<Details> {
+        view_details(repo, account, kind, number)
+            .await
+            .context(self.login_hint())
+    }
+
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        view_discussion(repo, account, kind, number, details)
+            .await
+            .context(self.login_hint())
+    }
+}
+
+async fn view_details(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    number: u64,
+) -> Result<Details> {
+    let value = repo
+        .send(account, &Request::get(repo.item_endpoint(kind, number)))
+        .await?;
+    let current = repo.current(kind, number, &value)?;
+    let author = match kind {
+        ItemKind::Issue => &value["reporter"],
+        ItemKind::Pr => &value["author"],
+    };
+    Ok(Details {
+        number,
+        title: current.item.title,
+        state: current.item.state.as_str().into(),
+        author: nickname(author),
+        created_at: text(&value["created_on"]).unwrap_or_default(),
+        labels: Vec::new(),
+        body: current.body,
+        pr: current
+            .item
+            .pr
+            .map(|pr| PrDetails::new(pr.head, pr.base, pr.draft)),
+        comments: None,
+        reviews: None,
+    })
+}
+
+/// Fills the item's comments and returns a pull request's reviews: one
+/// per inline thread, and one per approval or change request.
+async fn view_discussion(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    number: u64,
+    details: &mut Details,
+) -> Result<Option<Vec<Review>>> {
+    let endpoint = format!("{}/comments", repo.item_endpoint(kind, number));
+    let (comments, mut reviews) = threads(&repo.pages(account, &endpoint).await?);
+    details.comments = Some(comments);
+    if kind == ItemKind::Issue {
+        return Ok(None);
+    }
+    let verdicts = Bitbucket.verdicts(repo, account, number).await?;
+    reviews.extend(verdicts.into_iter().map(|(author, verdict)| {
+        Review {
+            author,
+            state: match verdict {
+                Verdict::Approved => "approved",
+                Verdict::ChangesRequested => "changes_requested",
+                Verdict::Commented => "commented",
+            }
+            .into(),
+            submitted_at: String::new(),
+            body: String::new(),
+            comments: Vec::new(),
+        }
+    }));
+    Ok(Some(reviews))
 }
 
 impl RestReads for Bitbucket {
@@ -496,72 +586,6 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
         None => format!("Bearer {token}"),
     };
     Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
-}
-
-impl ForgeRepo {
-    pub(crate) async fn bitbucket_details(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Details> {
-        let value = self
-            .send(account, &Request::get(self.item_endpoint(kind, number)))
-            .await?;
-        let current = self.current(kind, number, &value)?;
-        let author = match kind {
-            ItemKind::Issue => &value["reporter"],
-            ItemKind::Pr => &value["author"],
-        };
-        Ok(Details {
-            number,
-            title: current.item.title,
-            state: current.item.state.as_str().into(),
-            author: nickname(author),
-            created_at: text(&value["created_on"]).unwrap_or_default(),
-            labels: Vec::new(),
-            body: current.body,
-            pr: current
-                .item
-                .pr
-                .map(|pr| PrDetails::new(pr.head, pr.base, pr.draft)),
-            comments: None,
-            reviews: None,
-        })
-    }
-
-    /// Fills the item's comments and returns a pull request's reviews: one
-    /// per inline thread, and one per approval or change request.
-    pub(crate) async fn bitbucket_discussion(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        details: &mut Details,
-    ) -> Result<Option<Vec<Review>>> {
-        let endpoint = format!("{}/comments", self.item_endpoint(kind, number));
-        let (comments, mut reviews) = threads(&self.pages(account, &endpoint).await?);
-        details.comments = Some(comments);
-        if kind == ItemKind::Issue {
-            return Ok(None);
-        }
-        let verdicts = Bitbucket.verdicts(self, account, number).await?;
-        reviews.extend(verdicts.into_iter().map(|(author, verdict)| {
-            Review {
-                author,
-                state: match verdict {
-                    Verdict::Approved => "approved",
-                    Verdict::ChangesRequested => "changes_requested",
-                    Verdict::Commented => "commented",
-                }
-                .into(),
-                submitted_at: String::new(),
-                body: String::new(),
-                comments: Vec::new(),
-            }
-        }));
-        Ok(Some(reviews))
-    }
 }
 
 /// Bitbucket's strategy for each merge method; rebasing fast-forwards.

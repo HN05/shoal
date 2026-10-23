@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 pub(crate) mod threads;
+mod view;
 
 use super::{
     Backend,
@@ -26,6 +27,7 @@ use crate::{
     review::{
         status::{PrStatus, Verdict, forgejo_reviews},
         thread::{Target, Thread},
+        view::{Details, Review},
     },
     transport::api::{
         HttpMethod, MAX_RESPONSE_BYTES, Request, authorization, full_page, json_body,
@@ -281,6 +283,32 @@ impl Backend for Forgejo {
         url: &str,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
+    }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        _comments: bool,
+    ) -> Result<Details> {
+        view::details(repo, account, kind, number)
+            .await
+            .context(self.login_hint())
+    }
+
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        view::discussion(repo, account, kind, number, details)
+            .await
+            .context(self.login_hint())
     }
 }
 

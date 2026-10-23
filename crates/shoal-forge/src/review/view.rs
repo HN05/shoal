@@ -1,23 +1,15 @@
 //! An issue's or PR's content, status and discussion, read on request so
-//! callers need not know whether the forge is GitHub or Forgejo.
-use anyhow::{Context, Result, ensure};
+//! callers need not know which forge serves it.
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ForgeKind, ForgeRepo,
+    ForgeRepo,
     account::Account,
-    backends::{
-        Backend,
-        forgejo::threads::{review_comments, thread_key, threads as forgejo_threads},
-        github::{
-            Query, gh,
-            threads::{GitHubThread, threads as github_threads},
-        },
-    },
+    backends::Backend,
     items::link::ItemKind,
     review::status::{CheckResult, PrStatus, ReviewState},
-    transport::api::Request,
 };
 
 /// A failed lookup leaves `details` empty, or the discussion it would have
@@ -139,23 +131,9 @@ impl ForgeRepo {
             ItemKind::Issue => self.issue(url)?.0,
             ItemKind::Pr => self.pull(url)?.0,
         };
-        let content = async {
-            match self.kind {
-                ForgeKind::GitHub => self.github_details(account, kind, number, comments).await,
-                ForgeKind::Forgejo => self
-                    .forgejo_details(account, kind, number)
-                    .await
-                    .context(self.kind.login_hint()),
-                ForgeKind::GitLab => self
-                    .gitlab_details(account, kind, number)
-                    .await
-                    .context(self.kind.login_hint()),
-                ForgeKind::Bitbucket => self
-                    .bitbucket_details(account, kind, number)
-                    .await
-                    .context(self.kind.login_hint()),
-            }
-        };
+        let content = self
+            .kind
+            .view_details(self, account, kind, number, comments);
         let status = async {
             match kind {
                 ItemKind::Pr => Some(self.pr_status(account, url).await),
@@ -168,21 +146,10 @@ impl ForgeRepo {
             pr.record(status, errors);
         }
         if comments {
-            let discussion = match self.kind {
-                ForgeKind::GitHub => self.github_reviews(account, kind, number).await,
-                ForgeKind::Forgejo => self
-                    .forgejo_discussion(account, kind, number, &mut details)
-                    .await
-                    .context(self.kind.login_hint()),
-                ForgeKind::GitLab => self
-                    .gitlab_discussion(account, kind, number, &mut details)
-                    .await
-                    .context(self.kind.login_hint()),
-                ForgeKind::Bitbucket => self
-                    .bitbucket_discussion(account, kind, number, &mut details)
-                    .await
-                    .context(self.kind.login_hint()),
-            };
+            let discussion = self
+                .kind
+                .view_discussion(self, account, kind, number, &mut details)
+                .await;
             match discussion {
                 Ok(Some(reviews)) => details.reviews = Some(reviews),
                 Ok(None) => {}
@@ -190,100 +157,6 @@ impl ForgeRepo {
             }
         }
         Ok(details)
-    }
-
-    async fn github_details(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        comments: bool,
-    ) -> Result<Details> {
-        let id = number.to_string();
-        let repository = format!("{}/{}", self.host, self.path);
-        let (command, extra) = match kind {
-            ItemKind::Issue => ("issue", ""),
-            ItemKind::Pr => ("pr", ",headRefName,baseRefName,isDraft"),
-        };
-        let fields = format!(
-            "number,title,body,state,author,labels,createdAt{extra}{}",
-            if comments { ",comments" } else { "" }
-        );
-        let args = [
-            command,
-            "view",
-            &id,
-            "--repo",
-            &repository,
-            "--json",
-            &fields,
-        ];
-        let output = gh(account, &args, Query::View).await?;
-        github_details(&output, kind, number)
-    }
-
-    /// Reviews with their inline comments; issues have none.
-    async fn github_reviews(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Option<Vec<Review>>> {
-        if kind == ItemKind::Issue {
-            return Ok(None);
-        }
-        let pages = |resource: &'static str| {
-            let endpoint = format!("repos/{}/pulls/{number}/{resource}", self.path);
-            async move {
-                let args = [
-                    "api",
-                    "--hostname",
-                    &self.host,
-                    &endpoint,
-                    "--paginate",
-                    "--slurp",
-                ];
-                let output = gh(account, &args, Query::View).await?;
-                let pages: Vec<Vec<Value>> = serde_json::from_str(&output)
-                    .with_context(|| format!("invalid gh {resource} response"))?;
-                Ok::<_, anyhow::Error>(pages.into_iter().flatten().collect::<Vec<_>>())
-            }
-        };
-        let (reviews, comments, threads) = tokio::try_join!(
-            pages("reviews"),
-            pages("comments"),
-            github_threads(self, account, number)
-        )?;
-        github_reviews(&reviews, &comments, &threads).map(Some)
-    }
-
-    async fn forgejo_details(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Details> {
-        let item = self
-            .send(account, &Request::get(self.item_endpoint(kind, number)))
-            .await?;
-        forgejo_details(&item, kind, number)
-    }
-
-    /// Fills the item's comments and returns a PR's reviews.
-    async fn forgejo_discussion(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        details: &mut Details,
-    ) -> Result<Option<Vec<Review>>> {
-        let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
-        let comments = self.send(account, &Request::get(endpoint)).await?;
-        details.comments = Some(forgejo_comments(&comments)?);
-        if kind == ItemKind::Issue {
-            return Ok(None);
-        }
-        forgejo_reviews(&review_comments(self, account, number).await?).map(Some)
     }
 }
 
@@ -306,7 +179,7 @@ impl PrDetails {
         }
     }
 
-    fn read(head: &Value, base: &Value, draft: bool) -> Result<Self> {
+    pub(crate) fn read(head: &Value, base: &Value, draft: bool) -> Result<Self> {
         Ok(Self::new(
             head.as_str().context("PR has no head branch")?.into(),
             base.as_str().context("PR has no base branch")?.into(),
@@ -315,181 +188,8 @@ impl PrDetails {
     }
 }
 
-fn github_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
-    let item: Value = serde_json::from_str(text).context("invalid gh response")?;
-    ensure!(item["number"] == number, "gh returned a different item");
-    let pr = match kind {
-        ItemKind::Issue => None,
-        ItemKind::Pr => Some(PrDetails::read(
-            &item["headRefName"],
-            &item["baseRefName"],
-            item["isDraft"].as_bool().unwrap_or_default(),
-        )?),
-    };
-    let comments = match item.get("comments") {
-        Some(comments) => Some(
-            comments
-                .as_array()
-                .context("gh comments are not a list")?
-                .iter()
-                .map(|comment| Comment {
-                    author: login(&comment["author"]),
-                    created_at: text_field(&comment["createdAt"]),
-                    body: text_field(&comment["body"]),
-                })
-                .collect(),
-        ),
-        None => None,
-    };
-    Ok(Details {
-        number,
-        title: required(&item["title"], "title")?,
-        state: required(&item["state"], "state")?.to_ascii_lowercase(),
-        author: login(&item["author"]),
-        created_at: text_field(&item["createdAt"]),
-        labels: labels(&item["labels"]),
-        body: text_field(&item["body"]),
-        pr,
-        comments,
-        reviews: None,
-    })
-}
-
-/// REST reviews and inline comments; each comment belongs to the review that
-/// posted it, including replies, and takes its thread's resolution.
-fn github_reviews(
-    reviews: &[Value],
-    comments: &[Value],
-    threads: &[GitHubThread],
-) -> Result<Vec<Review>> {
-    let mut result = Vec::new();
-    for review in reviews {
-        let Some(state) = review_state(review["state"].as_str())? else {
-            continue;
-        };
-        let id = review["id"].as_u64().context("GitHub review has no ID")?;
-        result.push(Review {
-            author: login(&review["user"]),
-            state,
-            submitted_at: text_field(&review["submitted_at"]),
-            body: text_field(&review["body"]),
-            comments: comments
-                .iter()
-                .filter(|comment| comment["pull_request_review_id"].as_u64() == Some(id))
-                .map(|comment| {
-                    let id = comment["id"].as_u64().unwrap_or_default();
-                    let thread = threads.iter().find(|thread| thread.comments.contains(&id));
-                    review_comment(
-                        comment,
-                        &comment["line"],
-                        &comment["original_line"],
-                        comment["in_reply_to_id"].as_u64().unwrap_or(id),
-                        thread.map(|thread| thread.resolved),
-                    )
-                })
-                .collect(),
-        });
-    }
-    Ok(result)
-}
-
-fn forgejo_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
-    ensure!(
-        item["number"] == number,
-        "Forgejo returned a different item"
-    );
-    let pr = match kind {
-        ItemKind::Issue => {
-            ensure!(
-                item["pull_request"].is_null(),
-                "#{number} is a PR, not an issue"
-            );
-            None
-        }
-        ItemKind::Pr => Some(PrDetails::read(
-            &item["head"]["ref"],
-            &item["base"]["ref"],
-            item["draft"].as_bool().unwrap_or_default(),
-        )?),
-    };
-    let state = if item["merged"].as_bool() == Some(true) {
-        "merged".to_owned()
-    } else {
-        required(&item["state"], "state")?
-    };
-    Ok(Details {
-        number,
-        title: required(&item["title"], "title")?,
-        state,
-        author: login(&item["user"]),
-        created_at: text_field(&item["created_at"]),
-        labels: labels(&item["labels"]),
-        body: text_field(&item["body"]),
-        pr,
-        comments: None,
-        reviews: None,
-    })
-}
-
-fn forgejo_comments(comments: &Value) -> Result<Vec<Comment>> {
-    Ok(comments
-        .as_array()
-        .context("Forgejo comments are not a list")?
-        .iter()
-        .map(|comment| Comment {
-            author: login(&comment["user"]),
-            created_at: text_field(&comment["created_at"]),
-            body: text_field(&comment["body"]),
-        })
-        .collect())
-}
-
-/// Each review with the inline comments Forgejo lists under it, replies
-/// included, each in its review's thread on the same lines.
-fn forgejo_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
-    let mut result = Vec::new();
-    for (review, comments) in reviews {
-        let Some(state) = review_state(review["state"].as_str())? else {
-            continue;
-        };
-        let id = review["id"].as_u64().unwrap_or_default();
-        let comments: Vec<(u64, &Value)> = comments
-            .as_array()
-            .context("Forgejo review comments are not a list")?
-            .iter()
-            .map(|comment| (id, comment))
-            .collect();
-        let threads = forgejo_threads(&comments);
-        let comments = comments
-            .iter()
-            .map(|&(review, comment)| {
-                let id = comment["id"].as_u64().unwrap_or_default();
-                let (thread, resolved) = threads
-                    .get(&thread_key(review, comment))
-                    .copied()
-                    .unwrap_or((id, false));
-                review_comment(
-                    comment,
-                    &comment["position"],
-                    &comment["original_position"],
-                    thread,
-                    Some(resolved),
-                )
-            })
-            .collect();
-        result.push(Review {
-            author: login(&review["user"]),
-            state,
-            submitted_at: text_field(&review["submitted_at"]),
-            body: text_field(&review["body"]),
-            comments,
-        });
-    }
-    Ok(result)
-}
-
 /// A submitted review's state; pending drafts and review requests are not reviews.
-fn review_state(state: Option<&str>) -> Result<Option<String>> {
+pub(crate) fn review_state(state: Option<&str>) -> Result<Option<String>> {
     Ok(Some(
         match state.context("review has no state")? {
             "APPROVED" => "approved",
@@ -504,7 +204,7 @@ fn review_state(state: Option<&str>) -> Result<Option<String>> {
 }
 
 /// The line on the current side, or the original line of an outdated comment.
-fn review_comment(
+pub(crate) fn review_comment(
     comment: &Value,
     line: &Value,
     original: &Value,
@@ -524,23 +224,23 @@ fn review_comment(
     }
 }
 
-fn required(value: &Value, field: &str) -> Result<String> {
+pub(crate) fn required(value: &Value, field: &str) -> Result<String> {
     value
         .as_str()
         .map(str::to_owned)
         .with_context(|| format!("item has no {field}"))
 }
 
-fn text_field(value: &Value) -> String {
+pub(crate) fn text_field(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_owned()
 }
 
 /// A deleted account has no user.
-fn login(user: &Value) -> String {
+pub(crate) fn login(user: &Value) -> String {
     user["login"].as_str().unwrap_or("ghost").to_owned()
 }
 
-fn labels(labels: &Value) -> Vec<String> {
+pub(crate) fn labels(labels: &Value) -> Vec<String> {
     labels
         .as_array()
         .into_iter()
@@ -552,138 +252,6 @@ fn labels(labels: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn github_issue_and_pr_details_read_content_and_comments() {
-        let issue = json!({"number": 4, "title": "Crash", "body": "Steps", "state": "OPEN",
-            "author": {"login": "ann"}, "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z",
-            "comments": [{"author": {"login": "bob"}, "createdAt": "2026-01-02T00:00:00Z", "body": "Same here"}]});
-        let details = github_details(&issue.to_string(), ItemKind::Issue, 4).unwrap();
-        assert_eq!(details.title, "Crash");
-        assert_eq!(details.state, "open");
-        assert_eq!(details.author, "ann");
-        assert_eq!(details.labels, ["bug"]);
-        assert!(details.pr.is_none());
-        assert_eq!(details.comments.unwrap()[0].body, "Same here");
-        assert!(github_details(&issue.to_string(), ItemKind::Issue, 5).is_err());
-
-        let pull = json!({"number": 7, "title": "Fix", "body": "", "state": "MERGED",
-            "author": null, "labels": [], "createdAt": "2026-01-01T00:00:00Z",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": true});
-        let details = github_details(&pull.to_string(), ItemKind::Pr, 7).unwrap();
-        assert_eq!(details.state, "merged");
-        assert_eq!(details.author, "ghost");
-        assert!(details.comments.is_none());
-        let pr = details.pr.unwrap();
-        assert_eq!(
-            (pr.head.as_str(), pr.base.as_str(), pr.draft),
-            ("topic", "main", true)
-        );
-    }
-
-    #[test]
-    fn github_inline_comments_join_the_review_that_posted_them() {
-        let reviews = [
-            json!({"id": 1, "user": {"login": "bot"}, "state": "CHANGES_REQUESTED", "body": "Fix it", "submitted_at": "t1"}),
-            json!({"id": 2, "user": {"login": "me"}, "state": "PENDING", "body": "", "submitted_at": null}),
-            json!({"id": 3, "user": {"login": "me"}, "state": "COMMENTED", "body": "", "submitted_at": "t2"}),
-        ];
-        let comments = [
-            json!({"id": 10, "pull_request_review_id": 1, "user": {"login": "bot"}, "path": "a.rs", "line": 3, "original_line": 2, "body": "Bug", "created_at": "t1"}),
-            json!({"id": 11, "in_reply_to_id": 10, "pull_request_review_id": 3, "user": {"login": "me"}, "path": "a.rs", "line": null, "original_line": 2, "body": "Fixed", "created_at": "t2"}),
-            json!({"id": 12, "pull_request_review_id": 3, "user": {"login": "me"}, "path": "b.rs", "line": 1, "body": "New", "created_at": "t2"}),
-        ];
-        let threads = [GitHubThread {
-            node: "T_1".into(),
-            resolved: true,
-            comments: vec![10, 11],
-        }];
-        let reviews = github_reviews(&reviews, &comments, &threads).unwrap();
-        assert_eq!(reviews.len(), 2);
-        assert_eq!(reviews[0].state, "changes_requested");
-        let bug = &reviews[0].comments[0];
-        assert_eq!((bug.id, bug.thread, bug.line), (10, 10, Some(3)));
-        assert_eq!(bug.resolved, Some(true));
-        let fixed = &reviews[1].comments[0];
-        assert_eq!((fixed.body.as_str(), fixed.line), ("Fixed", Some(2)));
-        assert_eq!(
-            (fixed.id, fixed.thread, fixed.resolved),
-            (11, 10, Some(true))
-        );
-        // A thread GraphQL did not list has unknown resolution.
-        assert_eq!(reviews[1].comments[1].resolved, None);
-        assert!(github_reviews(&[json!({"id": 4, "state": "LATER"})], &[], &[]).is_err());
-    }
-
-    #[test]
-    fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
-        let pull = json!({"number": 541, "title": "Share", "body": "Why", "state": "closed",
-            "merged": true, "user": {"login": "dev"}, "labels": [{"name": "type/chore"}],
-            "created_at": "2026-10-10T01:00:00+02:00", "head": {"ref": "topic"}, "base": {"ref": "main"},
-            "draft": false, "pull_request": {"merged": true}});
-        let details = forgejo_details(&pull, ItemKind::Pr, 541).unwrap();
-        assert_eq!(details.state, "merged");
-        assert_eq!(details.labels, ["type/chore"]);
-        assert_eq!(details.pr.unwrap().head, "topic");
-        assert!(forgejo_details(&pull, ItemKind::Issue, 541).is_err());
-
-        let issue = json!({"number": 548, "title": "View", "body": "Text", "state": "open",
-            "user": {"login": "HN05"}, "labels": [], "created_at": "t", "pull_request": null});
-        let details = forgejo_details(&issue, ItemKind::Issue, 548).unwrap();
-        assert_eq!(
-            (details.state.as_str(), details.body.as_str()),
-            ("open", "Text")
-        );
-    }
-
-    #[test]
-    fn forgejo_reviews_carry_inline_comments_and_resolution() {
-        let reviews = [
-            (
-                json!({"id": 1, "user": {"login": "bot"}, "state": "COMMENT", "body": "Blocker", "submitted_at": "t1"}),
-                json!([
-                    {"id": 20, "user": {"login": "bot"}, "path": "a.py", "position": 182, "original_position": 0,
-                        "body": "Fetch first", "created_at": "t1", "resolver": {"login": "dev"}},
-                    {"id": 21, "user": {"login": "dev"}, "path": "a.py", "position": 182, "original_position": 0,
-                        "body": "Done", "created_at": "t2", "resolver": null},
-                    {"id": 22, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
-                        "body": "Old", "created_at": "t3", "resolver": null}
-                ]),
-            ),
-            (
-                json!({"id": 2, "user": {"login": "x"}, "state": "REQUEST_REVIEW", "body": ""}),
-                json!([]),
-            ),
-            (
-                json!({"id": 3, "user": {"login": "dev"}, "state": "COMMENT", "body": "", "submitted_at": "t4"}),
-                json!([
-                    {"id": 23, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
-                        "body": "Reply", "created_at": "t4", "resolver": null}
-                ]),
-            ),
-        ];
-        let reviews = forgejo_reviews(&reviews).unwrap();
-        assert_eq!(reviews.len(), 2);
-        assert_eq!(reviews[0].state, "commented");
-        let comments = &reviews[0].comments;
-        let thread =
-            |comment: &ReviewComment| (comment.id, comment.thread, comment.line, comment.resolved);
-        assert_eq!(thread(&comments[0]), (20, 20, Some(182), Some(true)));
-        assert_eq!(thread(&comments[1]), (21, 20, Some(182), Some(true)));
-        assert_eq!(thread(&comments[2]), (22, 22, Some(9), Some(false)));
-        // Another review's comment on the same line starts its own thread.
-        assert_eq!(
-            thread(&reviews[1].comments[0]),
-            (23, 23, Some(9), Some(false))
-        );
-        assert_eq!(
-            forgejo_comments(&json!([{"user": {"login": "a"}, "body": "b", "created_at": "c"}]))
-                .unwrap()[0]
-                .author,
-            "a"
-        );
-    }
 
     #[test]
     fn failed_views_omit_details_and_round_trip() {

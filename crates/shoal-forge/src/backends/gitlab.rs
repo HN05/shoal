@@ -391,6 +391,93 @@ impl Backend for GitLab {
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, url).await
     }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        _comments: bool,
+    ) -> Result<Details> {
+        view_details(repo, account, kind, number)
+            .await
+            .context(self.login_hint())
+    }
+
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        view_discussion(repo, account, kind, number, details)
+            .await
+            .context(self.login_hint())
+    }
+}
+
+async fn view_details(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    number: u64,
+) -> Result<Details> {
+    let value = repo
+        .send(account, &Request::get(repo.item_endpoint(kind, number)))
+        .await?;
+    let current = repo.current(kind, number, &value)?;
+    let pr = match current.item.pr {
+        Some(pr) => Some(PrDetails::new(pr.head, pr.base, pr.draft)),
+        None => None,
+    };
+    Ok(Details {
+        number,
+        title: current.item.title,
+        state: current.item.state.as_str().into(),
+        author: username(&value["author"]),
+        created_at: text(&value["created_at"]).unwrap_or_default(),
+        labels: current.item.labels,
+        body: current.body,
+        pr,
+        comments: None,
+        reviews: None,
+    })
+}
+
+/// Fills the item's comments and returns a merge request's reviews: one
+/// per diff thread, and one per approval or change request.
+async fn view_discussion(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    number: u64,
+    details: &mut Details,
+) -> Result<Option<Vec<Review>>> {
+    let endpoint = format!("{}/discussions", repo.item_endpoint(kind, number));
+    let (comments, mut reviews) = discussions(&repo.pages(account, &endpoint).await?);
+    details.comments = Some(comments);
+    if kind == ItemKind::Issue {
+        return Ok(None);
+    }
+    let verdicts = GitLab.verdicts(repo, account, number).await?;
+    reviews.extend(verdicts.into_iter().filter_map(|(author, verdict)| {
+        let state = match verdict {
+            Verdict::Approved => "approved",
+            Verdict::ChangesRequested => "changes_requested",
+            Verdict::Commented => return None,
+        };
+        Some(Review {
+            author,
+            state: state.into(),
+            submitted_at: String::new(),
+            body: String::new(),
+            comments: Vec::new(),
+        })
+    }));
+    Ok(Some(reviews))
 }
 
 impl RestReads for GitLab {
@@ -452,69 +539,6 @@ const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_s
 
 /// Title prefixes that make a merge request a draft, including the former `WIP:`.
 const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
-
-impl ForgeRepo {
-    pub(crate) async fn gitlab_details(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<Details> {
-        let value = self
-            .send(account, &Request::get(self.item_endpoint(kind, number)))
-            .await?;
-        let current = self.current(kind, number, &value)?;
-        let pr = match current.item.pr {
-            Some(pr) => Some(PrDetails::new(pr.head, pr.base, pr.draft)),
-            None => None,
-        };
-        Ok(Details {
-            number,
-            title: current.item.title,
-            state: current.item.state.as_str().into(),
-            author: username(&value["author"]),
-            created_at: text(&value["created_at"]).unwrap_or_default(),
-            labels: current.item.labels,
-            body: current.body,
-            pr,
-            comments: None,
-            reviews: None,
-        })
-    }
-
-    /// Fills the item's comments and returns a merge request's reviews: one
-    /// per diff thread, and one per approval or change request.
-    pub(crate) async fn gitlab_discussion(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        details: &mut Details,
-    ) -> Result<Option<Vec<Review>>> {
-        let endpoint = format!("{}/discussions", self.item_endpoint(kind, number));
-        let (comments, mut reviews) = discussions(&self.pages(account, &endpoint).await?);
-        details.comments = Some(comments);
-        if kind == ItemKind::Issue {
-            return Ok(None);
-        }
-        let verdicts = GitLab.verdicts(self, account, number).await?;
-        reviews.extend(verdicts.into_iter().filter_map(|(author, verdict)| {
-            let state = match verdict {
-                Verdict::Approved => "approved",
-                Verdict::ChangesRequested => "changes_requested",
-                Verdict::Commented => return None,
-            };
-            Some(Review {
-                author,
-                state: state.into(),
-                submitted_at: String::new(),
-                body: String::new(),
-                comments: Vec::new(),
-            })
-        }));
-        Ok(Some(reviews))
-    }
-}
 
 /// GitLab merges with the project's merge method, optionally squashing.
 fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Result<Request> {

@@ -26,7 +26,11 @@ use crate::{
         list,
     },
     repo::locator::ItemRoute,
-    review::{status::PrStatus, thread::Thread},
+    review::{
+        status::PrStatus,
+        thread::Thread,
+        view::{Details, Review},
+    },
     transport::api::Request,
     updates::Snapshot,
 };
@@ -274,6 +278,27 @@ pub(crate) trait Backend {
         number: u64,
         url: &str,
     ) -> Result<PrStatus>;
+
+    /// The item's content for a view, with its comments when `comments` is
+    /// set and the forge reads them with the item.
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comments: bool,
+    ) -> Result<Details>;
+
+    /// Fills the comments `details` lacks and returns a PR's reviews.
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>>;
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.
@@ -528,6 +553,28 @@ impl Backend for ForgeKind {
         url: &str,
     ) -> Result<PrStatus> {
         dispatch!(self, backend => backend.pr_status(repo, account, number, url).await)
+    }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comments: bool,
+    ) -> Result<Details> {
+        dispatch!(self, backend => backend.view_details(repo, account, kind, number, comments).await)
+    }
+
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details).await)
     }
 }
 

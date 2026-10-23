@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 mod activity;
 pub(crate) mod threads;
+mod view;
 
 use super::{
     Backend,
@@ -25,6 +26,7 @@ use crate::{
     review::{
         status::PrStatus,
         thread::{Target, Thread},
+        view::{Details, Review},
     },
     transport::{
         api::{HttpMethod, Request, encode, full_page},
@@ -432,6 +434,29 @@ impl Backend for GitHub {
         url: &str,
     ) -> Result<PrStatus> {
         activity::pr_status(repo, account, number, url).await
+    }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comments: bool,
+    ) -> Result<Details> {
+        view::details(repo, account, kind, number, comments).await
+    }
+
+    /// `gh` reads the comments with the item; this reads the reviews.
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        _details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        view::reviews(repo, account, kind, number).await
     }
 }
 
