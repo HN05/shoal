@@ -1955,6 +1955,7 @@ shoal issue list --label bug flaky  # search by text; --state, --author and --li
 shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
+shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal labels                        # the repository's labels with their descriptions
 shoal capabilities                  # what the repository's forge supports
 ```
@@ -2028,6 +2029,19 @@ while another issue is assigned. A workspace being removed refuses it. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings and when removal started before
 the workspace could record and link the new issue.
+
+`--repo` opens the issue in another repository, named as `OWNER/NAME` on the
+workspace's forge or by a repository URL on any forge, still as the agent
+account. The workspace's required labels and templates do not apply there, and
+`--link` is refused. `[issue] other_repositories` decides it for workspace
+processes: `"propose"` records an [approval request](#approval-for-agent-issues-and-prs)
+naming the repository, `"direct"` opens it at once, and `"deny"` refuses it.
+Unscoped callers always open directly.
+
+```toml
+[issue]
+other_repositories = "deny" # Default: "propose"
+```
 
 #### Approval for agent issues and PRs
 

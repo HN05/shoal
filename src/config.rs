@@ -360,6 +360,8 @@ pub struct Pr {
 pub struct Issue {
     /// Entries a new issue's labels must each start with.
     pub required_labels: Vec<String>,
+    /// Whether scoped callers may open issues in other repositories.
+    pub other_repositories: repo::OtherRepositories,
 }
 
 /// Which agent forge writes wait for the user's approval.

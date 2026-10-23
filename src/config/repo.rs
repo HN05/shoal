@@ -399,12 +399,14 @@ pub struct Pr {
     pub required_labels: Option<Vec<String>>,
 }
 
-/// The labels a new issue needs.
+/// The labels a new issue needs, and whether agents may open issues in
+/// other repositories.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Issue {
     /// An empty list turns inherited entries off.
     pub required_labels: Option<Vec<String>>,
+    pub other_repositories: Option<OtherRepositories>,
 }
 
 /// Whether `shoal land` pushes the default branch to its upstream afterwards,
@@ -424,6 +426,18 @@ states!(
         #[default]
         Direct => "direct",
         Propose => "propose",
+    }
+);
+
+states!(
+    #[derive(Default)]
+    /// Whether a scoped caller may open an issue in another repository than
+    /// its workspace's, at once or after the user's approval.
+    OtherRepositories {
+        Deny => "deny",
+        #[default]
+        Propose => "propose",
+        Direct => "direct",
     }
 );
 

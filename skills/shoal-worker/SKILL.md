@@ -46,7 +46,10 @@ repository. `shoal --json capabilities` lists what the repository's forge
 supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
-workspace, and only `--link` assigns it to you. Before opening one, search for an
+workspace, and only `--link` assigns it to you. A problem that belongs to another
+repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`
+(or a repository URL on another forge); it usually becomes a proposal, and the
+repository may refuse it. Before opening one, search for an
 existing issue with `shoal --json issue list <words>` (`--state all`, `--label`,
 `--author`, `--limit`; `pr list` takes the same), and comment there instead of
 opening a duplicate. Merging is

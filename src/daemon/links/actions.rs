@@ -7,7 +7,11 @@ use super::{
     wait::{OwnChange, record_own_change},
 };
 use crate::{
-    config::{Config, repo::Opening, resolve::Effective},
+    config::{
+        Config,
+        repo::{Opening, OtherRepositories},
+        resolve::Effective,
+    },
     daemon::{events, workspace::Manager},
     forge::{
         ForgeRepo,
@@ -280,13 +284,16 @@ impl Manager {
 }
 
 impl Manager {
-    /// Open an issue in the workspace's repository as its agent account, and
-    /// link it when `link` is set. A `proposer` records it for the user's
-    /// approval instead when `[approvals] issue_open` says so.
+    /// Open an issue as the workspace's agent account in its repository, or
+    /// the one `repository` names, and link it when `link` is set. A
+    /// `proposer` records it for the user's approval instead when
+    /// `[approvals] issue_open`, or for another repository
+    /// `[issue] other_repositories`, says so.
     pub async fn open_issue(
         &self,
         selector: &str,
         issue: NewIssue,
+        repository: Option<String>,
         link: bool,
         proposer: Option<Proposer>,
     ) -> Result<OpenOutcome> {
@@ -307,15 +314,23 @@ impl Manager {
             "the workspace already has a linked issue; open the issue without --link"
         );
         let settings = self.workspace_settings(&workspace).await?;
-        let required = &settings.issue.required_labels;
-        let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        conventions::require(&forge, &account, ItemKind::Issue, required, &issue.labels).await?;
-        if let Some(proposer) =
-            proposer.filter(|_| settings.approvals.issue_open == Opening::Propose)
-        {
+        let (own, account) = self.workspace_forge_account(&workspace).await?;
+        let destination = self.issue_destination(own, repository.as_deref()).await?;
+        anyhow::ensure!(
+            !link || !destination.elsewhere,
+            "an issue in another repository cannot be linked; open it without --link"
+        );
+        let opening = match proposer {
+            Some(_) => destination.opening(&settings)?,
+            None => Opening::Direct,
+        };
+        let (forge, required) = (&destination.forge, destination.required(&settings));
+        conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
+        if let Some(proposer) = proposer.filter(|_| opening == Opening::Propose) {
             forge.check_uploads(&account, &issue.attachments).await?;
+            let repository = destination.repository();
             let proposed = self
-                .propose_issue(&workspace, issue, None, link, proposer)
+                .propose_issue(&workspace, issue, repository, link, proposer)
                 .await?;
             return Ok(OpenOutcome::Proposed(proposed));
         }
@@ -323,21 +338,73 @@ impl Manager {
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
-        let checked = conventions::warnings(
-            &forge,
-            &account,
-            &workspace.path,
-            &item,
-            Some(&issue.body),
-            required,
-        )
-        .await;
+        // The workspace's templates do not apply to another repository.
+        let body = (!destination.elsewhere).then_some(issue.body.as_str());
+        let checked =
+            conventions::warnings(forge, &account, &workspace.path, &item, body, required).await;
         Ok(OpenOutcome::Opened(Opened {
             item,
             created: true,
             linked,
             warnings: warning.into_iter().chain(checked).collect(),
         }))
+    }
+
+    /// The repository `named` names for a new issue, or the workspace's
+    /// repository `own` without one.
+    async fn issue_destination(
+        &self,
+        own: ForgeRepo,
+        named: Option<&str>,
+    ) -> Result<IssueDestination> {
+        let Some(named) = named else {
+            return Ok(IssueDestination {
+                forge: own,
+                elsewhere: false,
+            });
+        };
+        let forge = own.resolve_named(named, &self.forge_hosts()).await?;
+        let elsewhere = forge != own;
+        Ok(IssueDestination { forge, elsewhere })
+    }
+}
+
+/// The repository a new issue opens in, and whether it is another than the
+/// workspace's, whose settings and conventions then do not apply.
+struct IssueDestination {
+    forge: ForgeRepo,
+    elsewhere: bool,
+}
+
+impl IssueDestination {
+    /// How a scoped caller opens the issue here under `settings`, refusing
+    /// another repository they deny.
+    fn opening(&self, settings: &Effective) -> Result<Opening> {
+        if !self.elsewhere {
+            return Ok(settings.approvals.issue_open);
+        }
+        match settings.issue.other_repositories {
+            OtherRepositories::Deny => bail!(
+                "agents cannot open issues in {}: [issue] other_repositories is \"deny\"",
+                self.forge.repository_url()
+            ),
+            OtherRepositories::Propose => Ok(Opening::Propose),
+            OtherRepositories::Direct => Ok(Opening::Direct),
+        }
+    }
+
+    /// The labels `settings` require of the new issue; none elsewhere.
+    fn required<'a>(&self, settings: &'a Effective) -> &'a [String] {
+        if self.elsewhere {
+            &[]
+        } else {
+            &settings.issue.required_labels
+        }
+    }
+
+    /// The URL a proposal records for another repository.
+    fn repository(&self) -> Option<String> {
+        self.elsewhere.then(|| self.forge.repository_url())
     }
 }
 
@@ -728,7 +795,7 @@ mod tests {
             attachments: Vec::new(),
         };
         let error = manager
-            .open_issue(&workspace.id, issue, false, None)
+            .open_issue(&workspace.id, issue, None, false, None)
             .await
             .unwrap_err();
         assert!(

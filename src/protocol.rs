@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 126;
+pub const VERSION: u32 = 127;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -395,10 +395,12 @@ pub enum Method {
         workspace: String,
         options: crate::forge::items::create::PullOptions,
     },
-    /// Open an issue in the workspace's repository, linking it when `link` is set.
+    /// Open an issue in the workspace's repository, or the one `repository`
+    /// names, linking it when `link` is set.
     OpenIssue {
         workspace: String,
         issue: crate::forge::items::create::NewIssue,
+        repository: Option<String>,
         link: bool,
     },
     /// Change an issue or PR of the workspace's repository: the one `item`

@@ -654,12 +654,13 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::OpenIssue {
             workspace,
             issue,
+            repository,
             link,
         } => {
             let proposer = manager.proposer(caller).await;
             Body::Opened(
                 manager
-                    .open_issue(&workspace, issue, link, proposer)
+                    .open_issue(&workspace, issue, repository, link, proposer)
                     .await?,
             )
         }

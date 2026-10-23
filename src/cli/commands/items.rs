@@ -156,6 +156,7 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
         IssueCommand::List(args) => return list(ctx, ItemKind::Issue, args).await,
         IssueCommand::Open {
             workspace,
+            repo,
             title,
             body,
             files,
@@ -169,7 +170,7 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
                 labels,
                 attachments,
             };
-            return open_issue(ctx, workspace, issue, link).await;
+            return open_issue(ctx, workspace, issue, repo, link).await;
         }
         IssueCommand::Edit { item, edit } => {
             (item, Action::Edit(edit_fields(edit)?), "Issue updated")
@@ -324,6 +325,7 @@ async fn open_issue(
     ctx: &Context,
     workspace: Option<String>,
     issue: NewIssue,
+    repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
@@ -332,6 +334,7 @@ async fn open_issue(
         Method::OpenIssue {
             workspace,
             issue,
+            repository,
             link,
         },
     )

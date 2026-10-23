@@ -283,6 +283,10 @@ impl Effective {
             },
             issue: Issue {
                 required_labels: built_in(merged.issue.required_labels, "issue.required_labels")?,
+                other_repositories: built_in(
+                    merged.issue.other_repositories,
+                    "issue.other_repositories",
+                )?,
             },
             land: Land {
                 push: built_in(merged.land.push, "land.push")?,
@@ -374,6 +378,7 @@ fn built_in() -> RepoConfig {
         },
         issue: config::repo::Issue {
             required_labels: Some(Vec::new()),
+            other_repositories: Some(Issue::default().other_repositories),
         },
         land: config::repo::Land {
             push: Some(Land::default().push),
@@ -684,6 +689,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(pr.draft),
         scalar!(pr.required_labels),
         scalar!(issue.required_labels),
+        scalar!(issue.other_repositories),
         scalar!(land.push),
         scalar!(land.requires_approval),
         scalar!(approvals.issue_open),
@@ -713,7 +719,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\n[land]\npush = true\nrequires_approval = false\n\
+[cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\nother_repositories = 'direct'\n[land]\npush = true\nrequires_approval = false\n\
 [approvals]\nissue_open = 'propose'\npr_open = 'propose'\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
@@ -1050,6 +1056,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             pr.draft.is_some(),
             pr.required_labels.is_some(),
             issue.required_labels.is_some(),
+            issue.other_repositories.is_some(),
             land.push.is_some(),
             land.requires_approval.is_some(),
             approvals.issue_open.is_some(),

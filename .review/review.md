@@ -137,7 +137,9 @@ instead of the PR delivery guidance below.
   Under `[approvals] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
-  issue proposal belongs to the repository and outlives its workspace. This is cooperative,
+  issue proposal belongs to the repository and outlives its workspace.
+  `[issue] other_repositories` governs a scoped issue in another repository the same
+  way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

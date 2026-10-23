@@ -56,7 +56,8 @@ when behavior changes, distinguishing decisions from proposals.
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue/PR links and watches, merge
   acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
-  sync, listing, opening and changing issues and PRs of the own repository, and rerunning
+  sync, listing, opening and changing issues and PRs of the own repository, opening issues
+  in other repositories as `[issue] other_repositories` allows, and rerunning
   or cancelling their CI jobs are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
@@ -125,6 +126,8 @@ when behavior changes, distinguishing decisions from proposals.
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded
   commit. Issue proposals belong to the repository and outlive the workspace.
+  `[issue] other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
+  does the same for a scoped issue in another repository, which is never linked.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.

@@ -237,6 +237,11 @@ post = true
 [land]
 push = false
 
+# Whether agents may open issues in repositories other than their workspace's:
+# "deny", "propose" (wait for your approval) or "direct".
+[issue]
+other_repositories = "propose"
+
 # Whether issues and PRs agents open wait for your approval: "direct" or "propose".
 [approvals]
 issue_open = "direct"

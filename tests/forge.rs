@@ -2856,3 +2856,122 @@ fn approving_a_proposal_warns_about_the_repository_conventions() {
         "{approved}"
     );
 }
+
+#[test]
+fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise() {
+    // The workspace's required labels do not apply to another repository.
+    let fixture = Fixture::new(Forge::GitHub, "[issue]\nrequired_labels = ['type/']\n");
+    fixture.respond(json!({
+        "POST repos/team/tool/issues": {"status": 201, "body": {"number": 5}},
+        "GET repos/team/tool/issues/5": {"body": {"number": 5, "title": "Wrong finding",
+            "state": "open", "labels": [{"name": "bug"}]}},
+    }));
+    let open = [
+        "issue",
+        "open",
+        "--repo",
+        "team/tool",
+        "--title",
+        "Wrong finding",
+        "--label",
+        "bug",
+    ];
+    let proposed = scoped(&fixture, &open)["proposed"].clone();
+    assert_eq!(
+        proposed["specification"]["repository"],
+        "https://github.com/team/tool"
+    );
+    // Naming it by URL is the same proposal.
+    let by_url = [
+        &["issue", "open", "--repo", "git@github.com:team/tool.git"][..],
+        &open[4..],
+    ]
+    .concat();
+    assert_eq!(scoped(&fixture, &by_url)["proposed"]["id"], proposed["id"]);
+    assert!(writes(&fixture).is_empty());
+
+    // Another repository's issue cannot be the workspace's assignment.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let exec = ["exec", "topic", "--", shoal];
+    let linked = fixture.run(&[&exec[..], &open, &["--link"]].concat());
+    assert!(
+        String::from_utf8_lossy(&linked.stderr).contains("cannot be linked"),
+        "{linked:?}"
+    );
+
+    let id = proposed["id"].to_string();
+    let approved = fixture.ok(&["approve", &id]);
+    let url = "https://github.com/team/tool/issues/5";
+    assert_eq!(approved["url"], url);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/tool/issues",
+            {"title": "Wrong finding", "body": "", "labels": ["bug"]}])]
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "topic"])["workspace"]["links"]["opened"],
+        json!([{"kind": "issue", "url": url, "title": "Wrong finding"}])
+    );
+    assert_eq!(
+        messages(&fixture),
+        [format!(
+            "Approval {id} to open issue \"Wrong finding\" in https://github.com/team/tool was approved: {url} was opened."
+        )]
+    );
+
+    // A repository can turn it off for agents; the user still opens directly.
+    let repo = fixture.repo.to_str().unwrap();
+    fixture.ok(&[
+        "config",
+        "set",
+        "issue.other_repositories",
+        "deny",
+        "--repo",
+        repo,
+    ]);
+    let denied = fixture.run(&[&exec[..], &open].concat());
+    assert!(
+        String::from_utf8_lossy(&denied.stderr).contains("other_repositories is \"deny\""),
+        "{denied:?}"
+    );
+    assert!(writes(&fixture).is_empty());
+    let direct = fixture.ok(&[&open[..], &["--workspace", "topic"]].concat());
+    assert_eq!(direct["url"], url);
+}
+
+#[test]
+fn agents_open_issues_directly_on_another_forge_when_allowed() {
+    let fixture = Fixture::new(Forge::Forgejo, "[issue]\nother_repositories = 'direct'\n");
+    fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
+    std::os::unix::fs::symlink(
+        fixture.root.path().join("forge.py"),
+        fixture.root.path().join("bin/gh"),
+    )
+    .unwrap();
+    fixture.respond(json!({
+        "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},
+        "GET repos/them/tool/issues/5": {"body": {"number": 5, "title": "Crash",
+            "state": "open", "labels": []}},
+    }));
+    let open = [
+        "issue",
+        "open",
+        "--repo",
+        "https://github.com/them/tool",
+        "--title",
+        "Crash",
+    ];
+    let opened = scoped(&fixture, &open);
+    let url = "https://github.com/them/tool/issues/5";
+    assert_eq!(opened["url"], url);
+    assert_eq!(opened["created"], true);
+    assert_eq!(opened["linked"], false);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/them/tool/issues", {"title": "Crash", "body": "", "labels": []}])]
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "topic"])["workspace"]["links"]["opened"],
+        json!([{"kind": "issue", "url": url, "title": "Crash"}])
+    );
+}

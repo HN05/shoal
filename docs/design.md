@@ -1190,6 +1190,15 @@ proposes again, and a pending one keeps the workspace
 from unattended removal. Holding the push back too is #922; other agent writes,
 such as comments, edits and closing, stay direct. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
+Agents also find problems that belong to another repository, such as a tool the
+project uses, so `issue open --repo` files an issue there, on any forge, as the
+agent account; every other item action stays within the workspace's repository.
+People outside the project see such an issue, so `[issue] other_repositories`
+governs scoped callers separately from `issue_open`: `"propose"` by default,
+`"direct"`, or `"deny"`. The workspace's required labels and templates describe
+its own repository and do not apply there, and the issue cannot be linked, since
+an assignment's cleanup follows the workspace's repository. A proposal records
+the repository it opens in.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it, or the nearest coordinating agent above the

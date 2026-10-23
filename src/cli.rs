@@ -989,11 +989,15 @@ pub struct CiChecks {
 pub enum IssueCommand {
     /// List or search the workspace repository's issues, newest first.
     List(ListArgs),
-    /// Open an issue in the workspace's repository.
+    /// Open an issue in the workspace's repository or another one.
     Open {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,
+        /// Open it in another repository: OWNER/NAME on the workspace's
+        /// forge, or a repository URL on any forge.
+        #[arg(long, value_name = "REPOSITORY")]
+        repo: Option<String>,
         /// Issue title.
         #[arg(long)]
         title: String,

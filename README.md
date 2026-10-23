@@ -181,6 +181,7 @@ shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
+shoal issue open --repo team/tool --title Bug # Open it in another repository
 shoal labels                  # The repository's labels and what each one means
 shoal capabilities            # What the repository's forge supports, such as resolving threads
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
