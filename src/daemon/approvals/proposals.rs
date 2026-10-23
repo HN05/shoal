@@ -99,6 +99,17 @@ pub enum Duplicate {
 impl ProposalDecision {
     /// Refuse details that do not apply to this decision of `target`.
     pub fn validate(&self, target: &Target, approve: bool) -> Result<()> {
+        self.check(approve)?;
+        ensure!(
+            self.duplicate_of.is_none() || *target == Target::IssueOpen,
+            "only an issue proposal can be a duplicate"
+        );
+        Ok(())
+    }
+
+    /// Refuse details that do not apply to an approval or a denial of any
+    /// request, before the request is known.
+    pub fn check(&self, approve: bool) -> Result<()> {
         if approve {
             ensure!(
                 self.reason.is_none() && self.duplicate_of.is_none(),
@@ -116,10 +127,6 @@ impl ProposalDecision {
                 "a title or body applies only when approving"
             );
         }
-        ensure!(
-            self.duplicate_of.is_none() || *target == Target::IssueOpen,
-            "only an issue proposal can be a duplicate"
-        );
         crate::validate::reason("denial", self.reason.as_deref())
     }
 }

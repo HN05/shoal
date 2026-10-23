@@ -18,6 +18,8 @@ pub(super) async fn decide(
     details: ProposalDecision,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
+    // Refused before the picker asks which request.
+    details.check(approve)?;
     let (id, shown) = match id {
         Some(id) => (id, None),
         // Workspace processes decide only the requests routed to them, by number.

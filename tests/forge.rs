@@ -1981,6 +1981,12 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "approval", "{inbox}");
     assert_eq!(inbox.as_array().unwrap().len(), 1);
+    // Invalid details are refused before the picker would ask which request.
+    let blank = fixture.run(&["approve", "--title", " "]);
+    assert!(
+        String::from_utf8_lossy(&blank.stderr).contains("the title cannot be empty"),
+        "{blank:?}"
+    );
     let comment = json!(["POST repos/team/project/issues/40/comments",
         {"body": finding("Flaky again", "\nAlso on CI\n")}]);
     let failed = fixture.run(&["approve", &flaky]);
