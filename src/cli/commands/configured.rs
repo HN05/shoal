@@ -251,8 +251,8 @@ async fn diff_base(
     Ok(Some(base.commit))
 }
 
-/// `name`'s command with only `fields` known, for launches outside a workspace;
-/// other placeholders stay literal.
+/// `name`'s command with only `fields` known, for launches outside a workspace,
+/// refused when it uses a placeholder only a workspace has a value for.
 pub(super) fn expand_outside_workspace(
     commands: &Commands,
     name: &str,
@@ -260,6 +260,11 @@ pub(super) fn expand_outside_workspace(
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
     let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
+    if let Some(placeholder) = named_commands::workspace_only_placeholder(argv) {
+        anyhow::bail!(
+            "the {name} command uses {placeholder}, which has no value outside a workspace"
+        );
+    }
     Ok(named_commands::substitute(argv, fields, args))
 }
 

@@ -36,6 +36,18 @@ pub fn uses_diff_base(argv: &[String]) -> bool {
     argv.iter().any(|arg| arg.contains("{diff_base}"))
 }
 
+/// The placeholders only a workspace has values for; `{path}` names a
+/// directory anywhere.
+const WORKSPACE_ONLY: &[&str] = &["{workspace}", "{branch}", "{diff_base}"];
+
+/// The first placeholder in `argv` that has no value outside a workspace.
+pub fn workspace_only_placeholder(argv: &[String]) -> Option<&'static str> {
+    WORKSPACE_ONLY
+        .iter()
+        .copied()
+        .find(|key| argv.iter().any(|arg| arg.contains(key)))
+}
+
 /// The placeholders every workspace command may use; `{diff_base}` only when
 /// `diff_base` is known.
 pub fn workspace_fields<'a>(
@@ -107,6 +119,22 @@ mod tests {
         ] {
             assert!(config::repo::parse(config).is_err(), "{config}");
         }
+    }
+
+    #[test]
+    fn outside_a_workspace_only_the_directory_placeholder_has_a_value() {
+        let argv = |args: &[&str]| args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+        let placeholder = |args: &[&str]| super::workspace_only_placeholder(&argv(args));
+        assert_eq!(placeholder(&["tool", "{path}", "{prompt}", "{args}"]), None);
+        assert_eq!(
+            placeholder(&["tool", "--name={workspace}"]),
+            Some("{workspace}")
+        );
+        assert_eq!(placeholder(&["tool", "{branch}"]), Some("{branch}"));
+        assert_eq!(
+            placeholder(&["tool", "{diff_base}..HEAD"]),
+            Some("{diff_base}")
+        );
     }
 
     #[test]

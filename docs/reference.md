@@ -770,7 +770,7 @@ Code and Codex CLI). The agent's configured launcher runs in the registered
 checkout with the rendered [chat template](#prompt-templates) as those
 instructions, so it waits for your
 first message. The template substitutes `{repo}` and `{path}`; in the launcher,
-`{path}` is the checkout and other workspace placeholders stay literal. The checkout is trusted in the agent's
+`{path}` is the checkout, and a launcher using a placeholder only a workspace has a value for is refused. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab

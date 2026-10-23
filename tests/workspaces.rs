@@ -20201,6 +20201,26 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let output = fixture.run(&["chat", repo, "--agent", "claude"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("chat needs a terminal"));
+    // The checkout has no value for a workspace's placeholders.
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "[commands]\nclaude = ['claude', '--name', '{workspace}']\n",
+    )
+    .unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["chat", repo, "--agent", "claude", "--here"]),
+        "",
+    );
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains(
+            "the claude command uses {workspace}, which has no value outside a workspace"
+        ),
+        "{transcript}"
+    );
+    fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
     fixture.add("scoped");
     let output = fixture.run(&[
         "exec",
