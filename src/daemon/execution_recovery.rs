@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, watch};
 use super::workspace::{Manager, Pause};
 use crate::daemon::log;
 use crate::{
+    execution::recovery,
     model::PortReservation,
     protocol::{ExecutionEvent, timing},
 };
@@ -124,6 +125,15 @@ pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, worksp
             log!("the stopped agent's processes are not proven stopped: {issue}")
         }
         Err(error) => log!("stopped agent's processes not checked: {error:#}"),
+    }
+}
+
+/// A completed execution no longer needs the restore record its protection
+/// stop left; removal is best effort.
+pub(super) fn discard_handoff(manager: &Manager, workspace_id: &str, execution_id: &str) {
+    let record = recovery::record_path(&manager.paths, workspace_id, execution_id);
+    if let Err(error) = recovery::consume(&record) {
+        log!("unused overload recovery handoff not removed: {error:#}");
     }
 }
 

@@ -16,7 +16,6 @@ use super::{
     scope::Caller,
     workspace::{ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution},
 };
-use crate::daemon::log;
 use crate::{
     model::Workspace,
     process::identity::Identity,
@@ -443,13 +442,7 @@ async fn finish(
             .await;
     }
     if overload_reason.is_some() && !handoff_claimed && complete {
-        let record =
-            crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution_id);
-        if let Err(error) = std::fs::remove_file(&record)
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            log!("unused overload recovery handoff not removed: {error:#}");
-        }
+        execution_recovery::discard_handoff(manager, &workspace.id, &execution_id);
         overload_reason = None;
     }
     if let Some(agent) = &agent {
