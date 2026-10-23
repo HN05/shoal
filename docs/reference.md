@@ -2282,6 +2282,7 @@ shoal notifications --follow   # Keep printing, and raise terminal notifications
 shoal notifications --keep-unread  # Show without marking read, also with --follow
 shoal notifications clear      # Delete all of them, including unread ones
 shoal notify "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
+shoal notifications withdraw <number> [--workspace W]   # Take back an unread one notify added
 ```
 
 The daemon records what happens while you are not looking: a resource or
@@ -2291,7 +2292,9 @@ exiting (with its code, or a note to run `doctor` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
-marking the assignment done. Each line shows the local time, the workspace, and the message;
+marking the assignment done. It prints the notification's number, or that a
+[coordinating agent](#child-workspaces) received the message instead; the
+workspace may withdraw its message by that number until it is shown. Each line shows the local time, the workspace, and the message;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
 `--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
@@ -2300,7 +2303,7 @@ identical conflicts, cleanup failures and messages collapse into one entry until
 every agent exit is listed. `shoal work` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
-workspace. Read entries older than the newest
+workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.
 
 ### Agent messages

@@ -127,7 +127,9 @@ HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[ready] undraft = false`; new commits make the mark outdated, so run it
 again after later fixes, and `shoal unready` withdraws it (`--draft` also
 returns the PR to draft). To tell the user about status without finishing,
-such as a PR that is ready, run `shoal notify "<one-line message>"`. Neither
+such as a PR that is ready, run `shoal notify "<one-line message>"`; if it stops
+applying before the user reads it, withdraw it with
+`shoal notifications withdraw <number>`, using the number it printed. Neither
 affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
 Questions).
 

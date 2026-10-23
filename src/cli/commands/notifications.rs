@@ -1,7 +1,8 @@
 //! `shoal notifications`: what the daemon saw while the user was away, shown
 //! once and then marked read unless `--keep-unread`; `--follow` keeps the
 //! terminal on the stream and raises each entry as a terminal notification.
-//! `shoal notify` adds one and `clear` deletes them all.
+//! `shoal notify` adds one, `withdraw` takes back an unread one it added, and
+//! `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
 use anyhow::{Context as _, Result, ensure};
@@ -71,6 +72,17 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
         "workspace processes cannot read or clear notifications; send one with shoal notify"
     );
     Ok(())
+}
+
+pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let withdrawn =
+        request::<Notification>(&ctx.paths, Method::WithdrawMessage { workspace, id }).await?;
+    ctx.emit(
+        &format!("Withdrew notification {id}: {}", withdrawn.message),
+        &withdrawn,
+    )?;
+    Ok(0)
 }
 
 pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {

@@ -15851,7 +15851,15 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     fixture.add("other");
     let output = scoped_command(&fixture, "sender", &["notify", "PR #12 is ready to merge"]);
     assert!(output.status.success(), "{output:?}");
+    // A message that stopped applying is withdrawn by the number notify gave.
+    let output = scoped_command(&fixture, "sender", &["notify", "tests are failing"]);
+    assert!(output.status.success(), "{output:?}");
+    let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let id = sent["notification"].as_i64().unwrap().to_string();
+    let output = scoped_command(&fixture, "sender", &["notifications", "withdraw", &id]);
+    assert!(output.status.success(), "{output:?}");
     for args in [
+        &["notifications", "withdraw", &id][..],
         &["notify", "hello", "--workspace", "other"][..],
         &["notify", "two\nlines"],
         &["notifications"],

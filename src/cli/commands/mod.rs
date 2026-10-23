@@ -494,6 +494,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             ..
         } => notifications::clear(&ctx).await,
         Command::Notifications {
+            command: Some(NotificationsCommand::Withdraw { id, workspace }),
+            ..
+        } => notifications::withdraw(&ctx, workspace, id).await,
+        Command::Notifications {
             command: None,
             follow: true,
             keep_unread,

@@ -1107,6 +1107,14 @@ pub struct ItemArgs {
 pub enum NotificationsCommand {
     /// Delete all notifications, including unread ones.
     Clear,
+    /// Withdraw an unread message the workspace sent with shoal notify.
+    Withdraw {
+        /// Notification number, as shoal notify printed it.
+        id: i64,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
