@@ -302,18 +302,19 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
     Ok(0)
 }
 
-/// Push as a tracked command under the agent account, with the user's Git
-/// configuration and hooks.
+/// Push to the branch's push remote as a tracked command under the agent
+/// account, with the user's Git configuration and hooks.
 async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let remote = git::push_remote(&workspace.path, &workspace.branch).await?;
     let code = crate::execution::publish(
         &ctx.paths,
         workspace.id.clone(),
-        git::push_command(&workspace.branch),
+        git::push_command(&remote, &workspace.branch),
     )
     .await?;
     ensure!(
         code == 0,
-        "git push of {} to origin failed (exit {code})",
+        "git push of {} to {remote} failed (exit {code})",
         workspace.branch
     );
     Ok(())

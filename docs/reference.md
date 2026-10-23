@@ -1893,7 +1893,8 @@ shoal capabilities                  # what the repository's forge supports
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
-recorded branch, then pushes the branch to `origin` without forcing, setting
+recorded branch, then pushes the branch without forcing to its push remote
+(`branch.<name>.pushRemote`, else `remote.pushDefault`, else `origin`), setting
 its upstream, as a tracked command with your Git configuration and hooks and
 its output on stderr. The daemon then links the open PR whose head is that
 branch in the repository, or opens one and links it. A new PR's title is

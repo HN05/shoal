@@ -743,7 +743,8 @@ async fn pull_current(workspace: &Workspace, proposed: &PullSpecification) -> Re
     {
         return Ok(false);
     }
-    let pushed = crate::git::pushed_commit(&workspace.path, "origin", &workspace.branch).await?;
+    let remote = crate::git::push_remote(&workspace.path, &workspace.branch).await?;
+    let pushed = crate::git::pushed_commit(&workspace.path, &remote, &workspace.branch).await?;
     Ok(pushed.as_deref() == Some(proposed.commit.as_str()))
 }
 

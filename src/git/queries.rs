@@ -77,6 +77,39 @@ pub async fn remote_url(repo: &Path, remote: &str) -> Result<String> {
     run(repo, &["remote", "get-url", remote]).await
 }
 
+/// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
+/// `remote.pushDefault`, else `origin`.
+pub async fn push_remote(repo: &Path, branch: &str) -> Result<String> {
+    for key in [
+        format!("branch.{branch}.pushRemote"),
+        "remote.pushDefault".into(),
+    ] {
+        let value = run(repo, &["config", "--default", "", "--get", &key]).await?;
+        if !value.trim().is_empty() {
+            return Ok(value.trim().to_owned());
+        }
+    }
+    Ok("origin".into())
+}
+
 pub async fn latest_subject(repo: &Path) -> Result<String> {
     run(repo, &["log", "-1", "--format=%s"]).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{git, repository};
+
+    #[tokio::test]
+    async fn push_remote_prefers_the_branch_then_the_default_then_origin() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        assert_eq!(push_remote(&repo, "topic").await.unwrap(), "origin");
+        git(&repo, &["config", "remote.pushDefault", "fork"]);
+        assert_eq!(push_remote(&repo, "topic").await.unwrap(), "fork");
+        git(&repo, &["config", "branch.topic.pushRemote", "mine"]);
+        assert_eq!(push_remote(&repo, "topic").await.unwrap(), "mine");
+        assert_eq!(push_remote(&repo, "other").await.unwrap(), "fork");
+    }
 }

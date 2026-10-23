@@ -12,8 +12,8 @@ mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 mod queries;
 pub use queries::{
-    current_branch, git_dir, is_bare_with_work_tree, latest_subject, metadata_path, remote_url,
-    remotes, revision, symbolic_revision, verify_revision, worktree_root,
+    current_branch, git_dir, is_bare_with_work_tree, latest_subject, metadata_path, push_remote,
+    remote_url, remotes, revision, symbolic_revision, verify_revision, worktree_root,
 };
 pub mod checkpoint;
 pub mod repo;
@@ -237,14 +237,14 @@ pub fn diff_command(commit: &str) -> Vec<OsString> {
 }
 
 /// Build the tracked command used when opening a pull request for a workspace.
-pub fn push_command(branch: &str) -> Vec<OsString> {
+pub fn push_command(remote: &str, branch: &str) -> Vec<OsString> {
     let branch = local_ref(branch);
     [
         Tool::Git.program(),
         "push",
         "--set-upstream",
         "--",
-        "origin",
+        remote,
         &format!("{branch}:{branch}"),
     ]
     .into_iter()
