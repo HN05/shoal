@@ -1,7 +1,7 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
+use serde::Serialize;
 
 use crate::{
     cli::{
@@ -11,7 +11,10 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
+    model::{
+        Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace,
+        Workspace,
+    },
     protocol::Method,
     shell,
     state::WorkspaceState,
@@ -181,6 +184,65 @@ pub(super) async fn finish_reopen(
     restored: RestoredWorkspace,
     action: &str,
 ) -> Result<i32> {
+    let Some(reopened) = prepare_reopened(ctx, restored).await? else {
+        return Ok(1);
+    };
+    ctx.emit(&reopened.message(ctx, action), &reopened)?;
+    if terminal::follows_caller(ctx) {
+        shell::navigate(&reopened.workspace.path, ctx.json)?;
+    }
+    super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
+    Ok(0)
+}
+
+/// A workspace opened again from a removal record, set up with its PRs
+/// linked.
+#[derive(Serialize)]
+pub(super) struct Reopened {
+    pub(super) workspace: Workspace,
+    removed: RemovedWorkspace,
+    warnings: Vec<String>,
+}
+
+impl Reopened {
+    /// The report of the reopening, which `action` begins.
+    pub(super) fn message(&self, ctx: &Context, action: &str) -> String {
+        let Self {
+            workspace, removed, ..
+        } = self;
+        let files = if removed.checkpoint.commit != removed.checkpoint.head {
+            "; unsaved files restored"
+        } else if removed.checkpoint.files_omitted {
+            "; unsaved files were not kept"
+        } else {
+            ""
+        };
+        let agents = match removed.agents.len() {
+            0 => String::new(),
+            1 => format!(
+                "; shoal resume {} continues its stopped agent",
+                workspace.name
+            ),
+            _ => format!(
+                "; shoal resume {} continues its stopped agents",
+                workspace.name
+            ),
+        };
+        format!(
+            "{action} {} on branch {} at {}{files}{agents}",
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+            workspace.branch,
+            workspace.path.display()
+        )
+    }
+}
+
+/// Print the reopening's warnings, set the workspace up and link its PRs
+/// again; `None` when its setup failed and the user deleted it.
+pub(super) async fn prepare_reopened(
+    ctx: &Context,
+    restored: RestoredWorkspace,
+) -> Result<Option<Reopened>> {
     let RestoredWorkspace {
         opened,
         removed,
@@ -192,45 +254,18 @@ pub(super) async fn finish_reopen(
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(ready) = super::workspaces::setup_workspace(ctx, &workspace).await? else {
-            return Ok(1);
+            return Ok(None);
         };
         workspace = ready;
     }
     for url in &removed.links.prs {
         workspace = super::workspaces::link_pull(ctx, workspace, url.clone()).await?;
     }
-    let files = if removed.checkpoint.commit != removed.checkpoint.head {
-        "; unsaved files restored"
-    } else if removed.checkpoint.files_omitted {
-        "; unsaved files were not kept"
-    } else {
-        ""
-    };
-    let agents = match removed.agents.len() {
-        0 => String::new(),
-        1 => format!(
-            "; shoal resume {} continues its stopped agent",
-            workspace.name
-        ),
-        _ => format!(
-            "; shoal resume {} continues its stopped agents",
-            workspace.name
-        ),
-    };
-    ctx.emit(
-        &format!(
-            "{action} {} on branch {} at {}{files}{agents}",
-            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            workspace.branch,
-            workspace.path.display()
-        ),
-        json!({"workspace": &workspace, "removed": &removed, "warnings": warnings}),
-    )?;
-    if terminal::follows_caller(ctx) {
-        shell::navigate(&workspace.path, ctx.json)?;
-    }
-    super::workspaces::run_post_setup(ctx, &workspace).await?;
-    Ok(0)
+    Ok(Some(Reopened {
+        workspace,
+        removed,
+        warnings,
+    }))
 }
 
 fn print_removed(removed: &[RemovedWorkspace]) {
