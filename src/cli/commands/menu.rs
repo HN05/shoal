@@ -14,6 +14,7 @@ use crate::{
         Command, ConfirmationArgs, ItemArgs, WorkspaceScope, agents, client,
         client::request,
         context::Context,
+        internal::{Worker, internal_command},
         output::{Palette, Style},
         ui::{self, Entries, ViewPicker, WidthLimit},
     },
@@ -332,7 +333,7 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
         _ => None,
     };
     let next = (views.len() > 1)
-        .then(|| self_command(ctx, &["menu-next"]))
+        .then(|| worker_command(ctx, Worker::MenuNext))
         .transpose()?;
     let picked = ui::pick_in_views(
         ctx,
@@ -399,22 +400,24 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     let prompt = std::env::var("FZF_PROMPT").unwrap_or_default();
     let next = View::after(&prompt, views);
     let name = next.to_possible_value().context("views have names")?;
-    let reload = self_command(ctx, &["menu-rows", name.get_name()])?;
+    let reload = worker_command(
+        ctx,
+        Worker::MenuRows {
+            view: name.get_name(),
+        },
+    )?;
     println!("{}", next.switch_to(scoped, &reload));
     Ok(0)
 }
 
-/// This binary's `shoal internal <args>` for the same state directory, as
-/// shell text for fzf to run.
-fn self_command(ctx: &Context, args: &[&str]) -> Result<String> {
-    let exe = std::env::current_exe().context("locate the shoal executable")?;
-    let mut words = vec![
-        exe.to_string_lossy().into_owned(),
-        "--state-dir".into(),
-        ctx.paths.state.to_string_lossy().into_owned(),
-        "internal".into(),
-    ];
-    words.extend(args.iter().map(|arg| (*arg).to_owned()));
+/// The `shoal internal` worker for the same executable and state
+/// directory, as shell text for fzf to run.
+fn worker_command(ctx: &Context, worker: Worker<'_>) -> Result<String> {
+    let words = internal_command(&ctx.paths, false, worker)?
+        .into_iter()
+        .map(|word| word.into_string())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| anyhow::anyhow!("the shoal executable or state path is not UTF-8"))?;
     Ok(crate::shell::quote(&words))
 }
 

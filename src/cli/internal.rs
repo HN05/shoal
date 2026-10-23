@@ -18,6 +18,8 @@ pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
 pub const ADD: &str = "add";
 pub const COPY_IGNORED: &str = "copy-ignored";
+pub const MENU_ROWS: &str = "menu-rows";
+pub const MENU_NEXT: &str = "menu-next";
 
 pub enum Worker<'a> {
     HerdrWatch {
@@ -59,6 +61,12 @@ pub enum Worker<'a> {
     CopyIgnored {
         setup_cmd: Option<&'a Path>,
     },
+    /// Print a bare `shoal` picker view's rows, by its name.
+    MenuRows {
+        view: &'a str,
+    },
+    /// Print the fzf actions that switch the picker to its next view.
+    MenuNext,
 }
 
 /// This executable for a command a terminal runs as typed. The terminal
@@ -151,6 +159,8 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
                 args.extend(["--".into(), setup_cmd.as_os_str().to_owned()]);
             }
         }
+        Worker::MenuRows { view } => args.extend([MENU_ROWS.into(), view.into()]),
+        Worker::MenuNext => args.push(MENU_NEXT.into()),
     }
     Ok(args)
 }
@@ -235,6 +245,19 @@ mod tests {
             assert_eq!(parsed_plan, plan);
             assert_eq!(parsed_push, push);
         }
+    }
+
+    #[test]
+    fn menu_workers_round_trip_their_view() {
+        let InternalCommand::MenuRows { view } = parse(Worker::MenuRows { view: "inbox" }, false)
+        else {
+            panic!("expected menu rows worker");
+        };
+        assert_eq!(view, crate::cli::commands::menu::View::Inbox);
+        assert!(matches!(
+            parse(Worker::MenuNext, false),
+            InternalCommand::MenuNext
+        ));
     }
 
     #[test]
