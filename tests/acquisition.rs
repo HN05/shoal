@@ -1,39 +1,23 @@
 mod support;
 
 use serde_json::{Value, json};
-use std::{
-    io::{BufRead, BufReader, Write},
-    os::unix::net::UnixListener,
-    process::Output,
-    thread,
-    time::Duration,
-};
+use std::{process::Output, thread};
 
 // Exercise the CLI protocol on every host without allocating real resources or simulators.
 fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    std::fs::create_dir(root.path().join("state")).unwrap();
-    let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+    let listener = support::fake_daemon::bind_fake_daemon(root.path());
     listener.set_nonblocking(true).unwrap();
     let server = thread::spawn(move || {
         let mut requests = Vec::new();
-        for mut reply in replies {
-            let mut stream =
+        for reply in replies {
+            let stream =
                 support::wait::wait_for("acquisition attempt", || match listener.accept() {
                     Ok((stream, _)) => Some(stream),
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
                     Err(error) => panic!("accept: {error}"),
                 });
-            stream.set_nonblocking(false).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(60)))
-                .unwrap();
-            let mut line = String::new();
-            BufReader::new(&stream).read_line(&mut line).unwrap();
-            let request: Value = serde_json::from_str(&line).unwrap();
-            reply["protocol"] = request["protocol"].clone();
-            reply["id"] = request["id"].clone();
-            writeln!(stream, "{reply}").unwrap();
+            let request = support::fake_daemon::answer(stream, |_| reply);
             requests.push(request["method"].clone());
         }
         requests

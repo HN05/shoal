@@ -32,8 +32,17 @@ pub fn read_request(stream: &UnixStream) -> Option<Value> {
 
 /// Keep envelope fields and newline delimiting identical for every response,
 /// including fixtures that deliberately write several frames together.
-pub fn frame(request: &Value, mut reply: Value) -> String {
-    reply["protocol"] = request["protocol"].clone();
+pub fn frame(request: &Value, reply: Value) -> String {
+    frame_with_protocol(request, request["protocol"].clone(), reply)
+}
+
+/// Answer under another protocol version, as a daemon from another release would.
+pub fn frame_with_protocol(
+    request: &Value,
+    protocol: impl Into<Value>,
+    mut reply: Value,
+) -> String {
+    reply["protocol"] = protocol.into();
     reply["id"] = request["id"].clone();
     format!("{reply}\n")
 }
