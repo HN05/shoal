@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::listing::ListFilter;
+use super::{configured, listing::ListFilter};
 use crate::{
     agent::Agent,
     cli::{
@@ -18,7 +18,7 @@ use crate::{
         output::{self, Palette},
         terminal, ui,
     },
-    config::{Effective, named_commands, templates},
+    config::{Effective, templates},
     model::{Chat, Repository},
     protocol::ConfigTarget,
     repository,
@@ -181,7 +181,7 @@ fn command(
         .chain(agents::chat_hook_args(agent.name())?)
         .chain(args)
         .collect();
-    named_commands::expand_outside_workspace(
+    configured::expand_outside_workspace(
         &settings.commands,
         agent.name(),
         &[

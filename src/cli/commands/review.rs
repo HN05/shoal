@@ -427,7 +427,7 @@ async fn run(
             )
             .await
         }
-        _ => crate::config::named_commands::run(ctx, MANUAL, Some(workspace), args).await,
+        _ => super::configured::run(ctx, MANUAL, Some(workspace), args).await,
     }
 }
 

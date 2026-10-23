@@ -9,6 +9,7 @@ mod branches;
 mod chat;
 mod cleanup;
 mod configuration;
+pub(crate) mod configured;
 mod events;
 mod holds;
 mod inbox;
@@ -274,9 +275,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             args,
         } => match name {
             Some(name) => agents::run_named(&ctx, &name, workspace, args).await,
-            None => crate::config::named_commands::list(&ctx).await,
+            None => configured::list(&ctx).await,
         },
-        Command::Custom(words) => match crate::config::named_commands::invocation(words)? {
+        Command::Custom(words) => match configured::invocation(words)? {
             Some((name, workspace, args)) => agents::run_named(&ctx, &name, workspace, args).await,
             None => Ok(0),
         },

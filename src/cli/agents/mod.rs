@@ -24,14 +24,11 @@ use crate::{
     agent::Agent,
     cli::{
         client,
+        commands::configured,
         context::Context,
         ui::{self, Fallback},
     },
-    config::{
-        Config, Effective,
-        named_commands::{self, Commands},
-        templates::Delivery,
-    },
+    config::{Config, Effective, named_commands::Commands, templates::Delivery},
     fsutil,
     model::{Repository, Workspace},
     protocol::ConfigTarget,
@@ -192,7 +189,7 @@ pub(super) async fn run_named(
 ) -> Result<i32> {
     let providers = crate::ai::providers(&Config::load(&ctx.paths)?.ai);
     if !providers.contains(name) && !integrations().any(|(served, _)| served == name) {
-        return named_commands::run(ctx, name, workspace, args).await;
+        return configured::run(ctx, name, workspace, args).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;

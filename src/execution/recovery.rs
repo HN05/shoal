@@ -8,8 +8,7 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::client,
-    config::named_commands,
+    cli::{client, commands::configured},
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
@@ -124,7 +123,7 @@ impl Recovery {
         }
         let prompt = std::ffi::OsStr::new(&message);
         let (command, handoff_delivered) = if let Some(argv) = configured {
-            let command = named_commands::expand_with_fields(
+            let command = configured::expand_with_fields(
                 paths,
                 &settings.agent_resume,
                 &name,
@@ -143,7 +142,7 @@ impl Recovery {
             if !takes_field {
                 args.push(prompt.to_owned());
             }
-            let command = named_commands::expand_with_fields(
+            let command = configured::expand_with_fields(
                 paths,
                 &settings.commands,
                 &name,

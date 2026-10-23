@@ -6,8 +6,8 @@ use anyhow::Result;
 
 use super::{Integration, Launch, ensure_available};
 use crate::{
-    cli::{context::Context, terminal},
-    config::{Effective, named_commands, templates},
+    cli::{commands::configured, context::Context, terminal},
+    config::{Effective, templates},
     execution,
 };
 
@@ -73,7 +73,7 @@ async fn command(
         .chain(integration.hook_args()?)
         .chain(args)
         .collect();
-    named_commands::expand_with_fields(
+    configured::expand_with_fields(
         &ctx.paths,
         &settings.commands,
         name,

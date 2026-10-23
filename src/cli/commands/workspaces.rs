@@ -1987,7 +1987,7 @@ pub(super) async fn edit(
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     if settings.commands.contains_key(EDIT) {
-        return crate::config::named_commands::run(ctx, EDIT, Some(workspace), args).await;
+        return super::configured::run(ctx, EDIT, Some(workspace), args).await;
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
