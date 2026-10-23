@@ -35,16 +35,31 @@ pub(super) async fn start(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot start chats"
     );
-    ensure!(ctx.interactive(), "chat needs a terminal");
     let repo = chosen(ctx, repository).await?;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
     let agent = chat_agent(ctx, &settings, agent)?;
+    let launch = agents::ChatLaunch {
+        instructions: instructions(&settings, &repo),
+        repository: repo,
+        settings,
+        args,
+    };
+    if let Some(code) = agents::start_chat(ctx, agent.name(), &launch).await? {
+        return Ok(code);
+    }
+    ensure!(ctx.interactive(), "chat needs a terminal");
+    let agents::ChatLaunch {
+        repository: repo,
+        settings,
+        instructions,
+        args,
+    } = launch;
     if !here && start_beside(ctx, &settings, &repo, &agent, &args).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent.name(), &repo);
-    let command = command(&settings, &repo, &agent, args)?;
+    let command = command(&settings, &repo, &agent, instructions, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(ctx, &repo, &chat, &command)
 }
@@ -96,18 +111,9 @@ async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository>
     Ok(repository::select(&repos, selector).await?.clone())
 }
 
-/// `--agent`, else `default_agent` when it can chat, else a picker of the
-/// installed agents that can.
+/// `--agent`, else `default_agent`, else a picker of the installed agents.
 fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
-    let chats = |agent: &Agent| agents::chats(agent.name());
-    let chosen = match agent {
-        Some(agent) => {
-            ensure!(chats(&agent), "{agent} cannot chat");
-            Some(agent)
-        }
-        None => settings.default_agent.clone().filter(chats),
-    };
-    match chosen {
+    match agent.or_else(|| settings.default_agent.clone()) {
         Some(agent) => {
             agents::ensure_available(agent.name(), settings)?;
             Ok(agent)
@@ -120,10 +126,9 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let names: Vec<_> = agents::names(settings)
         .into_iter()
-        .filter(|name| agents::chats(name))
         .filter(|name| agents::installed(name, &settings.commands, &search_path))
         .collect();
-    ensure!(!names.is_empty(), "no installed agent can chat");
+    ensure!(!names.is_empty(), "no agent is installed");
     let choices: Vec<_> = names
         .iter()
         .map(|name| (name.clone(), name.as_str()))
@@ -162,13 +167,19 @@ fn command(
     settings: &Effective,
     repo: &Repository,
     agent: &Agent,
+    instructions: String,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
     let name = agent.name();
+    // Instructions that join the prompt start a turn before the user speaks.
+    let instructions = match settings.arguments(name).instructions {
+        Some(_) => instructions,
+        None => templates::chat_first_message(&instructions).unwrap_or_default(),
+    };
     let (args, prompt) = agents::input(
         settings,
         name,
-        instructions(settings, repo, name),
+        instructions,
         None,
         agents::chat_hook_args(name)?,
         args,
@@ -184,25 +195,15 @@ fn command(
     )
 }
 
-/// Sent after instructions that reach an agent as its first message, which
-/// starts a turn before the user speaks.
-const WAIT_FOR_USER: &str =
-    "Reply only that you are ready, then wait for the user's first message.";
-
-/// The resolved chat template with the repository's name and checkout; an
-/// agent that takes them as its first message is asked to wait for the user.
-fn instructions(settings: &Effective, repo: &Repository, name: &str) -> String {
-    let instructions = templates::render(
+/// The resolved chat template with the repository's name and checkout.
+fn instructions(settings: &Effective, repo: &Repository) -> String {
+    templates::render(
         settings.chat_template.as_deref().unwrap_or_default(),
         &[
             ("{repo}", repository::name(repo)),
             ("{path}", &repo.path.to_string_lossy()),
         ],
-    );
-    if instructions.is_empty() || settings.arguments(name).instructions.is_some() {
-        return instructions;
-    }
-    format!("{}\n\n{WAIT_FOR_USER}", instructions.trim_end())
+    )
 }
 
 /// Replace this process with the agent, so the terminal's signals reach it

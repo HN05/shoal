@@ -1037,6 +1037,10 @@ instructions apart from the first message gets them so, and another gets them as
 its first message, which starts a turn and so asks only for a short reply.
 A chat's launcher runs where only the checkout's path has a value, so one that
 uses another workspace placeholder is refused rather than given the literal text.
+A Happy chat has no terminal to focus: like a workspace Happy session it starts
+detached, as Happy's daemon would start it, so the user continues it in the
+Happy app, and the process that recorded the chat hands the record to the
+session's process.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither

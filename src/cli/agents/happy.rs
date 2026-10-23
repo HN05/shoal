@@ -1,14 +1,16 @@
 //! Detached Happy sessions and their tool-specific prompt delivery.
 use std::{
     ffi::OsString,
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
+    process::Stdio,
 };
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 use serde_json::json;
 
-use super::{Integration, Launch, trust::TrustFile};
+use super::{ChatLaunch, Integration, Launch, trust::TrustFile};
 use crate::{
     cli::{
         client,
@@ -18,7 +20,7 @@ use crate::{
     config::{Effective, templates},
     execution,
     happy::{self, Agent},
-    model::Workspace,
+    model::{Chat, Repository, Workspace},
     protocol::ConfigTarget,
 };
 
@@ -45,15 +47,18 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
-    /// A Happy session starts detached, not in place of Shoal.
-    fn chats(&self) -> bool {
-        false
-    }
-
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {
         (!settings.happy.enabled).then_some(
             "Happy sessions are off; set happy.enabled = true in the repository or global config",
         )
+    }
+
+    fn chat<'a>(
+        &'a self,
+        ctx: &'a Context,
+        chat: &'a ChatLaunch,
+    ) -> BoxFuture<'a, Result<Option<i32>>> {
+        Box::pin(async move { start_chat(ctx, self, chat).await.map(Some) })
     }
 
     fn launch<'a>(
@@ -102,11 +107,7 @@ fn session_input(
         workspace,
         templates::Delivery::Watched,
     );
-    let instruction_args = settings
-        .arguments(agent.as_str())
-        .instruction_args(&instructions)
-        .filter(|_| happy::accepts_prompt(agent));
-    match instruction_args {
+    match instruction_args(settings, agent, &instructions) {
         Some(instruction_args) => (prompt, instruction_args.into_iter().chain(args).collect()),
         None => {
             let prompt = match prompt {
@@ -116,6 +117,19 @@ fn session_input(
             (Some(prompt), args)
         }
     }
+}
+
+/// The arguments that give `agent` instructions apart from its first
+/// message; `None` for Happy's Codex mode, which takes no arguments.
+fn instruction_args(
+    settings: &Effective,
+    agent: Agent,
+    instructions: &str,
+) -> Option<Vec<OsString>> {
+    settings
+        .arguments(agent.as_str())
+        .instruction_args(instructions)
+        .filter(|_| happy::accepts_prompt(agent))
 }
 
 /// Start a Happy session the way Happy's own daemon does, so it registers with
@@ -196,6 +210,114 @@ async fn start(
         }),
     )?;
     Ok(0)
+}
+
+/// Start a chat as a Happy session in the repository's checkout, detached as
+/// workspace sessions are, since the user continues it in the Happy app. It is
+/// no tracked execution: the chat lasts while the session's process runs.
+async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i32> {
+    let agent = happy.0;
+    let name = format!("happy-{}", agent.as_str());
+    let ChatLaunch {
+        repository,
+        settings,
+        instructions,
+        args,
+    } = chat;
+    super::ensure_available(&name, settings)?;
+    let (prompt, args) = match instruction_args(settings, agent, instructions) {
+        Some(instruction_args) => (
+            None,
+            instruction_args.into_iter().chain(args.clone()).collect(),
+        ),
+        None => (templates::chat_first_message(instructions), args.clone()),
+    };
+    if let Some(trust) = happy.trust_file() {
+        trust.trust_checkout(ctx, repository);
+    }
+    let daemon_recorded = warn_without_daemon(ctx);
+    // This process holds the chat until the session runs.
+    let record = client::start_chat(&ctx.paths, repository, &name).await?;
+    let files = ctx.paths.chat_files(&record);
+    let opening = Opening::prepare(
+        ctx,
+        agent,
+        &repository.path,
+        None,
+        &files,
+        prompt.as_deref(),
+    )
+    .await?;
+    let command = happy::command(agent, prompt.as_deref(), args);
+    let log = files.with_extension("log");
+    let record = match run_chat(ctx, repository, &record, &log, command, &opening.env()).await {
+        Ok(moved) => moved,
+        Err(error) => {
+            opening.discard().await;
+            return Err(error);
+        }
+    };
+    let prompt_delivered = opening.deliver(prompt.as_deref()).await;
+    ctx.emit(
+        &format!(
+            "Started Happy {} chat {} for {} (pid {}); open it in the Happy app\nOutput: {}{}",
+            agent.as_str(),
+            record.number,
+            crate::repository::name(repository),
+            record.pid,
+            log.display(),
+            opening.delivery(prompt_delivered),
+        ),
+        json!({
+            "chat": record,
+            "log": log,
+            "prompt_file": opening.prompt_file,
+            "prompt_delivered": prompt_delivered,
+            "happy_session_id": opening.seeded.as_ref().map(|seeded| seeded.session.id.clone()),
+            "happy_daemon_recorded": daemon_recorded,
+        }),
+    )?;
+    Ok(0)
+}
+
+/// Start `command` in its own session at the checkout with the chat's
+/// identity and `env`, writing to `log`, and hand the chat to it.
+async fn run_chat(
+    ctx: &Context,
+    repository: &Repository,
+    chat: &Chat,
+    log: &Path,
+    command: Vec<OsString>,
+    env: &[(&str, String)],
+) -> Result<Chat> {
+    if let Some(parent) = log.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    let output = std::fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
+    let mut session = std::process::Command::new(&command[0]);
+    session
+        .args(&command[1..])
+        .current_dir(&repository.path)
+        .envs(crate::env::chat_environment(chat, &ctx.paths))
+        .stdin(Stdio::null())
+        .stdout(output.try_clone()?)
+        .stderr(output);
+    // A launch from inside another Happy session must not attach to it.
+    for name in happy::client::RECONNECT_ENV {
+        session.env_remove(name);
+    }
+    session.envs(env.iter().map(|(name, value)| (*name, value)));
+    // SAFETY: setsid detaches the forked child without allocating, before exec.
+    unsafe {
+        session.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let child = session.spawn().context("start the Happy session")?;
+    client::move_chat(&ctx.paths, chat, child.id()).await
 }
 
 /// Whether Happy's daemon has recorded itself, warning when it has not, since

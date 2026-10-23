@@ -222,6 +222,19 @@ pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> 
     .await
 }
 
+/// Hand `chat` to process `pid`, whose agent now runs it.
+#[cfg_attr(not(feature = "happy"), allow(dead_code))]
+pub async fn move_chat(paths: &Paths, chat: &Chat, pid: u32) -> Result<Chat> {
+    request(
+        paths,
+        Method::MoveChat {
+            chat: chat.id.clone(),
+            pid,
+        },
+    )
+    .await
+}
+
 /// Running chats; listing them ends those whose agent exited.
 pub async fn chats(paths: &Paths) -> Result<Vec<Chat>> {
     request(paths, Method::ListChats).await

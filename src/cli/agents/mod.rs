@@ -83,10 +83,14 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
-    /// Whether the agent runs chats, which replace Shoal's process with its
-    /// configured command.
-    fn chats(&self) -> bool {
-        true
+    /// Start a chat its own way, returning once it runs; `None` runs the
+    /// configured command in place of Shoal.
+    fn chat<'a>(
+        &'a self,
+        _ctx: &'a Context,
+        _chat: &'a ChatLaunch,
+    ) -> BoxFuture<'a, Result<Option<i32>>> {
+        Box::pin(async { Ok(None) })
     }
 
     /// Start the agent its own way; `None` leaves it to the tracked terminal
@@ -164,6 +168,15 @@ impl<'a> AgentEnvironment<'a> {
             configured: &NONE,
         }
     }
+}
+
+/// One chat about a repository in its registered checkout.
+pub(in crate::cli) struct ChatLaunch {
+    pub repository: Repository,
+    pub settings: Effective,
+    /// The rendered chat template.
+    pub instructions: String,
+    pub args: Vec<OsString>,
 }
 
 /// How a launch relates to the agents around it.
@@ -391,9 +404,14 @@ pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString
     integration(name).chat_hook_args()
 }
 
-/// Whether agent `name` runs chats.
-pub(in crate::cli) fn chats(name: &str) -> bool {
-    integration(name).chats()
+/// Start a chat of agent `name` its integration's own way; `None` leaves it
+/// to the configured command run in place of Shoal.
+pub(in crate::cli) async fn start_chat(
+    ctx: &Context,
+    name: &str,
+    chat: &ChatLaunch,
+) -> Result<Option<i32>> {
+    integration(name).chat(ctx, chat).await
 }
 
 /// Whether agent `name`'s wrapper wakes it by typing a prompt.

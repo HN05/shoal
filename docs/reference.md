@@ -778,7 +778,16 @@ Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
 labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
 session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
-inside a zmx session or a Herdr pane it runs in place. Chats run with your
+inside a zmx session or a Herdr pane it runs in place. A Happy chat
+(`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
+starts detached in the checkout as `shoal happy` starts a workspace session, and
+you continue it in the Happy app. Happy's Claude takes the instructions as
+arguments, and Happy's Codex receives them as its first message the way its
+prompts are delivered. Its output and any saved first message replace those of
+the repository's earlier chat with its number, at
+`<state>/chats/<repository id>-<number>.log` and `.prompt.md`; `--json` reports
+the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
+`happy_daemon_recorded`. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
 pressure or resumed. The daemon records each chat while its agent process runs,

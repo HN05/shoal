@@ -798,7 +798,8 @@ pub enum Command {
     /// Start a new chat with an agent about a repository in its registered checkout.
     ///
     /// Inside Herdr the chat opens in a focused tab; on a terminal it runs in
-    /// a zmx session. Chats are not tracked by the daemon.
+    /// a zmx session. A Happy chat starts detached, to continue in the Happy
+    /// app. Chats are not tracked executions.
     Chat {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]

@@ -13532,6 +13532,7 @@ fn install_fake_happy(fixture: &Fixture) -> PathBuf {
   printf 'cwd=%s\n' "$PWD"
   printf 'args='; printf '%s\0' "$@"; printf '\n'
   printf 'scope=%s\nexecution=%s\nworkspace=%s\nport=%s\n' "$SHOAL_SCOPE_TOKEN" "$SHOAL_EXECUTION_ID" "$SHOAL_WORKSPACE" "$SHOAL_PORT_WEB"
+  printf 'chat=%s\n' "$SHOAL_CHAT"
   printf 'reconnect=%s|%s|%s|%s|%s|%s\n' "$HAPPY_RECONNECT_SESSION_ID" "$HAPPY_RECONNECT_ENCRYPTION_KEY" "$HAPPY_RECONNECT_ENCRYPTION_VARIANT" "$HAPPY_RECONNECT_SEQ" "$HAPPY_RECONNECT_METADATA_VERSION" "$HAPPY_RECONNECT_AGENT_STATE_VERSION"
   if read -r _line; then printf 'stdin=data\n'; else printf 'stdin=eof\n'; fi
   test -t 1 && printf 'stdout=tty\n' || printf 'stdout=notty\n'
@@ -20205,12 +20206,119 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
 }
 
 #[test]
+fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
+    let record = install_fake_happy(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    let chat = |agent: &str| {
+        let _ = fs::remove_file(&record);
+        let output = fixture
+            .command()
+            .args([
+                "--json", "chat", repo, "--agent", agent, "--", "--model", "test",
+            ])
+            .env("HAPPY_RECORD", &record)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let started: Value = serde_json::from_slice(&output.stdout).unwrap();
+        wait_until("fake happy record", || record.exists());
+        (started, fs::read_to_string(&record).unwrap())
+    };
+    let args = |recorded: &str| -> Vec<String> {
+        recorded
+            .split_once("args=")
+            .unwrap()
+            .1
+            .split_once("\nscope=")
+            .unwrap()
+            .0
+            .split('\0')
+            .filter(|arg| !arg.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+
+    // Happy's Claude takes the instructions as arguments and waits.
+    let (started, recorded) = chat("happy-claude");
+    let chat_record = &started["chat"];
+    assert_eq!(chat_record["agent"], "happy-claude");
+    assert_eq!(chat_record["number"], 1);
+    assert!(
+        recorded.contains(&format!("cwd={}\n", checkout.display())),
+        "{recorded}"
+    );
+    assert!(recorded.contains(&format!("chat={}\n", chat_record["id"].as_str().unwrap())));
+    assert!(recorded.contains("stdin=eof\nstdout=notty"), "{recorded}");
+    let claude = args(&recorded);
+    assert_eq!(
+        claude[..5],
+        [
+            "claude",
+            "--happy-starting-mode",
+            "remote",
+            "--started-by",
+            "daemon"
+        ]
+    );
+    assert_eq!(claude[5], "--append-system-prompt");
+    assert!(
+        claude[6].contains(checkout.to_str().unwrap()),
+        "{}",
+        claude[6]
+    );
+    assert_eq!(claude[7..], ["--model", "test"]);
+    assert_eq!(started["prompt_file"], Value::Null);
+    // The chat lasts while the session runs, not the command that started it.
+    let pid = chat_record["pid"].as_u64().unwrap();
+    assert_eq!(
+        fixture.ok(&["work", "--chats"]),
+        serde_json::json!([chat_record])
+    );
+    let log = PathBuf::from(started["log"].as_str().unwrap());
+    wait_until("the session's output", || {
+        fs::read_to_string(&log).is_ok_and(|output| output.contains("hello from happy"))
+    });
+
+    // Happy's Codex takes them as its first message, saved here when Happy
+    // cannot deliver it.
+    let (started, recorded) = chat("happy-codex");
+    assert_eq!(started["chat"]["number"], 2);
+    assert_eq!(
+        args(&recorded),
+        [
+            "codex",
+            "--happy-starting-mode",
+            "remote",
+            "--started-by",
+            "daemon",
+            "--model",
+            "test"
+        ]
+    );
+    let message = fs::read_to_string(started["prompt_file"].as_str().unwrap()).unwrap();
+    assert!(message.contains(checkout.to_str().unwrap()), "{message}");
+    assert!(
+        message.ends_with("Reply only that you are ready, then wait for the user's first message."),
+        "{message}"
+    );
+    assert_eq!(started["prompt_delivered"], false);
+
+    for pid in [pid, started["chat"]["pid"].as_u64().unwrap()] {
+        Command::new("kill").arg(pid.to_string()).status().unwrap();
+    }
+    wait_until("the chats to end", || {
+        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+    });
+}
+
+#[test]
 fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
-    let fixture = Fixture::with_config(Some("default_agent = \"happy-claude\"\n"));
+    let fixture = Fixture::new();
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
-    // A default agent that cannot chat leaves the choice to a picker of the
-    // installed chat agents.
+    // Without a default agent a picker offers the installed agents that can run.
     let (output, rows) = fixture.pick(&["chat", repo], "0", "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
@@ -20227,7 +20335,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     );
     assert!(!output.status.success());
     assert!(
-        transcript.contains("happy-claude cannot chat"),
+        transcript.contains("cannot start happy-claude: Happy sessions are off"),
         "{transcript}"
     );
     let output = fixture.run(&["chat", repo, "--agent", "claude"]);

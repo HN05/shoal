@@ -43,6 +43,17 @@ fn install_at(directory: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Chat `instructions` sent as an agent's first message, which starts a turn
+/// before the user speaks, so it asks the agent to wait for them.
+pub fn chat_first_message(instructions: &str) -> Option<String> {
+    let instructions = instructions.trim_end();
+    (!instructions.is_empty()).then(|| {
+        format!(
+            "{instructions}\n\nReply only that you are ready, then wait for the user's first message."
+        )
+    })
+}
+
 /// How a launched agent receives its issue and PR activity, which
 /// `{updates}` describes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
