@@ -230,7 +230,11 @@ explain in a comment or with `audit/wontfix` why it will not be.
 Issues and PRs carry one or more `area/` labels and one `type/` and one
 `complexity/` label; `shoal labels` lists what each means, and
 `.forgejo/scripts/labels.sh` creates the scheme. An issue states the problem or
-goal and what done looks like; a PR description follows
+goal and what done looks like. One whose approach is settled is labelled
+`planned`, and agents implement it without asking; one that leaves a choice for
+the owner is labelled `needs-plan` until `shoal plan` settles a Plan section in
+its body. Issues with neither, such as tracking and meta issues, stay out of that
+flow. A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
 of running the full suite locally first.
 A failed check is a defect even when a rerun passes. Read its log, then fix the
