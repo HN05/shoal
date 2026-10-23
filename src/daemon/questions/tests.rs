@@ -336,6 +336,10 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Method::ListQuestions {
                 workspace: Some(target.clone()),
             },
+            Method::WithdrawQuestion {
+                workspace: target.clone(),
+                id: 1,
+            },
         ] {
             assert_eq!(
                 scope::authorize(&manager, Some("scope"), &mut method)
@@ -537,4 +541,89 @@ async fn done_closes_open_questions_for_good() {
         .unwrap();
     assert!(asked_again.is_open());
     assert_ne!(asked_again.id, open.id);
+}
+
+#[tokio::test]
+async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() {
+    let (_root, manager, workspace) = fixture().await;
+    let other = manager
+        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let question = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    let waiter = tokio::spawn({
+        let manager = manager.clone();
+        let name = workspace.name.clone();
+        let ask = question.ask.clone();
+        async move { manager.await_answer(&name, question.id, &ask).await }
+    });
+    let error = manager
+        .withdraw_question(&other.name, question.id)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("has no question"), "{error:#}");
+
+    let withdrawn = manager
+        .withdraw_question(&workspace.name, question.id)
+        .await
+        .unwrap();
+    assert!(withdrawn.withdrawn && !withdrawn.is_open());
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
+    assert_ne!(
+        manager.cleanup_reason(&workspace).await,
+        CleanupReason::Question
+    );
+    // The user was never shown it, so nothing tells them about it.
+    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    for error in [
+        waiter.await.unwrap().unwrap_err(),
+        manager
+            .answer_question(question.id, "Postgres".into(), None)
+            .await
+            .unwrap_err(),
+        manager
+            .withdraw_question(&workspace.name, question.id)
+            .await
+            .unwrap_err(),
+    ] {
+        assert!(error.to_string().contains("was withdrawn"), "{error:#}");
+    }
+    // Its number stays taken, and asking again asks anew.
+    let again = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    assert!(again.is_open());
+    assert_ne!(again.id, question.id);
+}
+
+#[tokio::test]
+async fn withdrawing_a_shown_question_tells_the_user() {
+    let (_root, manager, workspace) = fixture().await;
+    let question = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    let shown = manager.notifications(true, 50).await.unwrap();
+    manager
+        .mark_notifications_read(shown.iter().map(|n| n.id).collect())
+        .await
+        .unwrap();
+    manager
+        .withdraw_question(&workspace.name, question.id)
+        .await
+        .unwrap();
+    let unread = manager.notifications(true, 50).await.unwrap();
+    assert_eq!(unread.len(), 1);
+    assert_eq!(unread[0].kind, NotificationKind::QuestionWithdrawn);
+    assert_eq!(
+        unread[0].message,
+        format!(
+            "withdrew question {} (no answer needed): Which database?",
+            question.id
+        )
+    );
 }

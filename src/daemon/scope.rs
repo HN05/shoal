@@ -71,6 +71,7 @@ pub async fn authorize(
         | Method::AgentMessages { workspace }
         | Method::MarkAgentMessagesDelivered { workspace, .. }
         | Method::AskQuestion { workspace, .. }
+        | Method::WithdrawQuestion { workspace, .. }
         | Method::AwaitAnswer { workspace, .. }
         | Method::AgentUpdates { workspace }
         | Method::AwaitAgentWake { workspace, .. }

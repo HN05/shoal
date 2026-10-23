@@ -573,6 +573,12 @@ pub enum Method {
     ShowQuestion {
         id: i64,
     },
+    /// Close the workspace's open question `id`, which its agents no longer
+    /// need answered.
+    WithdrawQuestion {
+        workspace: String,
+        id: i64,
+    },
     /// The user's answer, queued for the asking workspace's agents.
     /// `shown` is the question the user was shown, which a later question
     /// reusing its number does not match.

@@ -2,14 +2,22 @@
 //! and the agent's recommendation; only the user answers, and the answer
 //! reaches the agents as a message. Delivering the answer, or removing the
 //! workspace, deletes the question, which frees its number for the next one.
-//! Marking the assignment done closes its unanswered questions, which keep
-//! their numbers until the workspace goes so that a late answer is refused.
+//! Marking the assignment done, or the asking agent withdrawing a question,
+//! closes it unanswered; a closed question keeps its number until the
+//! workspace goes so that a late answer is refused.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::daemon::{agent_messages, notifications::NotificationKind, workspace::Manager};
+use crate::{
+    daemon::{
+        agent_messages,
+        notifications::{self, NotificationKind},
+        workspace::Manager,
+    },
+    model::Workspace,
+};
 
 /// Longest answer, in bytes; answers may span lines.
 pub const MAX_ANSWER_LEN: usize = 4096;
@@ -50,9 +58,12 @@ pub struct Question {
     /// The agent message carrying the answer; delivering it deletes the question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<i64>,
-    /// Unix seconds `done` closed the unanswered question.
+    /// Unix seconds `done` or withdrawal closed the unanswered question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_at: Option<i64>,
+    /// Whether the asking agent closed it, needing no answer after all.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub withdrawn: bool,
 }
 
 /// Questions that fit one response, and how many older ones were left out.
@@ -124,6 +135,11 @@ impl Question {
             self.id
         );
         ensure!(
+            !self.withdrawn,
+            "question {} was withdrawn: its agent no longer needs an answer",
+            self.id
+        );
+        ensure!(
             self.closed_at.is_none(),
             "question {} is closed: its workspace's assignment was marked done",
             self.id
@@ -147,6 +163,18 @@ impl Question {
             format!(
                 "question {} (answer with shoal answer {}): {} Recommended: {}",
                 self.id, self.id, self.ask.question, self.ask.recommendation
+            ),
+            crate::validate::MAX_MESSAGE_LEN,
+        )
+    }
+
+    /// What the user, or the coordinating agent, is told about a withdrawn
+    /// question whose notification was already shown.
+    fn withdrawal_notification(&self) -> String {
+        shorten(
+            format!(
+                "withdrew question {} (no answer needed): {}",
+                self.id, self.ask.question
             ),
             crate::validate::MAX_MESSAGE_LEN,
         )
@@ -178,7 +206,7 @@ fn shorten(mut text: String, max: usize) -> String {
 const SELECT: &str =
     "SELECT q.number,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
     q.reason,q.choices,q.answer,q.answered_at,
-    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at
+    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at,q.withdrawn
     FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
@@ -198,6 +226,7 @@ fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
             answered_at: row.get(9)?,
             message_id: row.get(10)?,
             closed_at: row.get(11)?,
+            withdrawn: row.get(12)?,
         },
         row.get(7)?,
     ))
@@ -322,6 +351,22 @@ pub(crate) fn close_open(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec
     Ok(numbers)
 }
 
+/// Close the workspace's open question `id` as withdrawn by its agent.
+fn withdraw(tx: &Transaction<'_>, workspace: &Workspace, id: i64) -> Result<Question> {
+    let mut question = by_id(tx, id)?
+        .filter(|question| question.workspace_id == workspace.id)
+        .with_context(|| format!("workspace {} has no question {id}", workspace.name))?;
+    question.ensure_open()?;
+    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    tx.execute(
+        "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",
+        params![id, closed_at],
+    )?;
+    question.closed_at = Some(closed_at);
+    question.withdrawn = true;
+    Ok(question)
+}
+
 /// Delete the question whose answer `message_id` carried, once the message
 /// is delivered.
 pub(crate) fn delete_delivered(
@@ -444,6 +489,38 @@ impl Manager {
             .await?;
         self.agent_messages_changed.send_modify(|count| *count += 1);
         self.questions_changed.send_modify(|count| *count += 1);
+        Ok(question)
+    }
+
+    /// Withdraw the workspace's open question `id`, which its agents no
+    /// longer need answered. Its notification goes while unread; once shown,
+    /// the user or the coordinating agent is told instead.
+    pub async fn withdraw_question(&self, selector: &str, id: i64) -> Result<Question> {
+        let workspace = self.workspace(selector).await?;
+        let (question, retracted) = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let question = withdraw(&tx, &workspace, id)?;
+                let retracted = notifications::retract(
+                    &tx,
+                    &question.workspace,
+                    NotificationKind::QuestionAsked,
+                    &question.notification(),
+                )?;
+                tx.commit()?;
+                Ok((question, retracted))
+            })
+            .await?;
+        self.questions_changed.send_modify(|count| *count += 1);
+        if !retracted {
+            self.notify(
+                Some(&question.workspace),
+                NotificationKind::QuestionWithdrawn,
+                question.withdrawal_notification(),
+            )
+            .await;
+        }
         Ok(question)
     }
 

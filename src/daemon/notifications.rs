@@ -18,6 +18,8 @@ states!(NotificationKind {
     ApprovalRequested => "approval_requested",
     /// A workspace's agent asked the user a question.
     QuestionAsked => "question_asked",
+    /// A workspace's agent withdrew a question the user had been shown.
+    QuestionWithdrawn => "question_withdrawn",
     /// A resource or simulator request found no free capacity.
     ResourceBusy => "resource_busy",
     /// A preferred port was in use.
@@ -61,7 +63,10 @@ impl NotificationKind {
     fn coordination(self) -> Option<Source> {
         match self {
             Self::AgentExited | Self::AgentStopped => Some(Source::Daemon),
-            Self::AgentMessage | Self::QuestionAsked | Self::WorkspaceDone => Some(Source::Agent),
+            Self::AgentMessage
+            | Self::QuestionAsked
+            | Self::QuestionWithdrawn
+            | Self::WorkspaceDone => Some(Source::Agent),
             _ => None,
         }
     }
@@ -120,6 +125,22 @@ pub(crate) fn insert(
         [RETAINED as i64],
     )?;
     Ok(Some(id))
+}
+
+/// Delete the unread notification of `kind` recording `message` for
+/// `workspace`, so the user is not shown an event that no longer applies.
+/// Returns whether there was one.
+pub(crate) fn retract(
+    tx: &rusqlite::Transaction<'_>,
+    workspace: &str,
+    kind: NotificationKind,
+    message: &str,
+) -> Result<bool> {
+    let deleted = tx.execute(
+        "DELETE FROM notifications WHERE read=0 AND workspace=?1 AND kind=?2 AND message=?3",
+        params![workspace, kind, message],
+    )?;
+    Ok(deleted > 0)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

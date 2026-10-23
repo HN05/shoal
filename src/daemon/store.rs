@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 58;
+const SCHEMA_VERSION: i64 = 59;
 
 #[cfg(test)]
 mod benchmark;
@@ -389,7 +389,11 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (56, QUEUE_TARGETS, None),
     (57, include_str!("store/chat_messages.sql"), None),
     (58, include_str!("store/repository_approvals.sql"), None),
+    (59, QUESTION_WITHDRAWN, None),
 ];
+
+/// Whether the asking agent withdrew a closed question.
+const QUESTION_WITHDRAWN: &str = "ALTER TABLE questions ADD COLUMN withdrawn INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn IN (0,1));";
 
 /// The existing workspace a queued launch opens, apart from the workspace a
 /// starting launch reports it opened.
@@ -1034,6 +1038,9 @@ mod tests {
         }
         if version >= 58 {
             db.execute_batch(include_str!("store/repository_approvals.sql"))?;
+        }
+        if version >= 59 {
+            db.execute_batch(QUESTION_WITHDRAWN)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
