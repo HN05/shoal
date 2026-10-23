@@ -795,7 +795,7 @@ impl Manager {
                 let request = withdraw(&tx, &workspace, id)?;
                 let retracted = notifications::retract(
                     &tx,
-                    &request.workspace,
+                    &request.workspace_id,
                     NotificationKind::ApprovalRequested,
                     &request.notification(),
                 )?;

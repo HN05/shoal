@@ -601,6 +601,24 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
 }
 
 #[tokio::test]
+async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
+    let (_root, manager, workspace) = fixture().await;
+    let question = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    manager
+        .rename_workspace(&workspace.id, "renamed", None)
+        .await
+        .unwrap();
+    manager
+        .withdraw_question(&workspace.id, question.id)
+        .await
+        .unwrap();
+    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn withdrawing_a_shown_question_tells_the_user() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager

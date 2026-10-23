@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 59;
+const SCHEMA_VERSION: i64 = 60;
 
 #[cfg(test)]
 mod benchmark;
@@ -390,7 +390,13 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (57, include_str!("store/chat_messages.sql"), None),
     (58, include_str!("store/repository_approvals.sql"), None),
     (59, QUESTION_WITHDRAWN, None),
+    (60, NOTIFICATION_SENDERS, None),
 ];
+
+/// The workspace a notification is about, by identity, so withdrawing what
+/// it sent survives a rename and never reaches a later workspace of the same
+/// name. Earlier notifications name none.
+const NOTIFICATION_SENDERS: &str = "ALTER TABLE notifications ADD COLUMN workspace_id TEXT;";
 
 /// Whether the asking agent withdrew a closed question.
 const QUESTION_WITHDRAWN: &str = "ALTER TABLE questions ADD COLUMN withdrawn INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn IN (0,1));";
@@ -1041,6 +1047,9 @@ mod tests {
         }
         if version >= 59 {
             db.execute_batch(QUESTION_WITHDRAWN)?;
+        }
+        if version >= 60 {
+            db.execute_batch(NOTIFICATION_SENDERS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

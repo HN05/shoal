@@ -504,7 +504,7 @@ impl Manager {
                 let question = withdraw(&tx, &workspace, id)?;
                 let retracted = notifications::retract(
                     &tx,
-                    &question.workspace,
+                    &question.workspace_id,
                     NotificationKind::QuestionAsked,
                     &question.notification(),
                 )?;

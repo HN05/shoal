@@ -99,8 +99,9 @@ pub(crate) struct Recorded {
     pub new: bool,
 }
 
-/// Record an event for the user in the caller's transaction. Callers wake
-/// watchers with `notifications_changed` after committing a new one.
+/// Record an event for the user in the caller's transaction, with the
+/// identity of the workspace that now has its name. Callers wake watchers
+/// with `notifications_changed` after committing a new one.
 pub(crate) fn insert(
     tx: &rusqlite::Transaction<'_>,
     workspace: Option<&str>,
@@ -120,7 +121,8 @@ pub(crate) fn insert(
         }
     }
     tx.execute(
-        "INSERT INTO notifications(created_at,workspace,kind,message) VALUES (?1,?2,?3,?4)",
+        "INSERT INTO notifications(created_at,workspace,workspace_id,kind,message)
+            VALUES (?1,?2,(SELECT id FROM workspaces WHERE name=?2),?3,?4)",
         params![
             i64::try_from(crate::time::unix_seconds())?,
             workspace,
@@ -136,18 +138,18 @@ pub(crate) fn insert(
     Ok(Recorded { id, new: true })
 }
 
-/// Delete the unread notification of `kind` recording `message` for
-/// `workspace`, so the user is not shown an event that no longer applies.
-/// Returns whether there was one.
+/// Delete the unread notification of `kind` recording `message` for the
+/// workspace `workspace_id`, so the user is not shown an event that no
+/// longer applies. Returns whether there was one.
 pub(crate) fn retract(
     tx: &rusqlite::Transaction<'_>,
-    workspace: &str,
+    workspace_id: &str,
     kind: NotificationKind,
     message: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
-        "DELETE FROM notifications WHERE read=0 AND workspace=?1 AND kind=?2 AND message=?3",
-        params![workspace, kind, message],
+        "DELETE FROM notifications WHERE read=0 AND workspace_id=?1 AND kind=?2 AND message=?3",
+        params![workspace_id, kind, message],
     )?;
     Ok(deleted > 0)
 }
@@ -161,9 +163,9 @@ fn withdraw_message(
     let notification = tx
         .query_row(
             &format!(
-                "SELECT {COLUMNS} FROM notifications WHERE id=?1 AND workspace=?2 AND kind=?3"
+                "SELECT {COLUMNS} FROM notifications WHERE id=?1 AND workspace_id=?2 AND kind=?3"
             ),
-            params![id, workspace.name, NotificationKind::AgentMessage],
+            params![id, workspace.id, NotificationKind::AgentMessage],
             row,
         )
         .optional()?
@@ -610,6 +612,29 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("already shown"), "{error:#}");
+
+        // The sender keeps its messages across a rename, and a later
+        // workspace taking its name gets none of them.
+        let unread = send("PR #14 is ready to merge").await;
+        let renamed = manager
+            .rename_workspace(&sender.id, "renamed", None)
+            .await
+            .unwrap();
+        // The renamed workspace keeps its directory, so the new one needs another.
+        let path = Some(temp.path().join("successor"));
+        let successor = manager
+            .create_workspace(&repo.id, "sender".into(), None, None, path)
+            .await
+            .unwrap();
+        let error = manager
+            .withdraw_message(&successor.id, unread)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("sent no notification"),
+            "{error:#}"
+        );
+        manager.withdraw_message(&renamed.id, unread).await.unwrap();
     }
 
     #[tokio::test]
