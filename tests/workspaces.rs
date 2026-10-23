@@ -99,29 +99,14 @@ impl Fixture {
     }
 
     fn protocol(&self) -> u64 {
-        self.raw_request(0, 1, serde_json::json!("status"))["protocol"]
-            .as_u64()
-            .unwrap()
+        support::daemon_client::protocol(self.root.path())
     }
 
     fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
-        use std::{
-            io::{BufRead, BufReader},
-            os::unix::net::UnixStream,
-        };
-        let mut stream = UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(60)))
-            .unwrap();
-        writeln!(
-            stream,
-            "{}",
-            serde_json::json!({"protocol": protocol, "id": id, "method": method})
+        support::daemon_client::exchange(
+            self.root.path(),
+            &serde_json::json!({"protocol": protocol, "id": id, "method": method}),
         )
-        .unwrap();
-        let mut response = String::new();
-        BufReader::new(stream).read_line(&mut response).unwrap();
-        serde_json::from_str::<Value>(&response).unwrap()
     }
 
     fn rename(&self, workspace: &str, branch: &str) -> Value {

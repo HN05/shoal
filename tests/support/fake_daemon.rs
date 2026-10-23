@@ -6,12 +6,10 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::{UnixListener, UnixStream},
     path::Path,
-    time::Duration,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
-// A generous hang guard, never a timing assertion.
-const HANG_GUARD: Duration = Duration::from_secs(60);
+use super::HANG_GUARD;
 
 pub fn bind_fake_daemon(root: &Path) -> UnixListener {
     std::fs::create_dir_all(root.join("state")).unwrap();

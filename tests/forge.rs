@@ -15,11 +15,8 @@ mod support;
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
-    os::unix::net::UnixStream,
     path::{Path, PathBuf},
     process::{Child, Command, Output},
-    time::Duration,
 };
 
 const FORGE: &str = include_str!("fixtures/forge.py");
@@ -168,24 +165,12 @@ impl Fixture {
     }
 
     fn request_as(&self, method: Value, scope: Option<&str>) -> Value {
-        let send = |protocol: u64, method: Value| {
-            let mut stream =
-                UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(60)))
-                .unwrap();
-            writeln!(
-                stream,
-                "{}",
-                json!({"protocol": protocol, "id": 1, "method": method, "scope": scope})
-            )
-            .unwrap();
-            let mut response = String::new();
-            BufReader::new(stream).read_line(&mut response).unwrap();
-            serde_json::from_str::<Value>(&response).unwrap()
-        };
-        let protocol = send(0, json!("status"))["protocol"].as_u64().unwrap();
-        send(protocol, method)
+        let root = self.root.path();
+        let protocol = support::daemon_client::protocol(root);
+        support::daemon_client::exchange(
+            root,
+            &json!({"protocol": protocol, "id": 1, "method": method, "scope": scope}),
+        )
     }
 
     fn events(&self) -> Vec<Value> {

@@ -1,5 +1,6 @@
 //! Shared fixtures and process defaults for integration tests. Apply overrides with
 //! `Command::env` / `current_dir` / `stdin` after constructing a command.
+pub mod daemon_client;
 pub mod fake_daemon;
 
 #[allow(dead_code)]
@@ -12,7 +13,12 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::Path,
     process::{Command, Stdio},
+    time::Duration,
 };
+
+/// A generous bound on a daemon socket read or write, never a timing assertion.
+#[allow(dead_code)]
+pub const HANG_GUARD: Duration = Duration::from_secs(60);
 
 /// Install an executable fixture, including any parent directories it needs.
 #[allow(dead_code)] // Integration test binaries use different subsets of support.
