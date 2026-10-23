@@ -334,6 +334,26 @@ pub(crate) fn save_stopped_agents(
     Ok(())
 }
 
+/// Save the record of stopped agent `id` as moved, since its session is not
+/// available where the workspace is, keeping its stop time.
+pub(crate) fn save_moved(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
+    let path = record_path(paths, workspace_id, id);
+    let Some(record) = Record::load(&path)? else {
+        return Ok(());
+    };
+    let stopped = std::fs::metadata(&path)?.modified()?;
+    crate::fsutil::replace_atomically(
+        &path,
+        &serde_json::to_vec(&record.moved())?,
+        ReplaceOptions {
+            permissions: Permissions::Temporary,
+            sync: true,
+        },
+    )?;
+    std::fs::File::open(path)?.set_modified(stopped)?;
+    Ok(())
+}
+
 /// Remove a record whose stop never reached the agent, returning whether it
 /// did. A record the wrapper saved after stopping the agent is kept.
 pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -> Result<bool> {
@@ -434,6 +454,15 @@ impl LastSession {
 
     pub(crate) fn path(paths: &Paths, workspace_id: &str) -> PathBuf {
         paths.workspace_state(workspace_id).join(LAST_SESSION)
+    }
+
+    /// Save the workspace's last session as moved, since it is not available
+    /// where the workspace is.
+    pub(crate) fn save_moved(paths: &Paths, workspace_id: &str) -> Result<()> {
+        match Self::load(paths, workspace_id)? {
+            Some(last) => last.moved().write(paths, workspace_id),
+            None => Ok(()),
+        }
     }
 
     /// Save execution `id` of `agent` as the workspace's last session.
@@ -798,6 +827,38 @@ mod tests {
             std::fs::metadata(path).unwrap().modified().unwrap(),
             std::time::UNIX_EPOCH + std::time::Duration::from_secs(agents[0].stopped_at)
         );
+    }
+
+    #[test]
+    fn records_saved_as_moved_drop_their_session_and_keep_their_stop_time() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path());
+        let mut record = Record::new("claude", None, Stage::Stopped, Some("tab".into()));
+        record.session = Some("s1".into());
+        let agent = StoppedAgent {
+            execution: "execution".into(),
+            record,
+            stopped_at: 100,
+        };
+        save_stopped_agents(&paths, "workspace", &[agent]).unwrap();
+        save_moved(&paths, "workspace", "execution").unwrap();
+        let agents = stopped_agents(&paths, "workspace").unwrap();
+        assert!(agents[0].record.moved);
+        assert_eq!(agents[0].record.session, None);
+        assert_eq!(agents[0].stopped_at, 100);
+        // A record that is gone stays gone.
+        save_moved(&paths, "workspace", "other").unwrap();
+        assert_eq!(stopped_agents(&paths, "workspace").unwrap().len(), 1);
+
+        let last = LastSession {
+            agent: "codex".into(),
+            session: Some("s2".into()),
+            moved: false,
+        };
+        last.write(&paths, "workspace").unwrap();
+        LastSession::save_moved(&paths, "workspace").unwrap();
+        let last = LastSession::load(&paths, "workspace").unwrap().unwrap();
+        assert_eq!((last.session, last.moved), (None, true));
     }
 
     #[test]

@@ -13,6 +13,7 @@ mod launch;
 mod trust;
 
 use std::{
+    collections::BTreeMap,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
@@ -64,15 +65,20 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
-    /// Whether the agent's session `session` is on this machine; without a
-    /// way to check, it counts as there.
-    fn has_session(&self, _ctx: &Context, _session: &str) -> bool {
+    /// Whether the agent's session `session` is where the agent, running in
+    /// `environment`, looks for it; without a way to check, it counts as there.
+    fn has_session(&self, _environment: &AgentEnvironment, _session: &str) -> bool {
         true
     }
 
     /// Make `session` resumable from `directory`, where its workspace moved
     /// from another directory on this machine.
-    fn carry_session(&self, _ctx: &Context, _session: &str, _directory: &Path) -> Result<()> {
+    fn carry_session(
+        &self,
+        _environment: &AgentEnvironment,
+        _session: &str,
+        _directory: &Path,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -148,6 +154,13 @@ pub(in crate::cli) struct Launch {
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
+}
+
+/// What a workspace's tracked agents run with, which says where their tools
+/// keep sessions: this process's environment with the workspace's `[env]`.
+pub(in crate::cli) struct AgentEnvironment<'a> {
+    pub home: &'a Path,
+    pub configured: &'a BTreeMap<String, OsString>,
 }
 
 /// How a launch relates to the agents around it.
@@ -380,45 +393,89 @@ pub(crate) fn wakes_by_prompt(name: &str) -> bool {
     integration(name).wakes_by_prompt()
 }
 
-/// Whether agent `name`'s session `session` is on this machine.
-pub(in crate::cli) fn has_session(ctx: &Context, name: &str, session: &str) -> bool {
-    integration(name).has_session(ctx, session)
-}
-
 /// Make the sessions that `workspace`, reopened from `removed`, keeps for
-/// `shoal resume` resumable at its path, which may be new, trusting the path
-/// for their agents. Failures only warn.
+/// `shoal resume` resumable at its path, which may be new, for its agents
+/// running with `configured`: trust the path for them and carry each session
+/// there. A session its agent cannot find starts a new one instead. Failures
+/// only warn.
 pub(in crate::cli) async fn carry_sessions(
     ctx: &Context,
     workspace: &Workspace,
     removed: &RemovedWorkspace,
+    configured: &BTreeMap<String, OsString>,
 ) {
-    let agents = removed.agents.iter().map(|agent| {
-        (
-            &agent.record.agent,
-            &agent.record.session,
-            agent.record.moved,
-        )
-    });
-    let last = removed
-        .last_session
-        .iter()
-        .map(|last| (&last.agent, &last.session, last.moved));
-    for (agent, session, moved) in agents.chain(last) {
-        let Some(session) = session.as_deref().filter(|_| !moved) else {
+    let environment = AgentEnvironment {
+        home: &ctx.paths.home,
+        configured,
+    };
+    for kept in kept_sessions(removed) {
+        let integration = integration(kept.agent);
+        if !integration.has_session(&environment, kept.session) {
+            if let Err(error) = kept.mark_unavailable(&ctx.paths, &workspace.id) {
+                eprintln!(
+                    "warning: cannot start a new {} session for shoal resume: {error:#}",
+                    kept.agent
+                );
+            }
             continue;
-        };
-        let integration = integration(agent);
+        }
         if let Some(trust) = integration.trust_file() {
             trust.trust_workspace(ctx, workspace).await;
         }
-        if let Err(error) = integration.carry_session(ctx, session, &workspace.path) {
+        if let Err(error) = integration.carry_session(&environment, kept.session, &workspace.path) {
             eprintln!(
-                "warning: cannot make {agent} session {session} resumable in {}: {error:#}",
+                "warning: cannot make {} session {} resumable in {}: {error:#}",
+                kept.agent,
+                kept.session,
                 workspace.path.display()
             );
         }
     }
+}
+
+/// A session a reopened workspace keeps for `shoal resume`: a stopped
+/// agent's, or the last one's when `execution` is `None`.
+struct KeptSession<'a> {
+    agent: &'a str,
+    session: &'a str,
+    execution: Option<&'a str>,
+}
+
+impl KeptSession<'_> {
+    /// Save its record as moved, so `shoal resume` starts a new session.
+    fn mark_unavailable(&self, paths: &crate::paths::Paths, workspace_id: &str) -> Result<()> {
+        use crate::execution::recovery;
+        match self.execution {
+            Some(execution) => recovery::save_moved(paths, workspace_id, execution),
+            None => recovery::LastSession::save_moved(paths, workspace_id),
+        }
+    }
+}
+
+/// The sessions of `removed`'s agents that were not moved.
+fn kept_sessions(removed: &RemovedWorkspace) -> Vec<KeptSession<'_>> {
+    let mut kept: Vec<_> = removed
+        .agents
+        .iter()
+        .filter(|agent| !agent.record.moved)
+        .filter_map(|agent| {
+            Some(KeptSession {
+                agent: &agent.record.agent,
+                session: agent.record.session.as_deref()?,
+                execution: Some(&agent.execution),
+            })
+        })
+        .collect();
+    if let Some(last) = removed.last_session.as_ref().filter(|last| !last.moved)
+        && let Some(session) = last.session.as_deref()
+    {
+        kept.push(KeptSession {
+            agent: &last.agent,
+            session,
+            execution: None,
+        });
+    }
+    kept
 }
 
 /// Trust a repository's checkout for a chat of agent `name` as workspace

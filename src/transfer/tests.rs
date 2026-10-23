@@ -289,29 +289,30 @@ fn manifest_with_sessions() -> Manifest {
 }
 
 #[test]
-fn an_import_keeps_sessions_only_on_the_exporting_machine_where_they_remain() {
-    let manifest = manifest_with_sessions();
-    let here = manifest.workspace_on(Some("m1"), |_, _| true);
+fn an_import_keeps_sessions_only_on_the_exporting_machine() {
+    let mut manifest = manifest_with_sessions();
+    let here = manifest.workspace_on(Some("m1"));
     assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
     assert!(!here.agents[0].record.moved);
     assert_eq!(here.agents[0].record.place.as_deref(), Some("tab"));
     let last = here.last_session.unwrap();
     assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
 
-    // Claude's session is gone; Codex's remains.
-    let partly = manifest.workspace_on(Some("m1"), |agent, _| agent == "codex");
-    assert!(partly.agents[0].record.moved);
-    assert_eq!(partly.agents[0].record.session, None);
-    assert!(!partly.last_session.unwrap().moved);
-
     for elsewhere in [
-        manifest.workspace_on(Some("m2"), |_, _| true),
-        manifest.workspace_on(None, |_, _| true),
+        manifest.workspace_on(Some("m2")),
+        manifest.workspace_on(None),
     ] {
         assert!(elsewhere.agents[0].record.moved);
         assert_eq!(elsewhere.agents[0].record.session, None);
         assert!(elsewhere.last_session.unwrap().moved);
     }
+
+    // An agent that never reported a session starts a new one here too.
+    let sessions = manifest.sessions.as_mut().unwrap();
+    sessions.last_session.as_mut().unwrap().session = None;
+    let here = manifest.workspace_on(Some("m1"));
+    assert!(!here.agents[0].record.moved);
+    assert!(here.last_session.unwrap().moved);
 }
 
 #[test]

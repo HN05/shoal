@@ -1719,10 +1719,11 @@ commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal restore` does; when that restore fails,
 `shoal restore <workspace>` retries it. On the machine that exported it, `shoal
 resume` continues each agent's reported session. Every reopen, by import or
-`shoal restore`, trusts the workspace's path for those agents and copies the
-newer files of the project folder holding a Claude Code session's latest copy
-into the path's folder. An agent whose session is not available, such as on another machine,
-`shoal resume` starts as `shoal claude` or `shoal codex` starts a new one,
+`shoal restore`, looks for those sessions where Claude Code and Codex keep them
+under the workspace's `[env]`, trusts the workspace's path for their agents and
+copies the newer files of the project folder holding a Claude Code session's
+latest copy into the path's folder. An agent whose session is not available,
+such as on another machine, `shoal resume` starts as `shoal claude` or `shoal codex` starts a new one,
 telling it the workspace moved, instead of running `[agent_resume]`. Workspace
 processes can neither export nor import.
 

@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 
 use super::{
-    Integration, Launch, desktop,
+    AgentEnvironment, Integration, Launch, desktop,
     trust::{CODEX, TrustFile},
 };
 use crate::{
@@ -51,9 +51,9 @@ impl Integration for Codex {
     }
 
     /// Codex resumes a session by ID from any directory.
-    fn has_session(&self, ctx: &Context, session: &str) -> bool {
-        crate::env::codex_home().is_ok_and(|home| {
-            let home = home.unwrap_or_else(|| ctx.paths.home.join(".codex"));
+    fn has_session(&self, environment: &AgentEnvironment, session: &str) -> bool {
+        crate::env::codex_home_with(environment.configured).is_ok_and(|home| {
+            let home = home.unwrap_or_else(|| environment.home.join(".codex"));
             has_rollout(&home.join("sessions"), session)
         })
     }

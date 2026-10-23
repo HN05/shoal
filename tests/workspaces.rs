@@ -4808,13 +4808,17 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         "quit-session"
     );
     assert_eq!(
-        fs::read_to_string(claude_project(&fixture, path).join("quit-session.jsonl")).unwrap(),
+        fs::read_to_string(
+            claude_project(&fixture.root.path().join(".claude/projects"), path)
+                .join("quit-session.jsonl")
+        )
+        .unwrap(),
         "conversation\n"
     );
 }
 
-/// Claude Code's project folder of `directory` in the fixture's home.
-fn claude_project(fixture: &Fixture, directory: &Path) -> std::path::PathBuf {
+/// Claude Code's project folder of `directory` in `projects`.
+fn claude_project(projects: &Path, directory: &Path) -> std::path::PathBuf {
     let name: String = fs::canonicalize(directory)
         .unwrap()
         .to_str()
@@ -4828,12 +4832,21 @@ fn claude_project(fixture: &Fixture, directory: &Path) -> std::path::PathBuf {
             }
         })
         .collect();
-    fixture.root.path().join(".claude/projects").join(name)
+    projects.join(name)
 }
 
 #[test]
 fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
     let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    // Claude Code runs with the directory `[env]` gives it.
+    let claude = fixture.root.path().join("claude-config");
+    let config = fixture.root.path().join(".config/shoal/config.toml");
+    let mut text = fs::read_to_string(&config).unwrap();
+    text.push_str(&format!(
+        "[env]\nCLAUDE_CONFIG_DIR = '{}'\n",
+        claude.display()
+    ));
+    fs::write(&config, text).unwrap();
     let workspace = fixture.add("carried");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(
@@ -4854,7 +4867,7 @@ fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
     assert!(output.status.success(), "{output:?}");
     // Claude Code keeps the session in the project folder of the directory
     // the workspace had before.
-    let projects = fixture.root.path().join(".claude/projects");
+    let projects = claude.join("projects");
     let old = projects.join("-old-workspace");
     fs::create_dir_all(&old).unwrap();
     fs::write(old.join("carried-session.jsonl"), "conversation\n").unwrap();
@@ -4883,7 +4896,7 @@ fn import_on_the_exporting_machine_continues_the_session_from_the_new_path() {
         "carried-session"
     );
     assert_eq!(
-        fs::read_to_string(claude_project(&fixture, path).join("carried-session.jsonl")).unwrap(),
+        fs::read_to_string(claude_project(&projects, path).join("carried-session.jsonl")).unwrap(),
         "conversation\n"
     );
 }

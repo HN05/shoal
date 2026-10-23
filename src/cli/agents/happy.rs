@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 use serde_json::json;
 
-use super::{Integration, Launch, trust::TrustFile};
+use super::{AgentEnvironment, Integration, Launch, trust::TrustFile};
 use crate::{
     cli::{
         client,
@@ -42,12 +42,17 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
-    fn has_session(&self, ctx: &Context, session: &str) -> bool {
-        self.inner().has_session(ctx, session)
+    fn has_session(&self, environment: &AgentEnvironment, session: &str) -> bool {
+        self.inner().has_session(environment, session)
     }
 
-    fn carry_session(&self, ctx: &Context, session: &str, directory: &Path) -> Result<()> {
-        self.inner().carry_session(ctx, session, directory)
+    fn carry_session(
+        &self,
+        environment: &AgentEnvironment,
+        session: &str,
+        directory: &Path,
+    ) -> Result<()> {
+        self.inner().carry_session(environment, session, directory)
     }
 
     fn unavailable(&self, settings: &Effective) -> Option<&'static str> {

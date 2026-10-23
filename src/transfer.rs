@@ -105,13 +105,9 @@ impl Manifest {
     }
 
     /// The removal record to import on `machine`. On the exporting machine,
-    /// each agent keeps its session when `available` finds the agent's
-    /// session there; every other agent starts a new session.
-    pub fn workspace_on(
-        &self,
-        machine: Option<&str>,
-        available: impl Fn(&str, &str) -> bool,
-    ) -> RemovedWorkspace {
+    /// each agent with a session keeps it, which reopening checks where the
+    /// agent runs; every other agent starts a new session.
+    pub fn workspace_on(&self, machine: Option<&str>) -> RemovedWorkspace {
         let Some(sessions) = self
             .sessions
             .as_ref()
@@ -119,18 +115,15 @@ impl Manifest {
         else {
             return self.workspace.clone();
         };
-        let kept = |agent: &str, session: Option<&str>| {
-            session.is_some_and(|session| available(agent, session))
-        };
         let agents = sessions.agents.iter().cloned().map(|agent| {
-            if kept(&agent.record.agent, agent.record.session.as_deref()) {
+            if agent.record.session.is_some() {
                 agent
             } else {
                 moved_agent(agent)
             }
         });
         let last_session = sessions.last_session.clone().map(|last| {
-            if kept(&last.agent, last.session.as_deref()) {
+            if last.session.is_some() {
                 last
             } else {
                 last.moved()

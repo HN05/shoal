@@ -8,15 +8,16 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{cli::context::Context, env, execution::recovery};
+use crate::{cli::agents::AgentEnvironment, env, execution::recovery};
 
 /// The longest folder name Claude Code uses as is; it shortens longer ones.
 const MAX_FOLDER_NAME: usize = 200;
 
-/// The directory holding every project folder.
-pub(super) fn projects(ctx: &Context) -> Result<PathBuf> {
-    Ok(env::claude_config_dir()?
-        .unwrap_or_else(|| ctx.paths.home.join(".claude"))
+/// The directory holding every project folder of Claude Code running in
+/// `environment`.
+pub(super) fn projects(environment: &AgentEnvironment) -> Result<PathBuf> {
+    Ok(env::claude_config_dir_with(environment.configured)?
+        .unwrap_or_else(|| environment.home.join(".claude"))
         .join("projects"))
 }
 

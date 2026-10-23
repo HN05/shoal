@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde_json::{Value, json};
 
 use super::{
-    Integration,
+    AgentEnvironment, Integration,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
@@ -39,15 +39,20 @@ impl Integration for Claude {
         Some(&CLAUDE_CODE)
     }
 
-    fn has_session(&self, ctx: &Context, session: &str) -> bool {
-        sessions::projects(ctx)
+    fn has_session(&self, environment: &AgentEnvironment, session: &str) -> bool {
+        sessions::projects(environment)
             .and_then(|projects| sessions::find(&projects, session))
             .is_ok_and(|folder| folder.is_some())
     }
 
     /// Claude Code resumes only sessions in the directory's project folder.
-    fn carry_session(&self, ctx: &Context, session: &str, directory: &Path) -> Result<()> {
-        sessions::carry(&sessions::projects(ctx)?, session, directory)
+    fn carry_session(
+        &self,
+        environment: &AgentEnvironment,
+        session: &str,
+        directory: &Path,
+    ) -> Result<()> {
+        sessions::carry(&sessions::projects(environment)?, session, directory)
     }
 }
 

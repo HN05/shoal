@@ -252,7 +252,7 @@ pub(super) async fn prepare_reopened(
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
-    crate::cli::agents::carry_sessions(ctx, &opened.workspace, &removed).await;
+    carry_sessions(ctx, &opened.workspace, &removed).await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(ready) = super::workspaces::setup_workspace(ctx, &workspace).await? else {
@@ -268,6 +268,18 @@ pub(super) async fn prepare_reopened(
         removed,
         warnings,
     }))
+}
+
+/// Make the sessions the reopened `workspace` keeps resumable where its
+/// agents, with its `[env]`, look for them.
+async fn carry_sessions(ctx: &Context, workspace: &Workspace, removed: &RemovedWorkspace) {
+    let configured = super::workspaces::configured_environment(ctx, workspace)
+        .await
+        .unwrap_or_else(|error| {
+            eprintln!("warning: cannot resolve the workspace's [env] for its agents: {error:#}");
+            Default::default()
+        });
+    crate::cli::agents::carry_sessions(ctx, workspace, removed, &configured).await;
 }
 
 fn print_removed(removed: &[RemovedWorkspace]) {
