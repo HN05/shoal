@@ -26,7 +26,7 @@ pub(super) enum Admission {
     /// Start now; the entry, when one tracks the slot.
     Start(Option<String>),
     /// Wait in the queue behind this many entries in total.
-    Queued(QueueEntry, usize),
+    Queued(Box<QueueEntry>, usize),
 }
 
 /// Ask the daemon for a slot for `agent`, which `plan` starts in workspace `name`.
@@ -47,12 +47,13 @@ pub(super) async fn admit(
         env: terminal::environment(),
         now,
         workspace: None,
+        after: Vec::new(),
     };
     let admission =
         client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
     Ok(match (admission.start, admission.entry) {
         (true, entry) => Admission::Start(entry.map(|entry| entry.id)),
-        (false, Some(entry)) => Admission::Queued(entry, admission.waiting),
+        (false, Some(entry)) => Admission::Queued(Box::new(entry), admission.waiting),
         (false, None) => anyhow::bail!("the daemon queued the agent without an entry"),
     })
 }
@@ -87,6 +88,7 @@ pub(super) async fn queue_in(
         env: terminal::environment(),
         now: false,
         workspace: Some(workspace.id.clone()),
+        after: Vec::new(),
     };
     let admission =
         client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;

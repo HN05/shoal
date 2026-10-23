@@ -647,6 +647,23 @@ pub struct QueueEntry {
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<String>,
+    /// The work a waiting launch still waits for: workspace and queued launch
+    /// names and issue URLs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_for: Vec<String>,
+    /// The branch of the completed dependency a started launch builds on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+}
+
+/// Work a queued launch waits for until it is complete.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Dependency {
+    /// A workspace or a queued launch of the same repository, by name or ID.
+    Work(String),
+    /// An issue, by URL.
+    Issue(String),
 }
 
 /// An agent launch `shoal add` asks the daemon to admit or queue. The plan
@@ -667,6 +684,9 @@ pub struct QueueRequest {
     /// the caller's processes, whether or not a limit applies.
     #[serde(default)]
     pub workspace: Option<String>,
+    /// The work the launch waits for; it always queues while any remains.
+    #[serde(default)]
+    pub after: Vec<Dependency>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -166,6 +166,7 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
             launch.opens,
         ],
     )?;
+    dependencies::record(&tx, &launch.id, &launch.repository, &request.after)?;
     tx.commit()?;
     Ok(())
 }
@@ -183,15 +184,19 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
-const ENTRY_COLUMNS: &str =
-    "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,opens_workspace_id";
+const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,opens_workspace_id,base_branch";
 
 impl Manager {
-    /// Admit `request` to a free slot or queue it. A launch no limit applies
-    /// to starts untracked; one admitted here starts in the caller, except a
-    /// launch in an existing workspace, which the daemon always starts.
+    /// Admit `request` to a free slot or queue it. A launch that no limit
+    /// applies to and that waits for no other work starts untracked; one
+    /// admitted here starts in the caller, except a launch in an existing
+    /// workspace, which the daemon always starts.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         crate::validate::name("queued workspace", &request.name)?;
+        ensure!(
+            !request.now || request.after.is_empty(),
+            "a launch that starts now cannot wait for other work"
+        );
         let repository = self.repository(&request.repository).await?;
         let target = match &request.workspace {
             Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),
@@ -200,7 +205,7 @@ impl Manager {
         let _gate = self.agent_queue_gate.lock().await;
         // Whether any limit applies does not depend on the slots in use.
         let limits = self.agent_limits(vec![repository.id.clone()], &[]).await?;
-        if target.is_none() && !limits.apply_to(&repository.id) {
+        if target.is_none() && request.after.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,
@@ -258,7 +263,8 @@ impl Manager {
     /// and return whether `caller`'s entry was admitted. An admitted restore
     /// is left to its waiting agent. Requires the queue gate.
     async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
-        let (waiting, restores) = self.waiting_work().await?;
+        let (mut waiting, restores) = self.waiting_work().await?;
+        let bases = self.hold_back_dependents(&mut waiting).await?;
         if waiting.is_empty() {
             return Ok(false);
         }
@@ -280,7 +286,7 @@ impl Manager {
             };
             self.grant_restores(&restored, epoch);
         }
-        let starts = self.mark_starting(admitted).await?;
+        let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
     }
 
@@ -336,8 +342,36 @@ impl Manager {
         }
     }
 
-    /// Mark `admitted` entries starting, returning the launches the daemon starts.
-    async fn mark_starting(&self, admitted: Vec<String>) -> Result<Vec<Start>> {
+    /// Take the launches whose dependencies are not complete out of `waiting`,
+    /// returning the branch each remaining launch with a done dependency
+    /// builds on.
+    async fn hold_back_dependents(
+        &self,
+        waiting: &mut Vec<Waiting>,
+    ) -> Result<HashMap<String, String>> {
+        let readiness = self.dependency_readiness().await?;
+        waiting.retain(|entry| {
+            !matches!(
+                readiness.get(&entry.id),
+                Some(dependencies::Readiness::Waiting(_))
+            )
+        });
+        Ok(readiness
+            .into_iter()
+            .filter_map(|(id, readiness)| match readiness {
+                dependencies::Readiness::Ready { base } => Some((id, base?)),
+                dependencies::Readiness::Waiting(_) => None,
+            })
+            .collect())
+    }
+
+    /// Mark `admitted` entries starting, each on its base from `bases`,
+    /// returning the launches the daemon starts.
+    async fn mark_starting(
+        &self,
+        admitted: Vec<String>,
+        mut bases: HashMap<String, String>,
+    ) -> Result<Vec<Start>> {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -345,8 +379,8 @@ impl Manager {
                 let mut starts = Vec::new();
                 for id in admitted {
                     tx.execute(
-                        "UPDATE agent_queue SET state=?2,seen_at=?3 WHERE id=?1",
-                        params![id, QueueState::Starting, now],
+                        "UPDATE agent_queue SET state=?2,seen_at=?3,base_branch=?4 WHERE id=?1",
+                        params![id, QueueState::Starting, now, bases.remove(&id)],
                     )?;
                     let (kind, name, env): (QueueKind, String, Option<String>) = tx.query_row(
                         "SELECT kind,name,env FROM agent_queue WHERE id=?1",
@@ -640,8 +674,20 @@ impl Manager {
             .await
     }
 
-    /// Entries in queue order, waiting ones numbered.
+    /// Entries in queue order, waiting ones numbered and with the work they
+    /// wait for.
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
+        let mut entries = self.numbered_entries().await?;
+        let mut readiness = self.dependency_readiness().await?;
+        for entry in &mut entries {
+            if let Some(dependencies::Readiness::Waiting(work)) = readiness.remove(&entry.id) {
+                entry.waiting_for = work;
+            }
+        }
+        Ok(entries)
+    }
+
+    async fn numbered_entries(&self) -> Result<Vec<QueueEntry>> {
         self.store
             .run(|db| {
                 let mut entries = db
@@ -782,11 +828,17 @@ impl Manager {
         let attached = self
             .store
             .run(move |db| {
-                Ok(db.execute(
+                let tx = db.transaction()?;
+                let attached = tx.execute(
                     "UPDATE agent_queue SET workspace_id=?2
                      WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
-                )?)
+                )?;
+                if attached == 1 {
+                    dependencies::replace_launch(&tx, &id, &workspace.id)?;
+                }
+                tx.commit()?;
+                Ok(attached)
             })
             .await?;
         ensure!(
@@ -1053,8 +1105,12 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         created_at: row.get("created_at")?,
         workspace_id: row.get("workspace_id")?,
         opens: row.get("opens_workspace_id")?,
+        waiting_for: Vec::new(),
+        base: row.get("base_branch")?,
     })
 }
+
+mod dependencies;
 
 #[cfg(test)]
 mod tests;

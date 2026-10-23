@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 62;
+const SCHEMA_VERSION: i64 = 63;
 
 #[cfg(test)]
 mod benchmark;
@@ -393,6 +393,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (60, NOTIFICATION_SENDERS, None),
     (61, CHAT_MESSAGE_SENDERS, None),
     (62, NOTIFICATION_SUBJECTS, None),
+    (63, include_str!("store/agent_queue_dependencies.sql"), None),
 ];
 
 /// The approval request a notification asks the user to decide, by its key,
@@ -1066,6 +1067,9 @@ mod tests {
         }
         if version >= 62 {
             db.execute_batch(NOTIFICATION_SUBJECTS)?;
+        }
+        if version >= 63 {
+            db.execute_batch(include_str!("store/agent_queue_dependencies.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

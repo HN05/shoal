@@ -120,7 +120,11 @@ fn restores_wait_for_healthy_readings_and_hold_back_later_entries() {
     assert!(admit(&occupied, &queue[1..], &starts(0), true).is_empty());
 }
 
-async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Repository {
+pub(super) async fn register(
+    manager: &Manager,
+    temp: &tempfile::TempDir,
+    name: &str,
+) -> Repository {
     let checkout = repository(temp.path(), name);
     manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -135,7 +139,7 @@ fn limit_globally(manager: &Manager, limit: u32) {
     )));
 }
 
-fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
+pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
     QueueRequest {
         repository: repository.id.as_str().into(),
         name: name.into(),
@@ -145,6 +149,7 @@ fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
         workspace: None,
+        after: Vec::new(),
     }
 }
 
@@ -156,7 +161,7 @@ async fn add(manager: &Manager, repository: &Repository, name: &str) -> QueueAdm
 }
 
 /// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
-fn started(id: &str) -> bool {
+pub(super) fn started(id: &str) -> bool {
     STARTED.lock().unwrap().iter().any(|(started, env)| {
         started == id && env.get("HERDR_ENV").map(String::as_str) == Some("1")
     })
@@ -497,7 +502,11 @@ async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
         .expect("queue step hung")
 }
 
-async fn create(manager: &Manager, repository: &Repository, name: &str) -> crate::model::Workspace {
+pub(super) async fn create(
+    manager: &Manager,
+    repository: &Repository,
+    name: &str,
+) -> crate::model::Workspace {
     manager
         .create_workspace(&repository.id, name.into(), None, None, None)
         .await

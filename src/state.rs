@@ -36,7 +36,7 @@ macro_rules! states {
         $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
     }) => {
         $(#[$enum_meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ::serde::Serialize, ::serde::Deserialize)]
         pub enum $name { $($(#[$meta])* #[serde(rename = $wire)] $variant),+ }
 
         impl $name {
@@ -185,6 +185,14 @@ states!(QueueKind {
     Launch => "launch",
     /// A protection-stopped agent's automatic restore in its own workspace.
     Restore => "restore",
+});
+states!(DependencyKind {
+    /// A workspace, by ID.
+    Workspace => "workspace",
+    /// A queued launch, by entry ID, until it opens its workspace.
+    Launch => "launch",
+    /// An issue, by URL.
+    Issue => "issue",
 });
 states!(AgentState: ValueEnum {
     /// The agent is working on a turn.
