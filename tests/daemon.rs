@@ -965,12 +965,24 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
-            let stream = wait_for("client connection", || match listener.accept() {
-                Ok((stream, _)) => Some(stream),
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                Err(error) => panic!("{error}"),
-            });
-            support::fake_daemon::answer(stream, |_| body);
+            // `exec` first lists workspaces to remember the one it runs in.
+            loop {
+                let stream = wait_for("client connection", || match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+                    Err(error) => panic!("{error}"),
+                });
+                let request = support::fake_daemon::answer(stream, |request| {
+                    if request["method"] == "list_workspaces" {
+                        json!({"type": "workspaces", "data": []})
+                    } else {
+                        body.clone()
+                    }
+                });
+                if request["method"] != "list_workspaces" {
+                    break;
+                }
+            }
         });
         let output = command(root.path()).args(&args).output().unwrap();
         daemon.join().unwrap();
