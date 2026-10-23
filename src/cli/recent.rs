@@ -36,6 +36,21 @@ impl History {
             .unwrap_or_default()
     }
 
+    /// Apply `change` under a lock, so concurrent commands keep each other's
+    /// entries.
+    fn update(paths: &Paths, change: impl FnOnce(&mut Self)) -> Result<()> {
+        let path = paths.recent_workspaces();
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path.with_extension("json.lock"))?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        let mut history = Self::load(paths);
+        change(&mut history);
+        history.save(paths)
+    }
+
     fn save(&self, paths: &Paths) -> Result<()> {
         crate::fsutil::replace_atomically(
             &paths.recent_workspaces(),
@@ -118,12 +133,15 @@ async fn remember(ctx: &Context, selector: &str, from_current: bool) {
     ) else {
         return;
     };
-    let mut history = History::load(&ctx.paths);
-    if from_current && let Ok(Some(current)) = ui::current_workspace(&workspaces) {
-        history.record(command, &current.id);
-    }
-    history.record(command, &target.id);
-    let _ = history.save(&ctx.paths);
+    let current = from_current
+        .then(|| ui::current_workspace(&workspaces).ok().flatten())
+        .flatten();
+    let _ = History::update(&ctx.paths, |history| {
+        if let Some(current) = current {
+            history.record(command, &current.id);
+        }
+        history.record(command, &target.id);
+    });
 }
 
 #[cfg(test)]
