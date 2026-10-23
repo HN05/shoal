@@ -13,7 +13,7 @@ use crate::{
     git::{
         self,
         default_branch::DefaultBranchLookup,
-        repo::{clean_branch, merge_temporaries, upstream},
+        repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
     model::{LandPlan, PulledBranch, Repository},
@@ -71,20 +71,8 @@ impl Manager {
             .map(|tree| tree.path);
         if let Some(checkout) = &checkout {
             clean_branch(checkout, &default).await?;
-            for marker in [
-                "MERGE_HEAD",
-                "CHERRY_PICK_HEAD",
-                "REVERT_HEAD",
-                "rebase-apply",
-                "rebase-merge",
-                "sequencer",
-                "index.lock",
-            ] {
-                let path = git::metadata_path(checkout, marker, git_run).await?;
-                ensure!(
-                    !checkout.join(path.trim()).exists(),
-                    "{default} has an unfinished Git operation ({marker})"
-                );
+            if let Some(marker) = unfinished_operation(checkout).await? {
+                bail!("{default} has an unfinished Git operation ({marker})");
             }
         }
         let merge_temporaries = checkout

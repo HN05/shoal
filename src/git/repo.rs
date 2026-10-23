@@ -88,6 +88,27 @@ pub(crate) async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
     Ok(())
 }
 
+/// The first Git operation a landing must not merge over in `checkout`: an
+/// unfinished merge, cherry-pick, revert, rebase or sequencer run, or a held
+/// index lock.
+pub(crate) async fn unfinished_operation(checkout: &Path) -> Result<Option<&'static str>> {
+    for marker in [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "rebase-apply",
+        "rebase-merge",
+        "sequencer",
+        "index.lock",
+    ] {
+        let path = git::metadata_path(checkout, marker, git_run).await?;
+        if checkout.join(path.trim()).exists() {
+            return Ok(Some(marker));
+        }
+    }
+    Ok(None)
+}
+
 /// Executed only by the landing worker, inside the tracked process group.
 /// With `push`, the default branch then goes to its upstream; a missing
 /// upstream is refused before anything merges.
@@ -250,4 +271,44 @@ pub(crate) fn merge_temporaries(checkout: &Path) -> Result<Vec<std::path::PathBu
         }
     }
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::test_support::{git, repository};
+
+    #[tokio::test]
+    async fn unfinished_operation_reads_the_checkouts_own_git_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        let linked = root.path().join("linked");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "linked",
+                linked.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(super::unfinished_operation(&repo).await.unwrap(), None);
+
+        let linked_git_dir = repo.join(".git/worktrees/linked");
+        fs::create_dir(linked_git_dir.join("rebase-merge")).unwrap();
+        assert_eq!(
+            super::unfinished_operation(&linked).await.unwrap(),
+            Some("rebase-merge")
+        );
+        assert_eq!(super::unfinished_operation(&repo).await.unwrap(), None);
+
+        fs::write(repo.join(".git/MERGE_HEAD"), "").unwrap();
+        assert_eq!(
+            super::unfinished_operation(&repo).await.unwrap(),
+            Some("MERGE_HEAD")
+        );
+    }
 }
