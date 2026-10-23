@@ -82,7 +82,10 @@ pub struct Config {
     /// versions still load and `config show` can say it is unused.
     #[serde(rename = "issue_template")]
     pub retired_issue_template: Option<String>,
-    pub agent_template: Option<String>,
+    pub worker_template: Option<String>,
+    /// What `worker_template` was called; still read, with a rename warning.
+    #[serde(rename = "agent_template")]
+    pub renamed_agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub bitbucket: crate::forge::backends::bitbucket::Credentials,
@@ -565,9 +568,11 @@ impl Config {
             config.retired_issue_template =
                 templates::read(directory, templates::RETIRED_ISSUE_FILE)?;
         }
-        if config.agent_template.is_none() {
-            config.agent_template = templates::read(directory, templates::AGENT_FILE)?;
-        }
+        templates::read_worker(
+            directory,
+            &mut config.worker_template,
+            &mut config.renamed_agent_template,
+        )?;
         if config.chat_template.is_none() {
             config.chat_template = templates::read(directory, templates::CHAT_FILE)?;
         }
@@ -586,7 +591,8 @@ impl Config {
                 .collect(),
             agent_resume: self.agent_resume.clone(),
             retired_issue_template: self.retired_issue_template.clone(),
-            agent_template: self.agent_template.clone(),
+            worker_template: self.worker_template.clone(),
+            renamed_agent_template: self.renamed_agent_template.clone(),
             chat_template: self.chat_template.clone(),
             agent_auth: self.agent_auth.clone(),
             git_profile: self.git_profile.clone(),
@@ -649,6 +655,7 @@ impl Config {
             .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
         crate::ai::validate(&config.ai, &config.commands, &paths.home)?;
         config.root_dir(paths)?;
+        templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;

@@ -57,7 +57,10 @@ pub struct RepoConfig {
     /// versions still load and `config show` can say it is unused.
     #[serde(rename = "issue_template")]
     pub retired_issue_template: Option<String>,
-    pub agent_template: Option<String>,
+    pub worker_template: Option<String>,
+    /// What `worker_template` was called; still read, with a rename warning.
+    #[serde(rename = "agent_template")]
+    pub renamed_agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
@@ -227,10 +230,11 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
             crate::config::templates::RETIRED_ISSUE_FILE,
         )?;
     }
-    if config.agent_template.is_none() {
-        config.agent_template =
-            crate::config::templates::read(workspace_dir, crate::config::templates::AGENT_FILE)?;
-    }
+    crate::config::templates::read_worker(
+        workspace_dir,
+        &mut config.worker_template,
+        &mut config.renamed_agent_template,
+    )?;
     if config.chat_template.is_none() {
         config.chat_template =
             crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
@@ -239,9 +243,17 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 }
 
 impl RepoConfig {
-    /// What this layer sets that Shoal no longer reads, with what replaces it.
-    pub fn retired_settings(&self) -> Vec<&'static str> {
+    /// Move settings set under a former name to their current one, warning
+    /// for each and for what this layer sets that Shoal no longer reads.
+    pub fn retire(&mut self) -> Vec<&'static str> {
         let mut retired = Vec::new();
+        if let Some(template) = self.renamed_agent_template.take() {
+            self.worker_template = Some(template);
+            retired.push(
+                "agent_template and agent-template.md are now named \
+                 worker_template and worker-template.md",
+            );
+        }
         if self
             .retired_issue_template
             .as_deref()
@@ -249,7 +261,7 @@ impl RepoConfig {
         {
             retired.push(
                 "issue_template and issue-template.md are no longer used; \
-                 move their instructions to agent_template",
+                 move their instructions to worker_template",
             );
         }
         retired
@@ -263,6 +275,10 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
         .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
     crate::config::named_commands::validate(&config.commands)?;
     crate::config::named_commands::validate(&config.agent_resume)?;
+    crate::config::templates::ensure_one_worker(
+        &config.worker_template,
+        &config.renamed_agent_template,
+    )?;
     config.agent_auth.validate()?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;

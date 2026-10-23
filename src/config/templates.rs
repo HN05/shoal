@@ -1,7 +1,7 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
 use std::{fs, io::Write, path::Path};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use crate::{config::Config, paths::Paths};
 
@@ -14,8 +14,10 @@ pub const RETIRED_ISSUE_FILE: &str = "issue-template.md";
 /// instructions of the user's.
 const RETIRED_ISSUE_DEFAULT: &str =
     "Work on issue #{number}: {title}\n{url}\n\nIssue details:\n{body}";
-pub const AGENT_FILE: &str = "agent-template.md";
-/// Sent to every agent launch ahead of the user's `agent_template` additions.
+pub const WORKER_FILE: &str = "worker-template.md";
+/// What `worker-template.md` was called; still read, with a rename warning.
+pub const RENAMED_AGENT_FILE: &str = "agent-template.md";
+/// Sent to every agent launch ahead of the user's `worker_template` additions.
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
@@ -23,6 +25,35 @@ pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
     crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))
+}
+
+/// Refuse one level setting the worker template under both its names.
+pub fn ensure_one_worker(worker: &Option<String>, renamed: &Option<String>) -> Result<()> {
+    ensure!(
+        worker.is_none() || renamed.is_none(),
+        "worker_template and its former name agent_template are both set; keep only worker_template"
+    );
+    Ok(())
+}
+
+/// Fill one level's omitted inline worker template from `worker-template.md`,
+/// or the file's former name, in `directory`; both files at once is an error.
+pub fn read_worker(
+    directory: &Path,
+    worker: &mut Option<String>,
+    renamed: &mut Option<String>,
+) -> Result<()> {
+    if worker.is_some() || renamed.is_some() {
+        return Ok(());
+    }
+    *worker = read(directory, WORKER_FILE)?;
+    *renamed = read(directory, RENAMED_AGENT_FILE)?;
+    ensure!(
+        worker.is_none() || renamed.is_none(),
+        "both {WORKER_FILE} and {RENAMED_AGENT_FILE} exist in {}; keep only {WORKER_FILE}",
+        directory.display()
+    );
+    Ok(())
 }
 
 pub fn install(paths: &Paths) -> Result<()> {
@@ -123,7 +154,7 @@ mod tests {
         install_at(directory.path()).unwrap();
         let path = directory.path().join(CHAT_FILE);
         assert_eq!(fs::read_to_string(&path).unwrap(), CHAT_DEFAULT);
-        assert!(!directory.path().join(AGENT_FILE).exists());
+        assert!(!directory.path().join(WORKER_FILE).exists());
         assert!(!directory.path().join(RETIRED_ISSUE_FILE).exists());
         fs::write(&path, "custom").unwrap();
         install_at(directory.path()).unwrap();

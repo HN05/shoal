@@ -1006,8 +1006,8 @@ ends a lease grant.
 
 ### Prompt templates
 
-`agent_template` and `chat_template` in the saved repository
-TOML win over the worktree's TOML values or `agent-template.md` and
+`worker_template` and `chat_template` in the saved repository
+TOML win over the worktree's TOML values or `worker-template.md` and
 `chat-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
@@ -1018,10 +1018,12 @@ Shoal uses its bundled default as the base. `config show` reports the combined t
 layer that configured it. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart. The issue prompt is built in:
 `issue_template` and `issue-template.md` still load but are unused, and
-`config show` and `doctor` warn when one holds instructions of yours.
+`config show` and `doctor` warn when one holds instructions of yours. The
+former names `agent_template` and `agent-template.md` still work with a
+rename warning; one level setting both names fails.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
-followed by the agent template, which holds only your additions and cannot
+followed by the worker template, which holds only your additions and cannot
 replace or suppress the guidance. Both may use `{workspace}`, `{branch}` and
 `{path}` from the target worktree, and `{updates}` saying how the launch
 receives issue and PR activity: delivered by its hooks for Claude Code and for

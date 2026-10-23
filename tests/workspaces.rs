@@ -4405,7 +4405,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         format!("\napp\n{path}\nrepo-default\n")
     );
     // An explicit desktop handoff does not load terminal prompt templates.
-    fs::write(config_dir.join("agent-template.md"), [0xff]).unwrap();
+    fs::write(config_dir.join("worker-template.md"), [0xff]).unwrap();
     for mode in ["--app", "--cli"] {
         let output = fixture
             .command()
@@ -4422,7 +4422,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         } else {
             assert!(!output.status.success());
             assert!(
-                String::from_utf8_lossy(&output.stderr).contains("agent-template.md"),
+                String::from_utf8_lossy(&output.stderr).contains("worker-template.md"),
                 "{output:?}"
             );
         }
@@ -4491,14 +4491,14 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
-fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
+fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
     let fixture = Fixture::new();
     let workspace = fixture.add("instructions");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(
-        config_dir.join("agent-template.md"),
+        config_dir.join("worker-template.md"),
         "global {workspace} {branch}",
     )
     .unwrap();
@@ -4518,16 +4518,19 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
     .enumerate()
     {
         if index == 1 {
-            fs::write(path.join("agent-template.md"), "repo {path}").unwrap();
+            fs::write(path.join("worker-template.md"), "repo {path}").unwrap();
         }
         if index == 4 {
-            fs::write(config_dir.join("agent-template.md"), "").unwrap();
+            fs::write(config_dir.join("worker-template.md"), "").unwrap();
         }
         if index >= 2 {
             let local = fixture.root.path().join("local.toml");
             fs::write(
                 &local,
-                format!("agent_template = {}", toml::Value::String(expected.clone())),
+                format!(
+                    "worker_template = {}",
+                    toml::Value::String(expected.clone())
+                ),
             )
             .unwrap();
             fixture.ok(&[
@@ -13805,7 +13808,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
-    fs::write(config_dir.join("agent-template.md"), "General {workspace}").unwrap();
+    fs::write(config_dir.join("worker-template.md"), "General {workspace}").unwrap();
     let record = install_fake_happy(&fixture);
     let gh = fixture.root.path().join("bin/gh");
     let title = "Fix API timeout";
@@ -15726,7 +15729,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'helper'\nagent_template = 'Follow {branch}'\n[commands]\nhelper = ['missing-global-launcher']\n",
+        "default_agent = 'helper'\nworker_template = 'Follow {branch}'\n[commands]\nhelper = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -15853,7 +15856,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "agent_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n\
+        "worker_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n\
          [ai.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");

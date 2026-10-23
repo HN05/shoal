@@ -25,7 +25,7 @@ pub struct Effective {
     #[serde(skip)]
     pub arguments: BTreeMap<String, crate::ai::Arguments>,
     pub agent_resume: named_commands::Commands,
-    pub agent_template: Option<String>,
+    pub worker_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
@@ -79,21 +79,32 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub struct Stack {
     layers: [(RepoConfig, Layer); 4],
+    /// Settings a layer sets under a former name or that Shoal no longer reads.
+    warnings: Vec<String>,
 }
 
 impl Stack {
     pub fn new(global: &Config, repository: &ConfigLayers) -> Self {
-        Self {
-            layers: [
-                (built_in(), Layer::BuiltInDefault),
-                (global.repository_layer(), Layer::GlobalConfig),
-                (repository.worktree_file.clone(), Layer::WorktreeFile),
-                (
-                    repository.saved_repository_config.clone(),
-                    Layer::SavedRepositoryConfig,
-                ),
-            ],
-        }
+        let mut warnings = Vec::new();
+        let mut retire = |mut config: RepoConfig, layer: Layer| {
+            let retired = config.retire();
+            warnings.extend(
+                retired
+                    .into_iter()
+                    .map(|warning| format!("{layer}: {warning}")),
+            );
+            (config, layer)
+        };
+        let layers = [
+            retire(built_in(), Layer::BuiltInDefault),
+            retire(global.repository_layer(), Layer::GlobalConfig),
+            retire(repository.worktree_file.clone(), Layer::WorktreeFile),
+            retire(
+                repository.saved_repository_config.clone(),
+                Layer::SavedRepositoryConfig,
+            ),
+        ];
+        Self { layers, warnings }
     }
 
     /// The settings in effect; fails when the layers combine into an invalid
@@ -120,17 +131,10 @@ impl Stack {
         Ok(entries)
     }
 
-    /// Warnings for the settings each layer sets that Shoal no longer reads.
-    pub fn warnings(&self) -> Vec<String> {
-        self.layers
-            .iter()
-            .flat_map(|(config, layer)| {
-                config
-                    .retired_settings()
-                    .into_iter()
-                    .map(move |warning| format!("{layer}: {warning}"))
-            })
-            .collect()
+    /// Warnings for the settings each layer sets under a former name or that
+    /// Shoal no longer reads.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
     }
 
     /// The entries of one named table with the layer each came from.
@@ -198,7 +202,7 @@ impl Effective {
             providers: Default::default(),
             arguments: Default::default(),
             agent_resume: merged.agent_resume,
-            agent_template: merged.agent_template,
+            worker_template: merged.worker_template,
             chat_template: merged.chat_template,
             agent_auth: merged.agent_auth,
             git_profile: merged.git_profile,
@@ -633,9 +637,9 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         named!("commands", commands),
         named!("agent_resume", agent_resume),
         Box::new(Template(Scalar {
-            key: "agent_template",
-            get: |config| &config.agent_template,
-            get_mut: |config| &mut config.agent_template,
+            key: "worker_template",
+            get: |config| &config.worker_template,
+            get_mut: |config| &mut config.worker_template,
         })),
         Box::new(Template(Scalar {
             key: "chat_template",
@@ -715,7 +719,7 @@ mod tests {
     /// value that does not survive layering. Adding a field to `RepoConfig`
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
-agent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
+worker_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
@@ -741,8 +745,44 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     }
 
     #[test]
+    fn a_former_template_name_still_layers_and_warns() {
+        let stack = stack(
+            "agent_template = 'global'",
+            "agent_template = 'file'",
+            "issue_template = 'Plan first.'",
+        );
+        assert_eq!(
+            stack.clone().resolve().unwrap().worker_template.as_deref(),
+            Some("global\n\nfile")
+        );
+        assert_eq!(
+            stack.warnings(),
+            [
+                "global config: agent_template and agent-template.md are now named \
+                 worker_template and worker-template.md",
+                "worktree file: agent_template and agent-template.md are now named \
+                 worker_template and worker-template.md",
+                "saved repository config: issue_template and issue-template.md are no \
+                 longer used; move their instructions to worker_template",
+            ]
+        );
+        let both = "worker_template = 'new'\nagent_template = 'old'";
+        assert!(parse(both).is_err());
+        assert!(Config::parse(both, &crate::paths::Paths::for_test("/home/test")).is_err());
+
+        let directory = tempfile::tempdir().unwrap();
+        for name in [
+            config::templates::WORKER_FILE,
+            config::templates::RENAMED_AGENT_FILE,
+        ] {
+            std::fs::write(directory.path().join(name), name).unwrap();
+        }
+        assert!(config::repo::load(directory.path()).is_err());
+    }
+
+    #[test]
     fn templates_append_one_repository_value_and_report_the_composed_text() {
-        for key in ["agent_template", "chat_template"] {
+        for key in ["worker_template", "chat_template"] {
             let default = match key {
                 "chat_template" => Some(config::templates::CHAT_DEFAULT),
                 _ => None,
@@ -953,7 +993,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             agent_resume,
             // Retired, so no layer passes it on.
             retired_issue_template: _,
-            agent_template,
+            // Moved to `worker_template` before layering.
+            renamed_agent_template: _,
+            worker_template,
             chat_template,
             agent_auth,
             git_profile,
@@ -1011,7 +1053,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
                 && !seed.paths.is_empty()
         );
         for present in [
-            agent_template.is_some(),
+            worker_template.is_some(),
             chat_template.is_some(),
             agent_auth.fj.is_some(),
             agent_auth.fj_home.is_some(),

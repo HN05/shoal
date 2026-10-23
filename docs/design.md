@@ -1107,14 +1107,16 @@ no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
-Shoal's agent guidance is built in and precedes every agent template, so
+Shoal's agent guidance is built in and precedes every worker template, so
 adding instructions never freezes or replaces it; `install` adds a missing
 chat template from the bundled default and never touches existing files;
 rendering substitutes known fields once without evaluating their contents.
 The issue prompt is built in and states only the task, pointing to `shoal view`
 for the rest: a seeded issue template froze the default for whoever had a copy,
-and instructions for issue work belong in the agent template. A retired setting
-still loads, and `config show` and `doctor` warn when it holds the user's text.
+and instructions for issue work belong in the worker template. That template was
+the agent template, a name that read as one per AI tool although it applies to
+every workspace agent. A retired or renamed setting still loads, and
+`config show` and `doctor` warn when it holds the user's text.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine

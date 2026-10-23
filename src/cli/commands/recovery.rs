@@ -21,7 +21,7 @@ use crate::{
 /// `config show` reports the repository layers too.
 fn global_config_check(ctx: &Context) -> Check {
     let retired = crate::config::Config::load_with_templates(&ctx.paths)
-        .map(|config| config.repository_layer().retired_settings());
+        .map(|config| config.repository_layer().retire());
     match retired {
         Ok(retired) if retired.is_empty() => Check::new(
             "global_config",

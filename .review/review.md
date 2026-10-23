@@ -257,8 +257,8 @@ instead of the PR delivery guidance below.
   guidance, falling back to the bundled chat template for an omitted global base.
   Empty repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
-  Shoal's built-in agent guidance precedes every agent template, which holds
-  only additions. `install` preserves existing template files; substitutions never evaluate or
+  Shoal's built-in agent guidance precedes every worker template, which holds
+  only additions; the former `agent_template` name still loads with a warning. `install` preserves existing template files; substitutions never evaluate or
   recursively expand inserted text.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected

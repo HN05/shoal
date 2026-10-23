@@ -714,7 +714,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert!(!config.with_file_name("issue-template.md").exists());
     fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
-    assert!(!config.with_file_name("agent-template.md").exists());
+    assert!(!config.with_file_name("worker-template.md").exists());
     fs::write(&config, "default_agent = 'claude'\n").unwrap();
     let output: Value = serde_json::from_slice(&run(&["--json", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);

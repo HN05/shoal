@@ -99,9 +99,10 @@ tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
 Issue additions also use `default_agent = "codex"` from the repository or global
-config. Edit `~/.config/shoal/agent-template.md` to add general instructions and
-`chat-template.md` for `shoal chat`; put those files in a repository root to
-append project-specific guidance.
+config. Edit `~/.config/shoal/worker-template.md` to add instructions for every
+workspace agent and `chat-template.md` for `shoal chat`. Agents read a
+repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same template
+files in a repository root add instructions only Shoal's agents need.
 New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add`. With shell integration, `shoal add` enters the
 workspace.

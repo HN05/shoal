@@ -103,7 +103,7 @@ fn session_input(
     args: Vec<OsString>,
 ) -> (Option<String>, Vec<OsString>) {
     let instructions = templates::instructions(
-        settings.agent_template.as_deref(),
+        settings.worker_template.as_deref(),
         workspace,
         templates::Delivery::Watched,
     );

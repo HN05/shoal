@@ -15,5 +15,5 @@ pub use crate::config::resolve::Entry;
 pub async fn load(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
     let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
-    Ok((stack.report()?, stack.warnings()))
+    Ok((stack.report()?, stack.warnings().to_vec()))
 }
