@@ -501,6 +501,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
+        Method::PlanRepositoryMoves { root } => {
+            Body::Repositories(manager.plan_repository_moves(root.as_deref()).await?)
+        }
         Method::MoveRepositories => Body::MovedRepositories(manager.move_repositories().await?),
         Method::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)

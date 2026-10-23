@@ -2362,8 +2362,21 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let old = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let root = fs::canonicalize(fixture.root.path()).unwrap().join("moved");
 
+    // A process inside is refused before confirmation is asked for.
+    let mut inside = Command::new("sleep")
+        .arg("60")
+        .current_dir(&old)
+        .spawn()
+        .unwrap();
     let output = fixture.run(&["repo", "migrate", "~/moved"]);
-    assert!(!output.status.success(), "moved without confirmation");
+    inside.kill().unwrap();
+    inside.wait().unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("processes are using"), "{error}");
+    assert!(!error.contains("confirmation required"), "{error}");
+    let output = fixture.run(&["repo", "migrate", "~/moved"]);
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("confirmation required"), "{error}");
     assert!(old.exists());
 
     let moved = fixture.ok(&["repo", "migrate", "~/moved", "--yes"]);

@@ -176,6 +176,11 @@ pub enum Method {
     RemoveRepository {
         repository: crate::repository::Selector,
     },
+    /// The repositories `MoveRepositories` would move into `root`, or the
+    /// configured `root_dir`, after the checks it runs before moving any.
+    PlanRepositoryMoves {
+        root: Option<std::path::PathBuf>,
+    },
     /// Move every repository directory into the configured `root_dir`.
     MoveRepositories,
     /// Fetch the default branch's remote and fast-forward the local default branch.

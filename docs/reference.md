@@ -1349,8 +1349,8 @@ clone, workspaces, seed and shared caches, keeping its name or suffixing it when
 taken. A root on another filesystem is copied, then the original is deleted. A
 checkout or workspace placed outside the repository directory stays where it is.
 A path argument is saved as the global `root_dir` and the daemon reloads it first.
-Interactive calls list the directories to move before asking; `-y`/`--yes` skips
-the prompt and is required for scripts and `--json`, which returns each moved
+Interactive calls run the checks below, then list the directories to move and
+ask; `-y`/`--yes` skips the prompt and is required for scripts and `--json`, which returns each moved
 `repository`, its old directory as `from` and its old `workspace_paths`.
 
 Every repository is checked before the first moves: none may have a running

@@ -17,16 +17,25 @@ use crate::{
     repository,
 };
 
-/// Save `root` as `root_dir` when given, then have the daemon move every
-/// repository directory outside the configured root into it.
+/// Check that every repository outside `root`, or the configured root, can
+/// move, confirm, save `root` as `root_dir` when given, then have the daemon
+/// move them.
 pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -> Result<()> {
     let repositories = client::repositories(&ctx.paths).await?;
-    let target = match &root {
-        Some(root) => root.clone(),
-        None => Config::load(&ctx.paths)?.root_dir(&ctx.paths)?,
-    };
-    let moving = outside(&repositories, &target);
+    let moving = ctx
+        .progress(
+            "Checking repositories",
+            request::<Vec<Repository>>(
+                &ctx.paths,
+                Method::PlanRepositoryMoves { root: root.clone() },
+            ),
+        )
+        .await?;
     if !confirmed && !moving.is_empty() {
+        let target = match &root {
+            Some(root) => root.clone(),
+            None => Config::load(&ctx.paths)?.root_dir(&ctx.paths)?,
+        };
         ensure!(
             ui::confirm(ctx, &plan(&target, &moving), "--yes")?,
             "repository move canceled"
@@ -72,20 +81,7 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
     })
 }
 
-/// Repositories whose directory is not directly in `root`.
-fn outside<'a>(repositories: &'a [Repository], root: &Path) -> Vec<&'a Repository> {
-    let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_owned());
-    repositories
-        .iter()
-        .filter(|repo| {
-            repo.workspaces_dir
-                .as_deref()
-                .is_some_and(|directory| directory.parent() != Some(&*root))
-        })
-        .collect()
-}
-
-fn plan(root: &Path, moving: &[&Repository]) -> String {
+fn plan(root: &Path, moving: &[Repository]) -> String {
     let mut text = format!("Move repository directories into {}:", root.display());
     for repo in moving {
         if let Some(directory) = &repo.workspaces_dir {
@@ -96,7 +92,6 @@ fn plan(root: &Path, moving: &[&Repository]) -> String {
             ));
         }
     }
-    text.push_str("\nStop their agents and commands, and leave these directories first.");
     text
 }
 

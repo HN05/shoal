@@ -28,14 +28,36 @@ struct Intent {
 }
 
 impl Manager {
+    /// The repositories [`Self::move_repositories`] would move into `root`, or
+    /// the configured `root_dir`, refusing as it would before anything moves.
+    pub async fn plan_repository_moves(&self, root: Option<&Path>) -> Result<Vec<Repository>> {
+        let _registry = self.registry_gate.lock().await;
+        Ok(self.movable_repositories(root).await?.1)
+    }
+
     /// Move every repository directory outside the configured `root_dir` into
     /// it, with the workspaces and clone inside. Each repository must be idle;
     /// all are checked before the first moves.
     pub async fn move_repositories(&self) -> Result<Vec<MovedRepository>> {
         let _registry = self.registry_gate.lock().await;
+        let (root, moving) = self.movable_repositories(None).await?;
+        let mut moved = Vec::with_capacity(moving.len());
+        for repo in moving {
+            moved.push(self.move_repository(&repo, &root).await?);
+        }
+        Ok(moved)
+    }
+
+    /// The root and the repositories outside it, after finishing interrupted
+    /// moves; refused unless every one of them can move. Callers hold the
+    /// registry gate.
+    async fn movable_repositories(
+        &self,
+        root: Option<&Path>,
+    ) -> Result<(PathBuf, Vec<Repository>)> {
         self.finish_repository_moves().await?;
         let repositories = self.repositories().await?;
-        let root = self.move_root(&repositories).await?;
+        let root = self.move_root(root, &repositories).await?;
         let moving: Vec<_> = repositories
             .into_iter()
             .filter(|repo| outside(repo, &root))
@@ -43,11 +65,7 @@ impl Manager {
         for repo in &moving {
             self.check_movable(repo).await?;
         }
-        let mut moved = Vec::with_capacity(moving.len());
-        for repo in moving {
-            moved.push(self.move_repository(&repo, &root).await?);
-        }
-        Ok(moved)
+        Ok((root, moving))
     }
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.
@@ -70,10 +88,15 @@ impl Manager {
         Ok(())
     }
 
-    /// The configured root, refused inside a directory that would move into it.
-    async fn move_root(&self, repositories: &[Repository]) -> Result<PathBuf> {
+    /// `root`, or the configured one, refused inside a directory that would
+    /// move into it.
+    async fn move_root(&self, root: Option<&Path>, repositories: &[Repository]) -> Result<PathBuf> {
+        let root = match root {
+            Some(root) => root.to_owned(),
+            None => self.config().root_dir(&self.paths)?,
+        };
         let root = registry::prepare_root(
-            &self.config().root_dir(&self.paths)?,
+            &root,
             &fs::canonicalize(&self.paths.state)?,
             repositories.iter().map(|repo| repo.path.as_path()),
         )
