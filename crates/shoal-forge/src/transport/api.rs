@@ -175,7 +175,8 @@ impl ForgeRepo {
             }
             None => self.kind.send(self, account, request).await?,
         };
-        memory.observe_limit(&self.host, &response, now)?;
+        // Relative limits count from the response, which may have taken a while.
+        memory.observe_limit(&self.host, &response, unix_seconds())?;
         if let (304, Some((_, body))) = (response.status, recalled) {
             return Ok(body);
         }
