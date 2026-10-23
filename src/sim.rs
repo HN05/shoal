@@ -141,6 +141,46 @@ pub struct Simulator {
 }
 
 impl Simulator {
+    /// An unclaimed record for a device simctl has not created yet.
+    fn new(profile: Profile) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            udid: None,
+            device: profile.device,
+            runtime: profile.runtime,
+            workspace_id: None,
+            last_workspace_id: None,
+            lease_name: None,
+            reason: None,
+            state: SimulatorState::Creating,
+            last_used: unix_seconds(),
+            error: None,
+            installed_apps: Some(0),
+        }
+    }
+
+    /// Take ownership for a lease; persist it before any simctl mutation.
+    fn claim(&mut self, workspace_id: &str, request: SimRequest) {
+        self.workspace_id = Some(workspace_id.to_owned());
+        self.lease_name = Some(request.name);
+        self.reason = request.reason;
+        self.state = SimulatorState::Booting;
+        self.error = None;
+    }
+
+    /// Lease a booted device, or mark a failed boot while keeping the claim.
+    fn finish_boot(&mut self, workspace_id: String, result: &Result<()>) {
+        self.last_used = unix_seconds();
+        self.last_workspace_id = Some(workspace_id);
+        match result {
+            Ok(()) => self.state = SimulatorState::Leased,
+            Err(error) => {
+                self.state = SimulatorState::Failed;
+                self.error = Some(format!("{error:#}"));
+            }
+        }
+    }
+
     fn is_leased_by(&self, workspace_id: &str, name: &str) -> bool {
         self.workspace_id.as_deref() == Some(workspace_id)
             && self.lease_name.as_deref() == Some(name)
@@ -480,42 +520,21 @@ impl Manager {
                 "all managed simulator devices are allocated".into(),
             ));
         }
-        let mut sim = plan.reusable.cloned().unwrap_or_else(|| Simulator {
-            id: Uuid::new_v4().to_string(),
-            udid: None,
-            device: profile.device,
-            runtime: profile.runtime,
-            workspace_id: None,
-            last_workspace_id: None,
-            lease_name: None,
-            reason: None,
-            state: SimulatorState::Creating,
-            last_used: unix_seconds(),
-            error: None,
-            installed_apps: Some(0),
-        });
+        let mut sim = plan
+            .reusable
+            .cloned()
+            .unwrap_or_else(|| Simulator::new(profile));
         let needs_reset = request.clean && sim.udid.is_some();
         if let Some(audit) = audit.as_mut() {
             audit.record_selection(&sim, needs_reset);
             self.save_clean_request(audit).await?;
         }
-        sim.workspace_id = Some(workspace.id.clone());
-        sim.lease_name = Some(request.name);
-        sim.reason = request.reason;
-        sim.state = SimulatorState::Booting;
-        sim.error = None;
+        sim.claim(&workspace.id, request);
         self.save_sim(&sim).await?; // ownership precedes every external mutation
         let result = self.boot(&mut sim, &workspace, needs_reset, audit).await;
-        sim.last_used = unix_seconds();
-        sim.last_workspace_id = Some(workspace.id);
-        if let Err(error) = result {
-            sim.state = SimulatorState::Failed;
-            sim.error = Some(format!("{error:#}"));
-            self.save_sim(&sim).await?;
-            return Err(error);
-        }
-        sim.state = SimulatorState::Leased;
+        sim.finish_boot(workspace.id, &result);
         self.save_sim(&sim).await?;
+        result?;
         Ok(Allocation::Granted(Box::new(sim)))
     }
 
