@@ -386,6 +386,17 @@ async fn serve(
             let _ = server.shutdown.send(true);
             return Ok(());
         }
+        Method::ListItems {
+            workspace,
+            kind,
+            search,
+        } => {
+            let listed = server
+                .manager
+                .list_items(&workspace, kind, &search, caller.is_some())
+                .await;
+            return write_items(stream, request.id, listed).await;
+        }
         method => match operation(&server.manager, method, caller.as_ref()).await {
             Ok(body) => body,
             Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
@@ -408,7 +419,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::AwaitAgentWake { .. }
         | Method::AwaitAnswer { .. }
         | Method::WatchItems { .. }
-        | Method::WaitChatMessages { .. } => {
+        | Method::WaitChatMessages { .. }
+        | Method::ListItems { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -606,15 +618,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
-        Method::ListItems {
-            workspace,
-            kind,
-            search,
-        } => Body::Items(
-            manager
-                .list_items(&workspace, kind, &search, caller.is_some())
-                .await?,
-        ),
         Method::SelectItems {
             workspace,
             selection,
@@ -999,6 +1002,26 @@ async fn watch_notifications(
             _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
         }
     }
+}
+
+/// Send listed items in as many `items` frames as they need, then `ok`, so
+/// a long listing never exceeds one frame.
+async fn write_items(
+    mut stream: UnixStream,
+    request_id: u64,
+    listed: Result<Vec<crate::forge::items::item::Item>>,
+) -> Result<()> {
+    let items = match listed {
+        Ok(items) => items,
+        Err(error) => {
+            let body = Body::error(ErrorCode::OperationFailed, format!("{error:#}"));
+            return protocol::write(&mut stream, &Response::new(request_id, body)).await;
+        }
+    };
+    for page in protocol::frame_pages(items)? {
+        protocol::write(&mut stream, &Response::new(request_id, Body::Items(page))).await?;
+    }
+    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await
 }
 
 async fn watch_workspace_events(

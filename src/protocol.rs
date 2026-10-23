@@ -395,7 +395,8 @@ pub enum Method {
     WorkspaceStatus {
         workspace: String,
     },
-    /// Issues or PRs of the workspace's repository that `search` matches.
+    /// Issues or PRs of the workspace's repository that `search` matches,
+    /// answered in one or more `items` frames and then `ok`.
     ListItems {
         workspace: String,
         kind: crate::forge::items::link::ItemKind,
@@ -1089,6 +1090,25 @@ pub async fn read_buffered<T: DeserializeOwned>(
     serde_json::from_slice(&bytes).context("invalid protocol message")
 }
 
+/// `items` in pages that each fit in a frame with room for the envelope,
+/// in order. There is always a first page, empty when `items` is.
+pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
+    const PAGE_BYTES: usize = MAX_FRAME - 1024;
+    let mut pages = vec![Vec::new()];
+    let mut bytes = 0;
+    for item in items {
+        let size = serde_json::to_vec(&item)?.len() + 1;
+        let page = pages.last_mut().expect("pages start with one");
+        if bytes + size > PAGE_BYTES && !page.is_empty() {
+            pages.push(Vec::new());
+            bytes = 0;
+        }
+        bytes += size;
+        pages.last_mut().expect("pages start with one").push(item);
+    }
+    Ok(pages)
+}
+
 pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: &T) -> Result<()> {
     let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
@@ -1102,6 +1122,21 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn frame_pages_split_long_listings_in_order() {
+        assert_eq!(
+            frame_pages(Vec::<String>::new()).unwrap(),
+            [Vec::<String>::new()]
+        );
+        let items: Vec<String> = (0..300).map(|n| format!("{n:0>500}")).collect();
+        let pages = frame_pages(items.clone()).unwrap();
+        assert!(pages.len() > 1);
+        for page in &pages {
+            assert!(serde_json::to_vec(page).unwrap().len() < MAX_FRAME - 512);
+        }
+        assert_eq!(pages.concat(), items);
+    }
 
     #[tokio::test]
     async fn buffered_execution_reads_preserve_adjacent_frames() {

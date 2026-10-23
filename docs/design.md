@@ -854,7 +854,8 @@ merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
-reads pages only until the limit is met. Forgejo's issue search lists PRs
+reads pages only until the limit is met. The daemon sends the results in as many
+protocol frames as they need, then `ok`, because a long listing exceeds one. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a

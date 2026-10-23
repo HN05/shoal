@@ -1226,6 +1226,24 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         String::from_utf8_lossy(&output.stdout),
         "#40  open    Flaky watch  [bug]\n"
     );
+    // A listing longer than one protocol frame arrives in several.
+    let long: Vec<Value> = (1..=400)
+        .map(|number| {
+            json!({"number": number, "title": "x".repeat(250), "state": "OPEN",
+            "labels": [{"name": "bug"}]})
+        })
+        .collect();
+    fixture.respond(json!({
+        "issue list --repo=github.com/team/project --state=open --limit=400": {"body": long},
+    }));
+    let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "--limit", "400"]);
+    let numbers: Vec<u64> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["number"].as_u64().unwrap())
+        .collect();
+    assert_eq!(numbers, (1..=400).collect::<Vec<_>>());
 
     let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();
