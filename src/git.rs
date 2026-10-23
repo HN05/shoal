@@ -395,6 +395,15 @@ pub async fn worktrees(
     Ok(parse_worktrees(&listing))
 }
 
+/// Reconnect the checkout and its linked worktrees after either moved; `moved`
+/// names the new location of each worktree that moved.
+pub async fn repair_worktrees(checkout: &Path, moved: &[PathBuf]) -> Result<()> {
+    let mut command = isolated_command(checkout);
+    command.args(["worktree", "repair", "--"]).args(moved);
+    subprocess::output(command).await?;
+    Ok(())
+}
+
 /// The first worktree registered on this literal local branch, including
 /// locked or prunable entries. The caller decides whether it is usable.
 pub async fn checkout_of(
@@ -552,6 +561,39 @@ mod tests {
                 .to_string(),
             "runner failed"
         );
+    }
+
+    #[tokio::test]
+    async fn repair_reconnects_a_moved_checkout_and_worktree() -> Result<()> {
+        use crate::test_support::{git, repository};
+        let root = tempfile::tempdir()?;
+        let old = std::fs::canonicalize(root.path())?.join("old");
+        std::fs::create_dir(&old)?;
+        let checkout = repository(&old, "checkout");
+        git(
+            &checkout,
+            &["worktree", "add", "-b", "feature", "../feature"],
+        );
+        let new = old.with_file_name("new");
+        std::fs::rename(&old, &new)?;
+
+        repair_worktrees(&new.join("checkout"), &[new.join("feature")]).await?;
+        let trees = worktrees(&new.join("checkout"), run).await?;
+        assert_eq!(
+            trees
+                .iter()
+                .map(|tree| tree.path.clone())
+                .collect::<Vec<_>>(),
+            [new.join("checkout"), new.join("feature")]
+        );
+        assert!(trees.iter().all(|tree| !tree.prunable));
+        assert_eq!(
+            head_branch(&new.join("feature"), false, run)
+                .await?
+                .as_deref(),
+            Some("feature")
+        );
+        Ok(())
     }
 
     #[tokio::test]

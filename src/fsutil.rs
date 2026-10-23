@@ -323,9 +323,84 @@ pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()>
     }
 }
 
+/// How [`move_directory`] moved a directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Moved {
+    Renamed,
+    /// Copied to another filesystem; the source is still there.
+    Copied,
+}
+
+/// Move the directory `source` onto the empty directory `destination`: a
+/// rename on one filesystem, otherwise a copy that keeps symlinks, modes and
+/// times and leaves `source` for the caller to delete once it no longer needs
+/// it. A failed copy leaves `destination` partly filled.
+pub async fn move_directory(source: &Path, destination: &Path) -> anyhow::Result<Moved> {
+    match fs::rename(source, destination) {
+        Ok(()) => return Ok(Moved::Renamed),
+        Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("move {} to {}", source.display(), destination.display())
+            });
+        }
+    }
+    copy_directory(source, destination).await?;
+    Ok(Moved::Copied)
+}
+
+async fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    let mut command = tokio::process::Command::new("cp");
+    command
+        .args(["-pPR", "--"])
+        .arg(source.join("."))
+        .arg(destination);
+    crate::subprocess::output(command)
+        .await
+        .map(drop)
+        .with_context(|| format!("copy {} to {}", source.display(), destination.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn moving_a_directory_keeps_its_contents_and_links() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source");
+        fs::create_dir_all(source.join("nested"))?;
+        fs::write(source.join("nested/file"), "contents")?;
+        fs::set_permissions(
+            source.join("nested/file"),
+            fs::Permissions::from_mode(0o750),
+        )?;
+        std::os::unix::fs::symlink("nested/file", source.join("link"))?;
+
+        let copied = temp.path().join("copied");
+        fs::create_dir(&copied)?;
+        copy_directory(&source, &copied).await?;
+        assert_eq!(fs::read_to_string(copied.join("nested/file"))?, "contents");
+        assert_eq!(
+            fs::metadata(copied.join("nested/file"))?
+                .permissions()
+                .mode()
+                & 0o777,
+            0o750
+        );
+        assert_eq!(
+            fs::read_link(copied.join("link"))?,
+            Path::new("nested/file")
+        );
+        assert!(source.join("nested/file").exists());
+
+        let renamed = temp.path().join("renamed");
+        fs::create_dir(&renamed)?;
+        assert_eq!(move_directory(&source, &renamed).await?, Moved::Renamed);
+        assert!(!source.exists());
+        assert_eq!(fs::read_to_string(renamed.join("nested/file"))?, "contents");
+        Ok(())
+    }
 
     #[test]
     fn marked_directories_are_never_found_unmarked_or_claimed() {
