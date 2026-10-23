@@ -1694,8 +1694,9 @@ stay behind; setup rebuilds what the workspace needs.
 
 `shoal export --repo <repository> --all -o <directory>` exports every workspace
 of the repository to `<workspace>.shoal` in the directory, creating it when
-missing. It checks every workspace as a single export does, and that the
-terminal does not close with one of them, before removing any: when one cannot
+missing. It checks every workspace as a single export does, that none is in the
+middle of another lifecycle operation, and that the terminal does not close with
+one of them, before removing any: when one cannot
 be exported, it lists each refusal and removes nothing. It asks once before
 releasing all of their holds, then exports each workspace and lists the files it
 wrote; a failure there leaves the remaining ones to export, and the command

@@ -924,6 +924,25 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     );
     assert!(paths.iter().all(|path| path.exists()));
     fs::remove_file(directory.join("first.shoal")).unwrap();
+    // So does one still in a lifecycle operation, which removal refuses.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let set_state = |state: &str| {
+        db.execute(
+            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            [state],
+        )
+        .unwrap();
+    };
+    set_state("preparing");
+    let refused = export(&["--yes"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("second: workspace is preparing"),
+        "{stderr}"
+    );
+    assert!(paths.iter().all(|path| path.exists()));
+    set_state("ready");
 
     let exported = export(&["--yes", "--json"]);
     assert!(exported.status.success(), "{exported:?}");
