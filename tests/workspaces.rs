@@ -997,6 +997,27 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     }
 }
 
+// A reader that goes away still lets the temporary archive be removed.
+#[test]
+fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
+    let fixture = Fixture::new();
+    fixture.add("streamed");
+    let temporary = fixture.root.path().join("cli-tmp");
+    fs::create_dir(&temporary).unwrap();
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let exported = fixture
+        .command()
+        .args(["export", "streamed", "-o", "-"])
+        .env("TMPDIR", &temporary)
+        .stdout(writer)
+        .output()
+        .unwrap();
+    assert_eq!(exported.status.code(), Some(141), "{exported:?}");
+    assert!(exported.stderr.is_empty(), "{exported:?}");
+    assert_eq!(fs::read_dir(&temporary).unwrap().count(), 0);
+}
+
 #[test]
 fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let fixture = Fixture::new();

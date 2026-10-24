@@ -1,6 +1,6 @@
 //! Standard output for command results. Rust ignores SIGPIPE, so a reader that
 //! closes early, such as `head`, turns the next write into an error that
-//! `println!` panics on. These writes end the process quietly instead, with the
+//! `println!` panics on. These writes end the command quietly instead, with the
 //! status a shell reports for a process SIGPIPE ended, as `git log | head` does.
 
 use std::io::{self, StdoutLock, Write};
@@ -26,25 +26,42 @@ macro_rules! outln {
     };
 }
 
+/// A write that failed because stdout's reader has gone. The CLI ends with
+/// [`CLOSED_STATUS`] and no message once the error has unwound its command,
+/// so cleanup such as dropping a temporary export still runs.
+#[derive(Debug)]
+pub struct StdoutClosed;
+
+impl std::fmt::Display for StdoutClosed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("stdout closed")
+    }
+}
+
+impl std::error::Error for StdoutClosed {}
+
+/// The macros cannot return an error, so a closed reader ends the process here.
 pub fn print(arguments: std::fmt::Arguments<'_>) {
-    if let Err(error) = write(|stdout| stdout.write_fmt(arguments)) {
-        panic!("failed printing to stdout: {error}");
+    match io::stdout().lock().write_fmt(arguments) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
+            std::process::exit(CLOSED_STATUS)
+        }
+        Err(error) => panic!("failed printing to stdout: {error}"),
     }
 }
 
-/// Write to the locked stdout, ending the process when its reader has gone.
-pub fn write<T>(write: impl FnOnce(&mut StdoutLock<'static>) -> io::Result<T>) -> io::Result<T> {
-    let result = write(&mut io::stdout().lock());
-    if result
-        .as_ref()
-        .is_err_and(|error| error.kind() == io::ErrorKind::BrokenPipe)
-    {
-        std::process::exit(CLOSED_STATUS);
-    }
-    result
+/// Write to the locked stdout; a closed reader fails with [`StdoutClosed`].
+pub fn write<T>(
+    write: impl FnOnce(&mut StdoutLock<'static>) -> io::Result<T>,
+) -> anyhow::Result<T> {
+    write(&mut io::stdout().lock()).map_err(|error| match error.kind() {
+        io::ErrorKind::BrokenPipe => StdoutClosed.into(),
+        _ => error.into(),
+    })
 }
 
-/// Flush stdout, ending the process when its reader has gone.
-pub fn flush() -> io::Result<()> {
+/// Flush stdout; a closed reader fails with [`StdoutClosed`].
+pub fn flush() -> anyhow::Result<()> {
     write(|stdout| stdout.flush())
 }

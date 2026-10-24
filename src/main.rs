@@ -94,6 +94,9 @@ async fn run_commands(cli: Cli) {
         Err(error) if error.downcast_ref::<cli::ui::SelectionCanceled>().is_some() => {
             std::process::exit(130)
         }
+        Err(error) if error.downcast_ref::<stdout::StdoutClosed>().is_some() => {
+            std::process::exit(stdout::CLOSED_STATUS)
+        }
         Err(error) => {
             if json_output {
                 eprintln!(
