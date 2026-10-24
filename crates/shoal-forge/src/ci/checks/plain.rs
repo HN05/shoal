@@ -66,9 +66,58 @@ fn redrawn(line: &str) -> String {
     format!("{last}{end}")
 }
 
+/// What starts the marker GitLab writes at each end of a collapsible section,
+/// `\e[0Ksection_start:1700000000:name[collapsed=true]\r\e[0K`.
+const SECTION_MARKER: &str = "\x1b[0Ksection_";
+
+/// `log` without GitLab's section markers, or the lines that held nothing else.
+pub(crate) fn without_sections(log: &str) -> String {
+    log.split_inclusive('\n')
+        .filter_map(|line| {
+            let plain = without_markers(line);
+            let held_text = !plain.trim_end_matches(['\r', '\n']).is_empty();
+            (held_text || plain.len() == line.len()).then_some(plain)
+        })
+        .collect()
+}
+
+fn without_markers(line: &str) -> String {
+    let mut plain = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = rest.find(SECTION_MARKER) {
+        plain.push_str(&rest[..start]);
+        let marker = &rest[start + SECTION_MARKER.len()..];
+        match marker_len(marker) {
+            Some(len) => rest = &marker[len..],
+            None => {
+                plain.push_str(SECTION_MARKER);
+                rest = marker;
+            }
+        }
+    }
+    plain.push_str(rest);
+    plain
+}
+
+/// The length of a section marker after its `section_`, through the escape
+/// that follows its carriage return.
+fn marker_len(marker: &str) -> Option<usize> {
+    let fields = marker
+        .strip_prefix("start:")
+        .or_else(|| marker.strip_prefix("end:"))?;
+    let (time, name) = fields.split_once(':')?;
+    if time.is_empty() || !time.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (_, after) = name.split_once('\r')?;
+    let after = after.strip_prefix("\x1b[0K").unwrap_or(after);
+    Some(marker.len() - after.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backends::{Backend, ForgeKind};
 
     #[test]
     fn escapes_controls_and_redrawn_text_are_removed() {
@@ -87,6 +136,38 @@ mod tests {
                 "Receiving objects: 100%\n",
                 "bell and C1\n",
                 "\tindented\nnext",
+            )
+        );
+    }
+
+    #[test]
+    fn gitlab_traces_lose_their_section_markers() {
+        let trace = concat!(
+            "\x1b[0KRunning with gitlab-runner 17.0.0\x1b[0;m\n",
+            "\x1b[0Ksection_start:1700000000:prepare_script[collapsed=true]\r",
+            "\x1b[0K\x1b[0K\x1b[36;1mPreparing environment\x1b[0;m\x1b[0;m\n",
+            "Running on runner-1\n",
+            "\x1b[0Ksection_end:1700000001:prepare_script\r\x1b[0K\n",
+            "\x1b[0Ksection_end:1700000002:step_script\r\x1b[0K",
+            "\x1b[0Ksection_start:1700000002:after_script\r\x1b[0K",
+            "\x1b[32;1m$ cargo test\x1b[0;m\n",
+            "output\x1b[0Ksection_end:1700000003:after_script\r\x1b[0K\n",
+            "\n",
+            "\x1b[0Ksection_end:x:not_a_marker\r\x1b[0K\n",
+            "\x1b[31;1mERROR: Job failed: exit code 101\n\x1b[0;m\n",
+        );
+        assert_eq!(
+            ForgeKind::GitLab.plain_log(trace),
+            concat!(
+                "Running with gitlab-runner 17.0.0\n",
+                "Preparing environment\n",
+                "Running on runner-1\n",
+                "$ cargo test\n",
+                "output\n",
+                "\n",
+                "section_end:x:not_a_marker\n",
+                "ERROR: Job failed: exit code 101\n",
+                "\n",
             )
         );
     }

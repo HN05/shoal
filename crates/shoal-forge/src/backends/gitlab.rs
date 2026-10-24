@@ -10,7 +10,7 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
+    ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, checks::plain, id},
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -545,6 +545,11 @@ impl Backend for GitLab {
             CiAction::Cancel => format!("jobs/{id}/cancel"),
         };
         Ok((Operation::Post(endpoint), vec![job.name.clone()]))
+    }
+
+    /// Traces mark each end of a collapsible section.
+    fn plain_log(&self, log: &str) -> String {
+        plain::readable(&plain::without_sections(log))
     }
 
     /// A job's trace is its log.

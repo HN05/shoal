@@ -2247,9 +2247,10 @@ branch. Assigned items suppress idle cleanup.
 author, labels, description, comments, and reviews with their inline comments; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
 reports, plus the last 8 KiB of each failed CI job's log, where the forge
-[reads job logs](#forges), without terminal escape sequences or text that a
-carriage return redrew, with the job's URL and its failing step when recorded by the runner. The daemon fetches logs as the
-workspace's agent account; successful and pending checks omit log output.
+[reads job logs](#forges), with the job's URL and its failing step when recorded
+by the runner. The tail is taken after removing terminal escape sequences, text
+a carriage return redrew and GitLab's section markers. The daemon fetches logs as
+the workspace's agent account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
 report an error, as does a check that links no CI job in the repository, such as
 an outside service's; log downloads are limited to 8 MiB.
