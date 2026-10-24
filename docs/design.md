@@ -1025,9 +1025,11 @@ its next turn ends.
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout with the user's authority instead of in a
 workspace: coordinating work is one thing a chat may do, and scoped sessions
-cannot create workspaces. Its instructions describe the discussion only, from a
-chat template that repositories can extend like the other prompt templates; the
-orchestrator skill is available when the user asks for coordination. Belonging
+cannot create workspaces. It refreshes the default branch first, as workspace
+creation does, so the discussion starts from the remote's work; a failed
+refresh only warns, so an offline or diverged checkout still gets its chat. Its
+instructions describe the discussion only, from a chat template that
+repositories can extend like the other prompt templates; the orchestrator skill is available when the user asks for coordination. Belonging
 to no workspace, a chat is not a tracked execution: queuing, overload stops and
 resume serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
