@@ -1158,13 +1158,13 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
-/// Image and video files to show in a description or comment.
+/// Files to show or link in a description or comment.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
-    /// Upload an image or video, as PATH or PATH#ALT_TEXT; repeat for more. It
-    /// replaces the body's image references to the file, such as
-    /// `![alt](shot.png)` relative to the body file or working directory, and
-    /// otherwise follows the body.
+    /// Upload a file, as PATH or PATH#ALT_TEXT; repeat for more. Images and
+    /// videos are shown, other files linked. It replaces the body's image
+    /// references to the file, such as `![alt](shot.png)` relative to the body
+    /// file or working directory, and otherwise follows the body.
     #[arg(long = "attach", value_name = "FILE")]
     pub attach: Vec<String>,
 }

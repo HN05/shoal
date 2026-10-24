@@ -1,6 +1,6 @@
-//! Image and video files attached to a description or comment: the CLI checks
-//! them and points the body's references at them, and the daemon uploads them
-//! and embeds each where the body references it, or after the body.
+//! Files attached to a description or comment: the CLI checks them and points
+//! the body's references at them, and the daemon uploads them and shows each
+//! where the body references it, or after the body.
 use std::{
     ops::Range,
     path::{Path, PathBuf},
@@ -13,11 +13,15 @@ use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capabili
 
 /// The largest image Shoal uploads, which is GitHub's limit.
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
-/// The largest video Shoal uploads. Forges limit videos by plan or
-/// configuration, so this generous bound leaves the rest to them.
-const MAX_VIDEO_BYTES: u64 = 100 * 1024 * 1024;
+/// The largest video or other file Shoal uploads. Forges limit these by plan
+/// or configuration, so this generous bound leaves the rest to them.
+const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
-/// The extensions Shoal attaches, and their content types.
+/// The content type of files whose extension [`TYPES`] does not name.
+const OTHER_TYPE: &str = "application/octet-stream";
+
+/// Extensions and their content types. The forge decides which files it
+/// accepts; images and videos are shown, other files linked.
 const TYPES: &[(&str, &str)] = &[
     ("png", "image/png"),
     ("jpg", "image/jpeg"),
@@ -28,9 +32,21 @@ const TYPES: &[(&str, &str)] = &[
     ("mp4", "video/mp4"),
     ("mov", "video/quicktime"),
     ("webm", "video/webm"),
+    ("txt", "text/plain"),
+    ("log", "text/plain"),
+    ("md", "text/markdown"),
+    ("csv", "text/csv"),
+    ("tsv", "text/tab-separated-values"),
+    ("patch", "text/x-diff"),
+    ("json", "application/json"),
+    ("pdf", "application/pdf"),
+    ("zip", "application/zip"),
+    ("gz", "application/gzip"),
+    ("tgz", "application/gzip"),
 ];
 
-/// A file to attach, by absolute path, with the alt text for an image.
+/// A file to attach, by absolute path, with an image's alt text or a
+/// file's link text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub path: PathBuf,
@@ -42,6 +58,8 @@ pub struct Attachment {
 pub(crate) enum Media {
     Image,
     Video,
+    /// Any other file, which bodies link to.
+    File,
 }
 
 impl Attachment {
@@ -64,7 +82,7 @@ impl Attachment {
             .unwrap_or("attachment")
     }
 
-    pub(crate) fn content_type(&self) -> Result<&'static str> {
+    pub(crate) fn content_type(&self) -> &'static str {
         let extension = self
             .path
             .extension()
@@ -74,36 +92,32 @@ impl Attachment {
         TYPES
             .iter()
             .find(|(known, _)| *known == extension)
-            .map(|(_, content_type)| *content_type)
-            .with_context(|| {
-                let known: Vec<_> = TYPES.iter().map(|(extension, _)| *extension).collect();
-                format!(
-                    "{}: attach an image or video ({})",
-                    self.path.display(),
-                    known.join(", ")
-                )
-            })
+            .map_or(OTHER_TYPE, |(_, content_type)| *content_type)
     }
 
     pub(crate) fn media(&self) -> Media {
-        match self.content_type() {
-            Ok(content_type) if content_type.starts_with("video/") => Media::Video,
-            _ => Media::Image,
+        let content_type = self.content_type();
+        if content_type.starts_with("image/") {
+            Media::Image
+        } else if content_type.starts_with("video/") {
+            Media::Video
+        } else {
+            Media::File
         }
     }
 
     /// Refuse what no upload would accept: a relative path, a missing or
-    /// empty file, another type, or a file over its kind's limit.
+    /// empty file, or a file over its kind's limit.
     pub fn check(&self) -> Result<()> {
         let path = self.path.display();
         ensure!(self.path.is_absolute(), "{path}: give an absolute path");
-        self.content_type()?;
         let metadata = std::fs::metadata(&self.path).with_context(|| format!("read {path}"))?;
         ensure!(metadata.is_file(), "{path} is not a file");
         ensure!(metadata.len() > 0, "{path} is empty");
         let (limit, kind) = match self.media() {
             Media::Image => (MAX_IMAGE_BYTES, "images"),
-            Media::Video => (MAX_VIDEO_BYTES, "videos"),
+            Media::Video => (MAX_FILE_BYTES, "videos"),
+            Media::File => (MAX_FILE_BYTES, "files"),
         };
         ensure!(
             metadata.len() <= limit,
@@ -459,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn checks_refuse_other_types_empty_and_oversized_files() {
+    fn checks_refuse_empty_and_oversized_files() {
         let dir = tempfile::tempdir().unwrap();
         let write = |name: &str, len: u64| {
             let path = dir.path().join(name);
@@ -470,10 +484,14 @@ mod tests {
         assert!(write("a.PNG", 10).check().is_ok());
         assert!(write("b.mp4", MAX_IMAGE_BYTES + 1).check().is_ok());
         assert_eq!(write("b.mp4", 1).media(), Media::Video);
-        assert!(error(write("c.txt", 10)).contains("image or video"));
+        let ledger = write("c.tsv", MAX_IMAGE_BYTES + 1);
+        assert!(ledger.check().is_ok());
+        assert_eq!(ledger.media(), Media::File);
+        assert_eq!(write("c.unknown", 1).content_type(), OTHER_TYPE);
         assert!(error(write("d.png", 0)).contains("is empty"));
         assert!(error(write("e.png", MAX_IMAGE_BYTES + 1)).contains("at most 10 MiB"));
-        assert!(error(write("f.webm", MAX_VIDEO_BYTES + 1)).contains("at most 100 MiB"));
+        assert!(error(write("f.webm", MAX_FILE_BYTES + 1)).contains("at most 100 MiB"));
+        assert!(error(write("f.zip", MAX_FILE_BYTES + 1)).contains("files must be"));
         assert!(error(attachment("relative.png", None)).contains("absolute"));
         let twice = [write("g.png", 1), write("g.png", 1)];
         assert!(format!("{:#}", check_all(&twice).unwrap_err()).contains("twice"));
@@ -525,6 +543,7 @@ mod tests {
     fn forges_keep_uploads_per_repository_item_or_comment() {
         let png = attachment("/t/a b.png", None);
         let video = attachment("/t/c.mp4", None);
+        let ledger = attachment("/t/ledger.tsv", None);
         let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
         let request = gitlab
             .kind
@@ -535,6 +554,12 @@ mod tests {
         assert_eq!(
             gitlab.kind.markup(&video, "c", "/uploads/x/c.mp4"),
             "![c](/uploads/x/c.mp4)"
+        );
+        assert_eq!(
+            gitlab
+                .kind
+                .markup(&ledger, "ledger.tsv", "/uploads/x/ledger.tsv"),
+            "[ledger.tsv](/uploads/x/ledger.tsv)"
         );
 
         let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
@@ -554,6 +579,7 @@ mod tests {
         );
         assert_eq!(request.upload.unwrap().field, None);
         assert_eq!(github.kind.markup(&png, "a [b]", "u"), "![a b](u)");
+        assert_eq!(github.kind.markup(&ledger, "a [b]", "u"), "[a b](u)");
 
         let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
         assert!(
@@ -562,6 +588,7 @@ mod tests {
                 .upload(&forgejo, Holder::Repository, &png, None)
                 .is_err()
         );
+        assert_eq!(forgejo.kind.markup(&ledger, "ledger", "u"), "[ledger](u)");
     }
 
     #[tokio::test]

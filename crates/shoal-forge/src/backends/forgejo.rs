@@ -14,7 +14,7 @@ mod view;
 use super::{
     Backend, LoginHint,
     github_rest::{self, Dialect},
-    image, rest, served_at,
+    image, link, rest, served_at,
 };
 use crate::{
     ForgeRepo,
@@ -500,7 +500,7 @@ impl Backend for Forgejo {
             repo.repo_endpoint(&endpoint),
             Upload {
                 path: attachment.path.clone(),
-                content_type: attachment.content_type()?,
+                content_type: attachment.content_type(),
                 field: Some("attachment"),
             },
         ))
@@ -514,6 +514,7 @@ impl Backend for Forgejo {
         match attachment.media() {
             Media::Video => format!("<video src=\"{url}\" controls></video>"),
             Media::Image => image(alt, url),
+            Media::File => link(alt, url),
         }
     }
 

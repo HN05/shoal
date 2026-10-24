@@ -584,7 +584,7 @@ impl Backend for GitLab {
             repo.repo_endpoint("uploads"),
             Upload {
                 path: attachment.path.clone(),
-                content_type: attachment.content_type()?,
+                content_type: attachment.content_type(),
                 field: Some("file"),
             },
         ))

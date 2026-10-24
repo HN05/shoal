@@ -36,9 +36,9 @@ which acts as your agent account and records the change: `shoal --json pr edit`
 (`--title`, `--body-file`, `--add-label`, `--add-reviewer`,
 `--draft`/`--no-draft`), `pr comment --body-file`, `pr close`, and the same
 `issue` commands. `open`, `edit` and `comment` take `--attach FILE` for
-screenshots and videos, which the body shows where it references them as
-`![alt](FILE)`. Answer each review
-finding in its thread: `shoal view` shows every review comment's ID, and
+screenshots, videos and other files the forge accepts; the body shows images
+and videos and links other files where it references them as `![alt](FILE)`.
+Answer each review finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
 They default to the linked item; pass a number or URL for another item in the

@@ -11,7 +11,7 @@ mod view;
 use super::{
     Backend, LoginHint,
     github_rest::{self, Dialect},
-    image,
+    image, link,
 };
 use crate::{
     ForgeRepo, MERGED_HINT,
@@ -601,7 +601,7 @@ impl Backend for GitHub {
             "GitHub cannot attach files to {holder:?}"
         );
         let repository = repository.context("GitHub uploads need the repository's ID")?;
-        let content_type = attachment.content_type()?;
+        let content_type = attachment.content_type();
         let name = encode(attachment.name(), false);
         let content = encode(content_type, false);
         Ok(Request::upload(
@@ -622,6 +622,7 @@ impl Backend for GitHub {
         match attachment.media() {
             Media::Video => url.to_owned(),
             Media::Image => image(alt, url),
+            Media::File => link(alt, url),
         }
     }
 

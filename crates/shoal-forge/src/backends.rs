@@ -24,7 +24,7 @@ use crate::{
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
-        attach::{Attachment, Holder},
+        attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -454,9 +454,13 @@ pub(crate) trait Backend {
         served_at(response, "url")
     }
 
-    /// The Markdown that shows an uploaded file.
-    fn markup(&self, _attachment: &Attachment, alt: &str, url: &str) -> String {
-        image(alt, url)
+    /// The Markdown that shows an uploaded image or video, or links to
+    /// another file.
+    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
+        match attachment.media() {
+            Media::File => link(alt, url),
+            Media::Image | Media::Video => image(alt, url),
+        }
     }
 
     /// The request that replaces the body of the discussion comment `id`,
@@ -503,7 +507,12 @@ fn served_at(response: &Value, field: &str) -> Result<String> {
 
 /// The Markdown image of `url`.
 fn image(alt: &str, url: &str) -> String {
-    format!("![{}]({url})", alt.replace(['[', ']'], ""))
+    format!("!{}", link(alt, url))
+}
+
+/// The Markdown link to `url`.
+fn link(text: &str, url: &str) -> String {
+    format!("[{}]({url})", text.replace(['[', ']'], ""))
 }
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names.

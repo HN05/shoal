@@ -711,7 +711,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
 
     // Files are checked before anything is sent.
     let text = fixture.root.path().join("notes.txt");
-    fs::write(&text, "x").unwrap();
+    fs::write(&text, "").unwrap();
     let refused = fixture.run(&[
         "pr",
         "comment",
@@ -722,7 +722,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         text.to_str().unwrap(),
     ]);
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("attach an image or video"),
+        String::from_utf8_lossy(&refused.stderr).contains("is empty"),
         "{refused:?}"
     );
     assert!(fixture.requests().is_empty());
@@ -815,17 +815,22 @@ fn gitlab_uploads_send_a_form_through_the_agents_glab() {
 fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let [note, image, video] = attachment_files(&fixture);
+    let ledger = fixture.root.path().join("ledger.tsv");
+    fs::write(&ledger, "a\tb\n").unwrap();
+    let ledger = ledger.to_str().unwrap();
     let host = fixture.web.trim_end_matches("/team/project").to_owned();
     let url = |id: u64| format!("{host}/attachments/{id}");
     let comments = "repos/team/project/issues/comments/70";
     fixture.respond(json!({
-        "GET settings/attachment": attachment_settings(true, ".png,video/*", 1),
+        "GET settings/attachment": attachment_settings(true, ".png,video/*,.tsv", 1),
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
         format!("POST {comments}/assets?name=login.png"):
             {"status": 201, "body": {"browser_download_url": url(1)}},
         format!("POST {comments}/assets?name=demo.mp4"):
             {"status": 201, "body": {"browser_download_url": url(2)}},
+        format!("POST {comments}/assets?name=ledger.tsv"):
+            {"status": 201, "body": {"browser_download_url": url(5)}},
         format!("PATCH {comments}"): {"body": {}},
         "GET repos/team/project/issues/3": {"body": {"number": 3, "title": "Bug",
             "state": "open", "labels": [], "body": "Steps"}},
@@ -851,6 +856,8 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
         &image,
         "--attach",
         &video,
+        "--attach",
+        ledger,
     ]);
     let sent: Vec<_> = fixture
         .requests()
@@ -859,13 +866,14 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
         .map(|request| (request[0].clone(), request[1].clone()))
         .collect();
     let upload = |name: &str, kind: &str, bytes: u64| json!({"field": "attachment", "file": name, "type": kind, "bytes": bytes});
-    // The comment exists before its files, which the forge keeps with it.
+    // The comment exists before its files, which the forge keeps with it,
+    // and links to files that are neither images nor videos.
     assert_eq!(
         sent,
         [
             (
                 json!("POST repos/team/project/issues/8/comments"),
-                json!({"body": "Before:\n\n`login.png`\n\n`demo.mp4`"})
+                json!({"body": "Before:\n\n`login.png`\n\n`demo.mp4`\n\n`ledger.tsv`"})
             ),
             (
                 json!(format!("POST {comments}/assets?name=login.png")),
@@ -876,11 +884,16 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
                 upload("demo.mp4", "video/mp4", 5)
             ),
             (
+                json!(format!("POST {comments}/assets?name=ledger.tsv")),
+                upload("ledger.tsv", "text/tab-separated-values", 4)
+            ),
+            (
                 json!(format!("PATCH {comments}")),
                 json!({"body": format!(
-                    "Before:\n\n![The error]({})\n\n<video src=\"{}\" controls></video>",
+                    "Before:\n\n![The error]({})\n\n<video src=\"{}\" controls></video>\n\n[ledger.tsv]({})",
                     url(1),
-                    url(2)
+                    url(2),
+                    url(5)
                 )})
             ),
         ]

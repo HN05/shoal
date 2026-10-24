@@ -2035,11 +2035,13 @@ and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
-`--attach 'FILE#ALT TEXT'`: a PNG, JPEG, GIF, WebP or SVG image of at most
-10 MiB, or an MP4, MOV or WebM video of at most 100 MiB, checked before anything
-is sent. Each file is uploaded through the forge and shown in place of the
-body's image references to it, such as `![The error](shot.png)` relative to the
-body file's directory or the working directory, and otherwise after the body;
+`--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
+100 MiB otherwise, checked before anything is sent; the forge decides which types
+it accepts. Each file is uploaded through the forge and replaces the body's image
+references to it, such as `![The error](shot.png)` relative to the body file's
+directory or the working directory, or otherwise follows the body: a PNG, JPEG,
+GIF, WebP or SVG image or an MP4, MOV or WebM video is shown, any other file
+linked with the alt text or its name;
 `edit` without a new description adds them after the current one. GitHub and
 GitLab keep uploads with the repository. Forgejo and Gitea keep them with the
 item or comment, so a new comment or item is first posted naming the files,

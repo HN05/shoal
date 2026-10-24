@@ -963,7 +963,7 @@ merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a
 forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
 endpoint for it. Resolving a thread nobody has answered needs confirmation,
-because the reply tells the reviewer why. Attached images and videos are read
+because the reply tells the reviewer why. Attached files are read
 by the daemon from paths the CLI checked, anywhere on disk: a body file can
 already come from anywhere and scope is cooperative, while recordings kept in the
 worktree would be untracked files that hold up cleanup. GitHub's REST API has no

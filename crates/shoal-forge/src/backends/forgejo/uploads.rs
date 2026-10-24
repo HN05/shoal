@@ -30,7 +30,7 @@ impl Settings {
     pub(super) fn check(&self, attachment: &Attachment) -> Result<()> {
         ensure!(self.enabled, "the forge does not accept attached files");
         let path = attachment.path.display();
-        if !self.allows(attachment)? {
+        if !self.allows(attachment) {
             bail!(
                 "{path}: the forge accepts only these attached files: {}",
                 self.allowed_types
@@ -50,8 +50,8 @@ impl Settings {
     /// Whether an entry allows the attachment's extension or media type.
     /// Forgejo matches the type it detects in the file; the type named by its
     /// extension stands in for it.
-    fn allows(&self, attachment: &Attachment) -> Result<bool> {
-        let content_type = attachment.content_type()?;
+    fn allows(&self, attachment: &Attachment) -> bool {
+        let content_type = attachment.content_type();
         let extension = attachment
             .path
             .extension()
@@ -63,7 +63,7 @@ impl Settings {
             .map(|entry| entry.trim().to_ascii_lowercase())
             .filter(|entry| !entry.is_empty())
             .collect();
-        Ok(entries.is_empty()
+        entries.is_empty()
             || entries.iter().any(|entry| {
                 entry == "*/*"
                     || Some(entry) == extension.as_ref()
@@ -71,7 +71,7 @@ impl Settings {
                     || entry.strip_suffix('*').is_some_and(|prefix| {
                         prefix.ends_with('/') && content_type.starts_with(prefix)
                     })
-            }))
+            })
     }
 }
 
