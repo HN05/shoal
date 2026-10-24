@@ -37,21 +37,49 @@ impl Integration for Claude {
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
-/// own settings. `turn_state` adds the hooks that report the turn's state.
-fn settings(turn_state: bool) -> std::io::Result<Vec<OsString>> {
+/// own settings. A `workspace` agent also reports its turn's state and may run
+/// the commands that finish its assignment.
+fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let state = if turn_state {
-        state_hooks(&shoal)
+    let (state, allow) = if workspace {
+        (state_hooks(&shoal), lifecycle_rules())
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     let groups = hooks::messages(&shoal)
         .chain(state)
         .chain([wake_hook(&shoal)]);
-    Ok(vec![
-        "--settings".into(),
-        json!({"hooks": hooks::by_event(groups)}).to_string().into(),
-    ])
+    let mut settings = json!({"hooks": hooks::by_event(groups)});
+    if !allow.is_empty() {
+        settings["permissions"] = json!({"allow": allow});
+    }
+    Ok(vec!["--settings".into(), settings.to_string().into()])
+}
+
+/// The Shoal commands with which a workspace's agent reports on and finishes
+/// its own assignment. Claude Code's auto mode may refuse them as writes to an
+/// outside system; the daemon still limits them to the agent's scope.
+const LIFECYCLE_COMMANDS: [&str; 8] = [
+    "done", "undone", "ready", "unready", "notify", "ask", "pr", "issue",
+];
+
+/// Rules allowing each lifecycle command, with or without arguments and
+/// `--json`, as the agent's guidance spells them.
+fn lifecycle_rules() -> Vec<String> {
+    LIFECYCLE_COMMANDS
+        .into_iter()
+        .flat_map(|command| {
+            ["shoal", "shoal --json"]
+                .into_iter()
+                .flat_map(move |shoal| {
+                    let invocation = format!("{shoal} {command}");
+                    [
+                        format!("Bash({invocation})"),
+                        format!("Bash({invocation} *)"),
+                    ]
+                })
+        })
+        .collect()
 }
 
 /// Each Claude Code hook event with the group that reports its state. A
@@ -167,6 +195,16 @@ mod tests {
         );
         assert_eq!(wake["asyncRewake"], true);
         assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
+        // The agent may finish its own assignment without a permission check.
+        let allow = settings["permissions"]["allow"].as_array().unwrap();
+        for rule in [
+            "Bash(shoal done)",
+            "Bash(shoal --json done)",
+            "Bash(shoal --json done *)",
+            "Bash(shoal --json pr *)",
+        ] {
+            assert!(allow.contains(&json!(rule)), "{rule}: {allow:?}");
+        }
     }
 
     #[test]
@@ -174,6 +212,8 @@ mod tests {
         let args = Claude.chat_hook_args().unwrap();
         let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
         assert!(!settings.to_string().contains("agent-state"), "{settings}");
+        // A chat belongs to no workspace and finishes no assignment.
+        assert!(settings.get("permissions").is_none(), "{settings}");
         let stop = &settings["hooks"]["Stop"][0]["hooks"][0]["command"];
         assert!(stop.as_str().unwrap().contains(" internal wake "), "{stop}");
         for event in hooks::MESSAGE_EVENTS {

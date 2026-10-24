@@ -718,7 +718,9 @@ Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex also get Shoal's hooks and trust entries, which
-other tools do without. `--agent` and `default_agent` also
+other tools do without. A workspace's Claude Code agent is also allowed to run the
+`shoal` commands that report on and finish its assignment, with or without `--json`;
+the daemon still limits them to its scope. `--agent` and `default_agent` also
 accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool
 remains a plain command invocation without agent prompts or exit notifications,
 expanding `{prompt}` to an empty string.

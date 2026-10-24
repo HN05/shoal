@@ -755,7 +755,9 @@ trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
 sessions), so commands never name a tool. Other names add no tool-specific setup.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
-approvals and Claude runs with its own settings. Both trust the repository's checkout,
+approvals and Claude runs with its own settings, plus permission for a workspace's
+agent to run the Shoal commands that finish its assignment, so completion never
+depends on Claude Code's auto-mode check. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
