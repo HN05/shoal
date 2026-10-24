@@ -100,6 +100,15 @@ impl Palette {
         }
     }
 
+    /// Clap's styled text, such as help, with its styles only when enabled.
+    pub fn styled(self, text: &clap::builder::StyledStr) -> String {
+        if self.enabled {
+            text.ansi().to_string()
+        } else {
+            text.to_string()
+        }
+    }
+
     pub fn paint(self, style: Style, value: impl Display) -> String {
         if !self.enabled {
             return value.to_string();
