@@ -34,9 +34,8 @@ pub(super) async fn start(
 ) -> Result<i32> {
     ensure_unscoped(ctx)?;
     let repo = chosen(ctx, repository).await?;
-    let settings = settings(ctx, &repo).await?;
     let topic = Topic::repository(&repo);
-    begin(ctx, repo, settings, topic, agent, here, args).await
+    begin(ctx, repo, topic, agent, here, args).await
 }
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
@@ -74,18 +73,19 @@ pub(super) async fn settings(ctx: &Context, repo: &Repository) -> Result<Effecti
     client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
 }
 
-/// Start a chat about `repo` and `topic` with the chosen agent.
+/// Start a chat about `repo` and `topic` with the chosen agent. Settings are
+/// read after the refresh, so the checkout's updated configuration applies.
 pub(super) async fn begin(
     ctx: &Context,
     repo: Repository,
-    settings: Effective,
     topic: Topic,
     agent: Option<Agent>,
     here: bool,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let agent = chat_agent(ctx, &settings, agent)?;
     sync(ctx, &repo).await;
+    let settings = settings(ctx, &repo).await?;
+    let agent = chat_agent(ctx, &settings, agent)?;
     let launch = agents::ChatLaunch {
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
