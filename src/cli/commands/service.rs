@@ -23,7 +23,7 @@ pub(super) async fn install(
     if dry_run {
         let definition = service::definition(&ctx.paths, &executable, platform)?;
         ctx.show(&definition, |definition| {
-            println!("# {}\n{}", definition.path.display(), definition.content);
+            outln!("# {}\n{}", definition.path.display(), definition.content);
         })?;
         return Ok(0);
     }
@@ -79,11 +79,11 @@ pub(super) async fn install(
     )?;
     if !ctx.json {
         if config_created {
-            println!("Wrote the defaults to {}", config.display());
+            outln!("Wrote the defaults to {}", config.display());
         }
         let zsh_directory = std::env::var_os("ZDOTDIR").map(PathBuf::from);
         if !shell::init_configured(&ctx.paths.home, zsh_directory.as_deref()) {
-            println!(
+            outln!(
                 "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
                 shell::INIT_COMMAND
             );

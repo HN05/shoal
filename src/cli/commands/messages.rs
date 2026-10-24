@@ -31,17 +31,17 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
     ctx.show(&messages, |messages| {
         let palette = Palette::stdout(ctx.json);
         for message in messages {
-            println!(
+            outln!(
                 "{}  {}",
                 palette.paint(Style::Muted, crate::time::local_minutes(message.created_at)),
                 message.message
             );
         }
         if messages.is_empty() {
-            println!("No new messages");
+            outln!("No new messages");
         }
     })?;
-    std::io::Write::flush(&mut std::io::stdout())?;
+    crate::stdout::flush()?;
     inbox.delivered(ctx, &messages).await?;
     Ok(0)
 }
@@ -67,8 +67,8 @@ async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(());
     }
-    println!("{}", hook_output(input, &inbox.hook_context(&updates)));
-    std::io::Write::flush(&mut std::io::stdout())?;
+    outln!("{}", hook_output(input, &inbox.hook_context(&updates)));
+    crate::stdout::flush()?;
     inbox.acknowledge(ctx, &updates).await
 }
 

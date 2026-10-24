@@ -83,11 +83,11 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
     });
     ctx.show(&output, |_| {
         if stopped.is_empty() && failed.is_empty() {
-            println!("No running agents or commands");
+            outln!("No running agents or commands");
         }
         let palette = Palette::stdout(ctx.json);
         for name in &stopped {
-            println!(
+            outln!(
                 "{}",
                 palette.paint(Style::Success, format!("Stopped {name}"))
             );
@@ -100,7 +100,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
             );
         }
         if !stopped.is_empty() {
-            println!("Restore with shoal resume --all");
+            outln!("Restore with shoal resume --all");
         }
     })?;
     Ok(if failed.is_empty() { 0 } else { 1 })

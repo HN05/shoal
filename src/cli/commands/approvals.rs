@@ -140,13 +140,13 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
     ctx.show(&requests, |requests| {
         for request in requests {
-            println!("{}", describe(request));
+            outln!("{}", describe(request));
             for line in details(request) {
-                println!("  {line}");
+                outln!("  {line}");
             }
         }
         if requests.is_empty() {
-            println!("No approval requests");
+            outln!("No approval requests");
         }
     })?;
     Ok(0)

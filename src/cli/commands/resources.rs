@@ -225,7 +225,7 @@ pub(super) async fn overview(
 
 pub(super) fn render_overview(overview: &Overview, palette: Palette) {
     for pool in &overview.pools {
-        println!(
+        outln!(
             "{} ({}) {}/{} in use, {} available{}",
             palette.paint(Style::Heading, &pool.name),
             pool.scope,
@@ -243,18 +243,21 @@ pub(super) fn render_overview(overview: &Overview, palette: Palette) {
         );
         for resource in &pool.resources {
             if resource.requires_approval {
-                println!(
+                outln!(
                     "  {}: approval required ({})",
-                    resource.name, resource.approval_lifetime
+                    resource.name,
+                    resource.approval_lifetime
                 );
             }
             if resource.kind == ResourceKind::Repo {
-                println!(
+                outln!(
                     "  {}: {} readers; read available: {}",
-                    resource.name, resource.readers, resource.read_available
+                    resource.name,
+                    resource.readers,
+                    resource.read_available
                 );
             } else if resource.kind == ResourceKind::Rwlock {
-                println!(
+                outln!(
                     "  {}: {} readers, {} writers; read available: {}, write available: {}",
                     resource.name,
                     resource.readers,
@@ -263,17 +266,20 @@ pub(super) fn render_overview(overview: &Overview, palette: Palette) {
                     resource.write_available
                 );
             } else {
-                println!(
+                outln!(
                     "  {}: {}/{} in use, {} available",
-                    resource.name, resource.used, resource.capacity, resource.available
+                    resource.name,
+                    resource.used,
+                    resource.capacity,
+                    resource.available
                 );
             }
         }
     }
     for lease in &overview.leases {
-        println!("  lease {}", describe_short(lease, palette));
+        outln!("  lease {}", describe_short(lease, palette));
     }
     if overview.pools.is_empty() && overview.leases.is_empty() {
-        println!("No configured resources or leases");
+        outln!("No configured resources or leases");
     }
 }

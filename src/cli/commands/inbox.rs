@@ -68,10 +68,10 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     );
     ctx.show(&inbox.items, |_| {
         for row in &rows {
-            println!("{row}");
+            outln!("{row}");
         }
         if rows.is_empty() {
-            println!("Nothing needs you");
+            outln!("Nothing needs you");
         }
     })?;
     Ok(0)

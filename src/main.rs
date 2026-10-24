@@ -1,3 +1,7 @@
+// First, so that every module below sees its print macros.
+#[macro_use]
+mod stdout;
+
 mod agent;
 mod agent_auth;
 mod ai;

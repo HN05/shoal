@@ -64,7 +64,7 @@ pub(super) async fn resume(ctx: &Context, workspace: String, id: i64, ask: Ask) 
 /// Printed here, the answer's message need not reach the agent again.
 async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> Result<()> {
     ctx.emit(question.answer.as_deref().unwrap_or_default(), question)?;
-    std::io::Write::flush(&mut std::io::stdout())?;
+    crate::stdout::flush()?;
     let Some(id) = question.message_id else {
         return Ok(());
     };
@@ -127,12 +127,12 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     ctx.show(&listing, |listing| {
         let palette = Palette::stdout(ctx.json);
         for question in &listing.questions {
-            println!("{}", render(question, palette));
+            outln!("{}", render(question, palette));
         }
         if listing.omitted > 0 {
-            println!("{} older questions not shown", listing.omitted);
+            outln!("{} older questions not shown", listing.omitted);
         } else if listing.questions.is_empty() {
-            println!("No open questions");
+            outln!("No open questions");
         }
     })?;
     Ok(0)

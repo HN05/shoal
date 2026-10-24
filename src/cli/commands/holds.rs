@@ -66,7 +66,7 @@ async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         let workspaces = client::workspaces(&ctx.paths).await?;
         ctx.show(&workspaces, |workspaces| {
             for workspace in workspaces {
-                println!(
+                outln!(
                     "{}",
                     Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name)
                 );
@@ -106,10 +106,10 @@ async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
 
 fn render(holds: &[WorkspaceHold]) {
     if holds.is_empty() {
-        println!("No holds");
+        outln!("No holds");
     }
     for hold in holds {
-        println!(
+        outln!(
             "  {}{}",
             hold.name,
             optional(hold.reason.as_deref(), |r| format!(" ({r})"))

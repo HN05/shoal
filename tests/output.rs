@@ -133,6 +133,26 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
     assert!(!root.path().join("state").exists());
 }
 
+// A reader that has already gone, like `head` after its lines, ends text and
+// JSON output with the status a shell reports for SIGPIPE.
+#[test]
+fn a_closed_stdout_ends_commands_quietly() {
+    let root = tempfile::tempdir().unwrap();
+    for args in [vec!["skill"], vec!["--json", "skill", "worker"]] {
+        let (reader, writer) = std::io::pipe().unwrap();
+        drop(reader);
+        let output = support::cli(root.path())
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(writer)
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(141), "{args:?}: {output:?}");
+        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+    }
+}
+
 #[test]
 fn repository_progress_respects_output_mode_and_clears_before_errors() {
     let success = serde_json::json!({

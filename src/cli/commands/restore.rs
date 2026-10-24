@@ -272,10 +272,10 @@ pub(super) async fn prepare_reopened(
 
 fn print_removed(removed: &[RemovedWorkspace]) {
     if removed.is_empty() {
-        println!("No removed workspaces to restore");
+        outln!("No removed workspaces to restore");
     }
     for line in removed_lines(removed) {
-        println!("{line}");
+        outln!("{line}");
     }
 }
 
@@ -304,10 +304,10 @@ fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
 
 fn print_checkpoints(checkpoints: &[Checkpoint]) {
     if checkpoints.is_empty() {
-        println!("No checkpoints");
+        outln!("No checkpoints");
     }
     for line in checkpoint_lines(checkpoints) {
-        println!("{line}");
+        outln!("{line}");
     }
 }
 

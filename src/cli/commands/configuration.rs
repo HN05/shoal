@@ -94,7 +94,7 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
         let palette = Palette::stdout(ctx.json);
         for entry in entries {
             let value = serde_json::to_string(&entry.value).expect("serialize config value");
-            println!(
+            outln!(
                 "{} = {} {}",
                 entry.key,
                 value,

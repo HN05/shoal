@@ -61,7 +61,7 @@ pub(super) async fn environment(
         let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
         ctx.show(&values, |values| {
             for (name, value) in values {
-                println!("{name}={value}");
+                outln!("{name}={value}");
             }
         })?;
     }
@@ -102,9 +102,10 @@ pub(super) async fn rename(
     let renamed =
         request::<Workspace>(&ctx.paths, Method::RenameWorkspace { workspace, branch }).await?;
     ctx.show(&renamed, |workspace| {
-        println!(
+        outln!(
             "Renamed workspace to {} ({})",
-            workspace.name, workspace.branch
+            workspace.name,
+            workspace.branch
         )
     })?;
     Ok(0)
@@ -122,21 +123,23 @@ pub(super) async fn land_worker(ctx: &Context, plan: String, push: bool) -> Resu
     ctx.show(&result, |result| {
         let refresh = &result.default_refresh;
         if refresh.updated {
-            println!(
+            outln!(
                 "Updated {} from its upstream ({}..{})",
-                refresh.branch, refresh.previous_commit, refresh.commit
+                refresh.branch,
+                refresh.previous_commit,
+                refresh.commit
             );
         }
         let (branch, default, commit) = (&result.branch, &result.default_branch, &result.commit);
         if !result.updated {
-            println!("{default} already contains {branch} ({commit})");
+            outln!("{default} already contains {branch} ({commit})");
         } else if result.fast_forward {
-            println!("Fast-forwarded {default} to {branch} ({commit})");
+            outln!("Fast-forwarded {default} to {branch} ({commit})");
         } else {
-            println!("Merged {branch} into {default} ({commit})");
+            outln!("Merged {branch} into {default} ({commit})");
         }
         if let Some(remote) = &result.pushed_to {
-            println!("Pushed {default} to {remote}");
+            outln!("Pushed {default} to {remote}");
         }
     })?;
     Ok(0)
@@ -193,12 +196,12 @@ pub(super) async fn conflicts(
         request::<ConflictCheck>(&ctx.paths, Method::Conflicts { workspace, target }).await?;
     ctx.show(&check, |check| {
         if check.conflicts {
-            println!("Conflicts with {}:", check.target);
+            outln!("Conflicts with {}:", check.target);
             for file in &check.files {
-                println!("  {file}");
+                outln!("  {file}");
             }
         } else {
-            println!("No conflicts with {}", check.target);
+            outln!("No conflicts with {}", check.target);
         }
     })?;
     Ok(i32::from(check.conflicts))
@@ -1520,7 +1523,7 @@ pub(super) async fn list(
     );
     ctx.show(&workspaces, |_| {
         for row in rows.into_iter().chain(queued) {
-            println!("{row}");
+            outln!("{row}");
         }
     })?;
     // A pointer for humans; agents cannot read notifications and JSON stays clean.
@@ -1562,7 +1565,7 @@ pub(super) async fn status(
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
             if index > 0 {
-                println!();
+                outln!();
             }
             render_status(status, ctx.json);
         }
@@ -1655,16 +1658,16 @@ fn render_status(view: &StatusView, json: bool) {
     let palette = Palette::stdout(json);
     let inspection = &status.inspection;
     let workspace = &inspection.workspace;
-    println!(
+    outln!(
         "{}  {}",
         palette.paint(Style::Heading, &workspace.name),
         palette.workspace_state(workspace.state)
     );
-    println!("Path:          {}", workspace.path.display());
-    println!("Branch:        {}", workspace.branch);
+    outln!("Path:          {}", workspace.path.display());
+    outln!("Branch:        {}", workspace.branch);
     super::base::render(workspace);
     super::split::render(workspace);
-    println!(
+    outln!(
         "Setup:         {}",
         if status.setup_finished {
             "finished"
@@ -1673,7 +1676,7 @@ fn render_status(view: &StatusView, json: bool) {
         }
     );
     match &status.diff {
-        Some(diff) => println!(
+        Some(diff) => outln!(
             "Changes:       {} file{}, +{} -{}",
             diff.files_changed,
             if diff.files_changed == 1 { "" } else { "s" },
@@ -1681,18 +1684,18 @@ fn render_status(view: &StatusView, json: bool) {
             diff.deletions
         ),
         None => {
-            println!("Changes:       unavailable");
+            outln!("Changes:       unavailable");
             if let Some(error) = &status.diff_error {
-                println!("  {}", palette.paint(Style::Warning, error));
+                outln!("  {}", palette.paint(Style::Warning, error));
             }
         }
     }
     if let Some(error) = &workspace.error {
-        println!("Error:         {}", palette.paint(Style::Error, error));
+        outln!("Error:         {}", palette.paint(Style::Error, error));
     }
-    println!("Holds:         {}", inspection.workspace.holds.len());
+    outln!("Holds:         {}", inspection.workspace.holds.len());
     for hold in &inspection.workspace.holds {
-        println!(
+        outln!(
             "  {}{}",
             hold.name,
             hold.reason
@@ -1701,7 +1704,7 @@ fn render_status(view: &StatusView, json: bool) {
         );
     }
 
-    println!("Executions:    {}", inspection.executions.len());
+    outln!("Executions:    {}", inspection.executions.len());
     for execution in &inspection.executions {
         let pid = execution
             .child
@@ -1709,7 +1712,7 @@ fn render_status(view: &StatusView, json: bool) {
             .or(execution.wrapper.as_ref())
             .map(|identity| format!("  pid {}", identity.pid))
             .unwrap_or_default();
-        println!(
+        outln!(
             "  {}  {}{}",
             execution.id,
             palette.execution_state(execution.state),
@@ -1717,30 +1720,30 @@ fn render_status(view: &StatusView, json: bool) {
         );
     }
 
-    println!("Sessions:      {}", view.sessions.len());
+    outln!("Sessions:      {}", view.sessions.len());
     for session in &view.sessions {
-        println!("  {}", session.label());
+        outln!("  {}", session.label());
     }
     if let Some(error) = &view.sessions_error {
-        println!("  {}", palette.paint(Style::Warning, error));
+        outln!("  {}", palette.paint(Style::Warning, error));
     }
 
-    println!(
+    outln!(
         "Agent state:   {}",
         workspace
             .agent_state
             .map_or("none", |status| { ui::agent_state_label(status.state) })
     );
-    println!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
+    outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
 
-    println!("Ports:         {}", inspection.ports.len());
+    outln!("Ports:         {}", inspection.ports.len());
     for port in &inspection.ports {
-        println!("  {}={} ({})", port.name, port.port, port.env_var);
+        outln!("  {}={} ({})", port.name, port.port, port.env_var);
     }
 
-    println!("Simulators:    {}", inspection.simulators.len());
+    outln!("Simulators:    {}", inspection.simulators.len());
     for simulator in &inspection.simulators {
-        println!(
+        outln!(
             "  {}={}  {}  {}  {}",
             simulator.lease_name.as_deref().unwrap_or("default"),
             simulator.udid.as_deref().unwrap_or("pending"),
@@ -1750,9 +1753,9 @@ fn render_status(view: &StatusView, json: bool) {
         );
     }
 
-    println!("Resources:     {}", inspection.resources.len());
+    outln!("Resources:     {}", inspection.resources.len());
     for resource in &inspection.resources {
-        println!(
+        outln!(
             "  {}/{} -> {} [{}]{}",
             resource.pool,
             resource.name,
@@ -1763,13 +1766,13 @@ fn render_status(view: &StatusView, json: bool) {
     }
 
     if let Some(issue) = &inspection.issue {
-        println!("Issue:         {}", issue.url);
+        outln!("Issue:         {}", issue.url);
         if let Some(state) = status.issue_status.as_ref().and_then(|s| s.state.as_ref()) {
-            println!("  State:       {state}");
+            outln!("  State:       {state}");
         }
         let lookup = status.issue_status.as_ref().and_then(|s| s.error.as_ref());
         for error in issue.error.iter().chain(lookup) {
-            println!("  {}", palette.paint(Style::Warning, error));
+            outln!("  {}", palette.paint(Style::Warning, error));
         }
     }
     if let Some(completion) = &inspection.completion {
@@ -1778,9 +1781,9 @@ fn render_status(view: &StatusView, json: bool) {
         } else {
             "no cleanup requested"
         };
-        println!("Completion:    done ({choice})");
+        outln!("Completion:    done ({choice})");
         if let Some(error) = &completion.error {
-            println!("  {}", palette.paint(Style::Warning, error));
+            outln!("  {}", palette.paint(Style::Warning, error));
         }
     }
     match &inspection.pr_cleanup {
@@ -1788,46 +1791,46 @@ fn render_status(view: &StatusView, json: bool) {
             match &registration.kind {
                 RegistrationKind::Watch { urls, .. } => {
                     for url in urls {
-                        println!("PR watch:      {url}");
+                        outln!("PR watch:      {url}");
                         if let Some(pr) = status.prs.iter().find(|pr| &pr.url == url) {
                             render_pr(pr, palette);
                         }
                     }
                 }
-                RegistrationKind::Acknowledgement { head } => println!("PR watch:      {head}"),
+                RegistrationKind::Acknowledgement { head } => outln!("PR watch:      {head}"),
             }
             if let Some(error) = &registration.error {
-                println!("  {}", palette.paint(Style::Warning, error));
+                outln!("  {}", palette.paint(Style::Warning, error));
             }
         }
-        None => println!("PR watch:      none"),
+        None => outln!("PR watch:      none"),
     }
     render_recorded("Opened:", &workspace.links.opened);
     render_recorded("Related:", &workspace.links.related);
-    println!("Cleanup:       {}", status.cleanup_reason);
+    outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
-        println!(
+        outln!(
             "Grace period:  ends {}",
             crate::time::local_minutes(at as i64)
         );
     }
     if let Some(error) = &status.cleanup_error {
-        println!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
+        outln!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
     }
     if workspace.review.is_empty() {
-        println!("Review:        none");
+        outln!("Review:        none");
     } else {
-        println!("Review:        ready for review");
-        println!("{}", super::links::review_lines(&workspace.review));
+        outln!("Review:        ready for review");
+        outln!("{}", super::links::review_lines(&workspace.review));
     }
-    println!("Notifications: {} unread", status.unread_notifications);
+    outln!("Notifications: {} unread", status.unread_notifications);
 }
 
 fn render_recorded(label: &str, items: &[crate::model::LinkedItem]) {
     for item in items {
         match &item.title {
-            Some(title) => println!("{label:<15}{} {title}", item.url),
-            None => println!("{label:<15}{}", item.url),
+            Some(title) => outln!("{label:<15}{} {title}", item.url),
+            None => outln!("{label:<15}{}", item.url),
         }
     }
 }
@@ -1839,23 +1842,23 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
             Some(false) => ", no merge conflicts".into(),
             None => String::new(),
         };
-        println!("  State:       {state}{conflicts}");
+        outln!("  State:       {state}{conflicts}");
     }
     if let Some(review) = pr.review {
-        println!("  Review:      {}", palette.review_state(review));
+        outln!("  Review:      {}", palette.review_state(review));
     }
     if pr.state.is_some() {
-        println!("  Checks:      {}", pr.checks.len());
+        outln!("  Checks:      {}", pr.checks.len());
     }
     for check in &pr.checks {
-        println!(
+        outln!(
             "    {}: {}",
             check.name,
             palette.check_result(&check.result)
         );
     }
     for error in &pr.errors {
-        println!("  {}", palette.paint(Style::Warning, error));
+        outln!("  {}", palette.paint(Style::Warning, error));
     }
 }
 
@@ -1863,7 +1866,7 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
     ctx.show(&inspection, |inspection| {
-        println!(
+        outln!(
             "{}",
             serde_json::to_string_pretty(inspection).unwrap_or_default()
         );
@@ -2101,19 +2104,19 @@ pub(super) async fn watch_items(
     let updates = crate::daemon::links::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
-            println!("Message: {}", message.message);
+            outln!("Message: {}", message.message);
         }
         for update in &updates.updates {
-            println!("{update}");
+            outln!("{update}");
         }
         if updates.timed_out {
-            println!("No item updates before timeout.");
+            outln!("No item updates before timeout.");
         }
         if updates.superseded {
-            println!("A newer wait in this workspace receives the updates.");
+            outln!("A newer wait in this workspace receives the updates.");
         }
     })?;
-    std::io::Write::flush(&mut std::io::stdout())?;
+    crate::stdout::flush()?;
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(0);
     }

@@ -213,8 +213,8 @@ async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
 fn render_list(kind: ItemKind, items: &[Item]) {
     if items.is_empty() {
         match kind {
-            ItemKind::Issue => println!("No issues"),
-            ItemKind::Pr => println!("No PRs"),
+            ItemKind::Issue => outln!("No issues"),
+            ItemKind::Pr => outln!("No PRs"),
         }
         return;
     }
@@ -232,7 +232,7 @@ fn render_list(kind: ItemKind, items: &[Item]) {
         if !item.labels.is_empty() {
             line += &format!("  [{}]", item.labels.join(", "));
         }
-        println!("{line}");
+        outln!("{line}");
     }
 }
 

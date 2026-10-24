@@ -286,7 +286,7 @@ pub(in crate::cli) async fn start_add(
         .start_add(ctx, settings, plan, issue, name, placement)
         .await?;
     if started && placement == Placement::Background {
-        println!("{}", host.background_note(name));
+        outln!("{}", host.background_note(name));
     }
     Ok(started)
 }

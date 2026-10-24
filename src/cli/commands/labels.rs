@@ -20,7 +20,7 @@ pub(super) async fn labels(ctx: &Context, workspace: Option<String>) -> Result<i
 /// other labels of its scope.
 fn render(labels: &[Label]) {
     if labels.is_empty() {
-        println!("No labels");
+        outln!("No labels");
         return;
     }
     let width = labels
@@ -31,6 +31,6 @@ fn render(labels: &[Label]) {
     for label in labels {
         let exclusive = if label.exclusive { " (exclusive)" } else { "" };
         let line = format!("{:width$}  {}{exclusive}", label.name, label.description);
-        println!("{}", line.trim_end());
+        outln!("{}", line.trim_end());
     }
 }

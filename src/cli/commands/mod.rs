@@ -116,11 +116,11 @@ async fn workspace_overviews<T: Serialize>(
             let heading = palette.paint(Style::Heading, &workspace.name);
             match overview {
                 WorkspaceOverviewResult::Ready(overview) => {
-                    println!("{heading}");
+                    outln!("{heading}");
                     render(overview, palette);
                 }
                 WorkspaceOverviewResult::Failed { error, .. } => {
-                    println!("{heading}: {}", palette.paint(Style::Warning, error));
+                    outln!("{heading}: {}", palette.paint(Style::Warning, error));
                 }
             }
         }
@@ -212,7 +212,7 @@ fn print_help(path: &[&str]) -> Result<()> {
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
     if matches!(cli.command, Some(Command::BuildInfo)) {
-        println!("{}", json!({"protocol": crate::protocol::VERSION}));
+        outln!("{}", json!({"protocol": crate::protocol::VERSION}));
         return Ok(0);
     }
     // The service runs without the user's tool configuration environment, and
@@ -243,9 +243,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         let state = crate::paths::Paths::state_dir(cli.state_dir.clone())?;
         let destination = shell::recovery_directory(path, &state)?;
         if cli.json {
-            println!("{}", json!({"path": destination}));
+            outln!("{}", json!({"path": destination}));
         } else {
-            println!("{}", destination.display());
+            outln!("{}", destination.display());
         }
         return Ok(0);
     }

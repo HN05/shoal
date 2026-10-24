@@ -29,10 +29,10 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     ctx.show(&notifications, |notifications| {
         let palette = Palette::stdout(ctx.json);
         for notification in notifications {
-            println!("{}", render(notification, palette));
+            outln!("{}", render(notification, palette));
         }
         if notifications.is_empty() {
-            println!("No {}notifications", if all { "" } else { "new " });
+            outln!("No {}notifications", if all { "" } else { "new " });
         }
     })?;
     // Shown once: exactly what this listing printed does not come back as new.
@@ -58,8 +58,8 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let cleared = request::<Cleared>(&ctx.paths, Method::ClearNotifications).await?;
     ctx.show(&cleared, |cleared| match cleared.cleared {
-        0 => println!("No notifications"),
-        n => println!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
+        0 => outln!("No notifications"),
+        n => outln!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
     })?;
     Ok(0)
 }
@@ -127,12 +127,13 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
         let notification = Notification::try_from(response.body)?;
         delivered = notification.id;
         ctx.show(&notification, |notification| {
-            println!("{}", render(notification, palette));
+            outln!("{}", render(notification, palette));
         })?;
         if raise {
-            let mut stdout = std::io::stdout().lock();
-            stdout.write_all(terminal_notification(&notification).as_bytes())?;
-            stdout.flush()?;
+            crate::stdout::write(|stdout| {
+                stdout.write_all(terminal_notification(&notification).as_bytes())?;
+                stdout.flush()
+            })?;
         }
     }
 }

@@ -24,7 +24,7 @@ pub(super) async fn run(
         Some(SimCommand::Catalog) => {
             let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
             ctx.show(&catalog, |catalog| {
-                println!(
+                outln!(
                     "{}",
                     serde_json::to_string_pretty(catalog).unwrap_or_default()
                 );
@@ -76,7 +76,7 @@ pub(super) async fn run(
                     render_history_entry(entry);
                 }
                 if entries.is_empty() {
-                    println!("No clean-device requests");
+                    outln!("No clean-device requests");
                 }
             })?;
             Ok(0)
@@ -125,9 +125,10 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
 }
 
 pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
-    println!(
+    outln!(
         "Capacity: {} booted, {} devices",
-        overview.policy.max_booted, overview.policy.max_devices
+        overview.policy.max_booted,
+        overview.policy.max_devices
     );
     for (name, profile) in &overview.policy.profiles {
         let preferred = if overview.preferred.contains(name) {
@@ -137,7 +138,7 @@ pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
         } else {
             ""
         };
-        println!(
+        outln!(
             "{}: {} / {}{}",
             palette.paint(Style::Heading, name),
             profile.device,
@@ -150,7 +151,7 @@ pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
         );
     }
     for sim in &overview.simulators {
-        println!(
+        outln!(
             "{}  {}  {}  {}  {}",
             sim.udid.as_deref().unwrap_or("pending"),
             sim.lease_name.as_deref().unwrap_or("idle"),
@@ -160,7 +161,7 @@ pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
         );
     }
     if overview.policy.profiles.is_empty() && overview.simulators.is_empty() {
-        println!("No configured profiles or managed simulators");
+        outln!("No configured profiles or managed simulators");
     }
 }
 
@@ -176,7 +177,7 @@ fn describe(sim: &Simulator) -> String {
 
 fn render_history_entry(entry: &AuditEntry) {
     let request = &entry.request;
-    println!(
+    outln!(
         "#{} at {}  {}/{}  {}  action={}  erased-apps={}  actor={}\n  reason: {}{}",
         entry.id,
         request.requested_at,
@@ -196,7 +197,7 @@ fn render_history_entry(entry: &AuditEntry) {
         optional(request.error.as_deref(), |e| format!("\n  {e}"))
     );
     for evicted in &request.evicted {
-        println!(
+        outln!(
             "  eviction planned: {} ({} apps)",
             evicted.udid.as_deref().unwrap_or(&evicted.id),
             evicted

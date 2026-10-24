@@ -100,7 +100,7 @@ fn median_us(rounds: usize, mut operation: impl FnMut() -> Result<usize>) -> Res
 #[test]
 #[ignore = "manual release-mode persistence microbenchmark"]
 fn benchmark_simulator_lookup() -> Result<()> {
-    println!(
+    outln!(
         "rows,old_lookup_us,indexed_lookup_us,old_sweep_us,indexed_sweep_us,migration_us,old_write_us,indexed_write_us"
     );
     for size in [4, 16, 64, 256, 1_000, 10_000] {
@@ -150,7 +150,7 @@ fn benchmark_simulator_lookup() -> Result<()> {
         } else {
             (f64::NAN, f64::NAN)
         };
-        println!(
+        outln!(
             "{size},{old:.2},{indexed:.2},{old_sweep:.2},{indexed_sweep:.2},{migration:.2},{old_write:.2},{indexed_write:.2}"
         );
     }

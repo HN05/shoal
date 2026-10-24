@@ -24,21 +24,21 @@ pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i3
         .any(|cleanup| matches!(cleanup.emptying, Emptying::Failed { .. }));
     ctx.show(&report, |report| {
         if report.removed.is_empty() && report.retained.is_empty() {
-            println!("No workspaces to clean up");
+            outln!("No workspaces to clean up");
         }
         let palette = Palette::stdout(ctx.json);
         for name in &report.removed {
             if report.dry_run {
-                println!("Would remove {name}");
+                outln!("Would remove {name}");
             } else {
-                println!(
+                outln!(
                     "{}",
                     palette.paint(Style::Success, format!("Removed {name}"))
                 );
             }
         }
         if !report.kept.is_empty() {
-            println!("Kept:");
+            outln!("Kept:");
             let width = report
                 .kept
                 .iter()
@@ -46,7 +46,7 @@ pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i3
                 .max()
                 .unwrap_or(0);
             for kept in &report.kept {
-                println!("  {:width$}  {}", kept.workspace, kept.reason);
+                outln!("  {:width$}  {}", kept.workspace, kept.reason);
             }
         }
         show_caches(report, ctx.json);
@@ -74,16 +74,16 @@ fn show_caches(report: &ManualCleanup, json: bool) {
         let repository = &cleanup.repository;
         match &cleanup.emptying {
             Emptying::Emptied { caches } if report.dry_run => {
-                println!("Would empty caches of {repository}: {}", caches.join(", "));
+                outln!("Would empty caches of {repository}: {}", caches.join(", "));
             }
-            Emptying::Emptied { caches } => println!(
+            Emptying::Emptied { caches } => outln!(
                 "{}",
                 palette.paint(
                     Style::Success,
                     format!("Emptied caches of {repository}: {}", caches.join(", "))
                 )
             ),
-            Emptying::Busy { caches } => println!(
+            Emptying::Busy { caches } => outln!(
                 "Kept caches of {repository}: {} (an execution or seed build is running)",
                 caches.join(", ")
             ),

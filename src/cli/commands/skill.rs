@@ -51,9 +51,9 @@ pub(super) fn run(
             SkillName::Orchestrator => SKILLS[1],
         };
         if json_output {
-            println!("{}", json!({"name": name, "skill": contents}));
+            outln!("{}", json!({"name": name, "skill": contents}));
         } else {
-            print!("{contents}");
+            out!("{contents}");
         }
         return Ok(0);
     };
@@ -105,14 +105,14 @@ pub(super) fn run(
         for name in &outcome.installed {
             let path = skill_file(directory, name);
             if !json_output {
-                println!("Installed skill {name} at {}", path.display());
+                outln!("Installed skill {name} at {}", path.display());
             }
             installed.push(json!({"agents": agents, "skill": name, "path": path}));
         }
         for name in &outcome.kept {
             let path = skill_file(directory, name);
             if !json_output {
-                println!(
+                outln!(
                     "Kept modified skill {name} at {}; use --force to replace it",
                     path.display()
                 );
@@ -121,9 +121,9 @@ pub(super) fn run(
         }
     }
     if json_output {
-        println!("{}", json!({"installed": installed, "kept": kept}));
+        outln!("{}", json!({"installed": installed, "kept": kept}));
     } else if agents.is_empty() {
-        println!("No skill directories found; run `shoal skill install <tool>` to create one");
+        outln!("No skill directories found; run `shoal skill install <tool>` to create one");
     }
     Ok(0)
 }

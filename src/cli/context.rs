@@ -86,9 +86,9 @@ impl Context {
     /// Print a human-readable line, or `value` as one JSON line with `--json`.
     pub fn emit(&self, message: &str, value: impl Serialize) -> Result<()> {
         if self.json {
-            println!("{}", serde_json::to_string(&value)?);
+            outln!("{}", serde_json::to_string(&value)?);
         } else {
-            println!("{message}");
+            outln!("{message}");
         }
         Ok(())
     }
@@ -101,7 +101,7 @@ impl Context {
     /// Print `value` as JSON with `--json`; otherwise render it with `text`.
     pub fn show<T: Serialize>(&self, value: &T, text: impl FnOnce(&T)) -> Result<()> {
         if self.json {
-            println!("{}", serde_json::to_string(value)?);
+            outln!("{}", serde_json::to_string(value)?);
         } else {
             text(value);
         }

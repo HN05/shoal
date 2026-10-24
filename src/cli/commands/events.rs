@@ -41,14 +41,14 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
         };
         ctx.show(&item, |item| match item {
             EventItem::Event(event) => {
-                println!("{} {} {}", event.id, event.details.kind, event.details.name)
+                outln!("{} {} {}", event.id, event.details.kind, event.details.name)
             }
-            EventItem::Chat(event) => println!("{} {} {}", event.id, event.kind, event.chat.id),
+            EventItem::Chat(event) => outln!("{} {} {}", event.id, event.kind, event.chat.id),
             EventItem::Gap {
                 since,
                 oldest_id,
                 latest_id,
-            } => println!(
+            } => outln!(
                 "event gap after {since}; retained events start at {oldest_id} (latest {latest_id})"
             ),
         })?;

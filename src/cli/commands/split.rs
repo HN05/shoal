@@ -186,7 +186,7 @@ async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
 /// The parent and child workspaces, when the workspace has any.
 pub(super) fn render(workspace: &Workspace) {
     if let Some(parent) = &workspace.parent_workspace {
-        println!("Parent workspace: {}", super::base::describe(parent));
+        outln!("Parent workspace: {}", super::base::describe(parent));
     }
     if !workspace.child_workspaces.is_empty() {
         let children: Vec<_> = workspace
@@ -194,6 +194,6 @@ pub(super) fn render(workspace: &Workspace) {
             .iter()
             .map(super::base::describe)
             .collect();
-        println!("Child workspaces: {}", children.join(", "));
+        outln!("Child workspaces: {}", children.join(", "));
     }
 }

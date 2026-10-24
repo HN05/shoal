@@ -17883,6 +17883,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
 
 #[test]
 #[ignore = "manual release-mode measurement"]
+#[allow(clippy::disallowed_macros)] // An ignored benchmark run with --nocapture.
 fn benchmark_daemon_reads() {
     let fixture = Fixture::new();
     for name in ["bench0", "bench1", "bench2", "bench3"] {

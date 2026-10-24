@@ -40,19 +40,19 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             let config = request::<LocalConfig>(&ctx.paths, method).await?;
             ctx.show(&config, |config| {
                 if clear {
-                    println!(
+                    outln!(
                         "{}",
                         Palette::stdout(ctx.json)
                             .paint(Style::Success, "Cleared local repository config")
                     );
                 } else if updating {
-                    println!(
+                    outln!(
                         "{}",
                         Palette::stdout(ctx.json)
                             .paint(Style::Success, "Saved local repository config")
                     );
                 } else if let Some(text) = &config.toml {
-                    print!("{text}");
+                    out!("{text}");
                 } else {
                     eprintln!(
                         "No local repository config; using each worktree's repository config"
@@ -77,7 +77,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             ctx.show(&repos, |repos| {
                 let palette = Palette::stdout(ctx.json);
                 for repo in repos {
-                    println!("{}", ui::repository_label(repo, palette));
+                    outln!("{}", ui::repository_label(repo, palette));
                 }
             })?;
         }
@@ -193,16 +193,18 @@ pub(super) async fn sync(ctx: &Context, repository: Option<String>) -> Result<i3
         request::<SyncedRepository>(&ctx.paths, Method::SyncRepository { repository }).await?;
     ctx.show(&synced, |synced| {
         if let Some(remote) = &synced.remote {
-            println!("Fetched {remote}");
+            outln!("Fetched {remote}");
         }
         let refresh = &synced.default_branch;
         match (&refresh.skipped, refresh.updated) {
-            (Some(skipped), _) => println!("{skipped}"),
-            (None, true) => println!(
+            (Some(skipped), _) => outln!("{skipped}"),
+            (None, true) => outln!(
                 "Updated {} from its upstream ({}..{})",
-                refresh.branch, refresh.previous_commit, refresh.commit
+                refresh.branch,
+                refresh.previous_commit,
+                refresh.commit
             ),
-            (None, false) => println!("{} is up to date with its upstream", refresh.branch),
+            (None, false) => outln!("{} is up to date with its upstream", refresh.branch),
         }
     })?;
     Ok(0)

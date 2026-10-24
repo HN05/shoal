@@ -96,7 +96,7 @@ pub(super) async fn run(
                 CheckStatus::Error => ("error", Style::Error),
                 CheckStatus::Skipped => ("not checked", Style::Warning),
             };
-            println!(
+            outln!(
                 "{} {}: {}",
                 palette.paint(style, label),
                 check.name,
@@ -162,14 +162,14 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
 }
 
 fn render(report: &Report, palette: Palette) {
-    println!(
+    outln!(
         "{}: {} ({})",
         palette.paint(Style::Heading, &report.workspace.name),
         palette.workspace_state(report.workspace.state),
         report.directory
     );
     for execution in &report.executions {
-        println!(
+        outln!(
             "  execution {}: {}{}{}",
             execution.id,
             palette.execution_state(execution.state),
@@ -181,25 +181,25 @@ fn render(report: &Report, palette: Palette) {
             if execution.cleared { " (cleared)" } else { "" }
         );
         for process in &execution.processes {
-            println!("    owned PID {}", process.pid);
+            outln!("    owned PID {}", process.pid);
         }
         for process in &execution.unverified_processes {
-            println!("    unverified group PID {} (not signaled)", process.pid);
+            outln!("    unverified group PID {} (not signaled)", process.pid);
         }
         for process in &execution.unreadable_processes {
-            println!(
+            outln!(
                 "    unreadable environment PID {} (ownership unknown)",
                 process.pid
             );
         }
         for note in &execution.notes {
-            println!("    {note}");
+            outln!("    {note}");
         }
     }
     for change in &report.changes {
-        println!("  {} {change}", palette.paint(Style::Success, "repaired:"));
+        outln!("  {} {change}", palette.paint(Style::Success, "repaired:"));
     }
     for issue in &report.issues {
-        println!("  {} {issue}", palette.paint(Style::Warning, "unresolved:"));
+        outln!("  {} {issue}", palette.paint(Style::Warning, "unresolved:"));
     }
 }

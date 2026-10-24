@@ -244,7 +244,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let rows = rows(ctx, &entries).await?;
     ctx.show(&entries, |_| {
         for row in rows {
-            println!("{row}");
+            outln!("{row}");
         }
     })?;
     Ok(0)
