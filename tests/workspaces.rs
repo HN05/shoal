@@ -20527,6 +20527,45 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
 }
 
 #[test]
+fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
+    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let home = fixture.root.path();
+    install_test_script(
+        home.join("bin/codex"),
+        "#!/bin/sh\necho \"$@\" >> \"$HOME/codex-runs\"\n",
+    );
+    let directive = home.join("shell-directive");
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "app",
+                "--agent",
+                "codex",
+                "--focus",
+            ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let workspace = fixture.ok(&["inspect", "app"]);
+    let path = workspace["workspace"]["path"].as_str().unwrap();
+    assert_eq!(
+        fs::read_to_string(home.join("codex-runs")).unwrap(),
+        format!("app {path}\n")
+    );
+    // The app opens without a zmx session to attach.
+    assert!(
+        !zmx_calls(&fixture).iter().any(|call| call[0] == "attach"),
+        "{transcript}"
+    );
+    assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path);
+}
+
+#[test]
 fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     let fixture = Fixture::with_config(Some("focus = false\n"));
     let home = fixture.root.path();

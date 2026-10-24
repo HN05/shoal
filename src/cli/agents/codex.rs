@@ -57,16 +57,17 @@ impl Integration for Codex {
     /// `codex.default_mode = "app"` opens the Codex app, which cannot receive
     /// a prompt, so a launch with one stays in the terminal, as a tracked one
     /// does.
+    fn launches_itself(&self, settings: &Effective, prompted: bool, tracked: bool) -> bool {
+        !prompted && !tracked && settings.codex.default_mode == CodexMode::App
+    }
+
     fn launch<'a>(
         &'a self,
         ctx: &'a Context,
         launch: &'a mut Launch,
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async move {
-            if launch.prompt.is_some()
-                || launch.tracked
-                || launch.settings.codex.default_mode != CodexMode::App
-            {
+            if !self.launches_itself(&launch.settings, launch.prompt.is_some(), launch.tracked) {
                 return Ok(None);
             }
             let args = std::mem::take(&mut launch.args);

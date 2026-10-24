@@ -27,6 +27,7 @@ use crate::{
         client,
         commands::configured,
         context::Context,
+        terminal,
         ui::{self, Fallback},
     },
     config::{Config, Effective, named_commands::Commands, templates::Delivery},
@@ -91,6 +92,13 @@ pub(in crate::cli) trait Integration: Sync {
         _chat: &'a ChatLaunch,
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async { Ok(None) })
+    }
+
+    /// Whether a launch under `settings`, given a first message when
+    /// `prompted`, starts the agent its own way instead of the tracked
+    /// terminal launch, which a `tracked` launch always uses.
+    fn launches_itself(&self, _settings: &Effective, _prompted: bool, _tracked: bool) -> bool {
+        false
     }
 
     /// Start the agent its own way; `None` leaves it to the tracked terminal
@@ -186,6 +194,19 @@ pub(in crate::cli) struct LaunchOptions {
     pub tracked: bool,
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
+}
+
+/// Whether a launch of `agent` under `settings` runs in a session this
+/// terminal attaches to, rather than in place or the agent's own way.
+pub(in crate::cli) fn runs_in_session(
+    ctx: &Context,
+    agent: &Agent,
+    settings: &Effective,
+    prompted: bool,
+    tracked: bool,
+) -> bool {
+    !integration(agent.name()).launches_itself(settings, prompted, tracked)
+        && terminal::keeps_agents_in_sessions(ctx, settings)
 }
 
 /// Start an agent in a ready workspace, giving it the prompt the way it

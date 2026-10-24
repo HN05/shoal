@@ -53,6 +53,10 @@ impl Integration for Happy {
         )
     }
 
+    fn launches_itself(&self, _settings: &Effective, _prompted: bool, _tracked: bool) -> bool {
+        true
+    }
+
     fn chat<'a>(
         &'a self,
         ctx: &'a Context,
