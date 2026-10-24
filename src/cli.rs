@@ -1312,13 +1312,11 @@ impl Cli {
     }
 }
 
-/// Clap prints help and version itself and exits 0 when stdout is closed, so
-/// shoal prints them to give a closed reader the status other output gets.
 fn exit_parse(error: clap::Error) -> ! {
     if error.use_stderr() {
         error.exit()
     }
-    out!("{}", output::Palette::stdout(false).styled(&error.render()));
+    output::print_clap_output(&error);
     std::process::exit(error.exit_code())
 }
 

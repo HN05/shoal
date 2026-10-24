@@ -145,6 +145,7 @@ fn a_closed_stdout_ends_commands_quietly() {
         vec!["repo"],
         vec!["--help"],
         vec!["--version"],
+        vec!["custom-tool", "--help"],
     ] {
         let (reader, writer) = std::io::pipe().unwrap();
         drop(reader);

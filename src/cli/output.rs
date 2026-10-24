@@ -58,6 +58,12 @@ pub enum Style {
     Done,
 }
 
+/// Print the help or version text clap reports as a parse error, which clap's
+/// own printing would not end with the status a closed stdout gets.
+pub fn print_clap_output(error: &clap::Error) {
+    out!("{}", Palette::stdout(false).styled(&error.render()));
+}
+
 #[derive(Clone, Copy)]
 pub struct Palette {
     enabled: bool,

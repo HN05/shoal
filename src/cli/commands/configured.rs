@@ -128,7 +128,7 @@ pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<Invoked>> {
     match Invocation::try_parse_from(words) {
         Ok(invocation) => Ok(Some((name, invocation.workspace, invocation.args))),
         Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {
-            error.print()?;
+            crate::cli::output::print_clap_output(&error);
             Ok(None)
         }
         Err(error) => Err(error.into()),
