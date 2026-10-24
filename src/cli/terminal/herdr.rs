@@ -368,11 +368,11 @@ async fn created(create: Command) -> Result<CreatedResult> {
 }
 
 async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
-    argv.extend([internal::GROUP.into(), internal::HERDR.into()]);
-    if close_when_done {
-        argv.push("--close-when-done".into());
-    }
+    let argv = internal::internal_command(
+        &ctx.paths,
+        false,
+        internal::Worker::Herdr { close_when_done },
+    )?;
     run_in_pane(&created.root_pane.pane_id, &argv).await
 }
 

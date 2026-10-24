@@ -22,6 +22,10 @@ pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
 
 pub enum Worker<'a> {
+    /// Add the workspace planned in the environment in this Herdr tab.
+    Herdr {
+        close_when_done: bool,
+    },
     HerdrWatch {
         workspace: &'a str,
         tab: &'a str,
@@ -102,6 +106,12 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
     }
     args.push(GROUP.into());
     match worker {
+        Worker::Herdr { close_when_done } => {
+            args.push(HERDR.into());
+            if close_when_done {
+                args.push("--close-when-done".into());
+            }
+        }
         Worker::HerdrWatch { workspace, tab } => {
             args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
         }
@@ -212,6 +222,32 @@ mod tests {
             panic!("expected an internal command");
         };
         command
+    }
+
+    #[test]
+    fn herdr_round_trips_close_when_done() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path());
+        for close_when_done in [false, true] {
+            // The plan normally arrives in the tab's environment.
+            let mut args =
+                internal_command(&paths, false, Worker::Herdr { close_when_done }).unwrap();
+            args.push("plan".into());
+            let cli = Cli::try_parse_from(args).unwrap();
+            assert_eq!(cli.state_dir.as_ref(), Some(&paths.state));
+            let Some(Command::Internal {
+                command:
+                    InternalCommand::Herdr {
+                        close_when_done: parsed,
+                        plan,
+                    },
+            }) = cli.command
+            else {
+                panic!("expected Herdr worker");
+            };
+            assert_eq!(parsed, close_when_done);
+            assert_eq!(plan, "plan");
+        }
     }
 
     #[test]
