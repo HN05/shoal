@@ -17,7 +17,7 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     capability::{Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation},
+    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain},
     conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
@@ -560,6 +560,11 @@ impl Backend for GitHub {
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {
         actions::log_endpoint(location)
+    }
+
+    /// Each log line starts with its time.
+    fn plain_log(&self, log: &str) -> String {
+        plain::readable(&plain::without_timestamps(log))
     }
 
     async fn check_uploads(

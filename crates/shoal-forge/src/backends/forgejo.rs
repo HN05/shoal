@@ -21,7 +21,10 @@ use crate::{
     account::{Account, ForgejoLogin},
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
+    ci::{
+        CiAction, CiCheck, Job, Location, Operation,
+        checks::{CheckLog, plain},
+    },
     conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
@@ -451,6 +454,11 @@ impl Backend for Forgejo {
         name: &str,
     ) -> Result<CheckLog> {
         actions::failed_check_log(repo, account, url, name).await
+    }
+
+    /// Each log line starts with its time.
+    fn plain_log(&self, log: &str) -> String {
+        plain::readable(&plain::without_timestamps(log))
     }
 
     /// tea cannot send a file, so uploads need fj's token. The instance's

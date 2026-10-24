@@ -66,6 +66,40 @@ fn redrawn(line: &str) -> String {
     format!("{last}{end}")
 }
 
+/// `log` without the timestamp GitHub and Forgejo start each line with,
+/// `2024-05-01T12:00:00.1234567Z `.
+pub(crate) fn without_timestamps(log: &str) -> String {
+    log.split_inclusive('\n')
+        .map(|line| {
+            let end = line.find([' ', '\n']).unwrap_or(line.len());
+            if is_timestamp(&line[..end]) {
+                line[end..].strip_prefix(' ').unwrap_or(&line[end..])
+            } else {
+                line
+            }
+        })
+        .collect()
+}
+
+/// Whether `word` is a UTC time to at least the second.
+fn is_timestamp(word: &str) -> bool {
+    let Some(seconds) = word.strip_suffix('Z').and_then(|time| time.get(..19)) else {
+        return false;
+    };
+    let fraction = &word[19..word.len() - 1];
+    let fields_match = seconds.bytes().enumerate().all(|(i, b)| match i {
+        4 | 7 => b == b'-',
+        10 => b == b'T',
+        13 | 16 => b == b':',
+        _ => b.is_ascii_digit(),
+    });
+    let fraction_matches = fraction.is_empty()
+        || fraction
+            .strip_prefix('.')
+            .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+    fields_match && fraction_matches
+}
+
 /// What starts the marker GitLab writes at each end of a collapsible section,
 /// `\e[0Ksection_start:1700000000:name[collapsed=true]\r\e[0K`.
 const SECTION_MARKER: &str = "\x1b[0Ksection_";
@@ -138,6 +172,32 @@ mod tests {
                 "\tindented\nnext",
             )
         );
+    }
+
+    #[test]
+    fn github_and_forgejo_logs_lose_their_timestamps() {
+        let log = concat!(
+            "2024-05-01T12:00:00.1234567Z ##[group]Run cargo test\n",
+            "2024-05-01T12:00:01.0000000Z \x1b[36;1mcargo test\x1b[0m\n",
+            "2024-05-01T12:00:02.0000000Z \n",
+            "2024-05-01T12:00:03Z test result: FAILED\r\n",
+            "2024-05-01T12:00:04.5Z\n",
+            "2024-05-01 12:00:05 not a timestamp\n",
+            "2024-05-01T12:00:06.Z neither\n",
+            "⭐ Run Main Test",
+        );
+        let plain = concat!(
+            "##[group]Run cargo test\n",
+            "cargo test\n",
+            "\n",
+            "test result: FAILED\n",
+            "\n",
+            "2024-05-01 12:00:05 not a timestamp\n",
+            "2024-05-01T12:00:06.Z neither\n",
+            "⭐ Run Main Test",
+        );
+        assert_eq!(ForgeKind::GitHub.plain_log(log), plain);
+        assert_eq!(ForgeKind::Forgejo.plain_log(log), plain);
     }
 
     #[test]
