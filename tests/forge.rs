@@ -3188,6 +3188,17 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         ]
     );
 
+    // Outside a workspace, a bad path fails before a workspace is chosen.
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["api", "repos/..%2f..%2fuser"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("`.` or `..` segments"), "{stderr}");
+
     // curl sends braces and brackets as given instead of expanding them.
     fixture.respond(json!({"GET repos/team/project/{a,b}[1-2]": {"body": {"one": true}}}));
     let globbed = fixture.ok(&[

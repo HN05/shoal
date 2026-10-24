@@ -17,13 +17,15 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
         Some(_) => HttpMethod::Post,
         None => HttpMethod::Get,
     });
-    let workspace =
-        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let request = RawRequest {
         method,
         path: args.path,
         body,
     };
+    // Refuse a bad path before the workspace picker asks for anything.
+    request.check()?;
+    let workspace =
+        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let response = ctx
         .progress(
             "Requesting",
