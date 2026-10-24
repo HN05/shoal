@@ -52,7 +52,7 @@ pub(super) async fn start(
     };
     let issue = issues::load(ctx, &repo, &input).await?;
     let topic = topic(&repo, &issue, &settings.issue);
-    chat::begin(ctx, repo, topic, agent, here, args).await
+    chat::begin(ctx, repo, settings, topic, agent, here, args).await
 }
 
 /// The number of the open issue labelled `[issue] plan_label` that `pick` selects.
