@@ -1120,8 +1120,8 @@ The issue prompt is built in and states only the task, pointing to `shoal view`
 for the rest: a seeded issue template froze the default for whoever had a copy,
 and instructions for issue work belong in the worker template. That template was
 the agent template, a name that read as one per AI tool although it applies to
-every workspace agent. A retired or renamed setting still loads, and
-`config show` and `doctor` warn when it holds the user's text.
+every workspace agent. A retired or renamed setting still loads; `config show`
+warns about it in every layer and `doctor` in the global config.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
