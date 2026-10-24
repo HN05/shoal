@@ -175,6 +175,72 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
     Ok(())
 }
 
+/// What the store records toward used slots, read in one pass.
+struct PersistedSlots {
+    /// Each workspace that is not done, by ID, with its repository ID.
+    open: HashMap<String, String>,
+    /// Executions whose state is unknown: agents that may still run.
+    unknown: Vec<UnknownExecution>,
+    /// Queue entries that are starting.
+    starting: Vec<StartingEntry>,
+}
+
+/// An execution in the unknown state.
+struct UnknownExecution {
+    id: String,
+    workspace: String,
+}
+
+/// A starting queue entry.
+struct StartingEntry {
+    repository: String,
+    /// The workspace it starts in, once known.
+    workspace: Option<String>,
+    /// When its holder was last seen.
+    seen_at: Option<i64>,
+    /// The execution a restore resumes; a launch has none.
+    execution: Option<String>,
+}
+
+/// Read the workspaces, executions and queue entries that slots are counted from.
+fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
+    let open = db
+        .prepare(
+            "SELECT id,repository_id FROM workspaces w WHERE NOT EXISTS
+                (SELECT 1 FROM workspace_completion c WHERE c.workspace_id=w.id)",
+        )?
+        .query_map([], |row| Ok((row.get("id")?, row.get("repository_id")?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let unknown = db
+        .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
+        .query_map([ExecutionState::Unknown], |row| {
+            Ok(UnknownExecution {
+                id: row.get("id")?,
+                workspace: row.get("workspace_id")?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let starting = db
+        .prepare(
+            "SELECT repository_id,workspace_id,seen_at,execution_id FROM agent_queue
+             WHERE state=?1",
+        )?
+        .query_map([QueueState::Starting], |row| {
+            Ok(StartingEntry {
+                repository: row.get("repository_id")?,
+                workspace: row.get("workspace_id")?,
+                seen_at: row.get("seen_at")?,
+                execution: row.get("execution_id")?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(PersistedSlots {
+        open,
+        unknown,
+        starting,
+    })
+}
+
 /// One used slot.
 pub(crate) struct Slot {
     repository: String,
@@ -514,46 +580,19 @@ impl Manager {
     /// An admitted restore starts in its agent's slot.
     async fn occupied_slots(&self) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
-        let (open, unknown, starting) = self
-            .store
-            .run(|db| {
-                let open = db
-                    .prepare(
-                        "SELECT id,repository_id FROM workspaces w WHERE NOT EXISTS
-                            (SELECT 1 FROM workspace_completion c WHERE c.workspace_id=w.id)",
-                    )?
-                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                    .collect::<rusqlite::Result<HashMap<String, String>>>()?;
-                let unknown = db
-                    .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
-                    .query_map([ExecutionState::Unknown], |row| {
-                        Ok((row.get(0)?, row.get(1)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
-                let starting = db
-                    .prepare(
-                        "SELECT repository_id,workspace_id,seen_at,execution_id FROM agent_queue
-                         WHERE state=?1",
-                    )?
-                    .query_map([QueueState::Starting], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                    })?
-                    .collect::<rusqlite::Result<
-                        Vec<(String, Option<String>, Option<i64>, Option<String>)>,
-                    >>()?;
-                Ok((open, unknown, starting))
-            })
-            .await?;
+        let PersistedSlots {
+            open,
+            unknown,
+            starting,
+        } = self.store.run(|db| persisted_slots(db)).await?;
         let now = crate::time::unix_seconds() as i64;
         let starting_since = |seen_at: Option<i64>| {
             let since = now.saturating_sub(seen_at.unwrap_or(now)).max(0) as u64;
             Activity::Starting(Duration::from_secs(since))
         };
         let stopped = |workspace: String| (workspace, Activity::Stopped);
-        for (execution, workspace) in unknown {
-            agents
-                .entry(execution)
-                .or_insert_with(|| stopped(workspace));
+        for UnknownExecution { id, workspace } in unknown {
+            agents.entry(id).or_insert_with(|| stopped(workspace));
         }
         for workspace in open.keys() {
             for execution in crate::execution::recovery::agent_records(&self.paths, workspace)? {
@@ -563,14 +602,14 @@ impl Manager {
             }
         }
         let mut launches = Vec::new();
-        for (repository, workspace, seen_at, execution) in starting {
-            match execution {
+        for entry in starting {
+            match &entry.execution {
                 Some(execution) => {
-                    if let Some((_, activity)) = agents.get_mut(&execution) {
-                        *activity = starting_since(seen_at);
+                    if let Some((_, activity)) = agents.get_mut(execution) {
+                        *activity = starting_since(entry.seen_at);
                     }
                 }
-                None => launches.push((repository, workspace, seen_at)),
+                None => launches.push(entry),
             }
         }
         let mut slots: Vec<Slot> = agents
@@ -582,11 +621,15 @@ impl Manager {
                 })
             })
             .collect();
-        for (repository, workspace, seen_at) in launches {
-            if workspace.is_none_or(|workspace| open.contains_key(&workspace)) {
+        for launch in launches {
+            if launch
+                .workspace
+                .as_ref()
+                .is_none_or(|workspace| open.contains_key(workspace))
+            {
                 slots.push(Slot {
-                    repository,
-                    activity: starting_since(seen_at),
+                    repository: launch.repository,
+                    activity: starting_since(launch.seen_at),
                 });
             }
         }
