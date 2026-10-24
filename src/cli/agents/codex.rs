@@ -110,6 +110,12 @@ pub(in crate::cli) async fn shortcut(
     super::launch::tracked(ctx, &Codex, launch).await
 }
 
+/// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex
+/// app its `--app` opens.
+pub(super) fn shortcut_available(installed: &super::Installed) -> bool {
+    installed.agent("codex") || desktop::available("codex", installed)
+}
+
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
 /// `turn_state` adds the hooks that report the turn's state.
 fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {

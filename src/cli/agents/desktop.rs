@@ -26,6 +26,12 @@ pub(in crate::cli) async fn shortcut(
     open_app(ctx, &workspace, program, None, args).await
 }
 
+/// Whether the desktop shortcut that runs `program` can start: it starts no
+/// tracked agent, so it needs only the app's program.
+pub(super) fn available(program: &str, installed: &super::Installed) -> bool {
+    installed.program(program)
+}
+
 /// Desktop launchers hand the directory to another process. Their short-lived
 /// command is not the agent session and must not own/kill the app's process
 /// group. `trust` is the app's trust file, when it has one.

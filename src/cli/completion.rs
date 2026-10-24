@@ -116,7 +116,6 @@ pub fn command() -> Command {
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
     }
     let search_path = std::env::var_os("PATH").unwrap_or_default();
-    let commands = typed.commands();
     for name in typed.command_names() {
         if command
             .get_subcommands()
@@ -138,24 +137,7 @@ pub fn command() -> Command {
                 .arg(clap::Arg::new("args").last(true).num_args(0..)),
         );
     }
-    let launchable = |name: &str| agents::installed(name, commands, &search_path);
-    for (name, available) in [
-        ("claude", launchable("claude")),
-        (
-            "codex",
-            launchable("codex") || agents::program_available("codex", &search_path),
-        ),
-        (
-            "happy",
-            agents::program_available("happy", &search_path)
-                && typed
-                    .settings()
-                    .agents
-                    .iter()
-                    .any(|name| name.starts_with("happy-")),
-        ),
-        ("t3", agents::program_available("t3", &search_path)),
-    ] {
+    for (name, available) in agents::shortcuts(&typed.installed(&search_path)) {
         if !available {
             command = withdraw(command, name);
         }
@@ -258,13 +240,8 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    // `shoal happy <agent>` starts the agent `happy-<agent>` names.
-                    typed
-                        .settings()
-                        .agents
-                        .iter()
-                        .filter(|name| typed.launchable(name, &search_path))
-                        .filter_map(|name| name.strip_prefix("happy-"))
+                    agents::happy_agents(&typed.installed(&search_path))
+                        .into_iter()
                         .filter(|agent| agent.starts_with(current.to_string_lossy().as_ref()))
                         .map(CompletionCandidate::new)
                         .collect::<Vec<_>>()
@@ -315,6 +292,15 @@ impl Typed {
     /// Whether `name` is an agent whose programs are on `search_path`.
     fn launchable(&self, name: &str, search_path: &OsStr) -> bool {
         agents::installed(name, self.commands(), search_path)
+    }
+
+    /// The offered agents and commands, judged against `search_path`.
+    fn installed<'a>(&'a self, search_path: &'a OsStr) -> agents::Installed<'a> {
+        agents::Installed {
+            agents: &self.settings().agents,
+            commands: self.commands(),
+            search_path,
+        }
     }
 
     fn settings(&self) -> &Settings {

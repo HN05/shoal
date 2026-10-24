@@ -241,6 +241,48 @@ fn agents_without_installed_executables_are_not_completed() {
 }
 
 #[test]
+fn happy_completes_only_with_an_installed_agent_to_run() {
+    let home = tempfile::tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
+    fs::write(
+        home.path().join(".config/shoal/config.toml"),
+        "[happy]\nenabled = true\n",
+    )
+    .unwrap();
+    let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
+    // Happy alone runs no agent, so neither it nor its agents complete.
+    install_programs(home.path(), &["happy"]);
+    for words in [vec!["shoal", "ha"], vec!["shoal", "happy", "c"]] {
+        let mut command = completion(home.path(), "bash", &words);
+        command.env("PATH", &path);
+        let values = candidates(command);
+        assert!(
+            !values
+                .iter()
+                .any(|value| value == "happy" || value == "claude"),
+            "{words:?}: {values:?}"
+        );
+    }
+    install_programs(home.path(), &["claude"]);
+    for (words, expected) in [
+        (vec!["shoal", "ha"], "happy"),
+        (vec!["shoal", "happy", "c"], "claude"),
+    ] {
+        let mut command = completion(home.path(), "bash", &words);
+        command.env("PATH", &path);
+        let values = candidates(command);
+        assert!(
+            values.iter().any(|value| value == expected),
+            "{words:?}: {values:?}"
+        );
+        assert!(
+            !values.iter().any(|value| value == "codex"),
+            "{words:?}: {values:?}"
+        );
+    }
+}
+
+#[test]
 fn zsh_completion_function_invokes_current_binary() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("completion.zsh");
