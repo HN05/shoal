@@ -579,15 +579,20 @@ async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
 }
 
 /// Forget a stopped agent as `shoal resume --discard` does once its wrapper ended.
+/// The test has no wrapper, so a machine-wide inventory would count every
+/// unreadable process, such as Linux's non-dumpable agents, as a survivor and
+/// keep the slot. Report the exit with an inventory that found none.
 async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &str) {
-    manager
-        .finish_execution(
+    let complete = manager
+        .finish_execution_after_scan(
             execution.to_owned(),
             crate::daemon::workspace::ExecutionKind::Command,
             Some(0),
+            Some(Ok(crate::process::identity::Scan::default())),
         )
         .await
         .unwrap();
+    assert!(complete, "the discarded agent kept its execution");
     std::fs::remove_file(crate::execution::recovery::record_path(
         &manager.paths,
         &workspace.id,
