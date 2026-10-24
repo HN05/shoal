@@ -726,6 +726,9 @@ unless `[review] post` or `--no-post` keeps them local; workspace reviews stay
 local. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.
+The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
+after verifying the recorded worktree and its branch, so a switched or replaced
+checkout is never moved.
 An issue target asks an agent to refine the issue before implementation, in the
 workspace `add --issue` would continue, opening it when missing. `repo setup`
 likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the

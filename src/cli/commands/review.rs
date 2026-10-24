@@ -17,7 +17,7 @@ use crate::{
     },
     git,
     model::{Repository, Workspace},
-    protocol::ConfigTarget,
+    protocol::{ConfigTarget, Method},
 };
 
 /// The configured command a manual review runs.
@@ -160,7 +160,7 @@ async fn pull_request(
         .find(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
     let workspace = match owner {
         Some(workspace) => {
-            update_to_head(&repo.path, &workspace, &pull.head).await?;
+            update_to_head(ctx, &repo.path, &workspace, &pull.head).await?;
             let workspace = super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
             eprintln!(
                 "Reviewing PR #{} in workspace {}",
@@ -296,26 +296,24 @@ async fn issue_workspace(
 
 /// Fast-forward a reused workspace to the PR's pushed head so the review sees
 /// the author's latest commits; local commits ahead of it stay as they are.
-async fn update_to_head(repo: &Path, workspace: &Workspace, head: &str) -> Result<()> {
+async fn update_to_head(
+    ctx: &Context,
+    repo: &Path,
+    workspace: &Workspace,
+    head: &str,
+) -> Result<()> {
     let tracking = fetch_pull_branch(repo, "head", head).await?;
-    let path = &workspace.path;
-    if git::is_ancestor(path, &tracking, "HEAD", git::isolated_command).await? {
-        return Ok(());
+    let updated: bool = client::request(
+        &ctx.paths,
+        Method::FastForwardWorkspace {
+            workspace: workspace.id.clone(),
+            branch: head.to_owned(),
+        },
+    )
+    .await?;
+    if updated {
+        eprintln!("Updated workspace {} to {tracking}", workspace.name);
     }
-    ensure!(
-        git::is_ancestor(path, "HEAD", &tracking, git::isolated_command).await?,
-        "workspace {} has diverged from {tracking}; update it before reviewing",
-        workspace.name
-    );
-    git::branch::fast_forward(path, &tracking)
-        .await
-        .with_context(|| {
-            format!(
-                "could not fast-forward workspace {} to {tracking}",
-                workspace.name
-            )
-        })?;
-    eprintln!("Updated workspace {} to {tracking}", workspace.name);
     Ok(())
 }
 
