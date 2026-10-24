@@ -20244,6 +20244,21 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
             format!("{}{transcript}", String::from_utf8_lossy(&output.stderr)),
         )
     };
+    // A refused agent leaves the checkout as it was.
+    let stale = git(&fixture.repo, &["rev-parse", "main"]);
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .args(["chat", "--agent", "happy-claude"]),
+        "",
+    );
+    assert!(!output.status.success(), "{transcript}");
+    assert!(
+        transcript.contains("Happy sessions are off"),
+        "{transcript}"
+    );
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), stale);
     // The checkout on the default branch advances before the agent reads it,
     // and the instructions come from the refreshed checkout.
     let upstream = git(&author, &["rev-parse", "HEAD"]);
