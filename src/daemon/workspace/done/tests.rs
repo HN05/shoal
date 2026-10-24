@@ -102,6 +102,44 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     reopened.store.shutdown().await;
 }
 
+#[tokio::test]
+async fn repeating_an_unchanged_completion_is_refused() {
+    let (_root, manager, workspace) = fixture().await;
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some("[done]\ncleanup = false\n".into()),
+        )
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    let error = manager.mark_done(&workspace.id, false).await.unwrap_err();
+    assert!(
+        error.to_string().contains("already marked done"),
+        "{error:#}"
+    );
+    // Another cleanup choice or HEAD replaces the recorded completion.
+    assert!(
+        manager
+            .mark_done(&workspace.id, true)
+            .await
+            .unwrap()
+            .cleanup
+    );
+    fs::write(workspace.path.join("more-work"), "more").unwrap();
+    commit(&workspace.path, "more-work");
+    let newer = manager.mark_done(&workspace.id, true).await.unwrap();
+    assert_eq!(
+        manager
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .head,
+        newer.head
+    );
+}
+
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
@@ -229,9 +267,10 @@ async fn completion_rechecks_work_after_removal_hooks() {
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
     manager.mark_done(&workspace.id, true).await.unwrap();
-    let withdrawn = manager.undo_done(&workspace.id).await.unwrap().unwrap();
+    let withdrawn = manager.undo_done(&workspace.id).await.unwrap();
     assert!(withdrawn.cleanup);
-    assert!(manager.undo_done(&workspace.id).await.unwrap().is_none());
+    let error = manager.undo_done(&workspace.id).await.unwrap_err();
+    assert!(error.to_string().contains("not marked done"), "{error:#}");
     assert!(manager.completion(&workspace.id).await.unwrap().is_none());
     // Without completion, links or holds the workspace is an idle candidate again.
     assert!(

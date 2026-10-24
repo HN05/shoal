@@ -2062,14 +2062,11 @@ fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
 
 pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let withdrawn: Option<Completion> =
-        request(&ctx.paths, Method::WorkspaceUndone { workspace }).await?;
-    let message = if withdrawn.is_some() {
-        "Completion withdrawn; run shoal done when finished."
-    } else {
-        "No completion recorded."
-    };
-    ctx.emit(message, json!({ "withdrawn": withdrawn }))?;
+    let withdrawn: Completion = request(&ctx.paths, Method::WorkspaceUndone { workspace }).await?;
+    ctx.emit(
+        "Completion withdrawn; run shoal done when finished.",
+        json!({ "withdrawn": withdrawn }),
+    )?;
     Ok(0)
 }
 

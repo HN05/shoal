@@ -1292,7 +1292,9 @@ explicit done signal completes an assignment; issue closure and merges do not,
 and merged cleanup removes unused merged workspaces from their state instead.
 Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
-user; it does not assert that work was merged. Own-workspace withdrawal removes a
+user; it does not assert that work was merged. A `done` that would record the
+same completion again and an `undone` without one fail, so a misplaced signal is
+reported instead of passing silently. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: only holds, open questions, a pending PR proposal, child workspaces
 and queued agent launches keep a workspace.

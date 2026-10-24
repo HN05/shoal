@@ -1842,7 +1842,9 @@ starts a new one, telling it the workspace moved, instead of running
 ### Assignment completion
 
 `shoal done [workspace]` records that the assignment is finished and notifies the
-user. `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
+user. It replaces a recorded completion at another HEAD, with another cleanup
+choice or a cleanup error, and fails when it would record the same one again.
+`[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
 false. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
@@ -1862,8 +1864,8 @@ whether or not its agent ran `done`.
 cleanup = true    # Default: true
 ```
 
-`shoal undone [workspace]` withdraws a recorded completion; `--json` returns
-`{"withdrawn": <completion>}`, with null when none was recorded. Scoped agents may mark only their own workspace or a child workspace undone.
+`shoal undone [workspace]` withdraws a recorded completion and fails when none
+is recorded; `--json` returns `{"withdrawn": <completion>}`. Scoped agents may mark only their own workspace or a child workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.
 
