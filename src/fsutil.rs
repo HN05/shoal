@@ -45,9 +45,9 @@ fn copy_entry(source: &Path, destination: &Path) -> io::Result<()> {
         }
         fs::set_permissions(destination, metadata.permissions())?;
     } else {
-        if destination.is_dir() && !destination.is_symlink() {
-            fs::remove_dir_all(destination)?;
-        }
+        // Copying onto an existing path would write through a symlink or a
+        // hard link to a file outside the destination.
+        remove_existing(destination)?;
         fs::copy(source, destination)?;
         fs::set_permissions(destination, metadata.permissions())?;
     }
@@ -373,6 +373,38 @@ pub(crate) async fn copy_directory(source: &Path, destination: &Path) -> anyhow:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copying_a_worktree_replaces_destination_links_instead_of_following_them() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let outside = temp.path().join("outside");
+        fs::write(&outside, "unrelated")?;
+        fs::set_permissions(&outside, fs::Permissions::from_mode(0o600))?;
+        let source = temp.path().join("source");
+        let destination = temp.path().join("destination");
+        fs::create_dir_all(&source)?;
+        fs::create_dir_all(&destination)?;
+        // The source replaced tracked links with regular files; the clean
+        // checkout still has the links, one absolute and one hard.
+        for name in ["symlink", "hardlink"] {
+            fs::write(source.join(name), "worktree")?;
+            fs::set_permissions(source.join(name), fs::Permissions::from_mode(0o755))?;
+        }
+        std::os::unix::fs::symlink(&outside, destination.join("symlink"))?;
+        fs::hard_link(&outside, destination.join("hardlink"))?;
+
+        copy_worktree(&source, &destination)?;
+
+        assert_eq!(fs::read_to_string(&outside)?, "unrelated");
+        assert_eq!(fs::metadata(&outside)?.permissions().mode() & 0o777, 0o600);
+        for name in ["symlink", "hardlink"] {
+            let copied = destination.join(name);
+            assert!(fs::symlink_metadata(&copied)?.file_type().is_file());
+            assert_eq!(fs::read_to_string(&copied)?, "worktree");
+            assert_eq!(fs::metadata(&copied)?.permissions().mode() & 0o777, 0o755);
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn moving_a_directory_keeps_its_contents_and_links() -> anyhow::Result<()> {
