@@ -126,7 +126,15 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             },
         )
         .await;
-    for (target, allowed) in [(&own.name, true), (&other.name, false)] {
+    let child = manager
+        .split_workspace(&own.id, "child".into(), None)
+        .await
+        .unwrap();
+    for (target, allowed) in [
+        (&own.name, true),
+        (&other.name, false),
+        (&child.name, false),
+    ] {
         let mut method = Method::SetAgentState {
             workspace: target.clone(),
             state: AgentState::Waiting,
@@ -139,4 +147,11 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             allowed
         );
     }
+    // The refused report leaves the child without an agent of its own, so
+    // the coordinating agent still receives its activity.
+    let delegated = manager.delegated_workspaces(&own.id).await.unwrap();
+    assert_eq!(
+        delegated.iter().map(|w| &w.name).collect::<Vec<_>>(),
+        [&child.name]
+    );
 }

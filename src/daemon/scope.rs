@@ -80,7 +80,6 @@ pub async fn authorize(
         | Method::AwaitAgentWake { workspace, .. }
         | Method::MarkReady { workspace, .. }
         | Method::ClearReady { workspace, .. }
-        | Method::SetAgentState { workspace, .. }
         | Method::SetPr { workspace, .. }
         | Method::SetIssue { workspace, .. }
         | Method::LinkItem { workspace, .. }
@@ -148,6 +147,15 @@ pub async fn authorize(
             ensure!(
                 caller.kind() != Some(ExecutionKind::Setup),
                 "a setup command cannot recursively run setup"
+            );
+            Some(workspace)
+        }
+        Method::SetAgentState { workspace, .. } => {
+            // A report claims the workspace for the reporting agent, which
+            // would keep a child's events from reaching its coordinator.
+            ensure!(
+                manager.workspace(workspace).await?.id == *owner,
+                "workspace processes report agent state only for their own workspace"
             );
             Some(workspace)
         }
