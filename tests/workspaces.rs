@@ -20330,6 +20330,20 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
 
     // An agent with an instructions template keeps them apart and starts on
     // the task as its prompt.
+    // A named agent that cannot start is refused before the issue is chosen.
+    let output = fixture
+        .command()
+        .args(["plan", "--agent", "missing-agent"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown agent \"missing-agent\""),
+        "{stderr}"
+    );
+
     let args = plan(&["https://forge.example/team/project/issues/12"], "claude");
     assert_eq!(args[0], "--append-system-prompt");
     assert!(!args[1].contains("Plan issue"), "{}", args[1]);

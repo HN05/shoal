@@ -160,13 +160,20 @@ pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<
 
 /// `--agent`, else `default_agent`, else a picker of the installed agents.
 fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
-    match agent.or_else(|| settings.default_agent.clone()) {
-        Some(agent) => {
-            agents::ensure_available(agent.name(), settings)?;
-            Ok(agent)
-        }
+    match named_agent(settings, agent)? {
+        Some(agent) => Ok(agent),
         None => pick_agent(ctx, settings),
     }
+}
+
+/// `--agent`, else `default_agent`, refused when unavailable; `None` when
+/// neither names one.
+pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<Option<Agent>> {
+    let Some(agent) = agent.or_else(|| settings.default_agent.clone()) else {
+        return Ok(None);
+    };
+    agents::ensure_available(agent.name(), settings)?;
+    Ok(Some(agent))
 }
 
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {

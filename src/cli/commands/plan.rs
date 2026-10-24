@@ -44,6 +44,8 @@ pub(super) async fn start(
     )
     .await?;
     let settings = chat::settings(ctx, &repo).await?;
+    // Refuse a named agent before asking for the issue.
+    let agent = chat::named_agent(&settings, agent)?;
     let input = match issue {
         Some(issue) => issue,
         None => labelled(ctx, &repo, &settings.issue, pick).await?,
