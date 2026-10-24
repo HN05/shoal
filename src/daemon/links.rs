@@ -241,19 +241,25 @@ pub(crate) fn forget_assigned(
     kind: ItemKind,
     urls: &[String],
 ) -> Result<()> {
-    let list = serde_json::to_string(urls)?;
+    forget_activity(db, id, urls)?;
+    review::forget(db, id, urls)?;
+    for url in urls {
+        events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
+    }
+    Ok(())
+}
+
+/// Drop the replay cursors of items that are no longer linked.
+fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
+    let urls = serde_json::to_string(urls)?;
     for table in ["pr_activity", "workspace_item_activity"] {
         db.execute(
             &format!(
                 "DELETE FROM {table} WHERE workspace_id=?1
                  AND url IN (SELECT value FROM json_each(?2))"
             ),
-            rusqlite::params![id, list],
+            rusqlite::params![id, urls],
         )?;
-    }
-    review::forget(db, id, urls)?;
-    for url in urls {
-        events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
     }
     Ok(())
 }
