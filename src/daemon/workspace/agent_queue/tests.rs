@@ -344,6 +344,7 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
 async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
     let starting = add(&manager, &repo, "starting").await.entry.unwrap();
     manager
         .fail_queue_entry(&starting.id, "first")
