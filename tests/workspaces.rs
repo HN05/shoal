@@ -20566,6 +20566,44 @@ fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
 }
 
 #[test]
+fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/codex"), "#!/bin/sh\nexit 0\n");
+    // The hook turns the app handoff the repository asks for into a CLI launch.
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\nprintf \"[codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "post_setup_cmd = 'post-setup.sh'\n[codex]\ndefault_mode = 'app'\n",
+    );
+    let directive = home.join("shell-directive");
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "switched",
+                "--agent",
+                "codex",
+                "--focus",
+            ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let attach = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach");
+    assert_eq!(attach.unwrap()[3], "switched", "{transcript}");
+    assert!(!directive.exists(), "{transcript}");
+}
+
+#[test]
 fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     let fixture = Fixture::with_config(Some("focus = false\n"));
     let home = fixture.root.path();

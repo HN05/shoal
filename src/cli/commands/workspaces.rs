@@ -679,9 +679,9 @@ async fn add_planned(
         )
         .await?;
     }
-    let navigate = enters_added(ctx, &opened.workspace, &agent, issue.is_some()).await?;
     let name = opened.workspace.name.clone();
-    let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
+    let Some(workspace) = finish_add_workspace(ctx, opened, pr, &agent, issue.is_some()).await?
+    else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
                 "setup of {name} did not complete; inspect it with `shoal doctor {name}`"
@@ -696,20 +696,20 @@ async fn add_planned(
     agent.launch(ctx, workspace, issue, args).await
 }
 
-/// Whether the caller's shell enters the added `workspace`. An agent that
-/// runs in a session this terminal attaches to, given an issue prompt when
-/// `prompted`, leaves it where it was, as detaching returns to that shell
-/// rather than to the workspace.
+/// Whether the caller's shell enters the added `workspace`, where `agent`
+/// starts unless `None`. An agent that runs in a session this terminal
+/// attaches to, given an issue prompt when `prompted`, leaves it where it
+/// was, as detaching returns to that shell rather than to the workspace.
 async fn enters_added(
     ctx: &Context,
     workspace: &Workspace,
-    agent: &ResolvedAddAgent,
+    agent: Option<&ResolvedAddAgent>,
     prompted: bool,
 ) -> Result<bool> {
     if !terminal::follows_caller(ctx) {
         return Ok(false);
     }
-    let Some(chosen) = &agent.agent else {
+    let Some((agent, chosen)) = agent.and_then(|agent| Some((agent, agent.agent.as_ref()?))) else {
         return Ok(true);
     };
     let settings =
@@ -1139,12 +1139,14 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
 }
 
 /// Set up an opened workspace and link its PR, which needs a ready workspace,
-/// before reporting it and, when `navigate`, entering it.
+/// before reporting it and entering it unless `agent`, given an issue prompt
+/// when `prompted`, takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
     opened: OpenedWorkspace,
     pr: Option<String>,
-    navigate: bool,
+    agent: &ResolvedAddAgent,
+    prompted: bool,
 ) -> Result<Option<Workspace>> {
     let OpenedWorkspace {
         mut workspace,
@@ -1169,12 +1171,18 @@ async fn finish_add_workspace(
         ),
         &workspace,
     )?;
-    if navigate {
+    // The post-setup hook may change how the agent launches, so the shell's
+    // destination waits for it; a failed hook starts no agent.
+    let post_setup = if reused {
+        Ok(())
+    } else {
+        run_post_setup(ctx, &workspace).await
+    };
+    let starts = post_setup.is_ok().then_some(agent);
+    if enters_added(ctx, &workspace, starts, prompted).await? {
         shell::navigate(&workspace.path, ctx.json)?;
     }
-    if !reused {
-        run_post_setup(ctx, &workspace).await?;
-    }
+    post_setup?;
     Ok(Some(workspace))
 }
 
