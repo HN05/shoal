@@ -19,7 +19,7 @@ use crate::{
         conventions,
         items::{
             action::{Action, Edit, Sent},
-            create::{NewIssue, NewPull, PullOptions},
+            create::{Created, NewIssue, NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
         },
@@ -334,7 +334,7 @@ impl Manager {
                 .await?;
             return Ok(OpenOutcome::Proposed(proposed));
         }
-        let item = forge.create_issue(&account, &issue).await?;
+        let Created { item, unfinished } = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
             .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
@@ -350,7 +350,11 @@ impl Manager {
             item,
             created: true,
             linked,
-            warnings: warning.into_iter().chain(checked).collect(),
+            warnings: warning
+                .into_iter()
+                .chain(unfinished)
+                .chain(checked)
+                .collect(),
         }))
     }
 
@@ -440,8 +444,11 @@ impl Manager {
         let existing = forge
             .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
             .await?;
-        let (item, body) = match existing {
-            Some(number) => (forge.read(&account, ItemKind::Pr, number).await?.item, None),
+        let (item, body, unfinished) = match existing {
+            Some(number) => {
+                let item = forge.read(&account, ItemKind::Pr, number).await?.item;
+                (item, None, None)
+            }
             None => {
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
@@ -456,7 +463,8 @@ impl Manager {
                     let proposed = self.propose_pull(&workspace, pull, head, proposer).await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
-                (forge.create_pull(&account, &pull).await?, Some(pull.body))
+                let created = forge.create_pull(&account, &pull).await?;
+                (created.item, Some(pull.body), created.unfinished)
             }
         };
         let created = body.is_some();
@@ -489,7 +497,11 @@ impl Manager {
             item,
             created,
             linked,
-            warnings: warning.into_iter().chain(checked).collect(),
+            warnings: warning
+                .into_iter()
+                .chain(unfinished)
+                .chain(checked)
+                .collect(),
         }))
     }
 

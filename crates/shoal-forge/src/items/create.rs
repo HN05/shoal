@@ -79,6 +79,16 @@ impl NewPull {
     }
 }
 
+/// An item Shoal opened, as the forge reports it once finished, or as it
+/// was posted when finishing it failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Created {
+    pub item: Item,
+    /// Why finishing the item failed after the forge opened it, so it may
+    /// lack labels, reviewers or files.
+    pub unfinished: Option<String>,
+}
+
 /// A PR's head: a branch in the PR's repository or in a fork of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Head<'a> {
@@ -139,11 +149,10 @@ impl ForgeRepo {
             .transpose()
     }
 
-    /// Open the PR and return it as the forge reports it.
-    pub async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
+    /// Open the PR; only failing to post it fails.
+    pub async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Created> {
         let (posted, follow_up) = self.post_pull(account, pull).await?;
-        self.finish_item(account, ItemKind::Pr, posted.number, &follow_up)
-            .await
+        Ok(self.finish_posted(account, posted, &follow_up).await)
     }
 
     /// Post the PR and return it as posted with the edit that finishes it:
@@ -183,11 +192,26 @@ impl ForgeRepo {
         self.kind.new_pull(self, pull)
     }
 
-    /// Open the issue and return it as the forge reports it.
-    pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
+    /// Open the issue; only failing to post it fails.
+    pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Created> {
         let (posted, follow_up) = self.post_issue(account, issue).await?;
-        self.finish_item(account, ItemKind::Issue, posted.number, &follow_up)
-            .await
+        Ok(self.finish_posted(account, posted, &follow_up).await)
+    }
+
+    /// Finish the item that was just posted, keeping it as posted when that
+    /// fails: it exists, so the caller records it instead of failing, and a
+    /// retry cannot open another.
+    async fn finish_posted(&self, account: &Account, posted: Item, follow_up: &Edit) -> Created {
+        match (self.finish_item(account, posted.kind, posted.number, follow_up)).await {
+            Ok(item) => Created {
+                item,
+                unfinished: None,
+            },
+            Err(error) => Created {
+                item: posted,
+                unfinished: Some(format!("{error:#}")),
+            },
+        }
     }
 
     /// Post the issue and return it as posted with the edit that finishes it:
@@ -249,17 +273,24 @@ impl ForgeRepo {
         number: u64,
         follow_up: &Edit,
     ) -> Result<Item> {
+        let opened = match kind {
+            ItemKind::Issue => format!("issue #{number} was opened"),
+            ItemKind::Pr => format!("PR #{number} was opened"),
+        };
         if *follow_up == Edit::default() {
-            return Ok(self.read(account, kind, number).await?.item);
+            let read = self.read(account, kind, number).await;
+            return read
+                .map(|read| read.item)
+                .with_context(|| format!("{opened}, but reading it failed"));
         }
         self.act(account, kind, number, &Action::Edit(follow_up.clone()))
             .await
             .with_context(|| match kind {
-                ItemKind::Issue => format!(
-                    "issue #{number} was opened, but labeling it or attaching its files failed"
-                ),
+                ItemKind::Issue => {
+                    format!("{opened}, but labeling it or attaching its files failed")
+                }
                 ItemKind::Pr => format!(
-                    "PR #{number} was opened, but labeling it, requesting reviews or attaching its files failed"
+                    "{opened}, but labeling it, requesting reviews or attaching its files failed"
                 ),
             })
     }
@@ -291,8 +322,77 @@ fn pending_edit(pending: Option<Pending>) -> Edit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::api::HttpMethod;
+    use crate::{
+        account::{AgentLogins, Launch},
+        transport::{api::HttpMethod, memory::Memory},
+    };
     use serde_json::json;
+    use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+    use tokio::process::Command;
+
+    /// Finds the CLIs only in one directory.
+    struct Bin(PathBuf);
+
+    impl Launch for Bin {
+        fn apply(&self, command: &mut Command) {
+            command.env("PATH", &self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("log");
+        let gh = dir.path().join("gh");
+        // Posting spends the account's last request until the limit resets.
+        std::fs::write(
+            &gh,
+            format!(
+                r#"#!/bin/sh
+echo "$*" >> '{log}'
+printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n\n{{"number":7}}'
+"#,
+                log = log.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let logins = AgentLogins {
+            launch: Box::new(Bin(dir.path().to_owned())),
+            fj_home: None,
+            fj: false,
+            tea: false,
+        };
+        let account = Account::agent(logins, &Default::default()).remembering(Memory::default());
+        let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+        let issue = NewIssue {
+            title: "Flaky".into(),
+            body: "Seen twice".into(),
+            labels: vec!["bug".into()],
+            attachments: Vec::new(),
+        };
+        let created = github.create_issue(&account, &issue).await.unwrap();
+        assert_eq!(
+            created.item,
+            Item {
+                kind: ItemKind::Issue,
+                number: 7,
+                url: "https://github.com/team/repo/issues/7".into(),
+                title: "Flaky".into(),
+                state: ItemState::Open,
+                labels: vec!["bug".into()],
+                pr: None,
+            }
+        );
+        let unfinished = created.unfinished.unwrap();
+        assert!(
+            unfinished.starts_with("issue #7 was opened, but reading it failed"),
+            "{unfinished}"
+        );
+        // The read was refused without reaching the forge.
+        let log = std::fs::read_to_string(log).unwrap();
+        assert_eq!(log.lines().count(), 1, "{log}");
+    }
 
     #[test]
     fn issues_carry_labels_on_github_and_label_afterwards_on_forgejo() {

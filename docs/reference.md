@@ -2005,8 +2005,10 @@ when no body is supplied for a linked issue; its base is `--base`, else the base
 workspace's branch, else the default branch. It is a draft with `--draft` or
 `[pr] draft = true`, which `--no-draft` overrides. Draft state, repeated
 `--label` and repeated `--reviewer` apply only to a new PR. Its JSON adds
-`created` (false for a PR it found), `linked`, and the
-[convention](#repository-conventions) `warnings` it prints on stderr.
+`created` (false for a PR it found), `linked`, and the `warnings` it prints on
+stderr: [convention](#repository-conventions) warnings, and a failure to label,
+request reviews, attach files or read a new PR once the forge opened it, which
+still records and links the PR as posted.
 
 ```toml
 [pr]
@@ -2057,8 +2059,10 @@ other item command reports. Bitbucket's `--author` matches a nickname.
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
-[convention](#repository-conventions) warnings and when removal started before
-the workspace could record and link the new issue.
+[convention](#repository-conventions) warnings, a failure to label, attach files
+or read the issue once the forge opened it, which still records it as posted,
+and when removal started before the workspace could record and link the new
+issue.
 
 `--repo` opens the issue in another repository, named as `OWNER/NAME` on the
 workspace's forge or by a repository URL on any forge, still as the agent
