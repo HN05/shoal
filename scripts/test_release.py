@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from unittest.mock import MagicMock, call, patch
 from urllib.error import HTTPError
+import isolated_git
 import release
 
 
@@ -212,7 +213,8 @@ class ReleaseTests(unittest.TestCase):
 
 class ReleaseIntegrationTests(unittest.TestCase):
     def test_prepare_and_publish_use_separate_reviewed_commits(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(release.os.environ, isolated_git.environment(temporary), clear=True):
             root = Path(temporary)
             remote, checkout = root / "remote.git", root / "checkout"
 

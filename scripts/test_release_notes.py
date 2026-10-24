@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock
 from urllib.error import HTTPError
 
+import isolated_git
 import release_notes
 
 
@@ -29,9 +30,11 @@ class ReleaseNotesTests(unittest.TestCase):
 
     def test_published_ancestry_pagination_and_referenced_issues(self):
         with tempfile.TemporaryDirectory() as root:
+            environment = isolated_git.environment(root)
+
             def git(*args):
                 return subprocess.check_output(["git", "-C", root, *args], text=True,
-                                               stderr=subprocess.DEVNULL).strip()
+                                               stderr=subprocess.DEVNULL, env=environment).strip()
 
             def commit(tag):
                 git("commit", "--allow-empty", "-qm", tag)

@@ -1,9 +1,10 @@
-import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+
+import isolated_git
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / ".forgejo/scripts/checkout-release.sh"
@@ -15,6 +16,7 @@ class CheckoutReleaseTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        self.environment = isolated_git.environment(self.root)
         self.remote = self.root / "upstream.git"
         self.remote.mkdir()
         self.git(self.remote, "init", "--initial-branch=main")
@@ -33,15 +35,16 @@ class CheckoutReleaseTests(unittest.TestCase):
 
     def git(self, directory, *args):
         return subprocess.check_output(
-            ["git", "-C", str(directory), *args], text=True, stderr=subprocess.PIPE).strip()
+            ["git", "-C", str(directory), *args], text=True, stderr=subprocess.PIPE,
+            env=self.environment).strip()
 
     def checkout(self, tag, directory):
         directory.mkdir()
         shutil.copyfile(METADATA, directory / "release_metadata.py")
         return subprocess.run(
             ["sh", str(SCRIPT)], cwd=directory, capture_output=True, text=True,
-            env={**os.environ, "RELEASE_TAG": tag, "FORGEJO_SERVER": self.root.as_uri() + "/",
-                 "REPOSITORY": "upstream"})
+            env={**self.environment, "RELEASE_TAG": tag,
+                 "FORGEJO_SERVER": self.root.as_uri() + "/", "REPOSITORY": "upstream"})
 
     def test_lightweight_and_annotated_tags_check_out_shallow_and_detached(self):
         for tag in ("v0.0.0", "v12.34.56"):
