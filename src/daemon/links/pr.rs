@@ -10,9 +10,9 @@ use crate::{
         forge_hosts::ForgeHosts,
         notifications::NotificationKind,
         store,
-        workspace::{Manager, review},
+        workspace::Manager,
     },
-    forge::{ForgeRepo, account::Account, review::status::PrStatus},
+    forge::{ForgeRepo, account::Account, items::link::ItemKind, review::status::PrStatus},
     git,
     model::Workspace,
     repository,
@@ -545,14 +545,17 @@ impl RegistrationChange {
     /// takes its replay cursors and review mark with it, and every watch added
     /// or dropped is journaled as an assigned PR link change.
     fn apply(&self, db: &Connection, id: &str) -> Result<()> {
-        forget_activity(db, id, &self.removed)?;
-        review::forget(db, id, &self.removed)?;
+        super::forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
-        for url in &self.removed {
-            record_pr_link(db, id, EventKind::Unlinked, url)?;
-        }
         for url in &self.added {
-            record_pr_link(db, id, EventKind::Linked, url)?;
+            events::record_link(
+                db,
+                id,
+                EventKind::Linked,
+                crate::model::Relation::Assigned,
+                ItemKind::Pr,
+                url,
+            )?;
         }
         Ok(())
     }
@@ -566,21 +569,6 @@ fn watched_urls(registration: Option<&Registration>) -> &[String] {
         }) => urls,
         _ => &[],
     }
-}
-
-/// Drop the replay cursors of PRs that are no longer watched.
-fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
-    let urls = serde_json::to_string(urls)?;
-    for table in ["pr_activity", "workspace_item_activity"] {
-        db.execute(
-            &format!(
-                "DELETE FROM {table} WHERE workspace_id=?1
-                 AND url IN (SELECT value FROM json_each(?2))"
-            ),
-            rusqlite::params![id, urls],
-        )?;
-    }
-    Ok(())
 }
 
 fn store_registration(
@@ -597,17 +585,6 @@ fn store_registration(
         None => db.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [id])?,
     };
     Ok(())
-}
-
-fn record_pr_link(db: &Connection, id: &str, kind: EventKind, url: &str) -> Result<()> {
-    events::record_link(
-        db,
-        id,
-        kind,
-        crate::model::Relation::Assigned,
-        crate::forge::items::link::ItemKind::Pr,
-        url,
-    )
 }
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {

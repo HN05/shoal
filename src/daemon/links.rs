@@ -18,7 +18,7 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         links::pr::Action,
-        workspace::Manager,
+        workspace::{Manager, review},
     },
     forge::items::link::ItemKind,
     model::{LinkedItem, Relation},
@@ -231,6 +231,31 @@ fn remove(
         events::record_link(db, id, EventKind::Unlinked, relation, *kind, url)?;
     }
     Ok(removed.len())
+}
+
+/// Drop what assigned items kept while linked, their replay cursors and review
+/// marks, and journal each as unlinked.
+pub(crate) fn forget_assigned(
+    db: &Connection,
+    id: &str,
+    kind: ItemKind,
+    urls: &[String],
+) -> Result<()> {
+    let list = serde_json::to_string(urls)?;
+    for table in ["pr_activity", "workspace_item_activity"] {
+        db.execute(
+            &format!(
+                "DELETE FROM {table} WHERE workspace_id=?1
+                 AND url IN (SELECT value FROM json_each(?2))"
+            ),
+            rusqlite::params![id, list],
+        )?;
+    }
+    review::forget(db, id, urls)?;
+    for url in urls {
+        events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
+    }
+    Ok(())
 }
 
 /// Refuse changes while the workspace is removed or otherwise in transition,

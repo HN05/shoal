@@ -1,6 +1,6 @@
 //! Persist issue associations.
 use anyhow::{Context, Result, ensure};
-use rusqlite::OptionalExtension;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
         events::{self, EventKind},
         workspace::Manager,
     },
-    forge::ForgeRepo,
+    forge::{ForgeRepo, items::link::ItemKind},
     model::Workspace,
     state::WorkspaceState,
 };
@@ -97,7 +97,7 @@ impl Manager {
                         &workspace.id,
                         EventKind::Linked,
                         crate::model::Relation::Assigned,
-                        crate::forge::items::link::ItemKind::Issue,
+                        ItemKind::Issue,
                         &url,
                     )?;
                 }
@@ -117,47 +117,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                super::ensure_accepts_links(&tx, &workspace.id)?;
-                let existing: Option<String> = tx
-                    .query_row(
-                        "SELECT url FROM workspace_issue WHERE workspace_id=?1",
-                        [&workspace.id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                if let Some(url) = selected {
-                    ensure!(
-                        existing.as_ref() == Some(&url),
-                        "issue is not linked: {url}"
-                    );
-                }
-                if let Some(url) = existing {
-                    tx.execute(
-                        "DELETE FROM pr_activity WHERE workspace_id=?1 AND url=?2",
-                        rusqlite::params![workspace.id, &url],
-                    )?;
-                    tx.execute(
-                        "DELETE FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
-                        rusqlite::params![workspace.id, &url],
-                    )?;
-                    crate::daemon::workspace::review::forget(
-                        &tx,
-                        &workspace.id,
-                        std::slice::from_ref(&url),
-                    )?;
-                    events::record_link(
-                        &tx,
-                        &workspace.id,
-                        EventKind::Unlinked,
-                        crate::model::Relation::Assigned,
-                        crate::forge::items::link::ItemKind::Issue,
-                        &url,
-                    )?;
-                }
-                tx.execute(
-                    "DELETE FROM workspace_issue WHERE workspace_id=?1",
-                    [&workspace.id],
-                )?;
+                unlink(&tx, &workspace.id, selected.as_deref())?;
                 tx.commit()?;
                 Ok(())
             })
@@ -178,6 +138,30 @@ impl Manager {
         let (number, url) = forge.issue(input)?;
         Ok((forge, number, url))
     }
+}
+
+/// Remove the workspace's issue, which must be `selected` when one is named,
+/// along with what its link kept.
+fn unlink(db: &Connection, id: &str, selected: Option<&str>) -> Result<()> {
+    super::ensure_accepts_links(db, id)?;
+    let existing: Option<String> = db
+        .query_row(
+            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(url) = selected {
+        ensure!(
+            existing.as_deref() == Some(url),
+            "issue is not linked: {url}"
+        );
+    }
+    if let Some(url) = existing {
+        super::forget_assigned(db, id, ItemKind::Issue, &[url])?;
+    }
+    db.execute("DELETE FROM workspace_issue WHERE workspace_id=?1", [id])?;
+    Ok(())
 }
 
 #[cfg(test)]
