@@ -1,13 +1,16 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::{Connection, params};
 
 use super::{
     pr::{RegistrationKind, current_head},
     wait,
 };
 use crate::{
-    daemon::{events::EventCause, workspace::Manager},
+    daemon::{
+        events::EventCause,
+        workspace::{Manager, record_base_changed},
+    },
     forge::{
         items::link::ItemKind,
         updates::{Update, UpdateKind},
@@ -96,43 +99,13 @@ impl Manager {
                 }
                 ItemKind::Issue => None,
             };
-            let message = format!(
-                "Base workspace {} merged into {target}{}. Rebase onto it: git fetch origin && git rebase --onto origin/{target} {head}",
-                base.name,
-                retargeted.unwrap_or_default()
-            );
-            updates.push(Update {
-                url,
-                kind: UpdateKind::BaseMerged,
-                message,
-                delivery: uuid::Uuid::new_v4().to_string(),
-                check: None,
-                workspace: None,
-            });
+            updates.push(base_merged_update(url, base, target, head, retargeted));
         }
         self.ensure_base_unchanged(base, head).await?;
         let (id, base_id) = (workspace.id, base.id.clone());
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let changed = tx.execute(
-                    "UPDATE workspaces SET base_workspace_id=(SELECT base_workspace_id FROM workspaces WHERE id=?2)
-                     WHERE id=?1 AND base_workspace_id=?2",
-                    params![id, base_id],
-                )?;
-                // Another sweep or a manual change already moved it.
-                if changed == 0 {
-                    return Ok(());
-                }
-                crate::daemon::workspace::record_base_changed(&tx, &id, EventCause::Pr)?;
-                for update in updates {
-                    wait::queue_update(&tx, &id, update)?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
-        Ok(())
+            .run(move |db| record_restack(db, &id, &base_id, updates))
+            .await
     }
 
     /// Retarget a stacked PR that still targets the merged base branch,
@@ -181,4 +154,54 @@ impl Manager {
         );
         Ok(())
     }
+}
+
+/// The `base_merged` update telling a stacked workspace's agent to rebase
+/// past `head` onto `target`, with the outcome of retargeting its PR.
+fn base_merged_update(
+    url: String,
+    base: &Workspace,
+    target: &str,
+    head: &str,
+    retargeted: Option<String>,
+) -> Update {
+    let message = format!(
+        "Base workspace {} merged into {target}{}. Rebase onto it: git fetch origin && git rebase --onto origin/{target} {head}",
+        base.name,
+        retargeted.unwrap_or_default()
+    );
+    Update {
+        url,
+        kind: UpdateKind::BaseMerged,
+        message,
+        delivery: uuid::Uuid::new_v4().to_string(),
+        check: None,
+        workspace: None,
+    }
+}
+
+/// Atomically stack `id` on the base of `base_id`, journal the change and
+/// queue `updates` for its next watch. Does nothing once `id` no longer
+/// builds on `base_id`: another sweep or a manual change already moved it.
+fn record_restack(
+    db: &mut Connection,
+    id: &str,
+    base_id: &str,
+    updates: Vec<Update>,
+) -> Result<()> {
+    let tx = db.transaction()?;
+    let changed = tx.execute(
+        "UPDATE workspaces SET base_workspace_id=(SELECT base_workspace_id FROM workspaces WHERE id=?2)
+         WHERE id=?1 AND base_workspace_id=?2",
+        params![id, base_id],
+    )?;
+    if changed == 0 {
+        return Ok(());
+    }
+    record_base_changed(&tx, id, EventCause::Pr)?;
+    for update in updates {
+        wait::queue_update(&tx, id, update)?;
+    }
+    tx.commit()?;
+    Ok(())
 }
