@@ -341,6 +341,30 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
 }
 
 #[tokio::test]
+async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let starting = add(&manager, &repo, "starting").await.entry.unwrap();
+    manager
+        .fail_queue_entry(&starting.id, "first")
+        .await
+        .unwrap();
+    // Removing its workspace also ends an entry before its launch reports.
+    manager
+        .fail_queue_entry(&starting.id, "second")
+        .await
+        .unwrap();
+    let failures = manager.notifications(true, 10).await.unwrap();
+    assert_eq!(
+        failures
+            .iter()
+            .filter(|notification| notification.kind == NotificationKind::QueueFailed)
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn only_waiting_entries_can_be_removed() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

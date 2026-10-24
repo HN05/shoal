@@ -878,28 +878,32 @@ impl Manager {
         Ok(workspace.id)
     }
 
-    /// End a starting entry that cannot start its agent and say why.
+    /// End a starting entry that cannot start its agent and say why. An entry
+    /// that already ended, such as with its removed workspace, has no slot
+    /// left to free.
     pub async fn fail_queue_entry(&self, id: &str, error: &str) -> Result<()> {
         let id = id.to_owned();
-        let name = self
+        let entry = self
             .store
             .run(move |db| {
-                let name: Option<String> = db
+                let entry: Option<(String, bool)> = db
                     .query_row(
-                        "SELECT name FROM agent_queue WHERE id=?1 AND state=?2",
+                        "SELECT name, state=?2 FROM agent_queue WHERE id=?1",
                         params![id, QueueState::Starting],
-                        |row| row.get(0),
+                        |row| Ok((row.get(0)?, row.get(1)?)),
                     )
                     .optional()?;
                 db.execute(
                     "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
                     params![id, QueueState::Starting],
                 )?;
-                Ok(name)
+                Ok(entry)
             })
             .await?;
-        let Some(name) = name else {
-            bail!("queue entry is no longer starting");
+        let name = match entry {
+            None => return Ok(()),
+            Some((_, false)) => bail!("queue entry is no longer starting"),
+            Some((name, true)) => name,
         };
         self.notify(
             Some(&name),
