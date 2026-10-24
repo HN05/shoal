@@ -366,7 +366,9 @@ configured command for another agent, plus proven child
   Manual stop, refused reattachment and graceful shutdown of wrappers that cannot
   reattach save agent recovery and user command arguments for explicit resume,
   preserve work and leases, and never rerun a recorded command. Every daemon stop
-  carries its cause, which the wrapper prints after the agent stops.
+  carries its cause, which the wrapper prints after the agent stops. A hangup or
+  terminate signal to an agent's wrapper or agent saves the agent's recovery the
+  same way, with the signal as its reason, and is not an exit on its own.
   Scoped callers cannot stop executions.
 - Command wrappers keep running when the daemon goes away and reattach only after
   the daemon verifies the record, scope token, wrapper and child identities and

@@ -346,6 +346,9 @@ async fn relay(
             }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
+                // A wrapper whose own session ended saves its agent unasked,
+                // which stops the agent as a requested pause does.
+                sent_stop = true;
                 if !recovering {
                     execution_recovery::stop_survivors(manager, execution_id, &workspace.id).await;
                     continue;

@@ -162,7 +162,10 @@ Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
-command is not known to be safe. Scoped callers cannot stop executions. An
+command is not known to be safe. Scoped callers cannot stop executions. A hangup
+or terminate signal to an agent's wrapper or agent saves the agent as manual stop
+does: closing a terminal, logging out and shutting down end the agent's session
+without the agent choosing to quit, and the daemon may already be gone. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.

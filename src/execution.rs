@@ -267,6 +267,11 @@ async fn run_tracked(
                 eprintln!("shoal: {stopped} stopped: {reason}");
                 break Ok(code);
             }
+            // Only an agent's session is saved when its own session ends.
+            Ok(Outcome::Paused {
+                code,
+                stop: Halt::Ended { .. },
+            }) if recovery.is_none() => break Ok(code),
             Ok(Outcome::Paused { code, stop }) => {
                 if let Some(recovery) = &recovery {
                     let after =
@@ -441,6 +446,7 @@ fn execution_command(
     })
 }
 
+#[derive(Debug)]
 enum Outcome {
     Exited(i32),
     /// The daemon stopped the command without saving it.
@@ -480,10 +486,11 @@ async fn pause_agent(
     let automatic = recovery.automatic && stop.recovers();
     let saved = save_paused_agent(paths, plan, mode, recovery, stop, automatic);
     match &saved {
-        Ok(_) if !automatic => eprintln!(
-            "{}",
-            stop.manual_restore(&stop.restore(&plan.workspace.name, &plan.id))
-        ),
+        // The terminal may have closed with the session.
+        Ok(_) if !automatic => {
+            let restore = stop.manual_restore(&stop.restore(&plan.workspace.name, &plan.id));
+            let _ = writeln!(std::io::stderr(), "{restore}");
+        }
         Ok(_) => {}
         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
     }
@@ -610,6 +617,10 @@ enum Halt {
         /// The removal record of the removed workspace keeps the session.
         removed: bool,
     },
+    /// A hangup or terminate signal ended the session the command ran in, as
+    /// closing its terminal, logging out or shutting down does; the reason is
+    /// saved for `shoal resume`.
+    Ended { reason: &'static str },
 }
 
 impl Halt {
@@ -628,15 +639,27 @@ impl Halt {
                 reason: reason.clone(),
                 resumes_when: resumes_when.clone(),
             }),
-            Self::Pause { .. } => None,
+            Self::Pause { .. } | Self::Ended { .. } => None,
         }
     }
 
     fn saved_reason(&self) -> Option<&str> {
         match self {
             Self::Protection { reason, .. } => Some(reason),
+            Self::Ended { reason } => Some(reason),
             Self::Pause { .. } => None,
         }
+    }
+
+    /// The halt for a session ended by `signal`, which the wrapper received or
+    /// which ended the command before the wrapper's own arrived.
+    fn ended_by(signal: i32) -> Option<Self> {
+        let reason = match signal {
+            libc::SIGHUP => "its terminal closed",
+            libc::SIGTERM => "its session was terminated",
+            _ => return None,
+        };
+        Some(Self::Ended { reason })
     }
 
     /// The cause for every line after the stop.
@@ -647,6 +670,7 @@ impl Halt {
                 reason: Some(reason),
                 ..
             } => format!(": {reason}"),
+            Self::Ended { reason } => format!(": {reason}"),
             Self::Pause { reason: None, .. } => String::new(),
         }
     }
@@ -667,7 +691,7 @@ impl Halt {
     fn manual_restore(&self, restore: &str) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
-            Self::Pause { .. } => String::new(),
+            Self::Pause { .. } | Self::Ended { .. } => String::new(),
         };
         format!(
             "shoal: agent stopped{}; {condition}{restore}",
@@ -809,7 +833,23 @@ async fn wait_for_child(
     // command keeps the terminal; nothing is written to it.
     loop {
         tokio::select! {
-            status = child.wait() => return Ok((status?, None, None)),
+            // A hangup reaches the command and this wrapper together, so the
+            // wrapper's signal goes first when both are ready.
+            biased;
+            _ = signals.hangup.recv() => {
+                let status = stop(child, group, libc::SIGHUP).await?;
+                return Ok((status, Halt::ended_by(libc::SIGHUP), None));
+            }
+            _ = signals.terminate.recv() => {
+                let status = stop(child, group, libc::SIGTERM).await?;
+                return Ok((status, Halt::ended_by(libc::SIGTERM), None));
+            }
+            _ = signals.interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
+            _ = signals.quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
+            status = child.wait() => {
+                let status = status?;
+                return Ok((status, status.signal().and_then(Halt::ended_by), None));
+            }
             received = link.recv() => {
                 let control = match received {
                     Ok(Received::Detached | Received::Reattached) => continue,
@@ -852,14 +892,12 @@ async fn wait_for_child(
                 };
                 return Ok((status, recovery, stopped));
             }
-            _ = signals.terminate.recv() => return Ok((stop(child, group, libc::SIGTERM).await?, None, None)),
-            _ = signals.interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
-            _ = signals.quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
         }
     }
 }
 
 struct ExecutionSignals {
+    hangup: Signal,
     terminate: Signal,
     interrupt: Signal,
     quit: Signal,
@@ -868,6 +906,7 @@ struct ExecutionSignals {
 impl ExecutionSignals {
     fn new() -> Result<Self> {
         Ok(Self {
+            hangup: signal(SignalKind::hangup())?,
             terminate: signal(SignalKind::terminate())?,
             interrupt: signal(SignalKind::interrupt())?,
             quit: signal(SignalKind::quit())?,

@@ -768,6 +768,34 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
 }
 
 #[tokio::test]
+async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
+    use crate::execution::recovery::{LastSession, Record, Saved};
+    let (_root, manager, workspace, serving) = fixture().await;
+    let agent = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    report_session(&manager, &workspace, "closed-session").await;
+    let wrapper = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions[0]
+        .wrapper
+        .clone()
+        .unwrap();
+    crate::process::identity::signal(&wrapper, libc::SIGHUP).unwrap();
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 129);
+    assert_eq!(
+        LastSession::load(&manager.paths, &workspace.id).unwrap(),
+        None
+    );
+    let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
+    let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
+    assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
+    assert_eq!(record.session.as_deref(), Some("closed-session"));
+    serving.abort();
+}
+
+#[tokio::test]
 async fn overload_restores_the_configured_session_and_keeps_waiting_execution_owned() {
     let (_root, manager, workspace, serving) = fixture().await;
     fs::write(

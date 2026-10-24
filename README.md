@@ -159,7 +159,7 @@ shoal message "Stop the dev server" --workspace fix-login  # Message the workspa
 shoal questions               # Questions agents asked you
 shoal answer 3 2              # Answer question 3 with its second choice
 shoal stop fix-login          # Stop agents and commands; save them for shoal resume
-shoal stop --all              # Stop every workspace, for example before a reboot
+shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false

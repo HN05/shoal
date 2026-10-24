@@ -362,6 +362,114 @@ async fn reattachment_child() {
     tokio::join!(refused, wrapper);
 }
 
+#[tokio::test]
+async fn an_ended_session_saves_the_command_as_stopped() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = timeout(
+        Duration::from_secs(60),
+        crate::test_support::isolated_test(root.path(), "execution::tests::ended_session_child")
+            .output(),
+    )
+    .await
+    .expect("isolated ended session test stalled")
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[tokio::test]
+#[ignore = "isolated wrapper launched by ended session regression"]
+async fn ended_session_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = Paths::for_test(&root);
+    let plan = ExecutionPlan {
+        id: uuid::Uuid::new_v4().to_string(),
+        workspace: Workspace::new_record(
+            "repo".into(),
+            "worker".into(),
+            root.clone(),
+            "worker".into(),
+            crate::state::WorkspaceState::Ready,
+        ),
+        scope_token: "test-scope".into(),
+        setup_cmd: None,
+        copy_ignored: false,
+        ports: vec![],
+        environment: Default::default(),
+        land: None,
+    };
+    let mode = Mode::Command { record: false };
+    let run =
+        |script: &str| -> Vec<OsString> { vec!["/bin/sh".into(), "-c".into(), script.into()] };
+
+    // The terminal closing hangs up the wrapper, which stops the command.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let hangup = async {
+        acknowledge_start(&mut daemon).await;
+        unsafe { libc::kill(std::process::id() as i32, libc::SIGHUP) };
+    };
+    let wrapper = async {
+        supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &run("while :; do sleep 1; done"),
+            &mode,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+    };
+    let ((), outcome) = tokio::join!(hangup, wrapper);
+    assert!(
+        matches!(
+            outcome,
+            Outcome::Paused {
+                code: 129,
+                stop: Halt::Ended {
+                    reason: "its terminal closed"
+                },
+            }
+        ),
+        "{outcome:?}"
+    );
+
+    // A command the signal ends before the wrapper's own arrives ended the same way.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let started = async {
+        acknowledge_start(&mut daemon).await;
+    };
+    let wrapper = async {
+        supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &run("kill -TERM $$; sleep 60"),
+            &mode,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+    };
+    let ((), outcome) = tokio::join!(started, wrapper);
+    assert!(
+        matches!(
+            outcome,
+            Outcome::Paused {
+                code: 143,
+                stop: Halt::Ended {
+                    reason: "its session was terminated"
+                },
+            }
+        ),
+        "{outcome:?}"
+    );
+}
+
 #[test]
 fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
     let protection = Halt::Protection {

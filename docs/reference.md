@@ -252,6 +252,10 @@ with `exec` or `run` save their arguments, which `shoal resume` reports and neve
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 `--all` stops every ready or failed workspace with a running execution in parallel,
 reporting each failure without keeping the others running.
+An agent whose wrapper or agent process receives a hangup or terminate signal, as
+closing its terminal, logging out or shutting down sends, is saved the same way,
+with the signal as its stop reason, so `shoal resume --all` restores it after a
+reboot; other commands just end.
 Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
 Run stop and resume outside scoped executions.
