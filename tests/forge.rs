@@ -822,7 +822,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     let url = |id: u64| format!("{host}/attachments/{id}");
     let comments = "repos/team/project/issues/comments/70";
     fixture.respond(json!({
-        "GET settings/attachment": attachment_settings(true, ".png,video/*,.tsv", 1),
+        "GET settings/attachment": attachment_settings(true, ".png,.mp4,text/*", 1),
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "POST repos/team/project/issues/8/comments": {"status": 201, "body": {"id": 70}},
         format!("POST {comments}/assets?name=login.png"):

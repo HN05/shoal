@@ -970,7 +970,7 @@ worktree would be untracked files that hold up cleanup. GitHub's REST API has no
 upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Forgejo
 takes a comment's files only once it is posted, so a failure there would leave it
 without them: Shoal refuses what the instance's attachment settings refuse before
-posting, and resends the uploads and the comment's update after failures that may
+posting, detecting a file's media type from its leading bytes as Forgejo does, and resends the uploads and the comment's update after failures that may
 pass. An upload is resent only when the forge did not get it or answered 503,
 since a second copy would stay on the comment and a proxy's other 5xx may follow a
 stored one; the update also after those. A comment whose files still fail stays posted, neither deleted
