@@ -133,12 +133,19 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
     assert!(!root.path().join("state").exists());
 }
 
-// A reader that has already gone, like `head` after its lines, ends text and
-// JSON output with the status a shell reports for SIGPIPE.
+// A reader that has already gone, like `head` after its lines, ends text,
+// JSON and help output with the status a shell reports for SIGPIPE.
 #[test]
 fn a_closed_stdout_ends_commands_quietly() {
     let root = tempfile::tempdir().unwrap();
-    for args in [vec!["skill"], vec!["--json", "skill", "worker"]] {
+    for args in [
+        vec!["skill"],
+        vec!["--json", "skill", "worker"],
+        vec![],
+        vec!["repo"],
+        vec!["--help"],
+        vec!["--version"],
+    ] {
         let (reader, writer) = std::io::pipe().unwrap();
         drop(reader);
         let output = support::cli(root.path())

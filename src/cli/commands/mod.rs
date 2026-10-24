@@ -206,7 +206,7 @@ fn print_help(path: &[&str]) -> Result<()> {
             .find_subcommand_mut(name)
             .expect("menu subcommands are defined");
     }
-    command.print_help()?;
+    out!("{}", Palette::stdout(false).styled(&command.render_help()));
     Ok(())
 }
 

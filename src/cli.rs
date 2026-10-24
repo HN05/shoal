@@ -1291,7 +1291,9 @@ impl Cli {
     /// Parse the process arguments as `Cli::parse` does, recording what the
     /// command needs of its workspace.
     pub fn from_args() -> Self {
-        let mut matches = <Self as clap::CommandFactory>::command().get_matches();
+        let mut matches = <Self as clap::CommandFactory>::command()
+            .try_get_matches()
+            .unwrap_or_else(|error| exit_parse(error));
         let mut path = vec![];
         let mut leaf = &matches;
         while let Some((name, child)) = leaf.subcommand() {
@@ -1308,6 +1310,16 @@ impl Cli {
         cli.need = availability::Need::of_command(&path);
         cli
     }
+}
+
+/// Clap prints help and version itself and exits 0 when stdout is closed, so
+/// shoal prints them to give a closed reader the status other output gets.
+fn exit_parse(error: clap::Error) -> ! {
+    if error.use_stderr() {
+        error.exit()
+    }
+    out!("{}", output::Palette::stdout(false).styled(&error.render()));
+    std::process::exit(error.exit_code())
 }
 
 impl Command {
