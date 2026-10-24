@@ -659,6 +659,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             }
             Body::Workspace(workspace)
         }
+        Method::FastForwardWorkspace { workspace, branch } => {
+            Body::FastForwarded(manager.fast_forward_workspace(&workspace, &branch).await?)
+        }
         Method::OpenPull { workspace, options } => {
             let proposer = manager.proposer(caller).await;
             Body::Opened(manager.open_pull(&workspace, options, proposer).await?)

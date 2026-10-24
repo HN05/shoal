@@ -95,6 +95,16 @@ impl Manager {
             workspace.name,
             workspace.state
         );
+        self.verify_checkout(workspace, expected_branch).await
+    }
+
+    /// Refuse a worktree that is no longer the recorded one or is off
+    /// `expected_branch`.
+    pub(crate) async fn verify_checkout(
+        &self,
+        workspace: &Workspace,
+        expected_branch: &str,
+    ) -> Result<()> {
         self.verify_worktree(workspace).await?;
         let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
         ensure!(

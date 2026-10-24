@@ -147,6 +147,8 @@ states!(WorkspaceState: Variants {
     Reconciling => "reconciling",
     /// Returning to a checkpoint.
     Restoring => "restoring",
+    /// Fast-forwarding to its branch's pushed head.
+    Updating => "updating",
     Failed => "failed",
 });
 
@@ -158,13 +160,14 @@ impl WorkspaceState {
             | Self::Stopping
             | Self::Removing
             | Self::Reconciling
-            | Self::Restoring => true,
+            | Self::Restoring
+            | Self::Updating => true,
             Self::Ready | Self::Failed => false,
         })
     }
 
-    /// A workspace being stopped, removed, reconciled or restored takes no
-    /// link changes.
+    /// A workspace being stopped, removed, reconciled, restored or updated
+    /// takes no link changes.
     pub fn accepts_links(self) -> bool {
         matches!(self, Self::Ready | Self::Preparing | Self::Failed)
     }
@@ -367,6 +370,7 @@ mod tests {
             ("removing", WorkspaceState::Removing),
             ("reconciling", WorkspaceState::Reconciling),
             ("restoring", WorkspaceState::Restoring),
+            ("updating", WorkspaceState::Updating),
             ("failed", WorkspaceState::Failed),
         ] {
             assert_eq!(

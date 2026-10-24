@@ -12,6 +12,7 @@ mod diff;
 mod done;
 mod environment;
 mod executions;
+mod fast_forward;
 mod holds;
 pub(super) mod identity;
 mod kept_branches;
