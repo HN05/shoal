@@ -62,11 +62,11 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
     ctx.show(&moved, |moved| {
         let palette = Palette::stdout(ctx.json);
         if moved.is_empty() {
-            println!("No repository directories to move");
+            outln!("No repository directories to move");
         }
         for moved in moved {
             let directory = moved.repository.workspaces_dir.as_deref();
-            println!(
+            outln!(
                 "{}",
                 palette.paint(
                     Style::Success,

@@ -393,7 +393,7 @@ pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
         "workspace processes cannot see the inbox or notifications; ask the user"
     );
     for (id, label) in rows(ctx, view, scoped).await? {
-        println!("{}", ui::picker_line(&id, &label));
+        outln!("{}", ui::picker_line(&id, &label));
     }
     Ok(0)
 }
@@ -412,7 +412,7 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
             view: name.get_name(),
         },
     )?;
-    println!("{}", next.switch_to(scoped, &reload));
+    outln!("{}", next.switch_to(scoped, &reload));
     Ok(0)
 }
 

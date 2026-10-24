@@ -103,7 +103,7 @@ fn benchmark_port_membership() {
         }
         start.elapsed().as_nanos() as f64 / f64::from(iterations)
     }
-    println!("reservations,case,scan_ns,lazy_bitmap_ns");
+    outln!("reservations,case,scan_ns,lazy_bitmap_ns");
     for count in [0, 16, 32, 33, 100, 1000, 10000] {
         for case in ["dense", "first-free", "sparse", "exhausted"] {
             let ports: Vec<u16> = match case {
@@ -153,7 +153,7 @@ fn benchmark_port_membership() {
             }
             scans.sort_by(f64::total_cmp);
             indexed_samples.sort_by(f64::total_cmp);
-            println!("{count},{case},{:.1},{:.1}", scans[4], indexed_samples[4]);
+            outln!("{count},{case},{:.1},{:.1}", scans[4], indexed_samples[4]);
         }
     }
 }

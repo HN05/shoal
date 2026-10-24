@@ -97,7 +97,7 @@ pub(super) async fn acquire(
                     )?;
                     return Ok(super::EXIT_BUSY);
                 }
-                println!(
+                outln!(
                     "{}: port {} {}; suggested {}",
                     proposal.name,
                     proposal.requested_port,
@@ -187,13 +187,13 @@ pub(super) async fn pick_configured(ctx: &Context, workspace: &str) -> Result<St
 
 pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
     for port in &overview.reserved {
-        println!("{}", describe(port, palette));
+        outln!("{}", describe(port, palette));
     }
     for (name, definition) in &overview.configured {
         if overview.reserved.iter().any(|p| &p.name == name) {
             continue;
         }
-        println!(
+        outln!(
             "{name}: not reserved (preferred: {}; conflicts: {})",
             definition
                 .port
@@ -203,6 +203,6 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
         );
     }
     if overview.reserved.is_empty() && overview.configured.is_empty() {
-        println!("No configured or reserved ports");
+        outln!("No configured or reserved ports");
     }
 }

@@ -192,7 +192,7 @@ async fn allocation(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "manual release-mode measurement"]
 async fn connection_setup() -> Result<()> {
-    println!(
+    outln!(
         "backend,rows,clients,workload,opens,requests_per_s,p50_us,p95_us,p99_us,setup_us_per_call,query_us_per_call"
     );
     for rows in [4, 1000] {
@@ -243,7 +243,7 @@ async fn connection_setup() -> Result<()> {
                         );
                         store.shutdown().await;
                     }
-                    println!(
+                    outln!(
                         "{workers},{rows},{clients},{},{},{:.0},{},{},{},{:.2},{:.2}",
                         if mixed { "mixed" } else { "read" },
                         metrics.opens.load(Ordering::Relaxed),

@@ -71,7 +71,7 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
         .collect();
     ctx.show(&definitions, |definitions| {
         for command in definitions {
-            println!(
+            outln!(
                 "{} = {} ({}{})",
                 command.name,
                 serde_json::to_string(&command.argv).expect("serialize command argv"),

@@ -66,7 +66,7 @@ pub(super) async fn view(
     ctx.show(&views, |views| {
         for (index, view) in views.iter().enumerate() {
             if index > 0 {
-                println!();
+                outln!();
             }
             render(view, palette);
         }
@@ -141,19 +141,19 @@ async fn read_failed_logs(
 }
 
 fn render_log(log: &CheckLog) {
-    println!("{}: {}", log.url, log.name);
+    outln!("{}: {}", log.url, log.name);
     if let Some(job) = &log.job_url {
-        println!("Job: {job}");
+        outln!("Job: {job}");
     }
     if let Some(step) = &log.failed_step {
-        println!("Failed step: {step}");
+        outln!("Failed step: {step}");
     }
     if log.truncated {
-        println!("[showing the last 8 KiB]");
+        outln!("[showing the last 8 KiB]");
     }
-    print!("{}", log.text);
+    out!("{}", log.text);
     if !log.text.ends_with('\n') {
-        println!();
+        outln!();
     }
 }
 
@@ -165,49 +165,49 @@ fn render(view: &ItemView, palette: Palette) {
     match &view.details {
         Some(details) => {
             let heading = format!("{kind} #{}: {}", details.number, details.title);
-            println!("{}", palette.paint(Style::Heading, heading));
-            println!("URL:      {}", view.url);
+            outln!("{}", palette.paint(Style::Heading, heading));
+            outln!("URL:      {}", view.url);
             render_details(details, palette);
         }
         None => {
-            println!("{}", palette.paint(Style::Heading, kind));
-            println!("URL:      {}", view.url);
+            outln!("{}", palette.paint(Style::Heading, kind));
+            outln!("URL:      {}", view.url);
         }
     }
     for log in &view.check_logs {
-        println!();
+        outln!();
         render_log(log);
     }
     for error in &view.errors {
-        println!("{}", palette.paint(Style::Warning, error));
+        outln!("{}", palette.paint(Style::Warning, error));
     }
 }
 
 fn render_details(details: &Details, palette: Palette) {
     match &details.pr {
         Some(pr) => render_pr(&details.state, pr, palette),
-        None => println!("State:    {}", details.state),
+        None => outln!("State:    {}", details.state),
     }
-    println!("Author:   {}", details.author);
-    println!("Created:  {}", details.created_at);
+    outln!("Author:   {}", details.author);
+    outln!("Created:  {}", details.created_at);
     if !details.labels.is_empty() {
-        println!("Labels:   {}", details.labels.join(", "));
+        outln!("Labels:   {}", details.labels.join(", "));
     }
     if !details.body.trim().is_empty() {
-        println!();
+        outln!();
         print_indented(&details.body, 2);
     }
     if let Some(comments) = &details.comments {
-        println!();
-        println!("Comments: {}", comments.len());
+        outln!();
+        outln!("Comments: {}", comments.len());
         for comment in comments {
-            println!("  {} · {}", comment.author, comment.created_at);
+            outln!("  {} · {}", comment.author, comment.created_at);
             print_indented(&comment.body, 4);
         }
     }
     if let Some(reviews) = &details.reviews {
-        println!();
-        println!("Reviews:  {}", reviews.len());
+        outln!();
+        outln!("Reviews:  {}", reviews.len());
         for review in reviews {
             render_review(review);
         }
@@ -221,21 +221,23 @@ fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
         None => String::new(),
     };
     let draft = if pr.draft { ", draft" } else { "" };
-    println!("State:    {state}{draft}{conflicts}");
-    println!("Branch:   {} → {}", pr.head, pr.base);
+    outln!("State:    {state}{draft}{conflicts}");
+    outln!("Branch:   {} → {}", pr.head, pr.base);
     if let Some(review) = pr.review {
-        println!("Review:   {}", palette.review_state(review));
+        outln!("Review:   {}", palette.review_state(review));
     }
-    println!("Checks:   {}", pr.checks.len());
+    outln!("Checks:   {}", pr.checks.len());
     for check in &pr.checks {
-        println!("  {}: {}", check.name, palette.check_result(&check.result));
+        outln!("  {}: {}", check.name, palette.check_result(&check.result));
     }
 }
 
 fn render_review(review: &Review) {
-    println!(
+    outln!(
         "  {} · {} · {}",
-        review.author, review.state, review.submitted_at
+        review.author,
+        review.state,
+        review.submitted_at
     );
     print_indented(&review.body, 4);
     for comment in &review.comments {
@@ -252,9 +254,12 @@ fn render_review(review: &Review) {
             Some(false) => " · unresolved",
             None => "",
         };
-        println!(
+        outln!(
             "    {}{line} · {} · {} · comment {}{thread}{resolved}",
-            comment.path, comment.author, comment.created_at, comment.id
+            comment.path,
+            comment.author,
+            comment.created_at,
+            comment.id
         );
         print_indented(&comment.body, 6);
     }
@@ -263,9 +268,9 @@ fn render_review(review: &Review) {
 fn print_indented(text: &str, indent: usize) {
     for line in text.trim_end().lines() {
         if line.trim().is_empty() {
-            println!();
+            outln!();
         } else {
-            println!("{:indent$}{line}", "");
+            outln!("{:indent$}{line}", "");
         }
     }
 }

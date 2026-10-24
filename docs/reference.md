@@ -465,7 +465,8 @@ directory it runs in, otherwise on the caller's own workspace, and agent hooks
 always report for the caller's own. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
 noninteractive rule. Leaving a picker without a choice exits with status 130
-and no message. Bare `shoal cd` always opens a picker;
+and no message, and a command whose output reader closes early, such as `head`,
+exits with status 141 and no message. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. A command that accepts
 `--all` lists it as the last picker entry, "All workspaces", and as the first
 completion of its workspace argument. `config show` checks the

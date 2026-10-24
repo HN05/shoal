@@ -1,0 +1,4 @@
+disallowed-macros = [
+    { path = "std::print", reason = "panics when stdout closes early; use out!" },
+    { path = "std::println", reason = "panics when stdout closes early; use outln!" },
+]

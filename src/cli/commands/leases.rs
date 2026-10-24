@@ -381,13 +381,13 @@ async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
 
 /// Simulators appear only where profiles are configured or devices exist.
 fn render_leases(leases: &Leases, palette: Palette) {
-    println!("{}", palette.paint(Style::Heading, "Ports"));
+    outln!("{}", palette.paint(Style::Heading, "Ports"));
     ports::render_overview(&leases.ports, palette);
     let simulators = &leases.simulators;
     if !simulators.policy.profiles.is_empty() || !simulators.simulators.is_empty() {
-        println!("{}", palette.paint(Style::Heading, "Simulators"));
+        outln!("{}", palette.paint(Style::Heading, "Simulators"));
         simulators::render_overview(simulators, palette);
     }
-    println!("{}", palette.paint(Style::Heading, "Resources"));
+    outln!("{}", palette.paint(Style::Heading, "Resources"));
     resources::render_overview(&leases.resources, palette);
 }

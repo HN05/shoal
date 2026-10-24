@@ -36,7 +36,7 @@ pub(super) async fn workspace_forge(ctx: &Context, workspace: Option<String>) ->
 /// The forge's name, then one line per capability: its name, whether the
 /// forge has it, and what to do instead when it does not.
 fn render(capabilities: &Capabilities) {
-    println!("Forge: {}", capabilities.forge);
+    outln!("Forge: {}", capabilities.forge);
     let width = capabilities
         .capabilities
         .iter()
@@ -54,6 +54,6 @@ fn render(capabilities: &Capabilities) {
             entry.capability.as_str(),
             entry.hint.unwrap_or_default()
         );
-        println!("{}", line.trim_end());
+        outln!("{}", line.trim_end());
     }
 }

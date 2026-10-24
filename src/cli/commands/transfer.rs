@@ -208,7 +208,7 @@ struct ImportReport {
 impl ImportReport {
     fn imported(&mut self, ctx: &Context, reopened: Reopened) {
         if !ctx.json {
-            println!("{}", reopened.message(ctx, "Imported"));
+            outln!("{}", reopened.message(ctx, "Imported"));
         }
         self.imported.push(reopened);
     }
@@ -311,9 +311,11 @@ impl Output {
     fn report(self, ctx: &Context, exported: &ExportedWorkspace) -> Result<i32> {
         let name = &exported.manifest.workspace.name;
         let Self::File { path } = &self else {
-            let mut stdout = std::io::stdout().lock();
-            std::io::copy(&mut std::fs::File::open(self.file())?, &mut stdout)?;
-            stdout.flush()?;
+            let mut file = std::fs::File::open(self.file())?;
+            crate::stdout::write(|stdout| {
+                std::io::copy(&mut file, stdout)?;
+                stdout.flush()
+            })?;
             eprintln!("Exported {name}");
             return Ok(0);
         };
@@ -603,7 +605,7 @@ impl ExportReport {
         exported: ExportedWorkspace,
     ) {
         if !ctx.json {
-            println!(
+            outln!(
                 "Exported {name} to {}",
                 directory.shown_file(name).display()
             );

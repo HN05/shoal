@@ -66,7 +66,7 @@ pub async fn run(
     if discard {
         let ids = discard_saved(&saved, active)?;
         ctx.show(&json!({"discarded": ids}), |_| {
-            println!(
+            outln!(
                 "Discarded stopped agents and commands for {}",
                 workspace.name
             )
@@ -128,7 +128,7 @@ async fn continue_last_session(
         consume(&path)?;
         ctx.show(
             &json!({"discarded": [], "last_session": last.agent}),
-            |_| println!("Discarded the last agent session for {}", workspace.name),
+            |_| outln!("Discarded the last agent session for {}", workspace.name),
         )?;
         return Ok(0);
     }
@@ -380,7 +380,7 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         let names = stopped.iter().map(|(workspace, _)| workspace.name.as_str());
         let names = names.collect::<Vec<_>>().join(", ");
         ctx.show(&json!({"discarded": ids}), |_| {
-            println!("Discarded stopped agents and commands for {names}")
+            outln!("Discarded stopped agents and commands for {names}")
         })?;
         return Ok(0);
     }
@@ -430,15 +430,15 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
             .count();
         if let Some(place) = place {
             let started = sessions.len() - listed;
-            println!("Resuming {started} agents in {place}");
+            outln!("Resuming {started} agents in {place}");
         }
         if listed > 0 {
-            println!("Resume each agent in its own terminal:");
+            outln!("Resume each agent in its own terminal:");
         }
         for ((workspace, id, _), agent) in sessions.iter().zip(&agents) {
             if agent["background"] == false {
                 let words = ["shoal", "resume", &workspace.name, "--execution", id];
-                println!("  {}", crate::shell::quote(&words));
+                outln!("  {}", crate::shell::quote(&words));
             }
         }
     })?;
@@ -470,7 +470,7 @@ fn report_commands(
         .collect::<Vec<_>>();
     let report = json!({"workspace": workspace.name, "commands": argv});
     if !commands.is_empty() && !ctx.json {
-        println!("{}", command_list(workspace, commands));
+        outln!("{}", command_list(workspace, commands));
     }
     for command in commands {
         consume(&command.path)?;

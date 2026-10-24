@@ -26,10 +26,10 @@ async fn list(ctx: &Context) -> Result<i32> {
     let kept = request::<Vec<KeptBranch>>(&ctx.paths, Method::KeptBranches).await?;
     ctx.show(&kept, |kept| {
         if kept.is_empty() {
-            println!("No kept branches");
+            outln!("No kept branches");
         }
         for line in lines(kept) {
-            println!("{line}");
+            outln!("{line}");
         }
     })?;
     Ok(0)

@@ -41,7 +41,7 @@ pub(super) async fn run(
     });
     ctx.show(&value, |_| {
         if workspace.base_workspace.is_none() {
-            println!("No base workspace");
+            outln!("No base workspace");
         }
         render(&workspace);
     })?;
@@ -80,11 +80,11 @@ async fn pick(ctx: &Context, selector: &str) -> Result<String> {
 /// The base and stacked workspaces, when the workspace has any.
 pub(super) fn render(workspace: &Workspace) {
     if let Some(base) = &workspace.base_workspace {
-        println!("Base workspace: {}", describe(base));
+        outln!("Base workspace: {}", describe(base));
     }
     if !workspace.stacked_workspaces.is_empty() {
         let stacked: Vec<_> = workspace.stacked_workspaces.iter().map(describe).collect();
-        println!("Stacked workspaces: {}", stacked.join(", "));
+        outln!("Stacked workspaces: {}", stacked.join(", "));
     }
 }
 
