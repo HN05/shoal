@@ -33,7 +33,7 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
         )
         .await?;
     ctx.show(&response, |response| {
-        println!("{response:#}");
+        outln!("{response:#}");
     })?;
     Ok(0)
 }
