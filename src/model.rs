@@ -344,7 +344,7 @@ pub struct Execution {
 }
 
 /// An assignment completion signal, bound to the workspace's HEAD.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Completion {
     pub head: String,
     pub cleanup: bool,

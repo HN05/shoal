@@ -19653,7 +19653,18 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     );
     let undone = scoped(&fixture, &["undone"]);
     assert_eq!(undone["withdrawn"]["cleanup"], true);
-    assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
+    let refused = fixture.run(&[
+        "exec",
+        "issue-work",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "undone",
+    ]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("not marked done"),
+        "{refused:?}"
+    );
     let inspection = fixture.ok(&["inspect", "issue-work"]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);

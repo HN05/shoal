@@ -718,7 +718,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Workspaces(manager.find_workspaces(&target, within).await?)
         }
         Method::WorkspaceUndone { workspace } => {
-            Body::WithdrawnCompletion(manager.undo_done(&workspace).await?)
+            Body::Completion(manager.undo_done(&workspace).await?)
         }
         Method::AcknowledgePrUpdates {
             workspace,

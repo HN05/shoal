@@ -931,7 +931,6 @@ response_bodies! {
     ApiResponse(Vec<String>),
     Opened(crate::daemon::links::proposals::OpenOutcome),
     Completion(crate::model::Completion),
-    WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),

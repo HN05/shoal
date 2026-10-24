@@ -1,5 +1,5 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
 
@@ -33,7 +33,7 @@ impl Manager {
 
     /// Withdraw a recorded completion; only holds and open questions keep the
     /// workspace.
-    pub async fn undo_done(&self, selector: &str) -> Result<Option<Completion>> {
+    pub async fn undo_done(&self, selector: &str) -> Result<Completion> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
@@ -42,17 +42,16 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
-                let record: Option<String> = tx
+                let record: String = tx
                     .query_row(
                         "DELETE FROM workspace_completion WHERE workspace_id=?1 RETURNING record",
                         [&workspace.id],
                         |row| row.get(0),
                     )
-                    .optional()?;
+                    .optional()?
+                    .context("assignment is not marked done")?;
                 // An unreadable record stays in place for diagnosis.
-                let completion = record
-                    .map(|record| serde_json::from_str(&record))
-                    .transpose()?;
+                let completion = serde_json::from_str(&record)?;
                 tx.commit()?;
                 Ok(completion)
             })
@@ -103,15 +102,18 @@ impl Manager {
 
     /// Record `completion` and close the workspace's open questions, which
     /// the finished assignment waits on no longer, waking waits on them.
-    /// Returns the closed questions' numbers.
+    /// Refuses a completion already recorded. Returns the closed questions'
+    /// numbers.
     async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Vec<i64>> {
         let id = id.to_owned();
         let record = serde_json::to_string(completion)?;
+        let completion = completion.clone();
         let closed = self
             .store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
+                require_new_completion(&tx, &id, &completion)?;
                 tx.execute(
                     "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
@@ -273,6 +275,28 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Refuse to record `completion` again: a completion at another HEAD, with
+/// another cleanup choice or with a cleanup error replaces the recorded one.
+fn require_new_completion(
+    tx: &rusqlite::Transaction,
+    id: &str,
+    completion: &Completion,
+) -> Result<()> {
+    let record: Option<String> = tx
+        .query_row(
+            "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    // An unreadable record is replaced like any other.
+    let recorded = record.and_then(|record| serde_json::from_str::<Completion>(&record).ok());
+    if recorded.as_ref() == Some(completion) {
+        bail!("assignment is already marked done at this HEAD");
+    }
+    Ok(())
 }
 
 /// What the user is told about a completion and the questions it closed.
