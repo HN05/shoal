@@ -150,6 +150,7 @@ pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
     } else {
         timing::REQUEST_TIMEOUT
     };
+    let _span = crate::profile::span("call", || method.name());
     let (_stream, body) = timeout(duration, open(paths, method))
         .await
         .context("daemon request timed out")??;
@@ -169,6 +170,7 @@ pub async fn pages<T>(paths: &Paths, method: Method) -> Result<Vec<T>>
 where
     Vec<T>: TryFrom<Body, Error = anyhow::Error>,
 {
+    let _span = crate::profile::span("call", || method.name());
     let (mut reader, body) = open_buffered(paths, method).await?;
     let mut items = Vec::<T>::try_from(body)?;
     loop {

@@ -3,7 +3,8 @@ use anyhow::{Context, Result, bail};
 use std::{
     io,
     process::{Output, Stdio},
-    time::Duration,
+    sync::OnceLock,
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -12,6 +13,18 @@ use tokio::{
 
 /// Stderr kept in error messages; longer output would exceed a protocol frame.
 pub const MAX_DIAGNOSTIC_CHARS: usize = 8192;
+
+/// Arguments longer than this are cut to their end in the command an
+/// observer receives.
+const OBSERVED_ARGUMENT_CHARS: usize = 48;
+
+static OBSERVER: OnceLock<fn(&str, Duration)> = OnceLock::new();
+
+/// Report every later run to `observer` with its shortened command line and
+/// duration, for profiling. The first observer set stays.
+pub fn observe(observer: fn(&str, Duration)) {
+    let _ = OBSERVER.set(observer);
+}
 
 /// Captured subprocess with optional input and a deadline for the entire exchange.
 /// The child is killed if the deadline expires or the caller drops the future.
@@ -49,7 +62,18 @@ impl Run {
     }
 
     /// Capture bytes, leaving exit-status interpretation to the caller.
-    pub async fn capture(mut self) -> io::Result<Output> {
+    pub async fn capture(self) -> io::Result<Output> {
+        let Some(observer) = OBSERVER.get() else {
+            return self.run().await;
+        };
+        let command = summary(self.command.as_std());
+        let started = Instant::now();
+        let output = self.run().await;
+        observer(&command, started.elapsed());
+        output
+    }
+
+    async fn run(mut self) -> io::Result<Output> {
         let program = self
             .command
             .as_std()
@@ -112,6 +136,24 @@ impl Run {
     pub async fn output(self) -> Result<String> {
         String::from_utf8(self.checked().await?.stdout).context("tool output is not UTF-8")
     }
+}
+
+/// The program and its arguments, long ones cut to their end.
+fn summary(command: &std::process::Command) -> String {
+    std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|part| {
+            let part = part.to_string_lossy();
+            if part.chars().count() <= OBSERVED_ARGUMENT_CHARS {
+                return part.into_owned();
+            }
+            // The end of a path names the worktree or file.
+            let skipped = part.chars().count() - (OBSERVED_ARGUMENT_CHARS - 1);
+            let kept: String = part.chars().skip(skipped).collect();
+            format!("…{kept}")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 async fn capture_output(mut child: Child, limit: Option<usize>) -> io::Result<Output> {
@@ -340,5 +382,19 @@ mod tests {
         })
         .await
         .expect("timed-out child survived");
+    }
+
+    static OBSERVED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+    #[tokio::test]
+    async fn observer_receives_each_run_with_long_arguments_cut_to_their_end() {
+        observe(|command, _| OBSERVED.lock().unwrap().push(command.to_owned()));
+        let long = format!("{}{}", "x".repeat(10), "y".repeat(OBSERVED_ARGUMENT_CHARS));
+        let mut command = shell("exit 0");
+        command.args(["observed-run", &long]);
+        Run::new(command).capture().await.unwrap();
+        let cut = format!("…{}", "y".repeat(OBSERVED_ARGUMENT_CHARS - 1));
+        let expected = format!("/bin/sh -c exit 0 observed-run {cut}");
+        assert!(OBSERVED.lock().unwrap().contains(&expected));
     }
 }

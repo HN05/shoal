@@ -22,6 +22,7 @@ mod model;
 mod paths;
 mod presets;
 mod process;
+mod profile;
 mod protocol;
 mod removal;
 mod repository;
@@ -70,6 +71,7 @@ fn main() {
     unsafe { env::take_queue_entry() };
     // SAFETY: as above; only this process's own launch ends its session.
     unsafe { env::take_session_end() };
+    profile::start();
     run_cli(cli);
 }
 

@@ -74,6 +74,8 @@ pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
+/// Set to `1` to print timing lines for profiling Shoal itself.
+pub const PROFILE: &str = "SHOAL_PROFILE";
 /// Set to `1` to let a debug build change user-level files, for tests that run
 /// in a temporary home.
 pub const DEV_USER_FILES: &str = "SHOAL_DEV_USER_FILES";

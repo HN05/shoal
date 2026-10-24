@@ -247,6 +247,11 @@ async fn serve(
                 return protocol::write(&mut stream, &response).await;
             }
         };
+    let _span = if request.method.holds_connection() {
+        None
+    } else {
+        crate::profile::span("request", || request.method.name())
+    };
     let _slot = match server.capacity.admit(slot, &request.method) {
         Ok(slot) => slot,
         // Their clients take a reply as final but wait for a free slot this way.

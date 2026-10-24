@@ -782,6 +782,19 @@ pub enum Method {
 }
 
 impl Method {
+    /// The variant's protocol name, for timing lines.
+    pub fn name(&self) -> String {
+        match serde_json::to_value(self) {
+            Ok(serde_json::Value::String(name)) => name,
+            Ok(serde_json::Value::Object(fields)) => fields
+                .into_iter()
+                .next()
+                .map(|(name, _)| name)
+                .unwrap_or_default(),
+            _ => String::new(),
+        }
+    }
+
     /// Daemon administration, which must reach a daemon of any release.
     pub fn controls_daemon(&self) -> bool {
         matches!(self, Self::Status | Self::Shutdown | Self::ReloadConfig)
@@ -1247,6 +1260,16 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn method_names_are_their_protocol_tags() {
+        assert_eq!(Method::Status.name(), "status");
+        let watch = Method::WatchNotifications {
+            keep_unread: false,
+            after: 0,
+        };
+        assert_eq!(watch.name(), "watch_notifications");
+    }
 
     #[test]
     fn frame_pages_split_long_listings_in_order() {
