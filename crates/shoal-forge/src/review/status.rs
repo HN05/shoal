@@ -40,6 +40,17 @@ pub struct CheckResult {
     pub result: String,
 }
 
+impl CheckResult {
+    /// Whether the check ran and failed, so its job may have a log worth
+    /// reading; a cancelled check was stopped rather than failing.
+    pub fn failed(&self) -> bool {
+        matches!(
+            self.result.as_str(),
+            "failure" | "error" | "timed_out" | "startup_failure"
+        )
+    }
+}
+
 impl PrStatus {
     pub fn new(url: String, state: Option<PrState>) -> Self {
         Self {
@@ -173,6 +184,23 @@ pub(crate) fn github_reviews(pull: &serde_json::Value) -> Result<Vec<(String, Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checks_that_ran_and_failed_are_failed() {
+        let failed = |result: &str| {
+            CheckResult {
+                name: "rust".into(),
+                result: result.into(),
+            }
+            .failed()
+        };
+        for result in ["failure", "error", "timed_out", "startup_failure"] {
+            assert!(failed(result), "{result}");
+        }
+        for result in ["success", "cancelled", "in_progress", "skipped"] {
+            assert!(!failed(result), "{result}");
+        }
+    }
 
     #[test]
     fn rate_limited_checks_are_reported_as_unread() {

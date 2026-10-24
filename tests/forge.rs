@@ -2183,18 +2183,20 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
 }
 
 #[test]
-fn github_watch_points_at_job_logs_but_not_at_commit_statuses() {
+fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let job = "https://github.com/team/project/actions/runs/12/job/34";
     let external = "https://ci.example/build/1";
     let mut open = pull(8, "open", "Fix", &[]);
     open["head"]["sha"] = json!("head");
     fixture.respond(json!({
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "headRefName": "topic",
+        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
+            "author": {"login": "agent"}, "labels": [], "createdAt": "t0",
+            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
             "headRefOid": "head", "baseRefOid": "base", "commits": [], "comments": [],
             "reviews": [], "mergeable": "MERGEABLE", "statusCheckRollup": [
                 {"__typename": "CheckRun", "name": "rust", "status": "COMPLETED",
-                    "conclusion": "FAILURE", "detailsUrl": job},
+                    "conclusion": "TIMED_OUT", "detailsUrl": job},
                 {"__typename": "StatusContext", "context": "deploy", "state": "FAILURE",
                     "targetUrl": external}
             ]}},
@@ -2202,7 +2204,7 @@ fn github_watch_points_at_job_logs_but_not_at_commit_statuses() {
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
             "total_count": 1, "check_runs": [
-                {"name": "rust", "status": "completed", "conclusion": "failure", "details_url": job}
+                {"name": "rust", "status": "completed", "conclusion": "timed_out", "details_url": job}
             ]}},
         "GET repos/team/project/commits/head/status?per_page=100": {"body": {
             "total_count": 1, "statuses": [
@@ -2211,6 +2213,11 @@ fn github_watch_points_at_job_logs_but_not_at_commit_statuses() {
         "GET repos/team/project/actions/jobs/34/logs": {"body": "assertion failed\n"},
     }));
     fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
+    let views = fixture.ok(&["view", "pr", "--no-comments", "--workspace", "topic"]);
+    let logs = views[0]["check_logs"].as_array().unwrap();
+    assert_eq!(logs.len(), 1, "{views}");
+    assert_eq!(logs[0]["name"], "rust");
+    assert_eq!(logs[0]["text"], "assertion failed\n");
     let result = fixture.ok(&["watch", "pr", "--workspace", "topic", "--timeout", "60"]);
     let message = |name: &str| {
         result["updates"]
@@ -2224,7 +2231,7 @@ fn github_watch_points_at_job_logs_but_not_at_commit_statuses() {
     };
     let rust = message("rust");
     assert!(
-        rust.starts_with("rust: FAILURE; read the log with"),
+        rust.starts_with("rust: TIMED_OUT; read the log with"),
         "{rust}"
     );
     assert!(rust.contains("--check 'rust'"), "{rust}");

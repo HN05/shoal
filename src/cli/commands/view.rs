@@ -115,7 +115,7 @@ async fn read_failed_logs(
             continue;
         };
         for check in &pr.checks {
-            if !matches!(check.result.as_str(), "failure" | "error") {
+            if !check.failed() {
                 continue;
             }
             let result = client::request::<CheckLog>(

@@ -18,7 +18,7 @@ impl Manager {
         for index in 0..updates.len() {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
-            if !matches!(check.result.as_str(), "failure" | "error")
+            if !check.failed()
                 || !self
                     .pull_forge(&update.url)
                     .await
