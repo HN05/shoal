@@ -17671,6 +17671,42 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
 }
 
 #[test]
+#[cfg(target_os = "macos")]
+fn exported_scopes_request_simulator_approval_before_mutations() {
+    let config = SIM_CONFIG.replace(
+        "[simulators.profiles.phone]",
+        "[simulators.profiles.phone]\nrequires_approval=true",
+    );
+    let fixture = Fixture::with_tools(Some(&config), true);
+    let workspace = fixture.add("external");
+    let exported = fixture.ok(&["env", "external"]);
+    let values: std::collections::BTreeMap<String, String> =
+        serde_json::from_value(exported).unwrap();
+    let acquire = |args: &[&str]| {
+        fixture
+            .command()
+            .envs(&values)
+            .current_dir(workspace["path"].as_str().unwrap())
+            .args(["--json", "sim", "acquire"])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let pending = pending_approval(acquire(&["--reason", "test app"]));
+    fixture.ok(&["deny", &pending["id"].to_string()]);
+    fixture.ok(&["sim", "release", "default", "external"]);
+    let clean = pending_approval(acquire(&["--clean", "--reason", "isolate app state"]));
+    assert_eq!(clean["specification"]["clean"], true);
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    assert!(
+        events
+            .lines()
+            .all(|line| serde_json::from_str::<Value>(line).unwrap()[0] == "list")
+    );
+    assert!(!fixture.root.path().join("sim-devices.json").exists());
+}
+
+#[test]
 fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     let fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
     fixture.add("agent");

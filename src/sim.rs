@@ -15,7 +15,7 @@ use audit::CleanRequest;
 use simctl::Inventory;
 
 use crate::{
-    daemon::{allocation::Allocation, approvals, queue, workspace::Manager},
+    daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
     time::unix_seconds,
@@ -328,7 +328,7 @@ impl Manager {
         &self,
         selector: &str,
         request: SimRequest,
-        execution_id: Option<String>,
+        caller: Option<&Caller>,
     ) -> Result<Allocation<Box<Simulator>>> {
         // Join before the gate: waiting behind another boot keeps the place.
         let workspace_id = self.workspace(selector).await?.id;
@@ -340,7 +340,9 @@ impl Manager {
         );
         let _guard = self.simulator_gate.lock().await;
         let workspace = self.workspace(selector).await?;
-        let scoped = execution_id.is_some();
+        // An exported scope has no execution, but its requests still need approval.
+        let scoped = caller.is_some();
+        let execution_id = caller.and_then(|c| c.execution_id().map(str::to_owned));
         let mut audit = if request.clean {
             Some(
                 self.start_clean_request(&workspace, &request, execution_id)

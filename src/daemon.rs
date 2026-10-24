@@ -1047,13 +1047,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             let owner = manager.workspace_filter(workspace.as_deref()).await?;
             Body::Simulators(manager.list_simulators(owner.as_deref()).await?)
         }
-        Method::SimAcquire { workspace, request } => {
-            let execution_id = caller.and_then(|c| c.execution_id().map(str::to_owned));
-            manager
-                .acquire_simulator(&workspace, request, execution_id)
-                .await?
-                .into_body(|sim| Body::Simulator(*sim))
-        }
+        Method::SimAcquire { workspace, request } => manager
+            .acquire_simulator(&workspace, request, caller)
+            .await?
+            .into_body(|sim| Body::Simulator(*sim)),
         Method::SimRelease { workspace, name } => {
             manager.release_simulator(&workspace, name).await?;
             Body::Ok
