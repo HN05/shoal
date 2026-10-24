@@ -138,8 +138,8 @@ their idle delay, then empties [shared caches](#shared-caches) there nothing is
 using, until enough space is available. A repository with idle
 cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 notifications and the `disk_space` event cause; a pass that cannot free enough
-space repeats at most every 30 seconds. While space stays below
-`disk.stop_free_gib` after cleanup, the daemon stops every running agent as
+space, or fails, repeats at most every 30 seconds. While space stays below
+`disk.stop_free_gib` after cleanup, whether or not it failed, the daemon stops every running agent as
 memory protection does, then every other tracked execution as `shoal stop` does,
 including ones started later, recording `agent_stopped` notifications, or
 `stop_failed` when stopping fails. Agents restore under the recovery rules below

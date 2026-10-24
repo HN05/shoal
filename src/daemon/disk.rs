@@ -116,9 +116,7 @@ impl Monitor {
             .is_none_or(|last| now.duration_since(last) >= CLEANUP_INTERVAL)
         {
             for filesystem in &mut low {
-                delete_xcode_leftovers(manager, filesystem, &available).await?;
-                free_space(manager, settings, &workspaces, filesystem, &available).await?;
-                empty_caches(manager, settings, filesystem, &available).await?;
+                clean_up(manager, settings, &workspaces, filesystem, &available).await;
             }
             let exhausted = low
                 .iter()
@@ -192,6 +190,35 @@ fn sample(
     (filesystems, complete)
 }
 
+/// Free space on the filesystem, from what loses nothing to idle workspaces
+/// and unused caches. A failed step ends the pass with a fresh reading, so a
+/// cleanup failure never keeps critical space from stopping executions.
+async fn clean_up(
+    manager: &Manager,
+    settings: &Disk,
+    workspaces: &[Workspace],
+    filesystem: &mut Filesystem,
+    available: impl Fn(&Path) -> io::Result<u64>,
+) {
+    let cleaned = async {
+        delete_xcode_leftovers(manager, filesystem, &available).await?;
+        free_space(manager, settings, workspaces, filesystem, &available).await?;
+        empty_caches(manager, settings, filesystem, &available).await
+    }
+    .await;
+    if let Err(error) = cleaned {
+        log!(
+            "disk space cleanup at {}: {error:#}",
+            filesystem.path.display()
+        );
+        // Without a fresh reading, the earlier one from this check stands.
+        match available(&filesystem.path) {
+            Ok(free) => filesystem.free = free,
+            Err(error) => log!("disk space reading {}: {error}", filesystem.path.display()),
+        }
+    }
+}
+
 /// Delete the Xcode data that removed workspaces left on the filesystem,
 /// which loses nothing, so it goes before any workspace.
 async fn delete_xcode_leftovers(
@@ -247,9 +274,16 @@ async fn free_space(
                 )
             }
             Err(error) => {
-                manager
+                // A full disk can fail this write too; the notice still goes out.
+                if let Err(recording) = manager
                     .record_retained(&workspace.id, EventCause::DiskSpace, &error)
-                    .await?;
+                    .await
+                {
+                    log!(
+                        "disk space cleanup could not record retaining {}: {recording:#}",
+                        workspace.name
+                    );
+                }
                 log!("disk space cleanup retained {}: {error:#}", workspace.name);
                 (
                     NotificationKind::CleanupFailed,
@@ -673,6 +707,70 @@ mod tests {
         assert!(!layout.root().join("trash").exists());
         // The stop decision used the reading taken after the purge.
         assert_eq!(readings.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test]
+    async fn failed_cleanup_still_stops_executions_on_critical_space() {
+        let (root, manager) = manager().await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let busy = manager
+            .create_workspace(&repo.id, "busy".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .create_workspace(&repo.id, "idle".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .begin_execution(
+                &busy.id,
+                None,
+                crate::daemon::workspace::ExecutionKind::Command,
+                None,
+            )
+            .await
+            .unwrap();
+        let readings = AtomicUsize::new(0);
+        let critical = manager.config().overload.disk.stop_free_bytes() - 1;
+        let available = |_: &Path| {
+            // The reading after removing the idle workspace fails.
+            match readings.fetch_add(1, Ordering::Relaxed) {
+                1 => Err(io::Error::other("unreadable")),
+                _ => Ok(critical),
+            }
+        };
+        let start = Instant::now();
+        let mut monitor = Monitor::default();
+        monitor.check(&manager, start, &available).await.unwrap();
+        let names = manager
+            .list_workspaces()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|workspace| workspace.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["busy"]);
+        let stops = manager
+            .notifications(true, 10)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|notification| {
+                matches!(
+                    notification.kind,
+                    NotificationKind::AgentStopped | NotificationKind::StopFailed
+                )
+            })
+            .count();
+        assert_eq!(stops, 1);
+        // The failed pass waits for the interval like one that freed too little.
+        let before = readings.load(Ordering::Relaxed);
+        monitor.check(&manager, start, &available).await.unwrap();
+        assert_eq!(readings.load(Ordering::Relaxed), before + 1);
     }
 
     #[tokio::test]
