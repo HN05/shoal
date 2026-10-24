@@ -163,7 +163,7 @@ async fn prepare_resume(
     execution_id: &str,
     workspace_id: &str,
 ) -> Result<Action> {
-    let ports = manager.inspect_workspace(workspace_id).await?.ports;
+    let ports = manager.list_ports(Some(workspace_id)).await?;
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))
     } else {
