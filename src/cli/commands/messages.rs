@@ -31,10 +31,12 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
     ctx.show(&messages, |messages| {
         let palette = Palette::stdout(ctx.json);
         for message in messages {
+            let time = crate::time::local_minutes(message.created_at);
+            let indent = " ".repeat(time.chars().count() + 2);
             outln!(
                 "{}  {}",
-                palette.paint(Style::Muted, crate::time::local_minutes(message.created_at)),
-                message.message
+                palette.paint(Style::Muted, time),
+                hanging_indent(&message.message, &indent)
             );
         }
         if messages.is_empty() {
@@ -260,7 +262,7 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
             updates
                 .messages
                 .iter()
-                .map(|message| format!("- {}", message.message)),
+                .map(|message| format!("- {}", hanging_indent(&message.message, "  "))),
         );
     }
     if !updates.updates.is_empty() {
@@ -268,6 +270,22 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
         lines.extend(updates.updates.iter().map(|update| format!("- {update}")));
     }
     lines.join("\n")
+}
+
+/// `text` with its later lines indented by `indent`, so a multi-line message
+/// reads as one entry of a list.
+pub(super) fn hanging_indent(text: &str, indent: &str) -> String {
+    text.lines()
+        .enumerate()
+        .map(|(n, line)| {
+            if n == 0 || line.is_empty() {
+                line.to_owned()
+            } else {
+                format!("{indent}{line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Claude Code and Codex read `additionalContext` for the event named in the
@@ -306,6 +324,14 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
 mod tests {
     use super::*;
     use crate::forge::updates::{Update, UpdateKind};
+
+    #[test]
+    fn multi_line_messages_stay_one_entry() {
+        assert_eq!(
+            hanging_indent("Move commits:\n\nabc123 to api\ndef456 to cli", "  "),
+            "Move commits:\n\n  abc123 to api\n  def456 to cli"
+        );
+    }
 
     #[test]
     fn hook_output_names_the_event_it_answers() {

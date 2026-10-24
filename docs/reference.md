@@ -2562,9 +2562,11 @@ shoal message "Stop the dev server" [--workspace W]  # Queue one for a workspace
 shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
-`shoal message` queues a one-line message, with the same limits as `notify`, for
-the agents working in a workspace. Agents read messages with `shoal messages` or
-`shoal watch`, which delete each message once they have printed it.
+`shoal message` queues a message of at most 8 KiB, without control characters
+other than newlines and tabs, for the agents working in a workspace; output
+indents a message's later lines under its first. Agents read messages with
+`shoal messages` or `shoal watch`, which delete each message once they have
+printed it.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`

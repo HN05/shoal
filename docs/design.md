@@ -860,7 +860,9 @@ removal uses its own hooks. Desktop or push delivery was considered and not adop
 
 Messages to agents travel the other way: the user queues them for a workspace,
 and the daemon holds them until an agent in that workspace reads them, then
-deletes them. Agents read messages through Shoal commands, and a pending watch
+deletes them. Unlike notifications, which a terminal notification shows as one
+line, they may span lines, because instructions to an agent often need several.
+Agents read messages through Shoal commands, and a pending watch
 ends for a new message. Messages and item activity are pushed rather than polled by the agent,
 because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a

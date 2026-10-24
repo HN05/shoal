@@ -2104,7 +2104,10 @@ pub(super) async fn watch_items(
     let updates = crate::daemon::links::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
-            outln!("Message: {}", message.message);
+            outln!(
+                "Message: {}",
+                super::messages::hanging_indent(&message.message, "         ")
+            );
         }
         for update in &updates.updates {
             outln!("{update}");

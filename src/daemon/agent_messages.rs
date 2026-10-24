@@ -68,7 +68,7 @@ impl Manager {
     /// Queue a message for the workspace's agents. An identical unread message
     /// is not repeated.
     pub async fn send_agent_message(&self, selector: &str, message: String) -> Result<()> {
-        crate::validate::message(&message)?;
+        crate::validate::agent_message(&message)?;
         let workspace = self.workspace(selector).await?;
         self.queue_agent_message(&workspace.id, message).await
     }
@@ -181,15 +181,31 @@ mod tests {
             .send_agent_message(&workspace.name, "Rebase onto main".into())
             .await
             .unwrap();
-        assert!(
-            manager
-                .send_agent_message(&workspace.name, "two\nlines".into())
-                .await
-                .is_err()
-        );
+        manager
+            .send_agent_message(&workspace.name, "Move:\n\tabc123 to api".into())
+            .await
+            .unwrap();
+        for rejected in [
+            "\x1b]9;spoof\x07".to_owned(),
+            "x".repeat(crate::validate::MAX_AGENT_MESSAGE_LEN + 1),
+        ] {
+            assert!(
+                manager
+                    .send_agent_message(&workspace.name, rejected)
+                    .await
+                    .is_err()
+            );
+        }
         let messages = manager.agent_messages(&workspace.name).await.unwrap();
         let texts: Vec<_> = messages.iter().map(|m| m.message.as_str()).collect();
-        assert_eq!(texts, ["Stop the dev server", "Rebase onto main"]);
+        assert_eq!(
+            texts,
+            [
+                "Stop the dev server",
+                "Rebase onto main",
+                "Move:\n\tabc123 to api"
+            ]
+        );
         manager
             .mark_agent_messages_delivered(&workspace.name, vec![messages[0].id])
             .await
@@ -203,7 +219,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             manager.agent_messages(&workspace.name).await.unwrap().len(),
-            2
+            3
         );
     }
 
