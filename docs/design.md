@@ -329,8 +329,8 @@ setup or hooks. It takes normal cleanup ownership. Reopening verifies its record
 adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.
 `adopt --copy` records a preparing workspace before creating a fresh worktree
 under the repository's Shoal directory, copies the source worktree's files while
-leaving the source in place, and adopts the copy on an available branch derived
-from the source branch; failures retain a failed record for normal removal.
+leaving the source in place, removes checkout files the source deleted at any
+depth, and adopts the copy on an available branch derived from the source branch; failures retain a failed record for normal removal.
 
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching

@@ -9,21 +9,40 @@ use std::{
 
 /// Copy the contents of a worktree without copying its Git administrative
 /// file. The destination may already contain the clean checkout created for
-/// the copied branch.
+/// the copied branch; entries the source lacks are removed at every depth, so
+/// deletions in the source stay deleted.
 pub fn copy_worktree(source: &Path, destination: &Path) -> io::Result<()> {
+    mirror_children(source, destination, |name| name != ".git")
+}
+
+/// Make `destination`'s children match `source`'s, considering only names
+/// `include` accepts on either side.
+fn mirror_children(
+    source: &Path,
+    destination: &Path,
+    include: fn(&OsStr) -> bool,
+) -> io::Result<()> {
+    remove_entries_missing_from(source, destination, include)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        if include(&entry.file_name()) {
+            copy_entry(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_entries_missing_from(
+    source: &Path,
+    destination: &Path,
+    include: fn(&OsStr) -> bool,
+) -> io::Result<()> {
     for entry in fs::read_dir(destination)? {
         let entry = entry?;
-        if entry.file_name() != ".git" && !source.join(entry.file_name()).symlink_metadata().is_ok()
+        if include(&entry.file_name()) && source.join(entry.file_name()).symlink_metadata().is_err()
         {
             remove_existing(&entry.path())?;
         }
-    }
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        if entry.file_name() == ".git" {
-            continue;
-        }
-        copy_entry(&entry.path(), &destination.join(entry.file_name()))?;
     }
     Ok(())
 }
@@ -39,10 +58,7 @@ fn copy_entry(source: &Path, destination: &Path) -> io::Result<()> {
             remove_existing(destination)?;
         }
         fs::create_dir_all(destination)?;
-        for entry in fs::read_dir(source)? {
-            let entry = entry?;
-            copy_entry(&entry.path(), &destination.join(entry.file_name()))?;
-        }
+        mirror_children(source, destination, |_| true)?;
         fs::set_permissions(destination, metadata.permissions())?;
     } else {
         // Copying onto an existing path would write through a symlink or a
@@ -446,6 +462,38 @@ mod tests {
         assert_eq!(move_directory(&source, &renamed).await?, Moved::Renamed);
         assert!(!source.exists());
         assert_eq!(fs::read_to_string(renamed.join("nested/file"))?, "contents");
+        Ok(())
+    }
+
+    #[test]
+    fn copying_a_worktree_removes_entries_deleted_at_any_depth() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source");
+        fs::create_dir_all(source.join("nested"))?;
+        fs::write(source.join(".git"), "gitdir: source")?;
+        fs::write(source.join("nested/kept"), "changed")?;
+
+        // The clean checkout still has what the source deleted.
+        let destination = temp.path().join("destination");
+        fs::create_dir_all(destination.join("nested/gone/deeper"))?;
+        fs::write(destination.join(".git"), "gitdir: destination")?;
+        fs::write(destination.join("removed"), "old")?;
+        fs::write(destination.join("nested/kept"), "old")?;
+        fs::write(destination.join("nested/deleted"), "old")?;
+        fs::write(destination.join("nested/gone/deeper/file"), "old")?;
+
+        copy_worktree(&source, &destination)?;
+        assert_eq!(
+            fs::read_to_string(destination.join(".git"))?,
+            "gitdir: destination"
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("nested/kept"))?,
+            "changed"
+        );
+        assert!(!destination.join("removed").exists());
+        assert!(!destination.join("nested/deleted").exists());
+        assert!(!destination.join("nested/gone").exists());
         Ok(())
     }
 

@@ -15466,6 +15466,24 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
             source.to_str().unwrap(),
         ],
     );
+    // A tracked file deleted from a directory that remains stays deleted.
+    fs::create_dir(source.join("nested")).unwrap();
+    fs::write(source.join("nested/kept"), "kept\n").unwrap();
+    fs::write(source.join("nested/deleted"), "deleted\n").unwrap();
+    git(&source, &["add", "nested"]);
+    git(
+        &source,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "-m",
+            "Add nested files",
+        ],
+    );
+    fs::remove_file(source.join("nested/deleted")).unwrap();
     fs::write(source.join("tracked"), "changed\n").unwrap();
     fs::write(source.join("untracked"), "new\n").unwrap();
     fs::remove_file(source.join(".gitignore")).unwrap();
@@ -15482,6 +15500,11 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
         "new\n"
     );
     assert!(!destination.join(".gitignore").exists());
+    assert_eq!(
+        fs::read_to_string(destination.join("nested/kept")).unwrap(),
+        "kept\n"
+    );
+    assert!(!destination.join("nested/deleted").exists());
     assert_eq!(
         fs::read_to_string(source.join("tracked")).unwrap(),
         "changed\n"
