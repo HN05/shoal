@@ -178,7 +178,10 @@ mod tests {
     #[test]
     fn pins_set_outright_replace_the_ones_yet_to_load() {
         let _pins = PIN_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
-        learn_pins(|| panic!("pins set outright replace these"));
+        // A reader in another test may load these before the pins below
+        // replace them, so they must not fail it; they only show if `pin`
+        // keeps them pending.
+        learn_pins(|| vec![("outright.pinned.example".into(), ForgeKind::GitLab)]);
         pin(vec![("outright.pinned.example".into(), ForgeKind::Forgejo)]);
         assert_eq!(learned("outright.pinned.example"), Some(ForgeKind::Forgejo));
     }
