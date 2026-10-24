@@ -28,7 +28,7 @@ use crate::{
         items::action::{Action, Edit, Sent},
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
-        items::item::{Item, ItemState, Opened},
+        items::item::{Item, Opened},
         items::link::ItemKind,
     },
     model::Workspace,
@@ -388,18 +388,8 @@ impl Manager {
             .proposed_issue()
             .context("the issue proposal has no issue")?
             .clone();
-        let (number, follow_up) = forge.post_issue(account, &proposed.issue).await?;
-        let url = forge.item_url(ItemKind::Issue, number)?;
-        self.keep_posted(request, &url, follow_up).await?;
-        let item = Item {
-            kind: ItemKind::Issue,
-            number,
-            url,
-            title: proposed.issue.title,
-            state: ItemState::Open,
-            labels: Vec::new(),
-            pr: None,
-        };
+        let (item, follow_up) = forge.post_issue(account, &proposed.issue).await?;
+        self.keep_posted(request, &item.url, follow_up).await?;
         Ok(self
             .record_proposed_issue(workspace, proposed.link, &item)
             .await)
@@ -538,9 +528,8 @@ impl Manager {
                     .link_open_pull(workspace, &forge, &account, number)
                     .await;
             }
-            let (number, follow_up) = forge.post_pull(&account, &proposed.pull).await?;
-            let url = forge.item_url(ItemKind::Pr, number)?;
-            self.keep_posted(request, &url, follow_up).await?;
+            let (posted, follow_up) = forge.post_pull(&account, &proposed.pull).await?;
+            self.keep_posted(request, &posted.url, follow_up).await?;
         } else {
             ensure_pull_head(&forge, &account, request, workspace).await?;
         }

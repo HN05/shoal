@@ -12,7 +12,7 @@ use crate::{
     items::{
         action::{Action, Edit},
         attach::{Attachment, Pending},
-        item::Item,
+        item::{Item, ItemState, PrSummary},
         link::ItemKind,
     },
     transport::api::Request,
@@ -141,14 +141,14 @@ impl ForgeRepo {
 
     /// Open the PR and return it as the forge reports it.
     pub async fn create_pull(&self, account: &Account, pull: &NewPull) -> Result<Item> {
-        let (number, follow_up) = self.post_pull(account, pull).await?;
-        self.finish_item(account, ItemKind::Pr, number, &follow_up)
+        let (posted, follow_up) = self.post_pull(account, pull).await?;
+        self.finish_item(account, ItemKind::Pr, posted.number, &follow_up)
             .await
     }
 
-    /// Post the PR and return its number with the edit that finishes it: its
-    /// labels, reviewers and files the forge keeps with the item.
-    pub async fn post_pull(&self, account: &Account, pull: &NewPull) -> Result<(u64, Edit)> {
+    /// Post the PR and return it as posted with the edit that finishes it:
+    /// its labels, reviewers and files the forge keeps with the item.
+    pub async fn post_pull(&self, account: &Account, pull: &NewPull) -> Result<(Item, Edit)> {
         self.require_all(pull.needs())?;
         let per_item = self.check_uploads(account, &pull.attachments).await?;
         let (body, pending) = self
@@ -162,13 +162,21 @@ impl ForgeRepo {
             .send(account, &self.create_pull_request(&pull))
             .await
             .context("could not open the PR")?;
-        let number = self.created_number(&created)?;
+        let summary = PrSummary {
+            head: pull.head,
+            base: pull.base,
+            draft: pull.draft,
+        };
+        let posted = Item {
+            pr: Some(summary),
+            ..self.posted_item(ItemKind::Pr, &created, pull.title, Vec::new())?
+        };
         let follow_up = Edit {
             add_labels: pull.labels,
             add_reviewers: pull.reviewers,
             ..pending_edit(pending)
         };
-        Ok((number, follow_up))
+        Ok((posted, follow_up))
     }
 
     fn create_pull_request(&self, pull: &NewPull) -> Request {
@@ -177,15 +185,15 @@ impl ForgeRepo {
 
     /// Open the issue and return it as the forge reports it.
     pub async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
-        let (number, follow_up) = self.post_issue(account, issue).await?;
-        self.finish_item(account, ItemKind::Issue, number, &follow_up)
+        let (posted, follow_up) = self.post_issue(account, issue).await?;
+        self.finish_item(account, ItemKind::Issue, posted.number, &follow_up)
             .await
     }
 
-    /// Post the issue and return its number with the edit that finishes it:
+    /// Post the issue and return it as posted with the edit that finishes it:
     /// Forgejo's labels, which it takes only by ID on creation, and files the
     /// forge keeps with the item.
-    pub async fn post_issue(&self, account: &Account, issue: &NewIssue) -> Result<(u64, Edit)> {
+    pub async fn post_issue(&self, account: &Account, issue: &NewIssue) -> Result<(Item, Edit)> {
         self.require_all(issue.needs())?;
         let per_item = self.check_uploads(account, &issue.attachments).await?;
         let (body, pending) = self
@@ -199,17 +207,37 @@ impl ForgeRepo {
             .send(account, &self.issue_request(&issue))
             .await
             .context("could not open the issue")?;
-        let number = self.created_number(&created)?;
-        let add_labels = if self.kind.labels_issue_after_opening() {
-            issue.labels
+        let (posted_labels, add_labels) = if self.kind.labels_issue_after_opening() {
+            (Vec::new(), issue.labels)
         } else {
-            Vec::new()
+            (issue.labels, Vec::new())
         };
+        let posted = self.posted_item(ItemKind::Issue, &created, issue.title, posted_labels)?;
         let follow_up = Edit {
             add_labels,
             ..pending_edit(pending)
         };
-        Ok((number, follow_up))
+        Ok((posted, follow_up))
+    }
+
+    /// The open item a creation response describes, with what was posted.
+    fn posted_item(
+        &self,
+        kind: ItemKind,
+        created: &Value,
+        title: String,
+        labels: Vec<String>,
+    ) -> Result<Item> {
+        let number = self.created_number(created)?;
+        Ok(Item {
+            kind,
+            number,
+            url: self.item_url(kind, number)?,
+            title,
+            state: ItemState::Open,
+            labels,
+            pr: None,
+        })
     }
 
     /// Apply the edit [`Self::post_issue`] or [`Self::post_pull`] left to
