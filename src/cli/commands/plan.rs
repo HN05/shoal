@@ -3,7 +3,7 @@
 //! an implementing agent receives.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{
     chat::{self, Topic},
@@ -13,7 +13,7 @@ use crate::{
     agent::Agent,
     cli::{context::Context, ui},
     config,
-    forge::items::link::ItemKind,
+    forge::items::{item::Item, link::ItemKind, list::MAX_LIMIT},
     model::Repository,
 };
 
@@ -74,12 +74,22 @@ async fn labelled(
     let issue = match pick {
         Pick::Picker => return ui::pick_item(ctx, "Issue> ", &kind, issues),
         Pick::Newest => issues.first(),
-        Pick::Oldest => issues.last(),
+        Pick::Oldest => oldest(&issues, &kind)?,
     };
     Ok(issue
         .with_context(|| format!("no open {kind}"))?
         .number
         .to_string())
+}
+
+/// The last of `issues`, listed newest first, unless the listing stopped at
+/// its limit before reaching the oldest.
+fn oldest<'a>(issues: &'a [Item], kind: &str) -> Result<Option<&'a Item>> {
+    ensure!(
+        issues.len() < MAX_LIMIT,
+        "the forge lists only the newest {MAX_LIMIT} open {kind}; name the oldest issue instead"
+    );
+    Ok(issues.last())
 }
 
 /// A chat that plans `issue`, reopened in a new tab by the issue's URL.
@@ -143,6 +153,26 @@ mod tests {
             planned_label: planned.map(str::to_owned),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_oldest_issue_is_refused_beyond_the_listing_limit() {
+        let item = |number: u64| -> Item {
+            serde_json::from_value(serde_json::json!({
+                "kind": "issue", "number": number, "url": "url", "title": "title",
+                "state": "open", "labels": [],
+            }))
+            .unwrap()
+        };
+        let mut issues: Vec<_> = (0..MAX_LIMIT as u64 - 1).rev().map(item).collect();
+        assert_eq!(oldest(&issues, "issues").unwrap().unwrap().number, 0);
+        issues.insert(0, item(MAX_LIMIT as u64));
+        let error = oldest(&issues, "issues").unwrap_err().to_string();
+        assert!(
+            error.contains("only the newest 1000 open issues"),
+            "{error}"
+        );
+        assert!(oldest(&[], "issues").unwrap().is_none());
     }
 
     #[test]

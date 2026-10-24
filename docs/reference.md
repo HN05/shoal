@@ -810,7 +810,8 @@ receiving their events gives you the notifications they stand for.
 starts a [chat](#chats) that settles an issue's plan with you before anyone
 implements it. The issue is a number or URL; without one, a picker offers the
 open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
-one from either end instead. The repository follows `shoal review --issue`, and
+one from either end instead; `--oldest` is refused when more than 1,000 are open,
+since the forge lists only the newest 1,000. The repository follows `shoal review --issue`, and
 the agent, tab and session follow `shoal chat`, with a tab labelled
 `<repo>#<number> plan`. Instead of waiting for you, the agent starts on the
 issue: it checks it against the default branch, talks the open points through
