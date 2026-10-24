@@ -89,7 +89,12 @@ fn run_cli(cli: Cli) {
 
 async fn run_commands(cli: Cli) {
     let json_output = cli.json;
-    match cli::commands::run(cli).await {
+    // Output without a final newline is still buffered, and the flush on exit
+    // ignores a closed reader, so flush it here where that reaches the error.
+    let result = cli::commands::run(cli)
+        .await
+        .and_then(|code| stdout::flush().map(|()| code));
+    match result {
         Ok(code) => std::process::exit(code),
         Err(error) if error.downcast_ref::<cli::ui::SelectionCanceled>().is_some() => {
             std::process::exit(130)

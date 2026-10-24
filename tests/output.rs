@@ -160,6 +160,34 @@ fn a_closed_stdout_ends_commands_quietly() {
     }
 }
 
+// Output without a final newline stays buffered until the command exits.
+#[test]
+fn a_closed_stdout_ends_unterminated_output_quietly() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = support::fake_daemon::bind_fake_daemon(root.path());
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        support::fake_daemon::answer(stream, |_| {
+            serde_json::json!({
+                "type": "repository_config",
+                "data": {"repository_id": "test", "toml": "focus=true"}
+            })
+        });
+    });
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let output = support::cli(root.path())
+        .args(["repo", "config", "/test"])
+        .stdin(Stdio::null())
+        .stdout(writer)
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert_eq!(output.status.code(), Some(141), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+}
+
 #[test]
 fn repository_progress_respects_output_mode_and_clears_before_errors() {
     let success = serde_json::json!({
