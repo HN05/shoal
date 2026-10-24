@@ -18562,9 +18562,15 @@ cat >/dev/null
             let config = fs::read_to_string(root.join("curl-stdin")).unwrap();
             assert_eq!(config, "header = \"Authorization: token secret123\"\n");
         }
+        // A PR activity lookup that failed around the restart may report
+        // before the update the restack queued.
         let updates = fixture.ok(&["watch", "pr", "--workspace", "upper", "--timeout", "1"]);
-        let update = &updates["updates"][0];
-        assert_eq!(update["kind"], "base_merged");
+        let update = updates["updates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|update| update["kind"] == "base_merged")
+            .unwrap_or_else(|| panic!("{updates}"));
         let message = update["message"].as_str().unwrap();
         assert!(
             message.contains("Shoal retargeted this PR to main"),
