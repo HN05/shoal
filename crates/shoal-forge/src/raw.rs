@@ -21,11 +21,65 @@ pub struct RawRequest {
     pub body: Option<Value>,
 }
 
+impl RawRequest {
+    /// Refuse a path that is empty, names another host or climbs out of the
+    /// API root, before any repository is known.
+    pub fn check(&self) -> Result<()> {
+        let path = self.path.trim_start_matches('/');
+        let route = path.split(['?', '#']).next().unwrap_or_default();
+        ensure!(!route.is_empty(), "the API path is empty");
+        ensure!(
+            !path.contains("://") && !path.chars().any(|c| c.is_whitespace() || c.is_control()),
+            "the API path must be relative to the forge's API root, without spaces"
+        );
+        ensure!(
+            !decoded(route)
+                .split(['/', '\\'])
+                .any(|part| matches!(part, "." | "..")),
+            "the API path must not contain `.` or `..` segments"
+        );
+        Ok(())
+    }
+}
+
+/// `text` with percent-encoding undone until nothing changes, as servers
+/// and the proxies before them may each decode a path before removing its
+/// dot segments.
+fn decoded(text: &str) -> String {
+    let mut text = text.to_owned();
+    loop {
+        let bytes = text.as_bytes();
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut at = 0;
+        while at < bytes.len() {
+            let hex = bytes
+                .get(at + 1..at + 3)
+                .and_then(|hex| std::str::from_utf8(hex).ok())
+                .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+            match (bytes[at], hex) {
+                (b'%', Some(byte)) => {
+                    out.push(byte);
+                    at += 3;
+                }
+                (byte, _) => {
+                    out.push(byte);
+                    at += 1;
+                }
+            }
+        }
+        let next = String::from_utf8_lossy(&out).into_owned();
+        if next == text {
+            return text;
+        }
+        text = next;
+    }
+}
+
 impl ForgeRepo {
     /// The forge's JSON response to `raw`, sent as `account`; null for an
     /// empty one.
     pub async fn raw(&self, account: &Account, raw: &RawRequest) -> Result<Value> {
-        let endpoint = self.raw_endpoint(&raw.path)?;
+        let endpoint = self.raw_endpoint(raw)?;
         let mut request = Request::new(raw.method, endpoint, raw.body.clone());
         if raw.method == HttpMethod::Get {
             request = request.repeatable();
@@ -33,27 +87,14 @@ impl ForgeRepo {
         self.send(account, &request).await
     }
 
-    /// `path` relative to the API root, with `{owner}` and `{repo}` filled in
-    /// from this repository. It stays under the root, so it cannot name
-    /// another host or climb out of the API.
-    fn raw_endpoint(&self, path: &str) -> Result<String> {
-        let path = path.trim_start_matches('/');
-        let route = path.split(['?', '#']).next().unwrap_or_default();
-        ensure!(!route.is_empty(), "the API path is empty");
-        ensure!(
-            !path.contains("://") && !path.chars().any(|c| c.is_whitespace() || c.is_control()),
-            "the API path must be relative to the forge's API root, without spaces"
-        );
-        // A server may decode `%2e` before it removes dot segments.
-        ensure!(
-            route.split('/').all(|part| !matches!(
-                part.to_ascii_lowercase().replace("%2e", ".").as_str(),
-                "." | ".."
-            )),
-            "the API path must not contain `.` or `..` segments"
-        );
+    /// The path of `raw` relative to the API root, with `{owner}` and
+    /// `{repo}` filled in from this repository.
+    fn raw_endpoint(&self, raw: &RawRequest) -> Result<String> {
+        raw.check()?;
         let (owner, repo) = self.path.rsplit_once('/').unwrap_or(("", &self.path));
-        Ok(path
+        Ok(raw
+            .path
+            .trim_start_matches('/')
             .replace("{owner}", &encode(owner, false))
             .replace("{repo}", &encode(repo, false)))
     }
@@ -120,6 +161,14 @@ mod tests {
         assert_eq!(input, r#"{"description":"new"}"#);
     }
 
+    fn get(path: &str) -> RawRequest {
+        RawRequest {
+            method: HttpMethod::Get,
+            path: path.into(),
+            body: None,
+        }
+    }
+
     #[test]
     fn placeholders_name_the_repository_on_every_forge() {
         for (remote, path, endpoint) in [
@@ -147,7 +196,7 @@ mod tests {
             ("git@github.com:team/repo.git", "user", "user"),
         ] {
             let repo = ForgeRepo::parse(remote).unwrap();
-            assert_eq!(repo.raw_endpoint(path).unwrap(), endpoint, "{remote}");
+            assert_eq!(repo.raw_endpoint(&get(path)).unwrap(), endpoint, "{remote}");
         }
     }
 
@@ -163,16 +212,22 @@ mod tests {
             "repos/./team",
             "repos/%2e%2E/user",
             "repos/.%2e",
+            "repos/..%2f..%2fuser",
+            "repos/..%5Cuser",
+            "repos/%252e%252e/user",
             "repos/team/repo issues",
             "repos/team\n",
         ] {
-            assert!(repo.raw_endpoint(path).is_err(), "{path:?}");
+            assert!(get(path).check().is_err(), "{path:?}");
         }
         // A query or fragment may hold dots.
         assert_eq!(
-            repo.raw_endpoint("repos/team/repo/contents?ref=..")
+            repo.raw_endpoint(&get("repos/team/repo/contents?ref=.."))
                 .unwrap(),
             "repos/team/repo/contents?ref=.."
         );
+        // Encoded separators that name no dot segment stay, as GitLab needs.
+        assert!(get("projects/group%2Fsub%2Fproject").check().is_ok());
+        assert!(get("repos/team/repo/contents/a%2E%2Eb").check().is_ok());
     }
 }
