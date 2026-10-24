@@ -22,6 +22,12 @@ struct CreationOutput {
     path: PathBuf,
 }
 
+/// Fields consumed from Worktrunk 0.81.0's `step copy-ignored` JSON result.
+#[derive(Deserialize)]
+struct CopyOutput {
+    files: u64,
+}
+
 /// Fields consumed from RemovalPlan::to_json in Worktrunk 0.81.0. A detached
 /// worktree has no branch. Extra fields vary for worktree/branch-only removal.
 #[derive(Deserialize)]
@@ -50,6 +56,12 @@ fn decode_creation(output: &str, workspace_dir: &Path) -> Result<()> {
         "Worktrunk created an unexpected workspace path"
     );
     Ok(())
+}
+
+fn decode_copy(output: &str) -> Result<u64> {
+    let value = serde_json::from_str(output).context("invalid Worktrunk copy result")?;
+    let result: CopyOutput = decode_object(value).context("invalid Worktrunk copy result")?;
+    Ok(result.files)
 }
 
 fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
@@ -129,16 +141,11 @@ fn default_branch_override(command: &mut Command, reference: &str) -> Result<()>
 }
 
 /// Copy ignored files from the primary worktree into `workspace_dir`,
-/// skipping files that already exist there. Output goes to the caller's terminal.
-pub async fn copy_ignored(worktrunk_config: &Path, workspace_dir: &Path) -> Result<()> {
+/// skipping files that already exist there, and return how many it copied.
+pub async fn copy_ignored(worktrunk_config: &Path, workspace_dir: &Path) -> Result<u64> {
     let mut command = command(workspace_dir, worktrunk_config);
-    let status = command
-        .args(["step", "copy-ignored"])
-        .status()
-        .await
-        .context("run wt; ensure it is installed and on PATH")?;
-    ensure!(status.success(), "wt step copy-ignored failed ({status})");
-    Ok(())
+    command.args(["step", "copy-ignored", "--format=json"]);
+    decode_copy(&subprocess::output(command).await?)
 }
 
 #[derive(Debug, Clone, Copy)]

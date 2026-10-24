@@ -1508,7 +1508,8 @@ retry with `shoal setup`. Lifecycle and permit changes are rejected while it run
 Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
 repository checkout's ignored files, such as `.env` or local signing settings,
 into the workspace before `setup_cmd`. It runs without a `setup_cmd`, and a
-failure fails setup. `copy_ignored = false`, also a global default, turns it off.
+failure fails setup. It prints how many files it copied, and nothing when it
+copied none. `copy_ignored = false`, also a global default, turns it off.
 Files the workspace already has are kept, including paths cloned from a
 [seed](#seed-builds). Without a `.worktreeinclude` in the checkout every
 ignored file is copied, build caches included; its gitignore-style patterns limit

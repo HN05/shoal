@@ -151,7 +151,13 @@ pub(super) async fn copy_ignored_worker(ctx: &Context, setup_cmd: Option<PathBuf
     );
     // Tracked setup runs in the workspace root.
     let workspace = std::env::current_dir()?;
-    git::worktrunk::copy_ignored(&ctx.paths.worktrunk_config(), &workspace).await?;
+    let copied = git::worktrunk::copy_ignored(&ctx.paths.worktrunk_config(), &workspace).await?;
+    if copied > 0 {
+        eprintln!(
+            "Copied {copied} ignored file{} from the repository checkout",
+            if copied == 1 { "" } else { "s" }
+        );
+    }
     match setup_cmd {
         Some(setup_cmd) => Err(become_setup(&setup_cmd)),
         None => Ok(0),
