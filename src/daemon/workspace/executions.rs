@@ -3,12 +3,13 @@
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::daemon::log;
 use crate::{
+    config::repo::Cache,
     daemon::{
         scope::{Caller, ScopedExecution},
         store,
     },
     hooks::HookKind,
-    model::{Execution, ExecutionPlan, LandPlan, PortReservation, Workspace},
+    model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
     process::{
         execution::Processes,
         identity::{self as process, Identity},
@@ -19,7 +20,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::atomic::Ordering,
     time::Duration,
@@ -152,6 +153,16 @@ struct PreparedExecution {
     _resources: Option<ResourceGuard>,
 }
 
+/// The record a new execution persists at registration.
+struct ExecutionRecord {
+    id: String,
+    workspace_id: String,
+    kind: ExecutionKind,
+    parent_execution: Option<String>,
+    wrapper: Option<Identity>,
+    scope_token: String,
+}
+
 struct RegisteredExecution {
     id: String,
     workspace: Workspace,
@@ -266,7 +277,6 @@ impl Manager {
         kind: ExecutionKind,
         parent_execution: Option<&str>,
     ) -> Result<RegisteredExecution> {
-        let parent_execution = parent_execution.map(str::to_owned);
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
         let mut connections = self.connections.lock().await;
@@ -282,33 +292,19 @@ impl Manager {
         let repository = self.repository(&workspace.repository_id).await?;
         let id = Uuid::new_v4().to_string();
         let scope_token = Uuid::new_v4().to_string();
-        // Only commands may reattach: setup and landing hold daemon gates
-        // that a restart releases.
-        let reattach_token = (kind == ExecutionKind::Command).then(|| scope_token.clone());
-        let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
-        let (cache_repository, configured_caches) = (repository.clone(), settings.caches.clone());
         let (ports, caches) = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                kind.reserve(&tx, &workspace_id, parent_execution.as_deref())?;
-                tx.execute(
-                    "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token) VALUES (?1,?2,?3,?4,?5)",
-                    params![
-                        execution_id,
-                        workspace_id,
-                        ExecutionState::Running,
-                        store::json_text(wrapper.as_ref())?,
-                        reattach_token
-                    ],
-                )?;
-                let ports = store::ports(&tx, Some(&workspace_id))?;
-                // Under the write lock emptying caches takes, and undone with
-                // the execution's row when the directories cannot be prepared.
-                let caches = crate::caches::directories(&cache_repository, &configured_caches)?;
-                tx.commit()?;
-                Ok((ports, caches))
-            })
+            .persist_execution(
+                ExecutionRecord {
+                    id: id.clone(),
+                    workspace_id: workspace.id.clone(),
+                    kind,
+                    parent_execution: parent_execution.map(str::to_owned),
+                    wrapper,
+                    scope_token: scope_token.clone(),
+                },
+                repository.clone(),
+                settings.caches.clone(),
+            )
             .await?;
         let environment = crate::env::render_configured_environment(
             &settings.env,
@@ -335,6 +331,50 @@ impl Manager {
             environment,
             stop: receiver,
         })
+    }
+
+    /// Reserve the execution's lifecycle, insert its running record and
+    /// prepare the repository's caches in one transaction, returning the
+    /// workspace's ports and the cache directories.
+    async fn persist_execution(
+        &self,
+        record: ExecutionRecord,
+        repository: Repository,
+        caches: BTreeMap<String, Cache>,
+    ) -> Result<(Vec<PortReservation>, BTreeMap<String, PathBuf>)> {
+        let ExecutionRecord {
+            id,
+            workspace_id,
+            kind,
+            parent_execution,
+            wrapper,
+            scope_token,
+        } = record;
+        // Only commands may reattach: setup and landing hold daemon gates
+        // that a restart releases.
+        let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                kind.reserve(&tx, &workspace_id, parent_execution.as_deref())?;
+                tx.execute(
+                    "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token) VALUES (?1,?2,?3,?4,?5)",
+                    params![
+                        id,
+                        workspace_id,
+                        ExecutionState::Running,
+                        store::json_text(wrapper.as_ref())?,
+                        reattach_token
+                    ],
+                )?;
+                let ports = store::ports(&tx, Some(&workspace_id))?;
+                // Under the write lock emptying caches takes, and undone with
+                // the execution's row when the directories cannot be prepared.
+                let caches = crate::caches::directories(&repository, &caches)?;
+                tx.commit()?;
+                Ok((ports, caches))
+            })
+            .await
     }
 
     async fn run_pre_setup(
