@@ -580,11 +580,15 @@ async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
 
 /// Forget a stopped agent as `shoal resume --discard` does once its wrapper ended.
 async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &str) {
+    // No marked process belongs to the agent. A host scan would also count
+    // every same-user process whose environment it cannot read, such as
+    // ssh-agent on Linux, as a survivor and keep the slot.
     manager
-        .finish_execution(
+        .finish_execution_after_scan(
             execution.to_owned(),
             crate::daemon::workspace::ExecutionKind::Command,
             Some(0),
+            Some(Ok(crate::process::identity::Scan::default())),
         )
         .await
         .unwrap();

@@ -515,7 +515,7 @@ impl Manager {
             .await
     }
 
-    async fn finish_execution_after_scan(
+    pub(super) async fn finish_execution_after_scan(
         &self,
         id: String,
         kind: ExecutionKind,
