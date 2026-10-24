@@ -768,8 +768,10 @@ and leaves it there for you to send from the app.
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
-`default_agent`, else a picker of the installed ones. The agent's configured
-launcher runs in the registered checkout with the rendered [chat
+`default_agent`, else a picker of the installed ones. The chat first refreshes the
+default branch as `shoal sync` does, under the [creation refresh
+rules](#base-branch); a failed refresh warns and the chat still starts. The
+agent's configured launcher runs in the registered checkout with the rendered [chat
 template](#prompt-templates) as its instructions. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
 apart from its first message and waits for yours; another receives them as its

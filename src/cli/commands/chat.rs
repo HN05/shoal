@@ -13,14 +13,15 @@ use super::{configured, listing::ListFilter};
 use crate::{
     agent::Agent,
     cli::{
-        agents, client,
+        agents,
+        client::{self, request},
         context::Context,
         output::{self, Palette},
         terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, Repository},
-    protocol::ConfigTarget,
+    model::{Chat, Repository, SyncedRepository},
+    protocol::{ConfigTarget, Method},
     repository,
 };
 
@@ -84,6 +85,7 @@ pub(super) async fn begin(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let agent = chat_agent(ctx, &settings, agent)?;
+    sync(ctx, &repo).await;
     let launch = agents::ChatLaunch {
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
@@ -109,6 +111,25 @@ pub(super) async fn begin(
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(ctx, &repo, &chat, &command)
+}
+
+/// Refresh the default branch as `shoal sync` does, so the agent reads what
+/// the remote has; a chat still starts when the refresh fails.
+async fn sync(ctx: &Context, repo: &Repository) {
+    let synced = ctx
+        .progress(
+            "Syncing the default branch",
+            request::<SyncedRepository>(
+                &ctx.paths,
+                Method::SyncRepository {
+                    repository: repo.id.clone().into(),
+                },
+            ),
+        )
+        .await;
+    if let Err(error) = synced {
+        eprintln!("warning: cannot sync the default branch: {error:#}");
+    }
 }
 
 /// `shoal work --chats`.

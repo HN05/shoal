@@ -20217,6 +20217,58 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
 }
 
 #[test]
+fn chat_syncs_the_default_branch_before_the_agent_starts() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    install_test_script(
+        home.join("bin/claude"),
+        "#!/bin/sh\ngit rev-parse HEAD > \"$HOME/chat-head\"\n",
+    );
+    let author = upstream_remote(&fixture);
+    let chat = || {
+        let (output, transcript) = fixture.terminal_command(
+            fixture
+                .command()
+                .current_dir(&fixture.repo)
+                .env("ZMX_SESSION", "outer")
+                .args(["chat", "--agent", "claude"]),
+            "",
+            true,
+        );
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        let head = fs::read_to_string(home.join("chat-head")).unwrap();
+        (
+            head,
+            format!("{}{transcript}", String::from_utf8_lossy(&output.stderr)),
+        )
+    };
+    // The checkout on the default branch advances before the agent reads it.
+    let upstream = git(&author, &["rev-parse", "HEAD"]);
+    assert_eq!(chat().0, upstream);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    // Another checked-out branch stays put while the default branch advances.
+    git(&fixture.repo, &["switch", "-c", "notes"]);
+    commit_file(&author, "later", "later\n");
+    git(&author, &["push", "origin", "main"]);
+    let later = git(&author, &["rev-parse", "HEAD"]);
+    assert_eq!(chat().0, upstream);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), later);
+    assert_eq!(git(&fixture.repo, &["branch", "--show-current"]), "notes\n");
+    // A refresh that cannot fast-forward warns and the chat still starts.
+    git(&fixture.repo, &["switch", "main"]);
+    commit_file(&fixture.repo, "local", "local\n");
+    let local = git(&fixture.repo, &["rev-parse", "main"]);
+    commit_file(&author, "remote", "remote\n");
+    git(&author, &["push", "origin", "main"]);
+    let (head, output) = chat();
+    assert_eq!(head, local);
+    assert!(
+        output.contains("warning:") && output.contains("diverged"),
+        "{output}"
+    );
+}
+
+#[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let fixture = Fixture::with_config(Some("focus = false\n"));
     install_fake_herdr(&fixture);
