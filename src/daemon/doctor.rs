@@ -1,6 +1,10 @@
 //! Daemon diagnostics, separate from workspace recovery mutations. They
 //! change no work; asking forge hosts again records their answers.
-use std::{collections::HashSet, ffi::OsStr, path::PathBuf};
+use std::{
+    collections::HashSet,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -131,6 +135,57 @@ pub fn unavailable_checks() -> Vec<Check> {
         .collect()
 }
 
+/// What Shoal owns under a repository's workspace directory.
+struct OwnedWorktrees {
+    tracked: HashSet<PathBuf>,
+    seed: crate::seed::Layout,
+    verified_seed: bool,
+}
+
+impl OwnedWorktrees {
+    /// Warnings for the seed path when Shoal did not create it and for each
+    /// Git worktree under `root`, other than the checkout, that Shoal does not own.
+    fn problems(&self, checkout: &Path, root: &Path, trees: &[git::Worktree]) -> Vec<String> {
+        let seed_path = self.seed.worktree();
+        let foreign_seed = (seed_path.symlink_metadata().is_ok() && !self.verified_seed).then(|| {
+            format!(
+                "Seed path is not Shoal's seed worktree; Shoal will neither rebuild nor remove it: {}",
+                seed_path.display()
+            )
+        });
+        let untracked = trees
+            .iter()
+            .filter(|tree| {
+                tree.path.starts_with(root)
+                    && tree.path != checkout
+                    && !(self.verified_seed && self.seed.is_worktree(&tree.path))
+                    && !self.tracked.contains(&tree.path)
+            })
+            .map(|tree| {
+                format!(
+                    "Git worktree is not tracked by Shoal: {}",
+                    tree.path.display()
+                )
+            });
+        foreign_seed.into_iter().chain(untracked).collect()
+    }
+}
+
+/// One warning per problem, or one passing check when there are none.
+fn worktree_report(name: String, root: &Path, problems: Vec<String>) -> Vec<Check> {
+    if problems.is_empty() {
+        return vec![Check::new(
+            name,
+            CheckStatus::Ok,
+            format!("No untracked Git worktrees under {}", root.display()),
+        )];
+    }
+    problems
+        .into_iter()
+        .map(|problem| Check::new(&name, CheckStatus::Warning, problem))
+        .collect()
+}
+
 impl Manager {
     pub async fn diagnose(&self) -> Result<Vec<Check>> {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
@@ -139,73 +194,55 @@ impl Manager {
         checks.extend(self.forge_host_checks().await?);
         for repo in self.repositories().await? {
             checks.push(checkout(&repo).await);
-            let Some(root) = &repo.workspaces_dir else {
-                continue;
-            };
-            let name = worktrees_check_name(crate::repository::name(&repo));
-            // Take the same gate as creation/removal before reading ownership.
-            let _guard = self.lock_repository_git(&repo.id).await;
-            let tracked: HashSet<PathBuf> = self
-                .list_workspaces()
-                .await?
-                .into_iter()
-                .map(|w| w.path)
-                .collect();
-            let seed = crate::seed::Layout::new(root, &repo.id);
-            let verified_seed = crate::daemon::seed::is_seed_worktree(&repo, &seed)
-                .await
-                .unwrap_or(false);
-            match git::worktrees(&repo.path, git::run).await {
-                Ok(trees) => {
-                    let mut untracked = false;
-                    let seed_path = seed.worktree();
-                    if seed_path.symlink_metadata().is_ok() && !verified_seed {
-                        untracked = true;
-                        checks.push(Check::new(
-                            &name,
-                            CheckStatus::Warning,
-                            format!(
-                                "Seed path is not Shoal's seed worktree; Shoal will neither rebuild nor remove it: {}",
-                                seed_path.display()
-                            ),
-                        ));
-                    }
-                    for tree in trees {
-                        if tree.path.starts_with(root)
-                            && tree.path != repo.path
-                            && !(verified_seed && seed.is_worktree(&tree.path))
-                            && !tracked.contains(&tree.path)
-                        {
-                            untracked = true;
-                            checks.push(Check::new(
-                                &name,
-                                CheckStatus::Warning,
-                                format!(
-                                    "Git worktree is not tracked by Shoal: {}",
-                                    tree.path.display()
-                                ),
-                            ));
-                        }
-                    }
-                    if !untracked {
-                        checks.push(Check::new(
-                            name,
-                            CheckStatus::Ok,
-                            format!("No untracked Git worktrees under {}", root.display()),
-                        ));
-                    }
-                }
-                Err(error) => checks.push(Check::new(
-                    name,
-                    CheckStatus::Error,
-                    format!(
-                        "Could not check worktrees under {}: {error:#}",
-                        root.display()
-                    ),
-                )),
-            }
+            checks.extend(self.worktree_checks(&repo).await?);
         }
         Ok(checks)
+    }
+
+    /// Git worktrees under the repository's workspace directory that Shoal
+    /// does not own; none for a repository without one.
+    async fn worktree_checks(&self, repo: &crate::model::Repository) -> Result<Vec<Check>> {
+        let Some(root) = &repo.workspaces_dir else {
+            return Ok(Vec::new());
+        };
+        let name = worktrees_check_name(crate::repository::name(repo));
+        // Take the same gate as creation/removal before reading ownership.
+        let _guard = self.lock_repository_git(&repo.id).await;
+        let owned = self.owned_worktrees(repo, root).await?;
+        Ok(match git::worktrees(&repo.path, git::run).await {
+            Ok(trees) => worktree_report(name, root, owned.problems(&repo.path, root, &trees)),
+            Err(error) => vec![Check::new(
+                name,
+                CheckStatus::Error,
+                format!(
+                    "Could not check worktrees under {}: {error:#}",
+                    root.display()
+                ),
+            )],
+        })
+    }
+
+    /// The caller holds the repository's Git gate so ownership stays current.
+    async fn owned_worktrees(
+        &self,
+        repo: &crate::model::Repository,
+        root: &Path,
+    ) -> Result<OwnedWorktrees> {
+        let tracked = self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .map(|w| w.path)
+            .collect();
+        let seed = crate::seed::Layout::new(root, &repo.id);
+        let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)
+            .await
+            .unwrap_or(false);
+        Ok(OwnedWorktrees {
+            tracked,
+            seed,
+            verified_seed,
+        })
     }
 }
 
@@ -246,6 +283,59 @@ mod tests {
             )),
             "{}",
             check.message
+        );
+    }
+
+    #[test]
+    fn worktree_problems_name_untracked_worktrees_and_a_foreign_seed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("repo");
+        let tree = |path: PathBuf| git::Worktree {
+            path,
+            branch: None,
+            prunable: false,
+            locked: false,
+        };
+        let seed = crate::seed::Layout::new(&root, "repo-id");
+        let owned = OwnedWorktrees {
+            tracked: HashSet::from([root.join("tracked")]),
+            seed,
+            verified_seed: false,
+        };
+        let trees = [
+            tree(root.join(".checkout")),
+            tree(root.join("tracked")),
+            tree(root.join("stray")),
+            tree(dir.path().join("elsewhere")),
+        ];
+        let checkout = root.join(".checkout");
+        assert_eq!(
+            owned.problems(&checkout, &root, &trees),
+            [format!(
+                "Git worktree is not tracked by Shoal: {}",
+                root.join("stray").display()
+            )]
+        );
+        let checks = worktree_report("worktrees:repo".to_owned(), &root, Vec::new());
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].status, CheckStatus::Ok);
+
+        let seed_path = owned.seed.worktree();
+        fs::create_dir_all(&seed_path).unwrap();
+        let trees = [tree(seed_path.clone())];
+        let problems = owned.problems(&checkout, &root, &trees);
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(problems[0].starts_with("Seed path is not Shoal's seed worktree"));
+        let verified = OwnedWorktrees {
+            verified_seed: true,
+            ..owned
+        };
+        assert!(verified.problems(&checkout, &root, &trees).is_empty());
+        let checks = worktree_report("worktrees:repo".to_owned(), &root, problems);
+        assert!(
+            checks
+                .iter()
+                .all(|check| check.status == CheckStatus::Warning)
         );
     }
 
