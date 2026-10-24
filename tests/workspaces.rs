@@ -20222,9 +20222,11 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
     let home = fixture.root.path();
     install_test_script(
         home.join("bin/claude"),
-        "#!/bin/sh\ngit rev-parse HEAD > \"$HOME/chat-head\"\n",
+        "#!/bin/sh\ngit rev-parse HEAD > \"$HOME/chat-head\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\n",
     );
     let author = upstream_remote(&fixture);
+    commit_file(&author, "chat-template.md", "Upstream chat guidance\n");
+    git(&author, &["push", "origin", "main"]);
     let chat = || {
         let (output, transcript) = fixture.terminal_command(
             fixture
@@ -20242,10 +20244,16 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
             format!("{}{transcript}", String::from_utf8_lossy(&output.stderr)),
         )
     };
-    // The checkout on the default branch advances before the agent reads it.
+    // The checkout on the default branch advances before the agent reads it,
+    // and the instructions come from the refreshed checkout.
     let upstream = git(&author, &["rev-parse", "HEAD"]);
     assert_eq!(chat().0, upstream);
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    let instructions = &chat_args(&fixture)[1];
+    assert!(
+        instructions.contains("Upstream chat guidance"),
+        "{instructions}"
+    );
     // Another checked-out branch stays put while the default branch advances.
     git(&fixture.repo, &["switch", "-c", "notes"]);
     commit_file(&author, "later", "later\n");
