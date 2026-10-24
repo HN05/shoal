@@ -474,7 +474,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }
-        Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
+        Command::Message {
+            message,
+            body_file,
+            workspace,
+        } => messages::send(&ctx, workspace, message, body_file).await,
         Command::Ask {
             question,
             recommend,

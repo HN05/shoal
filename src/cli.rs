@@ -359,8 +359,12 @@ pub enum Command {
     },
     /// Queue a message for the agents working in a workspace.
     Message {
-        /// One line of text, such as "Stop the dev server before running tests".
-        message: String,
+        /// Text such as "Stop the dev server before running tests".
+        #[arg(required_unless_present = "body_file")]
+        message: Option<String>,
+        /// Read the message from a file, such as multi-line instructions.
+        #[arg(long, value_name = "PATH", conflicts_with = "message")]
+        body_file: Option<PathBuf>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

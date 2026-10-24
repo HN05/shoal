@@ -1,6 +1,8 @@
 //! `shoal message` queues a message for a workspace's agents; `shoal messages`
 //! shows the workspace's undelivered messages once.
-use anyhow::Result;
+use std::path::PathBuf;
+
+use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
@@ -15,11 +17,29 @@ use crate::{
     protocol::Method,
 };
 
-pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {
+pub(super) async fn send(
+    ctx: &Context,
+    workspace: Option<String>,
+    message: Option<String>,
+    body_file: Option<PathBuf>,
+) -> Result<i32> {
+    let message = message_text(message, body_file)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(&ctx.paths, Method::SendAgentMessage { workspace, message }).await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;
     Ok(0)
+}
+
+/// The message given inline or read from `body_file`, without the file's
+/// trailing newline.
+fn message_text(message: Option<String>, body_file: Option<PathBuf>) -> Result<String> {
+    match body_file {
+        Some(path) => Ok(std::fs::read_to_string(&path)
+            .with_context(|| format!("read {}", path.display()))?
+            .trim_end()
+            .to_owned()),
+        None => message.context("give a message or --body-file"),
+    }
 }
 
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {

@@ -270,7 +270,8 @@ messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user. Answer its questions
 with `shoal answer <number> <answer>`, or ask the user yourself with
 `shoal ask` when the decision is theirs. Send it instructions with
-`shoal message <child> "<text>"`.
+`shoal message --workspace <child> "<text>"`, or `--body-file <path>` for
+several lines.
 
 A child agent's approval request comes to you when you hold an approved grant
 for the same thing; otherwise it passes you by, with a message saying so. Decide

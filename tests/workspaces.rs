@@ -16572,6 +16572,16 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         })
     );
     assert_eq!(hook(event), "");
+    // A message read from a file keeps its lines, indented under the first.
+    let body = fixture.root.path().join("instructions.md");
+    std::fs::write(&body, "Move commits:\n\tabc123 to api\n").unwrap();
+    let body = body.to_str().unwrap();
+    fixture.ok(&["message", "--body-file", body, "--workspace", "receiver"]);
+    let output: Value = serde_json::from_str(&hook(event)).unwrap();
+    assert_eq!(
+        output["hookSpecificOutput"]["additionalContext"],
+        "New Shoal messages for this workspace:\n- Move commits:\n  \tabc123 to api"
+    );
 
     // The wake hook prints the next update for the agent and exits 2, which
     // makes Claude Code start the idle agent's next turn with it.

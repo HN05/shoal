@@ -2559,6 +2559,7 @@ workspace and withdraw those messages. Read entries older than the newest
 
 ```sh
 shoal message "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
+shoal message --body-file plan.md [--workspace W]    # Queue a file's text as one message
 shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
