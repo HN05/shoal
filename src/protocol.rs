@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 127;
+pub const VERSION: u32 = 128;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -389,6 +389,12 @@ pub enum Method {
     VerifyWorkspace {
         workspace: String,
         on_branch: bool,
+    },
+    /// Fast-forward the workspace recorded on `branch` to the fetched
+    /// `origin/<branch>`, refusing a worktree that is not the recorded one on it.
+    FastForwardWorkspace {
+        workspace: String,
+        branch: String,
     },
     /// Link the open PR of the workspace's branch, or open one and link it.
     OpenPull {
@@ -941,6 +947,7 @@ response_bodies! {
     Checkpoint(crate::model::Checkpoint),
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),
     RestoredCheckpoint(crate::model::RestoredCheckpoint),
+    FastForwarded(bool),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
     ForgeType(crate::forge::backends::ForgeKind),
     Doctor(Vec<Report>),

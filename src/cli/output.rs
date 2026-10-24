@@ -192,7 +192,8 @@ pub fn workspace_state_style(state: WorkspaceState) -> Style {
         | WorkspaceState::Stopping
         | WorkspaceState::Removing
         | WorkspaceState::Reconciling
-        | WorkspaceState::Restoring => Style::Warning,
+        | WorkspaceState::Restoring
+        | WorkspaceState::Updating => Style::Warning,
     }
 }
 

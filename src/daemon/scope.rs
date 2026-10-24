@@ -96,6 +96,7 @@ pub async fn authorize(
         | Method::OpenIssue { workspace, .. }
         | Method::OpenPull { workspace, .. }
         | Method::VerifyWorkspace { workspace, .. }
+        | Method::FastForwardWorkspace { workspace, .. }
         | Method::ItemAction {
             workspace,
             action:

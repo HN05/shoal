@@ -1690,7 +1690,8 @@ mod tests {
                     | WorkspaceState::Stopping
                     | WorkspaceState::Removing
                     | WorkspaceState::Reconciling
-                    | WorkspaceState::Restoring => (
+                    | WorkspaceState::Restoring
+                    | WorkspaceState::Updating => (
                         WorkspaceState::Failed,
                         "daemon stopped during workspace operation; inspect before cleanup",
                     ),

@@ -15,6 +15,7 @@ pub enum ListStatus {
     Removing,
     Reconciling,
     Restoring,
+    Updating,
     Failed,
     Stopped,
     NeedsInput,
@@ -45,6 +46,7 @@ impl ListStatus {
             WorkspaceState::Removing => Self::Removing,
             WorkspaceState::Reconciling => Self::Reconciling,
             WorkspaceState::Restoring => Self::Restoring,
+            WorkspaceState::Updating => Self::Updating,
             WorkspaceState::Failed => Self::Failed,
             WorkspaceState::Ready if stopped => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
@@ -83,6 +85,7 @@ impl ListStatus {
             Self::Removing => "removing",
             Self::Reconciling => "reconciling",
             Self::Restoring => "restoring",
+            Self::Updating => "updating",
             Self::Failed => "failed",
             Self::Stopped => "stopped",
             Self::NeedsInput => "needs input",
@@ -113,6 +116,7 @@ impl ListStatus {
             | Self::Removing
             | Self::Reconciling
             | Self::Restoring
+            | Self::Updating
             | Self::Stopped
             | Self::ReadyOutdated
             | Self::Starting => Style::Warning,
@@ -146,6 +150,7 @@ impl ListStatus {
             | Self::Removing
             | Self::Reconciling
             | Self::Restoring
+            | Self::Updating
             | Self::Starting => Group::Changing,
             Self::Failed => Group::Failed,
         }
