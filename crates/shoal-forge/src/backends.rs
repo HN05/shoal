@@ -17,7 +17,10 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     capability::{Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::CheckLog},
+    ci::{
+        CiAction, CiCheck, Job, Location, Operation,
+        checks::{CheckLog, plain},
+    },
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -406,6 +409,11 @@ pub(crate) trait Backend {
         name: &str,
     ) -> Result<CheckLog> {
         repo.failed_job_log(account, url, name).await
+    }
+
+    /// `log`, a job log as the forge serves it, as plain text.
+    fn plain_log(&self, log: &str) -> String {
+        plain::readable(log)
     }
 
     /// The endpoint under the repository that serves the plain-text log of
@@ -851,6 +859,10 @@ impl Backend for ForgeKind {
         name: &str,
     ) -> Result<CheckLog> {
         dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
+    }
+
+    fn plain_log(&self, log: &str) -> String {
+        dispatch!(self, backend => backend.plain_log(log))
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

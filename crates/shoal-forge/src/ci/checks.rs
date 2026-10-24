@@ -1,4 +1,6 @@
 //! Failed CI job logs resolved from a PR's current check, using its agent account.
+pub(crate) mod plain;
+
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
@@ -94,14 +96,16 @@ impl ForgeRepo {
         pull.head_sha.context("PR has no head commit")
     }
 
-    /// The plain-text log of the job at `location`, refused beyond
+    /// The log of the job at `location` as plain text, refused beyond
     /// [`MAX_LOG_BYTES`].
     async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
         let endpoint = self.repo_endpoint(&self.kind.job_log_endpoint(location)?);
         let request = Request::get(endpoint).limited(MAX_LOG_BYTES);
-        self.read_text(account, &request)
+        let log = self
+            .read_text(account, &request)
             .await
-            .context("fetch job log (maximum 8 MiB)")
+            .context("fetch job log (maximum 8 MiB)")?;
+        Ok(self.kind.plain_log(&log))
     }
 
     /// The job and web URL of the failed check `name` among `checks`.

@@ -8,6 +8,7 @@ use super::tea;
 use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
+    backends::Backend,
     ci::checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
     items::link::ItemKind,
     transport::{
@@ -61,6 +62,7 @@ pub(crate) async fn failed_check_log(
     let job_id = job_id(&jobs, job_index, run_id)?;
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
     let log = job_log(repo, account, &endpoint).await?;
+    let log = repo.kind.plain_log(&log);
     Ok(CheckLog::from_text(url, name, &log).with_job(job_url(repo, target)))
 }
 
