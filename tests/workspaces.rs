@@ -10455,16 +10455,10 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
 fn ignored_files_are_copied_before_setup_unless_turned_off() {
     let fixture = Fixture::new();
     fs::write(fixture.repo.join(".gitignore"), ".env\nlocal/\n").unwrap();
-    fs::write(
+    install_test_script(
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\ncat .env local/signing > setup-saw\n",
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("setup.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
     fs::create_dir(fixture.repo.join("local")).unwrap();
