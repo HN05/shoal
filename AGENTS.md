@@ -192,6 +192,16 @@ next step depends on, where that step reads it, and only a condition that
 cannot hold before the awaited event: a file a child writes does not prove the
 daemon recorded its start.
 
+## Profiling
+
+`python3 scripts/profile_shoal.py [--setup ARGS]... -- <shoal args>` times a
+command against a foreground daemon in a temporary home and lists where the time
+went; `--help` shows its options. It builds the `profiling` cargo profile,
+release code with symbols for samplers such as samply. `SHOAL_PROFILE=1` makes a
+Shoal process print a `profile` line to stderr for each daemon call, daemon
+request and subprocess run. It is a contributor tool, so the user documentation
+leaves it out.
+
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its

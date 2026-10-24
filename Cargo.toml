@@ -65,3 +65,8 @@ rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+
+# Release code with symbols for samplers; scripts/profile_shoal.py builds it.
+[profile.profiling]
+inherits = "release"
+debug = true
