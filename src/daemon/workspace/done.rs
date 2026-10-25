@@ -1,5 +1,5 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
 
@@ -102,30 +102,28 @@ impl Manager {
 
     /// Record `completion` and close the workspace's open questions, which
     /// the finished assignment waits on no longer, waking waits on them.
-    /// Refuses a completion already recorded. Returns the closed questions'
-    /// numbers.
+    /// Refuses a completion that changes nothing. Returns the closed
+    /// questions' numbers.
     async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Vec<i64>> {
         let id = id.to_owned();
-        let record = serde_json::to_string(completion)?;
         let completion = completion.clone();
         let closed = self
             .store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
-                require_new_completion(&tx, &id, &completion)?;
-                tx.execute(
-                    "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
-                 ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
-                    rusqlite::params![id, record, EventCause::Manual],
-                )?;
+                let replaced = record_completion(&tx, &id, &completion)?;
                 // Like the continuation it replaced, a hold made from one by
                 // migration 31 ends at the next explicit done.
-                tx.execute(
+                let released = tx.execute(
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
                     [&id],
                 )?;
                 let closed = questions::close_open(&tx, &id)?;
+                ensure!(
+                    replaced || released > 0 || !closed.is_empty(),
+                    "assignment is already marked done at this HEAD"
+                );
                 tx.commit()?;
                 Ok(closed)
             })
@@ -277,26 +275,27 @@ impl Manager {
     }
 }
 
-/// Refuse to record `completion` again: a completion at another HEAD, with
-/// another cleanup choice or with a cleanup error replaces the recorded one.
-fn require_new_completion(
+/// Record `completion`, returning whether it differs from the recorded one:
+/// another HEAD, cleanup choice or cleanup error, or an unreadable record.
+fn record_completion(
     tx: &rusqlite::Transaction,
     id: &str,
     completion: &Completion,
-) -> Result<()> {
-    let record: Option<String> = tx
+) -> Result<bool> {
+    let recorded: Option<String> = tx
         .query_row(
             "SELECT record FROM workspace_completion WHERE workspace_id=?1",
             [id],
             |row| row.get(0),
         )
         .optional()?;
-    // An unreadable record is replaced like any other.
-    let recorded = record.and_then(|record| serde_json::from_str::<Completion>(&record).ok());
-    if recorded.as_ref() == Some(completion) {
-        bail!("assignment is already marked done at this HEAD");
-    }
-    Ok(())
+    let recorded = recorded.and_then(|record| serde_json::from_str::<Completion>(&record).ok());
+    tx.execute(
+        "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
+         ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
+        rusqlite::params![id, serde_json::to_string(completion)?, EventCause::Manual],
+    )?;
+    Ok(recorded.as_ref() != Some(completion))
 }
 
 /// What the user is told about a completion and the questions it closed.
