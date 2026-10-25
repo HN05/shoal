@@ -1,6 +1,6 @@
 //! `shoal inbox`: what needs the user now, each with its workspace: open
 //! questions, pending approvals, agents that need input, failed workspaces,
-//! work marked ready at its current commit, and demos to try.
+//! work marked ready at its current commit, and running demos.
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -45,7 +45,7 @@ pub(in crate::cli) enum Item {
         workspace: Workspace,
         mark: ReviewMark,
     },
-    Try {
+    Demo {
         demo: Running,
     },
 }
@@ -115,7 +115,7 @@ impl Inbox {
             demos
                 .into_iter()
                 .filter(|demo| workspaces.iter().any(|w| w.id == demo.workspace_id))
-                .map(|demo| Item::Try { demo }),
+                .map(|demo| Item::Demo { demo }),
         );
         Ok(Self { items, workspaces })
     }
@@ -225,7 +225,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
-            Self::Try { demo } => &demo.workspace_id,
+            Self::Demo { demo } => &demo.workspace_id,
         }
     }
 
@@ -245,7 +245,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
-            Self::Try { demo } => &demo.workspace,
+            Self::Demo { demo } => &demo.workspace,
         }
     }
 
@@ -256,7 +256,7 @@ impl Item {
             Self::NeedsInput { .. } => ("needs input", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } => ("ready", Style::Success),
-            Self::Try { .. } => ("ready to try", Style::Success),
+            Self::Demo { .. } => ("demo", Style::Success),
         };
         (label.into(), Some(style))
     }
@@ -283,7 +283,7 @@ impl Item {
                     None => label,
                 }
             }
-            Self::Try { demo } => format!("demo {}", demo.launch.name),
+            Self::Demo { demo } => demo.launch.name.clone(),
         }
     }
 

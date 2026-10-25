@@ -223,7 +223,7 @@ enum Row {
         url: Option<String>,
     },
     /// A running demo, by its name.
-    Try {
+    Demo {
         workspace: String,
         name: String,
     },
@@ -252,7 +252,7 @@ impl Row {
                 workspace,
                 url: mark.url.clone(),
             },
-            Item::Try { demo } => Self::Try {
+            Item::Demo { demo } => Self::Demo {
                 workspace,
                 name: demo.launch.name.clone(),
             },
@@ -274,7 +274,7 @@ impl Row {
             Self::Ready { workspace, url } => {
                 format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
             }
-            Self::Try { workspace, name } => format!("try:{workspace}:{name}"),
+            Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -314,7 +314,7 @@ impl Row {
                 workspace,
                 url: (!detail.is_empty()).then(|| detail.to_owned()),
             },
-            "try" => Self::Try {
+            "demo" => Self::Demo {
                 workspace,
                 name: detail.to_owned(),
             },
@@ -329,7 +329,7 @@ impl Row {
             | Self::NeedsInput(workspace)
             | Self::Failed(workspace)
             | Self::Ready { workspace, .. }
-            | Self::Try { workspace, .. }
+            | Self::Demo { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
             Self::Add => None,
@@ -607,7 +607,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             workspace: Some(workspace),
             item: None,
         },
-        Row::Try { workspace, name } => Command::Demo {
+        Row::Demo { workspace, name } => Command::Demo {
             command: None,
             name: Some(name),
             workspace: Some(workspace),
@@ -741,11 +741,11 @@ mod tests {
 
     #[test]
     fn demo_rows_round_trip_their_workspace_and_name() {
-        let row = Row::Try {
+        let row = Row::Demo {
             workspace: "workspace-id".into(),
             name: "web".into(),
         };
-        let Row::Try { workspace, name } = Row::parse(row.id()).unwrap() else {
+        let Row::Demo { workspace, name } = Row::parse(row.id()).unwrap() else {
             panic!("expected a demo row");
         };
         assert_eq!((workspace.as_str(), name.as_str()), ("workspace-id", "web"));

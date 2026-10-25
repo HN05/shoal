@@ -23435,14 +23435,14 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let listing = demo(&["ls", "--workspace", "tried"]);
     assert_eq!(listing["running"].as_array().unwrap().len(), 1);
     let inbox = fixture.ok(&["inbox"]);
-    let tries: Vec<_> = inbox
+    let demos: Vec<_> = inbox
         .as_array()
         .unwrap()
         .iter()
-        .filter(|item| item["kind"] == "try")
+        .filter(|item| item["kind"] == "demo")
         .collect();
-    assert_eq!(tries.len(), 1, "{inbox}");
-    assert_eq!(tries[0]["demo"]["name"], "demo");
+    assert_eq!(demos.len(), 1, "{inbox}");
+    assert_eq!(demos[0]["demo"]["name"], "demo");
     let screen = demo(&["screen", "demo", "--workspace", "tried"]);
     let text = screen["screen"].as_str().unwrap();
     assert!(text.contains("failing"), "{text}");
