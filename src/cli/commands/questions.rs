@@ -178,16 +178,22 @@ fn pick_question(ctx: &Context, questions: Vec<Question>) -> Result<Question> {
 }
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let workspace = match workspace {
-        Some(workspace) => workspace,
-        None => {
-            request::<Question>(&ctx.paths, Method::ShowQuestion { id })
-                .await?
-                .workspace_id
-        }
-    };
-    let question =
-        request::<Question>(&ctx.paths, Method::WithdrawQuestion { workspace, id }).await?;
+    let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
+    let workspace = workspace.unwrap_or_else(|| question.workspace_id.clone());
+    withdraw_shown(ctx, workspace, question).await
+}
+
+async fn withdraw_shown(ctx: &Context, workspace: String, shown: Question) -> Result<i32> {
+    let id = shown.id;
+    let question = request::<Question>(
+        &ctx.paths,
+        Method::WithdrawQuestion {
+            workspace,
+            id,
+            shown: Some(shown),
+        },
+    )
+    .await?;
     ctx.emit(
         &format!(
             "Withdrew question {} ({})",
@@ -243,7 +249,7 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
             )
             .await
         }
-        "/withdraw" => withdraw(ctx, Some(question.workspace_id), question.id).await,
+        "/withdraw" => withdraw_shown(ctx, question.workspace_id.clone(), question).await,
         "/cancel" => Err(ui::SelectionCanceled.into()),
         _ => answer(ctx, question.id, response, Some(question)).await,
     }

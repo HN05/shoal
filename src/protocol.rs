@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 130;
+pub const VERSION: u32 = 131;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -656,6 +656,8 @@ pub enum Method {
     WithdrawQuestion {
         workspace: String,
         id: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shown: Option<crate::daemon::questions::Question>,
     },
     /// The user's answer, queued for the asking workspace's agents.
     /// `shown` is the question the user was shown, which a later question

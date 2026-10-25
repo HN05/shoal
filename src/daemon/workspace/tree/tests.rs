@@ -798,7 +798,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
     }
     let refused = manager
-        .decide_routed_approval(&parent.id, requested.id, true)
+        .decide_routed_approval(&parent.id, requested.id, true, None)
         .await
         .unwrap_err();
     assert!(format!("{refused:#}").contains("not routed to this workspace"));
@@ -915,7 +915,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .await
         .unwrap();
     let error = manager
-        .decide_routed_approval(&parent.id, requested.id, true)
+        .decide_routed_approval(&parent.id, requested.id, true, None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("passed up"));
@@ -976,6 +976,132 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap();
     manager.notify_approval(&child.name, &other).await;
     assert_eq!(user_requests().await, 3);
+}
+
+#[tokio::test]
+async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
+    use crate::{
+        daemon::approvals::{
+            ApprovalRequest, DecisionStatus, Lifetime, SecretSpecification, Specification, Target,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let secret = |workspace: &Workspace| {
+        ApprovalRequest::new(
+            &workspace.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        )
+    };
+    let grant = manager
+        .request_approval(secret(&parent))
+        .await
+        .unwrap()
+        .unwrap();
+    manager
+        .decide_approval(grant.id, true, None, Default::default())
+        .await
+        .unwrap();
+    let caller = Caller {
+        workspace_id: parent.id.clone(),
+        execution: None,
+    };
+    manager.issue_scope("scope".into(), caller.clone()).await;
+    for displayed in [false, true] {
+        let requested = manager
+            .request_approval(secret(&child))
+            .await
+            .unwrap()
+            .unwrap();
+        manager.notify_approval(&child.name, &requested).await;
+        let shown = manager
+            .approval_request(requested.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut method = Method::DecideApproval {
+            id: shown.id,
+            approve: true,
+            shown: displayed.then(|| Box::new(shown.clone())),
+            details: Default::default(),
+        };
+        if !displayed {
+            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .unwrap();
+        }
+        let key = shown.key.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute("DELETE FROM access_requests WHERE id=?1", [&key])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let replacement = manager
+            .request_approval(ApprovalRequest {
+                created_at: shown.created_at,
+                ..secret(&child)
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(replacement.id, shown.id);
+        assert_ne!(replacement.key, shown.key);
+        manager.notify_approval(&child.name, &replacement).await;
+        if displayed {
+            crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .unwrap();
+        }
+        assert!(
+            matches!(&method, Method::DecideApproval {shown: Some(bound), ..} if bound.key == shown.key)
+        );
+        let error = crate::daemon::operation(&manager, method, Some(&caller))
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("changed since it was shown"));
+        assert_eq!(
+            manager
+                .approval_request(replacement.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            DecisionStatus::Pending
+        );
+        manager
+            .withdraw_approval(&child.id, replacement.id)
+            .await
+            .unwrap();
+    }
 }
 
 #[tokio::test]

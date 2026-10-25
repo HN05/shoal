@@ -203,7 +203,9 @@ pub async fn authorize(
                 request.decider.as_deref() == Some(owner.as_str()),
                 "workspace processes decide only the approval requests routed to them; ask the user to run this command"
             );
-            *shown = None;
+            if shown.is_none() {
+                *shown = Some(Box::new(request));
+            }
             None
         }
         Method::EscalateApproval { workspace, .. } => {

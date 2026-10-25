@@ -369,11 +369,20 @@ pub(crate) fn close_open(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec
 }
 
 /// Close the workspace's open question `id` as withdrawn by its agent.
-fn withdraw(tx: &Transaction<'_>, workspace: &Workspace, id: i64) -> Result<Question> {
+fn withdraw(
+    tx: &Transaction<'_>,
+    workspace: &Workspace,
+    id: i64,
+    shown: Option<&Question>,
+) -> Result<Question> {
     let mut question = by_id(tx, id)?
         .filter(|question| question.workspace_id == workspace.id)
         .with_context(|| format!("workspace {} has no question {id}", workspace.name))?;
     question.ensure_open()?;
+    ensure!(
+        shown.is_none_or(|shown| question.id == shown.id && question.is_same(shown)),
+        "question {id} changed since it was shown; choose again"
+    );
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     tx.execute(
         "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",
@@ -546,14 +555,19 @@ impl Manager {
     /// Withdraw the workspace's open question `id`, which its agents no
     /// longer need answered. Its notification goes while unread; once shown,
     /// the user or the coordinating agent is told instead.
-    pub async fn withdraw_question(&self, selector: &str, id: i64) -> Result<Question> {
+    pub async fn withdraw_question(
+        &self,
+        selector: &str,
+        id: i64,
+        shown: Option<Question>,
+    ) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
         let _gate = self.announcement_gate.lock().await;
         let (question, retracted) = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = withdraw(&tx, &workspace, id)?;
+                let question = withdraw(&tx, &workspace, id, shown.as_ref())?;
                 let retracted = notifications::retract(
                     &tx,
                     &question.workspace_id,

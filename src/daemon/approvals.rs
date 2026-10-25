@@ -391,9 +391,11 @@ impl ApprovalRequest {
     }
 
     /// Whether `other` is this request as recorded, though its decision may
-    /// differ: the same workspace, target, settings, reason and time.
+    /// differ: the same key, workspace, target, settings, reason and time.
     fn is_same(&self, other: &ApprovalRequest) -> bool {
-        self.workspace_id == other.workspace_id
+        self.id == other.id
+            && self.key == other.key
+            && self.workspace_id == other.workspace_id
             && self.target == other.target
             && self.name == other.name
             && self.specification == other.specification
@@ -901,11 +903,16 @@ impl Manager {
         coordinator: &str,
         id: i64,
         approve: bool,
+        shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
         let request = self
             .approval_request(id)
             .await?
             .with_context(|| format!("unknown approval request {id}"))?;
+        ensure!(
+            shown.is_none_or(|shown| request.is_same(&shown)),
+            "approval request {id} changed since it was shown; choose again"
+        );
         let decided = self
             .record_routed_decision(coordinator, &request, approve)
             .await?;
@@ -933,6 +940,7 @@ impl Manager {
         request: &ApprovalRequest,
         approve: bool,
     ) -> Result<Option<Decision>> {
+        let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
         let _guard = self.simulator_gate.lock().await;
         self.store
@@ -942,6 +950,10 @@ impl Manager {
                 ensure!(
                     stored.decider.as_deref() == Some(coordinator.as_str()),
                     "approval request {id} is not routed to this workspace"
+                );
+                ensure!(
+                    stored.is_same(&request),
+                    "approval request {id} changed since it was shown; choose again"
                 );
                 if !holds_grant(&tx, &coordinator, &stored)? {
                     return Ok(None);

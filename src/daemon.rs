@@ -962,9 +962,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WithdrawApproval { workspace, id } => {
             Body::ApprovalRequest(Box::new(manager.withdraw_approval(&workspace, id).await?))
         }
-        Method::WithdrawQuestion { workspace, id } => {
-            Body::Question(manager.withdraw_question(&workspace, id).await?)
-        }
+        Method::WithdrawQuestion {
+            workspace,
+            id,
+            shown,
+        } => Body::Question(manager.withdraw_question(&workspace, id, shown).await?),
         Method::AcceptQuestionRecommendation { id, shown } => {
             Body::Question(manager.accept_question_recommendation(id, shown).await?)
         }
@@ -1022,7 +1024,12 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 // A workspace process decides only what was routed to it.
                 Some(caller) => {
                     manager
-                        .decide_routed_approval(&caller.workspace_id, id, approve)
+                        .decide_routed_approval(
+                            &caller.workspace_id,
+                            id,
+                            approve,
+                            shown.map(|shown| *shown),
+                        )
                         .await?
                 }
                 None => {

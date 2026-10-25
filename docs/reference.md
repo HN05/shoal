@@ -2640,7 +2640,7 @@ number no stored question holds, across workspaces. On a terminal,
 a prompt with its text and number on the input line, alongside the recommendation
 and numbered choices. Enter accepts the recommendation shown in brackets; type a choice number or
 answer text for another answer, `/withdraw` to withdraw
-the question, or `/cancel` to leave. The answer is refused if another question
+the question, or `/cancel` to leave. The answer or withdrawal is refused if another question
 took the number meanwhile. With JSON or redirected input or output, listing and inspection
 print records without prompting.
 `--wait` blocks without a time limit until the answer arrives and prints it, which

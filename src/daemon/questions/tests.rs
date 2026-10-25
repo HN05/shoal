@@ -363,6 +363,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Method::WithdrawQuestion {
                 workspace: target.clone(),
                 id: 1,
+                shown: None,
             },
         ] {
             assert_eq!(
@@ -568,6 +569,39 @@ async fn done_closes_open_questions_for_good() {
 }
 
 #[tokio::test]
+async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
+    let (_root, manager, workspace) = fixture().await;
+    let shown = manager
+        .ask_question(&workspace.id, ask("Which database?", &[]))
+        .await
+        .unwrap();
+    let answered = manager
+        .answer_question(shown.id, "SQLite".into(), None)
+        .await
+        .unwrap();
+    manager
+        .mark_agent_messages_delivered(&workspace.id, vec![answered.message_id.unwrap()])
+        .await
+        .unwrap();
+    let replacement = manager
+        .ask_question(&workspace.id, ask("Which cache?", &[]))
+        .await
+        .unwrap();
+    assert_eq!(shown.id, replacement.id);
+    let error = manager
+        .withdraw_question(&workspace.id, shown.id, Some(shown))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("changed since it was shown"));
+    assert!(manager.question(replacement.id).await.unwrap().is_open());
+    let withdrawn = manager
+        .withdraw_question(&workspace.id, replacement.id, Some(replacement))
+        .await
+        .unwrap();
+    assert!(withdrawn.withdrawn);
+}
+
+#[tokio::test]
 async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() {
     let (_root, manager, workspace) = fixture().await;
     let other = manager
@@ -585,13 +619,13 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         async move { manager.await_answer(&name, question.id, &ask).await }
     });
     let error = manager
-        .withdraw_question(&other.name, question.id)
+        .withdraw_question(&other.name, question.id, None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"), "{error:#}");
 
     let withdrawn = manager
-        .withdraw_question(&workspace.name, question.id)
+        .withdraw_question(&workspace.name, question.id, None)
         .await
         .unwrap();
     assert!(withdrawn.withdrawn && !withdrawn.is_open());
@@ -609,7 +643,7 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
             .await
             .unwrap_err(),
         manager
-            .withdraw_question(&workspace.name, question.id)
+            .withdraw_question(&workspace.name, question.id, None)
             .await
             .unwrap_err(),
     ] {
@@ -636,7 +670,7 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.id, question.id)
+        .withdraw_question(&workspace.id, question.id, None)
         .await
         .unwrap();
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
@@ -655,7 +689,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.name, question.id)
+        .withdraw_question(&workspace.name, question.id, None)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -678,7 +712,7 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.name, question.id)
+        .withdraw_question(&workspace.name, question.id, None)
         .await
         .unwrap();
     // An announcement that lost the race to the withdrawal comes too late.
