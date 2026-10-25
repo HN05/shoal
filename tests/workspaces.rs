@@ -8764,7 +8764,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     fixture.ok(&["status", "first"]);
     assert!(fixture.run(&["diff", "second"]).status.success());
     assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
-    let unsupported = fixture.run(&["status", "-"]);
+    let unsupported = fixture.run(&["work", "setup", "-"]);
     assert!(!unsupported.status.success());
     assert!(String::from_utf8_lossy(&unsupported.stderr).contains("does not accept -"));
     let binary = env!("CARGO_BIN_EXE_shoal");
