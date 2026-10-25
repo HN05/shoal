@@ -1157,6 +1157,8 @@ pub enum ExecutionEvent {
         exit_code: i32,
     },
     Paused,
+    /// The child exited and the wrapper starts another, as a demo's does.
+    ChildExited,
 }
 
 /// Daemon → wrapper messages during an execution.

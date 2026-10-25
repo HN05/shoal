@@ -537,6 +537,22 @@ impl Manager {
             .await
     }
 
+    /// Forget the exited child of an execution whose wrapper starts another,
+    /// after stopping what it left running outside its process group.
+    pub(crate) async fn release_exited_child(&self, id: &str) -> Result<()> {
+        self.stop_exited_child_processes(id).await;
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     /// Close an execution. `exit_code` is `None` when the wrapper disconnected
     /// without reporting; such executions stay recorded as unknown. Returns
     /// whether the command's processes are verifiably gone. The reporting
