@@ -1960,7 +1960,7 @@ user. It replaces a recorded completion at another HEAD, with another cleanup
 choice or a cleanup error, and fails when it would change nothing: the same
 completion with no open question to close and no `post_done_cmd` to rerun.
 `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
-false. It then stops the workspace's [demos](#demos) unless `--keep-demos` leaves
+false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from

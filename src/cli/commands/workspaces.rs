@@ -2054,7 +2054,7 @@ pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i
     Ok(0)
 }
 
-/// Record completion, then stop the workspace's demos unless `keep_demos`.
+/// Stop the workspace's demos unless `keep_demos`, then record completion.
 pub(super) async fn done(
     ctx: &Context,
     workspace: Option<String>,
@@ -2062,24 +2062,19 @@ pub(super) async fn done(
     keep_demos: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let completion: Completion = request(
-        &ctx.paths,
-        Method::WorkspaceDone {
-            workspace: workspace.clone(),
-            cleanup,
-        },
-    )
-    .await?;
+    // Before completion, whose cleanup may remove the workspace at once.
     if !keep_demos {
         request::<()>(
             &ctx.paths,
             Method::StopDemos {
-                workspace,
+                workspace: workspace.clone(),
                 name: None,
             },
         )
         .await?;
     }
+    let completion: Completion =
+        request(&ctx.paths, Method::WorkspaceDone { workspace, cleanup }).await?;
     let message = if completion.cleanup {
         "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed."
     } else {
