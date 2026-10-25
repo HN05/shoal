@@ -56,7 +56,7 @@ when behavior changes, distinguishing decisions from proposals.
   stopped work; the agent
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue/PR links and watches, merge
-  acknowledgements, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
+  acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, listing, opening and changing issues and PRs of the own repository, opening issues
   in other repositories as `[issue] other_repositories` allows, rerunning
   or cancelling their CI jobs, and GET requests to the own repository's forge API, or
@@ -308,17 +308,7 @@ command uses it internally.
 ## Terminal recordings
 
 A PR that changes what Shoal prints or draws in the terminal, such as a picker,
-menu, listing or message, shows examples of the new interface. Produce them with
-a [VHS](https://github.com/charmbracelet/vhs) tape that runs a development build
-against a temporary `--state-dir` and repository and types the keys a user
-would: `Screenshot` captures a screen, `Output <file>.mp4` records a video, never
-a GIF, and `Output <file>.txt` writes each frame as text. Attach the screenshots
-and video to the PR with `shoal pr comment --attach`, and put text frames in
-code blocks of the description. Pace a video so the viewer can read each screen
-before the next key, about two to three seconds on a screen and longer on a
-dense one, without idle stretches. Look at the screenshots yourself first; VHS
-renders headlessly, so the recording is the only view the user gets. Keep the
-tape, its output and its temporary state directory and repository under the
-workspace's ignored `target/`, never in `/tmp` or elsewhere outside the
-workspace, where reading them needs the user's permission; commit them only
-when a document uses them.
+menu, listing or message, shows examples of the new interface, recorded as the
+shoal-worker skill describes. The tape runs a development build against a
+temporary `--state-dir` and repository under `target/`; commit the tape and its
+output only when a document uses them.

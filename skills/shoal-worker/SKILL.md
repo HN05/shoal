@@ -359,6 +359,45 @@ the device to minimize reinstalls. Only installed runtimes are supported.
 Stop servers, app automation, and debuggers before releasing their resources.
 Release when finished; reservations and leases outlive the requesting command.
 
+## Demos
+
+The user often works over SSH and cannot see windows, browsers or simulators
+you open. When a change is something to try rather than read, such as a
+prototype, a terminal interface or a web page, offer a demo:
+
+```sh
+shoal --json demo ls                      # Configured and running demos
+shoal --json demo start                   # The repository's only configured demo
+shoal --json demo start web               # A configured demo by name
+shoal --json demo start tui -- ./target/debug/app   # Any command, named tui
+shoal --json demo start site --preset web -- npm run dev
+shoal demo screen tui                     # What the demo shows now
+shoal demo send tui $'q'                  # Type into it; $'\r' is Enter
+shoal demo stop tui
+```
+
+Shoal keeps the command running, restarts it when it exits, and tells the user
+how to open it; `shoal demo` and the inbox open it for them. The `web` preset
+reserves a port and passes it as `PORT`; the `simulator` preset leases the
+workspace's simulator and passes its UDID as `SHOAL_SIM_UDID`. While the user
+tries it, read the screen and type into it to look at the same state they do.
+`shoal done` stops your demos; pass `--keep-demos` when the user is still trying
+one.
+
+## Recordings
+
+To show how a terminal interface looks, record it with a
+[VHS](https://github.com/charmbracelet/vhs) tape that types the keys a user
+would: `Screenshot` captures a screen, `Output <file>.mp4` records a video,
+never a GIF, and `Output <file>.txt` writes each frame as text. Pace a video so
+the viewer can read each screen before the next key, about two to three seconds
+on a screen and longer on a dense one, without idle stretches. VHS renders
+headlessly, so look at the screenshots yourself before sharing them. Keep the
+tape, its output and any temporary state under the workspace's ignored build
+directory, such as `target/`, never in `/tmp` or elsewhere outside the
+workspace, where reading them needs the user's permission. Attach screenshots
+and videos with `shoal pr comment --attach`, and put text frames in code blocks.
+
 ## Secrets
 
 A tool whose secret requires approval fails with the request to make. Run

@@ -609,6 +609,21 @@ a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
 
+Demos let the user try a change where the agent's windows are out of sight,
+usually over SSH. A demo is a named command the repository configures or the
+agent gives, and a workspace runs several. Its wrapper is an ordinary tracked
+command that records the demo with its execution, so stopping, removal and
+recovery need nothing new and the record ends with the execution; the wrapper
+restarts the command, backing off after quick exits so a failing command keeps
+its error on screen. The CLI places the wrapper where queued agents start,
+through the terminal hosts, since a demo is something the user opens and reads,
+falling back to a background process with a log. Shoal knows how a demo reaches
+the user only through presets, which reserve ports or lease a simulator and say
+how to open it; the repository's `open` command replaces that, so tools such
+as browsers and screen sharing stay outside Shoal. Starting, reading and stopping
+a demo are own-workspace actions without approval: the agent can already run
+the command, and a demo only keeps it running and tells the user.
+
 `max_agents` admission belongs to the daemon, so concurrent additions and its
 dispatcher share one count. Slots derive from state the daemon already tracks:
 connected agents, executions awaiting reattachment, resume records and starting
