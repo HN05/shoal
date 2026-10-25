@@ -195,8 +195,8 @@ pub struct ApprovalRequest {
     /// The number the user decides it by; reused once the request is deleted.
     #[serde(default)]
     pub id: i64,
-    /// The stored request's own key, which is never reused or shown.
-    #[serde(skip)]
+    /// Stable identity behind the user-facing number, carried through displayed snapshots.
+    #[serde(default)]
     pub key: String,
     pub workspace_id: String,
     #[serde(default)]
@@ -1343,8 +1343,17 @@ mod tests {
             error.to_string().contains("changed since it was shown"),
             "{error:#}"
         );
+        // Displayed snapshots travel through JSON to the CLI and back.
+        let snapshot: ApprovalRequest = serde_json::from_value(serde_json::to_value(&shown[0])?)?;
+        let mut replaced = snapshot.clone();
+        replaced.key = "a different request with the same visible details".into();
+        let error = manager
+            .decide_approval(1, true, Some(replaced), Default::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("changed since it was shown"));
         manager
-            .decide_approval(1, true, Some(shown[0].clone()), Default::default())
+            .decide_approval(1, true, Some(snapshot), Default::default())
             .await?;
         for (id, message) in [
             (4, "unknown approval request 4"),

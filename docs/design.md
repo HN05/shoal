@@ -530,8 +530,10 @@ shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
 withdraws review marks.
-Implicit question and approval decisions require stdin, stdout and stderr on a
-terminal, so redirected details cannot hide the decision being made.
+Approval snapshots carry their stable request key through the CLI so reused
+numbers cannot decide a replacement. Implicit question and approval decisions
+require stdin, stdout and stderr on a terminal, so redirected details cannot
+hide the decision being made.
 
 `herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
 plain terminal; `new_tab` only governs opening new tabs.
