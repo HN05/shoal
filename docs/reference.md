@@ -2643,9 +2643,10 @@ its context reaches the agent only through the subagent's report. Delivering thr
 the workspace, which ends with `superseded: true`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
 turn it waits up to a week for the next message or item activity, prints it and
-exits 2, so Claude Code starts the idle agent's next turn with it. A failed
-wait, such as one a restarted daemon refuses before the agent's wrapper
-reattaches, is tried again after a delay that doubles up to a minute, so the
+exits 2, so Claude Code starts the idle agent's next turn with it. The wait
+outlasts a daemon restart, including its handover to the installed release
+after an upgrade, until the agent's wrapper reattaches; a wait that fails
+otherwise is tried again after a delay that doubles up to a minute, so the
 agent is never left idle without one. Its command
 passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the

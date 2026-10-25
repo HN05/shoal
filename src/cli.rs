@@ -1582,6 +1582,13 @@ pub enum InternalCommand {
         /// The agent's process ID; the hook ends when that process exits.
         #[arg(long)]
         agent: u32,
+        /// Workspace whose updates to wait for; defaults to the agent's own.
+        #[arg(long, hide = true)]
+        workspace: Option<String>,
+        /// Continue a wait across a daemon restart, as the installed release
+        /// does after an upgrade restarted the daemon.
+        #[arg(long, hide = true)]
+        resume: bool,
     },
     /// Print which workspace a starting subagent works in as hook context;
     /// Shoal's Claude Code and Codex `SubagentStart` hooks run it.

@@ -1,6 +1,6 @@
 //! `shoal messages send` queues a message for a workspace's agents; `shoal messages`
 //! shows the workspace's undelivered messages once.
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::{Context as _, Result};
 
@@ -8,7 +8,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        installed::{Executable, arguments},
+        installed::{Executable, arguments, replace_option, with_flag},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -116,10 +116,20 @@ async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
 /// item activity of the agent's workspace or chat, then exit 2, which starts
 /// the idle agent's next turn with them. A failed wait is tried again, since
 /// without one the agent stays idle; a newer delivery or the exit of `agent`,
-/// the agent's process, ends it with 0 and leaves the agent idle.
-pub(super) async fn wake(ctx: &Context, agent: u32) -> Result<i32> {
+/// the agent's process, ends it with 0 and leaves the agent idle. `workspace`
+/// and `resumed` continue the wait of the hook an upgrade replaced.
+pub(super) async fn wake(
+    ctx: &Context,
+    agent: u32,
+    workspace: Option<String>,
+    resumed: bool,
+) -> Result<i32> {
+    let wait = WakeWait {
+        inbox: workspace.map(Inbox::Workspace),
+        restarted: resumed,
+    };
     let next = tokio::select! {
-        next = retry_next_updates(ctx) => next,
+        next = retry_next_updates(ctx, wait) => next,
         () = agent_exit(agent) => return Ok(0),
     };
     let Some((inbox, updates)) = next else {
@@ -155,17 +165,17 @@ const WAKE_RETRY_INITIAL: std::time::Duration = std::time::Duration::from_secs(1
 /// A lasting failure is tried again this often.
 const WAKE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// [`next_updates`], tried again after each failure, such as a daemon that
+/// [`WakeWait::next`], tried again after each failure, such as a daemon that
 /// has not come back or does not yet know the agent's scope. After an upgrade
 /// changed the daemon protocol, the installed release waits instead.
-async fn retry_next_updates(ctx: &Context) -> Option<(Inbox, Updates)> {
+async fn retry_next_updates(ctx: &Context, mut wait: WakeWait) -> Option<(Inbox, Updates)> {
     let executable = Executable::current();
     let mut delay = WAKE_RETRY_INITIAL;
     loop {
-        match next_updates(ctx).await {
+        match wait.next(ctx).await {
             Ok(next) => return next,
             Err(error) => {
-                let error = executable.resume_or(error, arguments);
+                let error = executable.resume_or(error, || wait.resume_arguments(arguments()));
                 eprintln!(
                     "shoal: waiting for agent updates failed; trying again in {}s: {error:#}",
                     delay.as_secs()
@@ -177,19 +187,47 @@ async fn retry_next_updates(ctx: &Context) -> Option<(Inbox, Updates)> {
     }
 }
 
-/// The inbox's next messages or item activity, or `None` when a newer
-/// delivery takes them.
-async fn next_updates(ctx: &Context) -> Result<Option<(Inbox, Updates)>> {
-    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
-    let updates = inbox.next(ctx).await?;
-    if updates.updates.is_empty() && updates.messages.is_empty() {
-        return Ok(None);
+/// The wake hook's wait: its inbox once found, and whether the daemon
+/// restarted before the next wait began, so it does not know the agent's
+/// scope until the agent's wrapper reattaches.
+struct WakeWait {
+    inbox: Option<Inbox>,
+    restarted: bool,
+}
+
+impl WakeWait {
+    /// The inbox's next messages or item activity, or `None` when a newer
+    /// delivery takes them.
+    async fn next(&mut self, ctx: &Context) -> Result<Option<(Inbox, Updates)>> {
+        let inbox = match &self.inbox {
+            Some(inbox) => inbox,
+            None => self
+                .inbox
+                .insert(Inbox::current(ctx, Fallback::OwnWorkspace).await?),
+        };
+        let updates = inbox.next(ctx, std::mem::take(&mut self.restarted)).await?;
+        if updates.updates.is_empty() && updates.messages.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some((inbox.clone(), updates)))
     }
-    Ok(Some((inbox, updates)))
+
+    /// The hook's `arguments` continuing this wait after an upgrade restarted
+    /// the daemon: a chat's inbox comes from the environment again.
+    fn resume_arguments(&self, arguments: Vec<OsString>) -> Vec<OsString> {
+        let arguments = match &self.inbox {
+            Some(Inbox::Workspace(workspace)) => {
+                replace_option(arguments, "--workspace", workspace)
+            }
+            Some(Inbox::Chat(_)) | None => arguments,
+        };
+        with_flag(arguments, "--resume")
+    }
 }
 
 /// Where an agent's messages arrive: its chat's, when it runs under one
 /// outside any workspace scope, otherwise its workspace's.
+#[derive(Clone)]
 enum Inbox {
     Workspace(String),
     Chat(String),
@@ -228,14 +266,21 @@ impl Inbox {
         }
     }
 
-    /// The next messages or item updates, waiting for them.
-    async fn next(&self, ctx: &Context) -> Result<Updates> {
+    /// The next messages or item updates, waiting for them; `restarted` says
+    /// the daemon restarted before this wait began.
+    async fn next(&self, ctx: &Context, restarted: bool) -> Result<Updates> {
         match self {
             Self::Workspace(workspace) => Updates::try_from(
-                super::workspaces::wait_for_items(ctx, workspace, Default::default(), None, false)
-                    .await?,
+                super::workspaces::wait_for_items(
+                    ctx,
+                    workspace,
+                    Default::default(),
+                    None,
+                    restarted,
+                )
+                .await?,
             ),
-            Self::Chat(chat) => wait_for_chat(ctx, chat).await,
+            Self::Chat(chat) => wait_for_chat(ctx, chat, restarted).await,
         }
     }
 
@@ -283,11 +328,11 @@ async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
 }
 
 /// The chat's next messages, waiting again when the daemon restarts.
-async fn wait_for_chat(ctx: &Context, chat: &str) -> Result<Updates> {
+async fn wait_for_chat(ctx: &Context, chat: &str, restarted: bool) -> Result<Updates> {
     let method = || Method::WaitChatMessages {
         chat: chat.to_owned(),
     };
-    Updates::try_from(client::await_reply(&ctx.paths, method, false).await?)
+    Updates::try_from(client::await_reply(&ctx.paths, method, restarted).await?)
 }
 
 /// What an agent hook tells the agent about `updates`, its messages under
@@ -412,6 +457,37 @@ mod tests {
         assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
         assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
         assert_eq!(hook_output("", &context), context);
+    }
+
+    #[test]
+    fn a_resumed_wake_continues_in_the_inbox_it_found() {
+        let resumed = |inbox: Option<Inbox>| {
+            let wait = WakeWait {
+                inbox,
+                restarted: false,
+            };
+            let hook = ["internal", "wake", "--agent", "7"].map(OsString::from);
+            wait.resume_arguments(hook.to_vec())
+        };
+        assert_eq!(
+            resumed(Some(Inbox::Workspace("worker".into()))),
+            [
+                "internal",
+                "wake",
+                "--agent",
+                "7",
+                "--workspace",
+                "worker",
+                "--resume"
+            ]
+        );
+        // A chat's inbox and one not found yet come from the environment.
+        for inbox in [Some(Inbox::Chat("chat".into())), None] {
+            assert_eq!(
+                resumed(inbox),
+                ["internal", "wake", "--agent", "7", "--resume"]
+            );
+        }
     }
 
     #[test]
