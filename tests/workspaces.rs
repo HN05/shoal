@@ -2949,6 +2949,12 @@ fn kept_branches_are_listed_and_deleted_on_request() {
             .is_empty()
     };
 
+    // --repo resolves an inferred repository name as other commands do.
+    let inferred = fixture.repo.file_name().unwrap().to_str().unwrap();
+    assert_eq!(
+        names(&fixture.ok(&["cleanup", "branches", "--dry-run", "--repo", inferred])),
+        ["first", "second", "third"]
+    );
     // A dry run lists only the named branches, and refuses unknown ones.
     assert_eq!(
         names(&fixture.ok(&["cleanup", "branches", "second", "--dry-run"])),

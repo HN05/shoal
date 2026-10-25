@@ -831,7 +831,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
-        Method::KeptBranches => Body::KeptBranches(manager.list_kept_branches().await?),
+        Method::KeptBranches { repository } => {
+            Body::KeptBranches(manager.list_kept_branches(repository.as_deref()).await?)
+        }
         Method::DeleteKeptBranches { branches } => {
             Body::KeptBranches(manager.delete_kept_branches(branches).await?)
         }

@@ -499,8 +499,12 @@ pub enum Method {
     ForgetAgentEnvironments {
         repository_id: String,
     },
-    /// Branches removal kept because only they have some commits.
-    KeptBranches,
+    /// Branches removal kept because only they have some commits, only
+    /// those of one repository when a selector names it.
+    KeptBranches {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<String>,
+    },
     /// Delete kept branches with the commits only they have; all or none.
     DeleteKeptBranches {
         branches: Vec<crate::model::BranchTarget>,

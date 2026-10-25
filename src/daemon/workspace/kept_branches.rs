@@ -132,9 +132,17 @@ impl Manager {
     /// Every kept branch Shoal could delete, with the commits no
     /// remote-tracking ref or the default branch has. The count reads refs
     /// that may be stale, so a branch it shows none for is listed too.
-    pub async fn list_kept_branches(&self) -> Result<Vec<KeptBranch>> {
+    /// The kept branches, only those of the repository `repository` selects.
+    pub async fn list_kept_branches(&self, repository: Option<&str>) -> Result<Vec<KeptBranch>> {
+        let only = match repository {
+            Some(selector) => Some(self.repository(selector).await?.id),
+            None => None,
+        };
         let mut listed = Vec::new();
         for repository_id in self.kept_branch_repositories().await? {
+            if only.as_ref().is_some_and(|only| *only != repository_id) {
+                continue;
+            }
             let repo = self.repository(&repository_id).await?;
             let _git = self.lock_repository_git(&repo.id).await;
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)

@@ -9,15 +9,10 @@ use crate::{
     time::local_seconds,
 };
 
-/// The kept branches, only those of `repo` when it names one by name or ID.
+/// The kept branches, only those of the repository `repo` selects.
 pub(super) async fn kept(ctx: &Context, repo: Option<&str>) -> Result<Vec<KeptBranch>> {
-    Ok(request::<Vec<KeptBranch>>(&ctx.paths, Method::KeptBranches)
-        .await?
-        .into_iter()
-        .filter(|branch| {
-            repo.is_none_or(|repo| branch.repository == repo || branch.repository_id == repo)
-        })
-        .collect())
+    let repository = repo.map(str::to_owned);
+    request(&ctx.paths, Method::KeptBranches { repository }).await
 }
 
 /// The kept branches to delete: every one with `all`, the named ones, or
