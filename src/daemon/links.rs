@@ -47,7 +47,8 @@ impl Manager {
         }
     }
 
-    /// Unlink the relation's items of `kind`, or only the one `input` names.
+    /// Unlink the relation's items of `kind`, or only the one `input` names;
+    /// one must be linked.
     pub async fn unlink_items(
         &self,
         selector: &str,
@@ -100,8 +101,9 @@ impl Manager {
         let removed = self
             .remove_items(&workspace.id, relation, kind, url.clone())
             .await?;
-        if let Some(url) = url {
-            ensure!(removed > 0, "{url} is not linked as {relation}");
+        match url {
+            Some(url) => ensure!(removed > 0, "{url} is not linked as {relation}"),
+            None => ensure!(removed > 0, "{} linked as {relation}", nothing(kind)),
         }
         Ok(())
     }
@@ -152,6 +154,9 @@ impl Manager {
         kind: Option<ItemKind>,
         input: Option<&str>,
     ) -> Result<()> {
+        if input.is_none() {
+            self.require_assigned(selector, kind).await?;
+        }
         if kind != Some(ItemKind::Pr) {
             self.clear_issue(selector, input).await?;
         }
@@ -161,6 +166,22 @@ impl Manager {
             });
             self.set_pr(selector, action).await?;
         }
+        Ok(())
+    }
+
+    /// Fail unless an item of `kind` is assigned: the issue, or a PR watch or
+    /// acknowledgement, which an unreadable registration counts as.
+    async fn require_assigned(&self, selector: &str, kind: Option<ItemKind>) -> Result<()> {
+        let id = self.workspace(selector).await?.id;
+        let issue = kind != Some(ItemKind::Pr) && self.issue_registration(&id).await?.is_some();
+        let pr =
+            kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(&id).await, Ok(None));
+        ensure!(
+            issue || pr,
+            "{} linked as {}",
+            nothing(kind),
+            Relation::Assigned
+        );
         Ok(())
     }
 
@@ -175,6 +196,14 @@ impl Manager {
             ItemKind::Issue => self.issue_forge(workspace, input).await?.2,
             ItemKind::Pr => self.pr_forge(workspace, input).await?.2,
         })
+    }
+}
+
+/// The subject of an error that no item of `kind` is linked.
+fn nothing(kind: Option<ItemKind>) -> String {
+    match kind {
+        Some(kind) => format!("no {kind} is"),
+        None => "nothing is".into(),
     }
 }
 
