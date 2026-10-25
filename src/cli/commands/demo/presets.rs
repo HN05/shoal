@@ -35,15 +35,33 @@ pub(super) struct Provided {
     pub leased_simulator: bool,
 }
 
-/// Reserve the demo's ports and lease its simulator. `Err` carries the exit
-/// status of a declined request, which was reported already.
+/// What a request gives, or the exit status of a declined one, which was
+/// reported already.
+pub(super) type Declinable<T> = std::result::Result<T, i32>;
+
+/// Reserve the demo's ports, then set up what its preset provides.
 pub(super) async fn provide(
     ctx: &Context,
     workspace: &Workspace,
     chosen: &Chosen,
     queue: bool,
-) -> Result<std::result::Result<Provided, i32>> {
-    let mut provided = Provided::default();
+) -> Result<Declinable<Provided>> {
+    let ports = match reserve_ports(ctx, workspace, chosen).await? {
+        Ok(ports) => ports,
+        Err(declined) => return Ok(Err(declined)),
+    };
+    Ok(match chosen.demo.preset {
+        Some(Preset::Web) => Ok(web(&ports)),
+        Some(Preset::Simulator) => simulator(ctx, workspace, &chosen.name, queue).await?,
+        None => Ok(Provided::default()),
+    })
+}
+
+async fn reserve_ports(
+    ctx: &Context,
+    workspace: &Workspace,
+    chosen: &Chosen,
+) -> Result<Declinable<Vec<PortReservation>>> {
     let mut ports = Vec::new();
     for name in port_names(chosen) {
         match reserve_port(ctx, workspace, &name).await? {
@@ -51,30 +69,40 @@ pub(super) async fn provide(
             Err(declined) => return Ok(Err(declined)),
         }
     }
-    match chosen.demo.preset {
-        Some(Preset::Web) => {
-            if let Some(port) = ports.first() {
-                provided
-                    .environment
-                    .insert(PORT.into(), port.port.to_string());
-            }
-        }
-        Some(Preset::Simulator) => {
-            let demos_own = demos_own_simulator(ctx, workspace).await?;
-            let held = holds_simulator(ctx, workspace).await?;
-            let sim = match lease_simulator(ctx, workspace, &chosen.name, queue).await? {
-                Ok(sim) => sim,
-                Err(declined) => return Ok(Err(declined)),
-            };
-            let udid = sim.udid.context("the leased simulator has no UDID")?;
-            provided.environment.insert(SIM_UDID.into(), udid);
-            // Every simulator demo shares the lease a demo took, so whichever
-            // stops last gives it up.
-            provided.leased_simulator = demos_own || !held;
-        }
-        None => {}
+    Ok(Ok(ports))
+}
+
+/// A web demo's first port, as `PORT`.
+fn web(ports: &[PortReservation]) -> Provided {
+    Provided {
+        environment: ports
+            .first()
+            .map(|port| (PORT.to_owned(), port.port.to_string()))
+            .into_iter()
+            .collect(),
+        leased_simulator: false,
     }
-    Ok(Ok(provided))
+}
+
+/// The workspace's simulator as `SHOAL_SIM_UDID`. Every simulator demo shares
+/// the lease a demo took, so whichever stops last gives it up.
+async fn simulator(
+    ctx: &Context,
+    workspace: &Workspace,
+    name: &str,
+    queue: bool,
+) -> Result<Declinable<Provided>> {
+    let demos_own = demos_own_simulator(ctx, workspace).await?;
+    let held = holds_simulator(ctx, workspace).await?;
+    let sim = match lease_simulator(ctx, workspace, name, queue).await? {
+        Ok(sim) => sim,
+        Err(declined) => return Ok(Err(declined)),
+    };
+    let udid = sim.udid.context("the leased simulator has no UDID")?;
+    Ok(Ok(Provided {
+        environment: BTreeMap::from([(SIM_UDID.to_owned(), udid)]),
+        leased_simulator: demos_own || !held,
+    }))
 }
 
 /// The configured ports, or for a web demo one named after it.
@@ -92,7 +120,7 @@ async fn reserve_port(
     ctx: &Context,
     workspace: &Workspace,
     name: &str,
-) -> Result<std::result::Result<PortReservation, i32>> {
+) -> Result<Declinable<PortReservation>> {
     let method = Method::PortAcquire {
         workspace: workspace.id.clone(),
         name: name.to_owned(),
@@ -137,7 +165,7 @@ async fn lease_simulator(
     workspace: &Workspace,
     name: &str,
     queue: bool,
-) -> Result<std::result::Result<Simulator, i32>> {
+) -> Result<Declinable<Simulator>> {
     let request = SimRequest {
         request_id: uuid::Uuid::new_v4().to_string(),
         clean: false,
