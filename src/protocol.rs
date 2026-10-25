@@ -1157,7 +1157,8 @@ pub enum ExecutionEvent {
         exit_code: i32,
     },
     Paused,
-    /// The child exited and the wrapper starts another, as a demo's does.
+    /// The child exited and the wrapper starts another, as a demo's does,
+    /// once the daemon answers [`Control::ChildReleased`].
     ChildExited,
 }
 
@@ -1194,6 +1195,9 @@ pub enum Control {
     Finished {
         complete: bool,
     },
+    /// What the exited child left is stopped and the worktree is still the
+    /// recorded one, so the wrapper may start its next run.
+    ChildReleased,
     /// The daemon is shutting down; keep the command running and reattach.
     Detach,
 }

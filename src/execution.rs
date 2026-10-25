@@ -296,14 +296,12 @@ async fn run_tracked(
         }
         match outcome {
             Ok(Outcome::Exited(code)) if matches!(mode, Mode::Demo { .. }) => {
-                link.send(&ExecutionEvent::ChildExited).await?;
-                link.between_runs();
                 let delay = restarts.after(started.elapsed());
                 eprintln!(
                     "shoal: demo exited with status {code}; restarting in {}s",
                     delay.as_secs()
                 );
-                match demo::await_restart(&mut link, delay).await? {
+                match demo::next_run(&mut link, delay).await? {
                     None => continue,
                     Some(reason) => {
                         eprintln!("shoal: demo stopped: {reason}");

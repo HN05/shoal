@@ -538,19 +538,21 @@ impl Manager {
     }
 
     /// Forget the exited child of an execution whose wrapper starts another,
-    /// once what it left running is proven stopped, as a paused agent's is.
+    /// once what it left running is proven stopped, as a paused agent's is,
+    /// and the worktree the next run starts in is still the recorded one.
     /// Unproven survivors keep the child's identity, so the next run cannot
     /// register over the evidence.
-    pub(crate) async fn release_exited_child(&self, id: &str, workspace_id: &str) -> Result<()> {
+    pub(crate) async fn release_exited_child(&self, id: &str, workspace: &Workspace) -> Result<()> {
         match self
-            .pause_agent_execution(id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+            .pause_agent_execution(id, &workspace.id, timing::WORKSPACE_STOP_TIMEOUT)
             .await?
         {
-            super::agents::Pause::Paused => Ok(()),
+            super::agents::Pause::Paused => {}
             super::agents::Pause::Unproven(issue) => {
                 bail!("the previous run left processes Shoal cannot prove stopped: {issue}")
             }
         }
+        self.verify_worktree(workspace).await
     }
 
     /// Close an execution. `exit_code` is `None` when the wrapper disconnected

@@ -348,9 +348,17 @@ async fn relay(
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
-                manager
-                    .release_exited_child(execution_id, &workspace.id)
-                    .await?;
+                // A refusal stops the demo instead of letting it run again.
+                let control = match manager.release_exited_child(execution_id, workspace).await {
+                    Ok(()) => Control::ChildReleased,
+                    Err(error) => {
+                        sent_stop = true;
+                        Control::Stop {
+                            reason: Some(format!("{error:#}")),
+                        }
+                    }
+                };
+                protocol::write(writer, &control).await?;
             }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;

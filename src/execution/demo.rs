@@ -1,19 +1,22 @@
 //! A demo's restarts: its wrapper runs the command again whenever it exits,
 //! waiting longer after each exit that follows soon after a start, so a
 //! command that fails at once keeps its error on screen without spinning.
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use tokio::{
     signal::unix::{SignalKind, signal},
-    time::{Duration, sleep},
+    time::{Duration, sleep, timeout},
 };
 
 use super::link::{Link, Received};
-use crate::protocol::Control;
+use crate::protocol::{Control, ExecutionEvent};
 
 /// A run at least this long counts as having started properly.
 const SETTLED: Duration = Duration::from_secs(10);
 const FIRST_DELAY: Duration = Duration::from_secs(1);
 const MAX_DELAY: Duration = Duration::from_secs(30);
+/// A hang guard for the daemon's answer, which waits for proof that the
+/// exited run's processes stopped.
+const RELEASE_LIMIT: Duration = Duration::from_secs(60);
 
 /// The delay before the next restart.
 #[derive(Debug, Default)]
@@ -36,9 +39,56 @@ impl Restarts {
     }
 }
 
+/// Prepare the next run after the child exited: have the daemon release the
+/// child, then wait `delay`. Returns why the demo stopped instead when the
+/// daemon refuses the next run or a stop comes first.
+pub(super) async fn next_run(link: &mut Link, delay: Duration) -> Result<Option<String>> {
+    if let Some(reason) = release_child(link).await? {
+        return Ok(Some(reason));
+    }
+    // The daemon no longer records the child, so a reattachment names none.
+    link.between_runs();
+    await_restart(link, delay).await
+}
+
+/// Report the exited child until the daemon answers, telling a restarted
+/// daemon again, since it may have gone before the report arrived. Until the
+/// answer the daemon still records the child, so reattaching names it.
+async fn release_child(link: &mut Link) -> Result<Option<String>> {
+    loop {
+        if !link.is_attached() {
+            super::await_reattachment(link).await?;
+        }
+        link.send(&ExecutionEvent::ChildExited).await?;
+        let answer = async {
+            loop {
+                match link.recv().await? {
+                    Received::Control(Control::ChildReleased) => return Ok(Some(None)),
+                    Received::Control(Control::Stop { reason } | Control::Pause { reason, .. }) => {
+                        return Ok(Some(Some(reason.unwrap_or_else(|| "stopped".into()))));
+                    }
+                    Received::Control(Control::OverloadStop { reason, .. }) => {
+                        return Ok(Some(Some(reason)));
+                    }
+                    Received::Control(_) => {}
+                    Received::Detached | Received::Reattached => {
+                        return Ok::<_, anyhow::Error>(None);
+                    }
+                }
+            }
+        };
+        let answered = timeout(RELEASE_LIMIT, answer)
+            .await
+            .context("the daemon did not release the demo's exited run")??;
+        if let Some(outcome) = answered {
+            return Ok(outcome);
+        }
+    }
+}
+
 /// Wait `delay` before the restart, returning why the demo stopped instead
 /// when the daemon or a signal ends it first.
-pub(super) async fn await_restart(link: &mut Link, delay: Duration) -> Result<Option<String>> {
+async fn await_restart(link: &mut Link, delay: Duration) -> Result<Option<String>> {
     let mut hangup = signal(SignalKind::hangup())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
