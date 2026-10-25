@@ -354,6 +354,30 @@ fn protocol_rejects_bad_clients_and_remains_available() {
 }
 
 #[test]
+fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    // Connections queue without an answer, as with a daemon that is busy.
+    let _listener = support::fake_daemon::bind_fake_daemon(root.path());
+    let mut hook = support::cli(root.path())
+        .args(["messages", "--hook"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    support::wait::wait_until("message hook to give up", || {
+        hook.try_wait().unwrap().is_some()
+    });
+    let output = hook.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("agent messages unavailable: the daemon did not answer in time"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn socket_is_recovered_after_abrupt_exit() {
     let mut daemon = Daemon::start();
     daemon.guard.child.kill().unwrap();

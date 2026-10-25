@@ -69,7 +69,9 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 /// Agent hooks run after every tool call, so a hook prints nothing without
-/// messages or item updates and reports failures without blocking the agent.
+/// messages or item updates and reports failures without blocking the agent:
+/// it gives up on a daemon that does not answer in time, such as one waiting
+/// to restart with an update, and the next call delivers instead.
 pub(super) async fn hook(ctx: &Context) -> Result<i32> {
     let mut input = String::new();
     // Hook input is optional context; a terminal, closed or unreadable stdin
@@ -84,14 +86,25 @@ pub(super) async fn hook(ctx: &Context) -> Result<i32> {
 }
 
 async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
-    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
-    let updates = inbox.updates(ctx).await?;
+    let deadline = tokio::time::Instant::now() + crate::agent::hooks::MESSAGE_DAEMON_LIMIT;
+    let (inbox, updates) = tokio::time::timeout_at(deadline, hook_updates(ctx))
+        .await
+        .context("the daemon did not answer in time")??;
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(());
     }
     outln!("{}", hook_output(input, &inbox.hook_context(&updates)));
     crate::stdout::flush()?;
-    inbox.acknowledge(ctx, &updates).await
+    // The output reaches the agent, so a late acknowledgement loses nothing.
+    tokio::time::timeout_at(deadline, inbox.acknowledge(ctx, &updates))
+        .await
+        .context("the daemon did not acknowledge the delivery in time")?
+}
+
+async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
+    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+    let updates = inbox.updates(ctx).await?;
+    Ok((inbox, updates))
 }
 
 /// Claude Code's `asyncRewake` `Stop` hook: wait for the next messages or

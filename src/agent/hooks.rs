@@ -10,6 +10,13 @@ use crate::state::AgentState;
 /// after each tool call, and when the user submits a prompt.
 pub const MESSAGE_EVENTS: [&str; 2] = ["PostToolUse", "UserPromptSubmit"];
 
+/// How long agents run a message hook before discarding its output.
+const MESSAGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// How long a message hook waits for the daemon, leaving the rest of
+/// [`MESSAGE_TIMEOUT`] to start and print.
+pub const MESSAGE_DAEMON_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// The session start sources that leave an agent waiting for its first turn:
 /// a restart to compact the context happens mid-turn.
 pub const SESSION_START: &str = "startup|resume|clear";
@@ -26,7 +33,7 @@ pub fn messages(shoal: &str) -> impl Iterator<Item = (&'static str, Value)> {
     let handler = json!({
         "type": "command",
         "command": format!("{shoal} messages --hook"),
-        "timeout": 10,
+        "timeout": MESSAGE_TIMEOUT.as_secs(),
     });
     MESSAGE_EVENTS
         .into_iter()
