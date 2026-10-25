@@ -403,13 +403,16 @@ fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
 /// Open a running demo in this terminal: its `open` command, its preset's
 /// way, or else the host's view of it.
 pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
-    let Some(open) = &demo.launch.open else {
-        return match demo.launch.preset {
-            Some(preset) => presets::open(preset, &demo.launch),
-            None => terminal::open_demo(&demo.launch).await,
-        };
-    };
-    // The worktree must still be the recorded one before anything runs there.
+    match (&demo.launch.open, demo.launch.preset) {
+        (Some(open), _) => run_opener(ctx, demo, open).await,
+        (None, Some(preset)) => presets::open(preset, &demo.launch),
+        (None, None) => terminal::open_demo(&demo.launch).await,
+    }
+}
+
+/// Run the demo's `open` command in its workspace with the demo's variables,
+/// once the worktree is verified to be the recorded one.
+async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()> {
     let workspace: Workspace = client::request(
         &ctx.paths,
         Method::VerifyWorkspace {
