@@ -71,6 +71,11 @@ pub struct Running {
     pub launch: Launch,
 }
 
+/// The workspace's simulator lease a simulator demo uses: the one `shoal
+/// acquire sim` takes by default, so the demo shows the device the agent
+/// installed on.
+pub const SIM_LEASE: &str = "default";
+
 /// The `shoal demo` subcommands, which `shoal demo NAME` could not tell
 /// apart from a demo of that name.
 const RESERVED: &[&str] = &["ls", "screen", "send", "start", "stop"];

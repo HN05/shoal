@@ -762,7 +762,7 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         } => {
             let launch = serde_json::from_str(&launch)
                 .map_err(|error| anyhow::anyhow!("invalid demo launch: {error}"))?;
-            demo::worker(&ctx, workspace, launch, command).await
+            crate::execution::run_demo(&ctx.paths, workspace, launch, command).await
         }
         InternalCommand::Session {
             workspace,

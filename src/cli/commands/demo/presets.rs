@@ -27,9 +27,6 @@ use crate::{
 const PORT: &str = "PORT";
 /// The variable a simulator demo's device reaches its command as.
 const SIM_UDID: &str = "SHOAL_SIM_UDID";
-/// The workspace's lease `shoal acquire sim` takes by default, so the demo
-/// shows the device the agent installed on.
-const SIM_LEASE: &str = "default";
 
 /// What the preset and ports provide the demo's command.
 #[derive(Debug, Default)]
@@ -131,7 +128,7 @@ async fn holds_simulator(ctx: &Context, workspace: &Workspace) -> Result<bool> {
     .await?;
     Ok(overview.simulators.iter().any(|sim| {
         sim.workspace_id.as_deref() == Some(&workspace.id)
-            && sim.lease_name.as_deref() == Some(SIM_LEASE)
+            && sim.lease_name.as_deref() == Some(crate::demos::SIM_LEASE)
     }))
 }
 
@@ -144,7 +141,7 @@ async fn lease_simulator(
     let request = SimRequest {
         request_id: uuid::Uuid::new_v4().to_string(),
         clean: false,
-        name: SIM_LEASE.into(),
+        name: crate::demos::SIM_LEASE.into(),
         profile: None,
         device: None,
         runtime: None,
@@ -167,29 +164,6 @@ async fn lease_simulator(
             |message| serde_json::json!({"acquired": false, "code": "simulator_busy", "message": message}),
         )?)),
     }
-}
-
-/// Release the simulator lease a demo took once no simulator demo of the
-/// workspace runs any more.
-pub(super) async fn release_simulator(ctx: &Context, workspace: &str) -> Result<()> {
-    let workspace = client::inspect(&ctx.paths, workspace.to_owned())
-        .await?
-        .workspace;
-    let still_used = running(ctx, Some(&workspace))
-        .await?
-        .iter()
-        .any(|demo| demo.launch.preset == Some(Preset::Simulator));
-    if !still_used {
-        client::request::<()>(
-            &ctx.paths,
-            Method::SimRelease {
-                workspace: workspace.id,
-                name: SIM_LEASE.into(),
-            },
-        )
-        .await?;
-    }
-    Ok(())
 }
 
 /// Show the demo as its preset does. Over SSH nothing on this machine's

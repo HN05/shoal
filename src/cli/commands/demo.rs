@@ -502,22 +502,6 @@ async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Run
     .await
 }
 
-/// The demo worker: run the demo until it stops, then give up the simulator
-/// it leased once no other simulator demo of the workspace uses it.
-pub(super) async fn worker(
-    ctx: &Context,
-    workspace: String,
-    launch: Launch,
-    command: Vec<OsString>,
-) -> Result<i32> {
-    let leased = launch.leased_simulator;
-    let code = crate::execution::run_demo(&ctx.paths, workspace.clone(), launch, command).await?;
-    if leased {
-        presets::release_simulator(ctx, &workspace).await?;
-    }
-    Ok(code)
-}
-
 /// The last `count` lines of `screen` with trailing blank lines dropped.
 fn last_lines(screen: &str, count: usize) -> Option<String> {
     let lines: Vec<&str> = screen.trim_end().lines().collect();
