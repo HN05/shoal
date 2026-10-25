@@ -25,6 +25,7 @@ use crate::{
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
         checks::{CheckLog, plain},
+        run::NewRun,
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -80,6 +81,7 @@ impl Backend for Forgejo {
                 Support::Unsupported(Some("rerun them from the web UI or push a fix"))
             }
             Capability::CancelJobs
+            | Capability::StartRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -488,6 +490,22 @@ impl Backend for Forgejo {
         name: &str,
     ) -> Result<CheckLog> {
         actions::failed_check_log(repo, account, url, name).await
+    }
+
+    /// Forgejo reports the run it starts when asked to; Gitea ignores the
+    /// request and reports none.
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request> {
+        let workflow = run.workflow_file(self)?;
+        Ok(Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint(&format!("actions/workflows/{workflow}/dispatches")),
+            Some(json!({"ref": run.branch, "inputs": run.inputs, "return_run_info": true})),
+        ))
+    }
+
+    fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
+        let number = response["run_number"].as_u64()?;
+        Some(format!("{}/actions/runs/{number}", repo.repository_url()))
     }
 
     /// Each log line starts with its time.

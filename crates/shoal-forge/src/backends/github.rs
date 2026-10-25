@@ -17,7 +17,7 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     capability::{Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain},
+    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain, run::NewRun},
     conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
@@ -74,6 +74,7 @@ impl Backend for GitHub {
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
+            | Capability::StartRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -556,6 +557,16 @@ impl Backend for GitHub {
         action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
         actions::operation(jobs, selected, job, action)
+    }
+
+    /// GitHub accepts the dispatch without reporting the run it starts.
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request> {
+        let workflow = run.workflow_file(self)?;
+        Ok(Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint(&format!("actions/workflows/{workflow}/dispatches")),
+            Some(json!({"ref": run.branch, "inputs": run.inputs})),
+        ))
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

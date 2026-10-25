@@ -1,6 +1,7 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the workspace's agent account.
 pub mod checks;
+pub mod run;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};

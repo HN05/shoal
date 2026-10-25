@@ -13,7 +13,7 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation},
+    ci::{CiAction, CiCheck, Job, Location, Operation, run::NewRun},
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -60,7 +60,7 @@ impl Backend for Bitbucket {
         "Bitbucket Cloud"
     }
 
-    /// Shoal has no Pipelines support.
+    /// Shoal starts Pipelines but reads none of their jobs.
     fn support(&self, capability: Capability) -> Support {
         match capability {
             Capability::ReopenPrs => Support::Unsupported(Some(
@@ -78,7 +78,8 @@ impl Backend for Bitbucket {
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
-            | Capability::ForkPrs => Support::Supported,
+            | Capability::ForkPrs
+            | Capability::StartRuns => Support::Supported,
             Capability::Forks => Support::Unsupported(Some(
                 "fork it on Bitbucket, add the fork as a remote and set remote.pushDefault to it",
             )),
@@ -472,7 +473,7 @@ impl Backend for Bitbucket {
             .hint_login(self)
     }
 
-    /// No CI job Shoal can act on, since it has no Pipelines support.
+    /// No CI job Shoal can act on, since it reads no Pipelines jobs.
     async fn ci_checks(
         &self,
         _repo: &ForgeRepo,
@@ -494,6 +495,37 @@ impl Backend for Bitbucket {
         _action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
         bail!("check {} is not a CI job Shoal can act on", job.name)
+    }
+
+    /// A workflow names a custom pipeline; without one the branch's own
+    /// pipeline runs. Inputs are its variables.
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request> {
+        let mut target = json!({
+            "type": "pipeline_ref_target",
+            "ref_type": "branch",
+            "ref_name": run.branch,
+        });
+        if let Some(pipeline) = &run.workflow {
+            target["selector"] = json!({"type": "custom", "pattern": pipeline});
+        }
+        let variables = run
+            .inputs
+            .iter()
+            .map(|(key, value)| json!({"key": key, "value": value}))
+            .collect::<Vec<_>>();
+        Ok(Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint("pipelines"),
+            Some(json!({"target": target, "variables": variables})),
+        ))
+    }
+
+    fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
+        let number = response["build_number"].as_u64()?;
+        Some(format!(
+            "{}/pipelines/results/{number}",
+            repo.repository_url()
+        ))
     }
 
     async fn check_uploads(

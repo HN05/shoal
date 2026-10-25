@@ -10,7 +10,10 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, checks::plain, id},
+    ci::{
+        CiAction, CiCheck, Job, JobState, Location, Operation, check, checks::plain, id,
+        run::NewRun,
+    },
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -77,6 +80,7 @@ impl Backend for GitLab {
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
+            | Capability::StartRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -546,6 +550,29 @@ impl Backend for GitLab {
             CiAction::Cancel => format!("jobs/{id}/cancel"),
         };
         Ok((Operation::Post(endpoint), vec![job.name.clone()]))
+    }
+
+    /// A branch has one pipeline, from its `.gitlab-ci.yml`, whose
+    /// `spec:inputs` take the run's inputs.
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request> {
+        ensure!(
+            run.workflow.is_none(),
+            "GitLab runs the branch's pipeline; leave out the workflow"
+        );
+        let mut body = json!({"ref": run.branch});
+        // Older GitLab refuses inputs, so a run without them sends none.
+        if !run.inputs.is_empty() {
+            body["inputs"] = json!(run.inputs);
+        }
+        Ok(Request::new(
+            HttpMethod::Post,
+            repo.repo_endpoint("pipeline"),
+            Some(body),
+        ))
+    }
+
+    fn started_run_url(&self, _repo: &ForgeRepo, response: &Value) -> Option<String> {
+        response["web_url"].as_str().map(Into::into)
     }
 
     /// Traces mark each end of a collapsible section.

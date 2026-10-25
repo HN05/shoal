@@ -20,6 +20,7 @@ use crate::{
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
         checks::{CheckLog, plain},
+        run::NewRun,
     },
     conventions::Lookup,
     items::{
@@ -416,6 +417,14 @@ pub(crate) trait Backend {
         name: &str,
     ) -> Result<CheckLog> {
         repo.failed_job_log(account, url, name).await
+    }
+
+    /// The request that starts `run`, or why the forge cannot start it.
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request>;
+
+    /// The web URL of the run a start request's `response` reports, if any.
+    fn started_run_url(&self, _repo: &ForgeRepo, _response: &Value) -> Option<String> {
+        None
     }
 
     /// `log`, a job log as the forge serves it, as plain text.
@@ -884,6 +893,14 @@ impl Backend for ForgeKind {
         name: &str,
     ) -> Result<CheckLog> {
         dispatch!(self, backend => backend.failed_check_log(repo, account, url, name).await)
+    }
+
+    fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request> {
+        dispatch!(self, backend => backend.start_run(repo, run))
+    }
+
+    fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
+        dispatch!(self, backend => backend.started_run_url(repo, response))
     }
 
     fn plain_log(&self, log: &str) -> String {
