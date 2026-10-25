@@ -41,6 +41,10 @@ pub(super) async fn run(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "a workspace process that cleared its scope token cannot use shoal demo"
     );
+    // Before a picker opens or anything is stopped or replaced.
+    if let Some(name) = requested_name(command.as_ref(), name.as_deref()) {
+        crate::demos::validate_name(name)?;
+    }
     match command {
         None => open(ctx, name, workspace).await,
         Some(DemoCommand::Start {
@@ -71,6 +75,16 @@ pub(super) async fn run(
             keys,
             workspace,
         }) => send(ctx, workspace, &name, &keys).await,
+    }
+}
+
+/// The demo name the command line gives, if it gives one.
+fn requested_name<'a>(command: Option<&'a DemoCommand>, name: Option<&'a str>) -> Option<&'a str> {
+    match command {
+        None => name,
+        Some(DemoCommand::Start { name, .. } | DemoCommand::Stop { name, .. }) => name.as_deref(),
+        Some(DemoCommand::Screen { name, .. } | DemoCommand::Send { name, .. }) => Some(name),
+        Some(DemoCommand::Ls { .. }) => None,
     }
 }
 
@@ -113,9 +127,6 @@ async fn start(
     command: Vec<OsString>,
 ) -> Result<i32> {
     // Before a picker opens or a running demo is replaced.
-    if let Some(name) = &name {
-        crate::demos::validate_name(name)?;
-    }
     overrides.validate()?;
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, id).await?.workspace;

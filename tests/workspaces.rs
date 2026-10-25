@@ -23662,6 +23662,20 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     wait_until("the demo to write its log", || {
         fs::read_to_string(&log).is_ok_and(|text| text.contains("hello"))
     });
+    // An invalid name is refused before a workspace is chosen.
+    for args in [
+        vec!["demo", "stop", "Bad"],
+        vec!["demo", "screen", "Bad"],
+        vec!["demo", "send", "Bad", "q"],
+    ] {
+        let refused = fixture.run(&args);
+        assert!(!refused.status.success());
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("demo names must"),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&refused.stderr)
+        );
+    }
     // A workspace process without its token still acts only on its own.
     let binary = env!("CARGO_BIN_EXE_shoal");
     let refused = fixture.run(&[
