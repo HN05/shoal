@@ -1002,8 +1002,9 @@ fn spawn(
         .args(&command[1..])
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
+    // A demo is the user's, so the agent's output setting stays behind.
     if let Mode::Demo { launch } = mode {
-        process.envs(&launch.environment);
+        process.env_remove(env::OUTPUT).envs(&launch.environment);
     }
     if let Some(auth) = auth {
         auth.apply(&mut process);

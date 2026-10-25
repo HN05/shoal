@@ -23403,6 +23403,8 @@ fn demos_restart_until_stopped_and_show_their_screen() {
         let output = fixture
             .command()
             .env("PATH", fixture.restricted_path(&bin))
+            // As Shoal sets it for the agents it launches.
+            .env("SHOAL_OUTPUT", "json")
             .arg("--json")
             .arg("demo")
             .args(args)
@@ -23422,7 +23424,7 @@ fn demos_restart_until_stopped_and_show_their_screen() {
         "--",
         "sh",
         "-c",
-        "echo run >> runs; echo failing; exit 3",
+        "echo run >> runs; echo \"output ${SHOAL_OUTPUT:-unset}\"; echo failing; exit 3",
     ]);
     assert_eq!(started["name"], "demo");
     assert_eq!(started["workspace"], "tried");
@@ -23444,6 +23446,8 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let screen = demo(&["screen", "demo", "--workspace", "tried"]);
     let text = screen["screen"].as_str().unwrap();
     assert!(text.contains("failing"), "{text}");
+    // The agent's output setting stays out of what the user tries.
+    assert!(text.contains("output unset"), "{text}");
     assert!(text.contains("demo exited with status 3"), "{text}");
     fixture.ok(&["done", "tried", "--keep-demos"]);
     let listing = demo(&["ls", "--workspace", "tried"]);
