@@ -26,13 +26,14 @@ use crate::{
         CiAction, CiCheck, Job, Location, Operation,
         checks::{CheckLog, plain},
         run::NewRun,
+        run_action::Run,
     },
     conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemState},
+        item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
     },
@@ -506,6 +507,32 @@ impl Backend for Forgejo {
     fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
         let number = response["run_number"].as_u64()?;
         Some(format!("{}/actions/runs/{number}", repo.repository_url()))
+    }
+
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+        actions::run_number(repo, target)
+    }
+
+    /// Forgejo links a run by its number in the repository, not its API ID.
+    fn run_path(&self, number: u64) -> String {
+        format!("actions/runs?run_number={number}")
+    }
+
+    fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
+        let run = actions::numbered_run(value, number)?;
+        Ok(Run {
+            id: run["id"].as_u64().context("Actions run has no ID")?,
+            url: format!("{}/actions/runs/{number}", repo.repository_url()),
+            branch: text(&run["prettyref"]),
+        })
+    }
+
+    /// Forgejo's API cannot rerun, which the capability refuses first.
+    fn run_endpoint(&self, run: &Run, action: CiAction, _failed: bool) -> Result<String> {
+        match action {
+            CiAction::Cancel => Ok(format!("actions/runs/{}/cancel", run.id)),
+            CiAction::Rerun => Err(capability::unsupported(self, Capability::ci(action))),
+        }
     }
 
     /// Each log line starts with its time.

@@ -2,6 +2,7 @@
 //! as the workspace's agent account.
 pub mod checks;
 pub mod run;
+pub mod run_action;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};

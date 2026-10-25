@@ -92,19 +92,44 @@ pub(crate) async fn run_id_for(
     run_id(&runs, number, head)
 }
 
-/// Web URLs use a repository run number and zero-based job index, neither
-/// API ID. A host may link over HTTPS while its remote uses HTTP.
-pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(u64, usize)> {
+/// The one run a list filtered by `number` holds.
+pub(crate) fn numbered_run(runs: &Value, number: u64) -> Result<&Value> {
+    let runs = runs["workflow_runs"]
+        .as_array()
+        .context("Actions runs are not a list")?;
+    let [run] = runs.as_slice() else {
+        anyhow::bail!("Actions run number did not identify one run")
+    };
+    ensure!(
+        run["index_in_repo"] == number,
+        "Actions run does not match its number"
+    );
+    Ok(run)
+}
+
+/// The run number of a run's or job's web URL in the repository, which may
+/// be relative to the host.
+pub(crate) fn run_number(repo: &ForgeRepo, target: &str) -> Option<u64> {
+    let parts = runs_path(repo, target)?;
+    parts.first()?.parse().ok().filter(|number| *number > 0)
+}
+
+/// The path components of `target` after the repository's runs. A host may
+/// link relative to itself, or over HTTPS while its remote uses HTTP.
+fn runs_path<'a>(repo: &ForgeRepo, target: &'a str) -> Option<Vec<&'a str>> {
     let relative = ["https", "http"]
         .iter()
         .find_map(|scheme| target.strip_prefix(&format!("{scheme}://{}", repo.host)))
         .unwrap_or(target);
-    let prefix = format!("/{}/actions/runs/", repo.path);
-    let parts = relative
-        .strip_prefix(&prefix)
-        .context("check does not link to this repository's Actions job")?
-        .split('/')
-        .collect::<Vec<_>>();
+    let rest = relative.strip_prefix(&format!("/{}/actions/runs/", repo.path))?;
+    Some(rest.split('/').collect())
+}
+
+/// Web URLs use a repository run number and zero-based job index, neither
+/// API ID.
+pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(u64, usize)> {
+    let parts =
+        runs_path(repo, target).context("check does not link to this repository's Actions job")?;
     let [run, "jobs", job] = parts.as_slice() else {
         anyhow::bail!("invalid Actions job URL")
     };
@@ -155,14 +180,9 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
 }
 
 fn run_id(runs: &Value, number: u64, head: &str) -> Result<u64> {
-    let runs = runs["workflow_runs"]
-        .as_array()
-        .context("Actions runs are not a list")?;
-    let [run] = runs.as_slice() else {
-        anyhow::bail!("Actions run number did not identify one run")
-    };
+    let run = numbered_run(runs, number)?;
     ensure!(
-        run["index_in_repo"] == number && run["commit_sha"] == head,
+        run["commit_sha"] == head,
         "Actions run does not match the PR check's head"
     );
     run["id"]

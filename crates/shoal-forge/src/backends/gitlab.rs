@@ -12,7 +12,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, JobState, Location, Operation, check, checks::plain, id,
-        run::NewRun,
+        run::NewRun, run_action::Run,
     },
     conventions::Lookup,
     items::{
@@ -573,6 +573,37 @@ impl Backend for GitLab {
 
     fn started_run_url(&self, _repo: &ForgeRepo, response: &Value) -> Option<String> {
         response["web_url"].as_str().map(Into::into)
+    }
+
+    /// A pipeline's URL holds its API ID.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+        let parts = repo.repository_path(target, "/-/pipelines/")?;
+        let [pipeline] = parts.as_slice() else {
+            return None;
+        };
+        id(pipeline)
+    }
+
+    fn run_path(&self, number: u64) -> String {
+        format!("pipelines/{number}")
+    }
+
+    /// A tag's pipeline ran on no branch.
+    fn run(&self, _repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+        Ok(Run {
+            id: value["id"].as_u64().context("pipeline has no ID")?,
+            url: text(&value["web_url"]).context("pipeline has no URL")?,
+            branch: text(&value["ref"]).filter(|_| value["tag"] != true),
+        })
+    }
+
+    /// GitLab retries only a pipeline's failed and cancelled jobs.
+    fn run_endpoint(&self, run: &Run, action: CiAction, _failed: bool) -> Result<String> {
+        let id = run.id;
+        Ok(match action {
+            CiAction::Rerun => format!("pipelines/{id}/retry"),
+            CiAction::Cancel => format!("pipelines/{id}/cancel"),
+        })
     }
 
     /// Traces mark each end of a collapsible section.

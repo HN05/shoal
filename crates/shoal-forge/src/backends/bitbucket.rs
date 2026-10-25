@@ -13,7 +13,7 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, run::NewRun},
+    ci::{CiAction, CiCheck, Job, Location, Operation, run::NewRun, run_action::Run},
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -518,6 +518,23 @@ impl Backend for Bitbucket {
             repo.repo_endpoint("pipelines"),
             Some(json!({"target": target, "variables": variables})),
         ))
+    }
+
+    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<u64> {
+        None
+    }
+
+    fn run_path(&self, number: u64) -> String {
+        format!("pipelines/{number}")
+    }
+
+    /// Shoal reads no Pipelines run, which the capabilities refuse first.
+    fn run(&self, _repo: &ForgeRepo, _number: u64, _value: &Value) -> Result<Run> {
+        Err(capability::unsupported(self, Capability::RerunJobs))
+    }
+
+    fn run_endpoint(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<String> {
+        Err(capability::unsupported(self, Capability::ci(action)))
     }
 
     fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {

@@ -17,14 +17,17 @@ use crate::{
     ForgeRepo, MERGED_HINT,
     account::Account,
     capability::{Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain, run::NewRun},
+    ci::{
+        CiAction, CiCheck, Job, Location, Operation, checks::plain, id, run::NewRun,
+        run_action::Run,
+    },
     conventions::{Lookup, shared_lookups},
     items::{
         action::{Edit, MergeMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         issue::require_open,
-        item::{Current, Item, ItemState, PrSummary},
+        item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
     },
@@ -567,6 +570,32 @@ impl Backend for GitHub {
             repo.repo_endpoint(&format!("actions/workflows/{workflow}/dispatches")),
             Some(json!({"ref": run.branch, "inputs": run.inputs})),
         ))
+    }
+
+    /// A run's URL holds its API ID.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+        id(repo.repository_path(target, "/actions/runs/")?.first()?)
+    }
+
+    fn run_path(&self, number: u64) -> String {
+        format!("actions/runs/{number}")
+    }
+
+    fn run(&self, _repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+        Ok(Run {
+            id: value["id"].as_u64().context("Actions run has no ID")?,
+            url: text(&value["html_url"]).context("Actions run has no URL")?,
+            branch: text(&value["head_branch"]),
+        })
+    }
+
+    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
+        let id = run.id;
+        Ok(match (action, failed) {
+            (CiAction::Rerun, false) => format!("actions/runs/{id}/rerun"),
+            (CiAction::Rerun, true) => format!("actions/runs/{id}/rerun-failed-jobs"),
+            (CiAction::Cancel, _) => format!("actions/runs/{id}/cancel"),
+        })
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

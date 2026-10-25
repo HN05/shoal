@@ -21,6 +21,7 @@ use crate::{
         CiAction, CiCheck, Job, Location, Operation,
         checks::{CheckLog, plain},
         run::NewRun,
+        run_action::Run,
     },
     conventions::Lookup,
     items::{
@@ -426,6 +427,21 @@ pub(crate) trait Backend {
     fn started_run_url(&self, _repo: &ForgeRepo, _response: &Value) -> Option<String> {
         None
     }
+
+    /// The number a workflow run's web URL in the repository names, if
+    /// `target` links one.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64>;
+
+    /// The path under the repository that reads the run numbered `number`
+    /// in its web URL.
+    fn run_path(&self, number: u64) -> String;
+
+    /// The run numbered `number` that a read of its path returned as `value`.
+    fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run>;
+
+    /// The endpoint under the repository that applies `action` to `run`;
+    /// `failed` reruns only its failed jobs.
+    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String>;
 
     /// `log`, a job log as the forge serves it, as plain text.
     fn plain_log(&self, log: &str) -> String {
@@ -901,6 +917,22 @@ impl Backend for ForgeKind {
 
     fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
         dispatch!(self, backend => backend.started_run_url(repo, response))
+    }
+
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {
+        dispatch!(self, backend => backend.locate_run(repo, target))
+    }
+
+    fn run_path(&self, number: u64) -> String {
+        dispatch!(self, backend => backend.run_path(number))
+    }
+
+    fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
+        dispatch!(self, backend => backend.run(repo, number, value))
+    }
+
+    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
+        dispatch!(self, backend => backend.run_endpoint(run, action, failed))
     }
 
     fn plain_log(&self, log: &str) -> String {
