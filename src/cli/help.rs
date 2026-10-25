@@ -64,7 +64,10 @@ pub(super) fn template() -> &'static str {
     TEMPLATE.get_or_init(|| {
         // Build only the subcommands: constructing Cli here would recurse.
         let mut catalog = super::Command::augment_subcommands(clap::Command::new("shoal"));
-        catalog.build();
+        // Build the root alone, which adds its `help` command; `build` would
+        // also build every command's deferred arguments, which the listing
+        // does not show.
+        let _ = catalog.render_usage();
         let mut template =
             String::from("{before-help}{about-with-newline}\n{usage-heading} {usage}\n\n");
         for (heading, names) in GROUPS {

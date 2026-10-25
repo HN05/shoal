@@ -150,6 +150,8 @@ pub fn command() -> Command {
     for legacy in ["ask", "notifications"] {
         command = withdraw(command, legacy);
     }
+    // Decoration reads every command's arguments, which are deferred until built.
+    command.build();
     decorate(command, &[], Arc::new(typed))
 }
 
@@ -188,6 +190,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
         .all(|id| command.get_arguments().any(|arg| arg.get_id() == id));
     command
         .mut_args(|arg| {
+            let arg = own_first(arg);
             if offer_all && arg.get_id() == "all" {
                 return arg.hide(true);
             }
@@ -286,6 +289,14 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
             path.push(subcommand.get_name().to_owned());
             decorate(subcommand, &path, typed.clone())
         })
+}
+
+/// A command's deferred arguments follow the global ones its parent added
+/// first; doubling the display order puts each own argument before a global
+/// one it ties with.
+fn own_first(arg: clap::Arg) -> clap::Arg {
+    let order = 2 * arg.get_display_order() + usize::from(arg.is_global_set());
+    arg.display_order(order)
 }
 
 impl Typed {

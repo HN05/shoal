@@ -129,7 +129,14 @@ pub struct WorkspaceScope {
     pub all: bool,
 }
 
+// Every subcommand enum defers its commands' arguments until parsing reaches
+// them: the whole tree takes megabytes that stay resident in each long-lived
+// process, such as an agent's wrapper and hooks. A command's attributes apply
+// before its deferred arguments, so they cannot change those arguments, an
+// argument struct's doc comment would replace the command's description, and
+// code that reads arguments from the tree builds it first.
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum Command {
     /// Daemons from earlier releases read the protocol before they update.
     #[command(name = "__build-info", hide = true)]
@@ -744,6 +751,7 @@ pub enum Command {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum PrCommand {
     /// Rerun failed or cancel running CI jobs of a PR.
     Ci {
@@ -862,6 +870,7 @@ pub enum PrCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum CiCommand {
     /// Rerun failed jobs on the PR's current head.
     Rerun {
@@ -886,6 +895,7 @@ pub struct CiChecks {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum IssueCommand {
     /// List or search the workspace repository's issues, newest first.
     List(ListArgs),
@@ -1059,6 +1069,7 @@ pub struct ItemArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum AlertsCommand {
     /// Send the user a notification about a workspace without marking it done.
     Send {
@@ -1116,6 +1127,7 @@ pub struct ApprovalsArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ApprovalsCommand {
     /// Withdraw a pending request the workspace's agent no longer needs.
     Withdraw {
@@ -1143,6 +1155,7 @@ pub struct QuestionsArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum MessagesCommand {
     /// Queue a message for the agents working in a workspace.
     Send {
@@ -1185,6 +1198,7 @@ pub struct QuestionAskArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum QuestionsCommand {
     /// Ask the user to decide something; the answer arrives as a message.
     Ask(QuestionAskArgs),
@@ -1199,6 +1213,7 @@ pub enum QuestionsCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum BaseCommand {
     /// Record the workspace whose branch this workspace builds on.
     Set {
@@ -1410,6 +1425,7 @@ pub enum SkillName {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum SkillCommand {
     /// Install or refresh the bundled skills for configured AI tools (no daemon needed).
     Install {
@@ -1423,6 +1439,7 @@ pub enum SkillCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum BranchCommand {
     /// List kept branches and how many commits only they have.
     Ls,
@@ -1443,6 +1460,7 @@ pub enum BranchCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum WorkCommand {
     /// Show, set or clear the workspace a stacked workspace builds on.
     #[command(args_conflicts_with_subcommands = true)]
@@ -1503,6 +1521,7 @@ pub enum WorkCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ForgeCommand {
     /// List what the repository's forge supports.
     Capabilities(RepositoryArgs),
@@ -1515,6 +1534,7 @@ pub enum ForgeCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum RepoCommand {
     /// List the repository's labels with their descriptions.
     Labels(RepositoryArgs),
@@ -1585,6 +1605,7 @@ pub enum RepoCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum PortCommand {
     /// Acquire a port, or return the existing reservation with this name.
     Acquire {
@@ -1614,6 +1635,7 @@ pub enum PortCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum InternalCommand {
     /// Stream durable workspace lifecycle events without consuming notifications.
     Events {
@@ -1708,6 +1730,7 @@ pub enum InternalCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ShellCommand {
     /// Generate shell completion scripts.
     Completions {
@@ -1722,6 +1745,7 @@ pub enum ShellCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ConfigCommand {
     /// Set config values using TOML dotted keys (global by default), saved together.
     Set {
@@ -1755,6 +1779,7 @@ pub enum ConfigCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum DaemonCommand {
     /// Install and start the per-user daemon service.
     Install {
@@ -1779,6 +1804,7 @@ pub enum DaemonCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum SimCommand {
     /// Show available device types, installed runtimes, and machine profiles.
     Catalog,
@@ -1853,6 +1879,7 @@ pub struct LeaseOptions {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum AcquireKind {
     /// Keep a workspace against automatic cleanup until released.
     Hold {
@@ -1940,6 +1967,7 @@ pub struct PoolSelection {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ReleaseKind {
     /// Release a named workspace hold; omit its name to choose one.
     Hold {
@@ -1968,6 +1996,7 @@ pub enum ReleaseKind {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ResourceCommand {
     /// Acquire a permit, reader/writer lock, or related repository path.
     Acquire {
@@ -2035,6 +2064,27 @@ mod tests {
         );
         assert!(resolves_json(&["--json", "status"], Some("yaml")).unwrap());
         assert!(!resolves_json(&["--text", "status"], Some("yaml")).unwrap());
+    }
+
+    /// Builds each command's deferred arguments and checks that its
+    /// description stays the one its parent lists.
+    fn assert_descriptions_survive_deferral(command: &clap::Command) {
+        for listed in command.get_subcommands() {
+            let mut built = listed.clone();
+            // Builds this command alone, leaving its subcommands deferred.
+            let _ = built.render_usage();
+            let name = built.get_name();
+            assert_eq!(built.get_about(), listed.get_about(), "{name}");
+            assert_eq!(built.get_long_about(), listed.get_long_about(), "{name}");
+            assert_descriptions_survive_deferral(&built);
+        }
+    }
+
+    #[test]
+    fn deferred_arguments_keep_each_command_description() {
+        let mut root = <Cli as clap::CommandFactory>::command();
+        let _ = root.render_usage();
+        assert_descriptions_survive_deferral(&root);
     }
 
     #[test]

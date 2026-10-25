@@ -257,7 +257,9 @@ mod tests {
     #[test]
     fn every_command_naming_a_workspace_states_its_need() {
         let mut found = vec![];
-        workspace_commands(&crate::cli::Cli::command(), &mut vec![], &mut found);
+        let mut command = crate::cli::Cli::command();
+        command.build();
+        workspace_commands(&command, &mut vec![], &mut found);
         assert!(found.len() > 40, "{found:?}");
         for path in found {
             let path: Vec<_> = path.iter().map(String::as_str).collect();
