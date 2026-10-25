@@ -288,7 +288,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
 fn global_config_changes_reload_a_running_daemon() {
     let daemon = Daemon::start();
     let policy = || {
-        let output = daemon.run(&["--json", "sim", "--all"]);
+        let output = daemon.run(&["--json", "leases", "sim", "--all"]);
         assert!(output.status.success(), "{output:?}");
         serde_json::from_slice::<Value>(&output.stdout).unwrap()["policy"].clone()
     };

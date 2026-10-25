@@ -8,70 +8,17 @@ use super::{
 };
 use crate::{
     cli::{
-        ResourceCommand, WorkspaceScope,
+        WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     daemon::resources::{
         Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
     protocol::Method,
 };
-
-pub(super) async fn run(
-    ctx: &Context,
-    command: Option<ResourceCommand>,
-    scope: WorkspaceScope,
-) -> Result<i32> {
-    match command {
-        Some(ResourceCommand::Acquire {
-            mode,
-            pool,
-            workspace,
-            resource,
-            name,
-            reason,
-            queue,
-        }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let request = ResourceRequest {
-                mode,
-                kind: None,
-                pool,
-                resource,
-                name,
-                reason,
-                queue,
-            };
-            acquire(ctx, workspace, request).await
-        }
-        Some(ResourceCommand::Release {
-            pool,
-            workspace,
-            name,
-        }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let method = Method::ResourceRelease {
-                workspace,
-                pool,
-                name,
-            };
-            client::request::<()>(&ctx.paths, method).await?;
-            ctx.emit_styled(
-                Style::Success,
-                "Resource released",
-                json!({"released": true}),
-            )?;
-            Ok(0)
-        }
-        Some(ResourceCommand::List { scope }) => overview(ctx, scope, Members::All).await,
-        None => overview(ctx, scope, Members::All).await,
-    }
-}
 
 /// Exit 2 means no compatible capacity or a pending or denied approval; a
 /// queued request returns only once acquired or denied.

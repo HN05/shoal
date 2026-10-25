@@ -507,17 +507,6 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
-    /// Reserve and release workspace TCP ports; superseded by acquire, release, and leases.
-    #[command(hide = true, args_conflicts_with_subcommands = true)]
-    Port {
-        #[command(subcommand)]
-        command: Option<PortCommand>,
-        /// Show the effective configuration and reservations for this workspace.
-        workspace: Option<String>,
-        /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
-    },
     /// Inspect approval requests and choose or submit a decision.
     #[command(args_conflicts_with_subcommands = true)]
     Approvals {
@@ -526,27 +515,10 @@ pub enum Command {
         #[command(flatten)]
         args: ApprovalsArgs,
     },
-    /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
-    #[command(hide = true, args_conflicts_with_subcommands = true)]
-    Resource {
-        #[command(subcommand)]
-        command: Option<ResourceCommand>,
-        /// Show effective capacity and leases for this workspace.
-        workspace: Option<String>,
-        /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
-    },
     /// Show the simulator catalog and clean-device history.
-    #[command(args_conflicts_with_subcommands = true)]
     Sim {
         #[command(subcommand)]
-        command: Option<SimCommand>,
-        /// Show configured profiles, capacity, and devices for this workspace.
-        workspace: Option<String>,
-        /// Show every managed device.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        command: SimCommand,
     },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
@@ -1586,36 +1558,6 @@ pub enum RepoCommand {
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
-pub enum PortCommand {
-    /// Acquire a port, or return the existing reservation with this name.
-    Acquire {
-        name: String,
-        workspace: Option<String>,
-        #[arg(long)]
-        port: Option<u16>,
-        /// Environment variable exported to subsequent workspace commands.
-        #[arg(long)]
-        env: Option<String>,
-        /// Explain what the reservation is used for.
-        #[arg(long)]
-        reason: Option<String>,
-        /// Override the repo's conflict behavior (default: suggest).
-        #[arg(long, value_enum)]
-        on_conflict: Option<crate::config::repo::ConflictPolicy>,
-    },
-    /// Show configured ports and current reservations.
-    List {
-        #[command(flatten)]
-        scope: WorkspaceScope,
-    },
-    Release {
-        name: String,
-        workspace: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
 pub enum InternalCommand {
     /// Stream durable workspace lifecycle events without consuming notifications.
     Events {
@@ -1788,34 +1730,6 @@ pub enum DaemonCommand {
 pub enum SimCommand {
     /// Show available device types, installed runtimes, and machine profiles.
     Catalog,
-    /// Show configured profiles, capacity, and managed instances.
-    #[command(hide = true)]
-    List {
-        #[command(flatten)]
-        scope: WorkspaceScope,
-    },
-    /// Acquire exclusive use; reuse the same named lease on repeated requests.
-    #[command(hide = true)]
-    Acquire {
-        workspace: Option<String>,
-        #[arg(long, default_value = "default")]
-        name: String,
-        #[arg(long, conflicts_with_all = ["device", "runtime"])]
-        profile: Option<String>,
-        #[arg(long)]
-        device: Option<String>,
-        /// Installed runtime; defaults to the latest compatible iOS runtime.
-        #[arg(long, requires = "device")]
-        runtime: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-        /// Require a fresh or erased device; a reason is mandatory and audited.
-        #[arg(long, requires = "reason")]
-        clean: bool,
-        /// Queue for capacity and wait until acquired or denied.
-        #[arg(long)]
-        queue: bool,
-    },
     /// Review clean-device requests, including failed and busy requests.
     History {
         #[command(flatten)]
@@ -1825,13 +1739,6 @@ pub enum SimCommand {
         /// Show entries older than this audit ID.
         #[arg(long)]
         before: Option<i64>,
-    },
-    /// End exclusive use; the idle policy controls shutdown and deletion.
-    #[command(hide = true)]
-    Release {
-        #[arg(default_value = "default")]
-        name: String,
-        workspace: Option<String>,
     },
 }
 
@@ -1973,40 +1880,6 @@ pub enum ReleaseKind {
     },
     /// End a secret grant or cancel its request, or every one.
     Secret { name: Option<String> },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum ResourceCommand {
-    /// Acquire a permit, reader/writer lock, or related repository path.
-    Acquire {
-        pool: String,
-        workspace: Option<String>,
-        #[arg(long)]
-        resource: Option<String>,
-        /// Lock mode (defaults to permit for semaphores, write for rwlocks, read for repos).
-        #[arg(long, value_enum)]
-        mode: Option<crate::daemon::resources::LockMode>,
-        /// Stable lease name; use different names to request multiple permits.
-        #[arg(long, default_value = "default")]
-        name: String,
-        #[arg(long)]
-        reason: Option<String>,
-        /// Queue for capacity and wait until acquired or denied.
-        #[arg(long)]
-        queue: bool,
-    },
-    Release {
-        pool: String,
-        workspace: Option<String>,
-        #[arg(long, default_value = "default")]
-        name: String,
-    },
-    /// Show configured pools, capacity, and current leases.
-    List {
-        #[command(flatten)]
-        scope: WorkspaceScope,
-    },
 }
 
 #[cfg(test)]

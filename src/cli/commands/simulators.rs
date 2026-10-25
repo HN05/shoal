@@ -9,19 +9,15 @@ use crate::{
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     protocol::Method,
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
-pub(super) async fn run(
-    ctx: &Context,
-    command: Option<SimCommand>,
-    scope: WorkspaceScope,
-) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
     match command {
-        Some(SimCommand::Catalog) => {
+        SimCommand::Catalog => {
             let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
             ctx.show(&catalog, |catalog| {
                 outln!(
@@ -31,36 +27,11 @@ pub(super) async fn run(
             })?;
             Ok(0)
         }
-        Some(SimCommand::List { scope }) => overview(ctx, scope).await,
-        Some(SimCommand::Acquire {
-            workspace,
-            name,
-            profile,
-            device,
-            runtime,
-            reason,
-            clean,
-            queue,
-        }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let request = SimRequest {
-                request_id: uuid::Uuid::new_v4().to_string(),
-                clean,
-                name,
-                profile,
-                device,
-                runtime,
-                reason,
-                queue,
-            };
-            acquire(ctx, workspace, request).await
-        }
-        Some(SimCommand::History {
+        SimCommand::History {
             scope,
             limit,
             before,
-        }) => {
+        } => {
             let workspace = ui::select_workspace_filter(ctx, scope).await?;
             let entries = request::<Vec<AuditEntry>>(
                 &ctx.paths,
@@ -81,18 +52,6 @@ pub(super) async fn run(
             })?;
             Ok(0)
         }
-        Some(SimCommand::Release { name, workspace }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            client::request::<()>(&ctx.paths, Method::SimRelease { workspace, name }).await?;
-            ctx.emit_styled(
-                Style::Success,
-                "Simulator released",
-                json!({"released": true}),
-            )?;
-            Ok(0)
-        }
-        None => overview(ctx, scope).await,
     }
 }
 

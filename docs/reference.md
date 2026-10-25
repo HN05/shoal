@@ -2696,8 +2696,7 @@ Holds are released separately.
 
 `shoal leases` shows every kind's capacity and leases; a kind shows
 only that kind, with repositories listed apart from other resources, and `--all`
-covers every workspace. The earlier `acquire`, `release`, and listing forms of
-`port`, `sim`, and `resource` remain accepted but are hidden from help.
+covers every workspace.
 
 ### Port reservations
 

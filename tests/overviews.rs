@@ -94,12 +94,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                 if json {
                     command.arg("--json");
                 }
-                // Exercise the list alias as well as the bare noun.
-                command.arg(noun);
-                if count == 8 {
-                    command.arg("list");
-                }
-                command.arg("--all");
+                command.args(["leases", noun, "--all"]);
                 let mut command = tokio::process::Command::from(command);
                 command.kill_on_drop(true);
                 let (output, ()) = tokio::time::timeout(Duration::from_secs(60), async {

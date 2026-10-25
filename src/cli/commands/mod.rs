@@ -665,11 +665,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
-        Command::Port {
-            command,
-            workspace,
-            all,
-        } => ports::run(&ctx, command, WorkspaceScope { workspace, all }).await,
         Command::Approvals {
             command: Some(ApprovalsCommand::Withdraw { id, workspace }),
             ..
@@ -678,16 +673,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Resource {
-            command,
-            workspace,
-            all,
-        } => resources::run(&ctx, command, WorkspaceScope { workspace, all }).await,
-        Command::Sim {
-            command,
-            workspace,
-            all,
-        } => simulators::run(&ctx, command, WorkspaceScope { workspace, all }).await,
+        Command::Sim { command } => simulators::run(&ctx, command).await,
         Command::Doctor {
             scope,
             repair,
