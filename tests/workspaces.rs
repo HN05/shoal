@@ -15550,7 +15550,8 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         ("waiter", "agent_exited", "claude exited with code 7")
     );
     assert!(shown.as_array().unwrap().iter().all(|n| n["read"] == false));
-    // Shown once. `--all` still has them, now read; the text form has the time first.
+    // Shown once. `--all` still has them, now read; the text form has today's
+    // time first.
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     let all = fixture.ok(&["alerts", "--all", "--limit", "2"]);
     assert_eq!(all.as_array().unwrap().len(), 2);
@@ -15560,7 +15561,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
         text.lines()
-            .all(|line| line.contains("  waiter  ") && line.as_bytes()[4] == b'-'),
+            .all(|line| line.contains("  waiter  ") && line.get(2..3) == Some(":")),
         "{text}"
     );
     // Once read, the same conflict is news again.

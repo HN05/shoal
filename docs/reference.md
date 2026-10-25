@@ -2619,7 +2619,9 @@ idle cleanup, and automatic cleanup that starts failing. `shoal alerts send` add
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
-workspace may withdraw its message by that number until it is shown. Each line shows the local time, the workspace, and the message;
+workspace may withdraw its message by that number until it is shown. Each line shows when it came in, the workspace, and the message: the local
+time for today's, otherwise whole days, weeks, months or years ago, such as
+`1 day ago` or `2 weeks ago`;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
 `--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
