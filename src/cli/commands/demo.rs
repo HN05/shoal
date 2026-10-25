@@ -109,6 +109,10 @@ impl Overrides {
                 .is_none_or(|open| !open.trim().is_empty()),
             "--open needs a command"
         );
+        ensure!(
+            self.scheme.is_none() || self.preset.is_none_or(|preset| preset == Preset::Web),
+            "--scheme applies only to the web preset"
+        );
         Ok(())
     }
 }

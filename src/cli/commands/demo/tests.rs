@@ -121,4 +121,12 @@ fn start_options_are_checked_before_anything_is_chosen() {
     assert!(overrides(Some("echo"), &["web"]).validate().is_ok());
     assert!(overrides(None, &["Web"]).validate().is_err());
     assert!(overrides(Some(" "), &[]).validate().is_err());
+    let https = |preset| Overrides {
+        preset: Some(preset),
+        scheme: Some(crate::demos::Scheme::Https),
+        open: None,
+        ports: Vec::new(),
+    };
+    assert!(https(Preset::Web).validate().is_ok());
+    assert!(https(Preset::Server).validate().is_err());
 }
