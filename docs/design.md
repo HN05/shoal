@@ -1213,7 +1213,8 @@ queue lives in memory, so a daemon restart loses the order; commands still polli
 join again.
 
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
-`shoal approvals` lists and `shoal approve` or `shoal deny` decides every kind: landing
+`shoal approvals` opens a request picker on a terminal, and a numbered request
+shows its details and prompts for a decision. Explicit `--approve` and `--deny` flags decide every kind: landing
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
 In a shared repository everything an agent opens is seen by other people, so

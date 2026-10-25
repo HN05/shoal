@@ -756,7 +756,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
             .await
             .last()
             .unwrap()
-            .contains("shoal escalate")
+            .contains("shoal approvals --escalate")
     );
     let user = || async {
         manager

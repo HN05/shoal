@@ -74,8 +74,8 @@ last `id` you handled and resync with `shoal --json work` after a `gap`.
 
 ```sh
 shoal --json approvals
-shoal approve <number>
-shoal deny <number>
+shoal approvals --approve <number>
+shoal approvals --deny <number>
 ```
 
 Report pending requests to the user with their recorded settings and reason,

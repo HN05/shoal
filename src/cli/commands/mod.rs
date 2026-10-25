@@ -70,7 +70,6 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    daemon::approvals::proposals::{Duplicate, ProposalDecision},
     env,
     forge::items::link::ItemKind,
     model::Workspace,
@@ -650,33 +649,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => approvals::withdraw(&ctx, workspace, id).await,
         Command::Approvals {
             command: None,
-            workspace,
-        } => approvals::list(&ctx, workspace).await,
-        Command::Approve { id, title, body } => {
-            let details = ProposalDecision {
-                title,
-                body: items::read_body(body)?,
-                ..ProposalDecision::default()
-            };
-            approvals::decide(&ctx, id, true, details).await
-        }
-        Command::Deny {
-            id,
-            reason,
-            duplicate_of,
-            duplicate_of_approval,
-        } => {
-            let duplicate_of = duplicate_of
-                .map(Duplicate::Issue)
-                .or(duplicate_of_approval.map(Duplicate::Approval));
-            let details = ProposalDecision {
-                reason,
-                duplicate_of,
-                ..ProposalDecision::default()
-            };
-            approvals::decide(&ctx, id, false, details).await
-        }
-        Command::Escalate { id } => approvals::escalate(&ctx, id).await,
+            args,
+        } => approvals::run(&ctx, args).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
         Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,
         Command::Doctor {

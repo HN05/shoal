@@ -182,7 +182,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 return arg.hide(true);
             }
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
-                ("id", _, "approve" | "deny") | ("id", "approvals", "withdraw") => {
+                ("id", _, "approvals") | ("id", "approvals", "withdraw") => {
                     Some(Target::ApprovalRequests)
                 }
                 ("id", _, "answer") | ("id", "questions", "withdraw") => Some(Target::Questions),

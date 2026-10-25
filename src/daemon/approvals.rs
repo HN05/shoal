@@ -428,7 +428,7 @@ impl ApprovalRequest {
     /// including how to approve it.
     fn notification(&self) -> String {
         format!(
-            "approval {}: {}{}; approve with shoal approve {}",
+            "approval {}: {}{}; approve with shoal approvals --approve {}",
             self.id,
             self.subject(),
             reason_suffix(self),
@@ -1115,7 +1115,7 @@ impl Manager {
                 self.tell_agent(
                     decider,
                     format!(
-                        "{about}; decide with shoal approve {id} or shoal deny {id}, or pass it up with shoal escalate {id}",
+                        "{about}; decide with shoal approvals --approve {id} or shoal approvals --deny {id}, or pass it up with shoal approvals --escalate {id}",
                         id = request.id
                     ),
                 )

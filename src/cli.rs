@@ -596,46 +596,13 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// List approval requests and retained grants (scoped callers see their own workspace).
+    /// Inspect approval requests and choose or submit a decision.
     #[command(args_conflicts_with_subcommands = true)]
     Approvals {
         #[command(subcommand)]
         command: Option<ApprovalsCommand>,
-        workspace: Option<String>,
-    },
-    /// Approve the exact settings recorded in a request; does not allocate
-    /// capacity. Approving an issue or PR proposal opens it.
-    Approve {
-        /// Request number; omit to choose a pending request.
-        id: Option<i64>,
-        /// Replace a proposed issue's or PR's title.
-        #[arg(long)]
-        title: Option<String>,
-        /// Replace a proposed issue's or PR's description.
         #[command(flatten)]
-        body: BodyArgs,
-    },
-    /// Deny a pending approval request.
-    Deny {
-        /// Request number; omit to choose a pending request.
-        id: Option<i64>,
-        /// Tell the agent why its proposal was denied.
-        #[arg(long)]
-        reason: Option<String>,
-        /// Deny an issue proposal as a duplicate of this issue number or URL
-        /// and add its text there as a comment.
-        #[arg(long, value_name = "ISSUE", conflicts_with = "duplicate_of_approval")]
-        duplicate_of: Option<String>,
-        /// Deny an issue proposal as a duplicate of another pending one, which
-        /// adds its text as a comment once opened.
-        #[arg(long, value_name = "NUMBER")]
-        duplicate_of_approval: Option<i64>,
-    },
-    /// Pass an approval request routed to this workspace's agent to the next
-    /// coordinating agent that holds a grant for it, or to the user.
-    Escalate {
-        /// Request number.
-        id: i64,
+        args: ApprovalsArgs,
     },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(
@@ -1114,7 +1081,7 @@ pub struct EditArgs {
 }
 
 /// A description or comment, given inline or read from a file.
-#[derive(Debug, Args)]
+#[derive(Debug, Default, Args)]
 pub struct BodyArgs {
     /// Text of the description or comment.
     #[arg(long)]
@@ -1191,6 +1158,41 @@ pub enum NotificationsCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+}
+
+#[derive(Debug, Default, Args)]
+pub struct ApprovalsArgs {
+    /// Request number; omit to choose a request.
+    pub id: Option<i64>,
+    /// List requests and grants for this workspace.
+    #[arg(long, conflicts_with_all = ["id", "approval_action"])]
+    pub workspace: Option<String>,
+    /// Approve the recorded settings, or open a proposed issue or PR.
+    #[arg(long, group = "approval_action")]
+    pub approve: bool,
+    /// Deny the request.
+    #[arg(long, group = "approval_action")]
+    pub deny: bool,
+    /// Pass a request routed to this workspace's coordinator up to its parent or the user.
+    #[arg(long, group = "approval_action", requires = "id")]
+    pub escalate: bool,
+    /// Withdraw a request no longer needed.
+    #[arg(long, group = "approval_action", requires = "id")]
+    pub withdraw: bool,
+    /// Replace a proposed issue's or PR's title.
+    #[arg(long, requires = "approve")]
+    pub title: Option<String>,
+    #[command(flatten)]
+    pub body: BodyArgs,
+    /// Tell the agent why its proposal was denied.
+    #[arg(long, requires = "deny")]
+    pub reason: Option<String>,
+    /// Deny an issue proposal as a duplicate of this issue number or URL.
+    #[arg(long, requires = "deny", conflicts_with = "duplicate_of_approval")]
+    pub duplicate_of: Option<String>,
+    /// Deny an issue proposal as a duplicate of another pending proposal.
+    #[arg(long, requires = "deny")]
+    pub duplicate_of_approval: Option<i64>,
 }
 
 #[derive(Debug, Subcommand)]

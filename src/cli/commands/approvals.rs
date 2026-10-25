@@ -4,10 +4,126 @@ use serde_json::json;
 
 use super::EXIT_BUSY;
 use crate::{
-    cli::{client::request, context::Context, output::Style, ui},
-    daemon::approvals::{ApprovalRequest, DecisionStatus, proposals::ProposalDecision},
+    cli::{
+        ApprovalsArgs,
+        client::{self, request},
+        context::Context,
+        output::Style,
+        ui,
+    },
+    daemon::approvals::{
+        ApprovalRequest, DecisionStatus,
+        proposals::{Duplicate, ProposalDecision},
+    },
     protocol::Method,
 };
+
+pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
+    let details = decision_details(&args)?;
+    if args.approve || args.deny {
+        return decide(ctx, args.id, args.approve, details).await;
+    }
+    ensure!(
+        details == ProposalDecision::default(),
+        "use --approve with a title or body"
+    );
+    match args.id {
+        Some(id) if args.escalate => escalate(ctx, id, None).await,
+        Some(id) if args.withdraw => withdraw(ctx, None, id).await,
+        Some(id) => show(ctx, id).await,
+        None => list(ctx, args.workspace).await,
+    }
+}
+
+fn decision_details(args: &ApprovalsArgs) -> Result<ProposalDecision> {
+    Ok(ProposalDecision {
+        title: args.title.clone(),
+        body: super::items::read_body(crate::cli::BodyArgs {
+            body: args.body.body.clone(),
+            body_file: args.body.body_file.clone(),
+        })?,
+        reason: args.reason.clone(),
+        duplicate_of: args
+            .duplicate_of
+            .clone()
+            .map(Duplicate::Issue)
+            .or(args.duplicate_of_approval.map(Duplicate::Approval)),
+    })
+}
+
+async fn show(ctx: &Context, id: i64) -> Result<i32> {
+    let request = request::<Box<ApprovalRequest>>(&ctx.paths, Method::ShowApproval { id }).await?;
+    show_request(ctx, request).await
+}
+
+async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
+    if ctx.interactive() && request.status == DecisionStatus::Pending {
+        return prompt_decision(ctx, request).await;
+    }
+    ctx.show(&request, |request| print_request(request))?;
+    Ok(0)
+}
+
+async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
+    ensure_scope_token(ctx)?;
+    if !can_decide(ctx, &request).await? {
+        print_request(&request);
+        return Ok(0);
+    }
+    print_request(&request);
+    let action = prompt_action(ctx, &request)?;
+    match action.as_str() {
+        "escalate" => escalate(ctx, request.id, Some(request)).await,
+        "approve" | "deny" => {
+            submit(
+                ctx,
+                request.id,
+                action == "approve",
+                Some(request),
+                ProposalDecision::default(),
+            )
+            .await
+        }
+        _ => anyhow::bail!("unknown approval action"),
+    }
+}
+
+async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
+    if !crate::env::inherits_scope(&ctx.paths.state) {
+        return Ok(true);
+    }
+    let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
+    let owner = client::inspect(&ctx.paths, owner).await?.workspace.id;
+    Ok(request.decider.as_deref() == Some(owner.as_str()))
+}
+
+fn prompt_action(ctx: &Context, request: &ApprovalRequest) -> Result<String> {
+    let actions = if crate::env::inherits_scope(&ctx.paths.state) {
+        "[a]pprove / [d]eny / [e]scalate / [c]ancel"
+    } else {
+        "[a]pprove / [d]eny / [c]ancel"
+    };
+    let prompt = format!("Approval ({}) {actions}", request.id);
+    loop {
+        let action = ui::input(ctx, &prompt)?;
+        match action.trim().to_ascii_lowercase().as_str() {
+            "a" | "approve" => return Ok("approve".into()),
+            "d" | "deny" => return Ok("deny".into()),
+            "e" | "escalate" if crate::env::inherits_scope(&ctx.paths.state) => {
+                return Ok("escalate".into());
+            }
+            "c" | "cancel" => return Err(ui::SelectionCanceled.into()),
+            _ => eprintln!("Choose {actions}."),
+        }
+    }
+}
+
+fn print_request(request: &ApprovalRequest) {
+    outln!("{}", describe(request));
+    for line in details(request) {
+        outln!("  {line}");
+    }
+}
 
 /// Approve or deny a request, choosing among pending ones when no number is
 /// given. Only proposals take `details`.
@@ -24,7 +140,9 @@ pub(super) async fn decide(
         Some(id) => (id, None),
         // Workspace processes decide only the requests routed to them, by number.
         None if crate::env::inherits_scope(&ctx.paths.state) => {
-            anyhow::bail!("workspace processes decide by number: shoal approve <number>")
+            anyhow::bail!(
+                "workspace processes decide by number: shoal approvals <number> --approve"
+            )
         }
         None => {
             let picked = pick_pending(ctx).await?;
@@ -49,18 +167,7 @@ pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Re
                     && request.status == DecisionStatus::Pending
             })
             .with_context(|| format!("approval request {id} changed since it was listed"))?;
-    let shown = summary(&request);
-    let choices = [
-        (true, format!("approve  {shown}")),
-        (false, format!("deny     {shown}")),
-    ];
-    let choices: Vec<_> = choices
-        .iter()
-        .map(|(approve, label)| (*approve, label.as_str()))
-        .collect();
-    let approve = ui::pick_choice(ctx, "Approval> ", &choices)?;
-    let details = ProposalDecision::default();
-    submit(ctx, id, approve, Some(Box::new(request)), details).await
+    prompt_decision(ctx, Box::new(request)).await
 }
 
 /// Send the decision on request `id`, which `shown` names when the user
@@ -93,7 +200,7 @@ async fn submit(
 
 /// Pass a request routed to this workspace's agent up to the next coordinating
 /// agent that holds a grant for it, or to the user.
-pub(super) async fn escalate(ctx: &Context, id: i64) -> Result<i32> {
+async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let workspace = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
     let request = request::<Box<ApprovalRequest>>(
@@ -101,7 +208,7 @@ pub(super) async fn escalate(ctx: &Context, id: i64) -> Result<i32> {
         Method::EscalateApproval {
             workspace,
             id,
-            shown: None,
+            shown,
         },
     )
     .await?;
@@ -127,7 +234,13 @@ fn ensure_scope_token(ctx: &Context) -> Result<()> {
 
 /// Withdraw the workspace's pending request `id`, which its agent no longer needs.
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace = match workspace {
+        Some(workspace) => workspace,
+        None => request::<Box<ApprovalRequest>>(&ctx.paths, Method::ShowApproval { id })
+            .await?
+            .workspace_id
+            .clone(),
+    };
     let request =
         request::<Box<ApprovalRequest>>(&ctx.paths, Method::WithdrawApproval { workspace, id })
             .await?;
@@ -138,12 +251,21 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
+    if ctx.interactive() && !requests.is_empty() {
+        let entries = requests
+            .iter()
+            .map(|request| (request.id.to_string(), summary(request)))
+            .collect();
+        let id: i64 = ui::pick(ctx, "Approvals> ", entries)?.parse()?;
+        let selected = requests
+            .into_iter()
+            .find(|request| request.id == id)
+            .context("unknown approval request")?;
+        return show_request(ctx, Box::new(selected)).await;
+    }
     ctx.show(&requests, |requests| {
         for request in requests {
-            outln!("{}", describe(request));
-            for line in details(request) {
-                outln!("  {line}");
-            }
+            print_request(request);
         }
         if requests.is_empty() {
             outln!("No approval requests");

@@ -2130,10 +2130,10 @@ coordinating agent, even in a child workspace.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
-shoal approve 4 --title "Fix login timeout" --body-file edited.md
-shoal deny 5 --reason "Not a bug"
-shoal deny 6 --duplicate-of 120     # an existing issue's number or URL
-shoal deny 7 --duplicate-of-approval 4
+shoal approvals --approve 4 --title "Fix login timeout" --body-file edited.md
+shoal approvals --deny 5 --reason "Not a bug"
+shoal approvals --deny 6 --duplicate-of 120     # an existing issue's number or URL
+shoal approvals --deny 7 --duplicate-of-approval 4
 ```
 
 `approve` opens the item as the workspace's agent account, with `--title`,
@@ -3009,12 +3009,15 @@ suggestion with changed settings requires a new request. Simulator approvals bin
 the installed device/runtime and whether a clean device was requested; clean requests
 still need a reason and the usual audit before mutations.
 
-Agents use the normal acquire command with `--reason`. `shoal approvals` lists
+Agents use the normal acquire command with `--reason`. `shoal approvals` shows
 these requests, land requests from a scoped `shoal land`,
-[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals <workspace>` filters
-by workspace. Scoped callers can see only their own requests. An unscoped user
-reviews the recorded settings and uses `shoal approve [number]` or
-`shoal deny [number]`; without a number, they pick among pending requests, shown
+[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --workspace <workspace>` filters
+by workspace. Scoped callers can inspect requests in their workspace tree. On a terminal,
+`shoal approvals` opens a picker; selecting a pending request or naming its number
+shows its recorded settings and prompts for a decision. JSON and nonterminal output
+print records without prompting. An unscoped user
+reviews the recorded settings and uses `shoal approvals --approve [number]` or
+`shoal approvals --deny [number]`; without a number, they pick among pending requests, shown
 with their workspace, reason and settings, and a request that took the chosen
 number meanwhile is refused. A request takes the smallest number no
 stored request holds. A keep or land request that no longer applies, because a request
@@ -3036,8 +3039,8 @@ unread; otherwise its deciding coordinator is told, or the user gets
 A request from a [child workspace](#child-workspaces) with an agent of its own
 goes up the tree first. The nearest coordinating agent above it that holds an
 approved grant for the same target and settings decides it instead of the user,
-by number with `shoal approve <number>` or `shoal deny <number>`. It may also
-pass the request up with `shoal escalate <number>`, to the next coordinating
+by number with `shoal approvals --approve <number>` or `shoal approvals --deny <number>`. It may also
+pass the request up with `shoal approvals --escalate <number>`, to the next coordinating
 agent with such a grant, or to the user. Each coordinating agent passed over
 without a grant receives a message saying so. Without a deciding coordinator,
 the user is notified as above. A land request names its own branch and commit,
