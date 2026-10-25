@@ -2,6 +2,7 @@
 //! background process writing a log, which stands in for its screen.
 use std::{
     fs::{self, File},
+    io::{Read, Seek, SeekFrom},
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::Stdio,
@@ -54,9 +55,27 @@ pub(super) async fn open_demo(place: &str) -> Result<()> {
     Ok(())
 }
 
+/// The end of the demo's log, which a long-running demo can make large.
 pub(super) fn demo_screen(place: &str) -> Result<String> {
-    let log = fs::read(Path::new(place)).with_context(|| format!("read {place}"))?;
-    Ok(String::from_utf8_lossy(&log).into_owned())
+    tail(Path::new(place), SCREEN_BYTES).with_context(|| format!("read {place}"))
+}
+
+/// How much of a log's end stands in for a screen.
+const SCREEN_BYTES: u64 = 256 * 1024;
+
+/// The last `limit` bytes of `path`, starting at a line when it had to cut.
+fn tail(path: &Path, limit: u64) -> std::io::Result<String> {
+    let mut file = File::open(path)?;
+    let start = file.metadata()?.len().saturating_sub(limit);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let text = match (start, text.find('\n')) {
+        (0, _) | (_, None) => &text[..],
+        (_, Some(end)) => &text[end + 1..],
+    };
+    Ok(text.to_owned())
 }
 
 /// In the workspace's state directory, which its removal deletes.
@@ -65,4 +84,18 @@ fn log_path(paths: &Paths, workspace_id: &str, name: &str) -> PathBuf {
         .workspace_state(workspace_id)
         .join("demos")
         .join(format!("{name}.log"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_screen_is_the_end_of_the_log_from_a_whole_line() {
+        let root = tempfile::tempdir().unwrap();
+        let log = root.path().join("demo.log");
+        fs::write(&log, "first\nsecond\nthird\n").unwrap();
+        assert_eq!(tail(&log, 1024).unwrap(), "first\nsecond\nthird\n");
+        assert_eq!(tail(&log, 10).unwrap(), "third\n");
+    }
 }
