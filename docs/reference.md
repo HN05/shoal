@@ -2671,8 +2671,8 @@ restart loses the order, and commands still polling join again.
 
 `shoal release` releases every lease and active approval request the workspace
 holds, in order, and stops at the first failure. A kind narrows it to that kind, a resource or repository name
-to its pool, and `--name` or a port name to one lease. Holds are released
-separately.
+to its pool, and `--name` or a port name to one lease; selecting nothing fails.
+Holds are released separately.
 
 `shoal leases` shows every kind's capacity and leases; a kind shows
 only that kind, with repositories listed apart from other resources, and `--all`
