@@ -164,6 +164,7 @@ pub(crate) async fn run(
     } else {
         Fallback::CurrentDirectoryOnly
     };
+    let explicit = workspace.is_some();
     let workspace = match ui::select_workspace(ctx, workspace, fallback).await {
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
             let defining = defining_workspaces(ctx, name).await?;
@@ -178,6 +179,9 @@ pub(crate) async fn run(
         }
         workspace => workspace?,
     };
+    if explicit && !known_globally {
+        ensure_workspace_exists(ctx, name, &workspace).await?;
+    }
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(
@@ -189,6 +193,19 @@ pub(crate) async fn run(
     )
     .await?;
     execution::run_command(&ctx.paths, workspace, command).await
+}
+
+/// Refuses `name` as unknown when the workspace named in its arguments does
+/// not exist: the arguments more likely belong to a mistyped built-in.
+async fn ensure_workspace_exists(ctx: &Context, name: &str, workspace: &str) -> Result<()> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    if workspaces
+        .iter()
+        .any(|known| known.id == workspace || known.name == workspace)
+    {
+        return Ok(());
+    }
+    Err(anyhow::anyhow!("unknown workspace: {workspace}").context(unknown_command(name)))
 }
 
 /// Workspaces whose repository configuration defines `name`; none for

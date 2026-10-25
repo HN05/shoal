@@ -15304,8 +15304,10 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
         for args in [
             vec!["ports"],
             vec!["ports", "command-target"],
+            vec!["ports", "12"],
             vec!["run", "ports"],
             vec!["run", "ports", "--workspace", "command-target"],
+            vec!["run", "ports", "--workspace", "12"],
         ] {
             let output = fixture
                 .command()
