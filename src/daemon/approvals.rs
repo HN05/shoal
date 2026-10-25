@@ -404,8 +404,8 @@ impl ApprovalRequest {
             && self.created_at == other.created_at
     }
 
-    /// What the user is asked to decide: the target and lease name, the
-    /// branch and commit to land, or the issue or PR to open.
+    /// What the user is asked to decide: the access and how long it lasts,
+    /// the branch and commit to land, or the issue or PR to open.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Land, Specification::Land(land)) => {
@@ -422,7 +422,28 @@ impl ApprovalRequest {
                 "open PR \"{}\" from {} at {}",
                 pull.pull.title, pull.pull.head, pull.commit
             ),
-            _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
+            _ => format!("{} ({})", self.access(), self.lifetime),
+        }
+    }
+
+    /// The kind and name of what the request grants access to, and the
+    /// lease name when the agent chose its own.
+    fn access(&self) -> String {
+        let (kind, name) = match &self.target {
+            Target::Resource { pool, .. } => ("resource", Some(pool)),
+            Target::Port(name) => ("port", Some(name)),
+            Target::Secret(name) => ("secret", Some(name)),
+            Target::Simulator => ("simulator", None),
+            target => return target.to_string(),
+        };
+        let target = match name {
+            Some(name) => format!("{kind} {name}"),
+            None => kind.to_owned(),
+        };
+        if self.name == "default" || name == Some(&self.name) {
+            target
+        } else {
+            format!("{target} \"{}\"", self.name)
         }
     }
 
@@ -1497,7 +1518,7 @@ mod tests {
         assert_eq!(
             unread[0].message,
             format!(
-                "approval {}: port/web / default (workspace) was withdrawn; no decision needed",
+                "approval {}: port web (workspace) was withdrawn; no decision needed",
                 shown.id
             )
         );
@@ -1581,12 +1602,12 @@ mod tests {
         request.status = DecisionStatus::Approved;
         assert_eq!(
             request.decision_message(),
-            "Approval 7 for port/web / default (workspace) was approved: retry the command that requested it."
+            "Approval 7 for port web (workspace) was approved: retry the command that requested it."
         );
         request.status = DecisionStatus::Denied;
         assert_eq!(
             request.decision_message(),
-            "Approval 7 for port/web / default (workspace) was denied: do not retry it."
+            "Approval 7 for port web (workspace) was denied: do not retry it."
         );
         request.target = Target::Land;
         request.specification = Specification::Land(LandSpecification {

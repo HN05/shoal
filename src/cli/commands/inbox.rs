@@ -253,8 +253,7 @@ impl Item {
         let title = |w: &Workspace| w.links.issue_title.clone().unwrap_or_default();
         match self {
             Self::Question { question } => question.ask.question.clone(),
-            Self::Approval { request } if request.reason.is_empty() => request.subject(),
-            Self::Approval { request } => format!("{}: {}", request.subject(), request.reason),
+            Self::Approval { request } => super::approvals::about(request),
             Self::NeedsInput { workspace } => title(workspace),
             Self::Failed { workspace } => workspace
                 .error

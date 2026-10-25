@@ -1,6 +1,6 @@
 //! Review daemon-owned approval requests and render allocation decisions.
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::EXIT_BUSY;
 use crate::{
@@ -8,11 +8,11 @@ use crate::{
         ApprovalsArgs,
         client::{self, request},
         context::Context,
-        output::Style,
-        ui,
+        output::{Palette, Style},
+        ui::{self, Cell, Entries, WidthLimit},
     },
     daemon::approvals::{
-        ApprovalRequest, DecisionStatus,
+        ApprovalRequest, DecisionStatus, Specification,
         proposals::{Duplicate, ProposalDecision},
     },
     protocol::Method,
@@ -60,18 +60,17 @@ async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i3
     if ctx.interactive_output() && request.status == DecisionStatus::Pending {
         return prompt_decision(ctx, request).await;
     }
-    ctx.show(&request, |request| print_request(request))?;
+    ctx.show(&request, |request| print_details(ctx, request))?;
     Ok(0)
 }
 
 async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
     ensure_scope_token(ctx)?;
+    print_details(ctx, &request);
     if !can_decide(ctx, &request).await? {
-        print_request(&request);
         return Ok(0);
     }
-    print_request(&request);
-    let approve = prompt_decision_answer(ctx, &request)?;
+    let approve = prompt_decision_answer(ctx)?;
     submit(
         ctx,
         request.id,
@@ -91,9 +90,9 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     Ok(request.decider.as_deref() == Some(owner.as_str()))
 }
 
-fn prompt_decision_answer(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
-    let prompt = format!("Approve ({})? [y/n]", request.id);
-    let answer = ui::input_or_cancel(ctx, &prompt)?.unwrap_or_default();
+/// Read `y` or `n`; anything else leaves the request undecided.
+fn prompt_decision_answer(ctx: &Context) -> Result<bool> {
+    let answer = ui::input_or_cancel(ctx, "Approve? [y/n]")?.unwrap_or_default();
     match answer.trim().to_ascii_lowercase().as_str() {
         "y" => Ok(true),
         "n" => Ok(false),
@@ -106,6 +105,93 @@ fn print_request(request: &ApprovalRequest) {
     for line in details(request) {
         outln!("  {line}");
     }
+}
+
+/// The request's number and subject, then labeled rows with what the user
+/// needs to decide it, and a proposal's description below them.
+fn print_details(ctx: &Context, request: &ApprovalRequest) {
+    let palette = Palette::stdout(ctx.json);
+    let heading = format!("Approval {}: {}", request.id, request.subject());
+    outln!("{}", palette.paint(Style::Heading, heading));
+    for line in ui::aligned(detail_rows(request), palette) {
+        outln!("  {line}");
+    }
+    if let Some(body) = proposed_body(request).filter(|body| !body.trim().is_empty()) {
+        outln!();
+        for line in body.lines() {
+            outln!("  {line}");
+        }
+    }
+}
+
+/// Status once decided, workspace, reason, and the settings an approval
+/// grants or the labels a proposal adds.
+fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
+    let mut rows = Vec::new();
+    let mut row = |label: &str, value: String| {
+        if !value.is_empty() {
+            rows.push([(label.to_owned(), Some(Style::Muted)), (value, None)]);
+        }
+    };
+    if request.status != DecisionStatus::Pending {
+        row("Status", request.status.to_string());
+    }
+    row("Workspace", request.workspace.clone());
+    row("Reason", request.reason.clone());
+    match proposed_labels(request) {
+        Some(labels) => row("Labels", labels.join(", ")),
+        None => row("Settings", settings(&request.specification)),
+    }
+    row("URL", request.url.clone().unwrap_or_default());
+    rows
+}
+
+fn proposed_labels(request: &ApprovalRequest) -> Option<&Vec<String>> {
+    request
+        .proposed_issue()
+        .map(|proposed| &proposed.issue.labels)
+        .or_else(|| {
+            request
+                .proposed_pull()
+                .map(|proposed| &proposed.pull.labels)
+        })
+}
+
+fn proposed_body(request: &ApprovalRequest) -> Option<&str> {
+    request
+        .proposed_issue()
+        .map(|proposed| proposed.issue.body.as_str())
+        .or_else(|| {
+            request
+                .proposed_pull()
+                .map(|proposed| proposed.pull.body.as_str())
+        })
+}
+
+/// The settings an approval grants as `key=value` pairs; nested settings
+/// take dotted keys and unset ones are left out.
+fn settings(specification: &Specification) -> String {
+    fn flatten(key: &str, value: &Value, pairs: &mut Vec<String>) {
+        match value {
+            Value::Null => {}
+            Value::Object(fields) => {
+                for (field, value) in fields {
+                    let nested = match key {
+                        "" => field.clone(),
+                        _ => format!("{key}.{field}"),
+                    };
+                    flatten(&nested, value, pairs);
+                }
+            }
+            Value::String(text) => pairs.push(format!("{key}={text}")),
+            value => pairs.push(format!("{key}={value}")),
+        }
+    }
+    let mut pairs = Vec::new();
+    if let Ok(value) = serde_json::to_value(specification) {
+        flatten("", &value, &mut pairs);
+    }
+    pairs.join("  ")
 }
 
 /// Approve or deny a request, choosing among pending ones when no number is
@@ -174,8 +260,8 @@ async fn submit(
         eprintln!("{warning}");
     }
     let message = match &request.url {
-        Some(url) => format!("{}\n  {url}", describe(&request)),
-        None => describe(&request),
+        Some(url) => format!("{}\n  {url}", outcome(&request)),
+        None => outcome(&request),
     };
     ctx.emit(&message, &request)?;
     Ok(0)
@@ -227,7 +313,7 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
     let request =
         request::<Box<ApprovalRequest>>(&ctx.paths, Method::WithdrawApproval { workspace, id })
             .await?;
-    ctx.emit(&describe(&request), &request)?;
+    ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }
 
@@ -262,20 +348,18 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     Ok(0)
 }
 
+/// Choose a request, pending ones first, and how to act on it.
 fn pick_request(
     ctx: &Context,
-    requests: Vec<ApprovalRequest>,
+    mut requests: Vec<ApprovalRequest>,
 ) -> Result<(Box<ApprovalRequest>, Option<bool>)> {
-    let entries = requests
-        .iter()
-        .map(|request| (request.id.to_string(), summary(request)))
-        .collect();
+    requests.sort_by_key(|request| request.status != DecisionStatus::Pending);
     let bindings = ui::KeyBindings(&[
-        ("enter", "inspect", None),
+        ("enter", "open", None),
         ("ctrl-a", "approve", Some(true)),
         ("ctrl-d", "deny", Some(false)),
     ]);
-    let picked = ui::pick_with_keys(ctx, "Approvals> ", entries, bindings)?;
+    let picked = ui::pick_with_keys(ctx, "Approval> ", picker_rows(&requests), bindings)?;
     let id: i64 = picked.id.parse()?;
     let selected = requests
         .into_iter()
@@ -289,16 +373,60 @@ async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
             .await?;
     let pending: Vec<_> = requests
-        .iter()
+        .into_iter()
         .filter(|request| request.status == DecisionStatus::Pending)
-        .map(|request| (request.id.to_string(), summary(request)))
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
-    let id: i64 = ui::pick(ctx, "Approval request> ", pending)?.parse()?;
-    requests
+    let id: i64 = ui::pick(ctx, "Approval> ", picker_rows(&pending))?.parse()?;
+    pending
         .into_iter()
         .find(|request| request.id == id)
         .context("picker returned an unknown approval request")
+}
+
+/// One aligned row per request: its number, its status once decided, the
+/// workspace, and what it asks for and why, cut to fit the picker.
+fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
+    let cells = requests
+        .iter()
+        .map(|request| {
+            let status = match request.status {
+                DecisionStatus::Pending => String::new(),
+                status => status.to_string(),
+            };
+            [
+                (request.id.to_string(), Some(Style::Muted)),
+                (status, Some(Style::Muted)),
+                (request.workspace.clone(), None),
+                (about(request), None),
+            ]
+        })
+        .collect();
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 3, width });
+    let labels = ui::aligned_to(cells, Palette::picker(), limit);
+    requests
+        .iter()
+        .map(|request| request.id.to_string())
+        .zip(labels)
+        .collect()
+}
+
+/// What a request asks for, and why when its agent said.
+pub(in crate::cli) fn about(request: &ApprovalRequest) -> String {
+    match request.reason.as_str() {
+        "" => request.subject(),
+        reason => format!("{}: {reason}", request.subject()),
+    }
+}
+
+/// The request's new status after a decision or withdrawal.
+fn outcome(request: &ApprovalRequest) -> String {
+    format!(
+        "Approval {} {}: {}",
+        request.id,
+        request.status,
+        request.subject()
+    )
 }
 
 /// One line with what the user needs to decide a request: the description
@@ -307,7 +435,11 @@ pub(in crate::cli) fn summary(request: &ApprovalRequest) -> String {
     if request.target.is_proposal() {
         return describe(request);
     }
-    format!("{}  {}", describe(request), request.specification)
+    format!(
+        "{}  {}",
+        describe(request),
+        settings(&request.specification)
+    )
 }
 
 fn describe(request: &ApprovalRequest) -> String {
@@ -333,7 +465,7 @@ fn details(request: &ApprovalRequest) -> Vec<String> {
     } else if let Some(proposed) = request.proposed_pull() {
         (&proposed.pull.labels, &proposed.pull.body)
     } else {
-        return vec![request.specification.to_string()];
+        return vec![settings(&request.specification)];
     };
     let mut lines = Vec::new();
     if !labels.is_empty() {

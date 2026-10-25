@@ -88,15 +88,13 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
             let (output, _) = acquire(kind, false, false, vec![reply]);
             assert_eq!(output.status.code(), Some(2), "{output:?}");
             let target = if kind == "resource" {
-                "resource/global/workers"
+                "resource workers"
             } else {
                 "simulator"
             };
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
-                format!(
-                    "1 [{status}] {target} / default (lease) in workspace worker: test allocation\n"
-                )
+                format!("1 [{status}] {target} (lease) in workspace worker: test allocation\n")
             );
         }
         let (output, _) = acquire(kind, false, true, vec![busy()]);
