@@ -2937,7 +2937,8 @@ then repairs as usual.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
-survivors; identities are rechecked before signaling, and unverified candidates are
+survivors; on macOS, the kernel's record of each process's parent also ties a
+command's descendants to it after it exits. Identities are rechecked before signaling, and unverified candidates are
 never killed. Stopping gives the entire command process group a shared grace period
 before forced termination, even if its leader exits first. When an agent exits,
 Shoal also stops its verified processes outside its process group, such as

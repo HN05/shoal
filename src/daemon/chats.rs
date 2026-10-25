@@ -171,6 +171,7 @@ fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {
                 Identity {
                     pid: row.get(1)?,
                     birth: row.get(2)?,
+                    unique: None,
                 },
             ))
         })?

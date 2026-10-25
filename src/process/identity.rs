@@ -12,15 +12,41 @@ use std::{
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Identity {
     pub pid: u32,
     pub birth: String,
+    /// The kernel's never-reused process ID where the platform reports one,
+    /// so the process's descendants stay attributable after it exits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unique: Option<u64>,
+}
+
+/// PID and birth name the process; records made before `unique` existed
+/// lack it.
+impl PartialEq for Identity {
+    fn eq(&self, other: &Self) -> bool {
+        self.pid == other.pid && self.birth == other.birth
+    }
+}
+
+impl Eq for Identity {}
+
+/// A process's identity and its parent's unique ID, which the kernel keeps
+/// after the parent exits and launchd adopts the process, until the process
+/// replaces its image.
+struct Lineage {
+    identity: Identity,
+    parent: Option<u64>,
 }
 
 pub fn capture(pid: u32) -> Result<Option<Identity>> {
+    Ok(lineage(pid)?.map(|lineage| lineage.identity))
+}
+
+fn lineage(pid: u32) -> Result<Option<Lineage>> {
     ensure!(pid > 1 && pid <= i32::MAX as u32, "invalid process ID");
-    platform_identity(pid)
+    platform_lineage(pid)
 }
 
 /// This process's ancestors, nearest first, until init or a reparented
@@ -237,33 +263,62 @@ fn image(_pid: u32) -> Result<Image> {
 }
 
 #[cfg(target_os = "macos")]
-fn platform_identity(pid: u32) -> Result<Option<Identity>> {
+fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
     let Some(info) = bsd_info(pid)? else {
         return Ok(None);
     };
+    let bsd = &info.bsd;
     // BSD SZOMB = 5. Zombies cannot execute or hold resources.
-    if info.pbi_uid != unsafe { libc::geteuid() } || info.pbi_status == 5 {
+    if bsd.pbi_uid != unsafe { libc::geteuid() } || bsd.pbi_status == 5 {
         return Ok(None);
     }
-    Ok(Some(Identity {
-        pid,
-        birth: format!("{}:{}", info.pbi_start_tvsec, info.pbi_start_tvusec),
+    Ok(Some(Lineage {
+        identity: Identity {
+            pid,
+            birth: format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec),
+            unique: Some(info.unique.unique),
+        },
+        parent: Some(info.unique.parent_unique),
     }))
 }
 
 #[cfg(target_os = "macos")]
 fn parent(pid: u32) -> Option<u32> {
-    bsd_info(pid).ok().flatten().map(|info| info.pbi_ppid)
+    bsd_info(pid).ok().flatten().map(|info| info.bsd.pbi_ppid)
+}
+
+/// `proc_bsdinfowithuniqid` from XNU's private `proc_info` flavors, which
+/// libc does not bind: one read gives the birth and unique IDs together.
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct BsdInfo {
+    bsd: libc::proc_bsdinfo,
+    unique: UniqueIdentifiers,
 }
 
 #[cfg(target_os = "macos")]
-fn bsd_info(pid: u32) -> Result<Option<libc::proc_bsdinfo>> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let size = std::mem::size_of::<libc::proc_bsdinfo>();
+#[repr(C)]
+#[allow(dead_code, reason = "unread fields fix the kernel's layout")]
+struct UniqueIdentifiers {
+    uuid: [u8; 16],
+    unique: u64,
+    parent_unique: u64,
+    id_version: i32,
+    original_parent_version: u32,
+    reserved: [u64; 2],
+}
+
+#[cfg(target_os = "macos")]
+const PROC_PIDT_BSDINFOWITHUNIQID: i32 = 18;
+
+#[cfg(target_os = "macos")]
+fn bsd_info(pid: u32) -> Result<Option<BsdInfo>> {
+    let mut info = std::mem::MaybeUninit::<BsdInfo>::zeroed();
+    let size = std::mem::size_of::<BsdInfo>();
     let result = unsafe {
         libc::proc_pidinfo(
             pid as i32,
-            libc::PROC_PIDTBSDINFO,
+            PROC_PIDT_BSDINFOWITHUNIQID,
             0,
             info.as_mut_ptr().cast(),
             size as i32,
@@ -337,7 +392,7 @@ fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
 }
 
 #[cfg(target_os = "linux")]
-fn platform_identity(pid: u32) -> Result<Option<Identity>> {
+fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
     use std::os::unix::fs::MetadataExt;
     let path = format!("/proc/{pid}");
     let metadata = match std::fs::metadata(&path) {
@@ -357,9 +412,14 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
         return Ok(None);
     }
     let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
-    Ok(Some(Identity {
-        pid,
-        birth: format!("{}:{}", boot.trim(), fields[19]),
+    // Linux keeps no record of an exited parent, so lineage ends with it.
+    Ok(Some(Lineage {
+        identity: Identity {
+            pid,
+            birth: format!("{}:{}", boot.trim(), fields[19]),
+            unique: None,
+        },
+        parent: None,
     }))
 }
 
@@ -460,7 +520,9 @@ impl Identity {
 
 /// A live, identity-verified leader establishes ownership of its group and
 /// current descendants (including children that started another session).
-/// Without that proof, group members are candidates only and must not be killed.
+/// After it exits, its lineage still establishes ownership of the processes
+/// descending from it through live parents. Without that proof, group members
+/// are candidates only and must not be killed.
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
@@ -468,6 +530,40 @@ pub async fn related(
     let Some(group) = group else {
         return Ok((vec![], vec![]));
     };
+    let rows = same_user_processes().await?;
+    let live = child.map(alive).transpose()?.unwrap_or(false);
+    let mut pids: HashSet<u32> = rows
+        .iter()
+        .filter(|(_, pgid, _)| *pgid == group)
+        .map(|(pid, _, _)| *pid)
+        .collect();
+    if live {
+        pids.extend(descendants(child.unwrap().pid, &rows));
+    }
+    let identities = pids
+        .into_iter()
+        .map(capture)
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    if live && child.map(alive).transpose()?.unwrap_or(false) {
+        return Ok((identities, vec![]));
+    }
+    let Some(root) = child.and_then(|child| child.unique) else {
+        return Ok((vec![], identities));
+    };
+    let lineage = descended_from(root, &rows)?;
+    let candidates = identities
+        .into_iter()
+        .filter(|identity| !lineage.contains(identity))
+        .collect();
+    Ok((lineage, candidates))
+}
+
+/// Same-user processes other than init and the daemon, as (PID, process
+/// group, parent PID).
+async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
     let mut command = tokio::process::Command::new(Tool::Ps.program());
     command
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
@@ -494,38 +590,51 @@ pub async fn related(
             rows.push((fields[0], fields[2], fields[3]));
         }
     }
-    let live = child.map(alive).transpose()?.unwrap_or(false);
-    let mut pids: HashSet<u32> = rows
-        .iter()
-        .filter(|(_, pgid, _)| *pgid == group)
-        .map(|(pid, _, _)| *pid)
-        .collect();
-    if live {
-        pids.insert(child.unwrap().pid);
-        loop {
-            let previous = pids.len();
-            for (pid, _, parent) in &rows {
-                if pids.contains(parent) {
-                    pids.insert(*pid);
-                }
-            }
-            if pids.len() == previous {
-                break;
+    Ok(rows)
+}
+
+/// `root` and the PIDs whose parent links lead to it.
+fn descendants(root: u32, rows: &[(u32, u32, u32)]) -> HashSet<u32> {
+    let mut pids = HashSet::from([root]);
+    loop {
+        let previous = pids.len();
+        for (pid, _, parent) in rows {
+            if pids.contains(parent) {
+                pids.insert(*pid);
             }
         }
+        if pids.len() == previous {
+            return pids;
+        }
     }
-    let identities = pids
-        .into_iter()
-        .map(capture)
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-    if live && child.map(alive).transpose()?.unwrap_or(false) {
-        Ok((identities, vec![]))
-    } else {
-        Ok((vec![], identities))
+}
+
+/// The live processes whose parent unique IDs lead to the process with
+/// unique ID `root`, which may have exited.
+fn descended_from(root: u64, rows: &[(u32, u32, u32)]) -> Result<Vec<Identity>> {
+    let mut lineages = Vec::new();
+    for (pid, _, _) in rows {
+        lineages.extend(lineage(*pid)?);
     }
+    Ok(lineage_descendants(root, lineages))
+}
+
+/// A parent's unique ID is lower than its children's, since the kernel
+/// assigns them in order, so one pass in that order finds every descendant.
+fn lineage_descendants(root: u64, mut lineages: Vec<Lineage>) -> Vec<Identity> {
+    lineages.sort_by_key(|lineage| lineage.identity.unique);
+    let mut ancestors = HashSet::from([root]);
+    let mut found = Vec::new();
+    for lineage in lineages {
+        let (Some(unique), Some(parent)) = (lineage.identity.unique, lineage.parent) else {
+            continue;
+        };
+        if ancestors.contains(&parent) {
+            ancestors.insert(unique);
+            found.push(lineage.identity);
+        }
+    }
+    found
 }
 
 pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
@@ -565,6 +674,82 @@ mod tests {
         assert!(process_identity_unavailable(Some(libc::EPERM)));
         assert!(!process_identity_unavailable(Some(libc::EACCES)));
         assert!(!process_identity_unavailable(None));
+    }
+
+    #[test]
+    fn lineage_follows_unique_ids_through_exited_parents_only_to_the_root() {
+        let process = |pid, unique, parent| Lineage {
+            identity: Identity {
+                pid,
+                birth: pid.to_string(),
+                unique: Some(unique),
+            },
+            parent: Some(parent),
+        };
+        // 10 has exited; 11 descends from it and 13 from 11, while 12 is
+        // another branch whose parent 9 is no descendant of 10.
+        let found = lineage_descendants(
+            10,
+            vec![process(13, 13, 11), process(12, 12, 9), process(11, 11, 10)],
+        );
+        let pids: Vec<_> = found.iter().map(|identity| identity.pid).collect();
+        assert_eq!(pids, [11, 13]);
+    }
+
+    #[test]
+    fn identity_equality_ignores_a_missing_unique_id() {
+        let recorded = Identity {
+            pid: 7,
+            birth: "1:2".into(),
+            unique: None,
+        };
+        let captured = Identity {
+            unique: Some(42),
+            ..recorded.clone()
+        };
+        assert_eq!(recorded, captured);
+        let stored: Identity = serde_json::from_str(r#"{"pid":7,"birth":"1:2"}"#).unwrap();
+        assert_eq!(stored.unique, None);
+    }
+
+    /// A command that started a background job and exited: launchd adopts
+    /// the job, whose recorded lineage still leads to the command.
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Result<()> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let mut command = tokio::process::Command::new("sh")
+            .args(["-c", "sleep 30 & echo $!; read _"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true)
+            .spawn()?;
+        let identity = capture(command.id().context("command PID")?)?.context("command")?;
+        let mut stdout = tokio::io::BufReader::new(command.stdout.take().context("stdout")?);
+        let mut line = String::new();
+        stdout.read_line(&mut line).await?;
+        let job = capture(line.trim().parse()?)?.context("background job")?;
+        // Replacing its image after launchd adopts it would end its lineage.
+        while executable(job.pid).as_deref() != Some(std::path::Path::new("/bin/sleep")) {
+            tokio::task::yield_now().await;
+        }
+        command.stdin.take().context("stdin")?.shutdown().await?;
+        command.wait().await?;
+        let (owned, candidates) = related(Some(&identity), Some(identity.pid)).await?;
+        signal(&job, libc::SIGKILL)?;
+        assert!(owned.contains(&job));
+        assert!(!candidates.contains(&job));
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn executable(pid: u32) -> Option<PathBuf> {
+        let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+        let len =
+            unsafe { libc::proc_pidpath(pid as i32, path.as_mut_ptr().cast(), path.len() as u32) };
+        path.truncate(usize::try_from(len).ok()?);
+        Some(PathBuf::from(OsStr::from_bytes(&path)))
     }
 
     #[test]

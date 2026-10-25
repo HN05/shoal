@@ -495,6 +495,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     let stranger = Identity {
         pid: wrapper.pid,
         birth: "another process".into(),
+        unique: None,
     };
     for (request, refusal) in [
         (
