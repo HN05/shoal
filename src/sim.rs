@@ -228,8 +228,9 @@ pub struct SimulatorOverview {
 impl Manager {
     pub async fn simulator_catalog(&self, selector: &str) -> Result<SimulatorCatalog> {
         let workspace = self.workspace(selector).await?;
+        let config = self.config();
         let preferred = self
-            .workspace_settings(&workspace)
+            .workspace_settings_from(&config, &workspace)
             .await?
             .simulators
             .preferred;
@@ -240,7 +241,7 @@ impl Manager {
         Ok(SimulatorCatalog {
             device_types,
             runtimes,
-            policy: self.config().simulators.clone(),
+            policy: config.simulators.clone(),
             preferred,
             inventory_error,
         })
