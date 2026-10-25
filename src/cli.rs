@@ -56,8 +56,7 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-// The workspace whose repository `shoal repo labels` and `shoal forge capabilities`
-// read, outside the derived `Command` builder for the same reason (#997).
+// Arguments of `shoal repo labels` and `shoal forge capabilities`.
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
     /// Workspace to use; defaults to the current workspace or picker.
@@ -65,8 +64,7 @@ pub struct RepositoryArgs {
     pub workspace: Option<String>,
 }
 
-// `shoal forge api` arguments, outside the derived `Command` builder for the same
-// reason (#997).
+// Arguments of `shoal forge api`.
 #[derive(Debug, Args)]
 pub struct ApiArgs {
     /// Path under the forge's API root, where `{owner}` and `{repo}` name the
@@ -83,8 +81,7 @@ pub struct ApiArgs {
     pub workspace: Option<String>,
 }
 
-// `shoal export` arguments, outside the derived `Command` builder, whose stack
-// frame in debug builds grows with every inline argument (#997).
+// Arguments of `shoal export`.
 #[derive(Debug, Args)]
 pub struct ExportArgs {
     #[arg(conflicts_with = "all")]
@@ -102,8 +99,7 @@ pub struct ExportArgs {
     pub confirmation: ConfirmationArgs,
 }
 
-// `shoal import` arguments, outside the derived `Command` builder for the
-// reason [`ExportArgs`] is.
+// Arguments of `shoal import`.
 #[derive(Debug, Args)]
 pub struct ImportArgs {
     /// Export files or directories of them.
@@ -1171,7 +1167,7 @@ pub enum MessagesCommand {
     },
 }
 
-// Arguments shared with the hidden pre-upgrade wait entry point.
+// Arguments of `shoal questions ask` and the hidden `shoal ask`.
 #[derive(Debug, Args)]
 pub struct QuestionAskArgs {
     /// The decision, in one line, such as "Which database should the cache use?"
@@ -1337,8 +1333,7 @@ impl Command {
     }
 }
 
-// What `shoal contribute` takes, apart so its arguments build in a stack
-// frame of their own.
+// Arguments of `shoal contribute`.
 #[derive(Debug, Args)]
 pub struct ContributeArgs {
     /// Run in the current pane instead of opening a Herdr tab.
