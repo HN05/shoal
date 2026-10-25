@@ -31,7 +31,7 @@ pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
 }
 
 async fn show(ctx: &Context, question: Question) -> Result<i32> {
-    if ctx.interactive() && question.is_open() {
+    if ctx.interactive_output() && question.is_open() {
         return prompt_answer(ctx, question).await;
     }
     ctx.show(&question, |question| {
@@ -147,7 +147,7 @@ fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace }).await?;
-    if ctx.interactive() && !listing.questions.is_empty() {
+    if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;
     }

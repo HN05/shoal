@@ -79,6 +79,11 @@ impl Context {
         Self::is_interactive(self.json)
     }
 
+    /// Inspect-and-act flows require their displayed details to be visible too.
+    pub fn interactive_output(&self) -> bool {
+        self.interactive() && io::stdout().is_terminal()
+    }
+
     pub fn is_interactive(json: bool) -> bool {
         !json && io::stdin().is_terminal() && io::stderr().is_terminal()
     }

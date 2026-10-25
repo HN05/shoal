@@ -207,13 +207,14 @@ impl Fixture {
         );
         let rows = self.root.path().join("picker-rows");
         let _ = fs::remove_file(&rows);
-        let (output, _) = self.interactive_command(
+        let (output, _) = self.terminal_command(
             self.command()
                 .current_dir(cwd)
                 .env("SHOAL_TEST_PICK_INPUT", &rows)
                 .env("SHOAL_TEST_PICK_ID", choice)
                 .args(args),
             answer,
+            matches!(args.first(), Some(&"approvals" | &"questions")),
         );
         (output, fs::read_to_string(&rows).unwrap_or_default())
     }
@@ -17486,6 +17487,66 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
 }
 
 #[test]
+fn redirected_requests_are_inspected_without_prompting_or_deciding() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    let pending = pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let question = fixture.ok(&[
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+        "--workspace",
+        "agent",
+    ]);
+    install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
+    for args in [
+        vec!["approvals".to_owned(), pending["id"].to_string()],
+        vec!["approvals".into()],
+        vec!["questions".into(), question["id"].to_string()],
+        vec!["questions".into()],
+    ] {
+        let (output, transcript) =
+            fixture.interactive_command(fixture.command().args(&args), "y\n");
+        assert!(output.status.success(), "{args:?}: {output:?} {transcript}");
+        let details = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            details.contains("serve preview") || details.contains("Which database?"),
+            "{details}"
+        );
+        assert!(
+            !transcript.contains("[y/n]") && !transcript.contains("[SQLite]:"),
+            "{transcript}"
+        );
+    }
+    assert_eq!(
+        fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
+        "pending"
+    );
+    assert_eq!(
+        fixture.ok(&["questions", &question["id"].to_string()])["answer"],
+        Value::Null
+    );
+    // An explicit decision remains scriptable with redirected output.
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["approvals", &pending["id"].to_string(), "--deny"]),
+        "",
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert_eq!(
+        fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
+        "denied"
+    );
+}
+
+#[test]
 fn approval_picker_inspects_before_deciding_the_selected_request() {
     let fixture = Fixture::new();
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
@@ -17516,13 +17577,13 @@ fn approval_prompt_accepts_only_case_insensitive_y_or_n() {
     let id = pending["id"].to_string();
     for response in ["yes\n", "approve\n", "x\n", "\n"] {
         let (output, transcript) =
-            fixture.interactive_command(fixture.command().args(["approvals", &id]), response);
+            fixture.terminal_command(fixture.command().args(["approvals", &id]), response, true);
         assert_eq!(output.status.code(), Some(130), "{transcript}");
         assert!(transcript.contains("[y/n]"), "{transcript}");
         assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
     }
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["approvals", &id]), "N\n");
+        fixture.terminal_command(fixture.command().args(["approvals", &id]), "N\n", true);
     assert!(output.status.success(), "{transcript}");
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "denied");
 }
@@ -17547,12 +17608,13 @@ printf '%s\n' "$SHOAL_TEST_KEY"
 head -1 "$HOME/picker-input"
 "#,
         );
-        let (output, transcript) = fixture.interactive_command(
+        let (output, transcript) = fixture.terminal_command(
             fixture
                 .command()
                 .arg("approvals")
                 .env("SHOAL_TEST_KEY", key),
             "",
+            true,
         );
         assert!(output.status.success(), "{transcript}");
         let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
@@ -17602,7 +17664,7 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
     ]);
     let id = question["id"].to_string();
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["questions", &id]), "\n");
+        fixture.terminal_command(fixture.command().args(["questions", &id]), "\n", true);
     assert!(output.status.success(), "{transcript}");
     assert!(
         transcript.contains("Which database? (1) [SQLite]:"),

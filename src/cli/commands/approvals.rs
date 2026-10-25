@@ -57,7 +57,7 @@ async fn show(ctx: &Context, id: i64) -> Result<i32> {
 }
 
 async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
-    if ctx.interactive() && request.status == DecisionStatus::Pending {
+    if ctx.interactive_output() && request.status == DecisionStatus::Pending {
         return prompt_decision(ctx, request).await;
     }
     ctx.show(&request, |request| print_request(request))?;
@@ -234,7 +234,7 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
-    if ctx.interactive() && !requests.is_empty() {
+    if ctx.interactive_output() && !requests.is_empty() {
         let (selected, decision) = pick_request(ctx, requests)?;
         return match decision {
             Some(approve) => {
