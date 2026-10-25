@@ -181,9 +181,10 @@ async fn read_output(
             .read_to_end(&mut bytes)
             .await?;
         if bytes.len() > limit {
-            return Err(io::Error::other(format!(
-                "tool output exceeded {limit} bytes"
-            )));
+            return Err(io::Error::new(
+                io::ErrorKind::FileTooLarge,
+                format!("tool output exceeded {limit} bytes"),
+            ));
         }
     } else {
         pipe.read_to_end(&mut bytes).await?;
@@ -276,6 +277,7 @@ mod tests {
                 .capture()
                 .await
                 .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::FileTooLarge);
             assert!(
                 error.to_string().contains("output exceeded 4 bytes"),
                 "{error}"

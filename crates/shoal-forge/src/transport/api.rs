@@ -274,7 +274,13 @@ impl ForgeRepo {
             .output_limit(request.max_bytes)
             .capture()
             .await
-            .with_context(|| format!("run {program}; is it installed?"))?;
+            .map_err(|error| {
+                unrun(
+                    error,
+                    request.max_bytes,
+                    format!("run {program}; is it installed?"),
+                )
+            })?;
         // The CLIs exit with an error for a failed response, which has a head.
         match Response::included(&String::from_utf8_lossy(&output.stdout)) {
             Err(_) if !output.status.success() => {
@@ -324,7 +330,7 @@ impl ForgeRepo {
             .output_limit(request.max_bytes)
             .capture()
             .await
-            .map_err(curl_unrun)?;
+            .map_err(|error| curl_unrun(error, request.max_bytes))?;
         if !output.status.success() {
             return Err(curl_failure(&output));
         }
@@ -441,13 +447,39 @@ fn error_message(text: &str) -> Option<String> {
 }
 
 /// Why curl did not run to its end: a timeout may pass, a missing curl or
-/// an oversized response will not.
-fn curl_unrun(error: std::io::Error) -> anyhow::Error {
+/// a response over `limit` bytes will not.
+fn curl_unrun(error: std::io::Error, limit: usize) -> anyhow::Error {
     match error.kind() {
         std::io::ErrorKind::TimedOut => Transient::Interrupted(error.to_string()).into(),
         std::io::ErrorKind::NotFound => anyhow::Error::new(error)
             .context("curl is required for Forgejo, Gitea and Bitbucket API requests"),
-        _ => anyhow::Error::new(error).context("read curl's response"),
+        _ => unrun(error, limit, "read curl's response"),
+    }
+}
+
+/// Why a program sending a request did not run to its end: a response over
+/// `limit` bytes, which asking for fewer items avoids, or `failure`.
+pub(crate) fn unrun(
+    error: std::io::Error,
+    limit: usize,
+    failure: impl std::fmt::Display + Send + Sync + 'static,
+) -> anyhow::Error {
+    if error.kind() == std::io::ErrorKind::FileTooLarge {
+        return anyhow::anyhow!(
+            "the response is larger than {}; request fewer items, such as with a smaller page",
+            size(limit)
+        );
+    }
+    anyhow::Error::new(error).context(failure)
+}
+
+/// `bytes` in MiB when it is a whole number of them.
+fn size(bytes: usize) -> String {
+    const MIB: usize = 1024 * 1024;
+    if bytes >= MIB && bytes.is_multiple_of(MIB) {
+        format!("{} MiB", bytes / MIB)
+    } else {
+        format!("{bytes} bytes")
     }
 }
 
@@ -685,14 +717,16 @@ printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
     #[test]
     fn only_a_missing_curl_asks_for_curl() {
         use std::io::{Error, ErrorKind};
-        let missing = curl_unrun(Error::from(ErrorKind::NotFound));
+        let missing = curl_unrun(Error::from(ErrorKind::NotFound), 4);
         assert!(format!("{missing:#}").starts_with("curl is required"));
-        let oversized = curl_unrun(Error::other("tool output exceeded 4 bytes"));
+        let oversized = curl_unrun(Error::from(ErrorKind::FileTooLarge), MAX_RESPONSE_BYTES);
         assert_eq!(
             format!("{oversized:#}"),
-            "read curl's response: tool output exceeded 4 bytes"
+            "the response is larger than 64 MiB; request fewer items, such as with a smaller page"
         );
-        let slow = curl_unrun(Error::from(ErrorKind::TimedOut));
+        let broken = curl_unrun(Error::other("broken pipe"), 4);
+        assert_eq!(format!("{broken:#}"), "read curl's response: broken pipe");
+        let slow = curl_unrun(Error::from(ErrorKind::TimedOut), 4);
         assert!(slow.downcast_ref::<Transient>().is_some());
     }
 

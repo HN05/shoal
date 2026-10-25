@@ -6,7 +6,7 @@ use tokio::process::Command;
 use crate::{
     account::Account,
     transport::{
-        api::Request,
+        api::{Request, unrun},
         programs,
         response::{Response, last_head},
     },
@@ -76,7 +76,7 @@ pub(crate) async fn exchange(
         .output_limit(limit)
         .capture()
         .await
-        .context("run tea; is it installed?")?;
+        .map_err(|error| unrun(error, limit, "run tea; is it installed?"))?;
     ensure!(
         output.status.success(),
         "tea failed: {}",
