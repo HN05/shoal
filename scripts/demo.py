@@ -124,7 +124,11 @@ def main():
         shutil.rmtree(SANDBOX)
     bin_dir = SANDBOX / "bin"
     bin_dir.mkdir(parents=True)
-    (SANDBOX / "home").mkdir()
+    home = SANDBOX / "home"
+    home.mkdir()
+    # An empty home would start zsh's first-run wizard instead of a prompt.
+    (home / ".zshrc").write_text("PROMPT='shoal-demo %1~ %# '\n")
+    (home / ".bashrc").write_text("PS1='shoal-demo \\W \\$ '\n")
     (bin_dir / "shoal").symlink_to(shoal)
     env = environment(SANDBOX, bin_dir)
     daemon = start_daemon(env)
