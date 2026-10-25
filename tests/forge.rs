@@ -268,6 +268,64 @@ fn item_actions_send_rest_requests_and_record_events() {
     }
 }
 
+#[test]
+fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "GET repos/team/project/pulls/8";
+    let labels = "GET repos/team/project/labels?limit=50&page=1";
+    let put = "PUT repos/team/project/issues/8/labels";
+    let edit = |add: &str| {
+        fixture.request(
+            json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+            "action": {"action": "edit", "add_labels": [add]}}}),
+        )
+    };
+    fixture.respond(json!({
+        endpoint: [
+            {"body": pull(8, "open", "Fix", &["bug", "complexity/small"])},
+            {"body": pull(8, "open", "Fix", &["bug", "complexity/medium"])},
+        ],
+        labels: {"body": [
+            {"name": "bug"},
+            {"name": "complexity/small", "exclusive": true},
+            {"name": "complexity/medium", "exclusive": true},
+        ]},
+        put: {"body": []},
+    }));
+    let response = edit("complexity/medium");
+    assert_eq!(response["type"], "item", "{response}");
+    let keys: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| (request[0].clone(), request[1].clone()))
+        .collect();
+    assert_eq!(keys[1].0, labels);
+    assert_eq!(
+        keys[2],
+        (json!(put), json!({"labels": ["bug", "complexity/medium"]}))
+    );
+
+    // A label the forge leaves out fails the edit, naming the item's labels.
+    fixture.respond(json!({
+        endpoint: {"body": pull(8, "open", "Fix", &["bug"])},
+        put: {"body": []},
+    }));
+    let response = edit("missing");
+    assert_eq!(response["type"], "error", "{response}");
+    let message = response["data"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("the forge did not add missing on #8, which has the labels bug"),
+        "{message}"
+    );
+    // An item without a label of the added one's scope lists no labels.
+    assert!(
+        fixture
+            .requests()
+            .iter()
+            .all(|request| request[0] != labels)
+    );
+}
+
 /// Add the label `ready` to PR 8 of the workspace's repository.
 fn label_pr(fixture: &Fixture) -> Value {
     fixture.request(

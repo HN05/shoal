@@ -196,6 +196,7 @@ impl Backend for GitLab {
             conflict,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
             user_ids: reviewers.into_iter().collect(),
+            replaced_labels: Vec::new(),
         })
     }
 

@@ -193,6 +193,7 @@ impl Backend for Bitbucket {
                 .filter_map(|user| text(&user["account_id"]))
                 .collect(),
             user_ids: Default::default(),
+            replaced_labels: Vec::new(),
         })
     }
 

@@ -68,6 +68,9 @@ pub struct Current {
     /// GitLab user IDs by username, which its reviewer changes take: the
     /// reviewers', and those of the users an edit adds.
     pub user_ids: std::collections::BTreeMap<String, u64>,
+    /// The item's labels that a Forgejo edit's added exclusive labels
+    /// replace, as the only one an item may have of their scope.
+    pub replaced_labels: Vec<String>,
 }
 
 impl ForgeRepo {

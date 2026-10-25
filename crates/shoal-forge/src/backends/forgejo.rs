@@ -186,6 +186,33 @@ impl Backend for Forgejo {
         read_pulls(repo, account, numbers).await.hint_login(self)
     }
 
+    /// Forgejo keeps one exclusive label of a scope from the set it is
+    /// given, not necessarily the added one, so the added one replaces the
+    /// item's.
+    async fn prepare_edit(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        edit: &Edit,
+        current: &mut Current,
+    ) -> Result<()> {
+        // Only an item with a label of an added label's scope lists the
+        // repository's labels to learn which are exclusive.
+        if replaced_labels(edit, &current.item.labels, |_| true).is_empty() {
+            return Ok(());
+        }
+        let exclusive: std::collections::HashSet<_> = repo
+            .labels(account)
+            .await?
+            .into_iter()
+            .filter(|label| label.exclusive)
+            .map(|label| label.name)
+            .collect();
+        current.replaced_labels =
+            replaced_labels(edit, &current.item.labels, |name| exclusive.contains(name));
+        Ok(())
+    }
+
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         Ok(github_rest::edit(repo, current, edit, Dialect::Forgejo))
     }
@@ -537,6 +564,33 @@ impl Backend for Forgejo {
     }
 }
 
+/// The `labels` that an exclusive label `edit` adds replaces: the other
+/// exclusive labels of its scope.
+fn replaced_labels(
+    edit: &Edit,
+    labels: &[String],
+    exclusive: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let replaces = |label: &String, added: &String| {
+        label != added
+            && exclusive(label)
+            && exclusive(added)
+            && exclusive_scope(label).is_some_and(|scope| exclusive_scope(added) == Some(scope))
+    };
+    labels
+        .iter()
+        .filter(|label| edit.add_labels.iter().any(|added| replaces(label, added)))
+        .cloned()
+        .collect()
+}
+
+/// The scope of a Forgejo label that allows one exclusive label of it: its
+/// name before the last `/`, when neither side is empty.
+fn exclusive_scope(name: &str) -> Option<&str> {
+    let (scope, value) = name.rsplit_once('/')?;
+    (!scope.is_empty() && !value.is_empty()).then_some(scope)
+}
+
 impl RestReads for Forgejo {
     async fn discussion(
         &self,
@@ -698,6 +752,37 @@ async fn owned_fork(repo: &ForgeRepo, account: &Account) -> Result<Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn added_exclusive_labels_replace_those_of_their_scope() {
+        let edit = Edit {
+            add_labels: vec![
+                "complexity/medium".into(),
+                "area/cli".into(),
+                "type/bug".into(),
+            ],
+            ..Edit::default()
+        };
+        let labels: Vec<String> = ["complexity/small", "area/daemon", "type/bug", "bug"]
+            .map(str::to_owned)
+            .into();
+        let complexity = |name: &str| name.starts_with("complexity/");
+        assert_eq!(
+            replaced_labels(&edit, &labels, complexity),
+            ["complexity/small"]
+        );
+        // Both labels must be exclusive.
+        let small = |name: &str| name == "complexity/small";
+        assert!(replaced_labels(&edit, &labels, small).is_empty());
+        assert_eq!(
+            replaced_labels(&edit, &labels, |_| true),
+            ["complexity/small", "area/daemon"]
+        );
+        assert_eq!(exclusive_scope("a/b/c"), Some("a/b"));
+        assert_eq!(exclusive_scope("/b"), None);
+        assert_eq!(exclusive_scope("a/"), None);
+        assert_eq!(exclusive_scope("bug"), None);
+    }
 
     #[test]
     fn searches_go_through_the_issue_list_for_either_kind() {

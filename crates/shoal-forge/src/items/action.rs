@@ -499,6 +499,7 @@ mod tests {
             conflict: None,
             reviewers: Vec::new(),
             user_ids: Default::default(),
+            replaced_labels: Vec::new(),
         }
     }
 

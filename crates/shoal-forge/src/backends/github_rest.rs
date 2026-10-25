@@ -92,6 +92,7 @@ pub(crate) fn current(
         conflict,
         reviewers: Vec::new(),
         user_ids: Default::default(),
+        replaced_labels: Vec::new(),
     })
 }
 
@@ -146,7 +147,9 @@ pub(crate) fn edit(
         let mut labels: Vec<_> = item
             .labels
             .iter()
-            .filter(|label| !edit.remove_labels.contains(label))
+            .filter(|label| {
+                !edit.remove_labels.contains(label) && !current.replaced_labels.contains(label)
+            })
             .cloned()
             .collect();
         for label in &edit.add_labels {
