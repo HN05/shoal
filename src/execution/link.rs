@@ -113,6 +113,15 @@ impl Link {
         }
     }
 
+    /// Keep reattaching while the wrapper waits to run its command again, as
+    /// a demo's does, after the daemon forgot the child that exited.
+    pub(super) fn between_runs(&mut self) {
+        if let Some(reattach) = &mut self.reattach {
+            reattach.request.child = None;
+            reattach.request.group_id = 0;
+        }
+    }
+
     /// Keep reattaching while the wrapper waits to restore its stopped agent,
     /// so the next daemon continues the wait.
     pub(super) fn await_restore(&mut self, protection: Protection) {

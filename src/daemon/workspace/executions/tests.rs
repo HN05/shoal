@@ -602,6 +602,61 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
     assert_eq!(manager.agent_overload(&id).await, Some(protection));
 }
 
+/// A demo's wrapper waiting to run its command again reattaches without a
+/// child once the daemon forgot the exited one.
+#[tokio::test]
+async fn a_wrapper_between_runs_reattaches_without_a_child() {
+    let (_root, manager, workspace) = fixture("true").await;
+    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
+    let started = manager
+        .begin_execution(
+            &workspace.id,
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    let between_runs = Reattach {
+        execution: id.clone(),
+        wrapper: wrapper.clone(),
+        child: None,
+        group_id: 0,
+        scope_token: started.plan.scope_token.clone(),
+        agent: None,
+        recover: false,
+        running_ms: 0,
+        awaiting_restore: None,
+    };
+    manager
+        .record_execution_child(id.clone(), Some(wrapper.clone()), wrapper.pid)
+        .await
+        .unwrap();
+    drop(started);
+    manager.detach_execution(&id).await;
+    // While the daemon records the child, a wrapper must name it.
+    let error = manager.reattach_execution(&between_runs).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("process identity does not match"),
+        "{error:#}"
+    );
+    let forget = id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
+                [forget],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reattached = manager.reattach_execution(&between_runs).await.unwrap();
+    assert_eq!(reattached.workspace.id, workspace.id);
+}
+
 #[tokio::test]
 async fn setup_executions_cannot_reattach() {
     let (_root, manager, workspace) = fixture("exit 0").await;

@@ -1079,8 +1079,11 @@ impl Manager {
 fn reattaching_identity_matches(execution: &Execution, request: &Reattach) -> bool {
     let child_matches =
         execution.child == request.child && execution.group_id == Some(request.group_id);
-    let child_forgotten = request.awaiting_restore.is_some()
-        && execution.child.is_none()
-        && execution.group_id.is_none();
+    let forgotten = execution.child.is_none() && execution.group_id.is_none();
+    // A wrapper waiting to restore its agent, or to run a demo's command
+    // again, has no child the daemon still records.
+    let child_forgotten = forgotten
+        && (request.awaiting_restore.is_some()
+            || (request.child.is_none() && request.group_id == 0));
     execution.wrapper.as_ref() == Some(&request.wrapper) && (child_matches || child_forgotten)
 }
