@@ -159,13 +159,13 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
 
     let stacked = set("upper", Some("lower")).await.unwrap();
     assert_eq!(stacked.base_workspace, Some(reference(lower)));
-    set("upper", Some(&lower.id)).await.unwrap();
+    assert!(error(set("upper", Some(&lower.id)).await).contains("already builds on"));
     assert!(error(set("lower", Some("upper")).await).contains("cannot build on itself"));
     assert!(error(set("lower", Some("lower")).await).contains("cannot build on itself"));
     assert!(error(set("upper", Some("foreign")).await).contains("another repository"));
     assert!(error(set("upper", Some("missing")).await).contains("unknown workspace"));
     assert_eq!(set("upper", None).await.unwrap().base_workspace, None);
-    assert_eq!(set(&foreign.name, None).await.unwrap().base_workspace, None);
+    assert!(error(set(&foreign.name, None).await).contains("has no base workspace"));
 
     let events = manager.workspace_events(None, 100).await.unwrap();
     let changes: Vec<_> = events
