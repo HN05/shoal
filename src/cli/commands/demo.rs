@@ -24,9 +24,10 @@ mod presets;
 
 /// The name an ad hoc demo takes when the agent gives none.
 const DEFAULT_NAME: &str = "demo";
-/// How often a start checks that its worker recorded the demo.
+/// How often a start checks that a replaced demo ended and its worker
+/// recorded the new one.
 const START_POLL: Duration = Duration::from_millis(100);
-/// A hang guard for a worker that never records its demo.
+/// A hang guard for a demo that never ends or a worker that never records it.
 const START_LIMIT: Duration = Duration::from_secs(120);
 
 pub(super) async fn run(
@@ -96,8 +97,7 @@ async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
-    // A demo of the same name gives way, so the new one takes its record.
-    stop_named(ctx, &workspace, Some(chosen.name.clone())).await?;
+    replace(ctx, &workspace, &chosen.name).await?;
     let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
         Ok(provided) => provided,
         Err(declined) => return Ok(declined),
@@ -266,6 +266,25 @@ async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) ->
         json!({"stopping": true, "name": name}),
     )?;
     Ok(0)
+}
+
+/// Stop a running demo `name` and wait for it to end, so the new one neither
+/// shares its place nor is mistaken for it.
+async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()> {
+    stop_named(ctx, workspace, Some(name.to_owned())).await?;
+    let deadline = tokio::time::Instant::now() + START_LIMIT;
+    while running(ctx, Some(workspace))
+        .await?
+        .iter()
+        .any(|demo| demo.launch.name == name)
+    {
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "demo {name} is still stopping; start it again once `shoal demo ls` no longer lists it"
+        );
+        tokio::time::sleep(START_POLL).await;
+    }
+    Ok(())
 }
 
 async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {

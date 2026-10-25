@@ -23449,6 +23449,23 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     // The agent's output setting stays out of what the user tries.
     assert!(text.contains("output unset"), "{text}");
     assert!(text.contains("demo exited with status 3"), "{text}");
+    // Starting the name again replaces the demo once the old one ended.
+    let replaced = demo(&[
+        "start",
+        "--workspace",
+        "tried",
+        "--",
+        "sh",
+        "-c",
+        "echo replaced; exec sleep 600",
+    ]);
+    assert_ne!(replaced["execution_id"], started["execution_id"]);
+    let listing = demo(&["ls", "--workspace", "tried"]);
+    assert_eq!(listing["running"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        listing["running"][0]["execution_id"],
+        replaced["execution_id"]
+    );
     fixture.ok(&["done", "tried", "--keep-demos"]);
     let listing = demo(&["ls", "--workspace", "tried"]);
     assert_eq!(listing["running"].as_array().unwrap().len(), 1);
