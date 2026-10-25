@@ -147,9 +147,6 @@ pub fn command() -> Command {
             command = withdraw(command, name);
         }
     }
-    for legacy in ["ask", "notifications"] {
-        command = withdraw(command, legacy);
-    }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
     decorate(command, &[], Arc::new(typed))
@@ -204,12 +201,6 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
                 ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces(need)),
-                ("pool", "resource", _) => Some(Target::Pools),
-                ("resource", "resource", _) => Some(Target::Members),
-                ("name", "resource", "release") => Some(Target::ResourceNames),
-                ("name", "port", "acquire") => Some(Target::Ports),
-                ("name", "port", "release") => Some(Target::ReservedPorts),
-                ("name", "sim", "release") => Some(Target::SimNames),
                 ("name", "acquire", "port") => Some(Target::Ports),
                 ("pool", "acquire" | "release", "resource" | "repo")
                 | ("resource", "acquire", "repo") => Some(Target::Pools),

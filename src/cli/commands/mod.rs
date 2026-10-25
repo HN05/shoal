@@ -213,10 +213,6 @@ fn print_help(path: &[&str]) -> Result<()> {
 }
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
-    if matches!(cli.command, Some(Command::BuildInfo)) {
-        outln!("{}", json!({"protocol": crate::protocol::VERSION}));
-        return Ok(0);
-    }
     // The service runs without the user's tool configuration environment, and
     // skill installation does this work itself.
     if !matches!(
@@ -292,7 +288,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             ForgeCommand::Api(args) => api::api(&ctx, args).await,
         },
-        Command::BuildInfo => unreachable!("build metadata needs no daemon or paths"),
         Command::Run {
             name,
             workspace,
@@ -476,11 +471,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::LegacyAsk(QuestionAskArgs { resume: None, .. }) => {
-            anyhow::bail!("`shoal ask` only continues a wait; ask with `shoal questions ask`")
-        }
-        Command::LegacyAsk(args)
-        | Command::Questions {
+        Command::Questions {
             command: Some(QuestionsCommand::Ask(args)),
             ..
         } => {
@@ -544,11 +535,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 workspaces::done(&ctx, workspace, cleanup).await
             }
         }
-        Command::LegacyNotifications {
-            keep_unread,
-            resume,
-            ..
-        } => notifications::follow(&ctx, keep_unread, resume).await,
         Command::Alerts {
             command: Some(AlertsCommand::Send { message, workspace }),
             ..
@@ -674,11 +660,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
-        Command::Port {
-            command,
-            workspace,
-            all,
-        } => ports::run(&ctx, command, WorkspaceScope { workspace, all }).await,
         Command::Approvals {
             command: Some(ApprovalsCommand::Withdraw { id, workspace }),
             ..
@@ -687,16 +668,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Resource {
-            command,
-            workspace,
-            all,
-        } => resources::run(&ctx, command, WorkspaceScope { workspace, all }).await,
-        Command::Sim {
-            command,
-            workspace,
-            all,
-        } => simulators::run(&ctx, command, WorkspaceScope { workspace, all }).await,
+        Command::Sim { command } => simulators::run(&ctx, command).await,
         Command::Doctor {
             scope,
             repair,

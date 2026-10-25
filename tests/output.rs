@@ -107,7 +107,7 @@ fn drain(master: &mut std::fs::File, transcript: &mut String) {
 fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
     let root = tempfile::tempdir().unwrap();
     let mut outputs = Vec::new();
-    for args in [vec![], vec!["-h"], vec!["--help"], vec!["help"]] {
+    for args in [vec![], vec!["-h"], vec!["--help"]] {
         let output = support::cli(root.path())
             .args(args)
             .stdin(Stdio::null())
@@ -122,14 +122,15 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
         outputs.push(help);
     }
     assert!(outputs.windows(2).all(|pair| pair[0] == pair[1]));
-    for args in [["cd", "--help"], ["help", "cd"]] {
-        let output = support::cli(root.path()).args(args).output().unwrap();
-        assert!(output.status.success(), "{output:?}");
-        let help = String::from_utf8(output.stdout).unwrap();
-        assert!(help.contains("Usage: shoal cd"), "{help}");
-        assert!(help.contains("Omit the workspace to open the picker"));
-        assert!(!help.contains("Workspaces:\n"));
-    }
+    let output = support::cli(root.path())
+        .args(["cd", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let help = String::from_utf8(output.stdout).unwrap();
+    assert!(help.contains("Usage: shoal cd"), "{help}");
+    assert!(help.contains("Omit the workspace to open the picker"));
+    assert!(!help.contains("Workspaces:\n"));
     assert!(!root.path().join("state").exists());
 }
 

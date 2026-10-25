@@ -811,11 +811,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::CheckRemoval {
             workspace,
-            caller_pid,
             include_changes,
         } => {
             let mut check = manager
-                .check_removal(&workspace, removal_inspection(caller_pid))
+                .check_removal(&workspace, InspectionPolicy::GitOnly)
                 .await?;
             if include_changes && check.dirty {
                 check.load_changed_files().await?;
@@ -824,13 +823,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             }
             Body::RemovalCheck(check)
         }
-        Method::RemoveWorkspace {
-            workspace,
-            unsaved,
-            caller_pid,
-        } => Body::RemovalResult(
+        Method::RemoveWorkspace { workspace, unsaved } => Body::RemovalResult(
             manager
-                .remove_workspace(&workspace, unsaved, removal_inspection(caller_pid))
+                .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
                 .await?,
         ),
         Method::Cleanup { dry_run, caches } => {
@@ -846,11 +841,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ExportWorkspace {
             workspace,
             unsaved,
-            caller_pid,
             file,
         } => Body::ExportedWorkspace(
             manager
-                .export_workspace(&workspace, unsaved, removal_inspection(caller_pid), file)
+                .export_workspace(&workspace, unsaved, InspectionPolicy::GitOnly, file)
                 .await?,
         ),
         Method::ImportWorkspace {
@@ -1310,15 +1304,6 @@ async fn answer_wait(
     protocol::write(&mut stream, &Response::new(request_id, body)).await
 }
 
-/// Preserve the legacy request field at the protocol boundary. Its numeric
-/// value has never been used as a PID by removal inspection.
-fn removal_inspection(caller_pid: u32) -> InspectionPolicy {
-    match caller_pid {
-        0 => InspectionPolicy::IncludeDirectoryProcesses,
-        _ => InspectionPolicy::GitOnly,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1356,17 +1341,6 @@ mod tests {
             message.contains("exceeds the 65536-byte protocol frame"),
             "{message}"
         );
-    }
-
-    #[test]
-    fn legacy_removal_request_selects_inspection_without_using_a_pid() {
-        assert_eq!(
-            removal_inspection(0),
-            InspectionPolicy::IncludeDirectoryProcesses
-        );
-        for caller_pid in [1, 123, u32::MAX] {
-            assert_eq!(removal_inspection(caller_pid), InspectionPolicy::GitOnly);
-        }
     }
 
     #[tokio::test]

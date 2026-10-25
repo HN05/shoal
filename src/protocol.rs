@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 132;
+pub const VERSION: u32 = 133;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -473,14 +473,12 @@ pub enum Method {
     },
     CheckRemoval {
         workspace: String,
-        caller_pid: u32,
         #[serde(default)]
         include_changes: bool,
     },
     RemoveWorkspace {
         workspace: String,
         unsaved: UnsavedWork,
-        caller_pid: u32,
     },
     /// Remove idle cleanup candidates without waiting for their idle delay.
     Cleanup {
@@ -515,7 +513,6 @@ pub enum Method {
     ExportWorkspace {
         workspace: String,
         unsaved: UnsavedWork,
-        caller_pid: u32,
         file: std::path::PathBuf,
     },
     /// Record a workspace another Shoal exported as removed here, with its

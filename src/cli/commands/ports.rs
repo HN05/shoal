@@ -4,11 +4,11 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        PortCommand, WorkspaceScope,
+        WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     daemon::ports::PortRequest,
     model::{PortOverview, PortReservation},
@@ -16,46 +16,6 @@ use crate::{
 };
 
 use super::workspace_overviews;
-
-pub(super) async fn run(
-    ctx: &Context,
-    command: Option<PortCommand>,
-    scope: WorkspaceScope,
-) -> Result<i32> {
-    match command {
-        Some(PortCommand::Acquire {
-            name,
-            workspace,
-            port,
-            env,
-            reason,
-            on_conflict,
-        }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let request = PortRequest {
-                port,
-                env_var: env,
-                reason,
-                on_conflict,
-            };
-            acquire(ctx, workspace, name, request).await
-        }
-        Some(PortCommand::List { scope }) => overview(ctx, scope).await,
-        Some(PortCommand::Release { name, workspace }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            client::request::<()>(&ctx.paths, Method::PortRelease { workspace, name }).await?;
-            ctx.emit_styled(
-                Style::Success,
-                "Port reservation released",
-                json!({"released": true}),
-            )?;
-            Ok(0)
-        }
-        None => overview(ctx, scope).await,
-    }
-}
 
 /// Acquire a port, offering the daemon's suggestion when the preferred port
 /// is taken. Exit 2 means nothing was reserved.
