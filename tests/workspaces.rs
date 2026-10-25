@@ -20839,7 +20839,10 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 
     let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
-    let (output, transcript) = launch(fixture.command().args([
+    // A person in a JSON-default environment chats with `--text`, which the
+    // session's Shoal uses too, since a chat needs text on a terminal.
+    let (output, transcript) = launch(fixture.command().env("SHOAL_OUTPUT", "json").args([
+        "--text",
         "chat",
         fixture.repo.to_str().unwrap(),
         "--agent",
@@ -20855,6 +20858,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(calls[1][..3], ["attach", "--labels", &labels]);
     // The session's Shoal records the chat and becomes its agent.
     let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
+    assert_eq!(calls[1][chat - 1], "--text");
     assert_eq!(
         calls[1][chat..],
         [

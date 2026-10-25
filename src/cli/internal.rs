@@ -74,12 +74,15 @@ pub enum Worker<'a> {
 }
 
 /// This executable for a command a terminal runs as typed. The terminal
-/// inherits HOME, so only a non-default state directory needs naming.
+/// inherits HOME, so only a non-default state directory needs naming. Like
+/// [`session_argv`], it shows text to the person at that terminal whatever
+/// `SHOAL_OUTPUT` the terminal has.
 pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     let mut argv = vec![crate::fsutil::invoked_executable()?.into_os_string()];
     if !paths.is_default_state() {
         argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
     }
+    argv.push("--text".into());
     Ok(argv)
 }
 
@@ -91,6 +94,7 @@ pub fn session_argv(paths: &Paths) -> Result<Vec<OsString>> {
         crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         paths.state.clone().into_os_string(),
+        "--text".into(),
     ])
 }
 
@@ -190,10 +194,10 @@ mod tests {
             state: "/home/.local/state/shoal".into(),
             ..custom.clone()
         };
-        assert_eq!(shoal_argv(&default).unwrap().len(), 1);
+        assert_eq!(shoal_argv(&default).unwrap()[1..], ["--text"]);
         assert_eq!(
             shoal_argv(&custom).unwrap()[1..],
-            ["--state-dir", "/home/state"]
+            ["--state-dir", "/home/state", "--text"]
         );
     }
 
@@ -205,7 +209,7 @@ mod tests {
         };
         assert_eq!(
             session_argv(&default).unwrap()[1..],
-            ["--state-dir", "/home/.local/state/shoal"]
+            ["--state-dir", "/home/.local/state/shoal", "--text"]
         );
     }
 
