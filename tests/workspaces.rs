@@ -23471,32 +23471,33 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     );
 }
 
-#[test]
-fn demo_presets_reserve_a_port_and_lease_the_simulator_until_stopped() {
-    let config = format!("{SIM_CONFIG}[done]\ncleanup = false\n");
-    let fixture = Fixture::with_tools(Some(&config), true);
-    let workspace = fixture.add("tried");
-    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+/// `shoal --json demo ARGS` without zmx or Herdr on PATH, so the demo runs in
+/// the background with a log.
+fn demo(fixture: &Fixture, args: &[&str]) -> Value {
     let bin = fixture.root.path().join("bin");
-    let demo = |args: &[&str]| {
-        let output = fixture
-            .command()
-            .env("PATH", fixture.restricted_path(&bin))
-            .arg("--json")
-            .arg("demo")
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{args:?}: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()
-    };
-    let started = |name: &str, preset: &str, variable: &str| {
-        let script = format!("echo ${variable} > {name}.env; exec sleep 600");
-        demo(&[
+    let output = fixture
+        .command()
+        .env("PATH", fixture.restricted_path(&bin))
+        .arg("--json")
+        .arg("demo")
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+/// Start the demo `name` of `tried` with `preset`, whose command writes the
+/// value of `variable` to `<name>.env` in the workspace and keeps running.
+fn start_preset_demo(fixture: &Fixture, name: &str, preset: &str, variable: &str) -> Value {
+    let script = format!("echo ${variable} > {name}.env; exec sleep 600");
+    demo(
+        fixture,
+        &[
             "start",
             name,
             "--preset",
@@ -23507,39 +23508,55 @@ fn demo_presets_reserve_a_port_and_lease_the_simulator_until_stopped() {
             "sh",
             "-c",
             &script,
-        ])
-    };
+        ],
+    )
+}
 
-    let web = started("site", "web", "PORT");
+/// Wait until the demo writes `value` to `<name>.env`, then stop the
+/// workspace's demos with `shoal done`.
+fn finish_preset_demo(fixture: &Fixture, workspace: &Value, name: &str, value: &str) {
+    let written = Path::new(workspace["path"].as_str().unwrap()).join(format!("{name}.env"));
+    wait_until("the demo to receive its variable", || {
+        fs::read_to_string(&written).is_ok_and(|text| text.trim() == value)
+    });
+    // Completion stops every demo of the workspace.
+    fixture.ok(&["done", "tried"]);
+    wait_until("the demos to stop", || {
+        demo(fixture, &["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
+}
+
+#[test]
+fn web_demos_reserve_a_port_and_pass_it_as_port() {
+    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let workspace = fixture.add("tried");
+    let web = start_preset_demo(&fixture, "site", "web", "PORT");
     let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
     let leases = fixture.ok(&["leases", "port", "--workspace", "tried"]);
     assert!(
         leases.to_string().contains(&format!("\"port\":{port}")),
         "{leases}"
     );
-    wait_until("the web demo to receive its port", || {
-        fs::read_to_string(path.join("site.env")).is_ok_and(|text| text.trim() == port)
-    });
+    finish_preset_demo(&fixture, &workspace, "site", &port);
+}
 
-    let app = started("app", "simulator", "SHOAL_SIM_UDID");
+#[cfg(target_os = "macos")]
+#[test]
+fn simulator_demos_lease_the_simulator_until_they_stop() {
+    let config = format!("{SIM_CONFIG}[done]\ncleanup = false\n");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    let workspace = fixture.add("tried");
+    let app = start_preset_demo(&fixture, "app", "simulator", "SHOAL_SIM_UDID");
     let udid = app["environment"]["SHOAL_SIM_UDID"]
         .as_str()
         .unwrap()
         .to_owned();
     assert_eq!(app["leased_simulator"], true);
     assert_eq!(fixture.ok(&["sim", "tried"])["simulators"][0]["udid"], udid);
-    wait_until("the simulator demo to receive its device", || {
-        fs::read_to_string(path.join("app.env")).is_ok_and(|text| text.trim() == udid)
-    });
-
-    // Completion stops every demo of the workspace.
-    fixture.ok(&["done", "tried"]);
-    wait_until("the demos to stop", || {
-        demo(&["ls", "--workspace", "tried"])["running"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    });
+    finish_preset_demo(&fixture, &workspace, "app", &udid);
     wait_until("the demo's simulator lease to end", || {
         fixture.ok(&["sim", "tried"])["simulators"][0]["workspace_id"].is_null()
     });
