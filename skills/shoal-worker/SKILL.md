@@ -262,13 +262,14 @@ its work is finished; Shoal cleans up your workspace only after its children are
 removed. You can split children from children; each workspace process reaches
 its own workspace and those below it.
 
-To have the child's work done in parallel, give it to a subagent where your
-instructions allow delegation. Tell it the child's `path` and to work only
-there, where its Shoal commands act on the child. Its report, your hooks and
-the child's issue and PR activity all come to you, so you see and steer its
-work directly; hand it the child's deliveries or handle them yourself. Prefer
-this to `--agent`, which starts a separate session you supervise only through
-Shoal's messages:
+To have work done in parallel, give it to a subagent where your instructions
+allow delegation. A subagent you run in its own worktree gets a child split from
+your workspace as that worktree; otherwise split the child first, then tell the
+subagent its `path` and to work only there. Either way its Shoal commands act on
+the child, and its report and the child's issue and PR activity come to you, so
+you see and steer its work directly; hand it the child's deliveries or handle
+them yourself. Prefer this to `--agent`, which starts a separate session you
+supervise only through Shoal's messages:
 
 ```sh
 shoal split --issue 43 --agent claude
