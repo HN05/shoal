@@ -40,6 +40,8 @@ pub struct Demo {
 /// reading or typing into the demo needs later.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Launch {
+    /// Unique to one start, so the starting CLI finds its own record.
+    pub id: String,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<Preset>,

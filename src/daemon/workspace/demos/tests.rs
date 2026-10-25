@@ -13,6 +13,7 @@ use crate::{
 
 fn launch(name: &str) -> Launch {
     Launch {
+        id: "launch".into(),
         name: name.into(),
         preset: None,
         open: None,

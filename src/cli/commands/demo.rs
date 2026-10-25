@@ -76,6 +76,21 @@ struct Overrides {
     ports: Vec<String>,
 }
 
+impl Overrides {
+    fn validate(&self) -> Result<()> {
+        for port in &self.ports {
+            crate::validate::lowercase_name("port", port)?;
+        }
+        ensure!(
+            self.open
+                .as_ref()
+                .is_none_or(|open| !open.trim().is_empty()),
+            "--open needs a command"
+        );
+        Ok(())
+    }
+}
+
 /// A demo ready to start: its name, definition and command.
 #[derive(Debug, PartialEq, Eq)]
 struct Chosen {
@@ -92,6 +107,11 @@ async fn start(
     queue: bool,
     command: Vec<OsString>,
 ) -> Result<i32> {
+    // Before a picker opens or a running demo is replaced.
+    if let Some(name) = &name {
+        crate::demos::validate_name(name)?;
+    }
+    overrides.validate()?;
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, id).await?.workspace;
     let settings =
@@ -201,7 +221,11 @@ async fn place(
     chosen: &Chosen,
     provided: presets::Provided,
 ) -> Result<Launch> {
+    // Places can repeat, such as a background demo's log, so the start finds
+    // its own record by this launch's ID.
+    let id = uuid::Uuid::new_v4().to_string();
     let launch = |host: &str, place: &str| Launch {
+        id: id.clone(),
         name: chosen.name.clone(),
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
@@ -233,7 +257,7 @@ async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> 
         let recorded = running(ctx, Some(workspace))
             .await?
             .into_iter()
-            .find(|demo| demo.launch.place == launch.place);
+            .find(|demo| demo.launch.id == launch.id);
         if let Some(demo) = recorded {
             return Ok(demo);
         }
@@ -516,23 +540,3 @@ fn last_lines(screen: &str, count: usize) -> Option<String> {
 
 #[cfg(test)]
 mod tests;
-impl Overrides {
-    fn validate(&self) -> Result<()> {
-        for port in &self.ports {
-            crate::validate::lowercase_name("port", port)?;
-        }
-        ensure!(
-            self.open
-                .as_ref()
-                .is_none_or(|open| !open.trim().is_empty()),
-            "--open needs a command"
-        );
-        Ok(())
-    }
-}
-
-    // Before a picker opens or a running demo is replaced.
-    if let Some(name) = &name {
-        crate::demos::validate_name(name)?;
-    }
-    overrides.validate()?;

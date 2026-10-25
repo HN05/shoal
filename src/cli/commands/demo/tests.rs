@@ -78,6 +78,7 @@ fn a_screen_keeps_its_last_lines_without_trailing_blanks() {
 #[test]
 fn listings_show_running_demos_then_the_configured_ones_not_running() {
     let launch = Launch {
+        id: "launch".into(),
         name: "web".into(),
         preset: Some(Preset::Web),
         open: None,

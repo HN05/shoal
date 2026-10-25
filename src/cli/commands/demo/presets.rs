@@ -230,6 +230,7 @@ mod tests {
 
     fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
         Launch {
+            id: "launch".into(),
             name: "app".into(),
             preset: Some(preset),
             open: None,
