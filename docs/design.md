@@ -371,6 +371,10 @@ discard the stopped work below it, since only it knows whether a stopped child
 agent still has work; resuming stays the user's. Approval
 requests go to the coordinator too when it holds an approved grant for the same
 thing; it decides them or passes them up, the user deciding at the top.
+The worker skill steers agents to a subagent working in the child's directory
+over `--agent`: the child then has no agent of its own, so its activity reaches
+the parent, and the subagent reports to the parent directly, supervision Shoal
+need not relay.
 
 `shoal work rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay
