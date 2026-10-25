@@ -1921,7 +1921,7 @@ async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
 
 /// Remove each checked workspace, going on after one fails.
 async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
-    let mut report = ui::Report::new("removed");
+    let mut report = ui::Report::new("removed", "remove");
     for check in checks {
         let name = &check.workspace.name;
         match remove_checked(ctx, check.workspace.id.clone(), &check).await {
@@ -1935,7 +1935,7 @@ async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    report.finish(ctx)
+    report.finish(ctx, "")
 }
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it

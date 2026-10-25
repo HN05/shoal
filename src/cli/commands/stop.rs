@@ -28,7 +28,14 @@ pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> 
         [workspace] => stop_one(ctx, workspace.clone(), yes).await,
         workspaces => {
             let workspaces = inspect_each(ctx, workspaces).await?;
-            stop_each(ctx, ui::Report::new("stopped"), &workspaces, "", yes).await
+            stop_each(
+                ctx,
+                ui::Report::new("stopped", "stop"),
+                &workspaces,
+                "",
+                yes,
+            )
+            .await
         }
     }
 }
@@ -97,7 +104,7 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
 
 /// Stop every settled workspace with a running execution.
 async fn stop_all(ctx: &Context) -> Result<i32> {
-    let mut report = ui::Report::new("stopped");
+    let mut report = ui::Report::new("stopped", "stop");
     let mut running = Vec::new();
     let mut unknown = false;
     for workspace in client::workspaces(&ctx.paths).await? {
@@ -152,15 +159,12 @@ async fn stop_each(
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    if !ctx.json && !stopped.is_empty() {
-        let resume = if resume.is_empty() {
-            format!(" {}", stopped.join(" "))
-        } else {
-            resume.to_owned()
-        };
-        outln!("Restore with shoal resume{resume}");
-    }
-    report.finish(ctx)
+    let summary = match (stopped.is_empty(), resume.is_empty()) {
+        (true, _) => String::new(),
+        (false, true) => format!("Restore with shoal resume {}", stopped.join(" ")),
+        (false, false) => format!("Restore with shoal resume{resume}"),
+    };
+    report.finish(ctx, &summary)
 }
 
 /// Disconnected executions are left for `shoal stop <workspace>` rather than

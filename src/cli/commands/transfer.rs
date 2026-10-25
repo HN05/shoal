@@ -54,9 +54,7 @@ pub(super) async fn export_all(
     let workspaces = repository_workspaces(ctx, repository).await?;
     let directory = ExportDirectory::create(directory)?;
     let planned = check_exports(ctx, &workspaces, &directory, yes).await?;
-    export_each(ctx, planned, &directory)
-        .await
-        .report(ctx, &directory)
+    export_each(ctx, planned, &directory).await
 }
 
 fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
@@ -573,74 +571,38 @@ async fn export_each(
     ctx: &Context,
     planned: Vec<PlannedExport>,
     directory: &ExportDirectory,
-) -> ExportReport {
-    let mut report = ExportReport::default();
+) -> Result<i32> {
+    let mut report = ui::Report::new("exported", "export");
     for PlannedExport { check, output } in planned {
         let name = &check.workspace.name;
         match export_checked(ctx, &check, &output).await {
-            Ok(exported) => report.exported(ctx, name, directory, exported),
+            Ok(exported) => {
+                let message = format!(
+                    "Exported {name} to {}",
+                    directory.shown_file(name).display()
+                );
+                let value = json!({
+                    "file": directory.file(name),
+                    "manifest": exported.manifest,
+                    "removal": exported.removal,
+                });
+                report.done(ctx, &message, value);
+            }
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    report
-}
-
-/// What an export of every workspace wrote, and the workspaces it could not
-/// export.
-#[derive(Default)]
-struct ExportReport {
-    exported: Vec<serde_json::Value>,
-    failed: Vec<serde_json::Value>,
-}
-
-impl ExportReport {
-    fn exported(
-        &mut self,
-        ctx: &Context,
-        name: &str,
-        directory: &ExportDirectory,
-        exported: ExportedWorkspace,
-    ) {
-        if !ctx.json {
-            outln!(
-                "Exported {name} to {}",
-                directory.shown_file(name).display()
-            );
-        }
-        self.exported.push(json!({
-            "file": directory.file(name),
-            "manifest": exported.manifest,
-            "removal": exported.removal,
-        }));
-    }
-
-    fn failed(&mut self, ctx: &Context, name: &str, error: &anyhow::Error) {
-        eprintln!(
-            "{} cannot export {name}: {error:#}",
-            Palette::stderr(ctx.json).paint(Style::Error, "error:")
-        );
-        self.failed
-            .push(json!({"workspace": name, "error": format!("{error:#}")}));
-    }
-
-    fn report(self, ctx: &Context, directory: &ExportDirectory) -> Result<i32> {
-        let exported = self.exported.len();
-        let shown = directory.shown.display();
-        let message = if self.failed.is_empty() {
-            format!(
-                "Exported {exported} workspaces to {shown}; shoal import {shown} opens them on another machine"
-            )
-        } else {
-            format!(
-                "Exported {exported} of {} workspaces to {shown}; {} failed",
-                exported + self.failed.len(),
-                self.failed.len()
-            )
-        };
-        ctx.emit(
-            &message,
-            json!({"directory": directory.path, "exported": self.exported, "failed": self.failed}),
-        )?;
-        Ok(if self.failed.is_empty() { 0 } else { 1 })
-    }
+    let (exported, failed) = report.counts();
+    let shown = directory.shown.display();
+    let summary = if failed == 0 {
+        format!(
+            "Exported {exported} workspaces to {shown}; shoal import {shown} opens them on another machine"
+        )
+    } else {
+        format!(
+            "Exported {exported} of {} workspaces to {shown}; {failed} failed",
+            exported + failed
+        )
+    };
+    report.field("directory", json!(directory.path));
+    report.finish(ctx, &summary)
 }

@@ -73,20 +73,25 @@ fn losses_text(action: &str, losses: &[(String, Vec<String>)]) -> String {
 }
 
 /// What a command did to each of several items: a line per item as it goes,
-/// then one JSON object naming the items under `done_key` and the failures
-/// under `failed`.
+/// then a summary, or with `--json` one object naming the items under
+/// `done_key` and the failures under `failed`.
 pub struct Report {
     done_key: &'static str,
+    /// What the command does, as in `cannot remove first`.
+    verb: &'static str,
     done: Vec<Value>,
     failed: Vec<Value>,
+    fields: serde_json::Map<String, Value>,
 }
 
 impl Report {
-    pub fn new(done_key: &'static str) -> Self {
+    pub fn new(done_key: &'static str, verb: &'static str) -> Self {
         Self {
             done_key,
+            verb,
             done: Vec::new(),
             failed: Vec::new(),
+            fields: serde_json::Map::new(),
         }
     }
 
@@ -98,25 +103,41 @@ impl Report {
         self.done.push(value);
     }
 
-    /// Record an item the command failed on, which does not stop the others.
-    pub fn failed(&mut self, ctx: &Context, item: &str, error: &anyhow::Error) {
+    /// Record a workspace the command failed on, which does not stop the
+    /// others.
+    pub fn failed(&mut self, ctx: &Context, workspace: &str, error: &anyhow::Error) {
         eprintln!(
-            "{} {item}: {error:#}",
-            Palette::stderr(ctx.json).paint(Style::Error, "error:")
+            "{} cannot {} {workspace}: {error:#}",
+            Palette::stderr(ctx.json).paint(Style::Error, "error:"),
+            self.verb
         );
         self.failed
-            .push(json!({"workspace": item, "error": format!("{error:#}")}));
+            .push(json!({"workspace": workspace, "error": format!("{error:#}")}));
     }
 
-    /// Print the JSON object, exiting 1 when any item failed.
-    pub fn finish(self, ctx: &Context) -> Result<i32> {
+    /// How many items the command acted on, and how many it failed on.
+    pub fn counts(&self) -> (usize, usize) {
+        (self.done.len(), self.failed.len())
+    }
+
+    /// Add `key` to the JSON object.
+    pub fn field(&mut self, key: &str, value: Value) {
+        self.fields.insert(key.to_owned(), value);
+    }
+
+    /// Print `summary` unless it is empty, or the JSON object, exiting 1 when
+    /// any item failed.
+    pub fn finish(mut self, ctx: &Context, summary: &str) -> Result<i32> {
+        let code = if self.failed.is_empty() { 0 } else { 1 };
+        self.fields
+            .insert(self.done_key.to_owned(), self.done.into());
+        self.fields.insert("failed".to_owned(), self.failed.into());
         if ctx.json {
-            outln!(
-                "{}",
-                json!({self.done_key: self.done, "failed": self.failed})
-            );
+            outln!("{}", Value::Object(self.fields));
+        } else if !summary.is_empty() {
+            outln!("{summary}");
         }
-        Ok(if self.failed.is_empty() { 0 } else { 1 })
+        Ok(code)
     }
 }
 
