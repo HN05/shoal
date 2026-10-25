@@ -155,6 +155,34 @@ async fn repeating_an_unchanged_completion_is_refused() {
     );
 }
 
+#[tokio::test]
+async fn repeating_a_completion_reruns_a_configured_hook() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, manager, workspace) = fixture().await;
+    let runs = root.path().join("runs");
+    let hook = root.path().join("post-done");
+    fs::write(
+        &hook,
+        format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", runs.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some(format!(
+                "post_done_cmd = '{}'\n[done]\ncleanup = false\n",
+                hook.display()
+            )),
+        )
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    // After the hook failed, the same completion runs it again.
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    assert_eq!(fs::read_to_string(&runs).unwrap(), "xx");
+}
+
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

@@ -1838,7 +1838,7 @@ starts a new one, telling it the workspace moved, instead of running
 `shoal done [workspace]` records that the assignment is finished and notifies the
 user. It replaces a recorded completion at another HEAD, with another cleanup
 choice or a cleanup error, and fails when it would change nothing: the same
-completion with no open question to close.
+completion with no open question to close and no `post_done_cmd` to rerun.
 `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
 false. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
