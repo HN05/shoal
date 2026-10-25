@@ -9,18 +9,24 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
-    ci::{CiAction, id},
+    ci::{CiAction, JobState, id},
     transport::api::{HttpMethod, Request},
 };
 
 /// A workflow run in the repository, as its forge reports it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
     /// The ID its API acts on.
+    #[serde(skip)]
     pub(crate) id: u64,
     pub url: String,
     /// The branch it ran on, when it ran on one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// Its workflow file, where the forge runs several per branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<String>,
+    pub state: JobState,
 }
 
 /// A run an action reached.
@@ -44,6 +50,11 @@ impl ForgeRepo {
     /// forge is known to apply `action` to runs.
     pub async fn find_run(&self, account: &Account, input: &str, action: CiAction) -> Result<Run> {
         self.require(Capability::ci(action))?;
+        self.read_run(account, input).await
+    }
+
+    /// The run `input`, its web URL or the number in it, names.
+    pub(crate) async fn read_run(&self, account: &Account, input: &str) -> Result<Run> {
         validate_run_reference(input)?;
         let number = id(input)
             .or_else(|| self.kind.locate_run(self, input))
@@ -82,6 +93,8 @@ mod tests {
             id,
             url: String::new(),
             branch: None,
+            workflow: None,
+            state: JobState::Finished,
         }
     }
 
@@ -165,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_read_their_branch_from_the_forge() -> Result<()> {
+    fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
         let read = |remote: &str, value| -> Result<Run> {
             let repo = ForgeRepo::parse(remote)?;
             repo.kind.run(&repo, 12, &value)
@@ -174,31 +187,37 @@ mod tests {
             read(
                 "https://github.com/team/repo",
                 json!({"id": 12, "html_url": "https://github.com/team/repo/actions/runs/12",
-                    "head_branch": "topic"})
+                    "head_branch": "topic", "path": ".github/workflows/ci.yml",
+                    "status": "completed", "conclusion": "failure"})
             )?,
             Run {
                 id: 12,
                 url: "https://github.com/team/repo/actions/runs/12".into(),
-                branch: Some("topic".into())
+                branch: Some("topic".into()),
+                workflow: Some("ci.yml".into()),
+                state: JobState::Failed,
             }
         );
         // A tag pipeline ran on no branch.
         let tag = read(
             "https://gitlab.com/team/repo",
             json!({"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",
-                "ref": "v1", "tag": true}),
+                "ref": "v1", "tag": true, "status": "running"}),
         )?;
-        assert_eq!(tag.branch, None);
+        assert_eq!((tag.branch, tag.state), (None, JobState::Running));
         let forgejo = read(
             "https://codeberg.org/team/repo",
-            json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "topic"}]}),
+            json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "topic",
+                "workflow_id": "deps.yml", "status": "success"}]}),
         )?;
         assert_eq!(
             forgejo,
             Run {
                 id: 9331,
                 url: "https://codeberg.org/team/repo/actions/runs/12".into(),
-                branch: Some("topic".into())
+                branch: Some("topic".into()),
+                workflow: Some("deps.yml".into()),
+                state: JobState::Finished,
             }
         );
         let error = read(

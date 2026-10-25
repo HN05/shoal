@@ -13,7 +13,12 @@ use crate::{
     account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, run::NewRun, run_action::Run},
+    ci::{
+        CiAction, CiCheck, Job, Location, Operation,
+        run::NewRun,
+        run_action::Run,
+        run_view::{RunFilter, RunJob},
+    },
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod},
@@ -70,9 +75,10 @@ impl Backend for Bitbucket {
             Capability::Attachments => {
                 Support::Unsupported(Some("Bitbucket has no API for attaching files"))
             }
-            Capability::RerunJobs | Capability::CancelJobs | Capability::ReadJobLogs => {
-                Support::Unsupported(None)
-            }
+            Capability::RerunJobs
+            | Capability::CancelJobs
+            | Capability::ReadJobLogs
+            | Capability::ReadRuns => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
@@ -529,8 +535,30 @@ impl Backend for Bitbucket {
     }
 
     /// Shoal reads no Pipelines run, which the capabilities refuse first.
-    fn run(&self, _repo: &ForgeRepo, _number: u64, _value: &Value) -> Result<Run> {
-        Err(capability::unsupported(self, Capability::RerunJobs))
+    fn run_item(&self, _repo: &ForgeRepo, _value: &Value) -> Result<Run> {
+        Err(capability::unsupported(self, Capability::ReadRuns))
+    }
+
+    fn runs_path(&self, _filter: &RunFilter) -> Result<String> {
+        Err(capability::unsupported(self, Capability::ReadRuns))
+    }
+
+    fn run_jobs_path(&self, run: &Run) -> String {
+        format!("pipelines/{}/steps", run.id)
+    }
+
+    fn run_jobs(&self, _run: &Run, _value: &Value) -> Result<Vec<RunJob>> {
+        Err(capability::unsupported(self, Capability::ReadRuns))
+    }
+
+    async fn run_job_log(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _run: &Run,
+        _job: &RunJob,
+    ) -> Result<String> {
+        Err(capability::unsupported(self, Capability::ReadJobLogs))
     }
 
     fn run_endpoint(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<String> {

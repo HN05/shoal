@@ -11,8 +11,12 @@ use crate::{
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
     ci::{
-        CiAction, CiCheck, Job, JobState, Location, Operation, check, checks::plain, id,
-        run::NewRun, run_action::Run,
+        CiAction, CiCheck, Job, JobState, Location, Operation, check,
+        checks::plain,
+        id,
+        run::NewRun,
+        run_action::Run,
+        run_view::{RunFilter, RunJob},
     },
     conventions::Lookup,
     items::{
@@ -81,6 +85,7 @@ impl Backend for GitLab {
             | Capability::RerunJobs
             | Capability::CancelJobs
             | Capability::StartRuns
+            | Capability::ReadRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -588,13 +593,61 @@ impl Backend for GitLab {
         format!("pipelines/{number}")
     }
 
-    /// A tag's pipeline ran on no branch.
-    fn run(&self, _repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+    /// A tag's pipeline ran on no branch, and a branch has one pipeline,
+    /// so none names a workflow.
+    fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
         Ok(Run {
             id: value["id"].as_u64().context("pipeline has no ID")?,
             url: text(&value["web_url"]).context("pipeline has no URL")?,
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
+            workflow: None,
+            state: status_state(&value["status"])?,
         })
+    }
+
+    fn runs_path(&self, filter: &RunFilter) -> Result<String> {
+        ensure!(
+            filter.workflow.is_none(),
+            "GitLab runs the branch's pipeline; leave out the workflow"
+        );
+        let mut path = format!("pipelines?per_page={}", filter.limit);
+        if let Some(branch) = &filter.branch {
+            path.push_str(&format!("&ref={}", encode(branch, false)));
+        }
+        Ok(path)
+    }
+
+    fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
+        value.as_array().map(Vec::as_slice)
+    }
+
+    fn run_jobs_path(&self, run: &Run) -> String {
+        format!("pipelines/{}/jobs?per_page=100", run.id)
+    }
+
+    fn run_jobs(&self, _run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+        let jobs = value.as_array().context("pipeline jobs are not a list")?;
+        jobs.iter()
+            .map(|job| {
+                Ok(RunJob {
+                    id: job["id"].as_u64().context("GitLab job has no ID")?,
+                    name: text(&job["name"]).context("GitLab job has no name")?,
+                    state: status_state(&job["status"])?,
+                    url: text(&job["web_url"]),
+                })
+            })
+            .collect()
+    }
+
+    async fn run_job_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _run: &Run,
+        job: &RunJob,
+    ) -> Result<String> {
+        repo.job_log(account, Location::GitLab { job: job.id })
+            .await
     }
 
     /// GitLab retries only a pipeline's failed and cancelled jobs.
@@ -993,25 +1046,34 @@ fn labels(labels: &Value) -> Vec<String> {
 }
 
 /// GitLab's newest status of each name; a retried job keeps its earlier ones.
+/// The state a commit status, pipeline or job reports.
+fn status_state(status: &Value) -> Result<JobState> {
+    Ok(match status.as_str() {
+        Some(
+            "created"
+            | "waiting_for_resource"
+            | "preparing"
+            | "pending"
+            | "running"
+            | "scheduled"
+            | "waiting_for_callback",
+        ) => JobState::Running,
+        Some("failed" | "canceled") => JobState::Failed,
+        Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
+        state => bail!("unknown GitLab CI state {state:?}"),
+    })
+}
+
 fn latest_checks(statuses: &[Value]) -> Result<Vec<CiCheck>> {
     let mut latest = std::collections::BTreeMap::new();
     for status in statuses {
         let id = status["id"].as_u64().context("GitLab status has no ID")?;
-        let state = match status["status"].as_str() {
-            Some(
-                "created"
-                | "waiting_for_resource"
-                | "preparing"
-                | "pending"
-                | "running"
-                | "scheduled"
-                | "waiting_for_callback",
-            ) => JobState::Running,
-            Some("failed" | "canceled") => JobState::Failed,
-            Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
-            state => bail!("unknown GitLab CI state {state:?}"),
-        };
-        let check = check(status, "name", state, "target_url")?;
+        let check = check(
+            status,
+            "name",
+            status_state(&status["status"])?,
+            "target_url",
+        )?;
         if latest
             .get(&check.0)
             .is_none_or(|(newest, _): &(u64, CiCheck)| *newest < id)

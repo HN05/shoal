@@ -18,19 +18,24 @@ pub(crate) fn checks(response: &Value) -> Result<Vec<CiCheck>> {
         "GitHub returned a partial page of check runs"
     );
     runs.iter()
-        .map(|run| {
-            let state = match (run["status"].as_str(), run["conclusion"].as_str()) {
-                (
-                    Some("completed"),
-                    Some("failure" | "timed_out" | "cancelled" | "startup_failure"),
-                ) => JobState::Failed,
-                (Some("completed"), _) => JobState::Finished,
-                (Some(_), _) => JobState::Running,
-                (None, _) => bail!("GitHub check run has no status"),
-            };
-            check(run, "name", state, "details_url")
-        })
+        .map(|run| check(run, "name", state(run)?, "details_url"))
         .collect()
+}
+
+/// The state of a check run, workflow run or job from its status and
+/// conclusion.
+pub(crate) fn state(value: &Value) -> Result<JobState> {
+    Ok(
+        match (value["status"].as_str(), value["conclusion"].as_str()) {
+            (
+                Some("completed"),
+                Some("failure" | "timed_out" | "cancelled" | "startup_failure"),
+            ) => JobState::Failed,
+            (Some("completed"), _) => JobState::Finished,
+            (Some(_), _) => JobState::Running,
+            (None, _) => bail!("GitHub run or job has no status"),
+        },
+    )
 }
 
 /// The job a check run's URL links in the repository.

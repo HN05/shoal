@@ -18,8 +18,12 @@ use crate::{
     account::Account,
     capability::{Capability, Support},
     ci::{
-        CiAction, CiCheck, Job, Location, Operation, checks::plain, id, run::NewRun,
+        CiAction, CiCheck, Job, Location, Operation,
+        checks::plain,
+        id,
+        run::{NewRun, workflow_segment},
         run_action::Run,
+        run_view::{RunFilter, RunJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -78,6 +82,7 @@ impl Backend for GitHub {
             | Capability::RerunJobs
             | Capability::CancelJobs
             | Capability::StartRuns
+            | Capability::ReadRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -581,12 +586,62 @@ impl Backend for GitHub {
         format!("actions/runs/{number}")
     }
 
-    fn run(&self, _repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+    /// A run names its workflow by the file's path in the repository.
+    fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
+        let path = text(&value["path"]);
         Ok(Run {
             id: value["id"].as_u64().context("Actions run has no ID")?,
             url: text(&value["html_url"]).context("Actions run has no URL")?,
             branch: text(&value["head_branch"]),
+            workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
+            state: actions::state(value)?,
         })
+    }
+
+    fn runs_path(&self, filter: &RunFilter) -> Result<String> {
+        let mut path = match &filter.workflow {
+            Some(workflow) => format!("actions/workflows/{}/runs", workflow_segment(workflow)?),
+            None => "actions/runs".into(),
+        };
+        path.push_str(&format!("?per_page={}", filter.limit));
+        if let Some(branch) = &filter.branch {
+            path.push_str(&format!("&branch={}", encode(branch, false)));
+        }
+        Ok(path)
+    }
+
+    fn run_jobs_path(&self, run: &Run) -> String {
+        format!("actions/runs/{}/jobs?per_page=100", run.id)
+    }
+
+    fn run_jobs(&self, _run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+        let jobs = value["jobs"]
+            .as_array()
+            .context("Actions jobs are not a list")?;
+        jobs.iter()
+            .map(|job| {
+                Ok(RunJob {
+                    id: job["id"].as_u64().context("Actions job has no ID")?,
+                    name: text(&job["name"]).context("Actions job has no name")?,
+                    state: actions::state(job)?,
+                    url: text(&job["html_url"]),
+                })
+            })
+            .collect()
+    }
+
+    async fn run_job_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        run: &Run,
+        job: &RunJob,
+    ) -> Result<String> {
+        let location = Location::GitHub {
+            run: run.id,
+            job: job.id,
+        };
+        repo.job_log(account, location).await
     }
 
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {

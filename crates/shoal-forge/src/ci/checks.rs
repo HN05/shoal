@@ -98,7 +98,7 @@ impl ForgeRepo {
 
     /// The log of the job at `location` as plain text, refused beyond
     /// [`MAX_LOG_BYTES`].
-    async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
+    pub(crate) async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
         let endpoint = self.repo_endpoint(&self.kind.job_log_endpoint(location)?);
         let request = Request::get(endpoint).limited(MAX_LOG_BYTES);
         let log = self

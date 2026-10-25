@@ -59,15 +59,20 @@ impl NewRun {
                 backend.name()
             )
         })?;
-        ensure!(
-            !matches!(workflow, "." | "..")
-                && workflow
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')),
-            "workflow {workflow:?} is not a workflow file name or ID"
-        );
-        Ok(workflow)
+        workflow_segment(workflow)
     }
+}
+
+/// `workflow`, a workflow file name or ID, as one segment of an endpoint.
+pub(crate) fn workflow_segment(workflow: &str) -> Result<&str> {
+    ensure!(
+        !matches!(workflow, "." | "..")
+            && workflow
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')),
+        "workflow {workflow:?} is not a workflow file name or ID"
+    );
+    Ok(workflow)
 }
 
 impl ForgeRepo {

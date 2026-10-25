@@ -27,6 +27,7 @@ use crate::{
         checks::{CheckLog, plain},
         run::NewRun,
         run_action::Run,
+        run_view::{RunFilter, RunJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -83,6 +84,7 @@ impl Backend for Forgejo {
             )),
             Capability::CancelJobs
             | Capability::StartRuns
+            | Capability::ReadRuns
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
@@ -519,12 +521,65 @@ impl Backend for Forgejo {
     }
 
     fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
-        let run = actions::numbered_run(value, number)?;
+        self.run_item(repo, actions::numbered_run(value, number)?)
+    }
+
+    /// A run names its workflow by file name.
+    fn run_item(&self, repo: &ForgeRepo, value: &Value) -> Result<Run> {
+        let number = value["index_in_repo"]
+            .as_u64()
+            .context("Actions run has no number")?;
         Ok(Run {
-            id: run["id"].as_u64().context("Actions run has no ID")?,
+            id: value["id"].as_u64().context("Actions run has no ID")?,
             url: format!("{}/actions/runs/{number}", repo.repository_url()),
-            branch: text(&run["prettyref"]),
+            branch: text(&value["prettyref"]),
+            workflow: text(&value["workflow_id"]),
+            state: actions::state(&value["status"])?,
         })
+    }
+
+    /// The list reads a page only when it names one.
+    fn runs_path(&self, filter: &RunFilter) -> Result<String> {
+        let mut path = format!("actions/runs?limit={}&page=1", filter.limit);
+        if let Some(branch) = &filter.branch {
+            let reference = format!("refs/heads/{branch}");
+            path.push_str(&format!("&ref={}", encode(&reference, false)));
+        }
+        if let Some(workflow) = &filter.workflow {
+            path.push_str(&format!("&workflow_id={}", encode(workflow, false)));
+        }
+        Ok(path)
+    }
+
+    fn run_jobs_path(&self, run: &Run) -> String {
+        format!("actions/runs/{}/jobs", run.id)
+    }
+
+    /// The web UI links a job by its index in the run.
+    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+        let jobs = value.as_array().context("Actions jobs are not a list")?;
+        jobs.iter()
+            .enumerate()
+            .map(|(index, job)| {
+                Ok(RunJob {
+                    id: job["id"].as_u64().context("Actions job has no ID")?,
+                    name: text(&job["name"]).context("Actions job has no name")?,
+                    state: actions::state(&job["status"])?,
+                    url: Some(format!("{}/jobs/{index}", run.url)),
+                })
+            })
+            .collect()
+    }
+
+    async fn run_job_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _run: &Run,
+        job: &RunJob,
+    ) -> Result<String> {
+        let endpoint = repo.repo_endpoint(&format!("actions/jobs/{}/logs", job.id));
+        Ok(self.plain_log(&actions::job_log(repo, account, &endpoint).await?))
     }
 
     /// Forgejo's API cannot rerun, which the capability refuses first.

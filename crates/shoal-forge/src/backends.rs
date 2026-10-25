@@ -22,6 +22,7 @@ use crate::{
         checks::{CheckLog, plain},
         run::NewRun,
         run_action::Run,
+        run_view::{RunFilter, RunJob},
     },
     conventions::Lookup,
     items::{
@@ -437,7 +438,36 @@ pub(crate) trait Backend {
     fn run_path(&self, number: u64) -> String;
 
     /// The run numbered `number` that a read of its path returned as `value`.
-    fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run>;
+    fn run(&self, repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
+        self.run_item(repo, value)
+    }
+
+    /// One run as the forge reads or lists it.
+    fn run_item(&self, repo: &ForgeRepo, value: &Value) -> Result<Run>;
+
+    /// The path under the repository that lists the runs `filter` selects,
+    /// newest first.
+    fn runs_path(&self, filter: &RunFilter) -> Result<String>;
+
+    /// The runs a read of the list path returned.
+    fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
+        value["workflow_runs"].as_array().map(Vec::as_slice)
+    }
+
+    /// The path under the repository that lists `run`'s jobs.
+    fn run_jobs_path(&self, run: &Run) -> String;
+
+    /// The jobs of `run` that a read of its jobs path returned as `value`.
+    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>>;
+
+    /// The log of `run`'s `job` as plain text.
+    async fn run_job_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        run: &Run,
+        job: &RunJob,
+    ) -> Result<String>;
 
     /// The endpoint under the repository that applies `action` to `run`;
     /// `failed` reruns only its failed jobs.
@@ -929,6 +959,36 @@ impl Backend for ForgeKind {
 
     fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
         dispatch!(self, backend => backend.run(repo, number, value))
+    }
+
+    fn run_item(&self, repo: &ForgeRepo, value: &Value) -> Result<Run> {
+        dispatch!(self, backend => backend.run_item(repo, value))
+    }
+
+    fn runs_path(&self, filter: &RunFilter) -> Result<String> {
+        dispatch!(self, backend => backend.runs_path(filter))
+    }
+
+    fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
+        dispatch!(self, backend => backend.listed_runs(value))
+    }
+
+    fn run_jobs_path(&self, run: &Run) -> String {
+        dispatch!(self, backend => backend.run_jobs_path(run))
+    }
+
+    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+        dispatch!(self, backend => backend.run_jobs(run, value))
+    }
+
+    async fn run_job_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        run: &Run,
+        job: &RunJob,
+    ) -> Result<String> {
+        dispatch!(self, backend => backend.run_job_log(repo, account, run, job).await)
     }
 
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {

@@ -9,7 +9,10 @@ use crate::{
     ForgeRepo,
     account::{Account, ForgejoLogin},
     backends::Backend,
-    ci::checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
+    ci::{
+        JobState,
+        checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
+    },
     items::link::ItemKind,
     transport::{
         api::{Request, TIMEOUT, authorization, curl_body},
@@ -90,6 +93,16 @@ pub(crate) async fn run_id_for(
         )
         .await?;
     run_id(&runs, number, head)
+}
+
+/// The state of a run or job from its status.
+pub(crate) fn state(status: &Value) -> Result<JobState> {
+    Ok(match status.as_str() {
+        Some("waiting" | "running" | "blocked" | "unknown") => JobState::Running,
+        Some("failure" | "cancelled") => JobState::Failed,
+        Some("success" | "skipped") => JobState::Finished,
+        status => anyhow::bail!("unknown Forgejo Actions status {status:?}"),
+    })
 }
 
 /// The one run a list filtered by `number` holds.

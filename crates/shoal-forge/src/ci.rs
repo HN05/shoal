@@ -3,6 +3,7 @@
 pub mod checks;
 pub mod run;
 pub mod run_action;
+pub mod run_view;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -40,12 +41,15 @@ pub(crate) struct Job {
     pub(crate) location: Option<Location>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JobState {
-    Failed,
-    Running,
-    Finished,
-}
+states!(
+    /// Whether a CI job or run is still running and, once it finished,
+    /// whether it failed.
+    JobState {
+        Failed => "failed",
+        Running => "running",
+        Finished => "finished",
+    }
+);
 
 /// A CI job in the repository, by the IDs its forge acts on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
