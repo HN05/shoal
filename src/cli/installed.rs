@@ -109,6 +109,14 @@ pub(crate) fn replace_option(
     replaced
 }
 
+/// `arguments` with `flag` added unless they already have it.
+pub(crate) fn with_flag(mut arguments: Vec<OsString>, flag: &str) -> Vec<OsString> {
+    if !arguments.iter().any(|argument| argument == flag) {
+        arguments.push(flag.into());
+    }
+    arguments
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,5 +167,14 @@ mod tests {
             arguments(&["internal", "events", "--follow"]),
             ["internal", "events", "--follow", "--since", "9"]
         );
+    }
+
+    #[test]
+    fn a_flag_is_added_once() {
+        let arguments = |arguments: &[&str]| {
+            with_flag(arguments.iter().map(OsString::from).collect(), "--resume")
+        };
+        assert_eq!(arguments(&["watch"]), ["watch", "--resume"]);
+        assert_eq!(arguments(&["watch", "--resume"]), ["watch", "--resume"]);
     }
 }

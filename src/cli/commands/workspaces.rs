@@ -2160,15 +2160,12 @@ fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
 /// This watch's arguments continuing its wait in `workspace` until `deadline`,
 /// as the installed release does after an upgrade restarted the daemon.
 fn resume_watch_arguments(workspace: &str, deadline: Option<Instant>) -> Vec<OsString> {
-    use crate::cli::installed::{arguments, replace_option};
+    use crate::cli::installed::{arguments, replace_option, with_flag};
     let mut resumed = replace_option(arguments(), "--workspace", workspace);
     if let Some(seconds) = seconds_left(deadline) {
         resumed = replace_option(resumed, "--timeout", &seconds.to_string());
     }
-    if !resumed.iter().any(|argument| argument == "--resume") {
-        resumed.push("--resume".into());
-    }
-    resumed
+    with_flag(resumed, "--resume")
 }
 
 #[cfg(test)]
