@@ -65,7 +65,6 @@ impl Need {
             ]
             | ["pr", "open"]
             | ["questions", "ask"]
-            | ["ask"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"

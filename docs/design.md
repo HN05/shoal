@@ -535,8 +535,7 @@ shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
 withdraws review marks. Creating a question uses `questions ask`; notifications use `alerts`, with
-`alerts send` to send one. Hidden legacy entry points accept only resumed question
-waits and notification streams so running commands survive an upgrade.
+`alerts send` to send one.
 Approval snapshots carry their stable request key through the CLI so reused
 numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot

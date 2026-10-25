@@ -476,11 +476,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::LegacyAsk(QuestionAskArgs { resume: None, .. }) => {
-            anyhow::bail!("`shoal ask` only continues a wait; ask with `shoal questions ask`")
-        }
-        Command::LegacyAsk(args)
-        | Command::Questions {
+        Command::Questions {
             command: Some(QuestionsCommand::Ask(args)),
             ..
         } => {
@@ -544,11 +540,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 workspaces::done(&ctx, workspace, cleanup).await
             }
         }
-        Command::LegacyNotifications {
-            keep_unread,
-            resume,
-            ..
-        } => notifications::follow(&ctx, keep_unread, resume).await,
         Command::Alerts {
             command: Some(AlertsCommand::Send { message, workspace }),
             ..

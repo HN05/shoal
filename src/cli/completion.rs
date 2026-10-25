@@ -147,9 +147,6 @@ pub fn command() -> Command {
             command = withdraw(command, name);
         }
     }
-    for legacy in ["ask", "notifications"] {
-        command = withdraw(command, legacy);
-    }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
     decorate(command, &[], Arc::new(typed))

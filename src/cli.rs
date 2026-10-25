@@ -137,21 +137,6 @@ pub enum Command {
     /// Daemons from earlier releases read the protocol before they update.
     #[command(name = "__build-info", hide = true)]
     BuildInfo,
-    /// Continue a question wait launched before the command was grouped.
-    #[command(name = "ask", hide = true)]
-    LegacyAsk(QuestionAskArgs),
-    /// Continue a notification stream launched before the command was grouped.
-    #[command(name = "notifications", hide = true)]
-    LegacyNotifications {
-        #[arg(long, required = true)]
-        follow: bool,
-        #[arg(long)]
-        keep_unread: bool,
-        #[arg(long, required = true)]
-        resume: i64,
-        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
-        limit: u32,
-    },
     /// List configured commands, run one by name, or run an arbitrary command after --.
     Run {
         /// Configured command; omit it to execute the arguments after -- directly.
@@ -2080,49 +2065,6 @@ mod tests {
         let mut root = <Cli as clap::CommandFactory>::command();
         let _ = root.render_usage();
         assert_descriptions_survive_deferral(&root);
-    }
-
-    #[test]
-    fn legacy_question_and_notification_commands_parse_upgrade_resumes() {
-        let ask = [
-            "shoal",
-            "ask",
-            "Which cache?",
-            "--recommend",
-            "Redis",
-            "--wait",
-            "--workspace",
-            "workspace-id",
-        ];
-        let resumed = Cli::try_parse_from(ask.into_iter().chain(["--resume", "42"])).unwrap();
-        assert!(matches!(
-            resumed.command,
-            Some(Command::LegacyAsk(QuestionAskArgs {
-                resume: Some(42),
-                ..
-            }))
-        ));
-        assert!(Cli::try_parse_from(["shoal", "notifications", "--follow"]).is_err());
-        assert!(Cli::try_parse_from(["shoal", "notifications", "--resume", "42"]).is_err());
-        let resumed = Cli::try_parse_from([
-            "shoal",
-            "notifications",
-            "--follow",
-            "--keep-unread",
-            "--limit",
-            "20",
-            "--resume",
-            "42",
-        ])
-        .unwrap();
-        assert!(matches!(
-            resumed.command,
-            Some(Command::LegacyNotifications {
-                resume: 42,
-                keep_unread: true,
-                ..
-            })
-        ));
     }
 
     #[test]
