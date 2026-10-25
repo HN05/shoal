@@ -16,7 +16,7 @@ direct resource access; filesystem restrictions are future work.
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks beyond the `max_agents` queue, or store conversations. Agent shortcuts
-(`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
+(`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic execution
 path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Opt-in forge authentication wrappers
 are user-owned executables selected per tool through repository/global config;
@@ -526,7 +526,9 @@ is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; workspace maintenance lives under
 `work`, repository administration under `repo`, PR checks under `pr ci`, and
-shell integration under `shell`. Configured commands are discovered through `run`.
+shell integration under `shell`. `run` lists configured commands, runs one by
+name, or executes an arbitrary command after `--`; `--workspace` selects the
+workspace in either form.
 Implicit question and approval decisions require stdin, stdout and stderr on a
 terminal, so redirected details cannot hide the decision being made.
 

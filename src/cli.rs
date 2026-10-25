@@ -27,7 +27,7 @@ use crate::{agent::Agent, forge::IssueInput, model::Relation};
     version,
     about,
     help_template = help::template(),
-    after_help = "Start here (with a registered repository):\n  shoal add my-project fix-login\n  shoal exec fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
+    after_help = "Start here (with a registered repository):\n  shoal add my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     #[arg(skip)]
@@ -130,11 +130,14 @@ pub enum Command {
     /// Daemons from earlier releases read the protocol before they update.
     #[command(name = "__build-info", hide = true)]
     BuildInfo,
-    /// List or run configured commands.
+    /// List configured commands, run one by name, or run an arbitrary command after --.
     Run {
+        /// Configured command; omit it to execute the arguments after -- directly.
         name: Option<String>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
         workspace: Option<String>,
-        #[arg(last = true, requires = "name")]
+        #[arg(last = true)]
         args: Vec<OsString>,
     },
     /// Run a configured command or AI tool.
@@ -659,12 +662,6 @@ pub enum Command {
     /// and --new-sessions override that. `-` reads from standard input. A directory imports each
     /// .shoal file in it.
     Import(ImportArgs),
-    /// Run an arbitrary command in a workspace.
-    Exec {
-        workspace: Option<String>,
-        #[arg(last = true, required = true)]
-        command: Vec<OsString>,
-    },
     /// Run Claude Code in a workspace.
     Claude {
         workspace: Option<String>,
@@ -1238,7 +1235,9 @@ impl Command {
             Command::Edit { .. } => "edit".into(),
             Command::Diff { .. } => "diff".into(),
             Command::Status { .. } => "status".into(),
-            Command::Exec { .. } => "exec".into(),
+            Command::Run {
+                name: None, args, ..
+            } if !args.is_empty() => "run".into(),
             Command::Claude { .. } => "claude".into(),
             Command::Codex { .. } => "codex".into(),
             Command::T3 { .. } => "t3".into(),
@@ -1545,7 +1544,7 @@ pub enum PortCommand {
         workspace: Option<String>,
         #[arg(long)]
         port: Option<u16>,
-        /// Environment variable exported to subsequent exec/claude/codex commands.
+        /// Environment variable exported to subsequent workspace commands.
         #[arg(long)]
         env: Option<String>,
         /// Explain what the reservation is used for.
@@ -1820,7 +1819,7 @@ pub enum AcquireKind {
         name: Option<String>,
         #[arg(long)]
         port: Option<u16>,
-        /// Environment variable exported to subsequent exec/claude/codex commands.
+        /// Environment variable exported to subsequent workspace commands.
         #[arg(long)]
         env: Option<String>,
         /// Explain what the reservation is used for.

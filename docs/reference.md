@@ -248,7 +248,7 @@ finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace]` stops tracked agents and commands through their wrappers,
 which print what stopped them and how to restore them, retaining work and resource leases. Agents save recovery records; commands started
-with `exec` or `run` save their arguments, which `shoal resume` reports and never
+with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 `--all` stops every ready or failed workspace with a running execution in parallel,
 reporting each failure without keeping the others running.
@@ -276,7 +276,7 @@ stopped work it uses no agent slot, never delays cleanup and is not part of `--a
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
-stopped, resume prints them as `shoal exec` commands. Either way they are reported once.
+stopped, resume prints them as `shoal run` commands. Either way they are reported once.
 `--all` resumes every workspace whose assignment is not done and reports commands without an agent,
 skipping agents whose wrapper still waits to restore them. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
@@ -382,7 +382,7 @@ shoal add https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory
-shoal exec fix-login -- cargo test
+shoal run --workspace fix-login -- cargo test
 shoal edit fix-login                     # Open in $VISUAL/$EDITOR or the edit command
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker; default mode
@@ -514,7 +514,8 @@ Define workspace shortcuts in global or repository TOML:
 check = ["cargo", "test"]
 ```
 
-Run `shoal run check [workspace] -- <extra arguments>`; the shorter `shoal check`
+Use `shoal run -- <command> <arguments>` for arbitrary commands and
+`shoal run check [--workspace W] -- <extra arguments>` for configured ones; the shorter `shoal check`
 form is equivalent when the name does not collide with a built-in command. Omit
 the workspace to use the current one, otherwise the picker, which offers only the
 workspaces that define a repository-only command. Unknown
@@ -528,7 +529,7 @@ config and built-in defaults; a higher layer replaces the whole argument array.
 The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
 shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,
-and exit status just like `exec`.
+and exit status just like arbitrary `run` commands.
 
 `{workspace}`, `{branch}`, `{path}`, and `{diff_base}` expand once inside
 configured arguments. `{diff_base}` resolves lazily through the same daemon
@@ -2563,7 +2564,7 @@ Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
 every agent exit is listed. `shoal work` and `daemon status` mention pending
-ones. Plain `exec` commands and manual `rm` are your own and record nothing.
+ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
 workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.
@@ -2695,7 +2696,7 @@ shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
 shoal leases port --workspace fix-login  # Configured names and current leases
 shoal leases port --all                 # Every workspace
 shoal release port web --workspace fix-login
-shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
+shoal run --workspace fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
 
 Named TCP reservations belong to the worktree, persist across command exits, `stop`,

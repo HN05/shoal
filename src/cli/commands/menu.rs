@@ -712,9 +712,10 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             workspace,
             args: vec![],
         },
-        ExecuteChoice::Shell => Command::Exec {
+        ExecuteChoice::Shell => Command::Run {
+            name: None,
             workspace,
-            command: vec![
+            args: vec![
                 "sh".into(),
                 "-c".into(),
                 ui::input(ctx, "Shell command")?.into(),

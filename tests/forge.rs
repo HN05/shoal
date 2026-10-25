@@ -1397,7 +1397,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     // Merging is the user's: a workspace process is refused before any request.
     let shoal = env!("CARGO_BIN_EXE_shoal");
     let merge = ["pr", "merge", "--method", "rebase"];
-    let scoped = fixture.run(&[&["exec", "topic", "--", shoal][..], &merge].concat());
+    let scoped = fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &merge].concat());
     assert!(
         String::from_utf8_lossy(&scoped.stderr).contains("merging is the user's decision"),
         "{scoped:?}"
@@ -2459,7 +2459,13 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
 /// Run a Shoal command inside the workspace, as its agent would.
 fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
     let shoal = env!("CARGO_BIN_EXE_shoal");
-    let output = fixture.run(&[&["exec", "topic", "--", shoal, "--json"][..], args].concat());
+    let output = fixture.run(
+        &[
+            &["run", "--workspace", "topic", "--", shoal, "--json"][..],
+            args,
+        ]
+        .concat(),
+    );
     assert!(output.status.success(), "{args:?}: {output:?}");
     serde_json::from_slice(&output.stdout).unwrap()
 }
@@ -3026,7 +3032,17 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
     // A workspace renamed meanwhile does not get the old branch's PR linked.
     let shoal = env!("CARGO_BIN_EXE_shoal");
     let rename = |from: &str, to: &str| {
-        let renamed = fixture.run(&["exec", from, "--", shoal, "--json", "work", "rename", to]);
+        let renamed = fixture.run(&[
+            "run",
+            "--workspace",
+            from,
+            "--",
+            shoal,
+            "--json",
+            "work",
+            "rename",
+            to,
+        ]);
         assert!(renamed.status.success(), "{renamed:?}");
     };
     rename("topic", "renamed");
@@ -3148,7 +3164,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
 
     // Another repository's issue cannot be the workspace's assignment.
     let shoal = env!("CARGO_BIN_EXE_shoal");
-    let exec = ["exec", "topic", "--", shoal];
+    let exec = ["run", "--workspace", "topic", "--", shoal];
     let linked = fixture.run(&[&exec[..], &open, &["--link"]].concat());
     assert!(
         String::from_utf8_lossy(&linked.stderr).contains("cannot be linked"),
@@ -3326,7 +3342,8 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     );
     let shoal = env!("CARGO_BIN_EXE_shoal");
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "topic",
         "--",
         shoal,

@@ -140,9 +140,9 @@ shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved
 shoal config set default_agent claude --repo my-project
 shoal config unset default_agent  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
-shoal exec fix-login -- cargo test
+shoal run --workspace fix-login -- cargo test
 shoal edit fix-login           # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
-shoal run check fix-login      # With [commands] check = ["cargo", "test"] in config
+shoal run check --workspace fix-login      # With [commands] check = ["cargo", "test"] in config
 shoal run                     # List configured commands, arguments, and source layers
 shoal claude fix-login         # Run Claude Code
 shoal codex fix-login --app    # Open in the Codex desktop app
@@ -226,7 +226,7 @@ CLI agents run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
 running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns
 to one. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
-Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
+Codex's sandbox and approval prompts; use `shoal run --workspace fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
 Apps that launch their own processes can request `shoal work env fix-login --json`
 and add the returned variables to each child's environment. Revoke its scope

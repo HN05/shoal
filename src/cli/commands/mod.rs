@@ -292,7 +292,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             args,
         } => match name {
             Some(name) => agents::run_named(&ctx, &name, workspace, args).await,
-            None => configured::list(&ctx).await,
+            None if args.is_empty() => configured::list(&ctx).await,
+            None => workspaces::exec(&ctx, workspace, args).await,
         },
         Command::Custom(words) => match configured::invocation(words)? {
             Some((name, workspace, args)) => agents::run_named(&ctx, &name, workspace, args).await,
@@ -582,7 +583,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             };
             transfer::import(&ctx, files, options).await
         }
-        Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => {
             agents::run_named(&ctx, "claude", workspace, args).await
         }

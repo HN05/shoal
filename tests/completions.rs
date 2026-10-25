@@ -150,6 +150,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "watch", "--w"], "--workspace"),
         (vec!["shoal", "done", "--c"], "--cleanup"),
         (vec!["shoal", "run", "rev"], "review"),
+        (vec!["shoal", "run", "--w"], "--workspace"),
         (vec!["shoal", "daemon", "ins"], "install"),
         (vec!["shoal", "work", "set"], "setup"),
         (vec!["shoal", "work", "ad"], "adopt"),

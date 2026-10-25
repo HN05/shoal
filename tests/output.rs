@@ -117,7 +117,7 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
         assert!(output.stderr.is_empty(), "{output:?}");
         let help = String::from_utf8(output.stdout).unwrap();
         assert!(help.contains("Workspaces:\n"), "{help}");
-        assert!(help.contains("shoal exec fix-login -- cargo test"));
+        assert!(help.contains("shoal run --workspace fix-login -- cargo test"));
         assert!(!help.contains('\x1b'));
         outputs.push(help);
     }

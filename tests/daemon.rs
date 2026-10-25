@@ -756,7 +756,8 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let finish = root.path().join("finish");
     let mut execution = command(root.path())
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "keep-running",
             "--",
             "sh",
@@ -963,12 +964,12 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "operation_failed: failed: detail",
         ),
         (
-            vec!["exec", "worker", "--", "true"],
+            vec!["run", "--workspace", "worker", "--", "true"],
             json!({"type": "error", "data": {"code": "execution_failed", "message": "failed: detail"}}),
             "execution_failed: failed: detail",
         ),
         (
-            vec!["--json", "exec", "worker", "--", "true"],
+            vec!["--json", "run", "--workspace", "worker", "--", "true"],
             json!({"type": "error", "data": {"code": "future_code", "message": "failed: detail"}}),
             "future_code: failed: detail",
         ),
@@ -977,7 +978,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
-            // `exec` first lists workspaces to remember the one it runs in.
+            // `run` first lists workspaces to remember the one it runs in.
             loop {
                 let stream = wait_for("client connection", || match listener.accept() {
                     Ok((stream, _)) => Some(stream),

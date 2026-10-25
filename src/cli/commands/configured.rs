@@ -1,5 +1,5 @@
 //! `shoal run` and `shoal <name>`: configured commands use the same workspace
-//! selection and wrapper as `exec`.
+//! selection and wrapper as arbitrary commands.
 use std::{
     collections::BTreeSet,
     ffi::{OsStr, OsString},

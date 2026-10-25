@@ -338,7 +338,15 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     let binary = env!("CARGO_BIN_EXE_shoal");
     let denied = fixture.run(&[
-        "exec", "original", "--", binary, "work", "rename", "other", "stolen",
+        "run",
+        "--workspace",
+        "original",
+        "--",
+        binary,
+        "work",
+        "rename",
+        "other",
+        "stolen",
     ]);
     assert!(!denied.status.success());
     assert_eq!(
@@ -346,7 +354,8 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "other"
     );
     let renamed = fixture.ok(&[
-        "exec",
+        "run",
+        "--workspace",
         "original",
         "--",
         binary,
@@ -395,7 +404,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     );
     db.execute("DELETE FROM executions WHERE id='unknown'", [])
         .unwrap();
-    let output = fixture.run(&["exec", "explicit", "--", "/usr/bin/env"]);
+    let output = fixture.run(&["run", "--workspace", "explicit", "--", "/usr/bin/env"]);
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("SHOAL_WORKSPACE=explicit\n"));
 }
@@ -719,7 +728,7 @@ fn cleanup_removes_idle_candidates_on_request() {
     )
     .unwrap();
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let denied = fixture.run(&["exec", "dirty", "--", binary, "cleanup"]);
+    let denied = fixture.run(&["run", "--workspace", "dirty", "--", binary, "cleanup"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("workspace processes can only"));
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
@@ -1271,7 +1280,8 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     };
     let agent = spawn(&["claude", "removed"]);
     let command = spawn(&[
-        "exec",
+        "run",
+        "--workspace",
         "removed",
         "--",
         "sh",
@@ -1584,7 +1594,7 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
     let complete = |depth: usize| {
         let mut words = vec![];
         for _ in 0..depth {
-            words.extend([shoal, "exec", "first", "--"]);
+            words.extend([shoal, "run", "--workspace", "first", "--"]);
         }
         words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=3"]);
         words.extend([shoal, "--", "shoal", "work", "setup", ""]);
@@ -1646,7 +1656,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in ["rm", "cd", "exec", "diff", "status", "done"] {
+    for command in ["rm", "cd", "diff", "status", "done"] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -1654,6 +1664,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     }
     for words in [
         vec!["work", "inspect", "fi"],
+        vec!["run", "--workspace", "fi"],
+        vec!["run", "check", "--workspace", "fi"],
         vec!["link", "pr", "42", "assigned", "--workspace", "fi"],
         vec!["unlink", "pr", "assigned", "--workspace", "fi"],
     ] {
@@ -1762,7 +1774,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         .output()
         .unwrap();
     assert!(!failed.status.success());
-    let choices = described(&["exec", ""]);
+    let choices = described(&["run", "--workspace", ""]);
     assert!(choices.contains(&"broken:failed".into()), "{choices:?}");
     assert!(choices.contains(&"second".into()), "{choices:?}");
     fixture.ok(&[
@@ -1773,7 +1785,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         "--name",
         "review",
     ]);
-    assert!(described(&["exec", ""]).contains(&"second".into()));
+    assert!(described(&["run", "--workspace", ""]).contains(&"second".into()));
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
@@ -1781,7 +1793,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let names = fixture
         .command()
         .env("SHOAL_STATE_DIR", fixture.root.path().join("state"))
-        .args(["--", "shoal", "run", "rev", "unknown"])
+        .args(["--", "shoal", "run", "rev", "--workspace", "unknown"])
         .env("SHOAL_COMPLETE", "bash")
         .env("_CLAP_COMPLETE_INDEX", "2")
         .current_dir(cwd)
@@ -1865,7 +1877,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert!(!complete(&["rm", ""], cwd).contains(&"second".into()));
     fixture.add("second");
     let scoped = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         "env",
@@ -1912,7 +1925,8 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             let mut command = fixture.command();
             command
                 .args([
-                    "exec",
+                    "run",
+                    "--workspace",
                     "context-own",
                     "--",
                     "sh",
@@ -2054,7 +2068,8 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     let mut execution = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "summary",
             "--",
             "sh",
@@ -2205,7 +2220,13 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     let scoped = |workspace: &str| {
         fixture
             .command()
-            .args(["exec", workspace, "--", env!("CARGO_BIN_EXE_shoal")])
+            .args([
+                "run",
+                "--workspace",
+                workspace,
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+            ])
             .args(["--json", "status", "resource", "devices"])
             .output()
             .unwrap()
@@ -2461,7 +2482,15 @@ fn migrate_moves_workspaces_into_a_saved_root() {
 
     // The moved workspace still runs commands, and new ones go to the new root.
     let path = directory.join(old.file_name().unwrap());
-    let output = fixture.run(&["exec", "moving", "--", "git", "status", "--short"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "moving",
+        "--",
+        "git",
+        "status",
+        "--short",
+    ]);
     assert!(
         output.status.success(),
         "{}",
@@ -3047,7 +3076,8 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     );
     let api = fixture.ok(&["port", "acquire", "api", "first", "--env", "API_PORT"]);
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         "sh",
@@ -3067,11 +3097,13 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         2
     );
     let nested = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
-        "exec",
+        "run",
+        "--workspace",
         "second",
         "--",
         "sh",
@@ -3270,7 +3302,7 @@ fn review_runs_the_configured_command_or_prompts_an_agent() {
     );
     for args in [
         &["review", "changes", "--agent", "reviewer", "--", "extra"][..],
-        &["run", "reviewer", "changes", "--", "extra"][..],
+        &["run", "reviewer", "--workspace", "changes", "--", "extra"][..],
     ] {
         let output = fixture.run(args);
         assert!(output.status.success(), "{output:?}");
@@ -3829,7 +3861,15 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
             fixture.ok(&["work", "inspect", name])["workspace"]["id"],
             workspace["id"]
         );
-        let output = fixture.run(&["exec", name, "--", "git", "symbolic-ref", "HEAD"]);
+        let output = fixture.run(&[
+            "run",
+            "--workspace",
+            name,
+            "--",
+            "git",
+            "symbolic-ref",
+            "HEAD",
+        ]);
         assert!(output.status.success());
         assert_eq!(
             output.stdout,
@@ -4044,13 +4084,13 @@ def terminal_settings():
 before = terminal_settings()
 group = os.tcgetpgrp(0)
 command = [binary, 'work', 'setup', 'terminal'] if mode == 'hook' else [
-    binary, 'exec', 'terminal', '--', 'python3', agent, mode]
+    binary, 'run', '--workspace', 'terminal', '--', 'python3', agent, mode]
 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 try:
     if mode in ('interrupt', 'stop'):
         import json
         workspace = pathlib.Path(json.loads(subprocess.check_output(
-            [binary, '--json', 'inspect', 'terminal'], text=True))['workspace']['path'])
+            [binary, '--json', 'work', 'inspect', 'terminal'], text=True))['workspace']['path'])
         deadline = time.monotonic() + 10
         while not (workspace / 'raw-ready').exists():
             assert child.poll() is None, child.communicate()
@@ -4152,7 +4192,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
         .command()
         .current_dir(path.join("nested"))
         .args([
-            "exec",
+            "run",
             "--",
             "sh",
             "-c",
@@ -4185,8 +4225,8 @@ fn configured_environment_renders_for_tracked_commands() {
     let output = fixture
         .command()
         .args([
-            "exec",
-            "env-values",
+            "run",
+            "--workspace", "env-values",
             "--",
             "sh",
             "-c",
@@ -4208,7 +4248,8 @@ fn configured_environment_renders_for_tracked_commands() {
     let output = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "env-values",
             "--",
             "sh",
@@ -4657,7 +4698,8 @@ fn stop_and_manual_removal_terminate_connected_executions() {
         let child = fixture
             .command()
             .args([
-                "exec",
+                "run",
+                "--workspace",
                 "running",
                 "--",
                 "sh",
@@ -4698,7 +4740,15 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
         children.push(
             fixture
                 .command()
-                .args(["exec", name, "--", "sh", "-c", "while :; do sleep 1; done"])
+                .args([
+                    "run",
+                    "--workspace",
+                    name,
+                    "--",
+                    "sh",
+                    "-c",
+                    "while :; do sleep 1; done",
+                ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
@@ -4856,7 +4906,8 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         spawn(&["claude", "stopped"]),
         spawn(&["claude", "stopped"]),
         spawn(&[
-            "exec",
+            "run",
+            "--workspace",
             "stopped",
             "--",
             "sh",
@@ -4957,7 +5008,14 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .map(|entry| entry.unwrap().file_name())
         .collect::<Vec<_>>();
     assert_eq!(left, ["last-session.json"]);
-    let output = fixture.run(&["exec", "stopped", "--", env!("CARGO_BIN_EXE_shoal"), "stop"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "stopped",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "stop",
+    ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace processes can only"));
 }
@@ -5152,7 +5210,8 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     };
     let mut agent = spawn(&["claude", "restarted"]);
     let mut command = spawn(&[
-        "exec",
+        "run",
+        "--workspace",
         "restarted",
         "--",
         "sh",
@@ -5433,7 +5492,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
     fixture.add("available");
     for args in [
         &["add"][..],
-        &["exec", "--", "true"],
+        &["run", "--", "true"],
         &["rm"],
         &["work", "inspect"],
         &["stop"],
@@ -5475,7 +5534,7 @@ test "${PWD##*/}" = navigate
 cd "$REPO"
 shoal cd navigate
 test "${PWD##*/}" = navigate
-if shoal exec navigate -- sh -c 'exit 7'; then
+if shoal run --workspace navigate -- sh -c 'exit 7'; then
   exit 1
 else
   test "$?" -eq 7
@@ -5792,7 +5851,7 @@ fn execution_scope_limits_management_and_expires() {
     let scoped = |args: &[&str]| {
         fixture
             .command()
-            .args(["exec", "worker", "--", binary])
+            .args(["run", "--workspace", "worker", "--", binary])
             .args(args)
             .output()
             .unwrap()
@@ -5817,7 +5876,8 @@ fn execution_scope_limits_management_and_expires() {
     let mut sibling = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "worker",
             "--",
             "sh",
@@ -5858,7 +5918,7 @@ fn execution_scope_limits_management_and_expires() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"));
     assert!(
-        scoped(&["exec", "worker", "--", binary, "port"])
+        scoped(&["run", "--workspace", "worker", "--", binary, "port"])
             .status
             .success()
     );
@@ -5866,7 +5926,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["rm", "worker", "--yes"],
         vec!["stop", "worker"],
         vec!["work", "inspect", "other"],
-        vec!["exec", "other", "--", "true"],
+        vec!["run", "--workspace", "other", "--", "true"],
         vec!["work", "setup", "other"],
         vec!["link", "pr", "42", "assigned", "--workspace", "other"],
         vec!["unlink", "pr", "assigned", "--workspace", "other"],
@@ -5901,7 +5961,8 @@ fn execution_scope_limits_management_and_expires() {
         );
     }
     let token = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "worker",
         "--",
         "sh",
@@ -6058,7 +6119,8 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "normal handoff must preserve simulator state without rebooting"
     );
     let scoped = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -6069,7 +6131,8 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     ]);
     assert!(!scoped.status.success());
     let listed = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -6385,7 +6448,8 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
             .success()
     );
     let clean = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "third",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -6443,7 +6507,8 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
     ]);
     assert_eq!(page[0]["status"], "acquired");
     let visible = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "first",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -7445,7 +7510,13 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     let scoped = |args: &[&str]| {
         fixture
             .command()
-            .args(["exec", "first", "--", env!("CARGO_BIN_EXE_shoal")])
+            .args([
+                "run",
+                "--workspace",
+                "first",
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+            ])
             .args(args)
             .output()
             .unwrap()
@@ -8017,7 +8088,17 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     let second = fixture.add("second");
     let binary = env!("CARGO_BIN_EXE_shoal");
     let output = fixture.run(&[
-        "exec", "first", "--", binary, "--json", "resource", "acquire", "cache", "--mode", "read",
+        "run",
+        "--workspace",
+        "first",
+        "--",
+        binary,
+        "--json",
+        "resource",
+        "acquire",
+        "cache",
+        "--mode",
+        "read",
     ]);
     assert!(output.status.success());
     let lease: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -8025,7 +8106,15 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     assert!(
         !fixture
             .run(&[
-                "exec", "second", "--", binary, "resource", "release", "cache", "first"
+                "run",
+                "--workspace",
+                "second",
+                "--",
+                binary,
+                "resource",
+                "release",
+                "cache",
+                "first"
             ])
             .status
             .success()
@@ -8118,7 +8207,16 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     let binary = env!("CARGO_BIN_EXE_shoal");
     let scoped = fixture
         .command()
-        .args(["exec", "first", "--", binary, "--json", "status", "-"])
+        .args([
+            "run",
+            "--workspace",
+            "first",
+            "--",
+            binary,
+            "--json",
+            "status",
+            "-",
+        ])
         .output()
         .unwrap();
     assert!(!scoped.status.success());
@@ -8147,7 +8245,13 @@ head -n 1 "$HOME/picker-input"
                 ),
             );
             let args = if scoped {
-                vec!["exec", "menu-worker", "--", env!("CARGO_BIN_EXE_shoal")]
+                vec![
+                    "run",
+                    "--workspace",
+                    "menu-worker",
+                    "--",
+                    env!("CARGO_BIN_EXE_shoal"),
+                ]
             } else if key == "ctrl-o" {
                 // `shoal work` opens the same picker when its output is a terminal.
                 vec!["work"]
@@ -8320,7 +8424,7 @@ esac
     fixture.ok(&["notify", "agent only", "--workspace", "asker"]);
     let cleared = fixture
         .command()
-        .args(["exec", "asker", "--", "sh", "-c"])
+        .args(["run", "--workspace", "asker", "--", "sh", "-c"])
         // A second command keeps the scoped shell as the listing's parent.
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows notifications; exit $?"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
@@ -8337,7 +8441,7 @@ esac
     // printed instead of the picker it could not act from.
     let cleared = fixture
         .command()
-        .args(["exec", "asker", "--", "sh", "-c"])
+        .args(["run", "--workspace", "asker", "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" inbox --print; exit $?"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
         .output()
@@ -8346,7 +8450,14 @@ esac
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("Which database?"));
     fs::remove_file(fixture.root.path().join("picker-input")).unwrap();
     let mut scoped = fixture.command();
-    scoped.args(["exec", "asker", "--", env!("CARGO_BIN_EXE_shoal"), "inbox"]);
+    scoped.args([
+        "run",
+        "--workspace",
+        "asker",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "inbox",
+    ]);
     let (output, transcript) = fixture.terminal_command(&mut scoped, "", true);
     assert!(output.status.success(), "{transcript}");
     assert!(!fixture.root.path().join("picker-input").exists());
@@ -8618,7 +8729,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
     let waiter_log = fixture.root.path().join("waiter.log");
     let mut waiter = fixture
         .command()
-        .args(["exec", "waiter", "--", "sh", "-c"])
+        .args(["run", "--workspace", "waiter", "--", "sh", "-c"])
         .arg(concat!(
             r#""$0" internal agent-state waiting && i=0 && "#,
             r#"until [ -e "$1" ] || [ $i -ge 3000 ]; do sleep 0.1; i=$((i + 1)); done"#
@@ -9043,7 +9154,8 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     assert!(
         !fixture
             .run(&[
-                "exec",
+                "run",
+                "--workspace",
                 "interrupted",
                 "--",
                 env!("CARGO_BIN_EXE_shoal"),
@@ -9086,7 +9198,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
     assert!(
         fixture
-            .run(&["exec", "marked", "--", "true"])
+            .run(&["run", "--workspace", "marked", "--", "true"])
             .status
             .success()
     );
@@ -9102,7 +9214,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     );
     assert!(
         !fixture
-            .run(&["exec", "marked", "--", "true"])
+            .run(&["run", "--workspace", "marked", "--", "true"])
             .status
             .success()
     );
@@ -9161,7 +9273,8 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     assert!(
         !fixture
             .run(&[
-                "exec",
+                "run",
+                "--workspace",
                 "other",
                 "--",
                 env!("CARGO_BIN_EXE_shoal"),
@@ -9187,7 +9300,7 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     );
     assert!(
         fixture
-            .run(&["exec", "reclaimed", "--", "true"])
+            .run(&["run", "--workspace", "reclaimed", "--", "true"])
             .status
             .success()
     );
@@ -9296,7 +9409,12 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(report[0]["directory"], "unverified");
             assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
             assert!(report[0]["issues"].to_string().contains("identity changed"));
-            assert!(!fixture.run(&["exec", name, "--", "true"]).status.success());
+            assert!(
+                !fixture
+                    .run(&["run", "--workspace", name, "--", "true"])
+                    .status
+                    .success()
+            );
             assert!(!fixture.run(&["rm", name, "--yes"]).status.success());
         } else {
             assert_eq!(report[0]["workspace"]["state"], "ready");
@@ -9304,7 +9422,12 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
                 report[0]["workspace"]["git_dir_id"],
                 workspace["git_dir_id"]
             );
-            assert!(fixture.run(&["exec", name, "--", "true"]).status.success());
+            assert!(
+                fixture
+                    .run(&["run", "--workspace", name, "--", "true"])
+                    .status
+                    .success()
+            );
             let repeated = recovery_report(&fixture, &["doctor", name, "--repair"]);
             assert!(repeated[0]["changes"].as_array().unwrap().is_empty());
         }
@@ -9402,7 +9525,7 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
     assert!(!fixture.run(&["rm", "original", "--yes"]).status.success());
     assert!(
         !fixture
-            .run(&["exec", "original", "--", "true"])
+            .run(&["run", "--workspace", "original", "--", "true"])
             .status
             .success()
     );
@@ -9539,7 +9662,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     fixture.add("orphan");
     let mut wrapper = fixture
         .command()
-        .args(["exec", "orphan", "--", "sleep", "30"])
+        .args(["run", "--workspace", "orphan", "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9593,7 +9716,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
 fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value {
     let mut wrapper = fixture
         .command()
-        .args(["exec", workspace, "--", "sleep", "30"])
+        .args(["run", "--workspace", workspace, "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9650,7 +9773,15 @@ fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
     let fixture = Fixture::new();
     fixture.add("detached");
     let script = "import os, subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)";
-    let output = fixture.run(&["exec", "detached", "--", "python3", "-c", script]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "detached",
+        "--",
+        "python3",
+        "-c",
+        script,
+    ]);
     assert!(
         output.status.success(),
         "{}",
@@ -9687,7 +9818,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     fixture.ok(&["resource", "acquire", "lock", "orphan"]);
     let mut wrapper = fixture
         .command()
-        .args(["exec", "orphan", "--", "sleep", "30"])
+        .args(["run", "--workspace", "orphan", "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9735,7 +9866,7 @@ fn doctor_preserves_connected_commands_until_stop_is_explicit() {
     let port = fixture.ok(&["port", "acquire", "web", "connected"]);
     let mut wrapper = fixture
         .command()
-        .args(["exec", "connected", "--", "sleep", "30"])
+        .args(["run", "--workspace", "connected", "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9775,7 +9906,15 @@ time.sleep(30)
 "#;
     let mut wrapper = fixture
         .command()
-        .args(["exec", "orphan", "--", "python3", "-c", script])
+        .args([
+            "run",
+            "--workspace",
+            "orphan",
+            "--",
+            "python3",
+            "-c",
+            script,
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9796,7 +9935,14 @@ time.sleep(30)
         .unwrap();
     wait_until("orphan stopping signal", || root.join("stopping").exists());
     let marker = root.join("other-ran");
-    let output = fixture.run(&["exec", "other", "--", "touch", marker.to_str().unwrap()]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "other",
+        "--",
+        "touch",
+        marker.to_str().unwrap(),
+    ]);
     assert!(output.status.success());
     stopping.wait().unwrap(); // Recovery may still require acknowledgement of unreadable environments.
     assert!(
@@ -9857,7 +10003,13 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
     for args in [vec!["codex", "other", "--app"], vec!["t3", "other"]] {
         let output = fixture
             .command()
-            .args(["exec", "desktop", "--", env!("CARGO_BIN_EXE_shoal")])
+            .args([
+                "run",
+                "--workspace",
+                "desktop",
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+            ])
             .args(args)
             .env("PATH", fixture.restricted_path(&bin))
             .output()
@@ -9911,7 +10063,16 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     let feature = git(&author, &["rev-parse", "HEAD"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     // A scoped agent syncs its own repository without moving its branch.
-    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "repo", "sync"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "worker",
+        "--",
+        binary,
+        "--json",
+        "repo",
+        "sync",
+    ]);
     assert!(
         output.status.success(),
         "{}",
@@ -9945,7 +10106,8 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     commit_file(&other, "file", "other\n");
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "worker",
         "--",
         binary,
@@ -10013,7 +10175,8 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!declined.status.success());
     assert!(String::from_utf8_lossy(&declined.stderr).contains("pass --yes"));
     let scoped = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "second",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -10026,7 +10189,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(String::from_utf8_lossy(&scoped.stderr).contains("workspace processes can only"));
     let mut command = fixture
         .command()
-        .args(["exec", "first", "--", "sleep", "30"])
+        .args(["run", "--workspace", "first", "--", "sleep", "30"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -10712,7 +10875,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert!(!path.join("agent-started").exists());
     assert!(
         !fixture
-            .run(&["exec", "failed-setup", "--", "true"])
+            .run(&["run", "--workspace", "failed-setup", "--", "true"])
             .status
             .success()
     );
@@ -10917,7 +11080,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     );
     assert!(
         !fixture
-            .run(&["exec", "interrupted", "--", "true"])
+            .run(&["run", "--workspace", "interrupted", "--", "true"])
             .status
             .success()
     );
@@ -12162,7 +12325,8 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
         "setup\npost\n"
     );
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "coworker",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -12423,7 +12587,7 @@ fn merged_stops_agent_and_releases_resources_without_idle_delay() {
     fixture.ok(&["resource", "acquire", "device", "merged"]);
     let mut wrapper = fixture
         .command()
-        .args(["exec", "merged", "--", "sleep", "60"])
+        .args(["run", "--workspace", "merged", "--", "sleep", "60"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -12533,7 +12697,8 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         // Clear remains allowed while disabled, including for a scoped caller.
         assert_eq!(
             fixture.ok(&[
-                "exec",
+                "run",
+                "--workspace",
                 name,
                 "--",
                 env!("CARGO_BIN_EXE_shoal"),
@@ -12715,7 +12880,8 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     // Scoped callers can omit the workspace and register by number too.
     fixture.ok(&[
-        "exec",
+        "run",
+        "--workspace",
         "watch",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -12832,7 +12998,16 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     .unwrap();
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let first = fixture.ok(&["exec", "watch", "--", binary, "--json", "watch", "pr"]);
+    let first = fixture.ok(&[
+        "run",
+        "--workspace",
+        "watch",
+        "--",
+        binary,
+        "--json",
+        "watch",
+        "pr",
+    ]);
     assert_eq!(first["timed_out"], false);
     let kinds: Vec<_> = first["updates"]
         .as_array()
@@ -12851,7 +13026,8 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         "https://github.com/team/project/pull/7"
     );
     let denied = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "watch",
         "--",
         binary,
@@ -12997,7 +13173,16 @@ esac
         "items",
     ]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let filtered = fixture.ok(&["exec", "items", "--", binary, "--json", "watch", "pr"]);
+    let filtered = fixture.ok(&[
+        "run",
+        "--workspace",
+        "items",
+        "--",
+        binary,
+        "--json",
+        "watch",
+        "pr",
+    ]);
     assert_eq!(filtered["updates"].as_array().unwrap().len(), 1);
     assert_eq!(
         filtered["updates"][0]["url"],
@@ -13029,7 +13214,8 @@ esac
     assert!(
         !fixture
             .run(&[
-                "exec",
+                "run",
+                "--workspace",
                 "items",
                 "--",
                 binary,
@@ -13041,7 +13227,16 @@ esac
             .success()
     );
     fixture.ok(&[
-        "exec", "items", "--", binary, "--json", "unlink", "issue", "1", "assigned",
+        "run",
+        "--workspace",
+        "items",
+        "--",
+        binary,
+        "--json",
+        "unlink",
+        "issue",
+        "1",
+        "assigned",
     ]);
     let inspection = fixture.ok(&["work", "inspect", "items"]);
     assert!(inspection["issue"].is_null());
@@ -13430,13 +13625,30 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
     let expected = git(path, &["rev-parse", "HEAD"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let pending = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
+    let pending = fixture.run(&[
+        "run",
+        "--workspace",
+        "worker",
+        "--",
+        binary,
+        "--json",
+        "land",
+    ]);
     assert_eq!(pending.status.code(), Some(2));
     let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
     assert_eq!(pending["code"], "approval_pending");
     assert_eq!(pending["request"]["target"], "land");
     assert_eq!(pending["request"]["specification"]["head"], expected.trim());
-    let denied = fixture.run(&["exec", "worker", "--", binary, "internal", "land", "{}"]);
+    let denied = fixture.run(&[
+        "run",
+        "--workspace",
+        "worker",
+        "--",
+        binary,
+        "internal",
+        "land",
+        "{}",
+    ]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
     let repo = fixture.ok(&["repo", "list"])[0]["id"].clone();
@@ -13460,7 +13672,8 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         &pending["request"]["id"].to_string(),
     ]);
     let landed = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "worker",
         "--",
         binary,
@@ -13614,7 +13827,8 @@ fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
     let wrapper = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "worker",
             "--",
             "sh",
@@ -13650,7 +13864,7 @@ fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
     .unwrap();
     let wrapper = fixture
         .command()
-        .args(["exec", "worker", "--", "sh"])
+        .args(["run", "--workspace", "worker", "--", "sh"])
         .arg(&leader)
         .arg(&descendant)
         .env("READY", &ready)
@@ -14419,7 +14633,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     // Plain commands are the user's own; only agent shortcuts announce their exit.
     assert!(
         fixture
-            .run(&["exec", "waiter", "--", "true"])
+            .run(&["run", "--workspace", "waiter", "--", "true"])
             .status
             .success()
     );
@@ -14435,7 +14649,8 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let scoped = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "holder",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -14851,7 +15066,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         saved.to_str().unwrap(),
     ]);
 
-    let output = fixture.run(&["run", "work", "run-command"]);
+    let output = fixture.run(&["run", "work", "--workspace", "run-command"]);
     assert!(
         output.status.success(),
         "{}",
@@ -14908,6 +15123,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let output = fixture.run(&[
         "run",
         "claude",
+        "--workspace",
         "configured-agent",
         "--",
         "{path}",
@@ -14937,6 +15153,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let output = fixture.run(&[
         "run",
         "codex",
+        "--workspace",
         "configured-agent",
         "--",
         "--model",
@@ -15038,7 +15255,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
             vec!["ports"],
             vec!["ports", "command-target"],
             vec!["run", "ports"],
-            vec!["run", "ports", "command-target"],
+            vec!["run", "ports", "--workspace", "command-target"],
         ] {
             let output = fixture
                 .command()
@@ -15079,7 +15296,7 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
         );
     }
     let config = format!(
-        "[commands]\nclaude = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" exec -- fj nested']\n[agent_auth]\nfj = {:?}\ngh = {:?}\n",
+        "[commands]\nclaude = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n[agent_auth]\nfj = {:?}\ngh = {:?}\n",
         wrappers.join("fj"),
         wrappers.join("gh")
     );
@@ -15120,7 +15337,7 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
         .1
         .unwrap()
         .to_owned();
-    let output = fixture.run(&["exec", "agent-auth", "--", "printenv", "PATH"]);
+    let output = fixture.run(&["run", "--workspace", "agent-auth", "--", "printenv", "PATH"]);
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap().trim_end(),
@@ -15157,7 +15374,14 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let output = fixture.run(&["claude", "secrets"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"global secret|AGENT_TOKEN\n");
-    let output = fixture.run(&["exec", "secrets", "--", "printenv", "AGENT_TOKEN"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "secrets",
+        "--",
+        "printenv",
+        "AGENT_TOKEN",
+    ]);
     assert!(!output.status.success(), "{output:?}");
 
     // A hook started beneath an agent drops the secrets it inherited.
@@ -15231,7 +15455,7 @@ fn tool_secrets_reach_only_their_tools() {
         String::from_utf8(output.stdout).unwrap(),
         "unset\ntool secret|TOOL_TOKEN|two words -x\n"
     );
-    let output = fixture.run(&["exec", "tool-secrets", "--", "show-token"]);
+    let output = fixture.run(&["run", "--workspace", "tool-secrets", "--", "show-token"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"unset||\n");
     assert!(
@@ -15377,7 +15601,8 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     )
     .unwrap();
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "gated",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -15437,7 +15662,15 @@ fn agent_git_profile_applies_only_to_agent_processes() {
             "{stdout}"
         );
     }
-    let output = fixture.run(&["exec", "agent-git", "--", "git", "config", "user.email"]);
+    let output = fixture.run(&[
+        "run",
+        "--workspace",
+        "agent-git",
+        "--",
+        "git",
+        "config",
+        "user.email",
+    ]);
     assert!(output.status.success());
     assert_eq!(output.stdout, b"main@example.invalid\n");
     fs::write(
@@ -15629,7 +15862,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         fixture.repo.to_str().unwrap(),
     ]);
     assert_eq!(again["id"], w["id"]);
-    let output = fixture.run(&["exec", "adopt-topic", "--", "cat", "tracked"]);
+    let output = fixture.run(&["run", "--workspace", "adopt-topic", "--", "cat", "tracked"]);
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
@@ -16064,6 +16297,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let output = fixture.run(&[
         "run",
         "helper",
+        "--workspace",
         workspace["id"].as_str().unwrap(),
         "--",
         "literal {prompt}",
@@ -16134,7 +16368,14 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         || remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap());
     for words in [
         vec!["droid", "provider", "--", "user message"],
-        vec!["run", "droid", "provider", "--", "user message"],
+        vec![
+            "run",
+            "droid",
+            "--workspace",
+            "provider",
+            "--",
+            "user message",
+        ],
     ] {
         let output = fixture.run(&words);
         assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
@@ -16774,7 +17015,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     let hook = |stdin: &str| {
         let mut child = fixture
             .command()
-            .args(["exec", "receiver", "--", env!("CARGO_BIN_EXE_shoal")])
+            .args([
+                "run",
+                "--workspace",
+                "receiver",
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+            ])
             .args(["messages", "--hook"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -16837,7 +17084,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     ]);
     let output = fixture
         .command()
-        .args(["exec", "receiver", "--", env!("CARGO_BIN_EXE_shoal")])
+        .args([
+            "run",
+            "--workspace",
+            "receiver",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+        ])
         .args([
             "internal",
             "wake",
@@ -16868,7 +17121,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     // The execution reports, then lists itself while its state is current.
     let output = fixture
         .command()
-        .args(["exec", "reporter", "--", "sh", "-c"])
+        .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
         .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" work && "$0" status"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
         .output()
@@ -17241,7 +17494,8 @@ fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
     fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             workspace,
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -18102,7 +18356,8 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
     let child = fixture
         .command()
         .args([
-            "exec",
+            "run",
+            "--workspace",
             "agent",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -18470,7 +18725,10 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     );
     assert!(fixture.ok(&["work", "inspect", "agent-work"])["completion"].is_null());
     assert_eq!(
-        fixture.run(&["run", "helper", "agent-work"]).status.code(),
+        fixture
+            .run(&["run", "helper", "--workspace", "agent-work"])
+            .status
+            .code(),
         Some(7)
     );
     assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 1);
@@ -18604,7 +18862,8 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     )
     .unwrap();
     let completion = fixture.ok(&[
-        "exec",
+        "run",
+        "--workspace",
         "hooked",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -18729,7 +18988,7 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
     fixture.ok(&["resource", "acquire", "device", "finished"]);
     let mut wrapper = fixture
         .command()
-        .args(["exec", "finished", "--", "sleep", "60"])
+        .args(["run", "--workspace", "finished", "--", "sleep", "60"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -18768,7 +19027,8 @@ fn agents_follow_a_keep_default_and_can_request_cleanup() {
     assert_eq!(fixture.ok(&["done", "keep-default"])["cleanup"], false);
     // Agents can explicitly clean their own workspace despite a keep default.
     fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "keep-default",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
@@ -18829,7 +19089,8 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
         );
         // Scoped cancellation selects one PR and preserves the other.
         fixture.ok(&[
-            "exec",
+            "run",
+            "--workspace",
             "multi",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -18844,7 +19105,8 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "https://github.com/team/project/pull/1"
         );
         fixture.ok(&[
-            "exec",
+            "run",
+            "--workspace",
             "multi",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -20096,7 +20358,8 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     let fixture = issue_fixture("gh");
     let scoped = |fixture: &Fixture, args: &[&str]| {
         let mut command = vec![
-            "exec",
+            "run",
+            "--workspace",
             "issue-work",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
@@ -20209,7 +20472,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["work", "inspect"],
         vec!["port"],
         vec!["work", "setup"],
-        vec!["exec", "--", env!("CARGO_BIN_EXE_shoal"), "port"],
+        vec!["run", "--", env!("CARGO_BIN_EXE_shoal"), "port"],
     ] {
         let output = scoped(&args);
         assert!(output.status.success(), "{args:?}: {output:?}");
@@ -20327,7 +20590,14 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     );
     // Workspace processes list their holds but cannot change them.
     let scoped = |args: &[&str]| {
-        let mut command = vec!["exec", "held", "--", env!("CARGO_BIN_EXE_shoal"), "--json"];
+        let mut command = vec![
+            "run",
+            "--workspace",
+            "held",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+        ];
         command.extend_from_slice(args);
         fixture.run(&command)
     };
@@ -21184,7 +21454,8 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
     fixture.add("scoped");
     let output = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "scoped",
         "--",
         env!("CARGO_BIN_EXE_shoal"),

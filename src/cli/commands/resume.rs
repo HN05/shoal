@@ -487,7 +487,7 @@ fn report_commands(
 fn command_list(workspace: &Workspace, commands: &[SavedCommand]) -> String {
     let mut text = format!("Stopped commands in {}, not restarted:", workspace.name);
     for command in commands {
-        let mut words = vec!["shoal", "exec", &workspace.name, "--"];
+        let mut words = vec!["shoal", "run", "--workspace", &workspace.name, "--"];
         words.extend(command.argv.iter().map(String::as_str));
         text.push_str(&format!("\n  {}", crate::shell::quote(&words)));
     }
