@@ -275,7 +275,7 @@ Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal exec` commands. Either way they are reported once.
-`--all` resumes every workspace and reports commands without an agent,
+`--all` resumes every workspace whose assignment is not done and reports commands without an agent,
 skipping agents whose wrapper still waits to restore them. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
 pane it stopped in once that pane is back at its prompt. Otherwise it restores a

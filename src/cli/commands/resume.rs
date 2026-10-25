@@ -355,14 +355,7 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 /// in the backend's background, and without a backend each is listed for its
 /// own terminal.
 async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
-    let mut stopped = Vec::new();
-    for workspace in client::workspaces(&ctx.paths).await? {
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
-        saved.retain_unattended();
-        if !saved.is_empty() {
-            stopped.push((workspace, saved));
-        }
-    }
+    let stopped = stopped_work(ctx, discard).await?;
     if stopped.is_empty() {
         ctx.emit(
             "No stopped agents or commands",
@@ -443,6 +436,23 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         }
     })?;
     Ok(0)
+}
+
+/// The workspaces with stopped work that no waiting wrapper restores. A done
+/// assignment needs no agent, so its workspace is included only to `discard`.
+async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
+    let mut stopped = Vec::new();
+    for workspace in client::workspaces(&ctx.paths).await? {
+        if workspace.done && !discard {
+            continue;
+        }
+        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+        saved.retain_unattended();
+        if !saved.is_empty() {
+            stopped.push((workspace, saved));
+        }
+    }
+    Ok(stopped)
 }
 
 /// Only one resume reports a command; another holding its lock skips it.

@@ -124,8 +124,9 @@ like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. Restores wait in the agent queue,
 and manual recovery persists across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded, except that a done
-assignment needs no agent, so a done workspace's agent is not restored
-automatically. A record names the
+assignment needs no agent, so a done workspace's agent is restored neither
+automatically nor by `shoal resume --all`, only by resuming that workspace. A
+record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an
 execution becomes unknown, the daemon forgets an unknown execution with a saved

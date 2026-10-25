@@ -4706,6 +4706,37 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
 }
 
 #[test]
+fn resume_all_skips_the_agents_of_done_workspaces() {
+    let fixture = Fixture::new();
+    for name in ["active", "finished"] {
+        let workspace = fixture.add(name);
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            r#"{"agent":"claude"}"#,
+        )
+        .unwrap();
+    }
+    fixture.ok(&["done", "finished"]);
+    let all = fixture.ok(&["resume", "--all"]);
+    let agents = all["agents"].as_array().unwrap();
+    assert_eq!(agents.len(), 1, "{all}");
+    assert_eq!(agents[0]["workspace"], "active", "{all}");
+    // Discarding still forgets the done workspace's stopped agent.
+    let discarded = fixture.ok(&["resume", "--all", "--discard"]);
+    assert_eq!(
+        discarded["discarded"],
+        serde_json::json!(["active-agent", "finished-agent"]),
+        "{discarded}"
+    );
+}
+
+#[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
