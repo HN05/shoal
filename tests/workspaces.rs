@@ -4888,13 +4888,20 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(
         path.join("agent.sh"),
-        "touch started-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "printf %s \"${SHOAL_OUTPUT-unset}\" > output-$SHOAL_EXECUTION_ID\ntouch started-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
-    fs::write(path.join("resume.sh"), "printf '%s|' \"$1\" >> restored\n").unwrap();
-    let spawn = |args: &[&str]| {
-        fixture
-            .command()
+    fs::write(
+        path.join("resume.sh"),
+        "printf '%s|' \"$1\" >> restored\nprintf '%s|' \"${SHOAL_OUTPUT-unset}\" >> restored-output\n",
+    )
+    .unwrap();
+    let spawn_with = |args: &[&str], output: Option<&str>| {
+        let mut command = fixture.command();
+        if let Some(output) = output {
+            command.env("SHOAL_OUTPUT", output);
+        }
+        command
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -4902,18 +4909,22 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             .spawn()
             .unwrap()
     };
+    // Agents get JSON output unless they inherit a setting; commands get none.
     let mut children = vec![
-        spawn(&["claude", "stopped"]),
-        spawn(&["claude", "stopped"]),
-        spawn(&[
-            "run",
-            "--workspace",
-            "stopped",
-            "--",
-            "sh",
-            "-c",
-            "touch command-started; while :; do sleep 1; done",
-        ]),
+        spawn_with(&["claude", "stopped"], None),
+        spawn_with(&["claude", "stopped"], Some("text")),
+        spawn_with(
+            &[
+                "run",
+                "--workspace",
+                "stopped",
+                "--",
+                "sh",
+                "-c",
+                "printf %s \"${SHOAL_OUTPUT-unset}\" > command-output; touch command-started; while :; do sleep 1; done",
+            ],
+            None,
+        ),
     ];
     let mut last_inspection = Value::Null;
     let ids = try_wait_for(|| {
@@ -4929,6 +4940,16 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         (ids.len() == 2 && path.join("command-started").exists()).then_some(ids)
     })
     .unwrap_or_else(|| panic!("executions did not start: {last_inspection}"));
+    let mut outputs = ids
+        .iter()
+        .map(|id| fs::read_to_string(path.join(format!("output-{id}"))).unwrap())
+        .collect::<Vec<_>>();
+    outputs.sort();
+    assert_eq!(outputs, ["json", "text"]);
+    assert_eq!(
+        fs::read_to_string(path.join("command-output")).unwrap(),
+        "unset"
+    );
     let output = fixture
         .command()
         .current_dir(path)
@@ -4992,7 +5013,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let prompts = restored.split('|').collect::<Vec<_>>();
     assert_eq!(prompts.len(), 3, "{restored}");
     assert!(
-        prompts[0].contains("- sh -c 'touch command-started; while :; do sleep 1; done'"),
+        prompts[0].contains("- sh -c 'printf %s \"${SHOAL_OUTPUT-unset}\" > command-output; touch command-started; while :; do sleep 1; done'"),
         "{restored}"
     );
     for prompt in &prompts[..2] {
@@ -5002,6 +5023,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         );
     }
     assert!(!prompts[1].contains("command-started"), "{restored}");
+    assert_eq!(
+        fs::read_to_string(path.join("restored-output")).unwrap(),
+        "json|json|"
+    );
     // The restored agents exited on their own, leaving only the last session.
     let left = fs::read_dir(&state)
         .unwrap()
@@ -20773,7 +20798,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 fn install_recording_agent(fixture: &Fixture, agent: &str) {
     install_test_script(
         fixture.root.path().join("bin").join(agent),
-        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n",
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\n",
     );
 }
 
@@ -20845,6 +20870,10 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         started["chat"]["id"].as_str().unwrap()
     );
     assert_eq!(
+        fs::read_to_string(home.join("chat-output")).unwrap().trim(),
+        "json"
+    );
+    assert_eq!(
         fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
         checkout.to_str().unwrap()
     );
@@ -20901,7 +20930,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" status chat-worker > \"$HOME/chat-status\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" --text status chat-worker > \"$HOME/chat-status\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );

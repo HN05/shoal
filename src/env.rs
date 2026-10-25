@@ -73,7 +73,7 @@ pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// The output format, `json` or `text`, of a command that selects neither
-/// `--json` nor `--text`.
+/// `--json` nor `--text`; Shoal sets `json` for the agents it launches.
 pub const OUTPUT: &str = "SHOAL_OUTPUT";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
@@ -348,12 +348,15 @@ fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, 
 }
 
 /// A chat agent's identity: its chat, and the state directory whose daemon
-/// recorded it, which the agent's own Shoal commands must reach.
+/// recorded it, which the agent's own Shoal commands must reach; and the
+/// agents' output default.
 pub fn chat_environment(chat: &crate::model::Chat, paths: &Paths) -> BTreeMap<String, OsString> {
-    BTreeMap::from([
+    let mut values = BTreeMap::from([
         (CHAT.into(), chat.id.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
-    ])
+    ]);
+    values.extend(agent_output().map(|(name, value)| (name.into(), value.into())));
+    values
 }
 
 /// The workspace environment, without a tracked execution marker.
@@ -403,6 +406,14 @@ pub fn selects_json(setting: Option<&OsStr>) -> Result<bool> {
             setting.unwrap_or_default()
         ),
     }
+}
+
+/// The [`OUTPUT`] default an agent Shoal launches gets: JSON, unless this
+/// process already carries a setting, which the agent inherits instead.
+pub fn agent_output() -> Option<(&'static str, &'static str)> {
+    std::env::var_os(OUTPUT)
+        .is_none()
+        .then_some((OUTPUT, "json"))
 }
 
 pub fn scope_token() -> Option<String> {

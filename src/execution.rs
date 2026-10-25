@@ -412,6 +412,7 @@ async fn prepare_agent_launch(
     Ok(Some(AgentLaunch {
         account: settings.agent_auth.prepare(paths, &config.git)?,
         secrets,
+        output: has_agent.then(env::agent_output).flatten(),
     }))
 }
 
@@ -701,16 +702,19 @@ impl Halt {
 }
 
 /// What an agent's or publishing child receives beyond the workspace
-/// environment: the agent account and, for agents, the configured secrets.
+/// environment: the agent account and, for agents, the configured secrets and
+/// the output default.
 struct AgentLaunch {
     account: crate::agent_auth::Launch,
     secrets: crate::secrets::Launch,
+    output: Option<(&'static str, &'static str)>,
 }
 
 impl AgentLaunch {
     fn apply(&self, command: &mut Command) {
         self.account.apply(command);
         self.secrets.apply(command);
+        command.envs(self.output);
     }
 }
 

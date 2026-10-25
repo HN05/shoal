@@ -6,7 +6,10 @@ Commands print human-readable output unless `--json` or `SHOAL_OUTPUT=json`
 selects JSON, which also turns off prompts without confirming anything: a command
 that would ask still needs `--yes`. `--text` overrides `SHOAL_OUTPUT`, and an
 unset or empty `SHOAL_OUTPUT` means `text`; any other value fails. Errors use the
-selected format on stderr.
+selected format on stderr. The agents Shoal starts, including chats and resumed
+sessions, get `SHOAL_OUTPUT=json` unless they inherit a setting; the commands and
+shells it runs only inherit one. An agent Shoal does not start, such as one an
+app launch opens, gets JSON by default only when its own environment sets it.
 
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
@@ -745,7 +748,7 @@ default_mode = "cli" # Or "app"
 
 App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
 and preserve the launcher's output and exit code. They add no agent flags and
-provide no execution tracking, scope token, or port variables (so automatic
+provide no execution tracking, scope token, port variables or output default (so automatic
 cleanup cannot see their activity); T3's app must already be running.
 
 Happy sessions are an optional integration: off until `happy.enabled = true` in

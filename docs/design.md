@@ -688,7 +688,10 @@ and keeps a failed lookup on its PR. Human output uses `Display` for enum values
 semantic palette at the CLI presentation layer; machine output and stored values
 stay unstyled. The output format resolves once after parsing, from `--json` or
 `--text`, then `SHOAL_OUTPUT`, then text, so results, errors and prompts agree;
-internal commands name their format, and hooks run without the setting. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
+internal commands name their format, and hooks run without the setting.
+Agent launches set `SHOAL_OUTPUT=json` unless the launcher carries a setting,
+rather than guessing from the workspace or terminal: people use workspaces
+too, agents sometimes have terminals, and piped human output keeps its meaning. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
 suppressed for JSON and dumb terminals. Rust chooses paths, including
 `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
 without evaluating repository code. Completion leaves navigation to prompt recovery:
