@@ -1425,7 +1425,7 @@ fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
 
 fn workflow_input(input: &str) -> Result<(String, String), String> {
     match input.split_once('=') {
-        Some((name, value)) if !name.is_empty() => Ok((name.into(), value.into())),
+        Some((name, value)) if !name.trim().is_empty() => Ok((name.into(), value.into())),
         _ => Err("expected NAME=VALUE".into()),
     }
 }

@@ -2512,13 +2512,18 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
     assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
 
-    // A bad argument is refused before the workspace picker.
-    let output = fixture.run(&["forge", "ci", "run", "deps.yml", "--branch", " "]);
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("branch must be nonempty"),
-        "{output:?}"
-    );
+    // Bad arguments are refused before the workspace picker.
+    for (args, error) in [
+        (&["--branch", " "], "branch must be nonempty"),
+        (&["--input", " =x"], "expected NAME=VALUE"),
+    ] {
+        let output = fixture.run(&[&["forge", "ci", "run", "deps.yml"][..], args].concat());
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(error),
+            "{output:?}"
+        );
+    }
 }
 
 #[test]

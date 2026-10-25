@@ -53,12 +53,17 @@ async fn act(ctx: &Context, target: RunTarget, action: CiAction, failed: bool) -
         },
     )
     .await?;
-    let outcome = match action {
+    ctx.emit(&acted_text(&acted), &acted)?;
+    Ok(0)
+}
+
+/// What the action did to the run.
+fn acted_text(acted: &RunActed) -> String {
+    let outcome = match acted.action {
         CiAction::Rerun => "Rerun started",
         CiAction::Cancel => "Cancelled",
     };
-    ctx.emit(&format!("{outcome}: {}", acted.url), &acted)?;
-    Ok(0)
+    format!("{outcome}: {}", acted.url)
 }
 
 /// The run that started and, where the forge reports one, its URL.
