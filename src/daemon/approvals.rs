@@ -196,7 +196,7 @@ pub struct ApprovalRequest {
     #[serde(default)]
     pub id: i64,
     /// Stable identity behind the user-facing number, carried through displayed snapshots.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub key: String,
     pub workspace_id: String,
     #[serde(default)]
