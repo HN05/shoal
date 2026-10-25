@@ -178,15 +178,21 @@ pub(super) fn open(preset: Preset, launch: &Launch) -> Result<()> {
         outln!("{line}");
     }
     if preset == Preset::Simulator && ssh.is_none() {
-        let udid = launch
-            .environment
-            .get(SIM_UDID)
-            .with_context(|| format!("demo {} has no simulator", launch.name))?;
-        std::process::Command::new("open")
-            .args(["-a", "Simulator", "--args", "-CurrentDeviceUDID", udid])
-            .status()
-            .context("open Simulator")?;
+        show_simulator(launch)?;
     }
+    Ok(())
+}
+
+/// Bring the demo's device forward in Simulator on this machine's screen.
+fn show_simulator(launch: &Launch) -> Result<()> {
+    let udid = launch
+        .environment
+        .get(SIM_UDID)
+        .with_context(|| format!("demo {} has no simulator", launch.name))?;
+    std::process::Command::new("open")
+        .args(["-a", "Simulator", "--args", "-CurrentDeviceUDID", udid])
+        .status()
+        .context("open Simulator")?;
     Ok(())
 }
 
