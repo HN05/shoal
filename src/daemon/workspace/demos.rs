@@ -1,6 +1,8 @@
 //! Demos the daemon records with the executions that run them, so a demo
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
+use std::collections::HashSet;
+
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
@@ -11,6 +13,7 @@ use super::{
 use crate::{
     demos::{Launch, Running},
     model::Execution,
+    process::{execution::Processes, identity as process},
 };
 
 impl Manager {
@@ -55,9 +58,10 @@ impl Manager {
         Ok(())
     }
 
-    /// Stop a demo whose wrapper is away. Between runs the daemon already
-    /// proved the last run stopped and forgot it, so stopping what still
-    /// carries the execution's marker, the wrapper, completes the proof.
+    /// Stop a demo whose wrapper is away. With no child recorded, before its
+    /// first run registers or once the last run's stop was proven, nothing
+    /// names a process group, so the proof is that nothing carrying the
+    /// execution's marker survives and every live process could be read.
     async fn stop_disconnected_demo(&self, execution: &Execution) -> Result<()> {
         let between_runs = execution.child.is_none() && execution.group_id.is_none();
         if !between_runs {
@@ -67,6 +71,13 @@ impl Manager {
         }
         self.stop_disconnected(execution, StopPolicy::ForRemoval)
             .await?;
+        let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
+        ensure!(
+            Processes::inspect(execution, &scan)
+                .await?
+                .command_stopped(),
+            "process state remains uncertain; use shoal doctor to inspect it"
+        );
         self.forget_execution(&execution.id).await
     }
 
