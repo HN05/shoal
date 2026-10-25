@@ -4,7 +4,7 @@ use std::{collections::HashSet, io};
 
 use anyhow::{Result, ensure};
 
-use super::{Cell, Entries, pick, picker_width, rows_with_status, status_cell};
+use super::{Cell, Entries, pick, pick_many, picker_width, rows_with_status, status_cell};
 use crate::{
     cli::{
         WorkspaceScope,
@@ -64,6 +64,28 @@ pub async fn select_workspace(
     };
     recent::record(ctx, &workspace).await;
     Ok(workspace)
+}
+
+/// The workspaces a command that acts on several takes: those named, each
+/// once and in order, otherwise the current one, otherwise those picked.
+pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+    let mut selected = Vec::new();
+    for name in names {
+        let workspace = explicit_workspace(ctx, name).await?;
+        if !selected.contains(&workspace) {
+            selected.push(workspace);
+        }
+    }
+    if selected.is_empty() {
+        selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
+            Resolution::Workspace(id) => vec![id],
+            Resolution::Picker(workspaces) => pick_workspaces(ctx, workspaces).await?,
+        };
+    }
+    for workspace in &selected {
+        recent::record(ctx, workspace).await;
+    }
+    Ok(selected)
 }
 
 /// The workspace an explicit argument names, where `-` is the previous one.
@@ -257,6 +279,12 @@ pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result
     let entries = workspace_entries(ctx, workspaces).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick(ctx, "Workspace> ", entries)
+}
+
+async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
+    let entries = workspace_entries(ctx, workspaces).await;
+    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    pick_many(ctx, "Workspaces> ", entries)
 }
 
 /// The picker entries for `workspaces`, judged against what the command needs.

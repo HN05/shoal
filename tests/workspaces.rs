@@ -192,7 +192,8 @@ impl Fixture {
     }
 
     /// Run `args` on a terminal with a picker that records its rows and selects
-    /// the row whose ID is `choice`, then type `answer` into later prompts.
+    /// the rows whose IDs `choice` lists, separated by spaces, then type
+    /// `answer` into later prompts.
     fn pick(&self, args: &[&str], choice: &str, answer: &str) -> (Output, String) {
         self.pick_in(self.root.path(), args, choice, answer)
     }
@@ -203,7 +204,7 @@ impl Fixture {
         let fzf = bin.join("fzf");
         install_test_script(
             &fzf,
-            "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\ncase \"$*\" in *--expect=*) printf '\\n';; esac\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
+            "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\ncase \"$*\" in *--expect=*) printf '\\n';; esac\nawk -F '\\t' -v ids=\" $SHOAL_TEST_PICK_ID \" 'index(ids, \" \" $1 \" \") { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
         );
         let rows = self.root.path().join("picker-rows");
         let _ = fs::remove_file(&rows);
@@ -1666,6 +1667,10 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{command}"
         );
     }
+    // A command taking several workspaces offers each one once.
+    let choices = complete(&["rm", "first", ""], fixture.root.path());
+    assert!(choices.contains(&"second".into()), "{choices:?}");
+    assert!(!choices.contains(&"first".into()), "{choices:?}");
     for words in [
         vec!["run", "--workspace", "fi"],
         vec!["run", "check", "--workspace", "fi"],
@@ -11241,6 +11246,64 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let (yes, prompt) = fixture.interactive(&["repo", "rm", "project"], "Y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!fixture.repo.exists());
+}
+
+#[test]
+fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
+    let fixture = Fixture::new();
+    let names = ["first", "second", "third"];
+    let workspaces: Vec<Value> = names.iter().map(|name| fixture.add(name)).collect();
+    let path = |index: usize| PathBuf::from(workspaces[index]["path"].as_str().unwrap());
+    for index in [0, 2] {
+        fs::write(path(index).join("uncommitted"), "unsaved").unwrap();
+    }
+    let refused = fixture.run(&["rm", "first", "missing", "--yes"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("so none was removed"), "{stderr}");
+    assert!(stderr.contains("missing:"), "{stderr}");
+    assert!(path(0).exists());
+
+    let (no, prompt) = fixture.interactive(&["rm", "first", "second", "third"], "n\n");
+    let prompt = prompt.replace("\r\n", "\n");
+    assert!(!no.status.success(), "{prompt}");
+    assert_eq!(prompt.matches("Are you sure? [y/N]").count(), 1, "{prompt}");
+    assert!(
+        prompt.contains("Remove 3 workspaces: first, second, third"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("first:\n  Deletes: "), "{prompt}");
+    assert!(prompt.contains("third:\n  Deletes: "), "{prompt}");
+    assert!(!prompt.contains("second:"), "{prompt}");
+    assert!((0..3).all(|index| path(index).exists()));
+
+    let (picked, prompt) = fixture.pick(
+        &["rm"],
+        &format!(
+            "{} {}",
+            workspaces[0]["id"].as_str().unwrap(),
+            workspaces[1]["id"].as_str().unwrap()
+        ),
+        "y\n",
+    );
+    assert!(picked.status.success(), "{prompt}");
+    let stdout = String::from_utf8_lossy(&picked.stdout);
+    assert!(stdout.contains("Removed first"), "{stdout}");
+    assert!(stdout.contains("Removed second"), "{stdout}");
+    assert!(!path(0).exists() && !path(1).exists() && path(2).exists());
+
+    let second = fixture.add("fourth");
+    let removed = fixture.ok(&["rm", "third", "fourth", "--yes"]);
+    let removed_names: Vec<&str> = removed["removed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|removal| removal["workspace"].as_str().unwrap())
+        .collect();
+    assert_eq!(removed_names, ["third", "fourth"]);
+    assert_eq!(removed["failed"], serde_json::json!([]));
+    assert!(!path(2).exists());
+    assert!(!Path::new(second["path"].as_str().unwrap()).exists());
 }
 
 #[test]

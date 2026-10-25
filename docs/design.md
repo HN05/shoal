@@ -690,6 +690,10 @@ picker; a deleted current directory provides no workspace context. Explicit miss
 and other refused arguments fail without fallback, before any prompt for the
 omitted ones; `add` asks the daemon to check its creation request first.
 Noninteractive and JSON calls without a current workspace require a target.
+An action that can apply to several workspaces takes several targets, and its
+picker selects several: Tab selects each entry and Ctrl-A all of them. It checks
+every target before acting on any, asks one confirmation that names what each
+loses, and goes on after one fails, exiting 1.
 Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations retain their scope.
 A `-` target selects from a per-command history of workspace IDs that the CLI keeps
 in the state directory, shared across terminals so `attach -` works from a new pane;

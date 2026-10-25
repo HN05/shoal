@@ -410,6 +410,7 @@ shoal status pr 12                       # Workspaces that link PR 12
 shoal status resource devices            # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands for shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
+shoal rm fix-login old-spike             # Remove several, confirming once for all
 ```
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,

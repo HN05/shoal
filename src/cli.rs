@@ -607,12 +607,14 @@ pub enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
-    /// Remove a workspace and release its resources.
+    /// Remove workspaces and release their resources.
     ///
-    /// The branch goes too when a remote or the default branch has all its commits; otherwise it
-    /// stays. Deleting uncommitted changes or commits on a detached HEAD needs confirmation.
+    /// A branch goes too when a remote or the default branch has all its commits; otherwise it
+    /// stays. Deleting uncommitted changes or commits on a detached HEAD needs confirmation,
+    /// asked once for every workspace.
     Rm {
-        workspace: Option<String>,
+        #[arg(value_name = "WORKSPACE")]
+        workspace: Vec<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },

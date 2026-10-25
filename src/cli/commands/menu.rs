@@ -649,7 +649,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
     Ok(match key {
         Key::Enter => Command::Cd { workspace },
         Key::Delete => Command::Rm {
-            workspace,
+            workspace: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
         },
         Key::Status => Command::Status {

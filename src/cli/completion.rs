@@ -40,6 +40,8 @@ struct Typed {
     pool: Option<String>,
     /// `--all` is already on the line.
     all: bool,
+    /// Workspaces already named on the line, which are not offered again.
+    named: Vec<String>,
     custom: Option<String>,
     /// The selected command also governs inherited global workspace options.
     need: Option<Need>,
@@ -117,6 +119,12 @@ pub fn command() -> Command {
                 .filter(|arg| !arg.to_string_lossy().starts_with('-'))
                 .and_then(|arg| arg.to_str().map(str::to_owned))
         });
+        typed.named = leaf
+            .try_get_many::<String>("workspace")
+            .ok()
+            .flatten()
+            .map(|names| names.cloned().collect())
+            .unwrap_or_default();
         typed.pool = value(leaf, "pool");
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
     }
@@ -411,11 +419,13 @@ impl Typed {
         let Ok(Ok(mut values)) = values else {
             return vec![];
         };
+        let workspaces = matches!(target, Target::Workspaces(_) | Target::ResumeWorkspaces);
         values.retain(|value| {
-            value
-                .get_value()
-                .to_str()
-                .is_some_and(|s| s.starts_with(current) && !s.chars().any(char::is_control))
+            value.get_value().to_str().is_some_and(|s| {
+                s.starts_with(current)
+                    && !s.chars().any(char::is_control)
+                    && !(workspaces && s != current && self.named.iter().any(|name| name == s))
+            })
         });
         values.sort_by(|a, b| a.get_value().cmp(b.get_value()));
         values.dedup_by(|a, b| a.get_value() == b.get_value());

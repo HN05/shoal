@@ -1861,30 +1861,81 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
     }
 }
 
-pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) -> Result<i32> {
-    if let Some(selector) = &workspace
+pub(super) async fn remove(ctx: &Context, names: Vec<String>, yes: bool) -> Result<i32> {
+    if let [selector] = names.as_slice()
         && let Some(code) = super::agent_queue::remove(ctx, selector).await?
     {
         return Ok(code);
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check = request::<RemovalCheck>(
-        &ctx.paths,
-        Method::CheckRemoval {
+    let workspaces = ui::select_workspaces(ctx, names).await?;
+    let checks = check_removals(ctx, workspaces, yes).await?;
+    if !yes {
+        confirm_removals(ctx, &checks)?;
+    }
+    match <[RemovalCheck; 1]>::try_from(checks) {
+        Ok([check]) => remove_one(ctx, check).await,
+        Err(checks) => remove_each(ctx, checks).await,
+    }
+}
+
+/// Check every workspace before removing any, so one that cannot be removed
+/// leaves the others in place.
+async fn check_removals(
+    ctx: &Context,
+    workspaces: Vec<String>,
+    yes: bool,
+) -> Result<Vec<RemovalCheck>> {
+    let mut checks = Vec::new();
+    let mut refusals = Vec::new();
+    let several = workspaces.len() > 1;
+    for workspace in workspaces {
+        let method = Method::CheckRemoval {
             workspace: workspace.clone(),
             include_changes: ctx.interactive() && !yes,
-        },
-    )
-    .await?;
-    let unsaved = check.unsaved_work();
-    if !yes && (!unsaved.is_empty() || !check.workspace.holds.is_empty()) {
-        confirm_removal(ctx, &check)?;
+        };
+        match request::<RemovalCheck>(&ctx.paths, method).await {
+            Ok(check) => checks.push(check),
+            Err(error) if !several => return Err(error),
+            Err(error) => refusals.push(format!("{workspace}: {error:#}")),
+        }
     }
-    let result = remove_checked(ctx, workspace, &check).await?;
+    ensure!(
+        refusals.is_empty(),
+        "cannot remove these workspaces, so none was removed:\n  {}",
+        refusals.join("\n  ")
+    );
+    Ok(checks)
+}
+
+async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
+    let result = remove_checked(ctx, check.workspace.id.clone(), &check).await?;
     let mut output = serde_json::to_value(&result)?;
     output["holds"] = serde_json::to_value(&check.workspace.holds)?;
-    ctx.emit_styled(Style::Success, &removal_message(&result), &output)?;
+    ctx.emit_styled(
+        Style::Success,
+        &removal_message("Workspace removed", &result),
+        &output,
+    )?;
     Ok(0)
+}
+
+/// Remove each checked workspace, going on after one fails.
+async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
+    let mut report = ui::Report::new("removed");
+    for check in checks {
+        let name = &check.workspace.name;
+        match remove_checked(ctx, check.workspace.id.clone(), &check).await {
+            Ok(result) => {
+                let mut output = serde_json::to_value(&result)?;
+                output["workspace"] = json!(name);
+                output["holds"] = serde_json::to_value(&check.workspace.holds)?;
+                let message = removal_message(&format!("Removed {name}"), &result);
+                report.done(ctx, &message, output);
+            }
+            Err(error) => report.failed(ctx, name, &error),
+        }
+    }
+    report.finish(ctx)
 }
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
@@ -1927,46 +1978,75 @@ pub(super) async fn leaving<T>(
     result
 }
 
-fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
-    let mut action = format!("Remove workspace: {}", check.workspace.name);
-    for work in check.unsaved_work() {
-        action.push_str(&format!("\nDeletes: {work}"));
+/// Ask once before removing workspaces that would lose unsaved work or
+/// holds, naming what each loses.
+fn confirm_removals(ctx: &Context, checks: &[RemovalCheck]) -> Result<()> {
+    let losses: Vec<(String, Vec<String>)> = checks
+        .iter()
+        .map(|check| (check.workspace.name.clone(), removal_losses(ctx, check)))
+        .collect();
+    if losses.iter().all(|(_, lines)| lines.is_empty()) {
+        return Ok(());
     }
-    if !check.unsaved_work().is_empty() {
-        action.push_str(if !check.dirty || check.unsaved_files_archived {
-            "\nshoal work restore brings them back until the checkpoint expires."
+    let action = match checks {
+        [check] => format!("Remove workspace: {}", check.workspace.name),
+        _ => format!(
+            "Remove {} workspaces: {}",
+            checks.len(),
+            checks
+                .iter()
+                .map(|check| check.workspace.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+    ensure!(
+        ui::confirm_losses(ctx, &action, &losses, "--yes")?,
+        "workspace removal canceled"
+    );
+    Ok(())
+}
+
+/// What removing the workspace `check` inspected loses: its unsaved work,
+/// with the changed files on a terminal, and its holds.
+fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
+    let mut lines = Vec::new();
+    let unsaved = check.unsaved_work();
+    if unsaved.is_empty() && check.workspace.holds.is_empty() {
+        return lines;
+    }
+    for work in &unsaved {
+        lines.push(format!("Deletes: {work}"));
+    }
+    if !unsaved.is_empty() {
+        lines.push(if !check.dirty || check.unsaved_files_archived {
+            "shoal work restore brings them back until the checkpoint expires.".into()
         } else {
-            "\nThe checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored."
+            "The checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored.".into()
         });
     }
     if !check.workspace.holds.is_empty() {
-        action.push_str("\nHolds:");
+        lines.push("Holds:".into());
         for hold in &check.workspace.holds {
-            action.push_str("\n  ");
-            action.push_str(&hold.name);
-            if let Some(reason) = &hold.reason {
-                action.push_str(&format!(" ({reason})"));
-            }
+            let reason = crate::cli::context::optional(hold.reason.as_deref(), |reason| {
+                format!(" ({reason})")
+            });
+            lines.push(format!("  {}{reason}", hold.name));
         }
     }
     if ctx.interactive() && (!check.changed_files.is_empty() || check.changed_files_omitted > 0) {
-        action.push_str("\nUncommitted changes and untracked files (Git status):");
+        lines.push("Uncommitted changes and untracked files (Git status):".into());
         for file in &check.changed_files {
-            action.push_str("\n  ");
-            action.push_str(file);
+            lines.push(format!("  {file}"));
         }
         if check.changed_files_omitted > 0 {
-            action.push_str(&format!(
-                "\n  ... {} more entries omitted; run git status in the workspace for the full list",
+            lines.push(format!(
+                "  ... {} more entries omitted; run git status in the workspace for the full list",
                 check.changed_files_omitted
             ));
         }
     }
-    ensure!(
-        ui::confirm(ctx, &action, "--yes")?,
-        "workspace removal canceled"
-    );
-    Ok(())
+    lines
 }
 
 /// Where the shell should go if the current directory is inside `workspace`:
@@ -1987,12 +2067,13 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
     Ok(Some(repository.unwrap_or_else(|| ctx.paths.home.clone())))
 }
 
-fn removal_message(result: &RemovalResult) -> String {
+/// `removed`, such as `Workspace removed`, with the Git branch the removal kept.
+fn removal_message(removed: &str, result: &RemovalResult) -> String {
     match &result.branch {
         Some(branch) if !result.branch_outcome.is_deleted() => {
-            format!("Workspace removed; kept Git branch {branch}")
+            format!("{removed}; kept Git branch {branch}")
         }
-        _ => "Workspace removed".into(),
+        _ => removed.into(),
     }
 }
 

@@ -166,6 +166,7 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
+shoal rm fix-login old-spike  # Remove several; the picker selects them with Tab or Ctrl-A
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
 shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
@@ -354,8 +355,8 @@ tools such as `agent-browser`, values fetched from your secret store; see
 
 ## Cleanup
 
-`shoal rm` removes a workspace and its resources, prompting only before it deletes
-uncommitted work. It deletes the branch too unless the branch has commits that are
+`shoal rm` removes workspaces and their resources, prompting once, and only before
+it deletes uncommitted work. It deletes the branch too unless the branch has commits that are
 on no remote and not on the default branch; Shoal deletes such a kept branch once
 they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
 their commits. `shoal stop` keeps the workspace.
