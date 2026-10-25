@@ -1583,6 +1583,9 @@ pub enum InternalCommand {
         #[arg(long)]
         agent: u32,
     },
+    /// Print which workspace a starting subagent works in as hook context;
+    /// Shoal's Claude Code and Codex `SubagentStart` hooks run it.
+    SubagentStart,
     /// Split a child workspace for the worktree Claude Code creates and print
     /// its path; Shoal's Claude Code `WorktreeCreate` hook runs it.
     WorktreeCreate,

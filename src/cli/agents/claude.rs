@@ -42,10 +42,10 @@ impl Integration for Claude {
 /// the commands that finish its assignment.
 fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let (state, worktrees, allow) = if workspace {
+    let (state, subagents, allow) = if workspace {
         (
             state_hooks(&shoal),
-            worktree_hooks(&shoal),
+            subagent_hooks(&shoal),
             lifecycle_rules(),
         )
     } else {
@@ -53,7 +53,7 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     };
     let groups = hooks::messages(&shoal)
         .chain(state)
-        .chain(worktrees)
+        .chain(subagents)
         .chain([wake_hook(&shoal)]);
     let mut settings = json!({"hooks": hooks::by_event(groups)});
     if !allow.is_empty() {
@@ -136,10 +136,11 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
 /// How long a worktree hook may take: creating one runs the child's setup.
 const WORKTREE_TIMEOUT_SECS: u64 = 60 * 60;
 
-/// The groups that create the worktrees Claude Code asks for, as for a
-/// subagent with `isolation: "worktree"`, as child workspaces, and finish
-/// them when it removes one, instead of its own `git worktree` commands.
-fn worktree_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
+/// The groups that tell each subagent which workspace it works in, create
+/// the worktrees Claude Code asks for, as for a subagent with
+/// `isolation: "worktree"`, as child workspaces, and finish them when it
+/// removes one, instead of its own `git worktree` commands.
+fn subagent_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     [
         ("WorktreeCreate", "worktree-create"),
         ("WorktreeRemove", "worktree-remove"),
@@ -153,6 +154,7 @@ fn worktree_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
         }]});
         (event, group)
     })
+    .chain([hooks::subagent(shoal)])
     .collect()
 }
 
@@ -229,10 +231,12 @@ mod tests {
         );
         assert_eq!(wake["asyncRewake"], true);
         assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
-        // Worktrees Claude Code creates are child workspaces.
+        // Worktrees Claude Code creates are child workspaces, and each
+        // subagent learns which workspace it works in.
         for (event, command) in [
             ("WorktreeCreate", " internal worktree-create"),
             ("WorktreeRemove", " internal worktree-remove"),
+            ("SubagentStart", " internal subagent-start"),
         ] {
             let handler = &settings["hooks"][event][0]["hooks"][0];
             assert!(

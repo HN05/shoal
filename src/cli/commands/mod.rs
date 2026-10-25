@@ -44,6 +44,7 @@ mod simulators;
 mod skill;
 mod split;
 mod stop;
+mod subagents;
 mod transfer;
 mod update;
 mod view;
@@ -715,6 +716,7 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             agent_state::run(&ctx, workspace, state).await
         }
         InternalCommand::Wake { agent } => messages::wake(&ctx, agent).await,
+        InternalCommand::SubagentStart => subagents::start(&ctx).await,
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,
         InternalCommand::Herdr {

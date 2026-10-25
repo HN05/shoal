@@ -376,6 +376,9 @@ over `--agent`: the child then has no agent of its own, so its activity reaches
 the parent, and the subagent reports to the parent directly, supervision Shoal
 need not relay. Claude Code's worktree hooks make the worktree it creates for a
 subagent such a child, so its own isolation needs no worktree Shoal does not own.
+A subagent inherits its agent's scope, and under Codex its instructions and
+directory, so a `SubagentStart` hook names the workspace it works in; without
+it, a Codex subagent finishes its agent's assignment as the instructions say.
 
 `shoal work rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay

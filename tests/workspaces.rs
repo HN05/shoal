@@ -4926,26 +4926,7 @@ fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     // Completion without cleanup keeps the finished child to inspect.
     let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
     let parent = fixture.add("parent");
-    let hook = |command: &str, input: Value| {
-        let mut child = fixture
-            .command()
-            .args(["run", "--workspace", "parent", "--"])
-            .args([env!("CARGO_BIN_EXE_shoal"), "internal", command])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(input.to_string().as_bytes())
-            .unwrap();
-        let output = child.wait_with_output().unwrap();
-        assert!(output.status.success(), "{command}: {output:?}");
-        String::from_utf8(output.stdout).unwrap()
-    };
+    let hook = |command: &str, input: Value| scoped_hook(&fixture, "parent", command, input);
     let created = hook(
         "worktree-create",
         serde_json::json!({
@@ -4975,6 +4956,39 @@ fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
         "worktree-remove",
         serde_json::json!({"worktree_path": parent["path"].as_str().unwrap().to_owned() + "-gone"}),
     );
+}
+
+#[test]
+fn a_starting_subagent_learns_which_workspace_it_works_in() {
+    let fixture = Fixture::new();
+    let parent = fixture.add("parent");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let child: Value = serde_json::from_slice(&split.stdout).unwrap();
+    let brief = |cwd: &Value| {
+        let input = serde_json::json!({"hook_event_name": "SubagentStart", "cwd": cwd});
+        let output: Value =
+            serde_json::from_str(&scoped_hook(&fixture, "parent", "subagent-start", input))
+                .unwrap();
+        assert_eq!(
+            output["hookSpecificOutput"]["hookEventName"],
+            "SubagentStart"
+        );
+        output["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    // Started in a child's worktree, it works there.
+    let inside = brief(&child["path"]);
+    assert!(
+        inside.contains("workspace child, a child of parent"),
+        "{inside}"
+    );
+    // Started in its agent's workspace, it leaves that workspace alone.
+    let beside = brief(&parent["path"]);
+    assert!(beside.contains("never run `shoal done`"), "{beside}");
+    assert!(beside.contains("workspace parent"), "{beside}");
 }
 
 #[test]
@@ -18335,6 +18349,29 @@ fn agents_wait_for_the_answer_to_their_question() {
         fixture.ok(&["questions"]),
         serde_json::json!({"questions": [], "omitted": 0})
     );
+}
+
+/// Run Shoal's `internal <command>` hook scoped to `workspace` with `input`
+/// on stdin, as an agent's hook runs, and return what it printed.
+fn scoped_hook(fixture: &Fixture, workspace: &str, command: &str, input: Value) -> String {
+    let mut child = fixture
+        .command()
+        .args(["run", "--workspace", workspace, "--"])
+        .args([env!("CARGO_BIN_EXE_shoal"), "internal", command])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{command}: {output:?}");
+    String::from_utf8(output.stdout).unwrap()
 }
 
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {

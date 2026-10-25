@@ -40,6 +40,17 @@ pub fn messages(shoal: &str) -> impl Iterator<Item = (&'static str, Value)> {
         .map(move |event| (event, json!({"hooks": [handler.clone()]})))
 }
 
+/// The group that tells a subagent, as it starts, which workspace it works
+/// in: it inherits the agent's scope, and under Codex its instructions too.
+pub fn subagent(shoal: &str) -> (&'static str, Value) {
+    let group = json!({"hooks": [{
+        "type": "command",
+        "command": format!("{shoal} internal subagent-start"),
+        "timeout": 10,
+    }]});
+    ("SubagentStart", group)
+}
+
 /// The group that reports `state`, for events `matcher` selects.
 pub fn state(shoal: &str, matcher: Option<&str>, state: AgentState) -> Value {
     let mut group = json!({ "hooks": [{

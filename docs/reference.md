@@ -1251,6 +1251,12 @@ as that child without an agent of its own, so the child's activity reaches the
 agent that started it. Removing the worktree marks the child done; Claude Code
 removes none when a subagent finishes, so its child stays until `shoal done` or
 merged cleanup.
+Claude Code and Codex launched in a workspace also run `shoal internal
+subagent-start` as their `SubagentStart` hook, which tells each subagent which
+workspace it works in: the child whose directory it starts in, or, starting in
+the agent's own workspace as a Codex subagent does with the agent's
+instructions, the child its brief names, leaving the agent's own workspace for
+the agent to finish.
 
 A workspace's coordinator is the agent of its nearest ancestor that has one,
 or the running [chat](#chats) that owns the workspace or an ancestor nearer than

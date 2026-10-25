@@ -335,7 +335,7 @@ fn from_subagent(input: &str) -> bool {
 
 /// Claude Code and Codex read `additionalContext` for the event named in the
 /// hook input; without one, the context is plain text.
-fn hook_output(input: &str, context: &str) -> String {
+pub(super) fn hook_output(input: &str, context: &str) -> String {
     let event = serde_json::from_str::<serde_json::Value>(input)
         .ok()
         .and_then(|input| input["hook_event_name"].as_str().map(str::to_owned));

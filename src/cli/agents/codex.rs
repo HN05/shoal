@@ -117,11 +117,14 @@ pub(super) fn shortcut_available(installed: &super::Installed) -> bool {
 }
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
-/// `turn_state` adds the hooks that report the turn's state.
+/// `turn_state` adds the hooks of a workspace's agent: those that report the
+/// turn's state and the one that briefs its subagents.
 fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let state = if turn_state {
-        state_hooks(&shoal)
+        let mut state = state_hooks(&shoal);
+        state.push(hooks::subagent(&shoal));
+        state
     } else {
         Vec::new()
     };
@@ -182,6 +185,7 @@ mod tests {
                 "hooks.PostToolUse",
                 "hooks.SessionStart",
                 "hooks.Stop",
+                "hooks.SubagentStart",
                 "hooks.UserPromptSubmit"
             ]
         );
