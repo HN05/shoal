@@ -95,7 +95,7 @@ def render(tag, url, previous, changes):
              "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
              "prebuilt Linux or macOS binary below. For a manual binary install, "
              f"install the [runtime dependencies]({url}/src/tag/{tag}/README.md#runtime-dependencies) "
-             "before running `shoal install`.", "",
+             "before running `shoal daemon install`.", "",
              f"## Changes since {previous}" if previous else "## Changes in this first release", ""]
     for pr, issues in changes:
         title = re.sub(r"[\r\n]+", " ", pr["title"])

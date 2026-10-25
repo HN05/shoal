@@ -45,13 +45,13 @@ pub(super) async fn install(
             // to become unreachable before install can replace the definition.
             ensure!(
                 service::file(&ctx.paths, platform).is_file(),
-                "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal install`"
+                "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal daemon install`"
             );
             if !ctx.json {
                 eprintln!("Updating daemon service after a protocol change...");
             }
             ctx.progress("Stopping incompatible daemon", stop(&ctx.paths)).await.context(
-                "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal install`",
+                "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal daemon install`",
             )?;
             false
         }
@@ -141,6 +141,10 @@ pub(super) async fn run(
     handoff: Option<daemon::handoff::Handoff>,
 ) -> Result<i32> {
     match command {
+        DaemonCommand::Install {
+            dry_run,
+            executable,
+        } => return install(&ctx, dry_run, executable).await,
         DaemonCommand::Run { managed } => daemon::run(ctx.paths, managed, handoff).await?,
         DaemonCommand::Status => {
             let status = client::status(&ctx.paths).await?;
@@ -174,7 +178,7 @@ pub(super) async fn run(
             if !service::file(&ctx.paths, Platform::current()?).is_file()
                 && ui::offer(
                     &ctx,
-                    "The daemon service is not installed. Install it with `shoal install`?",
+                    "The daemon service is not installed. Install it with `shoal daemon install`?",
                 )?
             {
                 return install(&ctx, false, None).await;

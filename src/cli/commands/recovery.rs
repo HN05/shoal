@@ -147,7 +147,7 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
         Ok(None) => (
             CheckStatus::Error,
             format!(
-                "Daemon is stopped or unreachable at {}; run `shoal daemon start` or `shoal install`",
+                "Daemon is stopped or unreachable at {}; run `shoal daemon start` or `shoal daemon install`",
                 ctx.paths.socket.display()
             ),
             false,

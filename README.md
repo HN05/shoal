@@ -7,7 +7,7 @@ switch between tasks, and clean up when finished.
 
 ```sh
 brew install hn05/tap/shoal
-shoal install
+shoal daemon install
 shoal skill install
 ```
 
@@ -17,8 +17,8 @@ the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the additional tools for workspace management and interactive
 menus. For a downloaded binary, install
-the [runtime dependencies](#runtime-dependencies) before running `shoal install`.
-`shoal install` starts the per-user
+the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
+`shoal daemon install` starts the per-user
 daemon and writes missing config and chat template defaults in `~/.config/shoal/`;
 `shoal skill install` installs the worker and orchestrator skills into each
 [AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
@@ -34,7 +34,7 @@ source <(shoal shell init)
 
 ### Runtime dependencies
 
-Put these tools on `PATH` before running `shoal install`, which captures it for
+Put these tools on `PATH` before running `shoal daemon install`, which captures it for
 the daemon. Prebuilt binaries do not require Rust.
 
 | Tool | Needed for |

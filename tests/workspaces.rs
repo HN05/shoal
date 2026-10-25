@@ -5852,7 +5852,7 @@ fn execution_scope_limits_management_and_expires() {
         serde_json::json!([]),
         "hook survivors must not belong to the invoking execution"
     );
-    let output = scoped(&["install", "--dry-run"]);
+    let output = scoped(&["daemon", "install", "--dry-run"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"));
     assert!(

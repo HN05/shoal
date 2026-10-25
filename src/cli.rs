@@ -760,15 +760,6 @@ pub enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
-    /// Install and start the per-user daemon service.
-    Install {
-        /// Preview the service definition without changing anything.
-        #[arg(long)]
-        dry_run: bool,
-        /// Executable path to register (preserves symlinks for package upgrades).
-        #[arg(long)]
-        executable: Option<PathBuf>,
-    },
     /// Replace a downloaded shoal with the latest GitHub release.
     Update,
     /// Inspect and control the local daemon.
@@ -1262,7 +1253,6 @@ impl Command {
             Command::Doctor { .. }
                 | Command::Contribute(_)
                 | Command::Branch { .. }
-                | Command::Install { .. }
                 | Command::Update
                 | Command::Config {
                     command: ConfigCommand::Install { .. }
@@ -1271,7 +1261,8 @@ impl Command {
                         | ConfigCommand::Unset { .. }
                 }
                 | Command::Daemon {
-                    command: DaemonCommand::Run { .. }
+                    command: DaemonCommand::Install { .. }
+                        | DaemonCommand::Run { .. }
                         | DaemonCommand::Start
                         | DaemonCommand::Stop
                         | DaemonCommand::Restart
@@ -1711,6 +1702,15 @@ pub enum ConfigCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum DaemonCommand {
+    /// Install and start the per-user daemon service.
+    Install {
+        /// Preview the service definition without changing anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// Executable path to register (preserves symlinks for package upgrades).
+        #[arg(long)]
+        executable: Option<PathBuf>,
+    },
     Status,
     Start,
     Stop,

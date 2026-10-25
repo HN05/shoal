@@ -249,9 +249,9 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
 fn install_progress_clears_on_failure_and_leaves_json_and_preview_clean() {
     for json in [false, true] {
         let args = if json {
-            vec!["--json", "install"]
+            vec!["--json", "daemon", "install"]
         } else {
-            vec!["install"]
+            vec!["daemon", "install"]
         };
         let (output, text) = run_with_reply(
             &args,
@@ -274,7 +274,7 @@ fn install_progress_clears_on_failure_and_leaves_json_and_preview_clean() {
             assert!(text.contains(" \rerror: test: status failed"), "{text:?}");
         }
     }
-    let (output, text) = run(&["install", "--dry-run"], Some(false), &[]);
+    let (output, text) = run(&["daemon", "install", "--dry-run"], Some(false), &[]);
     assert!(output.status.success());
     assert!(text.is_empty());
 }

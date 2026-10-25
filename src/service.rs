@@ -219,7 +219,7 @@ pub async fn start(paths: &Paths) -> Result<()> {
     let path = file(paths, platform);
     ensure!(
         path.is_file(),
-        "daemon service is not installed; run `shoal install`"
+        "daemon service is not installed; run `shoal daemon install`"
     );
     check_state_dir(paths, &path, platform)?;
     match platform {
@@ -284,7 +284,7 @@ fn check_state_dir(paths: &Paths, path: &Path, platform: Platform) -> Result<()>
     };
     ensure!(
         content.contains(&expected),
-        "installed service uses another state directory; use its --state-dir or rerun `shoal install`"
+        "installed service uses another state directory; use its --state-dir or rerun `shoal daemon install`"
     );
     Ok(())
 }

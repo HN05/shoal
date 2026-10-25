@@ -671,10 +671,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 service::install_config(&ctx, Some(name)).await
             }
         },
-        Command::Install {
-            dry_run,
-            executable,
-        } => service::install(&ctx, dry_run, executable).await,
         Command::Update => update::run(&ctx).await,
         Command::Daemon { command } => service::run(ctx, command, cli.daemon_handoff).await,
     }

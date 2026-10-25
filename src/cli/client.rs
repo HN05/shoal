@@ -27,7 +27,7 @@ pub struct ProtocolMismatch {
 
 impl std::fmt::Display for ProtocolMismatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("daemon protocol mismatch; run `shoal install` to update the managed daemon, or restart a foreground daemon with the installed version")
+        f.write_str("daemon protocol mismatch; run `shoal daemon install` to update the managed daemon, or restart a foreground daemon with the installed version")
     }
 }
 
@@ -125,7 +125,7 @@ fn awaits_update(paths: &Paths, method: &Method, error: &anyhow::Error) -> bool 
 async fn connect(paths: &Paths) -> Result<UnixStream> {
     UnixStream::connect(&paths.socket).await.with_context(|| {
         format!(
-            "connect to {}; run `shoal install` or `shoal daemon start`",
+            "connect to {}; run `shoal daemon install` or `shoal daemon start`",
             paths.socket.display()
         )
     })
@@ -618,7 +618,7 @@ mod tests {
             ] {
                 assert!(error.is::<ProtocolMismatch>());
                 assert!(!error.is::<RemoteError>());
-                assert!(error.to_string().contains("shoal install"));
+                assert!(error.to_string().contains("shoal daemon install"));
             }
         }
     }

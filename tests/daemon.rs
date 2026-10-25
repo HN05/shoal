@@ -425,7 +425,7 @@ fn failed_startup_recovery_never_serves() {
 fn install_preview_does_not_install_a_service() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let output = command(root.path())
-        .args(["--json", "install", "--dry-run"])
+        .args(["--json", "daemon", "install", "--dry-run"])
         .output()
         .unwrap();
     assert!(
@@ -511,12 +511,15 @@ impl Drop for IncompatibleDaemon {
 fn install_refuses_an_incompatible_daemon_without_an_installed_service() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let _daemon = IncompatibleDaemon::listen(root.path(), false);
-    let output = command(root.path()).arg("install").output().unwrap();
+    let output = command(root.path())
+        .args(["daemon", "install"])
+        .output()
+        .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("stop the foreground daemon"));
     assert!(
         command(root.path())
-            .args(["install", "--dry-run"])
+            .args(["daemon", "install", "--dry-run"])
             .output()
             .unwrap()
             .status
@@ -527,7 +530,7 @@ fn install_refuses_an_incompatible_daemon_without_an_installed_service() {
 #[test]
 fn install_preserves_a_compatible_foreground_daemon() {
     let daemon = Daemon::start();
-    let output = daemon.run(&["install"]);
+    let output = daemon.run(&["daemon", "install"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("foreground daemon"));
     assert!(daemon.run(&["daemon", "status"]).status.success());
@@ -615,7 +618,7 @@ fn daemon_start_offers_to_install_a_missing_service() {
     );
     assert!(!output.status.success(), "{transcript}");
     assert!(
-        transcript.contains("Install it with `shoal install`? [y/N]"),
+        transcript.contains("Install it with `shoal daemon install`? [y/N]"),
         "{transcript}"
     );
     assert!(
@@ -645,7 +648,7 @@ fn install_only_shows_shell_hint_without_startup_initialization() {
         let output = manager
             .command()
             .env("ZDOTDIR", zdotdir)
-            .arg("install")
+            .args(["daemon", "install"])
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -695,7 +698,8 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         );
         output
     };
-    let output: Value = serde_json::from_slice(&run(&["--json", "install"]).stdout).unwrap();
+    let output: Value =
+        serde_json::from_slice(&run(&["--json", "daemon", "install"]).stdout).unwrap();
     let original = fs::read_to_string(&pid_path).unwrap();
     // A missing global config is seeded once with the defaults, then left alone.
     let config = root.path().join(".config/shoal/config.toml");
@@ -716,7 +720,8 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     // Shoal's agent guidance is built in; the file holds only additions.
     assert!(!config.with_file_name("worker-template.md").exists());
     fs::write(&config, "default_agent = 'claude'\n").unwrap();
-    let output: Value = serde_json::from_slice(&run(&["--json", "install"]).stdout).unwrap();
+    let output: Value =
+        serde_json::from_slice(&run(&["--json", "daemon", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
@@ -774,10 +779,15 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     });
     let replacement = bin.join("updated-shoal");
     std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &replacement).unwrap();
-    run(&["install", "--executable", replacement.to_str().unwrap()]);
+    run(&[
+        "daemon",
+        "install",
+        "--executable",
+        replacement.to_str().unwrap(),
+    ]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
     let preview: Value =
-        serde_json::from_slice(&run(&["--json", "install", "--dry-run"]).stdout).unwrap();
+        serde_json::from_slice(&run(&["--json", "daemon", "install", "--dry-run"]).stdout).unwrap();
     assert!(
         fs::read_to_string(preview["path"].as_str().unwrap())
             .unwrap()
@@ -800,7 +810,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     {
         let _daemon = IncompatibleDaemon::listen(root.path(), true);
         let output = command(root.path())
-            .arg("install")
+            .args(["daemon", "install"])
             .env("PATH", &bin)
             .output()
             .unwrap();
@@ -811,11 +821,11 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     fs::remove_file(&socket).unwrap();
     {
         let _daemon = IncompatibleDaemon::listen(root.path(), false);
-        run(&["--json", "install"]);
+        run(&["--json", "daemon", "install"]);
     }
     assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
     let upgraded = fs::read_to_string(&pid_path).unwrap();
-    run(&["install"]);
+    run(&["daemon", "install"]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), upgraded);
     run(&["daemon", "restart"]);
     assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
@@ -1092,7 +1102,7 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("protocol mismatch"));
     let definition = command(root.path())
-        .args(["--json", "install", "--dry-run"])
+        .args(["--json", "daemon", "install", "--dry-run"])
         .output()
         .unwrap();
     let definition: Value = serde_json::from_slice(&definition.stdout).unwrap();

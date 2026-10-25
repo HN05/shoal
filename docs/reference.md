@@ -32,7 +32,7 @@ Rust. Both channels use the same [runtime dependencies](../README.md#runtime-dep
 brew tap hn05/tap
 brew install hn05/tap/shoal            # Or: brew install --HEAD hn05/tap/shoal
 shoal skill install
-shoal install
+shoal daemon install
 ```
 
 Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
@@ -61,8 +61,8 @@ directory. Without that link, installation uses the embedded skills.
 
 ```sh
 cargo install --path .
-shoal install --dry-run     # Preview the OS service definition
-shoal install               # Register and start the per-user service
+shoal daemon install --dry-run     # Preview the OS service definition
+shoal daemon install               # Register and start the per-user service
 shoal daemon status|stop|start|restart|reload
 ```
 
@@ -73,9 +73,9 @@ it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 `~/.local/state/shoal`; runtime state and the Unix socket are private to the
 user. Service commands target the one registered per-user service, whose state
 directory must match. `daemon status` exits 1 when offline. `daemon start`
-without an installed service offers to run `shoal install` in an interactive terminal.
+without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
-`shoal install` preserves the invoked executable's symlink path and captures the
+`shoal daemon install` preserves the invoked executable's symlink path and captures the
 current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
