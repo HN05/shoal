@@ -3014,7 +3014,8 @@ device = "iPhone 17"
 
 Omitting `runtime` from a profile or `--runtime` with `--device` selects the latest
 installed, available iOS runtime compatible with the device. `shoal catalog sim`
-lists installed device types and runtimes; nothing is downloaded.
+lists the profiles, limits and the repository's preferences with the installed
+device types and runtimes; nothing is downloaded.
 Repository config may set `[simulators] preferred = ["phone"]`;
 flags override it, and `allow_any = true` permits unconfigured `--device`
 requests with a `--reason`.
@@ -3022,7 +3023,8 @@ requests with a `--reason`.
 ```sh
 shoal acquire sim                   # Current worktree, configured preference
 shoal acquire sim --profile phone --name tests --queue
-shoal leases sim                    # Profiles, capacity, and managed devices; --all for all
+shoal catalog sim                   # Profiles, limits, device types and runtimes
+shoal leases sim                    # Managed devices and their leases; --all for all
 shoal release sim --name tests     # Or every simulator lease
 ```
 

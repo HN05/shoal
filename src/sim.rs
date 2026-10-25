@@ -200,24 +200,30 @@ impl Simulator {
     }
 }
 
-/// What `shoal sim catalog` shows: what could be created, and the policy.
+/// What could be created for a workspace: installed inventory, the policy,
+/// and the repository's preferred profiles.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SimulatorCatalog {
     pub device_types: Vec<simctl::DeviceType>,
     pub runtimes: Vec<simctl::Runtime>,
     pub policy: SimConfig,
+    pub preferred: Vec<String>,
 }
 
-/// Configured simulator capacity and profiles alongside current leases.
+/// Managed simulators and their leases.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SimulatorOverview {
-    pub policy: SimConfig,
-    pub preferred: Vec<String>,
     pub simulators: Vec<Simulator>,
 }
 
 impl Manager {
-    pub async fn simulator_catalog(&self) -> Result<SimulatorCatalog> {
+    pub async fn simulator_catalog(&self, selector: &str) -> Result<SimulatorCatalog> {
+        let workspace = self.workspace(selector).await?;
+        let preferred = self
+            .workspace_settings(&workspace)
+            .await?
+            .simulators
+            .preferred;
         let inventory = simctl::inventory().await?;
         Ok(SimulatorCatalog {
             device_types: inventory.devicetypes,
@@ -227,21 +233,13 @@ impl Manager {
                 .filter(|r| r.is_available)
                 .collect(),
             policy: self.config().simulators.clone(),
+            preferred,
         })
     }
 
     pub async fn simulator_overview(&self, selector: Option<&str>) -> Result<SimulatorOverview> {
-        let (owner, preferred) = match selector {
-            Some(selector) => {
-                let workspace = self.workspace(selector).await?;
-                let settings = self.workspace_settings(&workspace).await?;
-                (Some(workspace.id), settings.simulators.preferred)
-            }
-            None => (None, Vec::new()),
-        };
+        let owner = self.workspace_filter(selector).await?;
         Ok(SimulatorOverview {
-            policy: self.config().simulators.clone(),
-            preferred,
             simulators: self.list_simulators(owner.as_deref()).await?,
         })
     }

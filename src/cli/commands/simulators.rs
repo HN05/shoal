@@ -15,15 +15,55 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
-pub(super) async fn fetch_catalog(ctx: &Context) -> Result<SimulatorCatalog> {
-    request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await
+pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SimulatorCatalog> {
+    let method = Method::SimCatalog {
+        workspace: workspace.to_owned(),
+    };
+    request::<SimulatorCatalog>(&ctx.paths, method).await
 }
 
-pub(super) fn render_catalog(catalog: &SimulatorCatalog) {
+pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
+    let policy = &catalog.policy;
     outln!(
-        "{}",
-        serde_json::to_string_pretty(catalog).unwrap_or_default()
+        "Capacity: {} booted, {} devices; idle devices shut down after {} seconds",
+        policy.max_booted,
+        policy.max_devices,
+        policy.idle_seconds
     );
+    if policy.allow_any {
+        outln!("Devices outside the profiles: allowed with a reason");
+    }
+    for (name, profile) in &policy.profiles {
+        let preferred = if catalog.preferred.contains(name) {
+            " (preferred)"
+        } else if policy.default.as_deref() == Some(name) {
+            " (default)"
+        } else {
+            ""
+        };
+        outln!(
+            "{}: {} / {}{}",
+            palette.paint(Style::Heading, name),
+            profile.device,
+            if profile.runtime.is_empty() {
+                "latest iOS"
+            } else {
+                &profile.runtime
+            },
+            preferred
+        );
+    }
+    if policy.profiles.is_empty() {
+        outln!("No configured profiles");
+    }
+    outln!("{}", palette.paint(Style::Heading, "Runtimes"));
+    for runtime in &catalog.runtimes {
+        outln!("  {}  {}", runtime.name, runtime.identifier);
+    }
+    outln!("{}", palette.paint(Style::Heading, "Device types"));
+    for device in &catalog.device_types {
+        outln!("  {}  {}", device.name, device.identifier);
+    }
 }
 
 pub(super) async fn history(
@@ -82,31 +122,6 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
 }
 
 pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
-    outln!(
-        "Capacity: {} booted, {} devices",
-        overview.policy.max_booted,
-        overview.policy.max_devices
-    );
-    for (name, profile) in &overview.policy.profiles {
-        let preferred = if overview.preferred.contains(name) {
-            " (preferred)"
-        } else if overview.policy.default.as_deref() == Some(name) {
-            " (default)"
-        } else {
-            ""
-        };
-        outln!(
-            "{}: {} / {}{}",
-            palette.paint(Style::Heading, name),
-            profile.device,
-            if profile.runtime.is_empty() {
-                "latest iOS"
-            } else {
-                &profile.runtime
-            },
-            preferred
-        );
-    }
     for sim in &overview.simulators {
         outln!(
             "{}  {}  {}  {}  {}",
@@ -117,8 +132,8 @@ pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
             sim.runtime
         );
     }
-    if overview.policy.profiles.is_empty() && overview.simulators.is_empty() {
-        outln!("No configured profiles or managed simulators");
+    if overview.simulators.is_empty() {
+        outln!("No managed simulators");
     }
 }
 

@@ -35,13 +35,15 @@ pub(super) async fn show(
             })?;
         }
         Some(CatalogKind::Sim) => {
-            let catalog = simulators::fetch_catalog(ctx).await?;
-            ctx.show(&catalog, simulators::render_catalog)?;
+            let catalog = simulators::fetch_catalog(ctx, &workspace).await?;
+            ctx.show(&catalog, |catalog| {
+                simulators::render_catalog(catalog, Palette::stdout(ctx.json))
+            })?;
         }
         None => {
             let catalog = Catalog {
                 ports: ports::fetch_catalog(ctx, &workspace).await?,
-                simulators: simulators::fetch_catalog(ctx).await?,
+                simulators: simulators::fetch_catalog(ctx, &workspace).await?,
             };
             ctx.show(&catalog, |catalog| {
                 render_catalog(catalog, Palette::stdout(ctx.json))
@@ -55,5 +57,5 @@ fn render_catalog(catalog: &Catalog, palette: Palette) {
     outln!("{}", palette.paint(Style::Heading, "Ports"));
     ports::render_catalog(&catalog.ports, palette);
     outln!("{}", palette.paint(Style::Heading, "Simulators"));
-    simulators::render_catalog(&catalog.simulators);
+    simulators::render_catalog(&catalog.simulators, palette);
 }

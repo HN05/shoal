@@ -1084,7 +1084,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ResourceOverview { workspace } => {
             Body::ResourceOverview(manager.resource_overview(&workspace).await?)
         }
-        Method::SimCatalog => Body::SimCatalog(manager.simulator_catalog().await?),
+        Method::SimCatalog { workspace } => {
+            Body::SimCatalog(manager.simulator_catalog(&workspace).await?)
+        }
         Method::SimOverview { workspace } => {
             Body::SimOverview(manager.simulator_overview(workspace.as_deref()).await?)
         }

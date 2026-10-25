@@ -335,11 +335,13 @@ Release before changing mode; there are no atomic upgrades.
 ## Simulators
 
 ```sh
+shoal catalog sim
 shoal leases sim
 shoal acquire sim --queue
 shoal release sim
 ```
 
+`catalog sim` lists the configured profiles and installed runtimes.
 Acquisition uses configured preferences and returns an exclusive lease. Use its
 `udid` explicitly with app/test tools, never simctl's ambiguous `booted` selector.
 Let Shoal manage device creation, boot, shutdown, erase, and deletion. Exit 2

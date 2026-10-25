@@ -64,8 +64,7 @@ pub async fn authorize(
         | Method::ListChats
         | Method::FindWorkspaces { .. }
         | Method::ListRepositories
-        | Method::ForgeType { .. }
-        | Method::SimCatalog => None,
+        | Method::ForgeType { .. } => None,
         Method::HoldList { workspace }
         | Method::StopDemos { workspace, .. }
         | Method::DemoProgress { workspace, .. }
@@ -135,6 +134,7 @@ pub async fn authorize(
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }
         | Method::PortCatalog { workspace }
+        | Method::SimCatalog { workspace }
         | Method::SecretAcquire { workspace, .. }
         | Method::SecretRelease { workspace, .. }
         | Method::LayeredConfig {

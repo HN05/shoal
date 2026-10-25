@@ -802,7 +802,9 @@ pub enum Method {
         workspace: String,
     },
     // Simulators.
-    SimCatalog,
+    SimCatalog {
+        workspace: String,
+    },
     SimOverview {
         workspace: Option<String>,
     },

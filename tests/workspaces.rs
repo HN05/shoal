@@ -6275,9 +6275,14 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
     };
     set_runtimes(false);
     fixture.add("worker");
-    let overview = fixture.run(&["leases", "sim", "--workspace", "worker"]);
-    assert!(overview.status.success());
-    assert!(String::from_utf8_lossy(&overview.stdout).contains("latest iOS"));
+    let catalog = fixture.run(&["catalog", "sim", "--workspace", "worker"]);
+    assert!(catalog.status.success());
+    let catalog = String::from_utf8_lossy(&catalog.stdout);
+    assert!(catalog.contains("latest iOS"), "{catalog}");
+    assert!(
+        catalog.contains("iOS 26.10  com.apple.CoreSimulator.SimRuntime.iOS-26-10"),
+        "{catalog}"
+    );
     let first = fixture.ok(&["acquire", "sim", "--workspace", "worker"]);
     assert_eq!(
         first["runtime"],
@@ -6343,19 +6348,56 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 
 #[test]
 #[cfg(target_os = "macos")]
+fn global_config_changes_reload_a_running_daemon() {
+    let fixture = Fixture::with_tools(None, true);
+    fixture.add("worker");
+    let policy = || fixture.ok(&["catalog", "sim", "--workspace", "worker"])["policy"].clone();
+    assert!(policy()["default"].is_null());
+    let result = fixture.ok(&[
+        "config",
+        "set",
+        "simulators.profiles.phone.device",
+        "iPhone 17",
+        "simulators.profiles.phone.runtime",
+        "iOS 27",
+        "simulators.default",
+        "phone",
+    ]);
+    assert_eq!(result["daemon_reloaded"], true);
+    assert_eq!(policy()["default"], "phone");
+    let catalog = fixture.ok(&["catalog", "--workspace", "worker"]);
+    assert_eq!(catalog["simulators"]["policy"], policy());
+    assert!(catalog["ports"]["configured"].is_object());
+    // Hand edits apply on an explicit reload; an invalid file keeps the running config.
+    let config = fixture.root.path().join(".config/shoal/config.toml");
+    let edited = fs::read_to_string(&config).unwrap();
+    fs::write(&config, format!("{edited}\n[simulators]\nmax_booted = 0\n")).unwrap();
+    assert!(!fixture.run(&["daemon", "reload"]).status.success());
+    assert_eq!(policy()["default"], "phone");
+    fs::write(&config, format!("{NO_GRACE}{FORGEJO_HOST}")).unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(policy()["default"].is_null());
+    let scoped = fixture
+        .command()
+        .args(["daemon", "reload"])
+        .env("SHOAL_SCOPE_TOKEN", "test-scope")
+        .output()
+        .unwrap();
+    assert!(!scoped.status.success());
+}
+
+#[test]
+#[cfg(target_os = "macos")]
 fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
     fixture.add("second");
+    let catalog = fixture.ok(&["catalog", "sim", "--workspace", "first"]);
+    assert_eq!(catalog["policy"]["max_booted"], 1);
+    assert_eq!(catalog["policy"]["max_devices"], 2);
+    assert!(catalog["policy"]["profiles"]["phone"].is_object());
     let overview = fixture.ok(&["leases", "sim", "--workspace", "first"]);
-    assert_eq!(overview["policy"]["max_booted"], 1);
-    assert_eq!(overview["policy"]["max_devices"], 2);
-    assert!(overview["policy"]["profiles"]["phone"].is_object());
-    assert_eq!(overview["simulators"], serde_json::json!([]));
-    assert_eq!(
-        fixture.ok(&["leases", "sim", "--workspace", "first"]),
-        overview
-    );
+    assert_eq!(overview, serde_json::json!({"simulators": []}));
     let first = fixture.ok(&["acquire", "sim", "--workspace", "first"]);
     assert_eq!(first["state"], "leased");
     assert_eq!(fixture.ok(&["status", "first"])["simulators"][0], first);
