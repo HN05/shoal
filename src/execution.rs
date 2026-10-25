@@ -3,6 +3,7 @@
 //! completion. The daemon never touches terminal I/O. A detached launch runs
 //! the same wrapper in a background `shoal` process with a log file instead
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
+mod demo;
 mod detached;
 mod link;
 pub mod recovery;
@@ -16,7 +17,7 @@ use std::{
     os::unix::{fs::OpenOptionsExt, process::ExitStatusExt},
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{
     process::{Child, Command},
@@ -101,6 +102,10 @@ enum Mode {
     Setup {
         json: bool,
     },
+    /// A demo, restarted whenever its command exits until it is stopped.
+    Demo {
+        launch: Box<crate::demos::Launch>,
+    },
 }
 
 impl Mode {
@@ -109,7 +114,8 @@ impl Mode {
             Self::Command { .. }
             | Self::Recovery { .. }
             | Self::Detached { .. }
-            | Self::Publish => ExecutionKind::Command,
+            | Self::Publish
+            | Self::Demo { .. } => ExecutionKind::Command,
             Self::Land { .. } => ExecutionKind::Land,
             Self::Setup { .. } => ExecutionKind::Setup,
         }
@@ -197,6 +203,23 @@ pub async fn run_detached_wrapper(
     run_tracked(paths, workspace, command, Mode::Detached { log }, agent).await
 }
 
+/// A demo's wrapper, which records `launch` with its execution and restarts
+/// `command` until the demo is stopped; a stopped demo exits 0.
+pub async fn run_demo(
+    paths: &Paths,
+    workspace: String,
+    launch: crate::demos::Launch,
+    command: Vec<OsString>,
+) -> Result<i32> {
+    ensure!(!command.is_empty(), "a command is required after --");
+    let mode = Mode::Demo {
+        launch: Box::new(launch),
+    };
+    run_tracked(paths, workspace, command, mode, None)
+        .await
+        .map(|_| 0)
+}
+
 pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
     run_tracked(paths, workspace, command, Mode::Publish, None).await
 }
@@ -235,7 +258,9 @@ async fn run_tracked(
     let wake = wake::session(integration, &mode);
     let mut next_command = command;
     let mut recovery_record = None;
+    let mut restarts = demo::Restarts::default();
     let mut result = loop {
+        let started = Instant::now();
         let outcome = if mode.is_setup() && next_command.is_empty() {
             Ok(Outcome::Exited(0))
         } else {
@@ -258,6 +283,20 @@ async fn run_tracked(
             eprintln!("shoal: {refusal}; command stopped");
         }
         match outcome {
+            Ok(Outcome::Exited(code)) if matches!(mode, Mode::Demo { .. }) => {
+                let delay = restarts.after(started.elapsed());
+                eprintln!(
+                    "shoal: demo exited with status {code}; restarting in {}s",
+                    delay.as_secs()
+                );
+                match demo::await_restart(&mut link, delay).await? {
+                    None => continue,
+                    Some(reason) => {
+                        eprintln!("shoal: demo stopped: {reason}");
+                        break Ok(code);
+                    }
+                }
+            }
             Ok(Outcome::Exited(code)) => break Ok(code),
             Ok(Outcome::Stopped { code, reason }) => {
                 let stopped = if recovery.is_some() {
@@ -363,7 +402,10 @@ async fn open_execution(
         agent: agent.clone(),
         recover,
         reattach: mode.reattaches(),
-        demo: None,
+        demo: match mode {
+            Mode::Demo { launch } => Some(launch.clone()),
+            _ => None,
+        },
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
@@ -959,6 +1001,9 @@ fn spawn(
         .args(&command[1..])
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
+    if let Mode::Demo { launch } = mode {
+        process.envs(&launch.environment);
+    }
     if let Some(auth) = auth {
         auth.apply(&mut process);
     }

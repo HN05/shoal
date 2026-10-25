@@ -1663,6 +1663,15 @@ pub enum InternalCommand {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
+    /// A demo's wrapper, restarting its command until the demo is stopped.
+    #[command(name = internal::DEMO)]
+    Demo {
+        workspace: String,
+        #[arg(long)]
+        launch: String,
+        #[arg(last = true, required = true)]
+        command: Vec<OsString>,
+    },
     /// Copy the main checkout's ignored files inside tracked setup, then run setup.
     #[command(name = internal::COPY_IGNORED)]
     CopyIgnored {

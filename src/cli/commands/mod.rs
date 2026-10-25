@@ -748,6 +748,15 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Add { plan } => super::terminal::session_worker(ctx, &plan).await,
+        InternalCommand::Demo {
+            workspace,
+            launch,
+            command,
+        } => {
+            let launch = serde_json::from_str(&launch)
+                .map_err(|error| anyhow::anyhow!("invalid demo launch: {error}"))?;
+            crate::execution::run_demo(&ctx.paths, workspace, launch, command).await
+        }
         InternalCommand::Session {
             workspace,
             agent,

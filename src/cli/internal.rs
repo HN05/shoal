@@ -14,6 +14,7 @@ pub const HERDR_WATCH: &str = "herdr-watch";
 pub const LAND: &str = "land";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
+pub const DEMO: &str = "demo";
 pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
 pub const ADD: &str = "add";
