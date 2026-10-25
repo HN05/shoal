@@ -1,10 +1,12 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 use crate::{
     cli::{WorkspaceScope, client, context::Context, terminal, ui},
-    daemon::recovery::{ReconcileOptions, Report},
+    daemon::{
+        recovery::{ReconcileOptions, Report},
+        workspace::Discarded,
+    },
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume,
-        discard_saved,
     },
     model::{Inspection, Workspace},
     protocol::{ConfigTarget, Method},
@@ -41,17 +43,20 @@ pub async fn run(
     execution: Option<String>,
     discard: bool,
 ) -> Result<i32> {
+    if discard {
+        return discard_work(ctx, workspace, execution).await;
+    }
     let mut inspection = client::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
-        saved.retain_execution(execution, !discard);
+        saved.retain_execution(execution, true);
     }
     if saved.is_empty()
         && execution.is_none()
         && let Some(last) = LastSession::load(&ctx.paths, &workspace_id)?
     {
-        return continue_last_session(ctx, &inspection.workspace, last, discard).await;
+        return continue_last_session(ctx, &inspection.workspace, last).await;
     }
     ensure!(
         !saved.is_empty(),
@@ -60,22 +65,10 @@ pub async fn run(
     let recovery_id = execution
         .as_deref()
         .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
-    if !discard {
-        reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
-    }
+    reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
     inspection = client::inspect(&ctx.paths, workspace_id).await?;
     let workspace = &inspection.workspace;
     let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
-    if discard {
-        let ids = discard_saved(&saved, active)?;
-        ctx.show(&json!({"discarded": ids}), |_| {
-            outln!(
-                "Discarded stopped agents and commands for {}",
-                workspace.name
-            )
-        })?;
-        return Ok(0);
-    }
     let _commands = claim_commands(&mut saved.commands);
     let (selected_id, selected) = match saved.agents.as_slice() {
         [] => {
@@ -117,24 +110,42 @@ pub async fn run(
     launch(ctx, workspace, recovery, records).await
 }
 
-/// Continue the agent that last exited on its own in the workspace, or forget
-/// it with `discard`.
+/// Forget the workspace's stopped work, only `execution`'s when given, or
+/// else its last session.
+async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
+    let discarded = client::request::<Discarded>(
+        &ctx.paths,
+        Method::DiscardStoppedWork {
+            workspace,
+            execution,
+        },
+    )
+    .await?;
+    match &discarded.last_session {
+        Some(agent) => ctx.show(&json!({"discarded": [], "last_session": agent}), |_| {
+            outln!(
+                "Discarded the last agent session for {}",
+                discarded.workspace
+            )
+        })?,
+        None => ctx.show(&json!({"discarded": discarded.executions}), |_| {
+            outln!(
+                "Discarded stopped agents and commands for {}",
+                discarded.workspace
+            )
+        })?,
+    }
+    Ok(0)
+}
+
+/// Continue the agent that last exited on its own in the workspace.
 async fn continue_last_session(
     ctx: &Context,
     workspace: &Workspace,
     last: LastSession,
-    discard: bool,
 ) -> Result<i32> {
     let path = LastSession::path(&ctx.paths, &workspace.id);
     let _claim = claim(&path)?;
-    if discard {
-        consume(&path)?;
-        ctx.show(
-            &json!({"discarded": [], "last_session": last.agent}),
-            |_| outln!("Discarded the last agent session for {}", workspace.name),
-        )?;
-        return Ok(0);
-    }
     if last.moved {
         return start_moved(ctx, workspace, &last.agent, None, vec![path]).await;
     }
@@ -342,9 +353,15 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     if discard {
         let mut ids = Vec::new();
         for (workspace, saved) in &stopped {
-            let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
-            let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
-            ids.extend(discard_saved(saved, active)?);
+            // Each record by itself, leaving agents a wrapper waits to restore.
+            for execution in saved.execution_ids() {
+                let method = Method::DiscardStoppedWork {
+                    workspace: workspace.id.clone(),
+                    execution: Some(execution),
+                };
+                let discarded = client::request::<Discarded>(&ctx.paths, method).await?;
+                ids.extend(discarded.executions);
+            }
         }
         let names = stopped.iter().map(|(workspace, _)| workspace.name.as_str());
         let names = names.collect::<Vec<_>>().join(", ");

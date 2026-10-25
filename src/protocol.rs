@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 129;
+pub const VERSION: u32 = 130;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -307,6 +307,12 @@ pub enum Method {
     },
     WorkspaceUndone {
         workspace: String,
+    },
+    /// Forget the workspace's stopped work, only `execution`'s when given,
+    /// or else its last session.
+    DiscardStoppedWork {
+        workspace: String,
+        execution: Option<String>,
     },
     /// `cleanup` requests cleanup even when `[done] cleanup` is false.
     WorkspaceDone {
@@ -944,6 +950,7 @@ response_bodies! {
     ApiResponse(Vec<String>),
     Opened(crate::daemon::links::proposals::OpenOutcome),
     Completion(crate::model::Completion),
+    Discarded(crate::daemon::workspace::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),

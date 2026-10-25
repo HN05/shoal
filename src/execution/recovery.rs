@@ -629,6 +629,15 @@ impl Saved {
         self.agents.is_empty() && self.commands.is_empty()
     }
 
+    /// The executions of the saved agents and commands.
+    pub fn execution_ids(&self) -> Vec<String> {
+        self.agents
+            .iter()
+            .map(|(id, _)| id.clone())
+            .chain(self.commands.iter().map(|command| command.id.clone()))
+            .collect()
+    }
+
     /// Drop agents whose wrapper is still waiting to restore them, since
     /// `shoal resume` has nothing to do for them.
     pub fn retain_unattended(&mut self) {

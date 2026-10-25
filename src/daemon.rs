@@ -725,6 +725,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceUndone { workspace } => {
             Body::Completion(manager.undo_done(&workspace).await?)
         }
+        Method::DiscardStoppedWork {
+            workspace,
+            execution,
+        } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
         Method::AcknowledgePrUpdates {
             workspace,
             deliveries,

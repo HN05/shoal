@@ -43,12 +43,7 @@ pub(crate) fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Res
     for command in &saved.commands {
         consume(&command.path)?;
     }
-    Ok(saved
-        .agents
-        .iter()
-        .map(|(id, _)| id.clone())
-        .chain(saved.commands.iter().map(|command| command.id.clone()))
-        .collect())
+    Ok(saved.execution_ids())
 }
 
 #[cfg(test)]
