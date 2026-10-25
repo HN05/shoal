@@ -151,6 +151,9 @@ pub struct Manager {
     agents: Mutex<HashMap<String, agents::Agent>>,
     /// Why the daemon asked connected executions to stop.
     stop_requests: Mutex<HashMap<String, executions::StopRequest>>,
+    /// Recent demo launches whose execution ended before their command ran,
+    /// for the start waiting on each.
+    unrun_demo_launches: std::sync::Mutex<std::collections::VecDeque<String>>,
     /// Set under the connections lock once shutdown stops executions.
     shutting_down: std::sync::atomic::AtomicBool,
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
@@ -230,6 +233,7 @@ impl Manager {
             unattachable: Default::default(),
             agents: Mutex::new(HashMap::new()),
             stop_requests: Mutex::new(HashMap::new()),
+            unrun_demo_launches: Default::default(),
             shutting_down: std::sync::atomic::AtomicBool::new(false),
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),

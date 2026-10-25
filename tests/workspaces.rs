@@ -23705,7 +23705,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     ]);
     assert!(!missing.status.success());
     assert!(
-        String::from_utf8_lossy(&missing.stderr).contains("not an executable"),
+        String::from_utf8_lossy(&missing.stderr).contains("did not start"),
         "{}",
         String::from_utf8_lossy(&missing.stderr)
     );

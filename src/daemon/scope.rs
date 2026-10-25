@@ -68,6 +68,7 @@ pub async fn authorize(
         | Method::SimCatalog => None,
         Method::HoldList { workspace }
         | Method::StopDemos { workspace, .. }
+        | Method::DemoProgress { workspace, .. }
         | Method::SetBaseWorkspace { workspace, .. }
         | Method::RenameWorkspace { workspace, .. }
         | Method::SplitWorkspace { workspace, .. }

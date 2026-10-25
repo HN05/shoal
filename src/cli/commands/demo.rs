@@ -15,7 +15,7 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    demos::{Demo, Launch, Preset, Running},
+    demos::{Demo, Launch, Preset, Progress, Running},
     model::Workspace,
     protocol::{ConfigTarget, Method},
 };
@@ -122,7 +122,6 @@ async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
-    ensure_runnable(&workspace, &chosen.command)?;
     replace(ctx, &workspace, &chosen.name).await?;
     let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
         Ok(provided) => provided,
@@ -259,23 +258,23 @@ async fn place(
 /// Wait until the worker has recorded `launch`, which shows its command runs.
 async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
     let deadline = tokio::time::Instant::now() + START_LIMIT;
-    let mut recorded_before = false;
     loop {
-        let recorded = running(ctx, Some(workspace))
-            .await?
-            .into_iter()
-            .find(|demo| demo.launch.id == launch.id);
-        match recorded {
-            Some(demo) if demo.has_run => return Ok(demo),
-            Some(_) => recorded_before = true,
-            // The record went with an execution whose command never ran.
-            None if recorded_before => return Err(not_started(launch).await),
-            None => {}
+        let progress = client::request::<Progress>(
+            &ctx.paths,
+            Method::DemoProgress {
+                workspace: workspace.id.clone(),
+                launch: launch.id.clone(),
+            },
+        )
+        .await?;
+        match progress {
+            Progress::Running { demo } => return Ok(*demo),
+            Progress::Ended => return Err(not_started(launch).await),
+            Progress::Starting if tokio::time::Instant::now() >= deadline => {
+                return Err(not_started(launch).await);
+            }
+            Progress::Starting => tokio::time::sleep(START_POLL).await,
         }
-        if tokio::time::Instant::now() >= deadline {
-            return Err(not_started(launch).await);
-        }
-        tokio::time::sleep(START_POLL).await;
     }
 }
 
@@ -305,25 +304,6 @@ async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) ->
         json!({"stopping": true, "name": name}),
     )?;
     Ok(0)
-}
-
-/// Refuse a command whose executable is missing before anything starts, as
-/// its demo would end before its record says it ran.
-fn ensure_runnable(workspace: &Workspace, command: &[OsString]) -> Result<()> {
-    let program = command.first().context("a demo needs a command")?;
-    let path = std::path::Path::new(program);
-    let found = if path.is_relative() && path.components().count() > 1 {
-        crate::fsutil::is_executable(&workspace.path.join(path)).unwrap_or(false)
-    } else {
-        let search = std::env::var_os("PATH").unwrap_or_default();
-        crate::cli::agents::program_available(&program.to_string_lossy(), &search)
-    };
-    ensure!(
-        found,
-        "cannot start the demo: {} is not an executable in the workspace or on PATH",
-        program.to_string_lossy()
-    );
-    Ok(())
 }
 
 /// Stop a running demo `name` and wait for it to end, so the new one neither

@@ -647,6 +647,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::HoldList { workspace } => Body::Holds(manager.workspace(&workspace).await?.holds),
         Method::ListDemos { workspace } => Body::Demos(manager.demos(workspace.as_deref()).await?),
+        Method::DemoProgress { workspace, launch } => {
+            Body::DemoProgress(manager.demo_progress(&workspace, &launch).await?)
+        }
         Method::StopDemos { workspace, name } => {
             manager.stop_demos(&workspace, name).await?;
             Body::Ok

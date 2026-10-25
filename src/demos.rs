@@ -71,6 +71,19 @@ pub struct Running {
     pub launch: Launch,
 }
 
+/// How far a launch the starting CLI waits on got.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Progress {
+    /// Not recorded yet, or recorded before its command started.
+    Starting,
+    Running {
+        demo: Box<Running>,
+    },
+    /// Its execution ended before its command started.
+    Ended,
+}
+
 /// The `shoal demo` subcommands, which `shoal demo NAME` could not tell
 /// apart from a demo of that name.
 const RESERVED: &[&str] = &["ls", "screen", "send", "start", "stop"];

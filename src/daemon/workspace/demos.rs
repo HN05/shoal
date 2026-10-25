@@ -4,17 +4,21 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{
     Manager,
     executions::{Save, StopPolicy, StopRequest},
 };
 use crate::{
-    demos::{Launch, Running},
+    demos::{Launch, Progress, Running},
     model::Execution,
     process::{execution::Processes, identity as process},
 };
+
+/// Launches that ended unrun the daemon remembers; a start asks about its
+/// own within moments.
+const UNRUN_LAUNCHES: usize = 64;
 
 impl Manager {
     /// The running demos of `selector`'s workspace, or of every workspace.
@@ -26,6 +30,67 @@ impl Manager {
         self.store
             .run(move |db| list(db, workspace.as_deref()))
             .await
+    }
+
+    /// How far the start of `launch` in `selector`'s workspace got.
+    pub async fn demo_progress(&self, selector: &str, launch: &str) -> Result<Progress> {
+        let recorded = self
+            .demos(Some(selector))
+            .await?
+            .into_iter()
+            .find(|demo| demo.launch.id == launch);
+        Ok(match recorded {
+            Some(demo) if demo.has_run => Progress::Running {
+                demo: Box::new(demo),
+            },
+            Some(_) => Progress::Starting,
+            None if self.launch_ended_unrun(launch) => Progress::Ended,
+            None => Progress::Starting,
+        })
+    }
+
+    /// The launch of the demo `execution` runs, while its command has not
+    /// started; read before the execution finishes, which deletes it.
+    pub(crate) async fn unrun_demo_launch(&self, execution: &str) -> Result<Option<String>> {
+        let execution = execution.to_owned();
+        self.store
+            .run(move |db| {
+                let record: Option<String> = db
+                    .query_row(
+                        "SELECT record FROM demos WHERE execution_id=?1 AND has_run=0",
+                        [execution],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                record
+                    .map(|record| {
+                        serde_json::from_str::<Launch>(&record)
+                            .map(|launch| launch.id)
+                            .context("invalid demo record")
+                    })
+                    .transpose()
+            })
+            .await
+    }
+
+    /// Remember that `launch` ended before its command ran.
+    pub(crate) fn remember_unrun_launch(&self, launch: String) {
+        let mut launches = self
+            .unrun_demo_launches
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if launches.len() == UNRUN_LAUNCHES {
+            launches.pop_front();
+        }
+        launches.push_back(launch);
+    }
+
+    fn launch_ended_unrun(&self, launch: &str) -> bool {
+        self.unrun_demo_launches
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .any(|ended| ended == launch)
     }
 
     /// Ask the workspace's demo `name`, or every demo there, to stop. Their

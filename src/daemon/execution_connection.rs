@@ -533,9 +533,18 @@ async fn finish(
     if agent.is_some() && result.is_ok() {
         manager.stop_exited_agent_processes(&execution_id).await;
     }
+    // The record goes with the execution, so a start waiting on it learns
+    // from the daemon that its command never ran.
+    let unrun = manager
+        .unrun_demo_launch(&execution_id)
+        .await
+        .unwrap_or_default();
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
+    if let Some(launch) = unrun {
+        manager.remember_unrun_launch(launch);
+    }
     if let Some(agent) = &agent
         && result.is_ok()
     {

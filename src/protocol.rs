@@ -304,6 +304,11 @@ pub enum Method {
     ListDemos {
         workspace: Option<String>,
     },
+    /// How far the start of one demo launch in a workspace got.
+    DemoProgress {
+        workspace: String,
+        launch: String,
+    },
     /// Ask a workspace's demos to stop: the one named, or every one.
     StopDemos {
         workspace: String,
@@ -970,6 +975,7 @@ response_bodies! {
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
     Demos(Vec<crate::demos::Running>),
+    DemoProgress(crate::demos::Progress),
     Workspaces(Vec<Workspace>),
     Chat(crate::model::Chat),
     Chats(Vec<crate::model::Chat>),
