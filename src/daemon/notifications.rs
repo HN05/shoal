@@ -244,7 +244,7 @@ fn withdraw_message(
         .with_context(|| format!("workspace {} sent no notification {id}", workspace.name))?;
     ensure!(
         !notification.read,
-        "notification {id} was already shown; send a correction with shoal notify"
+        "notification {id} was already shown; send a correction with shoal alerts send"
     );
     tx.execute("DELETE FROM notifications WHERE id=?1", [id])?;
     Ok(notification)

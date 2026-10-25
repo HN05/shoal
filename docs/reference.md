@@ -402,7 +402,7 @@ Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you
 searching for the current workspace's items when it has any, otherwise on the
 list of workspaces; `shoal inbox` and `shoal work` open it on
 their view on a terminal. Tab cycles the inbox, the workspaces and recent
-notifications, which it marks read as `shoal notifications` does; there
+notifications, which it marks read as `shoal alerts` does; there
 Enter enters the notification's workspace (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow;
 commands that only Shoal, its agent hooks and integrations run live under the
@@ -1216,7 +1216,7 @@ A workspace's coordinator is the agent of its nearest ancestor that has one,
 or the running [chat](#chats) that owns the workspace or an ancestor nearer than
 that agent. The coordinator receives, as messages naming the workspace, what
 would otherwise notify the user. That covers the workspace agent's messages from
-`shoal notify`, its questions, its completion, and its ready-for-review marks,
+`shoal alerts send`, its questions, its completion, and its ready-for-review marks,
 which never notify the user otherwise. It also covers the daemon's reports that
 the workspace's agent exited or was stopped. Without a coordinator, or when its unread messages are full,
 the user receives them as before. A workspace without an agent of its own is its
@@ -2360,7 +2360,7 @@ workspace itself when nothing is linked, ready for review at the current HEAD.
 Items are selected like `link`, and a selected item must be linked; a kind with
 no linked items is an error. Marking again moves the mark to the current HEAD, and
 marking linked items replaces a mark made while nothing was linked.
-Marks never notify, record completion, or affect cleanup; use `shoal notify` to
+Marks never notify, record completion, or affect cleanup; use `shoal alerts send` to
 ask for attention. New commits make a mark outdated: `work` shows
 `ready (outdated)`, and `status`, `inspect` and `work --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
@@ -2539,13 +2539,13 @@ starts when the daemon upgrades and does not reconstruct older changes.
 ### Notifications
 
 ```sh
-shoal notifications            # Oldest new ones first, then marked read; says how many remain
-shoal notifications --all      # Recent ones including read (--limit, default 50)
-shoal notifications --follow   # Keep printing, and raise terminal notifications
-shoal notifications --keep-unread  # Show without marking read, also with --follow
-shoal notifications clear      # Delete all of them, including unread ones
-shoal notify "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
-shoal notifications withdraw <number> [--workspace W]   # Take back an unread one notify added
+shoal alerts            # Oldest new ones first, then marked read; says how many remain
+shoal alerts --all      # Recent ones including read (--limit, default 50)
+shoal alerts --follow   # Keep printing, and raise terminal notifications
+shoal alerts --keep-unread  # Show without marking read, also with --follow
+shoal alerts clear      # Delete all of them, including unread ones
+shoal alerts send "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
+shoal alerts withdraw <number> [--workspace W]   # Take back an unread one send added
 ```
 
 The daemon records what happens while you are not looking: a resource or
@@ -2553,7 +2553,7 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
+idle cleanup, and automatic cleanup that starts failing. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
@@ -2629,7 +2629,7 @@ shoal questions <number> --answer <answer> # Answer text or a choice number
 
 `shoal questions ask` records a question for the user from a workspace's agents: the
 decision, the recommended answer, an optional reason and optional choices, each
-one line with the same limits as `notify`. It raises a `question_asked`
+one line with the same limits as `alerts send`. It raises a `question_asked`
 notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,
 resolving a choice number to that choice, and queues it for the workspace's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks

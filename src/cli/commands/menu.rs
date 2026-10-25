@@ -436,7 +436,7 @@ async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
 }
 
 /// Recent notifications, newest first; showing the unread ones marks them
-/// read, as `shoal notifications` does.
+/// read, as `shoal alerts` does.
 async fn notification_rows(ctx: &Context) -> Result<Entries> {
     let method = Method::ListNotifications {
         unread_only: false,

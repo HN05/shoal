@@ -5276,7 +5276,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
             .unwrap()
             .is_empty()
     );
-    let notifications = fixture.ok(&["notifications"]);
+    let notifications = fixture.ok(&["alerts"]);
     let messages = notifications
         .as_array()
         .unwrap()
@@ -5287,11 +5287,8 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         messages.contains(&"claude exited with code 0"),
         "{messages:?}"
     );
-    assert!(fixture.ok(&["notifications", "clear"])["cleared"].as_u64() >= Some(1));
-    assert_eq!(
-        fixture.ok(&["notifications", "--all"]),
-        Value::Array(vec![])
-    );
+    assert!(fixture.ok(&["alerts", "clear"])["cleared"].as_u64() >= Some(1));
+    assert_eq!(fixture.ok(&["alerts", "--all"]), Value::Array(vec![]));
 }
 
 #[test]
@@ -6095,7 +6092,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         serde_json::from_slice::<Value>(&busy.stdout).unwrap()["acquired"],
         false
     );
-    fixture.ok(&["notifications"]);
+    fixture.ok(&["alerts"]);
     let mut waiting = fixture
         .command()
         .args(["--json", "sim", "acquire", "second", "--queue"])
@@ -7067,7 +7064,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     fixture.daemon.child.wait().unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["resource", "--all"]), leases);
-    fixture.ok(&["notifications"]);
+    fixture.ok(&["alerts"]);
     let mut waiter = fixture
         .command()
         .args([
@@ -8013,7 +8010,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             .code(),
         Some(2)
     );
-    fixture.ok(&["notifications"]);
+    fixture.ok(&["alerts"]);
     let mut waiter = fixture
         .command()
         .args([
@@ -8413,16 +8410,16 @@ esac
         "{to_inbox}"
     );
     // Notifications name their workspace, and showing them marks them read.
-    fixture.ok(&["notify", "build finished", "--workspace", "asker"]);
+    fixture.ok(&["alerts", "send", "build finished", "--workspace", "asker"]);
     let shown = fixture.run(&["internal", "menu-rows", "notifications"]);
     let shown = String::from_utf8(shown.stdout).unwrap();
     assert!(
         shown.starts_with("notification:asker\t") && shown.contains("build finished"),
         "{shown}"
     );
-    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     // A workspace process cannot see them, even having cleared its token.
-    fixture.ok(&["notify", "agent only", "--workspace", "asker"]);
+    fixture.ok(&["alerts", "send", "agent only", "--workspace", "asker"]);
     let cleared = fixture
         .command()
         .args(["run", "--workspace", "asker", "--", "sh", "-c"])
@@ -8434,7 +8431,7 @@ esac
     assert!(!cleared.status.success(), "{cleared:?}");
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
     assert_eq!(
-        fixture.ok(&["notifications"]).as_array().unwrap().len(),
+        fixture.ok(&["alerts"]).as_array().unwrap().len(),
         1,
         "the refused listing marked nothing read"
     );
@@ -14030,7 +14027,7 @@ fn process_alive(pid: u32) -> bool {
 fn wait_for_busy(fixture: &Fixture, workspace: &str) {
     wait_until("blocked acquisition notification", || {
         fixture
-            .ok(&["notifications"])
+            .ok(&["alerts"])
             .as_array()
             .unwrap()
             .iter()
@@ -14596,10 +14593,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     ));
     fixture.add("holder");
     fixture.add("waiter");
-    assert_eq!(
-        fixture.run(&["notifications"]).stdout,
-        b"No new notifications\n"
-    );
+    assert_eq!(fixture.run(&["alerts"]).stdout, b"No new notifications\n");
     fixture.ok(&["resource", "acquire", "lock", "holder"]);
     for _ in 0..2 {
         let busy = fixture.run(&["resource", "acquire", "lock", "waiter"]);
@@ -14646,7 +14640,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     assert!(list.status.success());
     assert_eq!(
         String::from_utf8_lossy(&list.stderr),
-        "3 new notifications; run shoal notifications\n"
+        "3 new notifications; run shoal alerts\n"
     );
     let scoped = fixture
         .command()
@@ -14656,7 +14650,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             "holder",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
-            "notifications",
+            "alerts",
         ])
         .output()
         .unwrap();
@@ -14665,16 +14659,16 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     // A limited listing shows the oldest new entries and says how many remain.
     let first = fixture
         .command()
-        .args(["--json", "notifications", "--limit", "1"])
+        .args(["--json", "alerts", "--limit", "1"])
         .output()
         .unwrap();
     assert_eq!(
         String::from_utf8_lossy(&first.stderr),
-        "2 more new notifications; run shoal notifications again\n"
+        "2 more new notifications; run shoal alerts again\n"
     );
     let first: Value = serde_json::from_slice(&first.stdout).unwrap();
     assert_eq!(first[0]["kind"], "resource_busy", "{first}");
-    let shown = fixture.ok(&["notifications"]);
+    let shown = fixture.ok(&["alerts"]);
     assert_eq!(shown.as_array().unwrap().len(), 2, "{shown}");
     let mut shown = shown.as_array().unwrap().clone();
     shown.insert(0, first[0].clone());
@@ -14717,12 +14711,12 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     );
     assert!(shown.as_array().unwrap().iter().all(|n| n["read"] == false));
     // Shown once. `--all` still has them, now read; the text form has the time first.
-    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
-    let all = fixture.ok(&["notifications", "--all", "--limit", "2"]);
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
+    let all = fixture.ok(&["alerts", "--all", "--limit", "2"]);
     assert_eq!(all.as_array().unwrap().len(), 2);
     assert!(all.as_array().unwrap().iter().all(|n| n["read"] == true));
     assert_eq!(fixture.run(&["work"]).stderr, b"");
-    let text = fixture.run(&["notifications", "--all"]);
+    let text = fixture.run(&["alerts", "--all"]);
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
         text.lines()
@@ -14737,12 +14731,12 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             .code(),
         Some(2)
     );
-    assert_eq!(fixture.ok(&["notifications"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["alerts"]).as_array().unwrap().len(), 1);
 
     // A follower prints the daemon's removals as they happen and marks them read.
     let mut follower = fixture
         .command()
-        .args(["--json", "notifications", "--follow"])
+        .args(["--json", "alerts", "--follow"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -14771,7 +14765,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     );
     follower.kill().unwrap();
     follower.wait().unwrap();
-    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     assert_eq!(
         fixture.ok(&["daemon", "status"])["daemon"]["unread_notifications"],
         0
@@ -16287,7 +16281,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         fixture.ok(&["work", "inspect", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
     );
-    let notifications = fixture.ok(&["notifications"]);
+    let notifications = fixture.ok(&["alerts"]);
     assert!(
         notifications
             .to_string()
@@ -16391,7 +16385,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     }
     assert!(
         fixture
-            .ok(&["notifications"])
+            .ok(&["alerts"])
             .to_string()
             .contains("droid exited with code 7")
     );
@@ -16802,7 +16796,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .contains("external cleanup failed")
     );
     assert!(!fixture.run(&["work", "inspect", "hooked"]).status.success());
-    let notifications = fixture.ok(&["notifications"]);
+    let notifications = fixture.ok(&["alerts"]);
     assert!(
         notifications
             .as_array()
@@ -16843,20 +16837,24 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     let fixture = Fixture::new();
     fixture.add("sender");
     fixture.add("other");
-    let output = scoped_command(&fixture, "sender", &["notify", "PR #12 is ready to merge"]);
+    let output = scoped_command(
+        &fixture,
+        "sender",
+        &["alerts", "send", "PR #12 is ready to merge"],
+    );
     assert!(output.status.success(), "{output:?}");
-    // A message that stopped applying is withdrawn by the number notify gave.
-    let output = scoped_command(&fixture, "sender", &["notify", "tests are failing"]);
+    // A message that stopped applying is withdrawn by the number alerts send gave.
+    let output = scoped_command(&fixture, "sender", &["alerts", "send", "tests are failing"]);
     assert!(output.status.success(), "{output:?}");
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let id = sent["notification"].as_i64().unwrap().to_string();
-    let output = scoped_command(&fixture, "sender", &["notifications", "withdraw", &id]);
+    let output = scoped_command(&fixture, "sender", &["alerts", "withdraw", &id]);
     assert!(output.status.success(), "{output:?}");
     for args in [
-        &["notifications", "withdraw", &id][..],
-        &["notify", "hello", "--workspace", "other"][..],
-        &["notify", "two\nlines"],
-        &["notifications"],
+        &["alerts", "withdraw", &id][..],
+        &["alerts", "send", "hello", "--workspace", "other"][..],
+        &["alerts", "send", "two\nlines"],
+        &["alerts"],
     ] {
         let output = scoped_command(&fixture, "sender", args);
         assert!(
@@ -16864,7 +16862,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
             "scoped {args:?} unexpectedly succeeded"
         );
     }
-    let notifications = fixture.ok(&["notifications"]);
+    let notifications = fixture.ok(&["alerts"]);
     let messages: Vec<_> = notifications
         .as_array()
         .unwrap()
@@ -16887,7 +16885,7 @@ fn notifications_kept_unread_stay_new() {
     let fixture = Fixture::new();
     fixture.add("sender");
     for message in ["first", "second"] {
-        let output = scoped_command(&fixture, "sender", &["notify", message]);
+        let output = scoped_command(&fixture, "sender", &["alerts", "send", message]);
         assert!(output.status.success(), "{output:?}");
     }
     let unread = || fixture.ok(&["daemon", "status"])["daemon"]["unread_notifications"].clone();
@@ -16904,18 +16902,18 @@ fn notifications_kept_unread_stay_new() {
             .collect()
     };
     let before = unread();
-    let listed = fixture.ok(&["notifications", "--keep-unread"]);
+    let listed = fixture.ok(&["alerts", "--keep-unread"]);
     let listed = messages(listed.as_array().unwrap());
     let texts: Vec<_> = listed.iter().map(|(_, text)| text.as_str()).collect();
     assert_eq!(texts, ["first", "second"]);
     assert_eq!(unread(), before);
     // A limited listing counts what it printed among the ones remaining.
-    let limited = fixture.run(&["notifications", "--keep-unread", "--limit", "1"]);
+    let limited = fixture.run(&["alerts", "--keep-unread", "--limit", "1"]);
     let remaining = before.as_u64().unwrap() - 1;
     assert_eq!(
         String::from_utf8_lossy(&limited.stderr),
         format!(
-            "{remaining} more new notification{}; run shoal notifications again\n",
+            "{remaining} more new notification{}; run shoal alerts again\n",
             if remaining == 1 { "" } else { "s" }
         )
     );
@@ -16923,7 +16921,7 @@ fn notifications_kept_unread_stay_new() {
     // A follower resuming after the first sees only the second, and keeps it unread.
     let mut follower = fixture
         .command()
-        .args(["--json", "notifications", "--follow", "--keep-unread"])
+        .args(["--json", "alerts", "--follow", "--keep-unread"])
         .args(["--resume", &listed[0].0.to_string()])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -16953,9 +16951,9 @@ fn notifications_kept_unread_stay_new() {
     assert_eq!(followed, listed[1]);
     assert_eq!(unread(), before);
 
-    let read = fixture.ok(&["notifications"]);
+    let read = fixture.ok(&["alerts"]);
     assert_eq!(messages(read.as_array().unwrap()), listed);
-    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
 }
 
 #[test]
@@ -18770,7 +18768,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     wait_until("failed agent exit hook", || {
         fixture
-            .ok(&["notifications", "--all"])
+            .ok(&["alerts", "--all"])
             .as_array()
             .unwrap()
             .iter()
@@ -18929,7 +18927,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     assert_eq!(fixture.ok(&["done", "hooked"])["cleanup"], false);
     assert!(
         fixture
-            .ok(&["notifications", "--all"])
+            .ok(&["alerts", "--all"])
             .as_array()
             .unwrap()
             .iter()
@@ -19160,7 +19158,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             });
             let state = fixture.ok(&["work", "inspect", "multi"]);
             assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
-            fixture.ok(&["notifications"]);
+            fixture.ok(&["alerts"]);
             // A changed default must not change a kept assignment.
             fs::write(
                 root.join(".config/shoal/config.toml"),
@@ -19379,13 +19377,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
             .as_str()
             .is_some_and(|error| error.contains("could not check whether"))
     });
-    assert!(
-        fixture
-            .ok(&["notifications"])
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(fixture.ok(&["alerts"]).as_array().unwrap().is_empty());
     // A merge that left out the base's HEAD keeps the stack, since rebasing
     // onto it would drop the missing commits.
     fs::remove_file(root.join("fail")).unwrap();
@@ -20502,7 +20494,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["add", fixture.repo.to_str().unwrap(), "forbidden"],
         vec!["rm", "external", "--yes"],
         vec!["rm", "other", "--yes"],
-        vec!["notifications"],
+        vec!["alerts"],
         vec!["work", "inspect", "other"],
         vec!["work", "env"],
         vec!["work", "env", "other"],
@@ -20969,7 +20961,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --workspace chat-worker\n\"$shoal\" notify --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --workspace chat-worker\n\"$shoal\" alerts send --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -20994,7 +20986,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         fs::read_to_string(home.join("chat-hook-again")).unwrap(),
         ""
     );
-    assert_eq!(fixture.ok(&["notifications"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
 }
 
 #[test]

@@ -101,8 +101,8 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("work restore", "cannot reopen removed workspaces"),
         ("export -o -", "cannot export workspaces"),
         ("import -", "cannot import workspaces"),
-        ("notifications", "cannot read or clear notifications"),
-        ("notifications clear", "cannot read or clear notifications"),
+        ("alerts", "cannot read or clear notifications"),
+        ("alerts clear", "cannot read or clear notifications"),
         (
             "questions 1 --answer yes",
             "cannot answer questions without their scope token",

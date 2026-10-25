@@ -247,7 +247,7 @@ pub async fn authorize(
         Method::ItemAction {
             action: Action::Merge { .. },
             ..
-        } => bail!("merging is the user's decision; ask them with shoal notify"),
+        } => bail!("merging is the user's decision; ask them with shoal alerts send"),
         _ => bail!(
             "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
         ),

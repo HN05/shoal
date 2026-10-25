@@ -1270,7 +1270,7 @@ fn a_rate_limited_forge_slows_watches_instead_of_failing_lookups() {
         .spawn()
         .unwrap();
     let limited = || {
-        let notifications = fixture.ok(&["notifications", "--keep-unread"]);
+        let notifications = fixture.ok(&["alerts", "--keep-unread"]);
         notifications
             .as_array()
             .unwrap()

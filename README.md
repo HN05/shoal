@@ -153,8 +153,8 @@ shoal plan --oldest            # Settle the oldest unplanned issue's plan in a c
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal work inspect fix-login       # Detailed workspace and execution records
-shoal notifications           # Conflicts, finished agents, and removals you missed
-shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
+shoal alerts                  # Conflicts, finished agents, and removals you missed
+shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal messages send "Stop the dev server" --workspace fix-login  # Message the workspace's agents
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice

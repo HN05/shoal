@@ -1,7 +1,7 @@
-//! `shoal notifications`: what the daemon saw while the user was away, shown
+//! `shoal alerts`: what the daemon saw while the user was away, shown
 //! once and then marked read unless `--keep-unread`; `--follow` keeps the
 //! terminal on the stream and raises each entry as a terminal notification.
-//! `shoal notify` adds one, `withdraw` takes back an unread one it added, and
+//! `shoal alerts send` adds one, `withdraw` takes back an unread one it added, and
 //! `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
@@ -46,7 +46,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
         let remaining = status.unread_notifications.saturating_sub(shown as u64);
         if remaining > 0 {
             eprintln!(
-                "{remaining} more new notification{}; run shoal notifications again",
+                "{remaining} more new notification{}; run shoal alerts again",
                 if remaining == 1 { "" } else { "s" }
             );
         }
@@ -69,7 +69,7 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
 fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot read or clear notifications; send one with shoal notify"
+        "workspace processes cannot read or clear notifications; send one with shoal alerts send"
     );
     Ok(())
 }

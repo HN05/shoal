@@ -949,12 +949,12 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "expected Repositories, received Ok",
         ),
         (
-            vec!["notifications", "--follow"],
+            vec!["alerts", "--follow"],
             json!({"type": "workspaces", "data": []}),
             "expected Ok, received Workspaces",
         ),
         (
-            vec!["notifications", "--follow"],
+            vec!["alerts", "--follow"],
             json!({"type": "error", "data": {"code": "scope_denied", "message": "denied"}}),
             "scope_denied: denied",
         ),

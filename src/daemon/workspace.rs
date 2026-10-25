@@ -163,7 +163,7 @@ pub struct Manager {
     pub(super) disk_recovered_in: std::sync::atomic::AtomicU64,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
-    /// The newest recorded notification ID; wakes `shoal notifications --follow`.
+    /// The newest recorded notification ID; wakes `shoal alerts --follow`.
     pub(crate) notifications_changed: watch::Sender<i64>,
     /// Counts queued agent messages; wakes watches waiting for them.
     pub(crate) agent_messages_changed: watch::Sender<u64>,

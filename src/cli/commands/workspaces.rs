@@ -1533,7 +1533,7 @@ pub(super) async fn list(
         && status.unread_notifications > 0
     {
         eprintln!(
-            "{} new notification{}; run shoal notifications",
+            "{} new notification{}; run shoal alerts",
             status.unread_notifications,
             if status.unread_notifications == 1 {
                 ""

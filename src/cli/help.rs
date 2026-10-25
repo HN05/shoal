@@ -15,7 +15,6 @@ const GROUPS: &[(&str, &[&str])] = &[
             "cd",
             "edit",
             "status",
-            "notify",
             "messages",
             "questions",
             "approvals",
@@ -50,7 +49,7 @@ const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Shared resources", &["acquire", "release", "leases", "sim"]),
-    ("Diagnostics and activity", &["notifications", "doctor"]),
+    ("Diagnostics and activity", &["alerts", "doctor"]),
     (
         "Configuration and installation",
         &[

@@ -59,7 +59,14 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
 /// The Shoal commands with which a workspace's agent reports on and finishes
 /// its own assignment. Claude Code's auto mode may refuse them as writes to an
 /// outside system; the daemon still limits them to the agent's scope.
-const LIFECYCLE_COMMANDS: [&str; 6] = ["done", "ready", "notify", "questions ask", "pr", "issue"];
+const LIFECYCLE_COMMANDS: [&str; 6] = [
+    "done",
+    "ready",
+    "alerts send",
+    "questions ask",
+    "pr",
+    "issue",
+];
 
 /// Rules allowing each lifecycle command, with or without arguments and
 /// `--json`, as the agent's guidance spells them.

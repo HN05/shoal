@@ -136,9 +136,9 @@ HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[ready] undraft = false`. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
-finishing, run `shoal notify "<one-line message>"`; if it stops applying before
+finishing, run `shoal alerts send "<one-line message>"`; if it stops applying before
 the user reads it, withdraw it with
-`shoal notifications withdraw <number>`, using the number it printed. Neither
+`shoal alerts withdraw <number>`, using the number it printed. Neither
 affects completion or cleanup. Ask for decisions with `shoal questions ask` instead (see
 Questions).
 
@@ -204,7 +204,7 @@ The daemon, its service and the Shoal installation belong to the user; stopping
 or restarting the daemon stops every agent. Never administer them, clear Shoal
 variables from your environment, or run a development build of Shoal against the
 user's state directory. When a Shoal command is missing, refused or failing,
-report the error with `shoal notify` and wait instead of working around it.
+report the error with `shoal alerts send` and wait instead of working around it.
 
 ## Update from the default branch
 

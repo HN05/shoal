@@ -59,11 +59,11 @@ it, and the entry lists what it still waits for in `waiting_for`.
 shoal --json work
 shoal --json inbox      # Questions, approvals, waiting or failed workspaces, ready marks
 shoal --json status fix-login
-shoal --json notifications
+shoal --json alerts
 shoal --json internal events --follow --since <id>
 ```
 
-Notifications report agent exits, messages agents sent with `shoal notify`,
+Notifications report agent exits, messages agents sent with `shoal alerts send`,
 questions they asked, busy resources, pending approval requests and cleanup Shoal did on its own; reading them marks them read. Events stream
 workspace lifecycle changes, including `review_ready` marks agents set with
 `shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their

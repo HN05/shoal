@@ -249,7 +249,7 @@ fn delegation_paths(db: &Connection, id: &str, agents: &TrackedAgents) -> Result
 pub(crate) enum Source {
     /// The daemon, about the workspace's agent, such as its exit.
     Daemon,
-    /// A process acting in the workspace, such as `shoal notify`.
+    /// A process acting in the workspace, such as `shoal alerts send`.
     Agent,
 }
 

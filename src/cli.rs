@@ -315,14 +315,6 @@ pub enum Command {
         #[arg(long)]
         session: Option<String>,
     },
-    /// Send the user a notification about a workspace without marking it done.
-    Notify {
-        /// One line of text, such as "PR #12 is ready to merge".
-        message: String,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-    },
     /// Read new messages or send one to a workspace's agents.
     #[command(args_conflicts_with_subcommands = true)]
     Messages {
@@ -551,9 +543,9 @@ pub enum Command {
     },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
-    Notifications {
+    Alerts {
         #[command(subcommand)]
-        command: Option<NotificationsCommand>,
+        command: Option<AlertsCommand>,
         /// Include notifications already shown.
         #[arg(long, conflicts_with = "follow")]
         all: bool,
@@ -1048,12 +1040,20 @@ pub struct ItemArgs {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum NotificationsCommand {
+pub enum AlertsCommand {
+    /// Send the user a notification about a workspace without marking it done.
+    Send {
+        /// One line of text, such as "PR #12 is ready to merge".
+        message: String,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Delete all notifications, including unread ones.
     Clear,
-    /// Withdraw an unread message the workspace sent with shoal notify.
+    /// Withdraw an unread message the workspace sent with shoal alerts send.
     Withdraw {
-        /// Notification number, as shoal notify printed it.
+        /// Notification number, as shoal alerts send printed it.
         id: i64,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]

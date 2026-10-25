@@ -65,8 +65,8 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ImportArgs, InternalCommand,
-        NotificationsCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ImportArgs,
+        InternalCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -469,9 +469,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::Notify { message, workspace } => {
-            notifications::send(&ctx, workspace, message).await
-        }
         Command::Questions {
             command:
                 Some(QuestionsCommand::Ask {
@@ -536,22 +533,26 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 workspaces::done(&ctx, workspace, cleanup).await
             }
         }
-        Command::Notifications {
-            command: Some(NotificationsCommand::Clear),
+        Command::Alerts {
+            command: Some(AlertsCommand::Send { message, workspace }),
+            ..
+        } => notifications::send(&ctx, workspace, message).await,
+        Command::Alerts {
+            command: Some(AlertsCommand::Clear),
             ..
         } => notifications::clear(&ctx).await,
-        Command::Notifications {
-            command: Some(NotificationsCommand::Withdraw { id, workspace }),
+        Command::Alerts {
+            command: Some(AlertsCommand::Withdraw { id, workspace }),
             ..
         } => notifications::withdraw(&ctx, workspace, id).await,
-        Command::Notifications {
+        Command::Alerts {
             command: None,
             follow: true,
             keep_unread,
             resume,
             ..
         } => notifications::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
-        Command::Notifications {
+        Command::Alerts {
             command: None,
             all,
             keep_unread,
