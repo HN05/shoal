@@ -16942,7 +16942,7 @@ fn notifications_kept_unread_stay_new() {
     // A follower resuming after the first sees only the second, and keeps it unread.
     let mut follower = fixture
         .command()
-        .args(["--json", "alerts", "--follow", "--keep-unread"])
+        .args(["--json", "notifications", "--follow", "--keep-unread"])
         .args(["--resume", &listed[0].0.to_string()])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -17496,14 +17496,13 @@ fn agents_wait_for_the_answer_to_their_question() {
     );
 
     // An upgraded release resumes a wait by the recorded number and the
-    // question's text without asking again.
+    // question's text through its original command name, without asking again.
     let workspace = open["workspace_id"].as_str().unwrap();
     let id = open["id"].to_string();
     let resumed = fixture
         .command()
         .args([
             "--json",
-            "questions",
             "ask",
             "Which cache?",
             "--recommend",

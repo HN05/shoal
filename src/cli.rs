@@ -130,6 +130,21 @@ pub enum Command {
     /// Daemons from earlier releases read the protocol before they update.
     #[command(name = "__build-info", hide = true)]
     BuildInfo,
+    /// Continue a question wait launched before the command was grouped.
+    #[command(name = "ask", hide = true, mut_arg("resume", |arg| arg.required(true)))]
+    LegacyAsk(QuestionAskArgs),
+    /// Continue a notification stream launched before the command was grouped.
+    #[command(name = "notifications", hide = true)]
+    LegacyNotifications {
+        #[arg(long, required = true)]
+        follow: bool,
+        #[arg(long)]
+        keep_unread: bool,
+        #[arg(long, required = true)]
+        resume: i64,
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
     /// List configured commands, run one by name, or run an arbitrary command after --.
     Run {
         /// Configured command; omit it to execute the arguments after -- directly.
@@ -1144,32 +1159,36 @@ pub enum MessagesCommand {
     },
 }
 
+/// Arguments shared with the hidden pre-upgrade wait entry point.
+#[derive(Debug, Args)]
+pub struct QuestionAskArgs {
+    /// The decision, in one line, such as "Which database should the cache use?"
+    pub question: String,
+    /// The answer you recommend.
+    #[arg(long)]
+    pub recommend: String,
+    /// Why you recommend it.
+    #[arg(long)]
+    pub reason: Option<String>,
+    /// A possible answer; repeat for each. The user may answer with its number.
+    #[arg(long = "choice", value_name = "CHOICE")]
+    pub choices: Vec<String>,
+    /// Wait for the answer and print it. Asking again waits for the same question.
+    #[arg(long)]
+    pub wait: bool,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+    /// Continue waiting for this question, as the installed release does
+    /// after an upgrade restarted the daemon.
+    #[arg(long, hide = true, requires = "workspace")]
+    pub resume: Option<i64>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum QuestionsCommand {
     /// Ask the user to decide something; the answer arrives as a message.
-    Ask {
-        /// The decision, in one line, such as "Which database should the cache use?"
-        question: String,
-        /// The answer you recommend.
-        #[arg(long)]
-        recommend: String,
-        /// Why you recommend it.
-        #[arg(long)]
-        reason: Option<String>,
-        /// A possible answer; repeat for each. The user may answer with its number.
-        #[arg(long = "choice", value_name = "CHOICE")]
-        choices: Vec<String>,
-        /// Wait for the answer and print it. Asking again waits for the same question.
-        #[arg(long)]
-        wait: bool,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-        /// Continue waiting for this question, as the installed release does
-        /// after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires = "workspace")]
-        resume: Option<i64>,
-    },
+    Ask(QuestionAskArgs),
     /// Withdraw an open question the workspace's agent no longer needs answered.
     Withdraw {
         /// Question number.
@@ -1964,6 +1983,50 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_question_and_notification_commands_only_accept_upgrade_resumes() {
+        let ask = [
+            "shoal",
+            "ask",
+            "Which cache?",
+            "--recommend",
+            "Redis",
+            "--wait",
+            "--workspace",
+            "workspace-id",
+        ];
+        assert!(Cli::try_parse_from(ask).is_err());
+        let resumed = Cli::try_parse_from(ask.into_iter().chain(["--resume", "42"])).unwrap();
+        assert!(matches!(
+            resumed.command,
+            Some(Command::LegacyAsk(QuestionAskArgs {
+                resume: Some(42),
+                ..
+            }))
+        ));
+        assert!(Cli::try_parse_from(["shoal", "notifications", "--follow"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "notifications", "--resume", "42"]).is_err());
+        let resumed = Cli::try_parse_from([
+            "shoal",
+            "notifications",
+            "--follow",
+            "--keep-unread",
+            "--limit",
+            "20",
+            "--resume",
+            "42",
+        ])
+        .unwrap();
+        assert!(matches!(
+            resumed.command,
+            Some(Command::LegacyNotifications {
+                resume: 42,
+                keep_unread: true,
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn agent_cli_and_config_spellings_remain_compatible() {

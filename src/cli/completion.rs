@@ -147,6 +147,9 @@ pub fn command() -> Command {
             command = withdraw(command, name);
         }
     }
+    for legacy in ["ask", "notifications"] {
+        command = withdraw(command, legacy);
+    }
     decorate(command, &[], Arc::new(typed))
 }
 

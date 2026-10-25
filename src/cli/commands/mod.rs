@@ -66,8 +66,8 @@ use crate::{
     agent::CodexMode,
     cli::{
         AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
-        ImportArgs, InternalCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents,
-        client,
+        ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
+        WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -476,19 +476,20 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::Questions {
-            command:
-                Some(QuestionsCommand::Ask {
-                    question,
-                    recommend,
-                    reason,
-                    choices,
-                    wait,
-                    workspace,
-                    resume,
-                }),
+        Command::LegacyAsk(args)
+        | Command::Questions {
+            command: Some(QuestionsCommand::Ask(args)),
             ..
         } => {
+            let QuestionAskArgs {
+                question,
+                recommend,
+                reason,
+                choices,
+                wait,
+                workspace,
+                resume,
+            } = args;
             let ask = crate::daemon::questions::Ask {
                 question,
                 recommendation: recommend,
@@ -540,6 +541,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 workspaces::done(&ctx, workspace, cleanup).await
             }
         }
+        Command::LegacyNotifications {
+            keep_unread,
+            resume,
+            ..
+        } => notifications::follow(&ctx, keep_unread, resume).await,
         Command::Alerts {
             command: Some(AlertsCommand::Send { message, workspace }),
             ..
