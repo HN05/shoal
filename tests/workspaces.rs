@@ -4764,6 +4764,15 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
         let output = scoped_command(&fixture, "parent", args);
         assert!(!output.status.success(), "{args:?}: {output:?}");
     }
+    // Clearing the token leaves the process scoped by its shell's ancestry.
+    let output = fixture
+        .command()
+        .args(["exec", "parent", "--", "sh", "-c"])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume other --discard; exit $?"#)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
     assert!(records.iter().all(|record| record.exists()));
     let output = scoped_command(&fixture, "parent", &["resume", "child", "--discard"]);
     assert!(output.status.success(), "{output:?}");
