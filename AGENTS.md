@@ -316,5 +316,8 @@ and video to the PR with `shoal pr comment --attach`, and put text frames in
 code blocks of the description. Pace a video so the viewer can read each screen
 before the next key, about two to three seconds on a screen and longer on a
 dense one, without idle stretches. Look at the screenshots yourself first; VHS
-renders headlessly, so the recording is the only view the user gets. Keep tapes
-and their output out of the repository unless a document uses them.
+renders headlessly, so the recording is the only view the user gets. Keep the
+tape, its output and its temporary state directory and repository under the
+workspace's ignored `target/`, never in `/tmp` or elsewhere outside the
+workspace, where reading them needs the user's permission; commit them only
+when a document uses them.
