@@ -213,10 +213,6 @@ fn print_help(path: &[&str]) -> Result<()> {
 }
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
-    if matches!(cli.command, Some(Command::BuildInfo)) {
-        outln!("{}", json!({"protocol": crate::protocol::VERSION}));
-        return Ok(0);
-    }
     // The service runs without the user's tool configuration environment, and
     // skill installation does this work itself.
     if !matches!(
@@ -292,7 +288,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             ForgeCommand::Api(args) => api::api(&ctx, args).await,
         },
-        Command::BuildInfo => unreachable!("build metadata needs no daemon or paths"),
         Command::Run {
             name,
             workspace,
