@@ -686,7 +686,9 @@ before a workspace exists, then the picker. `status` combines lifecycle, fork-po
 leases and watched PR state in one workspace view; the daemon looks PRs up on each request
 and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
-stay unstyled. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
+stay unstyled. The output format resolves once after parsing, from `--json` or
+`--text`, then `SHOAL_OUTPUT`, then text, so results, errors and prompts agree;
+internal commands name their format, and hooks run without the setting. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
 suppressed for JSON and dumb terminals. Rust chooses paths, including
 `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
 without evaluating repository code. Completion leaves navigation to prompt recovery:

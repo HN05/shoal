@@ -161,6 +161,7 @@ fn command(
         .env_remove(env::REVIEW_MARKS)
         .env_remove(env::RESOURCE_LEASE)
         .env_remove(env::SCOPE_TOKEN)
+        .env_remove(env::OUTPUT)
         .env_remove(env::EXECUTION_ID)
         .env_remove(env::RESERVED_PORT_ENV)
         .env_remove(env::SECRET_ENV)

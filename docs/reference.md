@@ -2,12 +2,18 @@
 
 Start with the [usage guide](../README.md).
 
+Commands print human-readable output unless `--json` or `SHOAL_OUTPUT=json`
+selects JSON, which also turns off prompts without confirming anything: a command
+that would ask still needs `--yes`. `--text` overrides `SHOAL_OUTPUT`, and an
+unset or empty `SHOAL_OUTPUT` means `text`; any other value fails. Errors use the
+selected format on stderr.
+
 Human-readable output uses color when its destination is a terminal. Set a
-nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and `--json`
+nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
 stay plain; stdout and stderr are detected independently.
 Progress feedback shows the pending operation with a spinner and elapsed seconds
 after half a second, cleared before the result.
-Progress uses terminal stderr only and is suppressed with `--json` or `TERM=dumb`.
+Progress uses terminal stderr only and is suppressed with JSON output or `TERM=dumb`.
 
 - [Installation and upgrades](#homebrew)
 - [Daemon](#daemon)
@@ -1545,7 +1551,7 @@ shoal rm fix-login --yes                    # Delete this workspace
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
-and `SHOAL_STATE_DIR`, without a scope token or port variables, so whatever they leave running (a tmux
+and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
 terminal after `add` or `work setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.

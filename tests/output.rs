@@ -313,3 +313,93 @@ fn terminal_styles_respect_redirection_json_and_environment() {
     assert!(!script.contains('\x1b'));
     assert!(script.contains("shoal"));
 }
+
+#[test]
+fn shoal_output_selects_the_format_of_results_and_errors() {
+    let added = serde_json::json!({
+        "type": "repository",
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+    });
+    let json = [("SHOAL_OUTPUT", "json")];
+    let (output, _) = run_with_reply(
+        &["repo", "add", "/test"],
+        None,
+        &json,
+        Some((false, added.clone())),
+    );
+    assert!(output.status.success(), "{output:?}");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["id"], "test");
+    let (output, _) = run_with_reply(
+        &["--text", "repo", "add", "/test"],
+        None,
+        &json,
+        Some((false, added)),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).starts_with("Registered"),
+        "{output:?}"
+    );
+
+    let (output, _) = run(&["repo", "ls"], None, &[("SHOAL_OUTPUT", "yaml")]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "error: SHOAL_OUTPUT must be `json` or `text`, not \"yaml\"\n"
+    );
+    let (output, _) = run(
+        &["--json", "skill", "worker"],
+        None,
+        &[("SHOAL_OUTPUT", "yaml")],
+    );
+    assert!(output.status.success(), "{output:?}");
+}
+
+/// A human on stdin and stderr is not asked to confirm under `SHOAL_OUTPUT=json`,
+/// which fails in JSON instead of confirming.
+#[test]
+fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let listener = support::fake_daemon::bind_fake_daemon(root.path());
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        support::fake_daemon::answer(stream, |_| {
+            serde_json::json!({
+                "type": "repositories",
+                "data": [{"id": "test", "path": "/test", "source": "/test", "last_used": 0}]
+            })
+        });
+    });
+    let (mut master, slave) = pty::open();
+    let mut child = support::cli(root.path())
+        .args(["repo", "rm", "/test"])
+        .env("SHOAL_OUTPUT", "json")
+        .stdin(slave.try_clone().unwrap())
+        .stdout(Stdio::piped())
+        .stderr(slave.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    let mut transcript = String::new();
+    if support::wait::try_wait_for(|| {
+        drain(&mut master, &mut transcript);
+        child.try_wait().unwrap()
+    })
+    .is_none()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("removal prompted: {transcript:?}");
+    }
+    let output = child.wait_with_output().unwrap();
+    server.join().unwrap();
+    drain(&mut master, &mut transcript);
+    drop(slave);
+    assert_eq!(output.status.code(), Some(1), "{transcript:?}");
+    assert!(output.stdout.is_empty());
+    let error: serde_json::Value = serde_json::from_str(transcript.trim()).unwrap();
+    assert_eq!(error["error"]["code"], "command_failed");
+    let message = error["error"]["message"].as_str().unwrap();
+    assert!(message.contains("pass --yes"), "{message}");
+}

@@ -95,15 +95,14 @@ pub fn session_argv(paths: &Paths) -> Result<Vec<OsString>> {
 }
 
 /// Build an argv for this executable, preserving the caller's resolved globals.
+/// The output format is explicit, so an inherited `SHOAL_OUTPUT` cannot change it.
 pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![
         crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         paths.state.as_os_str().to_owned(),
+        if json { "--json" } else { "--text" }.into(),
     ];
-    if json {
-        args.push("--json".into());
-    }
     args.push(GROUP.into());
     match worker {
         Worker::Herdr { close_when_done } => {
@@ -217,7 +216,7 @@ mod tests {
         assert_eq!(args[0], std::env::current_exe().unwrap());
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.state_dir, Some(paths.state));
-        assert_eq!(cli.json, json);
+        assert_eq!((cli.json, cli.text), (json, !json));
         let Some(Command::Internal { command }) = cli.command else {
             panic!("expected an internal command");
         };

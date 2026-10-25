@@ -38,9 +38,13 @@ pub struct Cli {
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,
-    /// Emit machine-readable output.
+    /// Emit machine-readable output and never prompt; the default when
+    /// SHOAL_OUTPUT=json.
     #[arg(long, global = true)]
     pub json: bool,
+    /// Emit human-readable output, overriding SHOAL_OUTPUT.
+    #[arg(long, global = true)]
+    pub text: bool,
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -1217,7 +1221,7 @@ pub enum BaseCommand {
 
 impl Cli {
     /// Parse the process arguments as `Cli::parse` does, recording what the
-    /// command needs of its workspace.
+    /// command needs of its workspace and resolving its output format.
     pub fn from_args() -> Self {
         let mut matches = <Self as clap::CommandFactory>::command()
             .try_get_matches()
@@ -1237,7 +1241,28 @@ impl Cli {
                     .exit()
             });
         cli.need = need;
+        cli.resolve_output(std::env::var_os(crate::env::OUTPUT).as_deref())
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "{} {error:#}",
+                    output::Palette::stderr(false).paint(output::Style::Error, "error:")
+                );
+                std::process::exit(2)
+            });
         cli
+    }
+
+    /// Let the `SHOAL_OUTPUT` `setting` choose JSON when the command line
+    /// selects neither format, so every later step reads one resolved mode.
+    fn resolve_output(&mut self, setting: Option<&std::ffi::OsStr>) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !(self.json && self.text),
+            "--json and --text cannot be used together"
+        );
+        if !self.json && !self.text {
+            self.json = crate::env::selects_json(setting)?;
+        }
+        Ok(())
     }
 }
 
@@ -1983,6 +2008,39 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whether `args` resolve to JSON output under the `SHOAL_OUTPUT` `setting`.
+    fn resolves_json(args: &[&str], setting: Option<&str>) -> anyhow::Result<bool> {
+        let mut cli = Cli::try_parse_from(["shoal"].iter().chain(args)).unwrap();
+        cli.resolve_output(setting.map(std::ffi::OsStr::new))?;
+        Ok(cli.json)
+    }
+
+    #[test]
+    fn the_command_line_selects_output_before_the_environment() {
+        for setting in [None, Some(""), Some("text")] {
+            assert!(!resolves_json(&["status"], setting).unwrap());
+        }
+        assert!(resolves_json(&["status"], Some("json")).unwrap());
+        for setting in [None, Some("text"), Some("json")] {
+            assert!(resolves_json(&["--json", "status"], setting).unwrap());
+            assert!(resolves_json(&["status", "--json"], setting).unwrap());
+            assert!(!resolves_json(&["status", "--text"], setting).unwrap());
+        }
+        assert!(resolves_json(&["--json", "status", "--text"], None).is_err());
+        assert!(resolves_json(&["--text", "status", "--json"], None).is_err());
+    }
+
+    #[test]
+    fn an_invalid_output_setting_fails_unless_the_command_line_selects_one() {
+        let error = resolves_json(&["status"], Some("JSON")).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "SHOAL_OUTPUT must be `json` or `text`, not \"JSON\""
+        );
+        assert!(resolves_json(&["--json", "status"], Some("yaml")).unwrap());
+        assert!(!resolves_json(&["--text", "status"], Some("yaml")).unwrap());
+    }
 
     #[test]
     fn legacy_question_and_notification_commands_only_accept_upgrade_resumes() {

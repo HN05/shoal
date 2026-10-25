@@ -5835,7 +5835,7 @@ fn execution_scope_limits_management_and_expires() {
     let post_setup = fixture.repo.join("post-setup.sh");
     install_test_script(
         &post_setup,
-        "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\nprintf hook >> hook-runs\nsleep 30 < /dev/null > /dev/null 2>&1 &\n",
+        "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\ntest -z \"$SHOAL_OUTPUT\" || exit 85\nprintf hook >> hook-runs\nsleep 30 < /dev/null > /dev/null 2>&1 &\n",
     );
     commit_resource_config(
         &fixture.repo,
@@ -5892,7 +5892,14 @@ fn execution_scope_limits_management_and_expires() {
     );
     fixture.ok(&["stop", "worker"]);
     assert!(!sibling.wait().unwrap().success());
-    let output = scoped(&["work", "setup", "worker"]);
+    // An agent's output default does not reach the hook its setup runs.
+    let output = fixture
+        .command()
+        .env("SHOAL_OUTPUT", "json")
+        .args(["run", "--workspace", "worker", "--", binary])
+        .args(["work", "setup", "worker"])
+        .output()
+        .unwrap();
     assert!(
         output.status.success(),
         "{}",

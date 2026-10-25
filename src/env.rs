@@ -1,6 +1,6 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, and process scanning agree on the contract.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
@@ -72,6 +72,9 @@ pub const AGENT_EXIT_CODE: &str = "SHOAL_AGENT_EXIT_CODE";
 pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
+/// The output format, `json` or `text`, of a command that selects neither
+/// `--json` nor `--text`.
+pub const OUTPUT: &str = "SHOAL_OUTPUT";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
 /// Set to `1` to print timing lines for profiling Shoal itself.
@@ -388,6 +391,18 @@ pub fn apply_workspace_identity(command: &mut Command, workspace: &Workspace, pa
     command
         .envs(workspace_identity(workspace, paths))
         .env_remove(SHELL_DIRECTIVE);
+}
+
+/// Whether an [`OUTPUT`] setting selects JSON; unset or empty selects text.
+pub fn selects_json(setting: Option<&OsStr>) -> Result<bool> {
+    match setting.map(OsStr::to_str) {
+        None | Some(Some("" | "text")) => Ok(false),
+        Some(Some("json")) => Ok(true),
+        Some(_) => bail!(
+            "{OUTPUT} must be `json` or `text`, not {:?}",
+            setting.unwrap_or_default()
+        ),
+    }
 }
 
 pub fn scope_token() -> Option<String> {
