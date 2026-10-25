@@ -345,7 +345,6 @@ async fn export_workspace(
         let method = Method::ExportWorkspace {
             workspace: selector.clone(),
             unsaved: UnsavedWork::default(),
-            caller_pid: std::process::id(),
             file: output.file(),
         };
         return request::<ExportedWorkspace>(&ctx.paths, method).await;
@@ -369,7 +368,6 @@ async fn export_checked(
     let method = Method::ExportWorkspace {
         workspace: check.workspace.id.clone(),
         unsaved: UnsavedWork::confirming(check),
-        caller_pid: std::process::id(),
         file: output.file(),
     };
     let exported = super::workspaces::leaving(
@@ -402,7 +400,6 @@ async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result
         &ctx.paths,
         Method::CheckRemoval {
             workspace: workspace.to_owned(),
-            caller_pid: std::process::id(),
             include_changes: true,
         },
     )

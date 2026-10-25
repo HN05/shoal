@@ -1466,7 +1466,6 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
             Method::RemoveWorkspace {
                 workspace: workspace.id.clone(),
                 unsaved: UnsavedWork::All,
-                caller_pid: std::process::id(),
             },
         )
         .await?;
@@ -1881,12 +1880,10 @@ pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) 
         return Ok(code);
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let caller_pid = std::process::id();
     let check = request::<RemovalCheck>(
         &ctx.paths,
         Method::CheckRemoval {
             workspace: workspace.clone(),
-            caller_pid,
             include_changes: ctx.interactive() && !yes,
         },
     )
@@ -1912,7 +1909,6 @@ async fn remove_checked(
     let method = Method::RemoveWorkspace {
         workspace,
         unsaved: UnsavedWork::confirming(check),
-        caller_pid: std::process::id(),
     };
     let result = leaving(
         ctx,
