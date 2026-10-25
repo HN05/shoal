@@ -1,0 +1,11 @@
+# Build output belongs to each worktree.
+copy_ignored = false
+setup_cmd = "scripts/setup.sh"
+
+[commands]
+build = ["cargo", "build", "--locked"]
+check = ["cargo", "check", "--locked"]
+test = ["cargo", "test", "--locked"]
+lint = ["cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings"]
+fmt = ["cargo", "fmt", "--all", "--check"]
+test-scripts = ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py"]
