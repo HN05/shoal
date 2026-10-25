@@ -172,6 +172,14 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .await
             .is_err()
     );
+    // So does withdrawing every mark, or every mark of a kind.
+    for selection in [Selection::default(), select(Some(ItemKind::Pr), None)] {
+        let error = manager
+            .clear_ready(&workspace.id, selection, None)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("marked ready"), "{error:#}");
+    }
     assert!(
         manager
             .workspace(&workspace.id)

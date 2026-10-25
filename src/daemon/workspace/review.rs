@@ -219,7 +219,8 @@ impl Manager {
         Ok(selected)
     }
 
-    /// The marks a withdrawal selects; an explicit item must be marked.
+    /// The marks a withdrawal selects, of which there must be one: an
+    /// explicit item must be marked.
     async fn selected_marks(
         &self,
         id: &str,
@@ -235,8 +236,14 @@ impl Manager {
                     (None, Some(kind)) => mark.kind == Some(kind),
                     (None, None) => true,
                 });
-                if let Some((url, kind)) = &explicit {
-                    ensure!(!selected.is_empty(), "{kind} is not marked ready: {url}");
+                match (&explicit, selection.kind) {
+                    (Some((url, kind)), _) => {
+                        ensure!(!selected.is_empty(), "{kind} is not marked ready: {url}")
+                    }
+                    (None, Some(kind)) => {
+                        ensure!(!selected.is_empty(), "no {kind} is marked ready")
+                    }
+                    (None, None) => ensure!(!selected.is_empty(), "nothing is marked ready"),
                 }
                 Ok(selected)
             })

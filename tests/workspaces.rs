@@ -16766,6 +16766,12 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .get("review")
             .is_none()
     );
+    let output = scoped_command(&fixture, "reviewed", &["unready"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("nothing is marked ready"),
+        "{output:?}"
+    );
 }
 
 /// Agent arguments without the hooks that deliver agent messages, which
