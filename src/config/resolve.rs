@@ -193,6 +193,12 @@ impl Effective {
         self.arguments.get(name).cloned().unwrap_or_default()
     }
 
+    /// The agent whose integration agent `name` runs with: its own, unless
+    /// it is a launch profile of another.
+    pub fn integration<'a>(&'a self, name: &'a str) -> &'a str {
+        self.integrations.get(name).map_or(name, String::as_str)
+    }
+
     fn from_merged(merged: RepoConfig) -> Result<Self> {
         fn built_in<T>(value: Option<T>, key: &str) -> Result<T> {
             value.with_context(|| format!("{key} has no built-in default"))

@@ -24,10 +24,11 @@ impl Drop for Waker {
     }
 }
 
-/// The session to wake `agent` in: Codex on the terminal of a session. A
-/// detached launch has no terminal, though it may inherit a session's name.
-pub(super) fn session(agent: Option<&str>, mode: &super::Mode) -> Option<PromptSession> {
-    let prompted = agent.is_some_and(crate::cli::agents::wakes_by_prompt);
+/// The session to wake an agent with `integration` in: Codex on the terminal
+/// of a session. A detached launch has no terminal, though it may inherit a
+/// session's name.
+pub(super) fn session(integration: Option<&str>, mode: &super::Mode) -> Option<PromptSession> {
+    let prompted = integration.is_some_and(crate::cli::agents::wakes_by_prompt);
     (prompted && !matches!(mode, super::Mode::Detached { .. }))
         .then(PromptSession::current)
         .flatten()

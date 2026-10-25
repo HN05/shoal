@@ -138,7 +138,7 @@ impl Recovery {
             .await?;
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else if let Some(mut args) = resume_args {
-            args.extend(crate::cli::agents::hook_args(&name)?);
+            args.extend(crate::cli::agents::hook_args(settings.integration(&name))?);
             let takes_field = settings
                 .commands
                 .get(&name)

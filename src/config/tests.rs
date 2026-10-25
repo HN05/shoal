@@ -356,6 +356,21 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
     assert_eq!(effective.default_agent, None);
 }
 
+#[test]
+fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
+    let global: Config = toml::from_str("[ai.claude-direct]\nbase = 'claude'\n").unwrap();
+    let repo = repo::parse("[commands]\nclaude = ['claude', '--verbose']\n").unwrap();
+    let effective = global.effective(&repo).unwrap();
+    assert!(effective.providers.contains("claude-direct"));
+    assert_eq!(effective.integration("claude-direct"), "claude");
+    assert_eq!(effective.integration("codex"), "codex");
+    assert_eq!(effective.commands["claude-direct"], ["claude", "--verbose"]);
+    assert_eq!(
+        effective.arguments("claude-direct"),
+        effective.arguments("claude")
+    );
+}
+
 fn change(key: &str, value: Option<&str>) -> edit::Change {
     edit::Change {
         key: key.into(),

@@ -224,7 +224,6 @@ async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
-    let wake = wake::session(agent.as_deref(), &mode);
     let TrackedLaunch {
         mut link,
         mut plan,
@@ -232,6 +231,8 @@ async fn run_tracked(
         auth,
         recovery,
     } = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
+    let integration = auth.as_ref().and_then(|auth| auth.integration.as_deref());
+    let wake = wake::session(integration, &mode);
     let mut next_command = command;
     let mut recovery_record = None;
     let mut result = loop {
@@ -323,7 +324,7 @@ async fn prepare_tracked_launch(
     mode: &Mode,
     agent: Option<String>,
 ) -> Result<TrackedLaunch> {
-    let auth = prepare_agent_launch(paths, &workspace, mode, agent.is_some()).await?;
+    let auth = prepare_agent_launch(paths, &workspace, mode, agent.as_deref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
@@ -394,8 +395,9 @@ async fn prepare_agent_launch(
     paths: &Paths,
     workspace: &str,
     mode: &Mode,
-    has_agent: bool,
+    agent: Option<&str>,
 ) -> Result<Option<AgentLaunch>> {
+    let has_agent = agent.is_some();
     if !has_agent && !matches!(mode, Mode::Publish) {
         return Ok(None);
     }
@@ -413,6 +415,7 @@ async fn prepare_agent_launch(
         account: settings.agent_auth.prepare(paths, &config.git)?,
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
+        integration: agent.map(|agent| settings.integration(agent).to_owned()),
     }))
 }
 
@@ -708,6 +711,8 @@ struct AgentLaunch {
     account: crate::agent_auth::Launch,
     secrets: crate::secrets::Launch,
     output: Option<(&'static str, &'static str)>,
+    /// The agent's integration, which launch profiles share with their base.
+    integration: Option<String>,
 }
 
 impl AgentLaunch {

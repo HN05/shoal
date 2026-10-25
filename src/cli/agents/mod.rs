@@ -209,7 +209,7 @@ pub(in crate::cli) fn runs_in_session(
     prompted: bool,
     tracked: bool,
 ) -> bool {
-    !integration(agent.name()).launches_itself(settings, prompted, tracked)
+    !integration(settings.integration(agent.name())).launches_itself(settings, prompted, tracked)
         && terminal::keeps_agents_in_sessions(ctx, settings)
 }
 
@@ -225,7 +225,7 @@ pub(super) async fn launch_agent(
 ) -> Result<i32> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let integration = integration(agent.name());
+    let integration = integration(settings.integration(agent.name()));
     let mut launch = Launch {
         name: agent.into(),
         workspace,
@@ -402,7 +402,7 @@ pub(in crate::cli) fn happy_agents<'a>(_installed: &Installed<'a>) -> Vec<&'a st
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
 pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
-    if let Some(reason) = integration(name).unavailable(settings) {
+    if let Some(reason) = integration(settings.integration(name)).unavailable(settings) {
         anyhow::bail!("cannot start {name}: {reason}");
     }
     ensure_installed(name, &settings.commands)
@@ -458,12 +458,14 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
     }
 }
 
-/// Arguments that register Shoal's hooks for agent `name`'s session.
+/// Arguments that register Shoal's hooks for the session of an agent with
+/// integration `name`, as [`Effective::integration`] resolves it.
 pub(crate) fn hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
     integration(name).hook_args()
 }
 
-/// Arguments that register Shoal's hooks for a chat of agent `name`.
+/// Arguments that register Shoal's hooks for a chat of an agent with
+/// integration `name`.
 pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
     integration(name).chat_hook_args()
 }
@@ -475,10 +477,13 @@ pub(in crate::cli) async fn start_chat(
     name: &str,
     chat: &ChatLaunch,
 ) -> Result<Option<i32>> {
-    integration(name).chat(ctx, chat).await
+    integration(chat.settings.integration(name))
+        .chat(ctx, chat)
+        .await
 }
 
-/// Whether agent `name`'s wrapper wakes it by typing a prompt.
+/// Whether the wrapper of an agent with integration `name` wakes it by
+/// typing a prompt.
 pub(crate) fn wakes_by_prompt(name: &str) -> bool {
     integration(name).wakes_by_prompt()
 }
@@ -491,6 +496,14 @@ pub(in crate::cli) async fn trust_resumed(
     workspace: &Workspace,
     removed: &RemovedWorkspace,
 ) {
+    let settings =
+        match client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await {
+            Ok(settings) => settings,
+            Err(error) => {
+                eprintln!("warning: cannot trust the restored workspace for its agents: {error:#}");
+                return;
+            }
+        };
     let stopped = removed
         .agents
         .iter()
@@ -503,7 +516,7 @@ pub(in crate::cli) async fn trust_resumed(
         .map(|last| last.agent.as_str());
     for trust in stopped
         .chain(last)
-        .filter_map(|name| integration(name).trust_file())
+        .filter_map(|name| integration(settings.integration(name)).trust_file())
     {
         trust.trust_tracked(ctx, workspace).await;
     }
@@ -511,8 +524,13 @@ pub(in crate::cli) async fn trust_resumed(
 
 /// Trust a repository's checkout for a chat of agent `name` as workspace
 /// launches trust theirs. Failure only warns.
-pub(in crate::cli) fn trust_checkout(ctx: &Context, name: &str, repository: &Repository) {
-    if let Some(trust) = integration(name).trust_file() {
+pub(in crate::cli) fn trust_checkout(
+    ctx: &Context,
+    settings: &Effective,
+    name: &str,
+    repository: &Repository,
+) {
+    if let Some(trust) = integration(settings.integration(name)).trust_file() {
         trust.trust_checkout(ctx, repository);
     }
 }

@@ -110,7 +110,7 @@ pub(super) async fn begin(
     if !here && start_beside(ctx, &settings, &repo, &topic, &agent, &args).await? {
         return Ok(0);
     }
-    agents::trust_checkout(ctx, agent.name(), &repo);
+    agents::trust_checkout(ctx, &settings, agent.name(), &repo);
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(ctx, &repo, &chat, &command)
@@ -258,7 +258,7 @@ fn command(
         name,
         instructions,
         opening,
-        agents::chat_hook_args(name)?,
+        agents::chat_hook_args(settings.integration(name))?,
         args,
     );
     configured::expand_outside_workspace(
