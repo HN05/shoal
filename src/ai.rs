@@ -215,7 +215,8 @@ pub fn integrations(agents: &Agents) -> BTreeMap<String, String> {
 
 /// Give each launch profile without a launcher of its own in `commands` the
 /// nearest one of its lineage there, so it follows whatever layer set it.
-pub fn inherit_launchers(agents: &Agents, commands: &mut Commands) {
+/// `commands` may carry each launcher's layer with it.
+pub fn inherit_launchers<T: Clone>(agents: &Agents, commands: &mut BTreeMap<String, T>) {
     for name in agents.keys() {
         if commands.contains_key(name) {
             continue;

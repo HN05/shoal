@@ -369,11 +369,12 @@ impl Typed {
                 layers = *found;
             }
         }
-        let commands = Stack::new(&global, &layers)
+        let mut commands = Stack::new(&global, &layers)
             .named(|config| &config.commands)
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
             .collect();
+        crate::ai::inherit_launchers(&global.ai, &mut commands);
         let providers = crate::ai::providers(&global.ai);
         let agents = global.resolve(&layers).map_or_else(
             |_| providers.iter().cloned().collect(),

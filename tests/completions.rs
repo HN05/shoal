@@ -216,7 +216,8 @@ fn agents_without_installed_executables_are_not_completed() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.droid]\ncommand = ['droid']\n",
+        "[commands]\nreview = ['tuicr']\n[ai.droid]\ncommand = ['droid']\n\
+         [ai.claude-direct]\nbase = 'claude'\n[ai.droid-direct]\nbase = 'droid'\n",
     )
     .unwrap();
     // Only the fixture's bin, so agents installed on this machine stay out.
@@ -236,8 +237,14 @@ fn agents_without_installed_executables_are_not_completed() {
         (vec!["shoal", "codex", "--a"], &[], &["--app"]),
         (
             vec!["shoal", "add", "--agent", "c"],
-            &["claude"],
+            &["claude", "claude-direct"],
             &["codex"],
+        ),
+        // Launch profiles run their base's launcher.
+        (
+            vec!["shoal", "add", "--agent", "droid-"],
+            &[],
+            &["droid-direct"],
         ),
         (
             vec!["shoal", "add", "--agent", "happy-"],
