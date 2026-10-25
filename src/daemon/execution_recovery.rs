@@ -42,6 +42,11 @@ pub(super) async fn pause(
         Ok(stopped) => stopped,
         Err(error) => return Ok(restore_failed(error)),
     };
+    match assignment_done(manager, workspace_id).await {
+        Ok(false) => {}
+        Ok(true) => return Ok(done_cancels_restore()),
+        Err(error) => return Ok(restore_failed(error)),
+    }
     // Take a place in the agent queue as the agent stops, so restores and
     // launches start in the order they arrived.
     if let Err(error) = manager.queue_agent_restore(execution_id).await {
@@ -82,6 +87,16 @@ pub(super) async fn pause(
 fn restore_failed(error: anyhow::Error) -> Action {
     log!("agent recovery cancelled: {error:#}");
     Action::Stop(Some(format!("automatic restore failed: {error:#}")))
+}
+
+/// Whether `shoal done` finished the workspace's assignment, which leaves its
+/// stopped agent nothing to do.
+async fn assignment_done(manager: &Manager, workspace_id: &str) -> Result<bool> {
+    Ok(manager.completion(workspace_id).await?.is_some())
+}
+
+fn done_cancels_restore() -> Action {
+    Action::Stop(Some("the assignment is done".into()))
 }
 
 /// How often a waiting restore checks again for survivors it could not stop.
@@ -163,6 +178,9 @@ async fn prepare_resume(
     execution_id: &str,
     workspace_id: &str,
 ) -> Result<Action> {
+    if assignment_done(manager, workspace_id).await? {
+        return Ok(done_cancels_restore());
+    }
     let ports = manager.list_ports(Some(workspace_id)).await?;
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))

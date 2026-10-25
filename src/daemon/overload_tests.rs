@@ -1226,6 +1226,45 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     serving.abort();
 }
 
+#[tokio::test]
+async fn a_done_workspace_does_not_restore_its_stopped_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!workspace.path.join("restored").exists());
+    assert!(queue_is_empty(&manager).await);
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+#[tokio::test]
+async fn finishing_the_assignment_cancels_a_waiting_restore() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    publish_recovery(&manager);
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!workspace.path.join("restored").exists());
+    assert!(queue_is_empty(&manager).await);
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
 async fn set_recovery(manager: &Manager, enabled: bool) {
     crate::test_support::configure(
         manager,
