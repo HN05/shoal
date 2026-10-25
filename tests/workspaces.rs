@@ -23612,13 +23612,13 @@ fn a_demo_outlives_the_command_that_started_it() {
     // Its completion scan finds none of its processes in the demo, so the
     // command finishes and the demo keeps running.
     wait_until("the starting command to finish", || {
-        fixture.ok(&["work", "inspect", "tried"])["executions"]
+        fixture.ok(&["status", "tried"])["executions"]
             .as_array()
             .unwrap()
             .len()
             == 1
     });
-    let executions = fixture.ok(&["work", "inspect", "tried"])["executions"].clone();
+    let executions = fixture.ok(&["status", "tried"])["executions"].clone();
     assert_eq!(executions[0]["state"], "running", "{executions}");
     assert_eq!(
         demo(&fixture, &["ls", "--workspace", "tried"])["running"]
