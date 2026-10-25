@@ -42,8 +42,7 @@ pub enum Need {
 }
 
 impl Need {
-    /// The need of the built-in command at `path`, such as `["hold",
-    /// "release"]`; `None` for other names, which run configured commands.
+    /// The need of the built-in command at `path`, such as `["release", "hold"]`; `None` for other names, which run configured commands.
     pub fn of(path: &[&str]) -> Option<Self> {
         Some(match path {
             ["attach"] => Self::Session,
@@ -59,21 +58,19 @@ impl Need {
             ["work", "base", "clear"] => Self::Base,
             ["work", "base", ..] | ["work", "inspect"] => Self::Any,
             ["work", "env"] => Self::Ready,
-            ["hold", "release"] => Self::Holds,
+            ["release", "hold"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split"
                 | "done" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
-            | ["hold", "acquire"]
             | ["pr", "open"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
-                | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue"
-                | "notifications",
+                | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "notifications",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

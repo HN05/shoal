@@ -30,6 +30,9 @@ pub(super) async fn acquire(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     match kind {
+        AcquireKind::Hold { name, reason } => {
+            super::holds::acquire(ctx, workspace, name, reason).await
+        }
         AcquireKind::Port {
             name,
             port,
@@ -152,6 +155,9 @@ pub(super) async fn release(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    if let Some(ReleaseKind::Hold { name }) = kind {
+        return super::holds::release(ctx, workspace, name).await;
+    }
     let selected = select_held(ctx, &workspace, kind).await?;
     ensure!(!selected.is_empty(), "no leases or requests to release");
     for held in &selected {
@@ -330,6 +336,7 @@ pub(super) async fn show(
     scope: WorkspaceScope,
 ) -> Result<i32> {
     match kind {
+        Some(LeaseKind::Hold) => super::holds::list(ctx, scope).await,
         Some(LeaseKind::Port) => ports::overview(ctx, scope).await,
         Some(LeaseKind::Sim) => simulators::overview(ctx, scope).await,
         Some(LeaseKind::Resource) => resources::overview(ctx, scope, Members::Locks).await,

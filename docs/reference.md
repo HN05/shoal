@@ -1926,7 +1926,7 @@ Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.
 Release remains available while the workspace record exists. Holds belong to the
 user and to apps hosting external sessions: scoped callers can list their own
-workspace's holds but not acquire or release them. `status`, `inspect`,
+workspace's holds but not acquire or release them. `status`, `work inspect`,
 and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 

@@ -372,9 +372,9 @@ and `--new-sessions` choose either.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh
-shoal hold acquire fix-login --name quay-thread-42 --reason "Quay thread"
-shoal hold fix-login
-shoal hold release fix-login --name quay-thread-42
+shoal acquire hold --workspace fix-login --name quay-thread-42 --reason "Quay thread"
+shoal leases hold --workspace fix-login
+shoal release hold --workspace fix-login --name quay-thread-42
 ```
 
 Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in

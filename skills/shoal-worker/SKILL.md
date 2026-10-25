@@ -123,7 +123,7 @@ can reopen a removed workspace with `shoal work restore`. Cleanup waits while on
 your questions is open, so ask with `shoal ask` when you need the user before the
 workspace goes. `shoal done` closes your open questions, and `shoal undone` does
 not reopen them. Holds belong to the user and host apps; you can list them with
-`shoal hold` but not acquire or release them. `--cleanup` overrides a
+`shoal leases hold` but not acquire or release them. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local
 default branch. Completion does not claim a merge occurred. Inspect

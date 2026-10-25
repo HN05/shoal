@@ -105,7 +105,7 @@ Agents run `shoal done` themselves when their assignment is finished. For a
 workspace the user wants ended, use `shoal --json done <workspace>`,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
-hold it with `shoal hold acquire <workspace> --name review` and release the hold
+hold it with `shoal acquire hold --workspace <workspace> --name review` and release the hold
 afterwards; `shoal work restore <workspace>` reopens a removed one, or lists an
 existing one's checkpoints, and `shoal work restore <workspace> <number>` returns it
 to a checkpoint. To move a workspace to another machine, run

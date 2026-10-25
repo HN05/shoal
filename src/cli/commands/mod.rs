@@ -430,7 +430,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             workspaces::list(&ctx, queue, &filter).await
         }
-        Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,

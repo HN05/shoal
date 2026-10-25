@@ -520,12 +520,13 @@ needs an unscoped caller.
 Nested executions keep scope, and the CLI refuses scoped operations to a process
 whose ancestor carries scope for the same state directory, so removing the token
 from a descendant's environment does not lift them. Unscoped callers may export a ready, verified
-workspace's identity, current port variables and a fresh token through `env`.
+workspace's identity, current port variables and a fresh token through `work env`.
 Exported tokens persist across restarts until explicitly revoked or the workspace
 is removed; they register no execution and do not prevent cleanup.
 
-Root help groups built-in commands by task; configured commands are discovered
-through `run`.
+Root help groups built-in commands by task; workspace maintenance lives under
+`work`, repository administration under `repo`, PR checks under `pr ci`, and
+shell integration under `shell`. Configured commands are discovered through `run`.
 
 `herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
 plain terminal; `new_tab` only governs opening new tabs.
@@ -1277,8 +1278,8 @@ Leases use top-level verbs that take the kind first: `acquire <kind>`,
 `release [kind [item]]` and `leases [kind]`, with `--workspace` instead of a
 positional workspace. Like `unlink`, omitting the item or kind widens release
 to every lease of that kind or in the workspace; listings combine configuration
-or capacity with leases. Holds stay separate because they keep a workspace
-rather than share capacity. The per-noun `port`, `sim` and `resource`
+or capacity with leases. Holds use the same verbs but keep a workspace
+rather than share capacity; releasing leases without a kind preserves holds. The per-noun `port`, `sim` and `resource`
 subcommands remain accepted but hidden; simulator machine inventory and audit
 history remain under `sim`. All-workspace overviews that need independent per-workspace
 reads use bounded concurrency, retain workspace order and report every failure.

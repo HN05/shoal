@@ -4,64 +4,52 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        HoldCommand, WorkspaceScope, client,
+        WorkspaceScope, client,
         context::{Context, optional},
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     model::WorkspaceHold,
     protocol::Method,
 };
 
-pub(super) async fn run(
+pub(super) async fn acquire(
     ctx: &Context,
-    command: Option<HoldCommand>,
-    scope: WorkspaceScope,
+    workspace: String,
+    name: String,
+    reason: Option<String>,
 ) -> Result<i32> {
-    match command {
-        Some(HoldCommand::Acquire {
+    let hold = client::request::<WorkspaceHold>(
+        &ctx.paths,
+        Method::HoldAcquire {
             workspace,
             name,
             reason,
-        }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let hold = client::request::<WorkspaceHold>(
-                &ctx.paths,
-                Method::HoldAcquire {
-                    workspace,
-                    name,
-                    reason,
-                },
-            )
-            .await?;
-            ctx.emit(
-                &format!(
-                    "Hold acquired: {}{}",
-                    hold.name,
-                    optional(hold.reason.as_deref(), |r| format!(" ({r})"))
-                ),
-                &hold,
-            )?;
-            Ok(0)
-        }
-        Some(HoldCommand::Release { workspace, name }) => {
-            let workspace =
-                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            let name = match name {
-                Some(name) => name,
-                None => pick(ctx, &workspace).await?,
-            };
-            client::request::<()>(&ctx.paths, Method::HoldRelease { workspace, name }).await?;
-            ctx.emit_styled(Style::Success, "Hold released", json!({"released": true}))?;
-            Ok(0)
-        }
-        Some(HoldCommand::List { scope }) => list(ctx, scope).await,
-        None => list(ctx, scope).await,
-    }
+        },
+    )
+    .await?;
+    ctx.emit(
+        &format!(
+            "Hold acquired: {}{}",
+            hold.name,
+            optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+        ),
+        &hold,
+    )?;
+    Ok(0)
 }
 
-async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+pub(super) async fn release(ctx: &Context, workspace: String, name: Option<String>) -> Result<i32> {
+    let name = match name {
+        Some(name) => name,
+        None => pick(ctx, &workspace).await?,
+    };
+    client::request::<()>(&ctx.paths, Method::HoldRelease { workspace, name }).await?;
+    ctx.emit_styled(Style::Success, "Hold released", json!({"released": true}))?;
+    Ok(0)
+}
+
+pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         let workspaces = client::workspaces(&ctx.paths).await?;
         ctx.show(&workspaces, |workspaces| {

@@ -383,14 +383,6 @@ pub enum Command {
     },
     /// Withdraw a recorded completion without keeping the workspace.
     Undone { workspace: Option<String> },
-    /// Hold a workspace against automatic cleanup.
-    #[command(args_conflicts_with_subcommands = true)]
-    Hold {
-        #[command(subcommand)]
-        command: Option<HoldCommand>,
-        #[command(flatten)]
-        scope: WorkspaceScope,
-    },
     /// List what needs you: questions, approvals, agents needing input, failures and ready work.
     Inbox {
         /// List only this registered repository's items.
@@ -1205,30 +1197,6 @@ pub enum BaseCommand {
     },
 }
 
-#[derive(Debug, Subcommand)]
-pub enum HoldCommand {
-    /// Keep a workspace against automatic cleanup until the hold is released.
-    Acquire {
-        workspace: Option<String>,
-        #[arg(long)]
-        name: String,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Release one named hold.
-    Release {
-        workspace: Option<String>,
-        /// Hold to release; omit to choose one.
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// List holds on a workspace, or every workspace with --all.
-    List {
-        #[command(flatten)]
-        scope: WorkspaceScope,
-    },
-}
-
 impl Cli {
     /// Parse the process arguments as `Cli::parse` does, recording what the
     /// command needs of its workspace.
@@ -1809,6 +1777,7 @@ pub enum SimCommand {
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum LeaseKind {
+    Hold,
     Port,
     Sim,
     Resource,
@@ -1831,6 +1800,13 @@ pub struct LeaseOptions {
 
 #[derive(Debug, Subcommand)]
 pub enum AcquireKind {
+    /// Keep a workspace against automatic cleanup until released.
+    Hold {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Reserve a named TCP port, or return the existing reservation.
     Port {
         /// Port name; omit to choose a configured port.
@@ -1911,6 +1887,11 @@ pub struct PoolSelection {
 
 #[derive(Debug, Subcommand)]
 pub enum ReleaseKind {
+    /// Release a named workspace hold; omit its name to choose one.
+    Hold {
+        #[arg(long)]
+        name: Option<String>,
+    },
     /// Release a port reservation, or every one.
     Port { name: Option<String> },
     /// Release a simulator lease, or every one.

@@ -901,7 +901,14 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
             path
         })
         .collect();
-    fixture.ok(&["hold", "acquire", "second", "--name", "review"]);
+    fixture.ok(&[
+        "acquire",
+        "hold",
+        "--workspace",
+        "second",
+        "--name",
+        "review",
+    ]);
     let repo = fixture.repo.to_str().unwrap();
     let directory = fixture.root.path().join("exports");
     let export = |extra: &[&str]| {
@@ -1722,7 +1729,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["stop", ""],
         vec!["undone", ""],
         vec!["unready", "--workspace", ""],
-        vec!["hold", "release", ""],
+        vec!["release", "hold", "--workspace", ""],
         vec!["work", "base", "clear", "--workspace", ""],
     ] {
         let choices = described(&args);
@@ -1731,8 +1738,15 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?} {choices:?}"
         );
     }
-    fixture.ok(&["hold", "acquire", "second", "--name", "review"]);
-    assert!(described(&["hold", "release", ""]).contains(&"second".into()));
+    fixture.ok(&[
+        "acquire",
+        "hold",
+        "--workspace",
+        "second",
+        "--name",
+        "review",
+    ]);
+    assert!(described(&["release", "hold", "--workspace", ""]).contains(&"second".into()));
     // A workspace that is not ready shows its state.
     let failed = fixture
         .command()
@@ -1749,7 +1763,14 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let choices = described(&["exec", ""]);
     assert!(choices.contains(&"broken:failed".into()), "{choices:?}");
     assert!(choices.contains(&"second".into()), "{choices:?}");
-    fixture.ok(&["hold", "release", "second", "--name", "review"]);
+    fixture.ok(&[
+        "release",
+        "hold",
+        "--workspace",
+        "second",
+        "--name",
+        "review",
+    ]);
     assert!(described(&["exec", ""]).contains(&"second".into()));
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
@@ -5488,10 +5509,10 @@ until ! shoal work inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" held
-shoal hold acquire held --name review
+shoal acquire hold --workspace held --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
-shoal hold release held --name review
+shoal release hold --workspace held --name review
 until ! shoal work inspect held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
@@ -8416,7 +8437,7 @@ esac
 fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     let fixture = Fixture::new();
     fixture.add("first");
-    let (output, rows) = fixture.pick(&["hold", "list"], "--all", "");
+    let (output, rows) = fixture.pick(&["leases", "hold"], "--all", "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("first"), "{rows}");
     assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
@@ -8667,16 +8688,30 @@ fn inbox_lists_what_needs_the_user_by_kind() {
 fn hold_release_picks_an_omitted_hold() {
     let fixture = Fixture::new();
     fixture.add("upper");
-    let none = fixture.run(&["hold", "release", "upper"]);
+    let none = fixture.run(&["release", "hold", "--workspace", "upper"]);
     assert!(String::from_utf8_lossy(&none.stderr).contains("no holds on this workspace"));
-    fixture.ok(&["hold", "acquire", "upper", "--name", "review"]);
     fixture.ok(&[
-        "hold", "acquire", "upper", "--name", "demo", "--reason", "show",
+        "acquire",
+        "hold",
+        "--workspace",
+        "upper",
+        "--name",
+        "review",
     ]);
-    let (output, rows) = fixture.pick(&["hold", "release", "upper"], "demo", "");
+    fixture.ok(&[
+        "acquire",
+        "hold",
+        "--workspace",
+        "upper",
+        "--name",
+        "demo",
+        "--reason",
+        "show",
+    ]);
+    let (output, rows) = fixture.pick(&["release", "hold", "--workspace", "upper"], "demo", "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("demo\tdemo (show)") && rows.contains("review\t"));
-    let holds = fixture.ok(&["hold", "list", "upper"]);
+    let holds = fixture.ok(&["leases", "hold", "--workspace", "upper"]);
     assert_eq!(holds.as_array().unwrap().len(), 1);
     assert_eq!(holds[0]["name"], "review");
 }
@@ -19969,7 +20004,14 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         command.extend_from_slice(args);
         fixture.ok(&command)
     };
-    fixture.ok(&["hold", "acquire", "issue-work", "--name", "review"]);
+    fixture.ok(&[
+        "acquire",
+        "hold",
+        "--workspace",
+        "issue-work",
+        "--name",
+        "review",
+    ]);
     scoped(&fixture, &["done"]);
     assert_eq!(
         fixture.ok(&["work", "inspect", "issue-work"])["workspace"]["done"],
@@ -19992,7 +20034,14 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     let inspection = fixture.ok(&["work", "inspect", "issue-work"]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);
-    fixture.ok(&["hold", "release", "issue-work", "--name", "review"]);
+    fixture.ok(&[
+        "release",
+        "hold",
+        "--workspace",
+        "issue-work",
+        "--name",
+        "review",
+    ]);
     // Only holds keep a workspace; cleanup removes the merged one on request,
     // which needs a default branch it can fetch.
     git(&fixture.repo, &["remote", "remove", "origin"]);
@@ -20143,8 +20192,9 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("held");
     let hold = fixture.ok(&[
-        "hold",
         "acquire",
+        "hold",
+        "--workspace",
         "held",
         "--name",
         "app-thread",
@@ -20157,9 +20207,19 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         assert_eq!(fixture.ok(&command)["workspace"]["holds"], expected);
     }
     assert_eq!(fixture.ok(&["work"])[0]["holds"], expected);
-    assert_eq!(fixture.ok(&["hold", "held"]), expected);
-    assert_eq!(fixture.ok(&["hold", "list", "held"]), expected);
-    assert_eq!(fixture.ok(&["hold", "--all"])[0]["holds"], expected);
+    assert_eq!(
+        fixture.ok(&["leases", "hold", "--workspace", "held"]),
+        expected
+    );
+    fixture.ok(&["release", "--workspace", "held"]);
+    assert_eq!(
+        fixture.ok(&["leases", "hold", "--workspace", "held"]),
+        expected
+    );
+    assert_eq!(
+        fixture.ok(&["leases", "hold", "--all"])[0]["holds"],
+        expected
+    );
     assert!(
         String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
             .contains("app-thread (Open thread)")
@@ -20170,14 +20230,14 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         command.extend_from_slice(args);
         fixture.run(&command)
     };
-    let listed = scoped(&["hold"]);
+    let listed = scoped(&["leases", "hold"]);
     assert!(listed.status.success(), "{listed:?}");
     assert_eq!(
         serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
         expected
     );
     for action in ["acquire", "release"] {
-        let output = scoped(&["hold", action, "--name", "scoped"]);
+        let output = scoped(&[action, "hold", "--name", "scoped"]);
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr).contains("shoal ask"),
@@ -20185,7 +20245,10 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         );
     }
     fixture.restart();
-    assert_eq!(fixture.ok(&["hold", "held"]), expected);
+    assert_eq!(
+        fixture.ok(&["leases", "hold", "--workspace", "held"]),
+        expected
+    );
     let (no, prompt) = fixture.interactive(&["rm", "held"], "n\n");
     assert!(!no.status.success());
     assert!(
@@ -20208,7 +20271,14 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         "missing-held",
         "work",
     );
-    fixture.ok(&["hold", "acquire", "missing-held", "--name", "app"]);
+    fixture.ok(&[
+        "acquire",
+        "hold",
+        "--workspace",
+        "missing-held",
+        "--name",
+        "app",
+    ]);
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
     fixture.restart();
     wait_removed(&fixture, "missing-held");
