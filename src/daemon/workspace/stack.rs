@@ -15,7 +15,8 @@ use crate::{
 };
 
 impl Manager {
-    /// Record or clear the workspace whose branch this one builds on.
+    /// Record or clear the workspace whose branch this one builds on, which
+    /// must change it.
     pub async fn set_base_workspace(
         &self,
         selector: &str,
@@ -50,9 +51,11 @@ impl Manager {
                     "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1 AND base_workspace_id IS NOT ?2",
                     params![id, base],
                 )?;
-                if changed > 0 {
-                    record_base_changed(&tx, &id, EventCause::Manual)?;
+                match &base {
+                    Some(_) => ensure!(changed > 0, "the workspace already builds on that base"),
+                    None => ensure!(changed > 0, "the workspace has no base workspace"),
                 }
+                record_base_changed(&tx, &id, EventCause::Manual)?;
                 tx.commit()?;
                 Ok(())
             })

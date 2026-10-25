@@ -1151,7 +1151,7 @@ shoal base set feature-a --workspace feature-b
 ```
 
 The base must be another workspace of the same repository and must not create
-a cycle. Scoped callers may set their own workspace's base. Removing a base
+a cycle; setting the current base, or clearing none, fails. Scoped callers may set their own workspace's base. Removing a base
 workspace moves the workspaces stacked on it to its own base workspace, or to
 none. `status` shows both directions; `work --json` and `inspect` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
