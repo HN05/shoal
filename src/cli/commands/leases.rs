@@ -153,20 +153,17 @@ pub(super) async fn release(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let selected = select_held(ctx, &workspace, kind).await?;
+    ensure!(!selected.is_empty(), "no leases or requests to release");
     for held in &selected {
         release_one(ctx, &workspace, held)
             .await
             .with_context(|| format!("release {held}"))?;
     }
-    let text = if selected.is_empty() {
-        "No leases to release".to_owned()
-    } else {
-        selected
-            .iter()
-            .map(|held| format!("Released {held}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let text = selected
+        .iter()
+        .map(|held| format!("Released {held}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     ctx.emit_styled(Style::Success, &text, json!({ "released": selected }))?;
     Ok(0)
 }

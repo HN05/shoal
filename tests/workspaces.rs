@@ -6683,7 +6683,12 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
         released(&[]),
         serde_json::json!([{"kind": "resource", "pool": "signing", "name": "default"}])
     );
-    assert_eq!(released(&[]), serde_json::json!([]));
+    let empty = fixture.run(&["release", "--workspace", "first"]);
+    assert!(!empty.status.success());
+    assert!(
+        String::from_utf8_lossy(&empty.stderr).contains("no leases or requests to release"),
+        "{empty:?}"
+    );
     let inspection = fixture.ok(&["inspect", "first"]);
     assert!(inspection["ports"].as_array().unwrap().is_empty());
     assert!(inspection["resources"].as_array().unwrap().is_empty());
