@@ -902,7 +902,8 @@ Agents read messages through Shoal commands, and a pending watch
 ends for a new message. Messages and item activity are pushed rather than polled by the agent,
 because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
-working agent accepts new context, and replaces a running watch so nothing is
+working agent accepts new context, except a subagent's tool call, whose context
+the agent never sees, and replaces a running watch so nothing is
 delivered twice. The hook never waits for cleanup or an item change, which can
 hold Shoal's item records for minutes: an agent discards the output of a hook
 that outlasts its timeout, so the activity waits for a later delivery. Claude Code also runs a background `Stop` hook that waits for

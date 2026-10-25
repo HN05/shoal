@@ -71,13 +71,18 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
 /// Agent hooks run after every tool call, so a hook prints nothing without
 /// messages or item updates and reports failures without blocking the agent:
 /// it gives up on a daemon that does not answer in time, such as one waiting
-/// to restart with an update, and the next call delivers instead.
+/// to restart with an update, and the next call delivers instead. A
+/// subagent's tool calls run the same hooks, but its context goes back to the
+/// agent only as its report, so the agent's own next call delivers them.
 pub(super) async fn hook(ctx: &Context) -> Result<i32> {
     let mut input = String::new();
     // Hook input is optional context; a terminal, closed or unreadable stdin
     // still delivers.
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+    }
+    if from_subagent(&input) {
+        return Ok(0);
     }
     if let Err(error) = deliver_to_hook(ctx, &input).await {
         eprintln!("shoal: agent messages unavailable: {error:#}");
@@ -321,6 +326,13 @@ pub(super) fn hanging_indent(text: &str, indent: &str) -> String {
         .join("\n")
 }
 
+/// Whether the hook input names the subagent whose tool call ran the hook,
+/// as Claude Code's and Codex's `agent_id` do.
+fn from_subagent(input: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(input)
+        .is_ok_and(|input| input.get("agent_id").is_some_and(|id| !id.is_null()))
+}
+
 /// Claude Code and Codex read `additionalContext` for the event named in the
 /// hook input; without one, the context is plain text.
 fn hook_output(input: &str, context: &str) -> String {
@@ -400,5 +412,18 @@ mod tests {
         assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
         assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
         assert_eq!(hook_output("", &context), context);
+    }
+
+    #[test]
+    fn only_a_subagent_call_is_left_undelivered() {
+        assert!(from_subagent(
+            r#"{"hook_event_name":"PostToolUse","agent_id":"a1","agent_type":"general-purpose"}"#
+        ));
+        // A session started with `--agent` names its type, not a subagent.
+        assert!(!from_subagent(
+            r#"{"hook_event_name":"PostToolUse","agent_type":"reviewer"}"#
+        ));
+        assert!(!from_subagent(r#"{"hook_event_name":"PostToolUse"}"#));
+        assert!(!from_subagent(""));
     }
 }
