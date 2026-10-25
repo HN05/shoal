@@ -214,6 +214,8 @@ instead of the PR delivery guidance below.
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Production Git command arguments live in `git`; callers use named operations
   and retain lifecycle and execution policy.
+  Interactive prompts and pickers live in `cli::ui`; flag a command that runs
+  fzf or reads the terminal itself, or adds a picker or prompt `ui` already offers.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
   only a documented negative exit status is a negative answer.
 - Explicit workspace paths override only that creation; reject overlaps with state,

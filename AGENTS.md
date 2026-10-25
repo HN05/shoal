@@ -20,6 +20,10 @@ when behavior changes, distinguishing decisions from proposals.
   operations and preserve Shoal's ownership records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named
   operations and retain lifecycle and execution policy.
+- Interactive input lives in `cli::ui`, whose module doc lists what it offers:
+  commands prompt and pick through its operations, never through fzf or the
+  terminal directly, and a new kind of prompt or picker goes there, built on
+  the existing ones, so every command looks and behaves the same.
 - Forge requests live in `crates/shoal-forge`, which depends on no other Shoal
   code; it takes the account to act as, while scope, approvals, identity choice
   and workspace records stay in the daemon. What one forge does its own way
