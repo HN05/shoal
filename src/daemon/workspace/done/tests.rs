@@ -118,6 +118,21 @@ async fn repeating_an_unchanged_completion_is_refused() {
         error.to_string().contains("already marked done"),
         "{error:#}"
     );
+    // Repeating it closes a question asked since.
+    manager
+        .ask_question(
+            &workspace.name,
+            crate::daemon::questions::Ask {
+                question: "Anything more?".into(),
+                recommendation: "No".into(),
+                reason: None,
+                choices: vec![],
+            },
+        )
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
     // Another cleanup choice or HEAD replaces the recorded completion.
     assert!(
         manager
