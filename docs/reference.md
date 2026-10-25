@@ -3078,7 +3078,8 @@ members. Names are lowercase letters, digits, `_`, or `-`, starting with a
 letter, at most 64 characters; capacities are 1–65535.
 
 ```sh
-shoal leases resource                        # Capacities and own leases
+shoal catalog resource                       # Pools, members and approval settings
+shoal leases resource                        # Usage and own leases
 shoal acquire resource devices               # Any available member
 shoal acquire resource devices --member beta --name tests --reason "Integration tests"
 shoal acquire resource signing --queue
@@ -3111,7 +3112,7 @@ A URL keeps tracked config independent of local registration names. It matches
 the registration with the same remote over any transport, and is never cloned:
 register it first with `shoal repo add <url>`.
 
-`shoal acquire repo server` returns a read lease with `repository.id` and
+`shoal catalog repo` lists them; `shoal acquire repo server` returns a read lease with `repository.id` and
 `repository.path` in JSON. Scoped callers can acquire it without repository
 administration access. New leases default to `read`; other modes are rejected.
 Capacity must be 1, and readers share one pool slot. Resource approvals and hooks

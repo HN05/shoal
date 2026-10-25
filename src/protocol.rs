@@ -801,6 +801,9 @@ pub enum Method {
     ResourceOverview {
         workspace: String,
     },
+    ResourceCatalog {
+        workspace: String,
+    },
     // Simulators.
     SimCatalog {
         workspace: String,
@@ -1039,6 +1042,7 @@ response_bodies! {
     SecretGrant(crate::daemon::secrets::SecretGrant),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
+    ResourceCatalog(crate::daemon::resources::Catalog),
     Simulator(Simulator),
     Simulators(Vec<Simulator>),
     SimCatalog(SimulatorCatalog),

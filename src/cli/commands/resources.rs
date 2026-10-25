@@ -15,7 +15,7 @@ use crate::{
         ui,
     },
     daemon::resources::{
-        Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
+        Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
     protocol::Method,
 };
@@ -104,6 +104,17 @@ impl Members {
         }
     }
 
+    fn retain_catalog(self, catalog: &mut Catalog) {
+        for pool in &mut catalog.pools {
+            pool.definition
+                .resources
+                .retain(|_, resource| self.includes(resource.kind));
+        }
+        catalog
+            .pools
+            .retain(|pool| !pool.definition.resources.is_empty());
+    }
+
     pub(super) fn retain(self, overview: &mut Overview) {
         for pool in &mut overview.pools {
             pool.resources
@@ -127,6 +138,49 @@ pub(super) async fn fetch_overview(
         request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
     members.retain(&mut overview);
     Ok(overview)
+}
+
+pub(super) async fn fetch_catalog(
+    ctx: &Context,
+    workspace: &str,
+    members: Members,
+) -> Result<Catalog> {
+    let method = Method::ResourceCatalog {
+        workspace: workspace.to_owned(),
+    };
+    let mut catalog = request::<Catalog>(&ctx.paths, method).await?;
+    members.retain_catalog(&mut catalog);
+    Ok(catalog)
+}
+
+pub(super) fn render_catalog(catalog: &Catalog, palette: Palette) {
+    for pool in &catalog.pools {
+        outln!(
+            "{} ({}) capacity {}{}",
+            palette.paint(Style::Heading, &pool.name),
+            pool.scope,
+            pool.definition.capacity,
+            optional(pool.definition.reason.as_deref(), |r| format!("  {r}"))
+        );
+        for (name, resource) in &pool.definition.resources {
+            outln!(
+                "  {name}: {}, capacity {}{}{}",
+                resource.kind,
+                resource.capacity,
+                optional(resource.repo.as_deref(), |repo| format!(
+                    ", repository {repo}"
+                )),
+                if resource.requires_approval {
+                    format!("; approval required ({})", resource.approval_lifetime)
+                } else {
+                    String::new()
+                }
+            );
+        }
+    }
+    if catalog.pools.is_empty() {
+        outln!("No configured resources");
+    }
 }
 
 /// Choose a configured pool with `members` for the workspace.
@@ -189,13 +243,6 @@ pub(super) fn render_overview(overview: &Overview, palette: Palette) {
             }
         );
         for resource in &pool.resources {
-            if resource.requires_approval {
-                outln!(
-                    "  {}: approval required ({})",
-                    resource.name,
-                    resource.approval_lifetime
-                );
-            }
             if resource.kind == ResourceKind::Repo {
                 outln!(
                     "  {}: {} readers; read available: {}",

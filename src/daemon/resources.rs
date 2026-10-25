@@ -224,8 +224,6 @@ pub struct ResourceRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResourceStatus {
-    pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub kind: ResourceKind,
     pub readers: u32,
     pub writers: u32,
@@ -254,6 +252,21 @@ pub struct PoolStatus {
 pub struct Overview {
     pub pools: Vec<PoolStatus>,
     pub leases: Vec<ResourceLease>,
+}
+
+/// A configured pool with the scope its leases count against.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CatalogPool {
+    pub name: String,
+    pub scope: Scope,
+    #[serde(flatten)]
+    pub definition: Definition,
+}
+
+/// The pools a workspace's resource and repository leases draw from.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Catalog {
+    pub pools: Vec<CatalogPool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -716,6 +729,21 @@ impl Manager {
         Ok(())
     }
 
+    pub async fn resource_catalog(&self, selector: &str) -> Result<Catalog> {
+        let workspace = self.workspace(selector).await?;
+        let pools = self
+            .resource_definitions(&workspace)
+            .await?
+            .into_iter()
+            .map(|(name, (scope, definition))| CatalogPool {
+                name,
+                scope,
+                definition,
+            })
+            .collect();
+        Ok(Catalog { pools })
+    }
+
     pub async fn resource_overview(&self, selector: &str) -> Result<Overview> {
         let workspace = self.workspace(selector).await?;
         let definitions = self.resource_definitions(&workspace).await?;
@@ -981,8 +1009,6 @@ fn pool_status(
             let occupancy = usage.member(name);
             let used = occupancy.slots();
             ResourceStatus {
-                requires_approval: r.requires_approval,
-                approval_lifetime: r.approval_lifetime,
                 kind: r.kind,
                 readers: occupancy.readers,
                 writers: occupancy.writers,

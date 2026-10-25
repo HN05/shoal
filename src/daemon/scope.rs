@@ -95,6 +95,7 @@ pub async fn authorize(
         | Method::ResourceAcquire { workspace, .. }
         | Method::ResourceRelease { workspace, .. }
         | Method::ResourceOverview { workspace }
+        | Method::ResourceCatalog { workspace }
         | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }

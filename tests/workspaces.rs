@@ -18544,6 +18544,17 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
     fixture.add("consumer");
     fixture.add("other-consumer");
+    let catalog = fixture.ok(&["catalog", "repo", "--workspace", "consumer"]);
+    assert_eq!(catalog["pools"][0]["resources"]["server"]["repo"], "server");
+    assert_eq!(
+        fixture.ok(&["catalog", "resource", "--workspace", "consumer"]),
+        serde_json::json!({"pools": []})
+    );
+    let rendered = fixture.run(&["catalog", "repo", "--workspace", "consumer"]);
+    assert!(
+        String::from_utf8_lossy(&rendered.stdout)
+            .ends_with(") capacity 1\n  server: repo, capacity 1, repository server\n")
+    );
     assert!(
         fixture.ok(&["leases", "repo", "--workspace", "consumer"])["leases"]
             .as_array()
@@ -19150,8 +19161,14 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     let id = id.as_str();
     assert_eq!(pending["workspace"], "agent");
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", "agent"])["pools"][0]["resources"][0]["requires_approval"],
+        fixture.ok(&["catalog", "resource", "--workspace", "agent"])["pools"][0]["resources"]["signing"]
+            ["requires_approval"],
         true
+    );
+    assert!(
+        fixture.ok(&["leases", "resource", "--workspace", "agent"])["pools"][0]["resources"][0]
+            .get("requires_approval")
+            .is_none()
     );
     assert_eq!(
         pending_approval(scoped_command(&fixture, "agent", &args))["id"],

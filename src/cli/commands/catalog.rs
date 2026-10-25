@@ -2,7 +2,11 @@
 use anyhow::Result;
 use serde::Serialize;
 
-use super::{ports, simulators};
+use super::{
+    ports,
+    resources::{self, Members},
+    simulators,
+};
 use crate::{
     cli::{
         CatalogKind,
@@ -10,6 +14,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
+    daemon::resources::Catalog as ResourceCatalog,
     model::PortCatalog,
     sim::SimulatorCatalog,
 };
@@ -19,6 +24,7 @@ use crate::{
 struct Catalog {
     ports: PortCatalog,
     simulators: SimulatorCatalog,
+    resources: ResourceCatalog,
 }
 
 pub(super) async fn show(
@@ -30,26 +36,35 @@ pub(super) async fn show(
     match kind {
         Some(CatalogKind::Port) => {
             let catalog = ports::fetch_catalog(ctx, &workspace).await?;
-            ctx.show(&catalog, |catalog| {
-                ports::render_catalog(catalog, Palette::stdout(ctx.json))
-            })?;
+            display(ctx, &catalog, ports::render_catalog)
         }
         Some(CatalogKind::Sim) => {
             let catalog = simulators::fetch_catalog(ctx, &workspace).await?;
-            ctx.show(&catalog, |catalog| {
-                simulators::render_catalog(catalog, Palette::stdout(ctx.json))
-            })?;
+            display(ctx, &catalog, simulators::render_catalog)
+        }
+        Some(CatalogKind::Resource) => {
+            let catalog = resources::fetch_catalog(ctx, &workspace, Members::Locks).await?;
+            display(ctx, &catalog, resources::render_catalog)
+        }
+        Some(CatalogKind::Repo) => {
+            let catalog = resources::fetch_catalog(ctx, &workspace, Members::Repositories).await?;
+            display(ctx, &catalog, resources::render_catalog)
         }
         None => {
             let catalog = Catalog {
                 ports: ports::fetch_catalog(ctx, &workspace).await?,
                 simulators: simulators::fetch_catalog(ctx, &workspace).await?,
+                resources: resources::fetch_catalog(ctx, &workspace, Members::All).await?,
             };
-            ctx.show(&catalog, |catalog| {
-                render_catalog(catalog, Palette::stdout(ctx.json))
-            })?;
+            display(ctx, &catalog, render_catalog)
         }
     }
+}
+
+fn display<T: Serialize>(ctx: &Context, catalog: &T, render: fn(&T, Palette)) -> Result<i32> {
+    ctx.show(catalog, |catalog| {
+        render(catalog, Palette::stdout(ctx.json))
+    })?;
     Ok(0)
 }
 
@@ -58,4 +73,6 @@ fn render_catalog(catalog: &Catalog, palette: Palette) {
     ports::render_catalog(&catalog.ports, palette);
     outln!("{}", palette.paint(Style::Heading, "Simulators"));
     simulators::render_catalog(&catalog.simulators, palette);
+    outln!("{}", palette.paint(Style::Heading, "Resources"));
+    resources::render_catalog(&catalog.resources, palette);
 }

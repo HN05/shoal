@@ -1851,6 +1851,10 @@ pub enum CatalogKind {
     Port,
     /// Device types, installed runtimes and machine profiles.
     Sim,
+    /// Resource pools, their members and approval settings.
+    Resource,
+    /// Related repositories that can be borrowed.
+    Repo,
 }
 
 #[derive(Debug, Subcommand)]

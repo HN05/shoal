@@ -313,6 +313,7 @@ environment: pass the number to the server explicitly.
 ## Resource pools
 
 ```sh
+shoal catalog resource
 shoal leases resource
 shoal acquire resource devices --queue
 shoal release resource devices
