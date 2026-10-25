@@ -1371,7 +1371,11 @@ mod tests {
             let remote = error.downcast_ref::<RemoteError>().unwrap();
             assert_eq!(remote.code, code);
             assert_eq!(remote.message, "failed");
-            assert_eq!(error.to_string(), format!("{spelling}: failed"));
+            let display = match code {
+                ErrorCode::OperationFailed => "failed".to_owned(),
+                _ => format!("{spelling}: failed"),
+            };
+            assert_eq!(error.to_string(), display);
         }
         for code in [json!(null), json!(42), json!({"unknown": "future_code"})] {
             assert!(serde_json::from_value::<ErrorCode>(code).is_err());

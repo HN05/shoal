@@ -584,15 +584,16 @@ mod tests {
                 .unwrap_err(),
             ] {
                 assert!(!error.is::<ProtocolMismatch>());
-                assert_eq!(error.to_string(), format!("{code}: failed: detail"));
+                let display = match code {
+                    ErrorCode::OperationFailed => "failed: detail".to_owned(),
+                    _ => format!("{code}: failed: detail"),
+                };
+                assert_eq!(error.to_string(), display);
                 let error = error.context("caller context");
                 let remote = error.downcast_ref::<RemoteError>().unwrap();
                 assert_eq!(remote.code, code);
                 assert_eq!(remote.message, "failed: detail");
-                assert_eq!(
-                    format!("{error:#}"),
-                    format!("caller context: {code}: failed: detail")
-                );
+                assert_eq!(format!("{error:#}"), format!("caller context: {display}"));
             }
         }
     }
