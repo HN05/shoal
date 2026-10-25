@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn built_in_names_are_valid_for_explicit_run() {
-        for name in ["run", "work", "help"] {
+        for name in ["run", "work"] {
             let config = format!("[commands]\n{name} = ['tool']\n");
             assert!(config::repo::parse(&config).is_ok(), "{config}");
         }

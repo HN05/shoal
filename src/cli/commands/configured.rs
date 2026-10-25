@@ -56,7 +56,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     let definitions: Vec<_> = definitions
         .into_iter()
         .map(|(name, (argv, layer))| {
-            let bare_name = if name == "help" || built_ins.contains(&name) {
+            let bare_name = if built_ins.contains(&name) {
                 BareName::BuiltIn
             } else {
                 BareName::Shorthand
