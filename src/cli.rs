@@ -103,15 +103,16 @@ pub struct RunArgs {
 // Arguments of `shoal export`.
 #[derive(Debug, Args)]
 pub struct ExportArgs {
-    #[arg(conflicts_with = "all")]
-    pub workspace: Option<String>,
+    #[arg(conflicts_with = "all", value_name = "WORKSPACE")]
+    pub workspace: Vec<String>,
     /// Export every workspace of the repository --repo names.
     #[arg(long, requires = "repository")]
     pub all: bool,
     /// Repository whose workspaces --all exports.
     #[arg(long = "repo", requires = "all")]
     pub repository: Option<String>,
-    /// File to write, or with --all, the directory to write a file per workspace in.
+    /// File to write, or with several workspaces or --all, the directory to write a file per
+    /// workspace in.
     #[arg(short, long)]
     pub output: PathBuf,
     #[command(flatten)]
@@ -642,9 +643,9 @@ pub enum Command {
     ///
     /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
     /// default branch, and the workspace's base, links and stopped agents. A removed workspace
-    /// is exported without another removal. `-` writes to standard output. With --all, every
-    /// workspace of the repository goes to its own file in the directory -o names, once each
-    /// one can be exported.
+    /// is exported without another removal. `-` writes to standard output. Several workspaces,
+    /// or with --all every workspace of the repository, go to a file each in the directory -o
+    /// names, once each one can be exported.
     Export(ExportArgs),
     /// Open workspaces shoal export wrote, in the repository with the same origin.
     ///

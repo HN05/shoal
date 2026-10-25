@@ -1032,6 +1032,34 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
 
 // A reader that goes away still lets the temporary archive be removed.
 #[test]
+fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
+    let fixture = Fixture::new();
+    let paths: Vec<_> = ["first", "second", "third"]
+        .into_iter()
+        .map(|name| PathBuf::from(fixture.add(name)["path"].as_str().unwrap()))
+        .collect();
+    let directory = fixture.root.path().join("exports");
+    let refused = fixture.run(&["export", "first", "second", "-o", "-"]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("name a directory"),
+        "{refused:?}"
+    );
+    let output = directory.to_str().unwrap();
+    let exported = fixture.ok(&["export", "first", "second", "-o", output, "--yes"]);
+    assert_eq!(
+        exported["exported"].as_array().unwrap().len(),
+        2,
+        "{exported}"
+    );
+    assert_eq!(exported["failed"], serde_json::json!([]));
+    for name in ["first", "second"] {
+        assert!(directory.join(format!("{name}.shoal")).exists());
+    }
+    assert!(!paths[0].exists() && !paths[1].exists() && paths[2].exists());
+}
+
+#[test]
 fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
     let fixture = Fixture::new();
     fixture.add("streamed");

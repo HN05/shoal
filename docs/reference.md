@@ -1916,6 +1916,7 @@ shoal export topic -o topic.shoal         # remove topic and write it to a file
 shoal import topic.shoal                  # open it in the repository with the same origin
 shoal export topic -o - | ssh other shoal import -
 shoal export --repo app --all -o moving   # remove every workspace of app, a file each
+shoal export topic spike -o moving        # remove both, a file each
 shoal import moving                       # open every workspace exported to moving
 ```
 
@@ -1933,8 +1934,9 @@ the default remote's default branch; a checkpoint that branch already has
 travels without one. Ignored files, leases, permits, approvals, grants and holds
 stay behind; setup rebuilds what the workspace needs.
 
-`shoal export --repo <repository> --all -o <directory>` exports every workspace
-of the repository to `<workspace>.shoal` in the directory, creating it when
+`shoal export <workspace>... -o <directory>`, for several workspaces, and
+`shoal export --repo <repository> --all -o <directory>`, for every workspace of
+the repository, export each to `<workspace>.shoal` in the directory, creating it when
 missing. It checks every workspace as a single export does, that none is in the
 middle of another lifecycle operation, and that the terminal does not close with
 one of them, before removing any: when one cannot

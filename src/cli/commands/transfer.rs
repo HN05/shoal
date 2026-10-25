@@ -13,7 +13,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     model::{RemovedWorkspace, RestoredWorkspace, Workspace},
     protocol::Method,
@@ -28,22 +28,41 @@ use super::restore::Reopened;
 const STANDARD_STREAM: &str = "-";
 
 /// `shoal export`: remove the workspace, or take an already removed one, and
-/// write it to `file`.
+/// write it to `file`; several go to a file each in the directory `file`
+/// names.
 pub(super) async fn export(
     ctx: &Context,
-    workspace: Option<String>,
+    names: Vec<String>,
     file: PathBuf,
     yes: bool,
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
-    let output = Output::reserve(&file)?;
-    let exported = export_workspace(ctx, workspace, yes, &output).await?;
-    output.report(ctx, &exported)
+    if let [selector] = names.as_slice()
+        && !workspace_exists(ctx, selector).await?
+    {
+        let output = Output::reserve(&file)?;
+        let exported = export_removed(ctx, selector, &output).await?;
+        return output.report(ctx, &exported);
+    }
+    let selected = ui::select_workspaces(ctx, names).await?;
+    if let [workspace] = selected.as_slice() {
+        let output = Output::reserve(&file)?;
+        let exported = export_workspace(ctx, workspace, yes, &output).await?;
+        return output.report(ctx, &exported);
+    }
+    ensure!(
+        file != Path::new(STANDARD_STREAM),
+        "several workspaces export to a file each; name a directory with -o"
+    );
+    let mut workspaces = Vec::new();
+    for selector in selected {
+        workspaces.push(client::inspect(&ctx.paths, selector).await?.workspace);
+    }
+    export_into(ctx, &workspaces, file, yes).await
 }
 
 /// `shoal export --all`: export every workspace of `repository` to a file of
-/// its own in `directory`, once each one can be exported, so a workspace that
-/// cannot be leaves every other one in place.
+/// its own in `directory`.
 pub(super) async fn export_all(
     ctx: &Context,
     repository: String,
@@ -52,8 +71,19 @@ pub(super) async fn export_all(
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     let workspaces = repository_workspaces(ctx, repository).await?;
+    export_into(ctx, &workspaces, directory, yes).await
+}
+
+/// Export `workspaces` to a file each in `directory`, once each one can be
+/// exported, so a workspace that cannot be leaves every other one in place.
+async fn export_into(
+    ctx: &Context,
+    workspaces: &[Workspace],
+    directory: PathBuf,
+    yes: bool,
+) -> Result<i32> {
     let directory = ExportDirectory::create(directory)?;
-    let planned = check_exports(ctx, &workspaces, &directory, yes).await?;
+    let planned = check_exports(ctx, workspaces, &directory, yes).await?;
     export_each(ctx, planned, &directory).await
 }
 
@@ -331,24 +361,27 @@ impl Output {
 /// Export the workspace to `output` once its checkpoint can keep every
 /// unsaved file, `output` lies outside it and the user lets its holds go;
 /// a removed workspace with that name or ID is exported from its record.
+/// Export the removed workspace `selector` names, which needs no removal.
+async fn export_removed(
+    ctx: &Context,
+    selector: &str,
+    output: &Output,
+) -> Result<ExportedWorkspace> {
+    let method = Method::ExportWorkspace {
+        workspace: selector.to_owned(),
+        unsaved: UnsavedWork::default(),
+        file: output.file(),
+    };
+    request::<ExportedWorkspace>(&ctx.paths, method).await
+}
+
 async fn export_workspace(
     ctx: &Context,
-    workspace: Option<String>,
+    workspace: &str,
     yes: bool,
     output: &Output,
 ) -> Result<ExportedWorkspace> {
-    if let Some(selector) = &workspace
-        && !workspace_exists(ctx, selector).await?
-    {
-        let method = Method::ExportWorkspace {
-            workspace: selector.clone(),
-            unsaved: UnsavedWork::default(),
-            file: output.file(),
-        };
-        return request::<ExportedWorkspace>(&ctx.paths, method).await;
-    }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check = check_export(ctx, &workspace, output).await?;
+    let check = check_export(ctx, workspace, output).await?;
     let action = format!(
         "Export workspace: {}\nRemoves it here and releases its holds:",
         check.workspace.name
