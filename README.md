@@ -147,6 +147,8 @@ shoal run                     # List configured commands, arguments, and source 
 shoal claude fix-login         # Run Claude Code
 shoal codex fix-login --app    # Open in the Codex desktop app
 shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
+shoal demo                     # Pick a running demo an agent started and open it
+shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal chat my-project          # Discuss the repository with an agent in its checkout
 shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat

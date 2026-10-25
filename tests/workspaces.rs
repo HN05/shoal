@@ -23391,3 +23391,66 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         .collect();
     assert_eq!(created, ["before", "after"]);
 }
+
+#[test]
+fn demos_restart_until_stopped_and_show_their_screen() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("tried");
+    let runs = Path::new(workspace["path"].as_str().unwrap()).join("runs");
+    // Without zmx or Herdr on PATH the demo runs in the background with a log.
+    let bin = fixture.root.path().join("bin");
+    let demo = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .env("PATH", fixture.restricted_path(&bin))
+            .arg("--json")
+            .arg("demo")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let started = demo(&[
+        "start",
+        "--workspace",
+        "tried",
+        "--",
+        "sh",
+        "-c",
+        "echo run >> runs; echo failing; exit 3",
+    ]);
+    assert_eq!(started["name"], "demo");
+    assert_eq!(started["workspace"], "tried");
+    // A command that exits at once runs again after a pause.
+    wait_until("the demo to restart", || {
+        fs::read_to_string(&runs).is_ok_and(|text| text.lines().count() >= 2)
+    });
+    let listing = demo(&["ls", "--workspace", "tried"]);
+    assert_eq!(listing["running"].as_array().unwrap().len(), 1);
+    let screen = demo(&["screen", "demo", "--workspace", "tried"]);
+    let text = screen["screen"].as_str().unwrap();
+    assert!(text.contains("failing"), "{text}");
+    assert!(text.contains("demo exited with status 3"), "{text}");
+
+    demo(&["stop", "demo", "--workspace", "tried"]);
+    wait_until("the demo to stop", || {
+        demo(&["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
+    assert!(
+        !fixture
+            .command()
+            .args(["demo", "screen", "demo", "--workspace", "tried"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}

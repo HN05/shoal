@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{Host, Place, Placement, Session};
+use super::{DemoWorker, Host, Place, Placement, Session};
 use crate::{
     cli::{
         agents::ensure_program,
@@ -172,6 +172,28 @@ impl Host for Zmx {
     ) -> BoxFuture<'a, Result<i32>> {
         Box::pin(attach(workspace, session))
     }
+
+    fn start_demo<'a>(
+        &'a self,
+        _ctx: &'a Context,
+        workspace: &'a Workspace,
+        name: &'a str,
+        worker: &'a DemoWorker<'a>,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { start_demo(workspace, name, worker).await.map(Some) })
+    }
+
+    fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(open_demo(place))
+    }
+
+    fn demo_screen<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<String>> {
+        Box::pin(demo_screen(place))
+    }
+
+    fn send_demo_keys<'a>(&'a self, place: &'a str, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(send_keys(place, keys))
+    }
 }
 
 /// The detached session the zmx worker runs in: it adds the workspace there
@@ -311,14 +333,28 @@ async fn run_in_background(ctx: &Context, workspace: &Workspace, args: &[OsStrin
 async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
     ensure_program("background launch", Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
-    let name = free_name(name, &taken);
+    run_in_new_session(&free_name(name, &taken), argv, env).await
+}
+
+/// Start a demo in a new detached session named after the workspace and the
+/// demo, whose worker ends the session once the demo stops.
+async fn start_demo(workspace: &Workspace, name: &str, worker: &DemoWorker<'_>) -> Result<String> {
+    ensure_program("demo", Tool::Zmx.program())?;
+    let taken = list().await?.into_iter().map(|session| session.0).collect();
+    let session = free_name(&format!("{}-{name}", workspace.name), &taken);
+    run_in_new_session(&session, &worker(&session)?, &[]).await?;
+    Ok(session)
+}
+
+/// Create the session `name` and run `argv` there as `start_detached` describes.
+async fn run_in_new_session(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
     let words = argv
         .iter()
         .map(|arg| arg.to_str().context("Shoal command path is not UTF-8"))
         .collect::<Result<Vec<_>>>()?;
     let mut create = Command::new(Tool::Zmx.program());
     create
-        .args(["run", &name, "-d", "true"])
+        .args(["run", name, "-d", "true"])
         .envs(env.iter().copied())
         .stdin(std::process::Stdio::null());
     Run::new(create)
@@ -326,7 +362,7 @@ async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> 
         .await
         .context("create a zmx session")?;
     let mut send = Command::new(Tool::Zmx.program());
-    send.args(["send", &name]).arg(format!(
+    send.args(["send", name]).arg(format!(
         "{}=1 {} && exit; exec \"$SHELL\" -l\r",
         env::ENDS_SESSION,
         crate::shell::quote(&words)
@@ -335,6 +371,44 @@ async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> 
         .checked()
         .await
         .context("start Shoal in its zmx session")?;
+    Ok(())
+}
+
+/// Attach this terminal to the demo's session until the user detaches.
+async fn open_demo(session: &str) -> Result<()> {
+    ensure_program("demo", Tool::Zmx.program())?;
+    let status = Command::new(Tool::Zmx.program())
+        .args(["attach", session])
+        .status()
+        .await
+        .context("run zmx")?;
+    crate::execution::reset_input_modes();
+    if !status.success() {
+        bail!("zmx exited with {status}");
+    }
+    Ok(())
+}
+
+/// The session's scrollback as plain text.
+async fn demo_screen(session: &str) -> Result<String> {
+    let mut history = Command::new(Tool::Zmx.program());
+    history.args(["history", session]);
+    let output = Run::new(history)
+        .checked()
+        .await
+        .context("read the demo's screen")?;
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Type `keys` into the session as they are, control characters included.
+async fn send_keys(session: &str, keys: &str) -> Result<()> {
+    let mut send = Command::new(Tool::Zmx.program());
+    send.args(["send", session, keys])
+        .stdin(std::process::Stdio::null());
+    Run::new(send)
+        .checked()
+        .await
+        .context("type into the demo's session")?;
     Ok(())
 }
 

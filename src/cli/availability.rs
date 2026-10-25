@@ -64,11 +64,12 @@ impl Need {
                 ..,
             ]
             | ["pr", "open"]
-            | ["questions", "ask"] => Self::Ready,
+            | ["questions", "ask"]
+            | ["demo", "start"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "resume" | "sim" | "config"
-                | "pr" | "issue" | "alerts",
+                | "pr" | "issue" | "alerts" | "demo",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

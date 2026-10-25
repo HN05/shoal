@@ -325,6 +325,21 @@ pub enum Command {
         #[arg(long)]
         session: Option<String>,
     },
+    /// Open a demo an agent started, or start, list and stop demos.
+    ///
+    /// A demo is a command Shoal keeps running in a workspace for you to try:
+    /// a terminal app, a web server or a simulator app.
+    #[command(args_conflicts_with_subcommands = true)]
+    Demo {
+        #[command(subcommand)]
+        command: Option<DemoCommand>,
+        /// Demo to open; without one, pick from the running demos.
+        name: Option<String>,
+        /// Workspace whose demos to offer; defaults to the current workspace,
+        /// otherwise every workspace.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Read new messages or send one to a workspace's agents.
     #[command(args_conflicts_with_subcommands = true)]
     Messages {
@@ -1097,6 +1112,68 @@ pub struct QuestionsArgs {
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
+pub enum DemoCommand {
+    /// Start a demo and tell the user how to open it; replaces a running
+    /// demo of the same name.
+    Start {
+        /// A configured demo, or the name for the command after `--`;
+        /// defaults to the only configured demo, or `demo` for a command.
+        name: Option<String>,
+        /// How the demo reaches the user, replacing the configured preset.
+        #[arg(long, value_enum)]
+        preset: Option<crate::demos::Preset>,
+        /// Shell command `shoal demo NAME` runs instead of opening the demo.
+        #[arg(long, value_name = "COMMAND")]
+        open: Option<String>,
+        /// Port to reserve before the demo starts; repeat for more.
+        #[arg(long = "port", value_name = "NAME")]
+        ports: Vec<String>,
+        /// Wait for a simulator when every one is busy.
+        #[arg(long)]
+        queue: bool,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// The command to run instead of the configured one.
+        #[arg(last = true)]
+        command: Vec<OsString>,
+    },
+    /// Stop a demo, or every demo of the workspace.
+    Stop {
+        name: Option<String>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// List configured and running demos.
+    Ls {
+        /// Workspace to list; defaults to the current workspace, otherwise
+        /// the running demos of every workspace.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Print what a running demo shows.
+    Screen {
+        name: String,
+        /// Lines to print from the end.
+        #[arg(long, default_value_t = 50)]
+        lines: usize,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Type text into a running demo, such as $'q' or $'\r' for Enter.
+    Send {
+        name: String,
+        keys: String,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum MessagesCommand {
     /// Queue a message for the agents working in a workspace.
     Send {
@@ -1232,6 +1309,7 @@ impl Command {
         Some(match self {
             Command::Cd { .. } => "cd".into(),
             Command::Attach { .. } => "attach".into(),
+            Command::Demo { .. } => "demo".into(),
             Command::Edit { .. } => "edit".into(),
             Command::Diff { .. } => "diff".into(),
             Command::Status { .. } => "status".into(),

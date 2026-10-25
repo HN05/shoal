@@ -13,6 +13,7 @@ mod cleanup;
 mod configuration;
 pub(crate) mod configured;
 mod contribute;
+mod demo;
 mod events;
 mod holds;
 mod inbox;
@@ -445,6 +446,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
         Command::Attach { workspace, session } => sessions::attach(&ctx, workspace, session).await,
+        Command::Demo {
+            command,
+            name,
+            workspace,
+        } => demo::run(&ctx, command, name, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
         Command::Conflicts { target, workspace } => {
             workspaces::conflicts(&ctx, workspace, target).await

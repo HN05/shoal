@@ -56,6 +56,12 @@ pub enum Worker<'a> {
         records: &'a [PathBuf],
         command: &'a [OsString],
     },
+    /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
+    Demo {
+        workspace: &'a str,
+        launch: &'a str,
+        command: &'a [OsString],
+    },
     /// Start an admitted queue entry where its launching terminal would.
     QueueStart {
         entry: &'a str,
@@ -163,6 +169,20 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
             }
             args.push("--".into());
+            args.extend_from_slice(command);
+        }
+        Worker::Demo {
+            workspace,
+            launch,
+            command,
+        } => {
+            args.extend([
+                DEMO.into(),
+                workspace.into(),
+                "--launch".into(),
+                launch.into(),
+                "--".into(),
+            ]);
             args.extend_from_slice(command);
         }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
@@ -285,6 +305,30 @@ mod tests {
             assert_eq!(parsed_plan, plan);
             assert_eq!(parsed_push, push);
         }
+    }
+
+    #[test]
+    fn demo_round_trips_its_launch_and_literal_command() {
+        let launch = r#"{"name":"web","host":"zmx","place":"a b"}"#;
+        let command = vec!["sh".into(), "-c".into(), "echo $PORT; --json".into()];
+        let InternalCommand::Demo {
+            workspace,
+            launch: parsed_launch,
+            command: parsed_command,
+        } = parse(
+            Worker::Demo {
+                workspace: "workspace-id",
+                launch,
+                command: &command,
+            },
+            false,
+        )
+        else {
+            panic!("expected demo worker");
+        };
+        assert_eq!(workspace, "workspace-id");
+        assert_eq!(parsed_launch, launch);
+        assert_eq!(parsed_command, command);
     }
 
     #[test]

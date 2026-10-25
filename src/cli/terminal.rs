@@ -3,6 +3,7 @@
 //! background, and the [`Host`] that carries that out with its own
 //! primitives. Commands never name a host; adding one means implementing
 //! [`Host`] and listing it in [`HOSTS`].
+mod background;
 mod herdr;
 mod zmx;
 
@@ -22,6 +23,7 @@ use super::{
 };
 use crate::{
     config::Effective,
+    demos::Launch,
     env,
     model::{Repository, Workspace},
 };
@@ -196,7 +198,38 @@ pub(in crate::cli) trait Host: Sync {
     ) -> BoxFuture<'a, Result<i32>> {
         Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
+
+    /// Start a demo of `workspace` in a new place of this host named after
+    /// `name`, running the demo worker `worker` gives for the place's handle.
+    /// Returns the handle, or `None` when this host keeps no demos.
+    fn start_demo<'a>(
+        &'a self,
+        _ctx: &'a Context,
+        _workspace: &'a Workspace,
+        _name: &'a str,
+        _worker: &'a DemoWorker<'a>,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    /// Show the demo at `place` in this terminal until the user leaves it.
+    fn open_demo<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { anyhow::bail!("{} cannot show demos", self.name()) })
+    }
+
+    /// What the demo at `place` shows, oldest line first.
+    fn demo_screen<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async { anyhow::bail!("{} cannot read a demo's screen", self.name()) })
+    }
+
+    /// Type `keys` into the demo at `place`.
+    fn send_demo_keys<'a>(&'a self, _place: &'a str, _keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { anyhow::bail!("{} cannot type into a demo", self.name()) })
+    }
 }
+
+/// The demo worker's argv for the handle of the place it runs in.
+pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&str) -> Result<Vec<OsString>> + Send + Sync + 'a;
 
 /// A terminal no host serves: everything runs in place.
 struct Plain;
@@ -216,6 +249,34 @@ impl Host for Plain {
 
     fn background_note(&self, name: &str) -> String {
         format!("Started {name} in the background")
+    }
+
+    fn start_demo<'a>(
+        &'a self,
+        ctx: &'a Context,
+        workspace: &'a Workspace,
+        name: &'a str,
+        worker: &'a DemoWorker<'a>,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(
+            async move { background::start_demo(&ctx.paths, workspace, name, worker).map(Some) },
+        )
+    }
+
+    fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(background::open_demo(place))
+    }
+
+    fn demo_screen<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async move { background::demo_screen(place) })
+    }
+
+    fn send_demo_keys<'a>(&'a self, _place: &'a str, _keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async {
+            anyhow::bail!(
+                "a demo running in the background takes no keys; start it from zmx or Herdr"
+            )
+        })
     }
 }
 
@@ -426,6 +487,57 @@ pub(in crate::cli) async fn attach(workspace: &Workspace, session: &Session) -> 
         .find(|host| host.name() == session.host)
         .context("the session's host is unknown")?;
     host.attach(workspace, &session.name).await
+}
+
+/// Start a demo of `workspace` in the first host that runs queued starts and
+/// keeps demos, otherwise as a background process with a log. `worker` gives
+/// the demo worker's argv for the host's name and the place's handle.
+/// Returns the host's name and the demo's place there.
+pub(in crate::cli) async fn start_demo(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    name: &str,
+    worker: &(dyn Fn(&str, &str) -> Result<Vec<OsString>> + Send + Sync),
+) -> Result<(&'static str, String)> {
+    let hosts = HOSTS
+        .iter()
+        .copied()
+        .filter(|host| host.takes_queued(settings) && host.ensure_installed().is_ok())
+        .chain([&Plain as &dyn Host]);
+    for host in hosts {
+        let worker = |place: &str| worker(host.name(), place);
+        if let Some(place) = host.start_demo(ctx, workspace, name, &worker).await? {
+            return Ok((host.name(), place));
+        }
+    }
+    unreachable!("the plain host keeps demos")
+}
+
+/// Show the demo `launch` describes in this terminal.
+pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
+    demo_host(&launch.host)?.open_demo(&launch.place).await
+}
+
+/// What the demo `launch` describes shows.
+pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
+    demo_host(&launch.host)?.demo_screen(&launch.place).await
+}
+
+/// Type `keys` into the demo `launch` describes.
+pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
+    demo_host(&launch.host)?
+        .send_demo_keys(&launch.place, keys)
+        .await
+}
+
+fn demo_host(name: &str) -> Result<&'static dyn Host> {
+    HOSTS
+        .iter()
+        .copied()
+        .chain([&Plain as &dyn Host])
+        .find(|host| host.name() == name)
+        .with_context(|| format!("the demo's host {name} is unknown"))
 }
 
 /// The place a host opened for this process to add a workspace in, hosting

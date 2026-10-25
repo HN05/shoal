@@ -1,0 +1,478 @@
+//! `shoal demo`: commands kept running in a workspace for the user to try.
+//! An agent starts one, the user opens it, and both can read its screen.
+use std::{collections::BTreeMap, ffi::OsString, time::Duration};
+
+use anyhow::{Context as _, Result, bail, ensure};
+use serde::Serialize;
+use serde_json::json;
+
+use crate::{
+    cli::{
+        DemoCommand, client,
+        context::Context,
+        internal::{Worker, internal_command},
+        output::{Palette, Style},
+        terminal,
+        ui::{self, Fallback},
+    },
+    demos::{Demo, Launch, Preset, Running},
+    model::Workspace,
+    protocol::{ConfigTarget, Method},
+};
+
+/// The name an ad hoc demo takes when the agent gives none.
+const DEFAULT_NAME: &str = "demo";
+/// How often a start checks that its worker recorded the demo.
+const START_POLL: Duration = Duration::from_millis(100);
+/// A hang guard for a worker that never records its demo.
+const START_LIMIT: Duration = Duration::from_secs(120);
+
+pub(super) async fn run(
+    ctx: &Context,
+    command: Option<DemoCommand>,
+    name: Option<String>,
+    workspace: Option<String>,
+) -> Result<i32> {
+    match command {
+        None => open(ctx, name, workspace).await,
+        Some(DemoCommand::Start {
+            name,
+            preset,
+            open,
+            ports,
+            queue: _,
+            workspace,
+            command,
+        }) => {
+            let overrides = Overrides {
+                preset,
+                open,
+                ports,
+            };
+            start(ctx, workspace, name, overrides, command).await
+        }
+        Some(DemoCommand::Stop { name, workspace }) => stop(ctx, workspace, name).await,
+        Some(DemoCommand::Ls { workspace }) => list(ctx, workspace).await,
+        Some(DemoCommand::Screen {
+            name,
+            lines,
+            workspace,
+        }) => screen(ctx, workspace, &name, lines).await,
+        Some(DemoCommand::Send {
+            name,
+            keys,
+            workspace,
+        }) => send(ctx, workspace, &name, &keys).await,
+    }
+}
+
+/// What `shoal demo start` replaces in the configured demo.
+struct Overrides {
+    preset: Option<Preset>,
+    open: Option<String>,
+    ports: Vec<String>,
+}
+
+/// A demo ready to start: its name, definition and command.
+#[derive(Debug, PartialEq, Eq)]
+struct Chosen {
+    name: String,
+    demo: Demo,
+    command: Vec<OsString>,
+}
+
+async fn start(
+    ctx: &Context,
+    workspace: Option<String>,
+    name: Option<String>,
+    overrides: Overrides,
+    command: Vec<OsString>,
+) -> Result<i32> {
+    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let chosen = choose(&settings.demos, name, command)?.with(overrides);
+    // A demo of the same name gives way, so the new one takes its record.
+    stop_named(ctx, &workspace, Some(chosen.name.clone())).await?;
+    let launch = place(ctx, &settings, &workspace, &chosen).await?;
+    let running = await_record(ctx, &workspace, &launch).await?;
+    let opening = format!("shoal demo {} --workspace {}", chosen.name, workspace.name);
+    if crate::env::is_scoped() {
+        let message = format!("Demo {} is running; open it with {opening}", chosen.name);
+        client::call(
+            &ctx.paths,
+            Method::SendMessage {
+                workspace: workspace.id.clone(),
+                message,
+            },
+        )
+        .await?;
+    }
+    ctx.emit_styled(
+        Style::Success,
+        &format!("Started demo {}; open it with {opening}", chosen.name),
+        &running,
+    )?;
+    Ok(0)
+}
+
+/// The demo `name` and the command after `--` select: a command names an
+/// ad hoc demo, otherwise `name` or the only configured demo is the one.
+fn choose(
+    configured: &BTreeMap<String, Demo>,
+    name: Option<String>,
+    command: Vec<OsString>,
+) -> Result<Chosen> {
+    if !command.is_empty() {
+        let name = name.unwrap_or_else(|| DEFAULT_NAME.to_owned());
+        crate::demos::validate_name(&name)?;
+        let demo = configured.get(&name).cloned().unwrap_or_else(|| Demo {
+            cmd: Vec::new(),
+            preset: None,
+            open: None,
+            ports: None,
+        });
+        return Ok(Chosen {
+            name,
+            demo,
+            command,
+        });
+    }
+    let names = || configured.keys().cloned().collect::<Vec<_>>().join(", ");
+    let (name, demo) = match name {
+        Some(name) => {
+            let demo = configured.get(&name).with_context(|| {
+                if configured.is_empty() {
+                    format!("no demo named {name} is configured; pass its command after --")
+                } else {
+                    format!(
+                        "no demo named {name} is configured; configured demos: {}",
+                        names()
+                    )
+                }
+            })?;
+            (name, demo.clone())
+        }
+        None => {
+            let mut demos = configured.iter();
+            match (demos.next(), demos.next()) {
+                (Some((name, demo)), None) => (name.clone(), demo.clone()),
+                (None, _) => bail!("no demo is configured; pass a command after --"),
+                (Some(_), Some(_)) => bail!("name the demo to start: {}", names()),
+            }
+        }
+    };
+    let command = demo.cmd.iter().map(OsString::from).collect();
+    Ok(Chosen {
+        name,
+        demo,
+        command,
+    })
+}
+
+impl Chosen {
+    fn with(mut self, overrides: Overrides) -> Self {
+        if overrides.preset.is_some() {
+            self.demo.preset = overrides.preset;
+        }
+        if let Some(open) = overrides.open {
+            self.demo.open = Some(vec!["sh".into(), "-c".into(), open]);
+        }
+        if !overrides.ports.is_empty() {
+            self.demo.ports = Some(overrides.ports);
+        }
+        self
+    }
+}
+
+/// Start the demo's worker in a terminal host and return what it records.
+async fn place(
+    ctx: &Context,
+    settings: &crate::config::Effective,
+    workspace: &Workspace,
+    chosen: &Chosen,
+) -> Result<Launch> {
+    let launch = |host: &str, place: &str| Launch {
+        name: chosen.name.clone(),
+        preset: chosen.demo.preset,
+        open: chosen.demo.open.clone(),
+        environment: BTreeMap::new(),
+        host: host.to_owned(),
+        place: place.to_owned(),
+        leased_simulator: false,
+    };
+    let worker = |host: &str, place: &str| {
+        let launch = serde_json::to_string(&launch(host, place))?;
+        internal_command(
+            &ctx.paths,
+            false,
+            Worker::Demo {
+                workspace: &workspace.id,
+                launch: &launch,
+                command: &chosen.command,
+            },
+        )
+    };
+    let (host, place) =
+        terminal::start_demo(ctx, settings, workspace, &chosen.name, &worker).await?;
+    Ok(launch(host, &place))
+}
+
+/// Wait until the worker has recorded `launch`, which shows its command runs.
+async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
+    let deadline = tokio::time::Instant::now() + START_LIMIT;
+    loop {
+        let recorded = running(ctx, Some(workspace))
+            .await?
+            .into_iter()
+            .find(|demo| demo.launch.place == launch.place);
+        if let Some(demo) = recorded {
+            return Ok(demo);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            let screen = terminal::demo_screen(launch).await.unwrap_or_default();
+            bail!(
+                "demo {} did not start{}",
+                launch.name,
+                last_lines(&screen, 20)
+                    .map(|lines| format!(":\n{lines}"))
+                    .unwrap_or_default()
+            );
+        }
+        tokio::time::sleep(START_POLL).await;
+    }
+}
+
+async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) -> Result<i32> {
+    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
+    stop_named(ctx, &workspace, name.clone()).await?;
+    let message = match &name {
+        Some(name) => format!("Stopping demo {name}"),
+        None => format!("Stopping the demos of {}", workspace.name),
+    };
+    ctx.emit_styled(
+        Style::Success,
+        &message,
+        json!({"stopping": true, "name": name}),
+    )?;
+    Ok(0)
+}
+
+async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {
+    client::request::<()>(
+        &ctx.paths,
+        Method::StopDemos {
+            workspace: workspace.id.clone(),
+            name,
+        },
+    )
+    .await
+}
+
+/// Configured and running demos, as `shoal demo ls --json` prints them.
+#[derive(Serialize)]
+struct Listing {
+    workspace: Option<String>,
+    configured: BTreeMap<String, Demo>,
+    running: Vec<Running>,
+}
+
+async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = scope(ctx, workspace).await?;
+    let configured = match &workspace {
+        Some(workspace) => {
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
+                .await?
+                .demos
+        }
+        None => BTreeMap::new(),
+    };
+    let listing = Listing {
+        workspace: workspace.as_ref().map(|workspace| workspace.name.clone()),
+        running: running(ctx, workspace.as_ref()).await?,
+        configured,
+    };
+    let rows = listing_rows(&listing, Palette::stdout(ctx.json));
+    ctx.show(&listing, |_| {
+        for row in &rows {
+            outln!("{row}");
+        }
+        if rows.is_empty() {
+            outln!("No demos");
+        }
+    })?;
+    Ok(0)
+}
+
+/// One row per demo: its name, workspace, state and preset; configured demos
+/// that are not running follow the running ones.
+fn listing_rows(listing: &Listing, palette: Palette) -> Vec<String> {
+    let preset = |preset: Option<Preset>| preset.map(Preset::as_str).unwrap_or_default().to_owned();
+    let mut rows: Vec<[ui::Cell; 4]> = listing
+        .running
+        .iter()
+        .map(|demo| {
+            [
+                (demo.launch.name.clone(), Some(Style::Heading)),
+                (demo.workspace.clone(), None),
+                ("Running".into(), Some(Style::Success)),
+                (preset(demo.launch.preset), Some(Style::Muted)),
+            ]
+        })
+        .collect();
+    for (name, demo) in &listing.configured {
+        if listing
+            .running
+            .iter()
+            .any(|running| running.launch.name == *name)
+        {
+            continue;
+        }
+        rows.push([
+            (name.clone(), Some(Style::Heading)),
+            (listing.workspace.clone().unwrap_or_default(), None),
+            ("Not running".into(), Some(Style::Muted)),
+            (preset(demo.preset), Some(Style::Muted)),
+        ]);
+    }
+    ui::aligned(rows, palette)
+}
+
+async fn open(ctx: &Context, name: Option<String>, workspace: Option<String>) -> Result<i32> {
+    ensure!(ctx.interactive(), "opening a demo requires a terminal");
+    let workspace = scope(ctx, workspace).await?;
+    let demos = running(ctx, workspace.as_ref()).await?;
+    let demo = match name {
+        Some(name) => find(demos, &name, workspace.as_ref())?,
+        None => pick(ctx, demos)?,
+    };
+    open_running(ctx, &demo).await?;
+    Ok(0)
+}
+
+fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
+    ensure!(!demos.is_empty(), "no demos are running");
+    let rows = ui::aligned(
+        demos
+            .iter()
+            .map(|demo| {
+                [
+                    (demo.launch.name.clone(), None),
+                    (demo.workspace.clone(), None),
+                ]
+            })
+            .collect(),
+        Palette::picker(),
+    );
+    let choices: Vec<_> = demos
+        .iter()
+        .zip(&rows)
+        .map(|(demo, row)| (demo, row.as_str()))
+        .collect();
+    ui::pick_choice(ctx, "Open demo> ", &choices).cloned()
+}
+
+/// Open a running demo in this terminal: its `open` command, or else the
+/// host's view of it.
+pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
+    let Some(open) = &demo.launch.open else {
+        return terminal::open_demo(&demo.launch).await;
+    };
+    let workspace = client::inspect(&ctx.paths, demo.workspace_id.clone())
+        .await?
+        .workspace;
+    let status = tokio::process::Command::new(&open[0])
+        .args(&open[1..])
+        .current_dir(&workspace.path)
+        .envs(&demo.launch.environment)
+        .status()
+        .await
+        .with_context(|| format!("run the open command of demo {}", demo.launch.name))?;
+    ensure!(
+        status.success(),
+        "the open command of demo {} exited with {status}",
+        demo.launch.name
+    );
+    Ok(())
+}
+
+async fn screen(ctx: &Context, workspace: Option<String>, name: &str, lines: usize) -> Result<i32> {
+    let demo = named(ctx, workspace, name).await?;
+    let screen = terminal::demo_screen(&demo.launch).await?;
+    let text = last_lines(&screen, lines).unwrap_or_default();
+    ctx.show(&json!({"name": name, "screen": text}), |_| outln!("{text}"))?;
+    Ok(0)
+}
+
+async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) -> Result<i32> {
+    let demo = named(ctx, workspace, name).await?;
+    terminal::send_demo_keys(&demo.launch, keys).await?;
+    ctx.emit(&format!("Sent to demo {name}"), json!({"sent": true}))?;
+    Ok(0)
+}
+
+/// The running demo `name` of the workspace given or chosen.
+async fn named(ctx: &Context, workspace: Option<String>, name: &str) -> Result<Running> {
+    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
+    find(
+        running(ctx, Some(&workspace)).await?,
+        name,
+        Some(&workspace),
+    )
+}
+
+fn find(demos: Vec<Running>, name: &str, workspace: Option<&Workspace>) -> Result<Running> {
+    let mut matching: Vec<_> = demos
+        .into_iter()
+        .filter(|demo| demo.launch.name == name)
+        .collect();
+    match (matching.len(), workspace) {
+        (0, Some(workspace)) => bail!("{} has no running demo {name}", workspace.name),
+        (0, None) => bail!("no demo {name} is running"),
+        (1, _) => Ok(matching.remove(0)),
+        _ => bail!("several workspaces run a demo {name}; pass --workspace"),
+    }
+}
+
+/// The workspace whose demos to show: the one named, the caller's own for a
+/// workspace process, the current one, or `None` for every workspace.
+async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Workspace>> {
+    let id = match workspace {
+        Some(selector) => Some(ui::explicit_workspace(ctx, selector).await?),
+        None if crate::env::is_scoped() => {
+            Some(ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?)
+        }
+        None => {
+            let workspaces = client::workspaces(&ctx.paths).await?;
+            ui::current_workspace(&workspaces)?.map(|workspace| workspace.id.clone())
+        }
+    };
+    match id {
+        Some(id) => Ok(Some(client::inspect(&ctx.paths, id).await?.workspace)),
+        None => Ok(None),
+    }
+}
+
+async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Running>> {
+    client::request(
+        &ctx.paths,
+        Method::ListDemos {
+            workspace: workspace.map(|workspace| workspace.id.clone()),
+        },
+    )
+    .await
+}
+
+/// The last `count` lines of `screen` with trailing blank lines dropped.
+fn last_lines(screen: &str, count: usize) -> Option<String> {
+    let lines: Vec<&str> = screen.trim_end().lines().collect();
+    let start = lines.len().saturating_sub(count);
+    let text = lines[start..].join("\n");
+    (!text.is_empty()).then_some(text)
+}
+
+#[cfg(test)]
+mod tests;
