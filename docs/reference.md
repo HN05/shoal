@@ -1223,7 +1223,7 @@ the user receives them as before. A workspace without an agent of its own is its
 coordinator's own work, so what a process does there reaches the user. A
 coordinator answers a question asked below it with
 `shoal questions <number> --answer <answer>`, or passes it up: an agent with its own
-`shoal ask`, a chat by asking the user in the chat.
+`shoal questions ask`, a chat by asking the user in the chat.
 
 ### Repositories
 
@@ -2620,14 +2620,14 @@ messages and send messages only to the agents of the [workspaces below their own
 ### Questions
 
 ```sh
-shoal ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
+shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
 shoal questions [--workspace W]      # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
 shoal questions <number>             # Inspect and choose an answer
 shoal questions <number> --answer <answer> # Answer text or a choice number
 ```
 
-`shoal ask` records a question for the user from a workspace's agents: the
+`shoal questions ask` records a question for the user from a workspace's agents: the
 decision, the recommended answer, an optional reason and optional choices, each
 one line with the same limits as `notify`. It raises a `question_asked`
 notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,

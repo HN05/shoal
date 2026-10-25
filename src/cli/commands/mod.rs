@@ -472,14 +472,18 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }
-        Command::Ask {
-            question,
-            recommend,
-            reason,
-            choices,
-            wait,
-            workspace,
-            resume,
+        Command::Questions {
+            command:
+                Some(QuestionsCommand::Ask {
+                    question,
+                    recommend,
+                    reason,
+                    choices,
+                    wait,
+                    workspace,
+                    resume,
+                }),
+            ..
         } => {
             let ask = crate::daemon::questions::Ask {
                 question,

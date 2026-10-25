@@ -334,30 +334,6 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         hook: bool,
     },
-    /// Ask the user to decide something; the answer arrives as a message.
-    Ask {
-        /// The decision, in one line, such as "Which database should the cache use?"
-        question: String,
-        /// The answer you recommend.
-        #[arg(long)]
-        recommend: String,
-        /// Why you recommend it.
-        #[arg(long)]
-        reason: Option<String>,
-        /// A possible answer; repeat for each. The user may answer with its number.
-        #[arg(long = "choice", value_name = "CHOICE")]
-        choices: Vec<String>,
-        /// Wait for the answer and print it. Asking again waits for the same question.
-        #[arg(long)]
-        wait: bool,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-        /// Continue waiting for this question, as the installed release does
-        /// after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires = "workspace")]
-        resume: Option<i64>,
-    },
     /// Review and answer questions from workspace agents.
     #[command(args_conflicts_with_subcommands = true)]
     Questions {
@@ -1165,6 +1141,30 @@ pub enum MessagesCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum QuestionsCommand {
+    /// Ask the user to decide something; the answer arrives as a message.
+    Ask {
+        /// The decision, in one line, such as "Which database should the cache use?"
+        question: String,
+        /// The answer you recommend.
+        #[arg(long)]
+        recommend: String,
+        /// Why you recommend it.
+        #[arg(long)]
+        reason: Option<String>,
+        /// A possible answer; repeat for each. The user may answer with its number.
+        #[arg(long = "choice", value_name = "CHOICE")]
+        choices: Vec<String>,
+        /// Wait for the answer and print it. Asking again waits for the same question.
+        #[arg(long)]
+        wait: bool,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Continue waiting for this question, as the installed release does
+        /// after an upgrade restarted the daemon.
+        #[arg(long, hide = true, requires = "workspace")]
+        resume: Option<i64>,
+    },
     /// Withdraw an open question the workspace's agent no longer needs answered.
     Withdraw {
         /// Question number.

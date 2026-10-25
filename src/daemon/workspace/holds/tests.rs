@@ -78,7 +78,10 @@ async fn holds_are_idempotent_persistent_and_scoped() {
             let error = scope::authorize(&manager, Some("scope"), &mut method)
                 .await
                 .unwrap_err();
-            assert!(error.to_string().contains("shoal ask"), "{error:#}");
+            assert!(
+                error.to_string().contains("shoal questions ask"),
+                "{error:#}"
+            );
         }
     }
     assert!(

@@ -219,7 +219,9 @@ pub async fn authorize(
             Some(target)
         }
         Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
-            bail!("holds belong to the user and host apps; workspace processes ask with shoal ask")
+            bail!(
+                "holds belong to the user and host apps; workspace processes ask with shoal questions ask"
+            )
         }
         Method::AnswerQuestion { id, shown, .. }
         | Method::AcceptQuestionRecommendation { id, shown } => {
@@ -237,7 +239,7 @@ pub async fn authorize(
                     && manager
                         .within_subtree(owner, &question.workspace_id)
                         .await?,
-                "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal ask"
+                "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
             );
             *shown = Some(question);
             None

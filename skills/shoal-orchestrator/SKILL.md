@@ -89,7 +89,7 @@ shoal --json questions
 shoal questions <number> --answer "<answer or choice number>"
 ```
 
-Agents ask with `shoal ask`; each question names the decision, the agent's
+Agents ask with `shoal questions ask`; each question names the decision, the agent's
 recommendation and any choices. Relay them to the user and answer as the user
 decides; the answer reaches the agent as a message.
 

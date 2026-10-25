@@ -60,10 +60,11 @@ impl Need {
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split" | "done"
-                | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
+                | "review" | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
             | ["pr", "open"]
+            | ["questions", "ask"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"

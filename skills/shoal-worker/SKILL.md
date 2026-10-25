@@ -120,7 +120,7 @@ current head, after you have read its log and fixed or reported the cause, and
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
 can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
-your questions is open, so ask with `shoal ask` when you need the user before the
+your questions is open, so ask with `shoal questions ask` when you need the user before the
 workspace goes. `shoal done` closes your open questions, and `shoal done --undo` does
 not reopen them. Holds belong to the user and host apps; you can list them with
 `shoal leases hold` but not acquire or release them. `--cleanup` overrides a
@@ -139,7 +139,7 @@ unless `[ready] undraft = false`. When something new needs fixing, run
 finishing, run `shoal notify "<one-line message>"`; if it stops applying before
 the user reads it, withdraw it with
 `shoal notifications withdraw <number>`, using the number it printed. Neither
-affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
+affects completion or cleanup. Ask for decisions with `shoal questions ask` instead (see
 Questions).
 
 `shoal done --undo` withdraws a `shoal done` you ran too early. When the user gives
@@ -169,7 +169,7 @@ When you need the user to decide something, ask a question rather than
 notifying:
 
 ```sh
-shoal --json ask "Which database should the cache use?" --recommend SQLite \
+shoal --json questions ask "Which database should the cache use?" --recommend SQLite \
   --reason "No server to run" --choice SQLite --choice Postgres
 ```
 
@@ -269,7 +269,7 @@ issue and PR activity goes to it rather than to you. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
-`shoal ask` when the decision is theirs. Send it instructions with
+`shoal questions ask` when the decision is theirs. Send it instructions with
 `shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for
 several lines. When a stopped child agent should not come back, such as one
 whose work is done, forget its saved session with

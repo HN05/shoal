@@ -8370,6 +8370,7 @@ esac
     assert_eq!(read("picker-input"), "");
 
     fixture.ok(&[
+        "questions",
         "ask",
         "Which database?",
         "--recommend",
@@ -8756,6 +8757,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
     fixture.ok(&[
+        "questions",
         "ask",
         "Which database?",
         "--recommend",
@@ -17385,7 +17387,13 @@ fn agents_withdraw_questions_they_no_longer_need_answered() {
     let output = scoped_command(
         &fixture,
         "asker",
-        &["ask", "Which database?", "--recommend", "SQLite"],
+        &[
+            "questions",
+            "ask",
+            "Which database?",
+            "--recommend",
+            "SQLite",
+        ],
     );
     assert!(output.status.success(), "{output:?}");
     let question: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -17410,7 +17418,14 @@ fn agents_wait_for_the_answer_to_their_question() {
     // Unscoped, so the workspace can be renamed while it waits.
     let asker = fixture
         .command()
-        .args(["--json", "ask", "Which database?", "--recommend", "SQLite"])
+        .args([
+            "--json",
+            "questions",
+            "ask",
+            "Which database?",
+            "--recommend",
+            "SQLite",
+        ])
         .args(["--choice", "SQLite", "--choice", "Postgres"])
         .args(["--workspace", "asker", "--wait"])
         .stdout(Stdio::piped())
@@ -17446,7 +17461,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     let output = scoped_command(
         &fixture,
         "renamed",
-        &["ask", "Which cache?", "--recommend", "None"],
+        &["questions", "ask", "Which cache?", "--recommend", "None"],
     );
     assert!(output.status.success(), "{output:?}");
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -17469,6 +17484,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         .command()
         .args([
             "--json",
+            "questions",
             "ask",
             "Which cache?",
             "--recommend",
@@ -17777,6 +17793,7 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
     let question = fixture.ok(&[
+        "questions",
         "ask",
         "Which database?",
         "--recommend",
@@ -17911,6 +17928,7 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
     let fixture = Fixture::new();
     fixture.add("asker");
     let question = fixture.ok(&[
+        "questions",
         "ask",
         "Which database?",
         "--recommend",
@@ -17943,6 +17961,7 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
     ] {
         let text = format!("Choose {recommendation} for {input:?}?");
         let mut args = vec![
+            "questions",
             "ask",
             &text,
             "--recommend",
@@ -20613,7 +20632,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         let output = scoped(&[action, "hold", "--name", "scoped"]);
         assert!(!output.status.success());
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("shoal ask"),
+            String::from_utf8_lossy(&output.stderr).contains("shoal questions ask"),
             "{output:?}"
         );
     }
