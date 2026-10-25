@@ -466,11 +466,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }
-        Command::Message {
-            message,
-            body_file,
-            workspace,
-        } => messages::send(&ctx, workspace, message, body_file).await,
         Command::Ask {
             question,
             recommend,
@@ -500,7 +495,20 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => questions::run(&ctx, args).await,
-        Command::Messages { workspace, hook } => {
+        Command::Messages {
+            command:
+                Some(crate::cli::MessagesCommand::Send {
+                    message,
+                    body_file,
+                    workspace,
+                }),
+            ..
+        } => messages::send(&ctx, workspace, message, body_file).await,
+        Command::Messages {
+            command: None,
+            workspace,
+            hook,
+        } => {
             if hook {
                 messages::hook(&ctx).await
             } else {

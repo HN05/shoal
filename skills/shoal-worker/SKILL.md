@@ -270,7 +270,7 @@ messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal ask` when the decision is theirs. Send it instructions with
-`shoal message --workspace <child> "<text>"`, or `--body-file <path>` for
+`shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for
 several lines. When a stopped child agent should not come back, such as one
 whose work is done, forget its saved session with
 `shoal resume <child> --discard`.

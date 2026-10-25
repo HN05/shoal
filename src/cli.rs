@@ -322,20 +322,11 @@ pub enum Command {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Queue a message for the agents working in a workspace.
-    Message {
-        /// Text such as "Stop the dev server before running tests".
-        #[arg(required_unless_present = "body_file")]
-        message: Option<String>,
-        /// Read the message from a file, such as multi-line instructions.
-        #[arg(long, value_name = "PATH", conflicts_with = "message")]
-        body_file: Option<PathBuf>,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-    },
-    /// Show the new agent messages of the workspace, or of the chat it runs in, once.
+    /// Read new messages or send one to a workspace's agents.
+    #[command(args_conflicts_with_subcommands = true)]
     Messages {
+        #[command(subcommand)]
+        command: Option<MessagesCommand>,
         workspace: Option<String>,
         /// Run as an agent hook: read the hook event on stdin, print new
         /// messages as additional context, and never fail the agent.
@@ -1158,6 +1149,22 @@ pub struct QuestionsArgs {
     /// Withdraw a question no longer needed.
     #[arg(long, requires = "id")]
     pub withdraw: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MessagesCommand {
+    /// Queue a message for the agents working in a workspace.
+    Send {
+        /// Text such as "Stop the dev server before running tests".
+        #[arg(required_unless_present = "body_file")]
+        message: Option<String>,
+        /// Read the message from a file, such as multi-line instructions.
+        #[arg(long, value_name = "PATH", conflicts_with = "message")]
+        body_file: Option<PathBuf>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

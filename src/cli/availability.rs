@@ -69,8 +69,8 @@ impl Need {
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
-                | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
-                | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "notifications",
+                | "messages" | "questions" | "approvals" | "view" | "notify" | "resume" | "port"
+                | "resource" | "sim" | "config" | "pr" | "issue" | "notifications",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

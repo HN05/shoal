@@ -2571,12 +2571,12 @@ workspace and withdraw those messages. Read entries older than the newest
 ### Agent messages
 
 ```sh
-shoal message "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
-shoal message --body-file plan.md [--workspace W]    # Queue a file's text as one message
+shoal messages send "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
+shoal messages send --body-file plan.md [--workspace W]    # Queue a file's text as one message
 shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
-`shoal message` queues a message of at most 8 KiB, without control characters
+`shoal messages send` queues a message of at most 8 KiB, without control characters
 other than newlines and tabs, for the agents working in a workspace; output
 indents a message's later lines under its first. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have

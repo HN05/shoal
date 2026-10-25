@@ -16746,11 +16746,17 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     let fixture = Fixture::new();
     fixture.add("receiver");
     fixture.add("other");
-    fixture.ok(&["message", "Stop the dev server", "--workspace", "receiver"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "Stop the dev server",
+        "--workspace",
+        "receiver",
+    ]);
     let output = scoped_command(
         &fixture,
         "receiver",
-        &["message", "hello", "--workspace", "receiver"],
+        &["messages", "send", "hello", "--workspace", "receiver"],
     );
     assert!(!output.status.success(), "agents cannot send: {output:?}");
     let output = scoped_command(&fixture, "receiver", &["messages", "other"]);
@@ -16785,7 +16791,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     };
     let event = r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#;
     assert_eq!(hook(event), "");
-    fixture.ok(&["message", "Free disk space", "--workspace", "receiver"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "Free disk space",
+        "--workspace",
+        "receiver",
+    ]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
     assert_eq!(
         output["hookSpecificOutput"],
@@ -16799,7 +16811,14 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     let body = fixture.root.path().join("instructions.md");
     std::fs::write(&body, "Move commits:\n\tabc123 to api\n").unwrap();
     let body = body.to_str().unwrap();
-    fixture.ok(&["message", "--body-file", body, "--workspace", "receiver"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "--body-file",
+        body,
+        "--workspace",
+        "receiver",
+    ]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
     assert_eq!(
         output["hookSpecificOutput"]["additionalContext"],
@@ -16808,7 +16827,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
 
     // The wake hook prints the next update for the agent and exits 2, which
     // makes Claude Code start the idle agent's next turn with it.
-    fixture.ok(&["message", "Rebase onto main", "--workspace", "receiver"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "Rebase onto main",
+        "--workspace",
+        "receiver",
+    ]);
     let output = fixture
         .command()
         .args(["exec", "receiver", "--", env!("CARGO_BIN_EXE_shoal")])
@@ -21468,7 +21493,13 @@ fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
 fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
     let fixture = Fixture::new();
     fixture.add("prompted");
-    fixture.ok(&["message", "Rebase onto main", "--workspace", "prompted"]);
+    fixture.ok(&[
+        "messages",
+        "send",
+        "Rebase onto main",
+        "--workspace",
+        "prompted",
+    ]);
     let home = fixture.root.path();
     // Codex's Stop hook reports the finished turn; it then waits, with a
     // generous hang guard, for the prompt Shoal types into its session.

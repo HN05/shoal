@@ -155,7 +155,7 @@ shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into 
 shoal work inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
-shoal message "Stop the dev server" --workspace fix-login  # Message the workspace's agents
+shoal messages send "Stop the dev server" --workspace fix-login  # Message the workspace's agents
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
 shoal stop fix-login          # Stop agents and commands; save them for shoal resume

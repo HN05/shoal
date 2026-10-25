@@ -1,4 +1,4 @@
-//! `shoal message` queues a message for a workspace's agents; `shoal messages`
+//! `shoal messages send` queues a message for a workspace's agents; `shoal messages`
 //! shows the workspace's undelivered messages once.
 use std::path::PathBuf;
 
