@@ -56,8 +56,8 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-/// The workspace whose repository `shoal repo labels` and `shoal forge capabilities`
-/// read, outside the derived `Command` builder for the same reason (#997).
+// The workspace whose repository `shoal repo labels` and `shoal forge capabilities`
+// read, outside the derived `Command` builder for the same reason (#997).
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
     /// Workspace to use; defaults to the current workspace or picker.
@@ -65,8 +65,8 @@ pub struct RepositoryArgs {
     pub workspace: Option<String>,
 }
 
-/// `shoal forge api` arguments, outside the derived `Command` builder for the same
-/// reason (#997).
+// `shoal forge api` arguments, outside the derived `Command` builder for the same
+// reason (#997).
 #[derive(Debug, Args)]
 pub struct ApiArgs {
     /// Path under the forge's API root, where `{owner}` and `{repo}` name the
@@ -83,8 +83,8 @@ pub struct ApiArgs {
     pub workspace: Option<String>,
 }
 
-/// `shoal export` arguments, outside the derived `Command` builder, whose stack
-/// frame in debug builds grows with every inline argument (#997).
+// `shoal export` arguments, outside the derived `Command` builder, whose stack
+// frame in debug builds grows with every inline argument (#997).
 #[derive(Debug, Args)]
 pub struct ExportArgs {
     #[arg(conflicts_with = "all")]
@@ -102,8 +102,8 @@ pub struct ExportArgs {
     pub confirmation: ConfirmationArgs,
 }
 
-/// `shoal import` arguments, outside the derived `Command` builder for the
-/// reason [`ExportArgs`] is.
+// `shoal import` arguments, outside the derived `Command` builder for the
+// reason [`ExportArgs`] is.
 #[derive(Debug, Args)]
 pub struct ImportArgs {
     /// Export files or directories of them.
@@ -135,7 +135,7 @@ pub enum Command {
     #[command(name = "__build-info", hide = true)]
     BuildInfo,
     /// Continue a question wait launched before the command was grouped.
-    #[command(name = "ask", hide = true, mut_arg("resume", |arg| arg.required(true)))]
+    #[command(name = "ask", hide = true)]
     LegacyAsk(QuestionAskArgs),
     /// Continue a notification stream launched before the command was grouped.
     #[command(name = "notifications", hide = true)]
@@ -520,17 +520,15 @@ pub enum Command {
         all: bool,
     },
     /// Reserve and release workspace TCP ports; superseded by acquire, release, and leases.
-    #[command(
-        hide = true,
-        args_conflicts_with_subcommands = true,
-        mut_arg("workspace", |arg| arg.help("Show the effective configuration and reservations for this workspace")),
-        mut_arg("all", |arg| arg.help("Show every managed workspace"))
-    )]
+    #[command(hide = true, args_conflicts_with_subcommands = true)]
     Port {
         #[command(subcommand)]
         command: Option<PortCommand>,
-        #[command(flatten)]
-        scope: WorkspaceScope,
+        /// Show the effective configuration and reservations for this workspace.
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
     /// Inspect approval requests and choose or submit a decision.
     #[command(args_conflicts_with_subcommands = true)]
@@ -541,29 +539,26 @@ pub enum Command {
         args: ApprovalsArgs,
     },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
-    #[command(
-        hide = true,
-        args_conflicts_with_subcommands = true,
-        mut_arg("workspace", |arg| arg.help("Show effective capacity and leases for this workspace")),
-        mut_arg("all", |arg| arg.help("Show every managed workspace"))
-    )]
+    #[command(hide = true, args_conflicts_with_subcommands = true)]
     Resource {
         #[command(subcommand)]
         command: Option<ResourceCommand>,
-        #[command(flatten)]
-        scope: WorkspaceScope,
+        /// Show effective capacity and leases for this workspace.
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
     /// Show the simulator catalog and clean-device history.
-    #[command(
-        args_conflicts_with_subcommands = true,
-        mut_arg("workspace", |arg| arg.help("Show configured profiles, capacity, and devices for this workspace")),
-        mut_arg("all", |arg| arg.help("Show every managed device"))
-    )]
+    #[command(args_conflicts_with_subcommands = true)]
     Sim {
         #[command(subcommand)]
         command: Option<SimCommand>,
-        #[command(flatten)]
-        scope: WorkspaceScope,
+        /// Show configured profiles, capacity, and devices for this workspace.
+        workspace: Option<String>,
+        /// Show every managed device.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
@@ -880,7 +875,7 @@ pub enum CiCommand {
     },
 }
 
-/// A PR and the checks on its head to act on.
+// A PR and the checks on its head to act on.
 #[derive(Debug, Args)]
 pub struct CiChecks {
     #[command(flatten)]
@@ -945,7 +940,7 @@ pub enum IssueCommand {
     },
 }
 
-/// Which issues or PRs of the workspace's repository to list.
+// Which issues or PRs of the workspace's repository to list.
 #[derive(Debug, Args)]
 pub struct ListArgs {
     /// Text the forge searches for in titles and descriptions.
@@ -968,7 +963,7 @@ pub struct ListArgs {
     pub limit: u16,
 }
 
-/// An issue or PR of the workspace's repository.
+// An issue or PR of the workspace's repository.
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
@@ -979,7 +974,7 @@ pub struct ItemSelector {
     pub workspace: Option<String>,
 }
 
-/// Title, description and label changes either kind of item takes.
+// Title, description and label changes either kind of item takes.
 #[derive(Debug, Args)]
 pub struct EditArgs {
     /// New title.
@@ -997,7 +992,7 @@ pub struct EditArgs {
     pub remove_labels: Vec<String>,
 }
 
-/// A description or comment, given inline or read from a file.
+// A description or comment, given inline or read from a file.
 #[derive(Debug, Default, Args)]
 pub struct BodyArgs {
     /// Text of the description or comment.
@@ -1008,7 +1003,7 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
-/// Files to show or link in a description or comment.
+// Files to show or link in a description or comment.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
     /// Upload a file, as PATH or PATH#ALT_TEXT; repeat for more. Images and
@@ -1019,7 +1014,7 @@ pub struct AttachArgs {
     pub attach: Vec<String>,
 }
 
-/// An optional item selection followed by its relation.
+// An optional item selection followed by its relation.
 #[derive(Debug, Args)]
 pub struct RelationArgs {
     /// pr/issue, a number or URL, then assigned, opened or related.
@@ -1163,7 +1158,7 @@ pub enum MessagesCommand {
     },
 }
 
-/// Arguments shared with the hidden pre-upgrade wait entry point.
+// Arguments shared with the hidden pre-upgrade wait entry point.
 #[derive(Debug, Args)]
 pub struct QuestionAskArgs {
     /// The decision, in one line, such as "Which database should the cache use?"
@@ -1327,8 +1322,8 @@ impl Command {
     }
 }
 
-/// What `shoal contribute` takes, apart so its arguments build in a stack
-/// frame of their own.
+// What `shoal contribute` takes, apart so its arguments build in a stack
+// frame of their own.
 #[derive(Debug, Args)]
 pub struct ContributeArgs {
     /// Run in the current pane instead of opening a Herdr tab.
@@ -1843,7 +1838,7 @@ pub enum LeaseKind {
     Repo,
 }
 
-/// Options shared by leases that a workspace may hold several of.
+// Options shared by leases that a workspace may hold several of.
 #[derive(Debug, Args)]
 pub struct LeaseOptions {
     /// Stable lease name; use different names to hold several leases.
@@ -1933,7 +1928,7 @@ pub enum AcquireKind {
     },
 }
 
-/// A pool, optionally narrowed to one named lease.
+// A pool, optionally narrowed to one named lease.
 #[derive(Debug, Args)]
 pub struct PoolSelection {
     /// Configured resource or pool; omit to release every lease of this kind.
@@ -2043,7 +2038,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_question_and_notification_commands_only_accept_upgrade_resumes() {
+    fn legacy_question_and_notification_commands_parse_upgrade_resumes() {
         let ask = [
             "shoal",
             "ask",
@@ -2054,7 +2049,6 @@ mod tests {
             "--workspace",
             "workspace-id",
         ];
-        assert!(Cli::try_parse_from(ask).is_err());
         let resumed = Cli::try_parse_from(ask.into_iter().chain(["--resume", "42"])).unwrap();
         assert!(matches!(
             resumed.command,

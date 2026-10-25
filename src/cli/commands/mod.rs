@@ -476,6 +476,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
+        Command::LegacyAsk(QuestionAskArgs { resume: None, .. }) => {
+            anyhow::bail!("`shoal ask` only continues a wait; ask with `shoal questions ask`")
+        }
         Command::LegacyAsk(args)
         | Command::Questions {
             command: Some(QuestionsCommand::Ask(args)),
@@ -671,7 +674,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
-        Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
+        Command::Port {
+            command,
+            workspace,
+            all,
+        } => ports::run(&ctx, command, WorkspaceScope { workspace, all }).await,
         Command::Approvals {
             command: Some(ApprovalsCommand::Withdraw { id, workspace }),
             ..
@@ -680,8 +687,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
-        Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,
+        Command::Resource {
+            command,
+            workspace,
+            all,
+        } => resources::run(&ctx, command, WorkspaceScope { workspace, all }).await,
+        Command::Sim {
+            command,
+            workspace,
+            all,
+        } => simulators::run(&ctx, command, WorkspaceScope { workspace, all }).await,
         Command::Doctor {
             scope,
             repair,
