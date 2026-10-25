@@ -6,7 +6,7 @@ use rusqlite::{Connection, Transaction, params};
 
 use super::{
     Manager,
-    executions::{Save, StopRequest},
+    executions::{Save, StopPolicy, StopRequest},
 };
 use crate::demos::{Launch, Running};
 
@@ -23,7 +23,9 @@ impl Manager {
     }
 
     /// Ask the workspace's demo `name`, or every demo there, to stop. Their
-    /// records go once their wrappers finish.
+    /// records go once their wrappers finish; a demo whose wrapper has not
+    /// reconnected since a daemon restart has its verified processes stopped
+    /// as `shoal stop` stops them.
     pub async fn stop_demos(&self, selector: &str, name: Option<String>) -> Result<()> {
         if let Some(name) = &name {
             crate::demos::validate_name(name)?;
@@ -36,10 +38,31 @@ impl Manager {
             .filter(|demo| name.as_ref().is_none_or(|name| *name == demo.launch.name))
             .map(|demo| demo.execution_id)
             .collect();
+        let disconnected = self.request_demo_stops(executions).await;
+        for id in disconnected {
+            let query = id.clone();
+            let execution = self
+                .store
+                .run(move |db| crate::daemon::store::find_execution(db, &query))
+                .await?;
+            if let Some(execution) = execution {
+                self.stop_disconnected(&execution, StopPolicy::RequireCompleteProof)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Ask the connected wrappers among `executions` to stop, returning the
+    /// rest. Native scans run after the connection map is released, as a
+    /// workspace stop runs them.
+    async fn request_demo_stops(&self, executions: Vec<String>) -> Vec<String> {
         let connections = self.connections.lock().await;
         let mut requests = self.stop_requests.lock().await;
+        let mut disconnected = Vec::new();
         for id in executions {
             let Some(sender) = connections.get(&id).filter(|sender| !sender.is_closed()) else {
+                disconnected.push(id);
                 continue;
             };
             requests.insert(
@@ -51,7 +74,7 @@ impl Manager {
             );
             let _ = sender.send(true);
         }
-        Ok(())
+        disconnected
     }
 }
 

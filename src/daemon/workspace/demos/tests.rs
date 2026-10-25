@@ -258,3 +258,49 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let ended = || {
+        let mut process = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let identity = crate::process::identity::capture(process.id())
+            .unwrap()
+            .unwrap();
+        process.kill().unwrap();
+        process.wait().unwrap();
+        identity
+    };
+    // The wrapper still runs, away from the daemon.
+    let mut away = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let wrapper = crate::process::identity::capture(away.id()).unwrap();
+    let child = ended();
+    let started = manager
+        .begin_execution_running(
+            &first.id,
+            wrapper,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    manager
+        .record_execution_child(id.clone(), Some(child.clone()), child.pid)
+        .await
+        .unwrap();
+    // As after a daemon restart, before the wrapper reconnects.
+    drop(started);
+    manager.detach_execution(&id).await;
+    manager.stop_demos(&first.name, None).await.unwrap();
+    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    assert!(away.wait().is_ok_and(|status| !status.success()));
+}

@@ -938,7 +938,11 @@ impl Manager {
         self.stop_requests.lock().await.get(id).cloned()
     }
 
-    async fn stop_disconnected(&self, execution: &Execution, policy: StopPolicy) -> Result<()> {
+    pub(super) async fn stop_disconnected(
+        &self,
+        execution: &Execution,
+        policy: StopPolicy,
+    ) -> Result<()> {
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
         let processes = Processes::inspect(execution, &scan).await?;
         processes.stop().await?;
