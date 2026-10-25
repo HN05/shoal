@@ -478,6 +478,11 @@ pub(crate) trait Backend {
     fn exclusive_label(&self, _name: &str, _label: &Value) -> bool {
         false
     }
+
+    /// Whether label names differing only in case name the same label.
+    fn label_names_fold_case(&self) -> bool {
+        false
+    }
 }
 
 /// Adds a backend's login hint to a failed read.
@@ -919,6 +924,10 @@ impl Backend for ForgeKind {
 
     fn exclusive_label(&self, name: &str, label: &Value) -> bool {
         dispatch!(self, backend => backend.exclusive_label(name, label))
+    }
+
+    fn label_names_fold_case(&self) -> bool {
+        dispatch!(self, backend => backend.label_names_fold_case())
     }
 }
 

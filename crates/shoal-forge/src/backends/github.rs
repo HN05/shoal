@@ -629,6 +629,11 @@ impl Backend for GitHub {
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         shared_lookups(kind)
     }
+
+    /// GitHub keeps its own spelling of a label added in another case.
+    fn label_names_fold_case(&self) -> bool {
+        true
+    }
 }
 
 /// The `gh issue list` or `gh pr list` arguments for `search`. Values go

@@ -191,15 +191,16 @@ impl Action {
 
     /// Refuse an edit whose labels `item`, as the forge reports it afterwards,
     /// does not show: a forge can leave out an unknown label, or one of two
-    /// exclusive ones, without an error.
-    fn ensure_applied(&self, item: &Item) -> Result<()> {
+    /// exclusive ones, without an error. `fold_case` is whether names that
+    /// differ only in case name the same label.
+    fn ensure_applied(&self, item: &Item, fold_case: bool) -> Result<()> {
         let Self::Edit(edit) = self else {
             return Ok(());
         };
         let has = |label: &String| {
             item.labels
                 .iter()
-                .any(|name| name.eq_ignore_ascii_case(label))
+                .any(|name| name == label || (fold_case && name.eq_ignore_ascii_case(label)))
         };
         // The labels of `labels` that `item` lacks when `added`, or has otherwise.
         let unapplied = |labels: &[String], added: bool| -> String {
@@ -295,7 +296,7 @@ impl ForgeRepo {
             .map_err(|error| after_post(error, first.is_some(), &authored))?
             .item;
         action
-            .ensure_applied(&item)
+            .ensure_applied(&item, self.kind.label_names_fold_case())
             .map_err(|error| after_post(error, first.is_some(), &authored))?;
         Ok(Acted { item, authored })
     }
@@ -880,8 +881,12 @@ mod tests {
 
     #[test]
     fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
-        let [_, forgejo] = forges();
+        let [github, forgejo] = forges();
+        let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo.git").unwrap();
+        assert!(github.kind.label_names_fold_case());
+        assert!(!gitlab.kind.label_names_fold_case() && !forgejo.kind.label_names_fold_case());
         let item = pr(&forgejo, false, &["Bug", "complexity/small"]).item;
+        let applied = |action: Action, fold_case: bool| action.ensure_applied(&item, fold_case);
         let edit = |add: &[&str], remove: &[&str]| {
             Action::Edit(Edit {
                 add_labels: add.iter().map(|label| label.to_string()).collect(),
@@ -889,20 +894,27 @@ mod tests {
                 ..Edit::default()
             })
         };
-        assert!(edit(&["bug"], &["ready"]).ensure_applied(&item).is_ok());
-        assert!(Action::Close.ensure_applied(&item).is_ok());
+        // Only a forge that folds case keeps `Bug` for an added `bug`, and
+        // elsewhere `Bug` stays when `bug` is removed.
+        assert!(applied(edit(&["bug"], &["ready"]), true).is_ok());
+        assert!(applied(edit(&["bug"], &[]), false).is_err());
+        assert!(applied(edit(&[], &["bug"]), false).is_ok());
+        assert!(applied(edit(&[], &["bug"]), true).is_err());
+        assert!(applied(Action::Close, false).is_ok());
         assert_eq!(
-            edit(&["complexity/medium", "ready"], &["complexity/small"])
-                .ensure_applied(&item)
-                .unwrap_err()
-                .to_string(),
+            applied(
+                edit(&["complexity/medium", "ready"], &["complexity/small"]),
+                false
+            )
+            .unwrap_err()
+            .to_string(),
             "the forge did not add complexity/medium, ready and did not remove \
              complexity/small on #7, which has the labels Bug, complexity/small"
         );
         let bare = pr(&forgejo, false, &[]).item;
         assert_eq!(
             edit(&["ready"], &[])
-                .ensure_applied(&bare)
+                .ensure_applied(&bare, false)
                 .unwrap_err()
                 .to_string(),
             "the forge did not add ready on #7, which has no labels"
