@@ -266,10 +266,10 @@ impl Manager {
         Ok(Pause::Paused)
     }
 
-    /// Stop what an exited agent or demo command left running outside its
+    /// Stop what an agent that reported its exit left running outside its
     /// process group, such as background shell commands, so nothing outlives
     /// it. The completion scan that follows decides whether anything survived.
-    pub(crate) async fn stop_exited_child_processes(&self, id: &str) {
+    pub(crate) async fn stop_exited_agent_processes(&self, id: &str) {
         let query_id = id.to_owned();
         let stopped = async {
             let record = self

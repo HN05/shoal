@@ -347,7 +347,11 @@ async fn relay(
                 *stopped = sent_stop;
                 return Ok(Ended::Finished(exit_code));
             }
-            ExecutionEvent::ChildExited => manager.release_exited_child(execution_id).await?,
+            ExecutionEvent::ChildExited => {
+                manager
+                    .release_exited_child(execution_id, &workspace.id)
+                    .await?;
+            }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
                 // A wrapper whose own session ended saves its agent unasked,
@@ -511,7 +515,7 @@ async fn finish(
         None
     };
     if agent.is_some() && result.is_ok() {
-        manager.stop_exited_child_processes(&execution_id).await;
+        manager.stop_exited_agent_processes(&execution_id).await;
     }
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())

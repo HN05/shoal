@@ -538,19 +538,19 @@ impl Manager {
     }
 
     /// Forget the exited child of an execution whose wrapper starts another,
-    /// after stopping what it left running outside its process group.
-    pub(crate) async fn release_exited_child(&self, id: &str) -> Result<()> {
-        self.stop_exited_child_processes(id).await;
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
-                    [id],
-                )?;
-                Ok(())
-            })
-            .await
+    /// once what it left running is proven stopped, as a paused agent's is.
+    /// Unproven survivors keep the child's identity, so the next run cannot
+    /// register over the evidence.
+    pub(crate) async fn release_exited_child(&self, id: &str, workspace_id: &str) -> Result<()> {
+        match self
+            .pause_agent_execution(id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+            .await?
+        {
+            super::agents::Pause::Paused => Ok(()),
+            super::agents::Pause::Unproven(issue) => {
+                bail!("the previous run left processes Shoal cannot prove stopped: {issue}")
+            }
+        }
     }
 
     /// Close an execution. `exit_code` is `None` when the wrapper disconnected

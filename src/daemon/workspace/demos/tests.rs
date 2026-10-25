@@ -193,3 +193,51 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
+    let started = manager
+        .begin_execution_running(
+            &first.id,
+            wrapper,
+            ExecutionKind::Command,
+            None,
+            Some(launch("tui")),
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    let run = || {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let identity = crate::process::identity::capture(child.id())
+            .unwrap()
+            .unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+        identity
+    };
+    let exited = run();
+    manager
+        .record_execution_child(id.clone(), Some(exited.clone()), exited.pid)
+        .await
+        .unwrap();
+    let next = run();
+    assert!(
+        manager
+            .record_execution_child(id.clone(), Some(next.clone()), next.pid)
+            .await
+            .is_err(),
+        "a run registers only after the previous one is released"
+    );
+    manager.release_exited_child(&id, &first.id).await.unwrap();
+    manager
+        .record_execution_child(id, Some(next.clone()), next.pid)
+        .await
+        .unwrap();
+}
