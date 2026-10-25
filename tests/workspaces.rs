@@ -23550,6 +23550,16 @@ fn finish_preset_demo(fixture: &Fixture, workspace: &Value, name: &str, value: &
 fn web_demos_reserve_a_port_and_pass_it_as_port() {
     let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
     let workspace = fixture.add("tried");
+    // Another reservation exported as PORT leaves the demo its own port.
+    fixture.ok(&[
+        "acquire",
+        "port",
+        "other",
+        "--workspace",
+        "tried",
+        "--env",
+        "PORT",
+    ]);
     let web = start_preset_demo(&fixture, "site", "web", "PORT");
     let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
     let leases = fixture.ok(&["leases", "port", "--workspace", "tried"]);

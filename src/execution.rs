@@ -1014,14 +1014,15 @@ fn spawn(
         .args(&command[1..])
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
-    // A demo is the user's, so the agent's output setting stays behind.
-    if let Mode::Demo { launch } = mode {
-        process.env_remove(env::OUTPUT).envs(&launch.environment);
-    }
     if let Some(auth) = auth {
         auth.apply(&mut process);
     }
     export_execution(&mut process, paths, plan);
+    // A demo is the user's, so the agent's output setting stays behind, and
+    // its own port or device wins over a reservation exported as `PORT`.
+    if let Mode::Demo { launch } = mode {
+        process.env_remove(env::OUTPUT).envs(&launch.environment);
+    }
     let quiet = matches!(mode, Mode::Setup { json: true });
     let (stdin, stdout, stderr) = match mode {
         Mode::Detached { log } => {
