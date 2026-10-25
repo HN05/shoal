@@ -7,6 +7,10 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
+mod claim;
+
+pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
+
 use crate::{
     cli::{client, commands::configured},
     fsutil::{Permissions, ReplaceOptions},
