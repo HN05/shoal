@@ -1302,6 +1302,26 @@ impl Terminal {
     }
 }
 
+/// Run `command` in this process's terminal as its foreground job, as an
+/// interactive hook runs, then restore the terminal's foreground group, OS
+/// settings and emulator input modes, whatever the command left.
+pub(crate) async fn run_in_terminal(mut command: Command) -> Result<ExitStatus> {
+    let mut terminal = Terminal::capture(false)?;
+    let mut child = command.process_group(0).spawn()?;
+    let group = child.id().context("command process ID unavailable")? as i32;
+    if let Some(terminal) = &mut terminal {
+        terminal.give_to(group)?;
+    }
+    // The command may have stopped on terminal I/O before becoming foreground.
+    // SAFETY: signals only the process group spawned above.
+    unsafe {
+        libc::kill(-group, libc::SIGCONT);
+    }
+    let status = child.wait().await?;
+    drop(terminal);
+    Ok(status)
+}
+
 /// Reset emulator input modes after a terminal owner returns control to the shell.
 pub(crate) fn reset_input_modes() {
     let Some(term) = Terminal::input_mode_output() else {

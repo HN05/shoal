@@ -23740,3 +23740,68 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
             .is_empty()
     );
 }
+
+#[test]
+fn a_demo_opener_leaves_the_terminal_as_it_found_it() {
+    let fixture = Fixture::new();
+    fixture.add("tried");
+    demo(
+        &fixture,
+        &[
+            "start",
+            "site",
+            "--workspace",
+            "tried",
+            "--open",
+            "stty -echo",
+            "--",
+            "sh",
+            "-c",
+            "exec sleep 600",
+        ],
+    );
+    let (mut master, slave) = pty::open();
+    let mut driver = support::isolated(fixture.root.path(), "python3");
+    let mut child = driver
+        .env("TERM", "xterm-256color")
+        .args([
+            "-c",
+            r#"import fcntl, os, subprocess, sys, termios
+binary = sys.argv[1]
+os.setsid()
+fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+def terminal_settings():
+    settings = termios.tcgetattr(0)
+    settings[3] &= ~getattr(termios, 'PENDIN', 0)
+    return settings
+before = terminal_settings()
+group = os.tcgetpgrp(0)
+opened = subprocess.run([binary, 'demo', 'site', '--workspace', 'tried'], timeout=30)
+assert opened.returncode == 0, opened.returncode
+assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
+assert terminal_settings() == before, (before, terminal_settings())
+"#,
+            env!("CARGO_BIN_EXE_shoal"),
+        ])
+        .stdin(slave.try_clone().unwrap())
+        .stdout(slave.try_clone().unwrap())
+        .stderr(slave.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    use std::io::Read;
+    let mut transcript = String::new();
+    // Drain while the driver runs: closing a PTY can wait for unread output.
+    let finished = try_wait_for(|| {
+        let _ = master.read_to_string(&mut transcript);
+        child.try_wait().unwrap()
+    });
+    if finished.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("terminal driver hung: {transcript:?}");
+    }
+    drop(slave);
+    let _ = master.read_to_string(&mut transcript);
+    assert!(finished.unwrap().success(), "{transcript}");
+    demo(&fixture, &["stop", "--workspace", "tried"]);
+}

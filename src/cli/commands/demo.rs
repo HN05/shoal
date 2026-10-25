@@ -484,11 +484,12 @@ async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()
         },
     )
     .await?;
-    let status = tokio::process::Command::new(&open[0])
+    let mut command = tokio::process::Command::new(&open[0]);
+    command
         .args(&open[1..])
         .current_dir(&workspace.path)
-        .envs(&demo.launch.environment)
-        .status()
+        .envs(&demo.launch.environment);
+    let status = crate::execution::run_in_terminal(command)
         .await
         .with_context(|| format!("run the open command of demo {}", demo.launch.name))?;
     ensure!(
