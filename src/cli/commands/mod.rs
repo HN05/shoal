@@ -430,7 +430,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspaces::list(&ctx, queue, &filter).await
         }
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
-        Command::Base { command, workspace } => base::run(&ctx, command, workspace).await,
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
@@ -509,10 +508,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
         }
         Command::Done { workspace, cleanup } => workspaces::done(&ctx, workspace, cleanup).await,
-        Command::Env { workspace, revoke } => {
-            workspaces::environment(&ctx, workspace, revoke).await
-        }
-        Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Notifications {
             command: Some(NotificationsCommand::Clear),
             ..

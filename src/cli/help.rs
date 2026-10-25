@@ -16,7 +16,6 @@ const GROUPS: &[(&str, &[&str])] = &[
             "cd",
             "edit",
             "status",
-            "base",
             "notify",
             "message",
             "messages",
@@ -35,8 +34,8 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Run commands and agents",
         &[
-            "exec", "env", "run", "claude", "codex", "happy", "t3", "chat", "plan", "attach",
-            "stop", "resume",
+            "exec", "run", "claude", "codex", "happy", "t3", "chat", "plan", "attach", "stop",
+            "resume",
         ],
     ),
     (
@@ -58,10 +57,7 @@ const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Shared resources", &["acquire", "release", "leases", "sim"]),
-    (
-        "Diagnostics and activity",
-        &["inspect", "notifications", "doctor"],
-    ),
+    ("Diagnostics and activity", &["notifications", "doctor"]),
     (
         "Configuration and installation",
         &[

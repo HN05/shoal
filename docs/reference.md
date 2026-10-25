@@ -393,7 +393,7 @@ shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status pr 12                       # Workspaces that link PR 12
 shoal status resource devices            # Workspaces that hold a devices lease
-shoal inspect fix-login
+shoal work inspect fix-login
 shoal stop fix-login                     # Stop agents and commands for shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
@@ -1146,10 +1146,10 @@ below. A `--base` naming another workspace's branch, locally or on a remote,
 records that workspace as the new workspace's base workspace.
 
 ```sh
-shoal base                          # Show the current workspace's base workspace
-shoal base set feature-a            # Record it by workspace name or branch
-shoal base clear                    # Remove it
-shoal base set feature-a --workspace feature-b
+shoal work base                          # Show the current workspace's base workspace
+shoal work base set feature-a            # Record it by workspace name or branch
+shoal work base clear                    # Remove it
+shoal work base set feature-a --workspace feature-b
 ```
 
 The base must be another workspace of the same repository and must not create
@@ -1598,7 +1598,7 @@ workspace ran hits, and debug info records that workspace's directory.
 The `xcode` preset keeps a [shared cache](#shared-caches) named `preset.xcode` holding
 an xcconfig, Xcode's compilation cache and Swift package checkouts. It sets
 `XCODE_XCCONFIG_FILE` to the xcconfig, and puts an `xcodebuild` wrapper first on
-the PATH of every process Shoal starts in a workspace and of `shoal env`. The
+the PATH of every process Shoal starts in a workspace and of `shoal work env`. The
 xcconfig turns compilation caching on and maps the workspace and its DerivedData
 folder out of cache keys, so a workspace reuses what another compiled. Packages
 checked out per workspace would still miss, so the wrapper passes
@@ -1707,7 +1707,7 @@ first, or with `--yes`. Large previews show an omitted-entry count; use
 them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
 Removal stops tracked commands and every verified process that carries the
-workspace's identity, including those hooks and `shoal env` exports started,
+workspace's identity, including those hooks and `shoal work env` exports started,
 leaving unrelated processes alone. Ownership and removal policy are checked again after removal hooks,
 and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
@@ -2832,7 +2832,7 @@ gets the CLI's scoped refusals even after the token is removed from its
 environment. Scope is cooperative and does not restrict direct filesystem or
 Git operations.
 
-`shoal env [workspace] --json` returns an object mapping environment variable names
+`shoal work env [workspace] --json` returns an object mapping environment variable names
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
@@ -2847,7 +2847,7 @@ precedence over `[env]`. Desktop handoffs may reuse an existing process and do
 not receive these variables.
 Only unscoped callers can export or revoke tokens, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
-Each exported token survives daemon restarts until `shoal env [workspace] --revoke
+Each exported token survives daemon restarts until `shoal work env [workspace] --revoke
 <token>` or successful workspace removal; revoking one leaves other tokens valid.
 Running processes retain their port snapshot. These processes are untracked, the
 token provides no cleanup protection, and removing the workspace stops them.

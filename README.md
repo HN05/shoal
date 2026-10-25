@@ -73,7 +73,7 @@ Use `shoal add my-project` to pick a new or existing branch, an open issue or an
 ```sh
 shoal add my-project fix-api --base feature/api  # Branch from feature/api
 shoal add my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
-shoal base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
+shoal work base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
 shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
@@ -152,7 +152,7 @@ shoal chat my-project          # Discuss the repository with an agent in its che
 shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
-shoal inspect fix-login       # Detailed workspace and execution records
+shoal work inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal message "Stop the dev server" --workspace fix-login  # Message the workspace's agents
@@ -228,9 +228,9 @@ to one. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
-Apps that launch their own processes can request `shoal env fix-login --json`
+Apps that launch their own processes can request `shoal work env fix-login --json`
 and add the returned variables to each child's environment. Revoke its scope
-with `shoal env fix-login --revoke <token>`. See
+with `shoal work env fix-login --revoke <token>`. See
 [workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 

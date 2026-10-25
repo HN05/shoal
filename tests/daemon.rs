@@ -784,7 +784,8 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
             .contains(replacement.to_str().unwrap())
     );
     let inspection: Value =
-        serde_json::from_slice(&run(&["--json", "inspect", "keep-running"]).stdout).unwrap();
+        serde_json::from_slice(&run(&["--json", "work", "inspect", "keep-running"]).stdout)
+            .unwrap();
     assert_eq!(inspection["executions"][0]["state"], "running");
     assert!(execution.try_wait().unwrap().is_none());
     fs::write(&finish, "").unwrap();

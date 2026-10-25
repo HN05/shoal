@@ -227,8 +227,8 @@ returns a `merge_conflict` update when that check newly fails. After rebasing a 
 Branches of other workspaces are shared refs, so `git merge feature/api`
 brings in their latest commits; use `origin/feature/api` for pushed work after
 `shoal repo sync`. Stay on your workspace's recorded branch. When it builds on
-another workspace's branch, record that with `shoal base set <workspace>`;
-`shoal base` shows it.
+another workspace's branch, record that with `shoal work base set <workspace>`;
+`shoal work base` shows it.
 When the repository has no remote, `shoal --json land` merges your committed
 branch into the default branch. Unless the repository sets `[land]
 requires_approval = false`, it first exits 2 with `approval_pending` for your

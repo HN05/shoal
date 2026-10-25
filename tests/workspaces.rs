@@ -341,7 +341,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     ]);
     assert!(!denied.status.success());
     assert_eq!(
-        fixture.ok(&["inspect", "other"])["workspace"]["branch"],
+        fixture.ok(&["work", "inspect", "other"])["workspace"]["branch"],
         "other"
     );
     let renamed = fixture.ok(&[
@@ -389,7 +389,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
             .contains("other active or unknown executions")
     );
     assert_eq!(
-        fixture.ok(&["inspect", "explicit"])["workspace"]["branch"],
+        fixture.ok(&["work", "inspect", "explicit"])["workspace"]["branch"],
         "explicit"
     );
     db.execute("DELETE FROM executions WHERE id='unknown'", [])
@@ -431,7 +431,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     );
     fixture.request(serde_json::json!({"set_pr":{"workspace":"original","clear":true}}));
     fixture.ok(&["done", "original"]);
-    let before = fixture.ok(&["inspect", "original"]);
+    let before = fixture.ok(&["work", "inspect", "original"]);
     let response = fixture.rename("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
     let renamed = &response["data"];
@@ -459,7 +459,12 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     ] {
         assert_eq!(renamed[field], workspace[field]);
     }
-    assert!(!fixture.run(&["inspect", "original"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "inspect", "original"])
+            .status
+            .success()
+    );
     assert_eq!(
         git(path, &["symbolic-ref", "HEAD"]).trim(),
         "refs/heads/feature/topic"
@@ -476,11 +481,11 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
         "preserve\n"
     );
     assert_eq!(
-        fixture.ok(&["inspect", "dependent"])["workspace"]["base_ref"],
+        fixture.ok(&["work", "inspect", "dependent"])["workspace"]["base_ref"],
         "refs/heads/feature/topic"
     );
     fixture.restart();
-    let after = fixture.ok(&["inspect", id]);
+    let after = fixture.ok(&["work", "inspect", id]);
     for field in ["ports", "resources"] {
         assert_eq!(after[field], before[field]);
     }
@@ -527,7 +532,10 @@ fn workspace_rename_refuses_collisions_and_recovers_git_failure() {
     ] {
         let response = fixture.rename("original", branch);
         assert_eq!(response["type"], "error", "{branch}: {response}");
-        assert_eq!(fixture.ok(&["inspect", "original"])["workspace"], workspace);
+        assert_eq!(
+            fixture.ok(&["work", "inspect", "original"])["workspace"],
+            workspace
+        );
         assert_eq!(
             git(path, &["symbolic-ref", "HEAD"]).trim(),
             "refs/heads/original"
@@ -581,7 +589,10 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
                 .unwrap();
         }
         fixture.restart();
-        assert_eq!(fixture.ok(&["inspect", id])["workspace"]["state"], "failed");
+        assert_eq!(
+            fixture.ok(&["work", "inspect", id])["workspace"]["state"],
+            "failed"
+        );
         let rejected = fixture.run(&["add", fixture.repo.to_str().unwrap(), "new-topic"]);
         assert!(!rejected.status.success());
         assert!(
@@ -614,7 +625,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             vec!["doctor", id, "--repair"]
         };
         repaired_workspaces(&fixture, &repair_args);
-        let inspection = fixture.ok(&["inspect", id]);
+        let inspection = fixture.ok(&["work", "inspect", id]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(
             inspection["workspace"]["branch"],
@@ -673,7 +684,12 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
     drop(db);
     let removed = fixture.ok(&["rm", "original"]);
     assert_eq!(removed["branch_deleted"], false);
-    assert!(!fixture.run(&["inspect", "original"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "inspect", "original"])
+            .status
+            .success()
+    );
     assert!(
         fixture
             .ok(&["port", "list", "--all"])
@@ -1622,7 +1638,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in ["rm", "cd", "exec", "diff", "status", "inspect", "done"] {
+    for command in ["rm", "cd", "exec", "diff", "status", "done"] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -1707,7 +1723,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["undone", ""],
         vec!["unready", "--workspace", ""],
         vec!["hold", "release", ""],
-        vec!["base", "clear", "--workspace", ""],
+        vec!["work", "base", "clear", "--workspace", ""],
     ] {
         let choices = described(&args);
         assert!(
@@ -1914,9 +1930,10 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             assert!(text.contains("own-only"), "{text}");
             assert!(!text.contains("other-only"), "{text}");
         }
-        for action in ["status", "inspect"] {
+        for action in [vec!["status"], vec!["work", "inspect"]] {
             let output = command(cwd, scoped, false)
-                .args(["--json", action])
+                .arg("--json")
+                .args(action)
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
@@ -1937,8 +1954,8 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
     }
     for args in [
         vec!["status", "context-other"],
-        vec!["inspect", "context-other"],
-        vec!["inspect", "missing"],
+        vec!["work", "inspect", "context-other"],
+        vec!["work", "inspect", "missing"],
         vec!["stop"],
         vec!["stop", "context-other"],
         vec!["config", "show", "context-other"],
@@ -2734,7 +2751,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     assert!(!fixture.run(&["rm", "dirty"]).status.success());
     assert_eq!(fs::read_to_string(file).unwrap(), "keep me");
     assert_eq!(
-        fixture.ok(&["inspect", "dirty"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "dirty"])["workspace"]["state"],
         "ready"
     );
     fixture.ok(&["rm", "dirty", "--yes"]);
@@ -2752,7 +2769,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["inspect", "broken"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "broken"])["workspace"]["state"],
         "failed"
     );
     fixture.ok(&["rm", "broken"]);
@@ -2770,7 +2787,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     ]);
     assert!(!failed.status.success());
     let reserved = PathBuf::from(
-        fixture.ok(&["inspect", "reserved"])["workspace"]["path"]
+        fixture.ok(&["work", "inspect", "reserved"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     );
@@ -3020,7 +3037,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         format!("{}:{}", web["port"], api["port"])
     );
     assert_eq!(
-        fixture.ok(&["inspect", "first"])["ports"]
+        fixture.ok(&["work", "inspect", "first"])["ports"]
             .as_array()
             .unwrap()
             .len(),
@@ -3323,7 +3340,7 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
         "{output:?}"
     );
     assert_eq!(
-        fixture.ok(&["inspect", name])["issue"]["url"],
+        fixture.ok(&["work", "inspect", name])["issue"]["url"],
         "https://forge.example/team/project/issues/12"
     );
 
@@ -3439,7 +3456,8 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             .contains("https://forge.example/api/v1/repos/team/project/pulls/7\n")
     );
     let url = "https://forge.example/team/project/pulls/7";
-    let linked_prs = || fixture.ok(&["inspect", "stack-top"])["workspace"]["links"]["prs"].clone();
+    let linked_prs =
+        || fixture.ok(&["work", "inspect", "stack-top"])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&["unlink", "pr", url, "assigned", "--workspace", "stack-top"]);
@@ -3464,7 +3482,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
-    let workspace = &fixture.ok(&["inspect", "stack-top"])["workspace"];
+    let workspace = &fixture.ok(&["work", "inspect", "stack-top"])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -3785,7 +3803,7 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
             format!("refs/heads/{actual_branch}\n")
         );
         assert_eq!(
-            fixture.ok(&["inspect", name])["workspace"]["id"],
+            fixture.ok(&["work", "inspect", name])["workspace"]["id"],
             workspace["id"]
         );
         let output = fixture.run(&["exec", name, "--", "git", "symbolic-ref", "HEAD"]);
@@ -3922,7 +3940,7 @@ fn interactive_add_preserves_literal_branch_spelling() {
     );
     assert!(output.status.success(), "{transcript}");
     assert!(transcript.contains("Branch name:"));
-    let workspace = &fixture.ok(&["inspect", "henrik-topic-"])["workspace"];
+    let workspace = &fixture.ok(&["work", "inspect", "henrik-topic-"])["workspace"];
     assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
     fixture.ok(&["rm", "henrik-topic-"]);
 }
@@ -4093,7 +4111,7 @@ finally:
                 );
             }
         }
-        let workspace = fixture.ok(&["inspect", "terminal"]);
+        let workspace = fixture.ok(&["work", "inspect", "terminal"]);
         fs::remove_file(
             Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
         )
@@ -4128,7 +4146,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     assert_eq!(output.stdout, b"pipe:execute");
     assert_eq!(output.stderr, b"error");
     assert_eq!(
-        fixture.ok(&["inspect", "execute"])["executions"],
+        fixture.ok(&["work", "inspect", "execute"])["executions"],
         serde_json::json!([])
     );
     fixture.ok(&["rm", "execute"]);
@@ -4184,7 +4202,7 @@ fn configured_environment_renders_for_tracked_commands() {
         format!("{}|http://localhost:{}", port["port"], port["port"])
     );
     assert!(cache.ends_with("/.caches/shared/go"), "{cache}");
-    let exported = fixture.ok(&["env", "env-values"]);
+    let exported = fixture.ok(&["work", "env", "env-values"]);
     assert_eq!(exported["API_PORT"], port["port"].to_string());
     assert_eq!(exported["SESSION"], "env-values");
     assert_eq!(
@@ -4262,7 +4280,7 @@ exit 7
             during["executions"].as_array().unwrap().len(),
             usize::from(mode == "cli")
         );
-        let after = fixture.ok(&["inspect", name]);
+        let after = fixture.ok(&["work", "inspect", name]);
         assert_eq!(after["executions"], serde_json::json!([]));
         let path = after["workspace"]["path"].as_str().unwrap();
         assert!(Path::new(path).join("tracked").exists());
@@ -4326,7 +4344,12 @@ exit 7
             .contains("cannot start codex: codex is not installed or not on PATH"),
         "{output:?}"
     );
-    assert!(!fixture.run(&["inspect", "missing-agent"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "inspect", "missing-agent"])
+            .status
+            .success()
+    );
 
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
@@ -4336,7 +4359,7 @@ exit 7
     .unwrap();
     let output = add("failed-agent");
     assert!(!output.status.success());
-    let workspace = fixture.ok(&["inspect", "failed-agent"]);
+    let workspace = fixture.ok(&["work", "inspect", "failed-agent"]);
     assert!(
         Path::new(workspace["workspace"]["path"].as_str().unwrap())
             .join("tracked")
@@ -4405,7 +4428,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
                 assert_eq!(lines[0], "default-mode");
             }
             assert_eq!(
-                fixture.ok(&["inspect", "default-mode"])["executions"],
+                fixture.ok(&["work", "inspect", "default-mode"])["executions"],
                 serde_json::json!([])
             );
         }
@@ -4623,7 +4646,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .spawn()
             .unwrap();
         wait_until("execution registration", || {
-            !fixture.ok(&["inspect", "running"])["executions"]
+            !fixture.ok(&["work", "inspect", "running"])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -4662,7 +4685,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     fixture.add("unused");
     for name in ["first", "second"] {
         wait_until("execution registration", || {
-            !fixture.ok(&["inspect", name])["executions"]
+            !fixture.ok(&["work", "inspect", name])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -4820,7 +4843,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     ];
     let mut last_inspection = Value::Null;
     let ids = try_wait_for(|| {
-        let inspection = fixture.ok(&["inspect", "stopped"]);
+        let inspection = fixture.ok(&["work", "inspect", "stopped"]);
         last_inspection = inspection.clone();
         let ids = inspection["executions"]
             .as_array()
@@ -4840,7 +4863,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(
-        fixture.ok(&["inspect", "stopped"])["executions"]
+        fixture.ok(&["work", "inspect", "stopped"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -5077,7 +5100,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     );
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
     assert!(
-        fixture.ok(&["inspect", "quarantined"])["executions"]
+        fixture.ok(&["work", "inspect", "quarantined"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -5136,7 +5159,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         saved
     };
     let running = |fixture: &Fixture| {
-        fixture.ok(&["inspect", "restarted"])["executions"]
+        fixture.ok(&["work", "inspect", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -5166,7 +5189,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     assert!(agent.wait().unwrap().success());
     assert_eq!(saved(), [".recovery.json"]);
     assert!(
-        fixture.ok(&["inspect", "restarted"])["executions"]
+        fixture.ok(&["work", "inspect", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -5197,7 +5220,7 @@ fn registry_survives_daemon_restart() {
     fixture.daemon.child.wait().unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "persistent"])["workspace"]["id"],
+        fixture.ok(&["work", "inspect", "persistent"])["workspace"]["id"],
         workspace["id"]
     );
     fixture.ok(&["rm", "persistent"]);
@@ -5247,6 +5270,9 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             if json {
                 command.arg("--json");
             }
+            if action == "inspect" {
+                command.arg("work");
+            }
             command.arg(action).args(explicit);
             let output = command.output().unwrap();
             assert!(output.status.success(), "{action}: {output:?}");
@@ -5264,6 +5290,19 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             (fixture.root.path(), vec![action, "missing"]),
             (fixture.root.path(), vec!["--json", action]),
         ] {
+            let args = if action == "inspect" {
+                args.into_iter()
+                    .flat_map(|word| {
+                        if word == "inspect" {
+                            vec!["work", word]
+                        } else {
+                            vec![word]
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                args
+            };
             let (_master, slave) = pty::open();
             let output = fixture
                 .command()
@@ -5373,7 +5412,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         &["add"][..],
         &["exec", "--", "true"],
         &["rm"],
-        &["inspect"],
+        &["work", "inspect"],
         &["stop"],
         &["status"],
         &["diff"],
@@ -5445,7 +5484,7 @@ test "${PWD##*/}" = acknowledged
 shoal undone
 rm untracked
 shoal done
-until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" held
@@ -5453,7 +5492,7 @@ shoal hold acquire held --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
 shoal hold release held --name review
-until ! shoal inspect held >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work inspect held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" completed
@@ -5463,7 +5502,7 @@ test "${PWD##*/}" = completed
 shoal undone
 rm untracked
 shoal done --cleanup
-until ! shoal inspect completed >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work inspect completed >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
@@ -5788,7 +5827,7 @@ fn execution_scope_limits_management_and_expires() {
         "hookhook"
     );
     assert_eq!(
-        fixture.ok(&["inspect", "worker"])["executions"],
+        fixture.ok(&["work", "inspect", "worker"])["executions"],
         serde_json::json!([]),
         "hook survivors must not belong to the invoking execution"
     );
@@ -5803,7 +5842,7 @@ fn execution_scope_limits_management_and_expires() {
     for args in [
         vec!["rm", "worker", "--yes"],
         vec!["stop", "worker"],
-        vec!["inspect", "other"],
+        vec!["work", "inspect", "other"],
         vec!["exec", "other", "--", "true"],
         vec!["work", "setup", "other"],
         vec!["link", "pr", "42", "assigned", "--workspace", "other"],
@@ -6767,7 +6806,7 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
         String::from_utf8_lossy(&empty.stderr).contains("no leases or requests to release"),
         "{empty:?}"
     );
-    let inspection = fixture.ok(&["inspect", "first"]);
+    let inspection = fixture.ok(&["work", "inspect", "first"]);
     assert!(inspection["ports"].as_array().unwrap().is_empty());
     assert!(inspection["resources"].as_array().unwrap().is_empty());
 }
@@ -6868,7 +6907,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "Parallel job",
     ]);
     assert_eq!(
-        fixture.ok(&["inspect", "third"])["resources"]
+        fixture.ok(&["work", "inspect", "third"])["resources"]
             .as_array()
             .unwrap()
             .len(),
@@ -7332,7 +7371,10 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     assert_eq!(renewed["id"], lease["id"]);
     assert_eq!(renewed["created_at"], lease["created_at"]);
     assert_eq!(renewed["reason"], "still signing");
-    assert_eq!(fixture.ok(&["inspect", "first"])["resources"][0], renewed);
+    assert_eq!(
+        fixture.ok(&["work", "inspect", "first"])["resources"][0],
+        renewed
+    );
     fs::remove_file(first_path.join(".shoal.toml")).unwrap();
     fixture.ok(&["resource", "release", "signing", "first"]);
     fixture.ok(&["resource", "acquire", "signing", "second"]);
@@ -7570,7 +7612,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("could not fetch origin/topic"), "{stderr}");
     assert_eq!(
-        fixture.ok(&["inspect", "from-remote"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "from-remote"])["workspace"]["state"],
         "failed"
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), initial);
@@ -8047,7 +8089,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     fixture.ok(&["status", "first"]);
     assert!(fixture.run(&["diff", "second"]).status.success());
     assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
-    let unsupported = fixture.run(&["inspect", "-"]);
+    let unsupported = fixture.run(&["work", "inspect", "-"]);
     assert!(!unsupported.status.success());
     assert!(String::from_utf8_lossy(&unsupported.stderr).contains("does not accept -"));
     let binary = env!("CARGO_BIN_EXE_shoal");
@@ -8464,13 +8506,13 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let foreign = fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
     let lower = lower["id"].as_str().unwrap();
-    let (output, rows) = fixture.pick(&["base", "set", "--workspace", "upper"], lower, "");
+    let (output, rows) = fixture.pick(&["work", "base", "set", "--workspace", "upper"], lower, "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains(&format!("{lower}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     assert!(!rows.contains(foreign["id"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
 }
@@ -8838,7 +8880,7 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     for _ in 0..2 {
         fixture.restart();
         for (state, workspace) in states.iter().zip(&workspaces) {
-            let inspection = fixture.ok(&["inspect", state]);
+            let inspection = fixture.ok(&["work", "inspect", state]);
             let saved = &inspection["workspace"];
             assert_eq!(
                 saved["state"],
@@ -8918,7 +8960,7 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "interrupted"])["workspace"]["state"],
         "failed"
     );
     let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
@@ -8929,7 +8971,7 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
     assert!(issue.contains("--repair"));
     assert_eq!(
-        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "interrupted"])["workspace"]["state"],
         "failed"
     );
     db.execute(
@@ -9002,7 +9044,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
         .unwrap();
     fixture.restart();
-    let saved = fixture.ok(&["inspect", "marked"])["workspace"].clone();
+    let saved = fixture.ok(&["work", "inspect", "marked"])["workspace"].clone();
     assert_eq!(saved["state"], "ready", "{saved}");
     assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
     assert!(
@@ -9052,7 +9094,7 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "reclaimed"])["workspace"]["state"],
         "failed"
     );
     let preview = recovery_report(&fixture, &["doctor", "reclaimed"]);
@@ -9119,7 +9161,7 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     );
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "reclaimed"])["workspace"]["state"],
         "ready"
     );
 }
@@ -9202,7 +9244,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
     }
     fixture.restart();
     for (name, workspace, legacy, lease) in cases {
-        let saved = fixture.ok(&["inspect", name])["workspace"].clone();
+        let saved = fixture.ok(&["work", "inspect", name])["workspace"].clone();
         if name == "ready" {
             assert_eq!(saved["state"], "ready");
             assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
@@ -9211,7 +9253,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(saved["git_dir_id"], legacy);
         }
         recovery_report(&fixture, &["doctor", name]);
-        assert_eq!(fixture.ok(&["inspect", name])["workspace"], saved);
+        assert_eq!(fixture.ok(&["work", "inspect", name])["workspace"], saved);
         let report = recovery_report(&fixture, &["doctor", name, "--repair"]);
         if name == "renumbered" {
             assert_eq!(report[0]["directory"], "unverified");
@@ -9373,7 +9415,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     })
     .unwrap_or_else(|| panic!("deleted worktrees remain: {last_names:?}"));
     assert_eq!(
-        fixture.ok(&["inspect", "moved"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "moved"])["workspace"]["state"],
         "failed"
     );
     assert!(!fixture.run(&["rm", "moved"]).status.success());
@@ -9444,7 +9486,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
     wait_for("registered execution with a child", || {
-        let inspection = fixture.ok(&["inspect", workspace]);
+        let inspection = fixture.ok(&["work", "inspect", workspace]);
         inspection["executions"]
             .as_array()
             .unwrap()
@@ -9469,7 +9511,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "inspect", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let report = recovery_report(&fixture, &["doctor", "orphan", "--repair"]);
     assert!(
@@ -9480,7 +9522,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
             .any(|p| p["pid"] == execution["child"]["pid"])
     );
     assert_eq!(
-        fixture.ok(&["inspect", "orphan"])["executions"]
+        fixture.ok(&["work", "inspect", "orphan"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -9497,11 +9539,11 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
         ],
     );
     assert_eq!(
-        fixture.ok(&["inspect", "orphan"])["executions"],
+        fixture.ok(&["work", "inspect", "orphan"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(
-        fixture.ok(&["inspect", "orphan"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "orphan"])["workspace"]["state"],
         "ready"
     );
 }
@@ -9561,7 +9603,7 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_without_launch_iden
         &["doctor", "crash", "--repair", "--acknowledge-stopped"],
     );
     assert_eq!(
-        fixture.ok(&["inspect", "crash"])["executions"],
+        fixture.ok(&["work", "inspect", "crash"])["executions"],
         serde_json::json!([])
     );
 }
@@ -9596,7 +9638,7 @@ fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
         ],
     );
     assert_eq!(
-        fixture.ok(&["inspect", "detached"])["executions"],
+        fixture.ok(&["work", "inspect", "detached"])["executions"],
         serde_json::json!([])
     );
 }
@@ -9617,7 +9659,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "inspect", "orphan"])["executions"][0]["state"] == "unknown"
     });
     fixture.ok(&["rm", "orphan"]);
     assert_eq!(
@@ -9669,7 +9711,7 @@ fn doctor_preserves_connected_commands_until_stop_is_explicit() {
     repaired_workspaces(&fixture, &["doctor", "connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
-        fixture.ok(&["inspect", "connected"])["executions"],
+        fixture.ok(&["work", "inspect", "connected"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(fixture.ok(&["port", "connected"])["reserved"][0], port);
@@ -9706,7 +9748,7 @@ time.sleep(30)
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "inspect", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let mut stopping = fixture
         .command()
@@ -9769,7 +9811,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
                 )
             );
             assert_eq!(
-                fixture.ok(&["inspect", "desktop"])["executions"],
+                fixture.ok(&["work", "inspect", "desktop"])["executions"],
                 serde_json::json!([])
             );
         }
@@ -9953,7 +9995,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         .spawn()
         .unwrap();
     wait_until("execution registration", || {
-        !fixture.ok(&["inspect", "first"])["executions"]
+        !fixture.ok(&["work", "inspect", "first"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -10603,7 +10645,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("status 17"));
-    let failed = fixture.ok(&["inspect", "failed-setup"]);
+    let failed = fixture.ok(&["work", "inspect", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
     let report = recovery_report(&fixture, &["doctor", "failed-setup"]);
@@ -10618,7 +10660,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).contains(issue));
     assert_eq!(
-        fixture.ok(&["inspect", "failed-setup"])["workspace"],
+        fixture.ok(&["work", "inspect", "failed-setup"])["workspace"],
         failed["workspace"]
     );
     assert_eq!(
@@ -10685,11 +10727,11 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     assert!(ignored.status.success(), "{transcript}");
     assert!(transcript.contains("[d]elete workspace"));
     assert_eq!(
-        fixture.ok(&["inspect", "ignored"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "ignored"])["workspace"]["state"],
         "ready"
     );
     assert_eq!(fixture.ok(&["status", "ignored"])["setup_finished"], false);
-    let ignored_path = fixture.ok(&["inspect", "ignored"])["workspace"]["path"]
+    let ignored_path = fixture.ok(&["work", "inspect", "ignored"])["workspace"]["path"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -10703,7 +10745,12 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         transcript.contains("Deleted workspace deleted"),
         "{transcript}"
     );
-    assert!(!fixture.run(&["inspect", "deleted"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "inspect", "deleted"])
+            .status
+            .success()
+    );
     assert!(
         git(&fixture.repo, &["branch", "--list", "deleted"])
             .trim()
@@ -10711,14 +10758,14 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     );
     assert!(fixture.repo.is_dir());
     assert_eq!(
-        fixture.ok(&["inspect", "existing"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "existing"])["workspace"]["state"],
         "ready"
     );
     let (canceled, transcript) =
         fixture.interactive(&["add", fixture.repo.to_str().unwrap(), "canceled"], "\n");
     assert!(!canceled.status.success(), "{transcript}");
     assert_eq!(
-        fixture.ok(&["inspect", "canceled"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "canceled"])["workspace"]["state"],
         "failed"
     );
 }
@@ -10759,7 +10806,7 @@ Path('setup-result').write_text('complete')
             command.arg("--json");
         }
         let (output, transcript) = fixture.interactive_command(&mut command, "");
-        let inspection = fixture.ok(&["inspect", "survivor"]);
+        let inspection = fixture.ok(&["work", "inspect", "survivor"]);
         let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
         let pid = fs::read_to_string(path.join("survivor-pid")).unwrap();
         // Reap the test-owned survivor before making assertions about the output.
@@ -10828,7 +10875,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         false
     });
     assert_eq!(
-        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "interrupted"])["workspace"]["state"],
         "preparing"
     );
     assert!(
@@ -10847,12 +10894,12 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
     let status = wait_for("setup to stop", || add.try_wait().unwrap());
     assert!(!status.success());
-    let inspection = fixture.ok(&["inspect", "interrupted"]);
+    let inspection = fixture.ok(&["work", "inspect", "interrupted"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "inspect", "interrupted"])["workspace"]["state"],
         "failed"
     );
     assert!(path.join("setup-started").exists());
@@ -10912,7 +10959,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("post-setup-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let inspection = fixture.ok(&["inspect", "hooked"]);
+    let inspection = fixture.ok(&["work", "inspect", "hooked"]);
     assert_eq!(
         inspection["executions"],
         serde_json::json!([]),
@@ -10939,7 +10986,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("post_setup_cmd exited with 5"));
-    let failed = fixture.ok(&["inspect", "hook-fails"]);
+    let failed = fixture.ok(&["work", "inspect", "hook-fails"]);
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert!(!failed_path.join("agent-started").exists());
@@ -10964,7 +11011,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("pre-remove-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let retained = fixture.ok(&["inspect", "hooked"]);
+    let retained = fixture.ok(&["work", "inspect", "hooked"]);
     assert_eq!(retained["workspace"]["state"], "ready");
     assert!(path.join("tracked").exists());
     fs::remove_file(path.join("fail-removal")).unwrap();
@@ -11401,7 +11448,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         let name = format!("{number}-fix-api-timeout");
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
-        assert_eq!(fixture.ok(&["inspect", &name])["issue"]["url"], url);
+        assert_eq!(fixture.ok(&["work", "inspect", &name])["issue"]["url"], url);
         if host == "github.com" {
             let invocation = fs::read_to_string(&issue_args).unwrap();
             assert!(invocation.contains(&format!("issue\0view\0{number}\0")));
@@ -11419,7 +11466,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         assert!(prompt.contains(body));
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["inspect", &name])["executions"],
+            fixture.ok(&["work", "inspect", &name])["executions"],
             serde_json::json!([])
         );
     }
@@ -11618,7 +11665,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let cwd = match number {
             45 => fixture.repo.join("nested"),
             46 => PathBuf::from(
-                fixture.ok(&["inspect", "41-paste-issue"])["workspace"]["path"]
+                fixture.ok(&["work", "inspect", "41-paste-issue"])["workspace"]["path"]
                     .as_str()
                     .unwrap(),
             )
@@ -11655,7 +11702,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(prompt.contains(&url) && prompt.contains(body), "{prompt}");
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["inspect", &name])["executions"],
+            fixture.ok(&["work", "inspect", &name])["executions"],
             serde_json::json!([])
         );
     }
@@ -11687,7 +11734,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(output.status.success(), "{output:?}");
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(workspace["name"], format!("{number}-create-workspace"));
-        let inspection = fixture.ok(&["inspect", workspace["name"].as_str().unwrap()]);
+        let inspection = fixture.ok(&["work", "inspect", workspace["name"].as_str().unwrap()]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         assert!(!agent_args.exists());
@@ -11765,7 +11812,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["inspect", "298-pick-agent"]);
+        let inspection = fixture.ok(&["work", "inspect", "298-pick-agent"]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
@@ -12141,7 +12188,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             "",
         );
         assert!(output.status.success(), "{transcript}");
-        let workspace = fixture.ok(&["inspect", "coworker-topic"]);
+        let workspace = fixture.ok(&["work", "inspect", "coworker-topic"]);
         assert_eq!(
             fs::read_to_string(&directive).unwrap().trim(),
             workspace["workspace"]["path"].as_str().unwrap()
@@ -12186,7 +12233,7 @@ esac
     };
     let (output, transcript) = add("Use an issue", "34");
     assert!(output.status.success(), "{output:?} {transcript}");
-    let issue = fixture.ok(&["inspect", "34-fix-api-timeout"]);
+    let issue = fixture.ok(&["work", "inspect", "34-fix-api-timeout"]);
     assert_eq!(
         issue["issue"]["url"],
         "https://github.com/team/project/issues/34"
@@ -12196,7 +12243,7 @@ esac
     assert!(output.status.success(), "{output:?} {transcript}");
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
-        fixture.ok(&["inspect", "topic"])["workspace"]["path"]
+        fixture.ok(&["work", "inspect", "topic"])["workspace"]["path"]
             .as_str()
             .unwrap()
     );
@@ -12247,7 +12294,7 @@ esac
         let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
         assert!(output.status.success(), "{output:?} {transcript}");
     }
-    let workspace = fixture.ok(&["inspect", "topic"]);
+    let workspace = fixture.ok(&["work", "inspect", "topic"]);
     assert_eq!(
         workspace["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
@@ -12314,7 +12361,7 @@ fn wait_removed(fixture: &Fixture, name: &str) {
     .unwrap_or_else(|| {
         panic!(
             "PR cleanup did not remove workspace: {}",
-            fixture.ok(&["inspect", name])
+            fixture.ok(&["work", "inspect", name])
         )
     });
 }
@@ -12322,7 +12369,7 @@ fn wait_removed(fixture: &Fixture, name: &str) {
 fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
     let mut inspection = Value::Null;
     try_wait_for(|| {
-        inspection = fixture.ok(&["inspect", name]);
+        inspection = fixture.ok(&["work", "inspect", name]);
         inspection["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|s| s.contains(message))
@@ -12390,7 +12437,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
     fixture.ok(&["unlink", "pr", "assigned", "--workspace", "retain"]);
-    assert!(fixture.ok(&["inspect", "retain"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "retain"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -12405,7 +12452,7 @@ fn pr_cleanup_can_be_disabled_independently() {
     );
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "keep"]);
     assert_eq!(
-        fixture.ok(&["inspect", "keep"])["workspace"]["links"]["prs"],
+        fixture.ok(&["work", "inspect", "keep"])["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
     );
     fixture.ok(&["unlink", "pr", "assigned", "--workspace", "keep"]);
@@ -12417,7 +12464,7 @@ fn pr_cleanup_can_be_disabled_independently() {
             .unwrap()
             .contains("PR cleanup is disabled")
     );
-    assert!(fixture.ok(&["inspect", "keep"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "keep"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -12443,9 +12490,9 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         )
         .unwrap();
         fixture.restart();
-        assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["work", "inspect", name])["pr_cleanup"], record);
         assert_eq!(fixture.acknowledge(name)["type"], "error");
-        assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["work", "inspect", name])["pr_cleanup"], record);
         // Clear remains allowed while disabled, including for a scoped caller.
         assert_eq!(
             fixture.ok(&[
@@ -12461,7 +12508,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
             serde_json::json!({"registered": false})
         );
         fixture.restart();
-        assert!(fixture.ok(&["inspect", name])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["work", "inspect", name])["pr_cleanup"].is_null());
         let again = fixture.run(&["unlink", "pr", "assigned", "--workspace", name]);
         assert!(
             String::from_utf8_lossy(&again.stderr).contains("no pr is linked as assigned"),
@@ -12486,14 +12533,14 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
         )
         .unwrap();
         fixture.restart();
-        let output = fixture.run(&["inspect", "invalid"]);
+        let output = fixture.run(&["work", "inspect", "invalid"]);
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr).contains("expected exactly one of url or head")
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
         fixture.ok(&["unlink", "pr", "assigned", "--workspace", "invalid"]);
-        assert!(fixture.ok(&["inspect", "invalid"])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["work", "inspect", "invalid"])["pr_cleanup"].is_null());
     }
 }
 
@@ -12550,7 +12597,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let failed = fixture.run(&["link", "pr", "56", "assigned", "--workspace", "watch"]);
     assert!(!failed.status.success());
     assert!(String::from_utf8_lossy(&failed.stderr).contains("origin remote"));
-    assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "watch"])["pr_cleanup"].is_null());
     git(
         &fixture.repo,
         &[
@@ -12572,7 +12619,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     ]);
     assert!(!failed.status.success());
     assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal done"));
-    assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -12643,7 +12690,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     ]);
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["inspect", "watch"])["pr_cleanup"]["url"],
+        fixture.ok(&["work", "inspect", "watch"])["pr_cleanup"]["url"],
         "https://github.com/team/repo/pull/56"
     );
     // Watched PRs are looked up once the assignment is done.
@@ -12717,7 +12764,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     );
     fixture.ok(&["link", "pr", "56", "assigned", "--workspace", "fj-watch"]);
     // A merge alone waits for the agent's explicit done.
-    assert!(fixture.ok(&["inspect", "fj-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "fj-watch"])["completion"].is_null());
     fixture.ok(&["done", "fj-watch"]);
     wait_removed(&fixture, "fj-watch");
 }
@@ -12809,7 +12856,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
     assert_eq!(third["updates"][0]["kind"], "merge_conflict");
-    assert!(fixture.ok(&["inspect", "watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "watch"])["completion"].is_null());
     fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--workspace", "watch"]);
     assert!(!missing.status.success());
@@ -12959,7 +13006,7 @@ esac
     fixture.ok(&[
         "exec", "items", "--", binary, "--json", "unlink", "issue", "1", "assigned",
     ]);
-    let inspection = fixture.ok(&["inspect", "items"]);
+    let inspection = fixture.ok(&["work", "inspect", "items"]);
     assert!(inspection["issue"].is_null());
     assert_eq!(
         inspection["pr_cleanup"]["url"],
@@ -12971,16 +13018,16 @@ esac
         explicit["updates"][0]["url"],
         "https://github.com/team/project/issues/2"
     );
-    let inspection = fixture.ok(&["inspect", "items"]);
+    let inspection = fixture.ok(&["work", "inspect", "items"]);
     assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
     write_issue(1, "relink");
     fixture.ok(&["link", "issue", "1", "assigned", "--workspace", "items"]);
     fixture.ok(&["unlink", "assigned", "--workspace", "items"]);
-    assert!(fixture.ok(&["inspect", "items"])["issue"].is_null());
-    assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "items"])["issue"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "items"])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
     let items = PathBuf::from(
-        fixture.ok(&["inspect", "items"])["workspace"]["path"]
+        fixture.ok(&["work", "inspect", "items"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     );
@@ -13000,7 +13047,7 @@ esac
     fs::write(pr_file, fork.to_string()).unwrap();
     let explicit = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
     assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
-    assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "items"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -13054,7 +13101,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
     assert_eq!(updates[0]["kind"], "comment");
     assert_eq!(updates[1]["message"], "rust: Success");
     assert_eq!(updates[0]["url"], "https://forge.example/team/repo/pulls/7");
-    let inspection = fixture.ok(&["inspect", "items"]);
+    let inspection = fixture.ok(&["work", "inspect", "items"]);
     assert!(inspection["pr_cleanup"].is_null());
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["branch"], "items");
@@ -13115,7 +13162,7 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
     state("open");
     let reopened = fixture.ok(&["watch", "issue", "8", "--workspace", "issue-watch"]);
     assert_eq!(reopened["updates"][0]["kind"], "reopened");
-    assert!(fixture.ok(&["inspect", "issue-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "issue-watch"])["completion"].is_null());
 }
 
 #[test]
@@ -13583,7 +13630,7 @@ fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
         "descendant cleanup was killed: {output:?}"
     );
     assert_eq!(
-        fixture.ok(&["inspect", "worker"])["executions"],
+        fixture.ok(&["work", "inspect", "worker"])["executions"],
         serde_json::json!([])
     );
 }
@@ -13642,7 +13689,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             .trim()
             .parse()
             .unwrap();
-        let during = fixture.ok(&["inspect", "worker"]);
+        let during = fixture.ok(&["work", "inspect", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
         if interruption == "daemon" {
@@ -13854,7 +13901,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         let execution_id = launch["execution_id"].as_str().unwrap();
         let log = PathBuf::from(launch["log"].as_str().unwrap());
         assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
-        let inspection = fixture.ok(&["inspect", &name]);
+        let inspection = fixture.ok(&["work", "inspect", &name]);
         let executions = inspection["executions"].as_array().unwrap();
         assert_eq!(executions.len(), 1, "{inspection}");
         assert_eq!(executions[0]["id"], execution_id);
@@ -13898,7 +13945,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         wait_until("happy to exit", || !process_alive(pid));
         if operation == "stop" {
             assert_eq!(
-                fixture.ok(&["inspect", &name])["executions"],
+                fixture.ok(&["work", "inspect", &name])["executions"],
                 serde_json::json!([])
             );
             assert!(log.exists());
@@ -14591,7 +14638,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("git profile missing is not defined"));
-    let failed = fixture.ok(&["inspect", "unknown"]);
+    let failed = fixture.ok(&["work", "inspect", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
     fixture.ok(&["rm", "unknown", "--yes"]);
@@ -14674,7 +14721,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         b"pipe:custom\nliteral $HOME\ntwo words\n--flag\n"
     );
     assert_eq!(
-        fixture.ok(&["inspect", "custom"])["executions"],
+        fixture.ok(&["work", "inspect", "custom"])["executions"],
         serde_json::json!([])
     );
     fs::write(
@@ -15414,7 +15461,7 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     let output = fixture.run(&["claude", "detached-auth"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("agent_auth.fj"));
-    let status = fixture.ok(&["inspect", "detached-auth"]);
+    let status = fixture.ok(&["work", "inspect", "detached-auth"]);
     assert!(
         status["executions"]
             .as_array()
@@ -15965,7 +16012,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         )
     );
     assert_eq!(
-        fixture.ok(&["inspect", workspace["id"].as_str().unwrap()])["executions"],
+        fixture.ok(&["work", "inspect", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
     );
     let notifications = fixture.ok(&["notifications"]);
@@ -16145,7 +16192,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("resource lease retained"));
-    let inspection = fixture.ok(&["inspect", "hooked"]);
+    let inspection = fixture.ok(&["work", "inspect", "hooked"]);
     let lease = &inspection["resources"][0];
     assert_eq!(lease["reason"], "test signing");
     assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -16176,7 +16223,10 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         let output = fixture.run(&args);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("resource busy"));
-        assert_eq!(fixture.ok(&["inspect", "hooked"])["resources"][0], *lease);
+        assert_eq!(
+            fixture.ok(&["work", "inspect", "hooked"])["resources"][0],
+            *lease
+        );
         assert!(path.exists());
     }
     fs::remove_file(path.join("pre_resource_release-fails")).unwrap();
@@ -16220,7 +16270,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     wait_until("permit hook", || {
         fixture.root.path().join("hook-entered").exists()
     });
-    let leases = fixture.ok(&["inspect", "hooked"])["resources"].clone();
+    let leases = fixture.ok(&["work", "inspect", "hooked"])["resources"].clone();
     assert_eq!(leases.as_array().unwrap().len(), 1);
     assert_eq!(leases[0]["resource"], "signing");
     for args in [
@@ -16376,7 +16426,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "hooked"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("pre_setup_cmd exited with 7"));
-    let inspection = fixture.ok(&["inspect", "hooked"]);
+    let inspection = fixture.ok(&["work", "inspect", "hooked"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     assert_eq!(
@@ -16471,7 +16521,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .unwrap()
             .contains("external cleanup failed")
     );
-    assert!(!fixture.run(&["inspect", "hooked"]).status.success());
+    assert!(!fixture.run(&["work", "inspect", "hooked"]).status.success());
     let notifications = fixture.ok(&["notifications"]);
     assert!(
         notifications
@@ -16549,7 +16599,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
             &serde_json::json!("PR #12 is ready to merge")
         )]
     );
-    assert!(fixture.ok(&["inspect", "sender"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "sender"])["completion"].is_null());
 }
 
 #[test]
@@ -16901,7 +16951,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     assert!(!row(&fixture).contains("ready"));
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert!(
-        fixture.ok(&["inspect", "reviewed"])["workspace"]
+        fixture.ok(&["work", "inspect", "reviewed"])["workspace"]
             .get("review")
             .is_none()
     );
@@ -17171,7 +17221,7 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     for args in [
         vec!["resource", "acquire", "server", "consumer"],
         vec!["resource", "consumer"],
-        vec!["inspect", "consumer"],
+        vec!["work", "inspect", "consumer"],
     ] {
         let rendered = fixture.run(&args);
         assert!(rendered.status.success());
@@ -17249,7 +17299,7 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
     );
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
-    let pools: Vec<_> = fixture.ok(&["inspect", "consumer"])["resources"]
+    let pools: Vec<_> = fixture.ok(&["work", "inspect", "consumer"])["resources"]
         .as_array()
         .unwrap()
         .iter()
@@ -17329,7 +17379,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         String::from_utf8_lossy(&missing.stderr).contains("repository is not registered: missing")
     );
     assert!(
-        fixture.ok(&["inspect", "consumer"])["resources"]
+        fixture.ok(&["work", "inspect", "consumer"])["resources"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -17996,7 +18046,7 @@ fn exported_scopes_request_simulator_approval_before_mutations() {
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("external");
-    let exported = fixture.ok(&["env", "external"]);
+    let exported = fixture.ok(&["work", "env", "external"]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported).unwrap();
     let acquire = |args: &[&str]| {
@@ -18282,7 +18332,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fs::read_to_string(&events).unwrap(),
         "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
     );
-    assert!(fixture.ok(&["inspect", "agent-work"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "agent-work"])["completion"].is_null());
     assert_eq!(
         fixture.run(&["run", "helper", "agent-work"]).status.code(),
         Some(7)
@@ -18348,7 +18398,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     wait_until("completion from exit hook", || {
-        fixture.ok(&["inspect", "agent-work"])["completion"]["cleanup"] == false
+        fixture.ok(&["work", "inspect", "agent-work"])["completion"]["cleanup"] == false
     });
 }
 
@@ -18451,7 +18501,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
     fixture.ok(&["done", "hooked"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["inspect", "hooked"])["completion"]["error"].is_string()
+        fixture.ok(&["work", "inspect", "hooked"])["completion"]["error"].is_string()
     });
     assert_eq!(
         fs::read_to_string(&events).unwrap(),
@@ -18513,7 +18563,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         fixture.root.path().join("done-started").exists()
     });
     assert_eq!(
-        fixture.ok(&["inspect", "hooked"])["completion"]["cleanup"],
+        fixture.ok(&["work", "inspect", "hooked"])["completion"]["cleanup"],
         false
     );
     for args in [
@@ -18600,10 +18650,10 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
     fs::write(path.join("work"), "retain").unwrap();
     fixture.ok(&["done", "unfinished"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["inspect", "unfinished"])["completion"]["error"].is_string()
+        fixture.ok(&["work", "inspect", "unfinished"])["completion"]["error"].is_string()
     });
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
-    assert!(fixture.ok(&["inspect", "unfinished"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "inspect", "unfinished"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -18635,7 +18685,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
         fixture.ok(&["link", "pr", "2", "assigned", "--workspace", "multi"]);
         fixture.ok(&["link", "pr", "1", "assigned", "--workspace", "multi"]);
         assert_eq!(
-            fixture.ok(&["inspect", "multi"])["pr_cleanup"]["urls"]
+            fixture.ok(&["work", "inspect", "multi"])["pr_cleanup"]["urls"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -18654,7 +18704,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "assigned",
         ]);
         assert_eq!(
-            fixture.ok(&["inspect", "multi"])["pr_cleanup"]["url"],
+            fixture.ok(&["work", "inspect", "multi"])["pr_cleanup"]["url"],
             "https://github.com/team/project/pull/1"
         );
         fixture.ok(&[
@@ -18681,16 +18731,17 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
                 .lines()
                 .any(|s| s == "2")
         });
-        assert!(fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"].is_null());
+        assert!(fixture.ok(&["work", "inspect", "multi"])["pr_cleanup"]["merged_head"].is_null());
         fs::write(root.join("pr-2.json"), serde_json::json!({"number":2,"state":"MERGED","headRefName":"multi","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
         fixture.restart();
         if cleanup {
             wait_removed(&fixture, "multi");
         } else {
             wait_until("confirmed merges", || {
-                fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
+                fixture.ok(&["work", "inspect", "multi"])["pr_cleanup"]["merged_head"]
+                    == head.trim()
             });
-            let state = fixture.ok(&["inspect", "multi"]);
+            let state = fixture.ok(&["work", "inspect", "multi"]);
             assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
             fixture.ok(&["notifications"]);
             // A changed default must not change a kept assignment.
@@ -18701,7 +18752,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             .unwrap();
             fixture.restart();
             assert_eq!(
-                fixture.ok(&["inspect", "multi"])["completion"]["cleanup"],
+                fixture.ok(&["work", "inspect", "multi"])["completion"]["cleanup"],
                 false
             );
         }
@@ -18807,14 +18858,14 @@ cat >/dev/null
         fixture.ok(&["link", "pr", "2", "assigned", "--workspace", "upper"]);
         fixture.restart();
         assert_eq!(
-            fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+            fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"]["name"],
             "lower"
         );
 
         write_pr(1, "Merged", "lower", "main");
         fixture.restart();
         wait_until("restacked upper", || {
-            fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"].is_null()
+            fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"].is_null()
         });
         let edits = fs::read_to_string(root.join("edits")).unwrap();
         if tool == "gh" {
@@ -18907,7 +18958,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fs::write(root.join("fail"), "commits").unwrap();
     fixture.restart();
     wait_until("recorded merge lookup failure", || {
-        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "inspect", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("could not check whether"))
     });
@@ -18926,12 +18977,12 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fs::write(root.join("pr-1"), pr.to_string()).unwrap();
     fixture.restart();
     wait_until("recorded unmerged base HEAD", || {
-        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "inspect", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("do not contain the base workspace's HEAD"))
     });
     assert_eq!(
-        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // A failure after the merge is confirmed is reported.
@@ -18939,21 +18990,21 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fs::write(root.join("fail"), "baseRefName").unwrap();
     fixture.restart();
     wait_until("reported restack failure", || {
-        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "inspect", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("could not move the workspaces stacked on it"))
     });
     assert_eq!(
-        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // Recovery restacks and clears the recorded error.
     fs::remove_file(root.join("fail")).unwrap();
     fixture.restart();
     wait_until("restack after recovery", || {
-        let lower = fixture.ok(&["inspect", "lower"]);
+        let lower = fixture.ok(&["work", "inspect", "lower"]);
         lower["pr_cleanup"]["error"].is_null()
-            && fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"].is_null()
+            && fixture.ok(&["work", "inspect", "upper"])["workspace"]["base_workspace"].is_null()
     });
 }
 
@@ -19237,7 +19288,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     // The tab's shell, not the caller's, enters the workspace after the agent.
     let tab_directive = herdr_tab_directive(&fixture);
-    let workspace = fixture.ok(&["inspect", "herdr-agent"]);
+    let workspace = fixture.ok(&["work", "inspect", "herdr-agent"]);
     assert_eq!(
         fs::read_to_string(&tab_directive).unwrap(),
         format!("{}\n", workspace["workspace"]["path"].as_str().unwrap())
@@ -19651,7 +19702,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let (worker, transcript) =
         fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
-    let workspace = fixture.ok(&["inspect", "herdr-shell"]);
+    let workspace = fixture.ok(&["work", "inspect", "herdr-shell"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("shell-cwd"))
             .unwrap()
@@ -19831,7 +19882,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
         fixture.root.path().join("happy-exited").exists()
     });
     wait_until("Happy execution reporting", || {
-        fixture.ok(&["inspect", "happy-tab"])["executions"]
+        fixture.ok(&["work", "inspect", "happy-tab"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -19840,7 +19891,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     fixture.restart();
     fixture.ok(&["done", "happy-tab"]);
     wait_for_herdr_close(&fixture);
-    assert!(fixture.ok(&["inspect", "happy-tab"])["completion"].is_object());
+    assert!(fixture.ok(&["work", "inspect", "happy-tab"])["completion"].is_object());
 }
 
 #[test]
@@ -19921,7 +19972,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     fixture.ok(&["hold", "acquire", "issue-work", "--name", "review"]);
     scoped(&fixture, &["done"]);
     assert_eq!(
-        fixture.ok(&["inspect", "issue-work"])["workspace"]["done"],
+        fixture.ok(&["work", "inspect", "issue-work"])["workspace"]["done"],
         true
     );
     let undone = scoped(&fixture, &["undone"]);
@@ -19938,7 +19989,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         String::from_utf8_lossy(&refused.stderr).contains("not marked done"),
         "{refused:?}"
     );
-    let inspection = fixture.ok(&["inspect", "issue-work"]);
+    let inspection = fixture.ok(&["work", "inspect", "issue-work"]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);
     fixture.ok(&["hold", "release", "issue-work", "--name", "review"]);
@@ -19961,7 +20012,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     fixture.add("other");
     let web = fixture.ok(&["port", "acquire", "web", "external"]);
     let api = fixture.ok(&["port", "acquire", "api", "external", "--env", "API_PORT"]);
-    let exported = fixture.ok(&["env", "external"]);
+    let exported = fixture.ok(&["work", "env", "external"]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported.clone()).unwrap();
     assert_eq!(exported["SHOAL_WORKSPACE_ID"], workspace["id"]);
@@ -19989,7 +20040,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         format!("{}|{}", web["port"], api["port"])
     );
     assert!(
-        fixture.ok(&["inspect", "external"])["executions"]
+        fixture.ok(&["work", "inspect", "external"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -20005,7 +20056,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     };
     for args in [
         vec!["status"],
-        vec!["inspect"],
+        vec!["work", "inspect"],
         vec!["port"],
         vec!["work", "setup"],
         vec!["exec", "--", env!("CARGO_BIN_EXE_shoal"), "port"],
@@ -20018,10 +20069,16 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["rm", "external", "--yes"],
         vec!["rm", "other", "--yes"],
         vec!["notifications"],
-        vec!["inspect", "other"],
-        vec!["env"],
-        vec!["env", "other"],
-        vec!["env", "external", "--revoke", &values["SHOAL_SCOPE_TOKEN"]],
+        vec!["work", "inspect", "other"],
+        vec!["work", "env"],
+        vec!["work", "env", "other"],
+        vec![
+            "work",
+            "env",
+            "external",
+            "--revoke",
+            &values["SHOAL_SCOPE_TOKEN"],
+        ],
     ] {
         let output = scoped(&args);
         assert!(!output.status.success(), "{args:?}: {output:?}");
@@ -20030,7 +20087,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let output = fixture
         .command()
         .envs(&values)
-        .args(["inspect", "external"])
+        .args(["work", "inspect", "external"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -20041,23 +20098,23 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     let fixture = Fixture::new();
     let workspace = fixture.add("external");
     fixture.add("other");
-    let first = fixture.ok(&["env", "external"]);
-    let second = fixture.ok(&["env", "external"]);
+    let first = fixture.ok(&["work", "env", "external"]);
+    let second = fixture.ok(&["work", "env", "external"]);
     let first_token = first["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let second_token = second["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let inspect = |token: &str| {
         fixture
             .command()
             .env("SHOAL_SCOPE_TOKEN", token)
-            .args(["inspect", "external"])
+            .args(["work", "inspect", "external"])
             .output()
             .unwrap()
     };
-    let wrong_owner = fixture.run(&["env", "other", "--revoke", first_token]);
+    let wrong_owner = fixture.run(&["work", "env", "other", "--revoke", first_token]);
     assert!(!wrong_owner.status.success());
     assert!(inspect(first_token).status.success());
     assert_eq!(
-        fixture.ok(&["env", "external", "--revoke", first_token])["revoked"],
+        fixture.ok(&["work", "env", "external", "--revoke", first_token])["revoked"],
         true
     );
     let revoked = inspect(first_token);
@@ -20078,7 +20135,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     // The branch had no commits, so removal deleted it too.
     fixture.ok(&["add", fixture.repo.to_str().unwrap(), "external"]);
     assert!(!inspect(second_token).status.success());
-    assert!(fixture.ok(&["env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
+    assert!(fixture.ok(&["work", "env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
 }
 
 #[test]
@@ -20096,11 +20153,8 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     ]);
     assert_eq!(hold["workspace_id"], workspace["id"]);
     let expected = serde_json::json!([hold]);
-    for command in ["status", "inspect"] {
-        assert_eq!(
-            fixture.ok(&[command, "held"])["workspace"]["holds"],
-            expected
-        );
+    for command in [vec!["status", "held"], vec!["work", "inspect", "held"]] {
+        assert_eq!(fixture.ok(&command)["workspace"]["holds"], expected);
     }
     assert_eq!(fixture.ok(&["work"])[0]["holds"], expected);
     assert_eq!(fixture.ok(&["hold", "held"]), expected);
@@ -21014,7 +21068,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert!(session["SHOAL_ADD_PLAN"].is_string(), "{session}");
     let log = fs::read_to_string(home.join("zmx-background.log")).unwrap_or_default();
     assert_eq!(runs(), "background tracked go\n", "{log}");
-    let workspace = fixture.ok(&["inspect", "background"]);
+    let workspace = fixture.ok(&["work", "inspect", "background"]);
     let id = workspace["workspace"]["id"].as_str().unwrap();
     let labels = [
         "set",
@@ -21053,7 +21107,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let workspace = fixture.ok(&["inspect", "shell-here"]);
+    let workspace = fixture.ok(&["work", "inspect", "shell-here"]);
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
         workspace["workspace"]["path"].as_str().unwrap()
@@ -21085,7 +21139,7 @@ fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let workspace = fixture.ok(&["inspect", "app"]);
+    let workspace = fixture.ok(&["work", "inspect", "app"]);
     let path = workspace["workspace"]["path"].as_str().unwrap();
     assert_eq!(
         fs::read_to_string(home.join("codex-runs")).unwrap(),
@@ -21154,7 +21208,7 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert!(transcript.contains("detached zmx session"), "{transcript}");
-    let workspace = fixture.ok(&["inspect", "shell-only"]);
+    let workspace = fixture.ok(&["work", "inspect", "shell-only"]);
     let log = fs::read_to_string(home.join("zmx-shell-only.log")).unwrap_or_default();
     assert_eq!(
         fs::read_to_string(home.join("shell-cwd"))
@@ -21460,7 +21514,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
         transcript.contains("cannot start claude: zmx is not installed or not on PATH"),
         "{transcript}"
     );
-    assert!(!fixture.run(&["inspect", "no-zmx"]).status.success());
+    assert!(!fixture.run(&["work", "inspect", "no-zmx"]).status.success());
 
     // Without a terminal the agent runs in place and needs no zmx.
     let output = fixture

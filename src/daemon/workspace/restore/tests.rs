@@ -48,7 +48,7 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    // A process started with the workspace identity, as hooks and `shoal env`
+    // A process started with the workspace identity, as hooks and `shoal work env`
     // exports start them, that saves its work when asked to stop.
     let ready = root.path().join("ready");
     let mut process = tokio::process::Command::new("python3")

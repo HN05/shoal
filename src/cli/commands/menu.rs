@@ -568,8 +568,15 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             workspace: Some(workspace),
             session: None,
         },
-        Row::Failed(workspace) => Command::Inspect {
-            workspace: Some(workspace),
+        Row::Failed(workspace) => Command::Work {
+            command: Some(crate::cli::WorkCommand::Inspect {
+                workspace: Some(workspace),
+            }),
+            queue: false,
+            chats: false,
+            repository: None,
+            status: Vec::new(),
+            print: false,
         },
         Row::Ready {
             workspace,
@@ -630,7 +637,14 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             workspace,
             confirmation: ConfirmationArgs::default(),
         },
-        Key::Inspect => Command::Inspect { workspace },
+        Key::Inspect => Command::Work {
+            command: Some(crate::cli::WorkCommand::Inspect { workspace }),
+            queue: false,
+            chats: false,
+            repository: None,
+            status: Vec::new(),
+            print: false,
+        },
         Key::Stop => Command::Stop {
             scope: WorkspaceScope {
                 workspace,

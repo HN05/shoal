@@ -56,21 +56,23 @@ impl Need {
             ["work", "rename"] => Self::Ready,
             ["work", "restore"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
-            ["base", "clear"] => Self::Base,
+            ["work", "base", "clear"] => Self::Base,
+            ["work", "base", ..] | ["work", "inspect"] => Self::Any,
+            ["work", "env"] => Self::Ready,
             ["hold", "release"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split"
-                | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
+                | "done" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
             | ["hold", "acquire"]
             | ["pr", "open"]
             | ["port" | "resource" | "sim", "acquire" | "release"] => Self::Ready,
             [
-                "status" | "inspect" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
+                "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
-                | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "ci"
+                | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "ci"
                 | "notifications",
                 ..,
             ] => Self::Any,

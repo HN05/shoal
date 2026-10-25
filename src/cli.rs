@@ -396,13 +396,6 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Show, set or clear the workspace a stacked workspace builds on.
-    #[command(args_conflicts_with_subcommands = true)]
-    Base {
-        #[command(subcommand)]
-        command: Option<BaseCommand>,
-        workspace: Option<String>,
-    },
     /// List what needs you: questions, approvals, agents needing input, failures and ready work.
     Inbox {
         /// List only this registered repository's items.
@@ -605,15 +598,6 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Export the environment for processes started in a workspace.
-    Env {
-        workspace: Option<String>,
-        /// Revoke a previously exported scope token.
-        #[arg(long)]
-        revoke: Option<String>,
-    },
-    /// Show detailed workspace and execution records.
-    Inspect { workspace: Option<String> },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
     Notifications {
@@ -1456,6 +1440,22 @@ pub enum BranchCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum WorkCommand {
+    /// Show, set or clear the workspace a stacked workspace builds on.
+    #[command(args_conflicts_with_subcommands = true)]
+    Base {
+        #[command(subcommand)]
+        command: Option<BaseCommand>,
+        workspace: Option<String>,
+    },
+    /// Export the environment for processes started in a workspace.
+    Env {
+        workspace: Option<String>,
+        /// Revoke a previously exported scope token.
+        #[arg(long)]
+        revoke: Option<String>,
+    },
+    /// Show detailed workspace and execution records.
+    Inspect { workspace: Option<String> },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.
