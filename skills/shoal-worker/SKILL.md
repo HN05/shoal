@@ -366,13 +366,13 @@ you open. When a change is something to try rather than read, such as a
 prototype, a terminal interface or a web page, offer a demo:
 
 ```sh
-shoal --json demo ls                      # Configured and running demos
-shoal --json demo start                   # The repository's only configured demo
-shoal --json demo start web               # A configured demo by name
-shoal --json demo start tui -- ./target/debug/app   # Any command, named tui
-shoal --json demo start site --preset web -- npm run dev
-shoal demo screen tui                     # What the demo shows now
-shoal demo send tui $'q'                  # Type into it; $'\r' is Enter
+shoal demo ls                      # Configured and running demos
+shoal demo start                   # The repository's only configured demo
+shoal demo start web               # A configured demo by name
+shoal demo start tui -- ./target/debug/app   # Any command, named tui
+shoal demo start site --preset web -- npm run dev
+shoal demo screen tui              # What the demo shows now
+shoal demo send tui $'q'           # Type into it; $'\r' is Enter
 shoal demo stop tui
 ```
 
