@@ -1,0 +1,195 @@
+use std::collections::BTreeMap;
+
+use super::*;
+use crate::{
+    daemon::{
+        scope::{self, Caller, ScopedExecution},
+        workspace::ExecutionKind,
+    },
+    model::Workspace,
+    protocol::Method,
+    test_support::{manager, repository},
+};
+
+fn launch(name: &str) -> Launch {
+    Launch {
+        name: name.into(),
+        preset: None,
+        open: None,
+        environment: BTreeMap::new(),
+        host: "zmx".into(),
+        place: format!("session-{name}"),
+        leased_simulator: false,
+    }
+}
+
+async fn workspaces(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
+    let checkout = repository(root, "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let first = manager
+        .create_workspace(&repo.id, "first".into(), None, None, None)
+        .await
+        .unwrap();
+    let second = manager
+        .create_workspace(&repo.id, "second".into(), None, None, None)
+        .await
+        .unwrap();
+    (first, second)
+}
+
+#[tokio::test]
+async fn demos_are_recorded_with_their_executions_and_end_with_them() {
+    let (temp, manager) = manager().await;
+    let (first, second) = workspaces(&manager, temp.path()).await;
+    let web = manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let tui = manager
+        .begin_execution_running(
+            &second.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("tui")),
+        )
+        .await
+        .unwrap();
+    let all = manager.demos(None).await.unwrap();
+    assert_eq!(
+        all.iter()
+            .map(|demo| (demo.workspace.as_str(), demo.launch.name.as_str()))
+            .collect::<Vec<_>>(),
+        [("first", "web"), ("second", "tui")]
+    );
+    assert_eq!(all[0].execution_id, web.plan.id);
+    assert_eq!(all[0].launch, launch("web"));
+    let own = manager.demos(Some(&second.name)).await.unwrap();
+    assert_eq!(own.len(), 1);
+    assert_eq!(own[0].execution_id, tui.plan.id);
+
+    // A new start of the same name takes the record from the one stopping.
+    let replacement = manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let demos = manager.demos(Some(&first.id)).await.unwrap();
+    assert_eq!(demos.len(), 1);
+    assert_eq!(demos[0].execution_id, replacement.plan.id);
+
+    manager
+        .finish_execution(replacement.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    drop(web);
+}
+
+#[tokio::test]
+async fn stopping_demos_asks_only_their_wrappers_to_stop() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let mut web = manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let mut tui = manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("tui")),
+        )
+        .await
+        .unwrap();
+    let mut command = manager
+        .begin_execution(&first.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+
+    manager
+        .stop_demos(&first.name, Some("web".into()))
+        .await
+        .unwrap();
+    assert!(*web.stop.borrow_and_update());
+    assert!(!*tui.stop.borrow_and_update());
+    let request = manager.stop_request(&web.plan.id).await.unwrap();
+    assert_eq!(request.save, Save::Nothing);
+
+    manager.stop_demos(&first.name, None).await.unwrap();
+    assert!(*tui.stop.borrow_and_update());
+    assert!(!*command.stop.borrow_and_update());
+    assert!(
+        manager
+            .stop_demos(&first.name, Some("Bad".into()))
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn workspace_processes_list_and_stop_only_their_own_demos() {
+    let (temp, manager) = manager().await;
+    let (first, second) = workspaces(&manager, temp.path()).await;
+    manager
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: first.id.clone(),
+                execution: Some(ScopedExecution {
+                    id: "execution".into(),
+                    kind: ExecutionKind::Command,
+                }),
+            },
+        )
+        .await;
+    let mut list = Method::ListDemos { workspace: None };
+    scope::authorize(&manager, Some("scope"), &mut list)
+        .await
+        .unwrap();
+    assert!(matches!(list, Method::ListDemos { workspace: Some(own) } if own == first.id));
+    let mut stop = Method::StopDemos {
+        workspace: first.name.clone(),
+        name: None,
+    };
+    scope::authorize(&manager, Some("scope"), &mut stop)
+        .await
+        .unwrap();
+    for mut method in [
+        Method::ListDemos {
+            workspace: Some(second.name.clone()),
+        },
+        Method::StopDemos {
+            workspace: second.name.clone(),
+            name: None,
+        },
+    ] {
+        assert!(
+            scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_err()
+        );
+    }
+}

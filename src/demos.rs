@@ -36,6 +36,41 @@ pub struct Demo {
     pub ports: Option<Vec<String>>,
 }
 
+/// What a demo's wrapper records with its execution: everything opening,
+/// reading or typing into the demo needs later.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Launch {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<Preset>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open: Option<Vec<String>>,
+    /// Variables the preset gives the command, such as `PORT`; opening the
+    /// demo receives them too.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub environment: BTreeMap<String, String>,
+    /// The terminal host the demo runs in, and its name for the demo's place
+    /// there, such as a zmx session.
+    pub host: String,
+    pub place: String,
+    /// Starting the demo leased the workspace's simulator, which the last
+    /// simulator demo to stop releases.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub leased_simulator: bool,
+}
+
+/// A running demo as listings show it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Running {
+    pub workspace_id: String,
+    pub workspace: String,
+    pub execution_id: String,
+    /// Unix seconds.
+    pub started_at: u64,
+    #[serde(flatten)]
+    pub launch: Launch,
+}
+
 /// The `shoal demo` subcommands, which `shoal demo NAME` could not tell
 /// apart from a demo of that name.
 const RESERVED: &[&str] = &["ls", "screen", "send", "start", "stop"];

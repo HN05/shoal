@@ -300,6 +300,15 @@ pub enum Method {
     HoldList {
         workspace: String,
     },
+    /// Running demos, of one workspace or, unscoped, of every workspace.
+    ListDemos {
+        workspace: Option<String>,
+    },
+    /// Ask a workspace's demos to stop: the one named, or every one.
+    StopDemos {
+        workspace: String,
+        name: Option<String>,
+    },
     /// Record or clear the workspace whose branch this one builds on.
     SetBaseWorkspace {
         workspace: String,
@@ -603,6 +612,9 @@ pub enum Method {
         /// The agent queue entry whose slot this agent takes over.
         #[serde(default)]
         queue_entry: Option<String>,
+        /// The demo this command runs, recorded with its execution.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        demo: Option<Box<crate::demos::Launch>>,
     },
     /// Long-lived: an execution connection resumed after a daemon restart.
     Reattach(Reattach),
@@ -957,6 +969,7 @@ response_bodies! {
     QueueEntry(crate::model::QueueEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
+    Demos(Vec<crate::demos::Running>),
     Workspaces(Vec<Workspace>),
     Chat(crate::model::Chat),
     Chats(Vec<crate::model::Chat>),
@@ -1546,6 +1559,7 @@ mod tests {
                 recover: false,
                 reattach: true,
                 queue_entry: None,
+                demo: None,
             };
             let encoded = serde_json::to_value(method).unwrap();
             assert_eq!(encoded["execute"]["kind"], spelling);

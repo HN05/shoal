@@ -8,6 +8,7 @@ use crate::{
         scope::{Caller, ScopedExecution},
         store,
     },
+    demos::Launch,
     hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
     process::{
@@ -161,6 +162,7 @@ struct ExecutionRecord {
     parent_execution: Option<String>,
     wrapper: Option<Identity>,
     scope_token: String,
+    demo: Option<Launch>,
 }
 
 struct RegisteredExecution {
@@ -222,12 +224,28 @@ impl ExecutionKind {
 impl Manager {
     /// Register an execution and issue its scope token. The returned receiver
     /// fires when the workspace asks its commands to stop.
+    #[cfg(test)]
     pub(crate) async fn begin_execution(
         &self,
         selector: &str,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         caller: Option<&Caller>,
+    ) -> Result<StartedExecution> {
+        self.begin_execution_running(selector, wrapper, kind, caller, None)
+            .await
+    }
+
+    /// Register an execution and issue its scope token, recording the demo it
+    /// runs with it. The returned receiver fires when the workspace asks its
+    /// commands to stop.
+    pub(crate) async fn begin_execution_running(
+        &self,
+        selector: &str,
+        wrapper: Option<Identity>,
+        kind: ExecutionKind,
+        caller: Option<&Caller>,
+        demo: Option<Launch>,
     ) -> Result<StartedExecution> {
         let (workspace, preparation) = self
             .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some())
@@ -247,6 +265,7 @@ impl Manager {
                 wrapper,
                 kind,
                 caller.and_then(Caller::execution_id),
+                demo,
             )
             .await?;
         // Setup releases its Git gate before the hook; resources remain guarded
@@ -276,6 +295,7 @@ impl Manager {
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         parent_execution: Option<&str>,
+        demo: Option<Launch>,
     ) -> Result<RegisteredExecution> {
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
@@ -301,6 +321,7 @@ impl Manager {
                     parent_execution: parent_execution.map(str::to_owned),
                     wrapper,
                     scope_token: scope_token.clone(),
+                    demo,
                 },
                 repository.clone(),
                 settings.caches.clone(),
@@ -349,6 +370,7 @@ impl Manager {
             parent_execution,
             wrapper,
             scope_token,
+            demo,
         } = record;
         // Only commands may reattach: setup and landing hold daemon gates
         // that a restart releases.
@@ -367,6 +389,9 @@ impl Manager {
                         reattach_token
                     ],
                 )?;
+                if let Some(demo) = &demo {
+                    super::demos::record(&tx, &id, &workspace_id, demo)?;
+                }
                 let ports = store::ports(&tx, Some(&workspace_id))?;
                 // Under the write lock emptying caches takes, and undone with
                 // the execution's row when the directories cannot be prepared.

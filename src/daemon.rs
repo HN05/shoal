@@ -302,6 +302,7 @@ async fn serve(
             recover,
             reattach,
             queue_entry,
+            demo,
         } => {
             return execution_connection::execute(
                 stream,
@@ -315,6 +316,7 @@ async fn serve(
                     recover,
                     reattach,
                     queue_entry,
+                    demo: demo.map(|demo| *demo),
                     caller,
                 },
                 operation_guard,
@@ -644,6 +646,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Ok
         }
         Method::HoldList { workspace } => Body::Holds(manager.workspace(&workspace).await?.holds),
+        Method::ListDemos { workspace } => Body::Demos(manager.demos(workspace.as_deref()).await?),
+        Method::StopDemos { workspace, name } => {
+            manager.stop_demos(&workspace, name).await?;
+            Body::Ok
+        }
         Method::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }

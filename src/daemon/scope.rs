@@ -67,6 +67,7 @@ pub async fn authorize(
         | Method::ForgeType { .. }
         | Method::SimCatalog => None,
         Method::HoldList { workspace }
+        | Method::StopDemos { workspace, .. }
         | Method::SetBaseWorkspace { workspace, .. }
         | Method::RenameWorkspace { workspace, .. }
         | Method::SplitWorkspace { workspace, .. }
@@ -138,6 +139,7 @@ pub async fn authorize(
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
         Method::ListApprovals { workspace }
+        | Method::ListDemos { workspace }
         | Method::ListQuestions { workspace }
         | Method::SimOverview { workspace }
         | Method::SimList { workspace }

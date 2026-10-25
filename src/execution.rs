@@ -363,6 +363,7 @@ async fn open_execution(
         agent: agent.clone(),
         recover,
         reattach: mode.reattaches(),
+        demo: None,
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;

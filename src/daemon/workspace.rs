@@ -8,6 +8,7 @@ pub(crate) mod capacity;
 mod checkpoints;
 mod conflicts;
 mod contributions;
+mod demos;
 mod diff;
 mod done;
 mod environment;

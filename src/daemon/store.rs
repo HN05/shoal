@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 68;
+const SCHEMA_VERSION: i64 = 69;
 
 #[cfg(test)]
 mod benchmark;
@@ -404,7 +404,18 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         UPDATE notifications SET message=replace(message,
         'shoal answer ', 'shoal questions ')
         WHERE kind='question_asked';", None),
+    (69, DEMOS, None),
 ];
+
+/// The demo each running execution runs; a demo ends with its execution.
+const DEMOS: &str = "CREATE TABLE demos (
+    execution_id TEXT PRIMARY KEY REFERENCES executions(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    record TEXT NOT NULL,
+    UNIQUE(workspace_id,name)
+);";
 
 /// Repositories `shoal contribute` registered, which Shoal removes once
 /// nothing of them is left, after a grace period like a workspace's.
@@ -1187,6 +1198,9 @@ mod tests {
         }
         if version >= 67 {
             db.execute_batch(REPOSITORY_MOVES)?;
+        }
+        if version >= 69 {
+            db.execute_batch(DEMOS)?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

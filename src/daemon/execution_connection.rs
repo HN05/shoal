@@ -31,6 +31,8 @@ pub(super) struct ExecutionContext {
     pub reattach: bool,
     /// The starting queue entry whose slot this agent takes over.
     pub queue_entry: Option<String>,
+    /// The demo the command runs.
+    pub demo: Option<crate::demos::Launch>,
     /// The scoped caller starting the execution.
     pub caller: Option<Caller>,
 }
@@ -76,6 +78,7 @@ pub(super) async fn execute(
         recover,
         reattach,
         queue_entry,
+        demo,
         caller,
     } = context;
     let StartedExecution {
@@ -83,7 +86,7 @@ pub(super) async fn execute(
         stop,
         _git_guard,
     } = match manager
-        .begin_execution(&workspace, Some(wrapper), kind, caller.as_ref())
+        .begin_execution_running(&workspace, Some(wrapper), kind, caller.as_ref(), demo)
         .await
     {
         Ok(begun) => begun,
@@ -610,6 +613,7 @@ mod tests {
                 recover: false,
                 reattach: false,
                 queue_entry: None,
+                demo: None,
                 caller: Some(Caller {
                     workspace_id: workspace.id.clone(),
                     execution: None,
@@ -698,6 +702,7 @@ mod tests {
                 recover: false,
                 reattach: false,
                 queue_entry: None,
+                demo: None,
                 caller: None,
             },
             manager.background_operations.clone().read_owned().await,
@@ -779,6 +784,7 @@ mod tests {
                 reattach: true,
                 caller: None,
                 queue_entry: None,
+                demo: None,
             },
             manager.background_operations.clone().read_owned().await,
         ));

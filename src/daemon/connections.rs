@@ -275,6 +275,7 @@ mod tests {
             recover: false,
             reattach: true,
             queue_entry: None,
+            demo: None,
         };
         let watch = Method::WatchNotifications {
             keep_unread: false,
