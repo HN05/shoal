@@ -8484,11 +8484,12 @@ esac
     assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
     assert!(
-        transcript.contains("Answered question 1 from asker"),
+        transcript.contains("Question 1 answered: Which database?"),
         "{transcript}"
     );
     assert!(
-        transcript.contains("Which database? (1) [SQLite]:"),
+        transcript.contains("Question 1: Which database?")
+            && transcript.contains("Answer [SQLite]:"),
         "{transcript}"
     );
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
@@ -17996,7 +17997,8 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
             fixture.terminal_command(fixture.command().args(["questions", &id]), input, true);
         assert!(output.status.success(), "{transcript}");
         assert!(
-            transcript.contains(&format!("{text} ({id}) [{recommendation}]:")),
+            transcript.contains(&format!("Question {id}: {text}"))
+                && transcript.contains(&format!("Answer [{recommendation}]:")),
             "{transcript}"
         );
         assert_eq!(fixture.ok(&["questions", &id])["answer"], expected);

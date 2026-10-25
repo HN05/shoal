@@ -10,7 +10,7 @@ use crate::{
         context::Context,
         installed::{Executable, arguments, replace_option},
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     daemon::questions::{Ask, Listing, Question},
     protocol::Method,
@@ -35,7 +35,7 @@ async fn show(ctx: &Context, question: Question) -> Result<i32> {
         return prompt_answer(ctx, question).await;
     }
     ctx.show(&question, |question| {
-        outln!("{}", render(question, Palette::stdout(ctx.json)))
+        outln!("{}", details(question, Palette::stdout(ctx.json)))
     })?;
     Ok(0)
 }
@@ -166,15 +166,37 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 fn pick_question(ctx: &Context, questions: Vec<Question>) -> Result<Question> {
-    let entries = questions
-        .iter()
-        .map(|question| (question.id.to_string(), summary(question)))
-        .collect();
-    let id: i64 = ui::pick(ctx, "Questions> ", entries)?.parse()?;
+    let id: i64 = ui::pick(ctx, "Question> ", picker_rows(&questions))?.parse()?;
     questions
         .into_iter()
         .find(|question| question.id == id)
         .context("picker returned an unknown question")
+}
+
+/// One aligned row per question, as the inbox shows it: its number, the
+/// workspace, the question cut to fit the picker, and the recommendation.
+fn picker_rows(questions: &[Question]) -> Entries {
+    let cells = questions
+        .iter()
+        .map(|question| {
+            [
+                (question.id.to_string(), Some(Style::Muted)),
+                (question.workspace.clone(), None),
+                (question.ask.question.clone(), None),
+                (
+                    format!("recommends {}", question.ask.recommendation),
+                    Some(Style::Muted),
+                ),
+            ]
+        })
+        .collect();
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 2, width });
+    let labels = ui::aligned_to(cells, Palette::picker(), limit);
+    questions
+        .iter()
+        .map(|question| question.id.to_string())
+        .zip(labels)
+        .collect()
 }
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
@@ -196,7 +218,7 @@ async fn withdraw_shown(ctx: &Context, workspace: String, shown: Question) -> Re
     .await?;
     ctx.emit(
         &format!(
-            "Withdrew question {} ({})",
+            "Question {} withdrawn: {}",
             question.id, question.ask.question
         ),
         &question,
@@ -222,15 +244,14 @@ async fn submit_answer(ctx: &Context, method: Method) -> Result<i32> {
 /// number that a later question reuses.
 fn answered(question: &Question) -> String {
     format!(
-        "Answered question {} from {} ({}): {}",
+        "Question {} answered: {}\n  Answer: {}",
         question.id,
-        question.workspace,
         question.ask.question,
         question.answer.as_deref().unwrap_or_default()
     )
 }
 
-/// Read an answer or choice number while keeping the question on the prompt line.
+/// Show the question and read an answer or choice number.
 async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
     match read_question_action(ctx, &question)? {
         QuestionAction::Recommend => {
@@ -254,31 +275,16 @@ enum QuestionAction {
     Answer(String),
 }
 
+/// Enter alone accepts the recommendation the prompt shows; Ctrl-C or end
+/// of input cancels.
 fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAction> {
-    print_answer_context(ctx, question);
-    let prompt = format!(
-        "{} ({}) [{}]",
-        question.ask.question, question.id, question.ask.recommendation
-    );
+    eprintln!("{}", details(question, Palette::stderr(ctx.json)));
+    let prompt = format!("Answer [{}]", question.ask.recommendation);
     let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
-    match response.trim() {
-        "" if response.is_empty() => Ok(QuestionAction::Recommend),
-        "/cancel" => Err(ui::SelectionCanceled.into()),
-        _ => Ok(QuestionAction::Answer(response)),
-    }
-}
-
-fn print_answer_context(ctx: &Context, question: &Question) {
-    let palette = Palette::stderr(ctx.json);
-    eprintln!("{}", palette.paint(Style::Muted, &question.workspace));
-    eprintln!("Recommended: {}", question.ask.recommendation);
-    if let Some(reason) = &question.ask.reason {
-        eprintln!("{reason}");
-    }
-    for (index, choice) in question.ask.choices.iter().enumerate() {
-        eprintln!("({}) {choice}", index + 1);
-    }
-    eprintln!("Enter accepts the recommendation; type a number or answer. /cancel to leave.");
+    Ok(match response.as_str() {
+        "" => QuestionAction::Recommend,
+        _ => QuestionAction::Answer(response),
+    })
 }
 
 /// One line with what the user needs to choose a question: its workspace,
@@ -298,8 +304,43 @@ pub(in crate::cli) fn summary(question: &Question) -> String {
     line
 }
 
-fn render(question: &Question, palette: Palette) -> String {
-    let status = if question.withdrawn {
+/// The question's number and text, then labeled rows with its status once
+/// settled, workspace, recommendation, reason, numbered choices and answer.
+fn details(question: &Question, palette: Palette) -> String {
+    let heading = format!("Question {}: {}", question.id, question.ask.question);
+    let mut rows: Vec<[Cell; 2]> = Vec::new();
+    let mut row = |label: &str, value: &str| {
+        rows.push([
+            (label.to_owned(), Some(Style::Muted)),
+            (value.to_owned(), None),
+        ]);
+    };
+    if !question.is_open() {
+        row("Status", status(question));
+    }
+    row("Workspace", &question.workspace);
+    row("Recommended", &question.ask.recommendation);
+    if let Some(reason) = &question.ask.reason {
+        row("Reason", reason);
+    }
+    for (number, choice) in (1..).zip(&question.ask.choices) {
+        let label = if number == 1 { "Choices" } else { "" };
+        row(label, &format!("{number}. {choice}"));
+    }
+    if let Some(answer) = &question.answer {
+        row("Answer", answer);
+    }
+    let mut lines = vec![palette.paint(Style::Heading, heading)];
+    lines.extend(
+        ui::aligned(rows, palette)
+            .into_iter()
+            .map(|line| format!("  {line}")),
+    );
+    lines.join("\n")
+}
+
+fn status(question: &Question) -> &'static str {
+    if question.withdrawn {
         "withdrawn"
     } else if question.closed_at.is_some() {
         "closed"
@@ -307,11 +348,14 @@ fn render(question: &Question, palette: Palette) -> String {
         "open"
     } else {
         "answered"
-    };
+    }
+}
+
+fn render(question: &Question, palette: Palette) -> String {
     let mut lines = vec![format!(
         "{} {} {}: {}",
         palette.paint(Style::Heading, question.id),
-        palette.paint(Style::Muted, format_args!("[{status}]")),
+        palette.paint(Style::Muted, format_args!("[{}]", status(question))),
         question.workspace,
         question.ask.question
     )];

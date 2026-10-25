@@ -2637,10 +2637,10 @@ deliver it and wake an idle agent; it confirms with the question text, since a
 stale notification may name a reused number. An answer may span lines, up to 4096 bytes.
 Delivering the answer deletes the question. A new question takes the smallest
 number no stored question holds, across workspaces. On a terminal,
-`shoal questions` opens a picker; selecting a question or naming its number opens
-a prompt with its text and number on the input line, alongside the recommendation
-and numbered choices. Enter accepts the recommendation shown in brackets; type a choice number or
-answer text for another answer, or `/cancel` to leave. The answer is refused if another question
+`shoal questions` opens a picker; selecting a question or naming its number shows
+its text, workspace, recommendation, reason and numbered choices, then an `Answer`
+prompt. Enter accepts the recommendation shown in brackets; type a choice number or
+answer text for another answer, or press Ctrl-C to leave. The answer is refused if another question
 took the number meanwhile. With JSON or redirected input or output, listing and inspection
 print records without prompting.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
