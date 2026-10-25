@@ -4841,7 +4841,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
     let save_agent = |name: &str| {
-        let id = fixture.ok(&["inspect", name])["workspace"]["id"]
+        let id = fixture.ok(&["work", "inspect", name])["workspace"]["id"]
             .as_str()
             .unwrap()
             .to_owned();
@@ -4864,7 +4864,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     // Clearing the token leaves the process scoped by its shell's ancestry.
     let output = fixture
         .command()
-        .args(["exec", "parent", "--", "sh", "-c"])
+        .args(["run", "--workspace", "parent", "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume other --discard; exit $?"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
         .output()
