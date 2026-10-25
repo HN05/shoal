@@ -56,6 +56,16 @@ pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
     if policy.profiles.is_empty() {
         outln!("No configured profiles");
     }
+    if let Some(error) = &catalog.inventory_error {
+        outln!(
+            "{}",
+            palette.paint(
+                Style::Warning,
+                format!("Installed device types and runtimes unavailable: {error}")
+            )
+        );
+        return;
+    }
     outln!("{}", palette.paint(Style::Heading, "Runtimes"));
     for runtime in &catalog.runtimes {
         outln!("  {}  {}", runtime.name, runtime.identifier);

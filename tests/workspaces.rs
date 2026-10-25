@@ -5923,6 +5923,32 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
 }
 
 #[test]
+fn catalog_lists_configuration_where_simulators_are_unavailable() {
+    let fixture = Fixture::with_config(Some(
+        "[simulators.profiles.phone]\ndevice = 'Phone'\n[resources.signing]\ncapacity = 1\n",
+    ));
+    // A host without Xcode: Linux refuses before running it, macOS runs this.
+    install_test_script(
+        fixture.root.path().join("bin").join("xcrun"),
+        "#!/bin/sh\necho 'xcrun: unable to find simctl' >&2\nexit 1\n",
+    );
+    fixture.add("worker");
+    let catalog = fixture.ok(&["catalog", "--workspace", "worker"]);
+    assert!(catalog["simulators"]["policy"]["profiles"]["phone"].is_object());
+    assert!(catalog["simulators"]["inventory_error"].is_string());
+    assert_eq!(catalog["simulators"]["runtimes"], serde_json::json!([]));
+    assert_eq!(catalog["resources"]["pools"][0]["name"], "signing");
+    let rendered = fixture.run(&["catalog", "sim", "--workspace", "worker"]);
+    assert!(rendered.status.success());
+    let rendered = String::from_utf8_lossy(&rendered.stdout);
+    assert!(rendered.contains("phone: Phone / latest iOS"), "{rendered}");
+    assert!(
+        rendered.contains("Installed device types and runtimes unavailable: "),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     let fixture = Fixture::new();
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

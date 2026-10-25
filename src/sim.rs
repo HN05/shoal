@@ -208,6 +208,15 @@ pub struct SimulatorCatalog {
     pub runtimes: Vec<simctl::Runtime>,
     pub policy: SimConfig,
     pub preferred: Vec<String>,
+    /// Why the installed device types and runtimes could not be read, such
+    /// as a host without Xcode; the configuration is listed regardless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory_error: Option<String>,
+}
+
+/// The runtimes simctl reports as usable.
+fn available(runtimes: Vec<simctl::Runtime>) -> Vec<simctl::Runtime> {
+    runtimes.into_iter().filter(|r| r.is_available).collect()
 }
 
 /// Managed simulators and their leases.
@@ -224,16 +233,16 @@ impl Manager {
             .await?
             .simulators
             .preferred;
-        let inventory = simctl::inventory().await?;
+        let (device_types, runtimes, inventory_error) = match simctl::inventory().await {
+            Ok(inventory) => (inventory.devicetypes, available(inventory.runtimes), None),
+            Err(error) => (Vec::new(), Vec::new(), Some(format!("{error:#}"))),
+        };
         Ok(SimulatorCatalog {
-            device_types: inventory.devicetypes,
-            runtimes: inventory
-                .runtimes
-                .into_iter()
-                .filter(|r| r.is_available)
-                .collect(),
+            device_types,
+            runtimes,
             policy: self.config().simulators.clone(),
             preferred,
+            inventory_error,
         })
     }
 
