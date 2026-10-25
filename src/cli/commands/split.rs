@@ -78,7 +78,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
 }
 
 /// Record the child of `parent` on a new branch named `name`, assigned `issue`.
-async fn create_child(
+pub(super) async fn create_child(
     ctx: &Context,
     parent: String,
     name: String,
@@ -109,7 +109,7 @@ async fn create_child(
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.
-async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
+pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
     let child = match child.state {
         WorkspaceState::Preparing => match super::workspaces::setup_workspace(ctx, &child).await? {
             Some(ready) => ready,

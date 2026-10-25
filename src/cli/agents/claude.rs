@@ -1,5 +1,6 @@
-//! Claude Code: its hooks deliver updates, report its turn state and wake it
-//! when idle, and `.claude.json` records the directories it trusts.
+//! Claude Code: its hooks deliver updates, report its turn state, wake it
+//! when idle and make the worktrees it creates child workspaces, and
+//! `.claude.json` records the directories it trusts.
 use std::ffi::OsString;
 
 use serde_json::{Value, json};
@@ -41,13 +42,18 @@ impl Integration for Claude {
 /// the commands that finish its assignment.
 fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let (state, allow) = if workspace {
-        (state_hooks(&shoal), lifecycle_rules())
+    let (state, worktrees, allow) = if workspace {
+        (
+            state_hooks(&shoal),
+            worktree_hooks(&shoal),
+            lifecycle_rules(),
+        )
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     let groups = hooks::messages(&shoal)
         .chain(state)
+        .chain(worktrees)
         .chain([wake_hook(&shoal)]);
     let mut settings = json!({"hooks": hooks::by_event(groups)});
     if !allow.is_empty() {
@@ -127,6 +133,29 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// How long a worktree hook may take: creating one runs the child's setup.
+const WORKTREE_TIMEOUT_SECS: u64 = 60 * 60;
+
+/// The groups that create the worktrees Claude Code asks for, as for a
+/// subagent with `isolation: "worktree"`, as child workspaces, and finish
+/// them when it removes one, instead of its own `git worktree` commands.
+fn worktree_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
+    [
+        ("WorktreeCreate", "worktree-create"),
+        ("WorktreeRemove", "worktree-remove"),
+    ]
+    .into_iter()
+    .map(|(event, command)| {
+        let group = json!({"hooks": [{
+            "type": "command",
+            "command": format!("{shoal} internal {command}"),
+            "timeout": WORKTREE_TIMEOUT_SECS,
+        }]});
+        (event, group)
+    })
+    .collect()
+}
+
 /// How long the wake hook may wait for an update: a week, since an idle agent
 /// should hear about a review whenever it arrives.
 const WAKE_TIMEOUT_SECS: u64 = 7 * 24 * 60 * 60;
@@ -200,6 +229,17 @@ mod tests {
         );
         assert_eq!(wake["asyncRewake"], true);
         assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
+        // Worktrees Claude Code creates are child workspaces.
+        for (event, command) in [
+            ("WorktreeCreate", " internal worktree-create"),
+            ("WorktreeRemove", " internal worktree-remove"),
+        ] {
+            let handler = &settings["hooks"][event][0]["hooks"][0];
+            assert!(
+                handler["command"].as_str().unwrap().ends_with(command),
+                "{handler}"
+            );
+        }
         // The agent may finish its own assignment without a permission check.
         let allow = settings["permissions"]["allow"].as_array().unwrap();
         for rule in [
@@ -219,6 +259,10 @@ mod tests {
         assert!(!settings.to_string().contains("agent-state"), "{settings}");
         // A chat belongs to no workspace and finishes no assignment.
         assert!(settings.get("permissions").is_none(), "{settings}");
+        assert!(
+            settings["hooks"].get("WorktreeCreate").is_none(),
+            "{settings}"
+        );
         let stop = &settings["hooks"]["Stop"][0]["hooks"][0]["command"];
         assert!(stop.as_str().unwrap().contains(" internal wake "), "{stop}");
         for event in hooks::MESSAGE_EVENTS {

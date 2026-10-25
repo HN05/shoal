@@ -4922,6 +4922,62 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 }
 
 #[test]
+fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
+    // Completion without cleanup keeps the finished child to inspect.
+    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let parent = fixture.add("parent");
+    let hook = |command: &str, input: Value| {
+        let mut child = fixture
+            .command()
+            .args(["run", "--workspace", "parent", "--"])
+            .args([env!("CARGO_BIN_EXE_shoal"), "internal", command])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.to_string().as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let created = hook(
+        "worktree-create",
+        serde_json::json!({
+            "hook_event_name": "WorktreeCreate",
+            "name": "agent-a1b2",
+            "cwd": parent["path"],
+        }),
+    );
+    // Claude Code reads the last line as the worktree's path.
+    let path = created.lines().last().unwrap();
+    let child = fixture.ok(&["status", "agent-a1b2"]);
+    assert_eq!(child["workspace"]["path"], path, "{created}");
+    assert_eq!(child["workspace"]["parent_workspace"]["name"], "parent");
+    assert!(child["completion"].is_null());
+    hook(
+        "worktree-remove",
+        serde_json::json!({"hook_event_name": "WorktreeRemove", "worktree_path": path}),
+    );
+    assert!(!fixture.ok(&["status", "agent-a1b2"])["completion"].is_null());
+    // A child its subagent already finished is torn down as it is.
+    hook(
+        "worktree-remove",
+        serde_json::json!({"hook_event_name": "WorktreeRemove", "worktree_path": path}),
+    );
+    // A worktree Shoal already removed has nothing left to finish.
+    hook(
+        "worktree-remove",
+        serde_json::json!({"worktree_path": parent["path"].as_str().unwrap().to_owned() + "-gone"}),
+    );
+}
+
+#[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",

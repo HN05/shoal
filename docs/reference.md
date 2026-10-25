@@ -1242,6 +1242,16 @@ reopens only the child, failing if it was removed meanwhile. `--json` adds the
 queue entry as `agent`.
 Workspace processes may queue agents only in the workspaces below their own.
 
+Claude Code launched in a workspace runs `shoal internal worktree-create` and
+`worktree-remove` as its `WorktreeCreate` and `WorktreeRemove` hooks, so a
+worktree it creates, such as one for a subagent with `isolation: "worktree"`,
+is a child split from the workspace containing its directory, on a branch named
+after the worktree, which it enters once setup finishes. The subagent then works
+as that child without an agent of its own, so the child's activity reaches the
+agent that started it. Removing the worktree marks the child done; Claude Code
+removes none when a subagent finishes, so its child stays until `shoal done` or
+merged cleanup.
+
 A workspace's coordinator is the agent of its nearest ancestor that has one,
 or the running [chat](#chats) that owns the workspace or an ancestor nearer than
 that agent. The coordinator receives, as messages naming the workspace, what

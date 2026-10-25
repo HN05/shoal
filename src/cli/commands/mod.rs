@@ -49,6 +49,7 @@ mod update;
 mod view;
 mod work;
 pub(in crate::cli) mod workspaces;
+mod worktree_hooks;
 
 #[cfg(test)]
 mod tests;
@@ -714,6 +715,8 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             agent_state::run(&ctx, workspace, state).await
         }
         InternalCommand::Wake { agent } => messages::wake(&ctx, agent).await,
+        InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
+        InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,
         InternalCommand::Herdr {
             close_when_done,
             plan,
