@@ -4297,7 +4297,7 @@ fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
         install_test_script_with_mode(
             &stub,
             r#"#!/bin/sh
-"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json inspect "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
+"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json work inspect "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
 test -f tracked || exit 98
 test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
 printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
@@ -8348,7 +8348,7 @@ esac
     let read = |name: &str| fs::read_to_string(fixture.root.path().join(name)).unwrap();
     let open = |pick: &str, answer: &str| {
         let (output, transcript) =
-            fixture.interactive_command(fixture.command().env("PICK", pick), answer);
+            fixture.terminal_command(fixture.command().env("PICK", pick), answer, true);
         (
             output,
             transcript,
@@ -8484,8 +8484,8 @@ esac
     assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Answered question 1 from asker"),
-        "{output:?}"
+        transcript.contains("Answered question 1 from asker"),
+        "{transcript}"
     );
     assert!(
         transcript.contains("Which database? (1) [SQLite]:"),
@@ -8496,10 +8496,7 @@ esac
     // notification enters its workspace.
     let (output, transcript, _, _) = open("=notification:quiet", "");
     assert!(output.status.success(), "{transcript}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("quiet"),
-        "{output:?}"
-    );
+    assert!(transcript.contains("quiet"), "{transcript}");
 }
 
 #[test]
