@@ -179,7 +179,7 @@ enabled = true
 idle_minutes = 240
 
 [cleanup.restore]
-# Keep removed workspaces restorable with shoal restore for this long, with up
+# Keep removed workspaces restorable with shoal work restore for this long, with up
 # to this much of their uncommitted and untracked files.
 retention_days = 30
 archive_max_mb = 50
@@ -245,6 +245,6 @@ other_repositories = "propose"
 issue_open = "direct"
 pr_open = "direct"
 
-# Whether shoal api sends agents' requests that are not reads; you may always send them.
+# Whether shoal forge api sends agents' requests that are not reads; you may always send them.
 [api]
 agent_writes = false
