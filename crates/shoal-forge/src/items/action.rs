@@ -188,6 +188,49 @@ impl Action {
         }
         Ok(())
     }
+
+    /// Refuse an edit whose labels `item`, as the forge reports it afterwards,
+    /// does not show: a forge can leave out an unknown label, or one of two
+    /// exclusive ones, without an error.
+    fn ensure_applied(&self, item: &Item) -> Result<()> {
+        let Self::Edit(edit) = self else {
+            return Ok(());
+        };
+        let has = |label: &String| {
+            item.labels
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(label))
+        };
+        // The labels of `labels` that `item` lacks when `added`, or has otherwise.
+        let unapplied = |labels: &[String], added: bool| -> String {
+            let labels: Vec<_> = labels
+                .iter()
+                .filter(|label| has(label) != added)
+                .map(String::as_str)
+                .collect();
+            labels.join(", ")
+        };
+        let problems: Vec<_> = [
+            ("add", unapplied(&edit.add_labels, true)),
+            ("remove", unapplied(&edit.remove_labels, false)),
+        ]
+        .into_iter()
+        .filter(|(_, labels)| !labels.is_empty())
+        .map(|(verb, labels)| format!("did not {verb} {labels}"))
+        .collect();
+        if problems.is_empty() {
+            return Ok(());
+        }
+        let labels = match item.labels.as_slice() {
+            [] => "no labels".to_owned(),
+            labels => format!("the labels {}", labels.join(", ")),
+        };
+        anyhow::bail!(
+            "the forge {} on #{}, which has {labels}",
+            problems.join(" and "),
+            item.number
+        )
+    }
 }
 
 /// What an action left on the forge.
@@ -251,6 +294,9 @@ impl ForgeRepo {
             .await
             .map_err(|error| after_post(error, first.is_some(), &authored))?
             .item;
+        action
+            .ensure_applied(&item)
+            .map_err(|error| after_post(error, first.is_some(), &authored))?;
         Ok(Acted { item, authored })
     }
 
@@ -829,5 +875,36 @@ mod tests {
         assert!(bitbucket.require_all(labels.needs(ItemKind::Pr)).is_err());
         assert!(bitbucket.require_all(rebase.needs(ItemKind::Pr)).is_ok());
         Ok(())
+    }
+
+    #[test]
+    fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
+        let [_, forgejo] = forges();
+        let item = pr(&forgejo, false, &["Bug", "complexity/small"]).item;
+        let edit = |add: &[&str], remove: &[&str]| {
+            Action::Edit(Edit {
+                add_labels: add.iter().map(|label| label.to_string()).collect(),
+                remove_labels: remove.iter().map(|label| label.to_string()).collect(),
+                ..Edit::default()
+            })
+        };
+        assert!(edit(&["bug"], &["ready"]).ensure_applied(&item).is_ok());
+        assert!(Action::Close.ensure_applied(&item).is_ok());
+        assert_eq!(
+            edit(&["complexity/medium", "ready"], &["complexity/small"])
+                .ensure_applied(&item)
+                .unwrap_err()
+                .to_string(),
+            "the forge did not add complexity/medium, ready and did not remove \
+             complexity/small on #7, which has the labels Bug, complexity/small"
+        );
+        let bare = pr(&forgejo, false, &[]).item;
+        assert_eq!(
+            edit(&["ready"], &[])
+                .ensure_applied(&bare)
+                .unwrap_err()
+                .to_string(),
+            "the forge did not add ready on #7, which has no labels"
+        );
     }
 }

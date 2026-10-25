@@ -294,7 +294,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     fixture.respond(json!({
         "GET meta": {"body": {"installed_version": "3.14.0"}},
         "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
-        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["bug"])},
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["bug", "ready"])},
         "PUT repos/team/project/issues/8/labels": {"body": []},
     }));
     let keys = |fixture: &Fixture| -> Vec<Value> {
@@ -381,7 +381,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
         ],
     );
     fixture.respond(json!({
-        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &["bug"])},
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &["bug", "ready"])},
         "PUT repos/team/project/issues/8/labels": {"body": []},
     }));
     assert_eq!(label_pr(&fixture)["type"], "item");
@@ -1283,7 +1283,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     fixture.respond(json!({
         "pr view 8": {"body": {"number": 8, "state": "OPEN", "headRefName": "topic",
             "commits": []}},
-        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["ready"])},
         format!("PATCH {endpoint}"): {"body": {}},
         "PUT repos/team/project/issues/8/labels": {"body": []},
         "POST graphql": {"body": {"data": {}}},
@@ -2877,7 +2877,7 @@ fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
         "PUT repos/team/project/issues/40/labels": {"status": 500,
             "body": {"message": "unavailable"}},
         "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
-            "state": "open", "labels": []}},
+            "state": "open", "labels": [{"name": "bug"}]}},
     });
     fixture.respond(responses.clone());
     let open = ["issue", "open", "--title", "Flaky", "--label", "bug"];
@@ -2920,7 +2920,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
     let mut responses = json!({
         "GET repos/team/project/pulls?state=open&head=team%3Atopic": {"body": []},
         "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
-        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "initial", &[])},
+        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "initial", &["bug"])},
         // Labeling the new PR fails the first time.
         "PUT repos/team/project/issues/9/labels": {"status": 500,
             "body": {"message": "unavailable"}},

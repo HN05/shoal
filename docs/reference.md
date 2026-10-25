@@ -2034,7 +2034,9 @@ takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
 `--remove-reviewer`, and `--draft` or `--no-draft`. Edits apply in that order,
 and a failed request stops the rest with the forge's message. Labels are
-replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix,
+replaced as a set by name, and an edit whose added labels the item then lacks,
+or whose removed labels it still has, fails naming them and the item's labels;
+Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
 `--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
