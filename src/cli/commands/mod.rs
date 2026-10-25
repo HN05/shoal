@@ -576,7 +576,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             execution,
             discard,
         } => resume::select(&ctx, scope, execution, discard).await,
-        Command::Stop { scope } => stop::run(&ctx, scope).await,
+        Command::Stop { scope, yes } => stop::run(&ctx, scope, yes).await,
         Command::Rm {
             workspace,
             confirmation,

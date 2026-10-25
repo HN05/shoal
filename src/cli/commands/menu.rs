@@ -661,6 +661,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
                 workspace,
                 all: false,
             },
+            yes: false,
         },
         Key::Attach => Command::Attach {
             workspace,

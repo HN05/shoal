@@ -38,7 +38,7 @@ mod xcode;
 
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
-pub use executions::{ExecutionKind, Save, StopRequest};
+pub use executions::{ExecutionKind, Save, StopRequest, UnprovenStop};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;

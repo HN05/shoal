@@ -437,10 +437,20 @@ async fn serve(
         }
         method => match operation(&server.manager, method, caller.as_ref()).await {
             Ok(body) => body,
-            Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
+            Err(error) => Body::error(error_code(&error), format!("{error:#}")),
         },
     };
     reply(&mut stream, request.id, body).await
+}
+
+/// The code of an operation's failure: specific where the caller can act on
+/// it, otherwise `operation_failed`.
+fn error_code(error: &anyhow::Error) -> ErrorCode {
+    if error.downcast_ref::<workspace::UnprovenStop>().is_some() {
+        ErrorCode::UnprovenStop
+    } else {
+        ErrorCode::OperationFailed
+    }
 }
 
 /// Write the reply to `request_id`, or an error saying it does not fit in a
@@ -813,10 +823,19 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.set_pr(&workspace, action).await?;
             Body::Ok
         }
-        Method::StopWorkspace { workspace } => {
-            manager
-                .stop_workspace(&workspace, StopRequest::manual())
-                .await?;
+        Method::StopWorkspace {
+            workspace,
+            acknowledge_unproven,
+        } => {
+            if acknowledge_unproven {
+                manager
+                    .stop_workspace_acknowledged(&workspace, StopRequest::manual())
+                    .await?;
+            } else {
+                manager
+                    .stop_workspace(&workspace, StopRequest::manual())
+                    .await?;
+            }
             Body::Ok
         }
         Method::CheckRemoval {

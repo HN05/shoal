@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 136;
+pub const VERSION: u32 = 137;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -484,6 +484,9 @@ pub enum Method {
     },
     StopWorkspace {
         workspace: String,
+        /// The user checked that executions Shoal cannot prove ended did.
+        #[serde(default)]
+        acknowledge_unproven: bool,
     },
     CheckRemoval {
         workspace: String,
@@ -932,6 +935,9 @@ crate::state::open_enum! {
         ManagedService => "managed_service",
         OperationFailed => "operation_failed",
         ExecutionFailed => "execution_failed",
+        /// Stopping needs the user to confirm that an execution Shoal cannot
+        /// prove ended did.
+        UnprovenStop => "unproven_stop",
     }
 }
 
@@ -1412,6 +1418,7 @@ mod tests {
             (ErrorCode::ManagedService, "managed_service"),
             (ErrorCode::OperationFailed, "operation_failed"),
             (ErrorCode::ExecutionFailed, "execution_failed"),
+            (ErrorCode::UnprovenStop, "unproven_stop"),
             (ErrorCode::Unknown("future_code".into()), "future_code"),
         ] {
             let wire = json!({"protocol": VERSION, "id": 7, "type": "error",

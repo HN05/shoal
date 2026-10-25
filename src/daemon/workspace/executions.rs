@@ -54,9 +54,41 @@ states!(
 pub(super) enum StopPolicy {
     /// Retain uncertain records; only clear executions proven fully stopped.
     RequireCompleteProof,
+    /// As `RequireCompleteProof`, but the user confirmed that executions
+    /// without a recorded launch identity ended once nothing visible survives.
+    Acknowledged,
     /// Stop verified processes, leaving records for successful workspace removal.
     /// Unrelated or unverifiable processes do not block that removal.
     ForRemoval,
+}
+
+/// A disconnected execution with nothing of it visible whose launch identity
+/// Shoal never recorded, so it cannot prove the execution ended. The user may
+/// check and confirm that it did.
+#[derive(Debug)]
+pub struct UnprovenStop {
+    pub execution: String,
+}
+
+impl std::fmt::Display for UnprovenStop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "execution {} has no visible processes, but Shoal never recorded how it was launched, so it cannot prove the execution ended",
+            self.execution
+        )
+    }
+}
+
+impl std::error::Error for UnprovenStop {}
+
+/// The process IDs of `processes`, for a message.
+fn pids<'a>(processes: impl IntoIterator<Item = &'a Identity>) -> String {
+    processes
+        .into_iter()
+        .map(|process| process.pid.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Why the daemon stops executions, which their wrappers show, and what the
@@ -851,7 +883,24 @@ impl Manager {
 
     /// Stop every execution, cancelling agents' waiting automatic restores.
     pub async fn stop_workspace(&self, selector: &str, request: StopRequest) -> Result<()> {
-        self.stop_workspace_executions(selector, request, Protected::Stop)
+        self.stop_workspace_executions(
+            selector,
+            request,
+            Protected::Stop,
+            StopPolicy::RequireCompleteProof,
+        )
+        .await
+    }
+
+    /// Stop as [`Manager::stop_workspace`] does, treating executions whose
+    /// launch identity was never recorded as ended once nothing of them is
+    /// visible, because the user checked.
+    pub async fn stop_workspace_acknowledged(
+        &self,
+        selector: &str,
+        request: StopRequest,
+    ) -> Result<()> {
+        self.stop_workspace_executions(selector, request, Protected::Stop, StopPolicy::Acknowledged)
             .await
     }
 
@@ -862,8 +911,13 @@ impl Manager {
             reason,
             save: Save::Everything,
         };
-        self.stop_workspace_executions(selector, request, Protected::Keep)
-            .await
+        self.stop_workspace_executions(
+            selector,
+            request,
+            Protected::Keep,
+            StopPolicy::RequireCompleteProof,
+        )
+        .await
     }
 
     async fn stop_workspace_executions(
@@ -871,18 +925,14 @@ impl Manager {
         selector: &str,
         request: StopRequest,
         protected: Protected,
+        policy: StopPolicy,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = self
-            .stop_executions_keeping(
-                &workspace.id,
-                StopPolicy::RequireCompleteProof,
-                &request,
-                protected,
-            )
+            .stop_executions_keeping(&workspace.id, policy, &request, protected)
             .await;
         self.set_state(
             &workspace.id,
@@ -950,24 +1000,38 @@ impl Manager {
         let after = process::scan(HashSet::from([execution.id.clone()])).await?;
         ensure!(
             after.processes.is_empty(),
-            "owned processes survived stopping; retry after shoal doctor"
+            "processes of execution {} survived stopping: {}",
+            execution.id,
+            pids(after.processes.iter().map(|process| &process.identity))
         );
-        match policy {
-            StopPolicy::ForRemoval => {}
-            StopPolicy::RequireCompleteProof => {
-                ensure!(
-                    processes.launch_recorded && processes.group_candidates.is_empty(),
-                    "execution ownership is incomplete; use shoal doctor to inspect it"
-                );
-                let after = Processes::inspect(execution, &after).await?;
-                ensure!(
-                    !after.has_survivors() && after.visibility_complete(),
-                    "process state remains uncertain; use shoal doctor to inspect it"
-                );
-                self.forget_execution(&execution.id).await?;
-            }
+        if policy == StopPolicy::ForRemoval {
+            return Ok(());
         }
-        Ok(())
+        ensure!(
+            processes.group_candidates.is_empty(),
+            "processes Shoal cannot verify share the process group of execution {}: {}; stop them yourself, then run shoal stop again",
+            execution.id,
+            pids(&processes.group_candidates)
+        );
+        let after = Processes::inspect(execution, &after).await?;
+        ensure!(
+            !after.has_survivors(),
+            "execution {} still has processes after stopping; check them, then run shoal stop again",
+            execution.id
+        );
+        ensure!(
+            after.unreadable.is_empty(),
+            "Shoal cannot read the environment of processes that may belong to execution {}: {}; check them, then run shoal stop again",
+            execution.id,
+            pids(&after.unreadable)
+        );
+        if !after.launch_recorded && policy != StopPolicy::Acknowledged {
+            return Err(UnprovenStop {
+                execution: execution.id.clone(),
+            }
+            .into());
+        }
+        self.forget_execution(&execution.id).await
     }
 
     /// Stop every verified process that still carries the workspace's identity,

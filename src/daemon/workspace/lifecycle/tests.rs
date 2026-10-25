@@ -551,7 +551,9 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 .await
                 .unwrap_err();
             assert!(
-                error.to_string().contains("ownership is incomplete"),
+                error
+                    .downcast_ref::<crate::daemon::workspace::UnprovenStop>()
+                    .is_some(),
                 "{error:#}"
             );
             let retained = matches!(removal, Removal::Automatic { .. } | Removal::Deleted);
@@ -596,6 +598,32 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
 }
 
 #[tokio::test]
+async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
+    let (_root, manager, workspace) = fixture().await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .stop_workspace_acknowledged(
+            &workspace.id,
+            crate::daemon::workspace::StopRequest::manual(),
+        )
+        .await
+        .unwrap();
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(inspection.executions.is_empty());
+}
+
+#[tokio::test]
 async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
     for merged in [false, true] {
         let (_root, manager, workspace) = fixture().await;
@@ -629,10 +657,15 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             )
             .await
             .unwrap_err();
-        assert!(
-            error.to_string().contains("ownership is incomplete"),
-            "{error:#}"
-        );
+        assert!(error.to_string().contains("cannot verify"), "{error:#}");
+        // The user's acknowledgement never covers a live process.
+        let acknowledged = manager
+            .stop_workspace_acknowledged(
+                &workspace.id,
+                crate::daemon::workspace::StopRequest::manual(),
+            )
+            .await;
+        assert!(acknowledged.is_err());
         assert!(identity::alive(&live).unwrap());
         assert_eq!(
             manager

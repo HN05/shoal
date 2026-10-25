@@ -1,5 +1,5 @@
 //! Stopping saves agent sessions and commands for `shoal resume`.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
 
@@ -13,21 +13,15 @@ use crate::{
     },
     execution::recovery,
     model::Workspace,
-    protocol::Method,
+    protocol::{ErrorCode, Method, RemoteError},
     state::{ExecutionState, WorkspaceState},
 };
 
-pub(super) async fn run(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, scope: WorkspaceScope, yes: bool) -> Result<i32> {
     let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return stop_all(ctx).await;
     };
-    request::<()>(
-        &ctx.paths,
-        Method::StopWorkspace {
-            workspace: workspace.clone(),
-        },
-    )
-    .await?;
+    stop(ctx, &workspace, yes).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let saved = recovery::pending(&ctx.paths, &workspace.id)?;
     let message = if saved {
@@ -44,6 +38,35 @@ pub(super) async fn run(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         json!({"stopped": true, "saved": saved}),
     )?;
     Ok(0)
+}
+
+/// Stop `workspace`. An execution Shoal cannot prove ended stops only once
+/// the user confirms it did, or with `yes`.
+async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
+    let request_stop = |acknowledge_unproven| {
+        request::<()>(
+            &ctx.paths,
+            Method::StopWorkspace {
+                workspace: workspace.to_owned(),
+                acknowledge_unproven,
+            },
+        )
+    };
+    let Err(error) = request_stop(yes).await else {
+        return Ok(());
+    };
+    let Some(unproven) = error
+        .downcast_ref::<RemoteError>()
+        .filter(|remote| remote.code == ErrorCode::UnprovenStop)
+    else {
+        return Err(error);
+    };
+    let action = format!(
+        "{}; check that nothing of it still runs. Treat it as stopped",
+        unproven.message
+    );
+    ensure!(ui::confirm(ctx, &action, "--yes")?, "stop canceled");
+    request_stop(true).await
 }
 
 /// Stop every settled workspace with a running execution, in parallel; one
@@ -63,6 +86,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
             &ctx.paths,
             Method::StopWorkspace {
                 workspace: workspace.id.clone(),
+                acknowledge_unproven: false,
             },
         )
     }))
@@ -106,8 +130,9 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
     Ok(if failed.is_empty() { 0 } else { 1 })
 }
 
-/// Disconnected executions are left for `shoal doctor` rather than failing
-/// every bulk stop, and preparing or removing workspaces keep their lifecycle.
+/// Disconnected executions are left for `shoal stop <workspace>` rather than
+/// failing every bulk stop, and preparing or removing workspaces keep their
+/// lifecycle.
 async fn is_running(ctx: &Context, workspace: &Workspace) -> Result<bool> {
     if !matches!(
         workspace.state,

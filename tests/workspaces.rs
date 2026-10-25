@@ -21795,6 +21795,48 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
 }
 
 #[test]
+fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("legacy");
+    let insert = |fixture: &Fixture| {
+        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        db.execute(
+            "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
+            [workspace["id"].as_str().unwrap()],
+        )
+        .unwrap();
+    };
+    let executions = |fixture: &Fixture| {
+        fixture.ok(&["status", "legacy"])["executions"]
+            .as_array()
+            .unwrap()
+            .len()
+    };
+    insert(&fixture);
+    fixture.restart();
+
+    let piped = fixture.run(&["stop", "legacy"]);
+    assert!(!piped.status.success());
+    let stderr = String::from_utf8_lossy(&piped.stderr);
+    assert!(
+        stderr.contains("cannot prove the execution ended"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("pass --yes"), "{stderr}");
+    assert_eq!(executions(&fixture), 1);
+
+    let (output, transcript) = fixture.interactive(&["stop", "legacy"], "y\n");
+    assert!(output.status.success(), "{transcript}");
+    assert!(transcript.contains("Treat it as stopped"), "{transcript}");
+    assert_eq!(executions(&fixture), 0);
+
+    insert(&fixture);
+    fixture.restart();
+    assert!(fixture.run(&["stop", "legacy", "--yes"]).status.success());
+    assert_eq!(executions(&fixture), 0);
+}
+
+#[test]
 fn holds_are_visible_and_manual_removal_confirms_holders() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("held");

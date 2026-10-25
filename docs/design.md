@@ -1598,7 +1598,8 @@ migrations available for retry. Startup audits but never deletes, kills or
 releases leases, and clears an unknown execution only when stopped-agent
 reconciliation proves it ended.
 Survivors are signaled only after verifying PID birth identity and same-user
-ownership; acknowledgement cannot override visible live processes. Recheck
+ownership; acknowledgement cannot override visible live processes. `shoal stop` asks for it, since an execution
+without a recorded launch identity cannot be proven ended even when nothing of it is visible. Recheck
 unreadable process identities before treating visibility as incomplete; an
 identity that has exited or is exiting no longer blocks the ownership proof, and
 an inaccessible macOS identity is treated as a different process because it

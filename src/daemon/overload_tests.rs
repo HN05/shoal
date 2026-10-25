@@ -548,9 +548,15 @@ async fn stop_child() {
     let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
     let paths = crate::paths::Paths::for_test(root);
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
-    crate::cli::client::request::<()>(&paths, Method::StopWorkspace { workspace: id })
-        .await
-        .unwrap();
+    crate::cli::client::request::<()>(
+        &paths,
+        Method::StopWorkspace {
+            workspace: id,
+            acknowledge_unproven: false,
+        },
+    )
+    .await
+    .unwrap();
 }
 
 #[tokio::test]

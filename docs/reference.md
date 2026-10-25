@@ -240,7 +240,7 @@ disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. After the
 wrapper stops the agent, Shoal also stops processes that carry the execution's
 identity outside the agent's process group, such as background shell commands,
-as `shoal doctor --stop` does. Shoal saves
+as `shoal stop` does. Shoal saves
 the agent identity and pressure reason before signaling the wrapper, so a wrapper killed
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
@@ -266,7 +266,12 @@ An agent whose wrapper or agent process receives a hangup or terminate signal, a
 closing its terminal, logging out or shutting down sends, is saved the same way,
 with the signal as its stop reason, so `shoal resume --all` restores it after a
 reboot; other commands just end.
-Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic
+For an execution whose wrapper is gone, `shoal stop <workspace>` stops the
+processes it verifies as the execution's and forgets the record once nothing of
+it is visible. Processes it cannot verify or read fail the stop with their PIDs,
+for you to check and stop yourself. An execution Shoal never recorded the launch
+of cannot be proven ended even then, so stop asks you to confirm it did, and
+`--yes` confirms without asking. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
 Run stop and resume outside scoped executions, except that a workspace process
 may discard the stopped work of a workspace below its own with

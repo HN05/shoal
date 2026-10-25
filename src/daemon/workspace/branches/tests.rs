@@ -1282,6 +1282,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             (
                 Method::StopWorkspace {
                     workspace: workspace.id.clone(),
+                    acknowledge_unproven: false,
                 },
                 false,
             ),

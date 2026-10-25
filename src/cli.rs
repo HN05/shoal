@@ -585,6 +585,9 @@ pub enum Command {
     Stop {
         #[command(flatten)]
         scope: WorkspaceScope,
+        /// Treat executions Shoal cannot prove ended as stopped without asking.
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Remove a workspace and release its resources.
     ///
