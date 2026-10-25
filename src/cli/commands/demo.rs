@@ -516,3 +516,23 @@ fn last_lines(screen: &str, count: usize) -> Option<String> {
 
 #[cfg(test)]
 mod tests;
+impl Overrides {
+    fn validate(&self) -> Result<()> {
+        for port in &self.ports {
+            crate::validate::lowercase_name("port", port)?;
+        }
+        ensure!(
+            self.open
+                .as_ref()
+                .is_none_or(|open| !open.trim().is_empty()),
+            "--open needs a command"
+        );
+        Ok(())
+    }
+}
+
+    // Before a picker opens or a running demo is replaced.
+    if let Some(name) = &name {
+        crate::demos::validate_name(name)?;
+    }
+    overrides.validate()?;

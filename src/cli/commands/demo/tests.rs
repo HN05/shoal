@@ -104,3 +104,15 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
         ["web  first  Running      web", "tui  first  Not running",]
     );
 }
+
+#[test]
+fn start_options_are_checked_before_anything_is_chosen() {
+    let overrides = |open: Option<&str>, ports: &[&str]| Overrides {
+        preset: None,
+        open: open.map(str::to_owned),
+        ports: ports.iter().map(|port| (*port).to_owned()).collect(),
+    };
+    assert!(overrides(Some("echo"), &["web"]).validate().is_ok());
+    assert!(overrides(None, &["Web"]).validate().is_err());
+    assert!(overrides(Some(" "), &[]).validate().is_err());
+}
