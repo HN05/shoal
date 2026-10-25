@@ -525,7 +525,8 @@ Exported tokens persist across restarts until explicitly revoked or the workspac
 is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; workspace maintenance lives under
-`work`, repository administration under `repo`, PR checks under `pr ci`, and
+`work`, repository administration under `repo`, forge inspection and API access under
+`forge`, PR checks under `pr ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
@@ -970,13 +971,13 @@ state in the title, so callers see the same item either way. Each backend
 declares the capabilities it has, and a request needing one it lacks is refused
 before anything is sent with one typed error naming the forge and the
 capability, so a backend gains a capability without changes elsewhere;
-`shoal repo capabilities` reports them so agents can check first. Actions run in the
+`shoal forge capabilities` reports them so agents can check first. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
-reads pages only until the limit is met. `shoal repo api` passes any request under
+reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models, since fj has no API passthrough to fall back to. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET

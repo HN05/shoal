@@ -184,8 +184,8 @@ instead of the PR delivery guidance below.
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting its branch, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
-  `shoal repo api` requests, sent through the REST transport; scoped callers cannot
-  merge. `shoal repo api` paths stay under the forge's API root. Forgejo and Gitea API
+  `shoal forge api` requests, sent through the REST transport; scoped callers cannot
+  merge. `shoal forge api` paths stay under the forge's API root. Forgejo and Gitea API
   requests use fj's saved token for the repository's own host, validated, passed
   to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
   through `tea api`; GitLab requests go through `glab api`. Bitbucket requests

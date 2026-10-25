@@ -1,4 +1,4 @@
-//! `shoal repo capabilities`: what the workspace repository's forge supports, so
+//! `shoal forge capabilities`: what the workspace repository's forge supports, so
 //! agents can check before they ask for something it lacks.
 use anyhow::{Context as _, Result};
 

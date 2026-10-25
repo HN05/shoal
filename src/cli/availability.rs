@@ -48,7 +48,7 @@ impl Need {
             ["attach"] => Self::Session,
             ["cd"] => Self::Directory,
             ["stop"] => Self::Running,
-            ["repo", "labels" | "capabilities" | "api"] => Self::Any,
+            ["repo", "labels"] | ["forge", "capabilities" | "api"] => Self::Any,
             ["work", "setup"] => Self::Setup,
             ["work", "rename"] => Self::Ready,
             ["work", "restore"] => Self::Any,

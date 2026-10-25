@@ -52,7 +52,7 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-/// The workspace whose repository `shoal repo labels` and `shoal repo capabilities`
+/// The workspace whose repository `shoal repo labels` and `shoal forge capabilities`
 /// read, outside the derived `Command` builder for the same reason (#997).
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
@@ -61,7 +61,7 @@ pub struct RepositoryArgs {
     pub workspace: Option<String>,
 }
 
-/// `shoal repo api` arguments, outside the derived `Command` builder for the same
+/// `shoal forge api` arguments, outside the derived `Command` builder for the same
 /// reason (#997).
 #[derive(Debug, Args)]
 pub struct ApiArgs {
@@ -161,6 +161,11 @@ pub enum Command {
     Repo {
         #[command(subcommand)]
         command: Option<RepoCommand>,
+    },
+    /// Inspect and access the current repository's forge.
+    Forge {
+        #[command(subcommand)]
+        command: ForgeCommand,
     },
     /// Create or reopen a workspace.
     Add {
@@ -1459,9 +1464,7 @@ pub enum WorkCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum RepoCommand {
-    /// List the repository's labels with their descriptions.
-    Labels(RepositoryArgs),
+pub enum ForgeCommand {
     /// List what the repository's forge supports.
     Capabilities(RepositoryArgs),
     /// Send a request to the repository's forge API and print its JSON response.
@@ -1470,6 +1473,12 @@ pub enum RepoCommand {
     /// `[api] agent_writes` lets agents send others; anyone else sends any
     /// request with your own logins.
     Api(ApiArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RepoCommand {
+    /// List the repository's labels with their descriptions.
+    Labels(RepositoryArgs),
     /// Fetch a repository's remote and fast-forward its default branch.
     ///
     /// Never pushes or changes workspace branches; rebase or merge onto the

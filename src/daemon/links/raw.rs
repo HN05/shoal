@@ -1,4 +1,4 @@
-//! Requests `shoal repo api` sends to a workspace repository's forge API, so a
+//! Requests `shoal forge api` sends to a workspace repository's forge API, so a
 //! scoped caller acts as its agent account and only reads unless the
 //! repository lets agents write.
 use anyhow::{Result, ensure};

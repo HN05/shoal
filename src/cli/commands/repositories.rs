@@ -22,10 +22,6 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Labels(repository) => {
             return super::labels::labels(ctx, repository.workspace).await;
         }
-        RepoCommand::Capabilities(repository) => {
-            return super::capabilities::capabilities(ctx, repository.workspace).await;
-        }
-        RepoCommand::Api(args) => return super::api::api(ctx, args).await,
         RepoCommand::Sync { repository } => return sync(ctx, repository).await,
         RepoCommand::Config {
             repository,

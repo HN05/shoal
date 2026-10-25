@@ -65,8 +65,9 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ImportArgs,
-        InternalCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
+        ImportArgs, InternalCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents,
+        client,
         context::Context,
         output::{Palette, Style},
     },
@@ -285,6 +286,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         "workspace processes cannot administer Shoal; ask the user to run this command"
     );
     match command {
+        Command::Forge { command } => match command {
+            ForgeCommand::Capabilities(repository) => {
+                capabilities::capabilities(&ctx, repository.workspace).await
+            }
+            ForgeCommand::Api(args) => api::api(&ctx, args).await,
+        },
         Command::BuildInfo => unreachable!("build metadata needs no daemon or paths"),
         Command::Run {
             name,

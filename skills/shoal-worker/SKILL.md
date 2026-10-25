@@ -42,10 +42,10 @@ Answer each review finding in its thread: `shoal view` shows every review commen
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
 They default to the linked item; pass a number or URL for another item in the
-repository. `shoal --json repo capabilities` lists what the repository's forge
+repository. `shoal --json forge capabilities` lists what the repository's forge
 supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. When no command covers a
-read, `shoal --json repo api 'repos/{owner}/{repo}/<path>'` sends a GET to the
+read, `shoal --json forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
 `glab api`. It refuses other methods unless the repository sets `[api]
 agent_writes`. File

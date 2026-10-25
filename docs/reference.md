@@ -1956,7 +1956,7 @@ token `[bitbucket]` configures. Without a login, only public repositories are
 readable. Shoal stores no forge credentials. An issue or PR number may be
 written `#42`.
 
-Forges differ in what Shoal can do there. `shoal repo capabilities` lists each
+Forges differ in what Shoal can do there. `shoal forge capabilities` lists each
 capability of the workspace repository's forge, such as resolving review
 threads, rerunning CI jobs, labels or a merge method, and whether the forge has
 it, with what to do instead when it does not; `--json` returns `forge` and
@@ -2005,7 +2005,7 @@ shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
-shoal repo capabilities                  # what the repository's forge supports
+shoal forge capabilities                  # what the repository's forge supports
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
@@ -2219,11 +2219,11 @@ cancels each check's run. `--json` returns `url`, `action` and the
 #### Forge API requests
 
 ```sh
-shoal repo api 'repos/{owner}/{repo}/branches'   # GET a path of the forge's API
-shoal repo api 'repos/{owner}/{repo}' -X PATCH --input body.json
+shoal forge api 'repos/{owner}/{repo}/branches'   # GET a path of the forge's API
+shoal forge api 'repos/{owner}/{repo}' -X PATCH --input body.json
 ```
 
-`shoal repo api` sends a request to a path under the workspace repository's forge API
+`shoal forge api` sends a request to a path under the workspace repository's forge API
 root, such as `/api/v1` on Forgejo, and prints the JSON response, which `--json`
 prints on one line. `{owner}` and `{repo}` fill in the repository; on GitLab
 `{owner}` is the encoded group path, so `projects/{owner}%2F{repo}` names a

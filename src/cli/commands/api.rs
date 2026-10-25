@@ -1,4 +1,4 @@
-//! `shoal repo api`: any request to the workspace repository's forge API, for
+//! `shoal forge api`: any request to the workspace repository's forge API, for
 //! what no other command reads.
 use std::{io::Read, path::Path};
 
