@@ -513,7 +513,7 @@ pub enum Command {
         #[arg(long, global = true)]
         workspace: Option<String>,
     },
-    /// Show capacity and leases for every kind, or one.
+    /// Show leases and usage for every kind, or one.
     Leases {
         kind: Option<LeaseKind>,
         /// Workspace to show; defaults to the current workspace or picker.
@@ -523,8 +523,13 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
-    /// Show configuration and available inventory for a kind.
-    Catalog { kind: CatalogKind },
+    /// Show configuration and available inventory for every kind, or one.
+    Catalog {
+        kind: Option<CatalogKind>,
+        /// Workspace whose configuration to show; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Show recorded requests for a kind.
     History {
         #[command(subcommand)]
@@ -1842,6 +1847,8 @@ pub enum DaemonCommand {
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum CatalogKind {
+    /// Automatic range, named ports and conflict policy.
+    Port,
     /// Device types, installed runtimes and machine profiles.
     Sim,
 }

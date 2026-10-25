@@ -5887,44 +5887,39 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     let workspaces = fixture.ok(&["work"]);
     assert_eq!(workspaces[0]["name"], "broken");
     assert_eq!(workspaces[1]["name"], "healthy");
-    for (noun, empty_text) in [
-        ("port", "No configured or reserved ports"),
-        ("resource", "No configured resources or leases"),
-    ] {
-        let mut expected = fixture.ok(&["leases", noun, "--workspace", "healthy"]);
-        expected["workspace"] = workspaces[1].clone();
-        let args = ["leases", noun, "--all"];
-        let output = fixture.command().arg("--json").args(args).output().unwrap();
-        assert_eq!(output.status.code(), Some(1));
-        assert!(output.stderr.is_empty());
-        let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(overviews.as_array().unwrap().len(), 2);
-        assert_eq!(overviews[0]["workspace"], workspaces[0]);
-        let error = overviews[0]["error"].as_str().unwrap();
-        assert!(!error.is_empty());
-        assert_eq!(overviews[0].as_object().unwrap().len(), 2);
-        assert_eq!(overviews[1], expected);
+    // Port reservations read no configuration, so only resources can fail here.
+    let (noun, empty_text) = ("resource", "No configured resources or leases");
+    let mut expected = fixture.ok(&["leases", noun, "--workspace", "healthy"]);
+    expected["workspace"] = workspaces[1].clone();
+    let args = ["leases", noun, "--all"];
+    let output = fixture.command().arg("--json").args(args).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(overviews.as_array().unwrap().len(), 2);
+    assert_eq!(overviews[0]["workspace"], workspaces[0]);
+    let error = overviews[0]["error"].as_str().unwrap();
+    assert!(!error.is_empty());
+    assert_eq!(overviews[0].as_object().unwrap().len(), 2);
+    assert_eq!(overviews[1], expected);
 
-        let human = fixture.run(&args);
-        assert_eq!(human.status.code(), Some(1));
-        assert!(human.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8(human.stdout).unwrap(),
-            format!("broken: {error}\nhealthy\n{empty_text}\n")
-        );
-    }
+    let human = fixture.run(&args);
+    assert_eq!(human.status.code(), Some(1));
+    assert!(human.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(human.stdout).unwrap(),
+        format!("broken: {error}\nhealthy\n{empty_text}\n")
+    );
     // Once every workspace is healthy, the same overview succeeds.
     fs::remove_file(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
-    for noun in ["port", "resource"] {
-        assert_eq!(
-            fixture
-                .ok(&["leases", noun, "--all"])
-                .as_array()
-                .unwrap()
-                .len(),
-            2
-        );
-    }
+    assert_eq!(
+        fixture
+            .ok(&["leases", "resource", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -5962,17 +5957,34 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         .unwrap();
     assert!(overview.status.success());
     let overview: Value = serde_json::from_slice(&overview.stdout).unwrap();
-    assert_eq!(overview["configured"]["web"]["port"], preferred);
     assert_eq!(overview["reserved"], serde_json::json!([]));
     assert_eq!(
         fixture.ok(&["leases", "port", "--workspace", "configured"]),
         overview
     );
-    let human = fixture.run(&["leases", "port", "--workspace", "configured"]);
+    let catalog = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "catalog", "port"])
+        .output()
+        .unwrap();
+    assert!(catalog.status.success());
+    let catalog: Value = serde_json::from_slice(&catalog.stdout).unwrap();
+    assert_eq!(catalog["configured"]["web"]["port"], preferred);
+    assert_eq!(
+        (&catalog["start"], &catalog["end"], &catalog["on_conflict"]),
+        (
+            &serde_json::json!(49152),
+            &serde_json::json!(65535),
+            &serde_json::json!("suggest")
+        )
+    );
+    let human = fixture.run(&["catalog", "port", "--workspace", "configured"]);
     assert!(human.status.success());
-    assert!(String::from_utf8_lossy(&human.stdout).contains(&format!(
-        "web: not reserved (preferred: {preferred}; conflicts: suggest)"
-    )));
+    assert!(
+        String::from_utf8_lossy(&human.stdout)
+            .contains(&format!("web: {preferred} PORT (conflicts: suggest)"))
+    );
     let proposal = fixture.run(&[
         "--json",
         "acquire",
@@ -6019,27 +6031,25 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     );
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::rename(path.join(".shoal.toml"), path.join(".shoal/config.toml")).unwrap();
-    fixture.ok(&["leases", "port", "--workspace", "configured"]);
+    fixture.ok(&["catalog", "port", "--workspace", "configured"]);
     fs::write(path.join(".shoal.toml"), "").unwrap();
     assert!(
         !fixture
-            .run(&["leases", "port", "--workspace", "configured"])
+            .run(&["catalog", "port", "--workspace", "configured"])
             .status
             .success()
     );
-    for noun in ["port", "resource"] {
-        let output = fixture.run(&["--json", "leases", noun, "--all"]);
-        assert_eq!(output.status.code(), Some(1));
-        let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
-        let overviews = overviews.as_array().unwrap();
-        assert_eq!(overviews.len(), 2);
-        assert!(overviews.iter().any(|overview| {
-            overview["workspace"]["name"] == "configured" && overview["error"].is_string()
-        }));
-        assert!(overviews.iter().any(|overview| {
-            overview["workspace"]["name"] == "healthy" && overview["error"].is_null()
-        }));
-    }
+    let output = fixture.run(&["--json", "leases", "resource", "--all"]);
+    assert_eq!(output.status.code(), Some(1));
+    let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let overviews = overviews.as_array().unwrap();
+    assert_eq!(overviews.len(), 2);
+    assert!(overviews.iter().any(|overview| {
+        overview["workspace"]["name"] == "configured" && overview["error"].is_string()
+    }));
+    assert!(overviews.iter().any(|overview| {
+        overview["workspace"]["name"] == "healthy" && overview["error"].is_null()
+    }));
 }
 
 #[test]
@@ -7745,7 +7755,7 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     }
     for name in ["first", "second"] {
         assert_eq!(
-            fixture.ok(&["leases", "port", "--workspace", name])["configured"]["web"]["env"],
+            fixture.ok(&["catalog", "port", "--workspace", name])["configured"]["web"]["env"],
             "LOCAL_PORT"
         );
     }
@@ -7782,12 +7792,12 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     // The worktree file is a layer of its own; its errors show through the saved config.
     assert!(
         !fixture
-            .run(&["leases", "port", "--workspace", "first"])
+            .run(&["catalog", "port", "--workspace", "first"])
             .status
             .success()
     );
     fs::remove_file(path.join(".shoal/config.toml")).unwrap();
-    let configured = fixture.ok(&["leases", "port", "--workspace", "first"])["configured"].clone();
+    let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 2);
     assert_eq!(configured["web"]["env"], "LOCAL_PORT");
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
@@ -7799,7 +7809,7 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     .unwrap();
     assert!(
         !fixture
-            .run(&["leases", "port", "--workspace", "first"])
+            .run(&["catalog", "port", "--workspace", "first"])
             .status
             .success()
     );
@@ -7827,12 +7837,12 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     // An empty saved config sets nothing, so every option falls through.
     fs::write(&input, "").unwrap();
     fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
-    let configured = fixture.ok(&["leases", "port", "--workspace", "first"])["configured"].clone();
+    let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 1);
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
     assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "first"])["configured"]["checked_in"]["env"],
+        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["checked_in"]["env"],
         "CHECKED_IN"
     );
     assert_eq!(

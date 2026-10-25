@@ -11,7 +11,7 @@ use crate::{
         ui,
     },
     daemon::ports::PortRequest,
-    model::{PortOverview, PortReservation},
+    model::{PortCatalog, PortOverview, PortReservation},
     protocol::{Body, Method},
 };
 
@@ -120,18 +120,12 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
 
 /// Choose a configured port of the workspace's repository.
 pub(super) async fn pick_configured(ctx: &Context, workspace: &str) -> Result<String> {
-    let overview = request::<PortOverview>(
-        &ctx.paths,
-        Method::PortOverview {
-            workspace: workspace.to_owned(),
-        },
-    )
-    .await?;
+    let catalog = fetch_catalog(ctx, workspace).await?;
     ensure!(
-        !overview.configured.is_empty(),
+        !catalog.configured.is_empty(),
         "no configured ports; name the port to reserve"
     );
-    let entries = overview
+    let entries = catalog
         .configured
         .into_iter()
         .map(|(name, definition)| {
@@ -149,20 +143,40 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
     for port in &overview.reserved {
         outln!("{}", describe(port, palette));
     }
-    for (name, definition) in &overview.configured {
-        if overview.reserved.iter().any(|p| &p.name == name) {
-            continue;
-        }
+    if overview.reserved.is_empty() {
+        outln!("No reserved ports");
+    }
+}
+
+pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<PortCatalog> {
+    let method = Method::PortCatalog {
+        workspace: workspace.to_owned(),
+    };
+    request::<PortCatalog>(&ctx.paths, method).await
+}
+
+pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {
+    outln!(
+        "Automatic range: {}-{}; conflicts: {}",
+        catalog.start,
+        catalog.end,
+        catalog.on_conflict
+    );
+    for (name, definition) in &catalog.configured {
         outln!(
-            "{name}: not reserved (preferred: {}; conflicts: {})",
+            "{}: {}{} (conflicts: {}){}",
+            palette.paint(Style::Heading, name),
             definition
                 .port
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "automatic".into()),
-            definition.on_conflict.unwrap_or(overview.on_conflict)
+            optional(definition.env.as_deref(), |env| format!(" {env}")),
+            definition.on_conflict.unwrap_or(catalog.on_conflict),
+            if definition.requires_approval {
+                format!("; approval required ({})", definition.approval_lifetime)
+            } else {
+                String::new()
+            }
         );
-    }
-    if overview.reserved.is_empty() && overview.configured.is_empty() {
-        outln!("No configured or reserved ports");
     }
 }

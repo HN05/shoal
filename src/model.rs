@@ -535,8 +535,16 @@ pub struct PortSuggestion {
 pub struct PortOverview {
     pub workspace: Workspace,
     pub reserved: Vec<PortReservation>,
-    pub configured: std::collections::BTreeMap<String, PortDefinition>,
+}
+
+/// The port configuration a workspace's reservations draw from.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PortCatalog {
+    pub workspace: Workspace,
+    pub start: u16,
+    pub end: u16,
     pub on_conflict: ConflictPolicy,
+    pub configured: std::collections::BTreeMap<String, PortDefinition>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -134,6 +134,7 @@ pub async fn authorize(
         | Method::PortAcquire { workspace, .. }
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }
+        | Method::PortCatalog { workspace }
         | Method::SecretAcquire { workspace, .. }
         | Method::SecretRelease { workspace, .. }
         | Method::LayeredConfig {

@@ -26,7 +26,7 @@ use crate::{
     },
     daemon::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
     env,
-    model::{PortOverview, Workspace},
+    model::{PortCatalog, PortOverview, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
     sim::Simulator,
@@ -527,12 +527,16 @@ impl Typed {
                 }
             }
             Target::Ports | Target::ReservedPorts => {
+                if matches!(target, Target::Ports) {
+                    let method = Method::PortCatalog {
+                        workspace: workspace.clone(),
+                    };
+                    let catalog = client::request::<PortCatalog>(&paths, method).await?;
+                    names.extend(catalog.configured.into_keys());
+                }
                 let overview =
                     client::request::<PortOverview>(&paths, Method::PortOverview { workspace })
                         .await?;
-                if matches!(target, Target::Ports) {
-                    names.extend(overview.configured.into_keys());
-                }
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {

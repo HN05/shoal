@@ -8,6 +8,7 @@ mod approvals;
 mod base;
 mod branches;
 mod capabilities;
+mod catalog;
 mod chat;
 mod cleanup;
 mod configuration;
@@ -68,9 +69,9 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, CatalogKind, Cli, Command, ConfigCommand, ExportArgs,
-        ForgeCommand, HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand,
-        ShellCommand, WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
+        HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
+        WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -676,9 +677,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Catalog { kind } => match kind {
-            CatalogKind::Sim => simulators::catalog(&ctx).await,
-        },
+        Command::Catalog { kind, workspace } => catalog::show(&ctx, kind, workspace).await,
         Command::History { kind } => match kind {
             HistoryKind::Sim {
                 workspace,

@@ -66,7 +66,7 @@ async fn overview_responses(listener: UnixListener, noun: &str, count: usize) {
                 .await;
             } else {
                 let data = if noun == "port" {
-                    json!({"workspace": workspace(index), "reserved": [], "configured": {}, "on_conflict": "suggest"})
+                    json!({"workspace": workspace(index), "reserved": []})
                 } else {
                     json!({"pools": [], "leases": []})
                 };
@@ -129,7 +129,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                     }
                 } else {
                     let empty = if noun == "port" {
-                        "No configured or reserved ports"
+                        "No reserved ports"
                     } else {
                         "No configured resources or leases"
                     };

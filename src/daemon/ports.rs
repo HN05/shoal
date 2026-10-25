@@ -19,7 +19,7 @@ use crate::{
         workspace::Manager,
     },
     env,
-    model::{PortOverview, PortReservation, PortSuggestion},
+    model::{PortCatalog, PortOverview, PortReservation, PortSuggestion},
     validate,
 };
 
@@ -147,13 +147,22 @@ impl Manager {
 
     pub async fn port_overview(&self, selector: &str) -> Result<PortOverview> {
         let workspace = self.workspace(selector).await?;
-        let ports = self.workspace_settings(&workspace).await?.ports;
         let reserved = self.list_ports(Some(&workspace.id)).await?;
         Ok(PortOverview {
             workspace,
             reserved,
-            configured: ports.definitions,
+        })
+    }
+
+    pub async fn port_catalog(&self, selector: &str) -> Result<PortCatalog> {
+        let workspace = self.workspace(selector).await?;
+        let ports = self.workspace_settings(&workspace).await?.ports;
+        Ok(PortCatalog {
+            workspace,
+            start: ports.start,
+            end: ports.end,
             on_conflict: ports.on_conflict,
+            configured: ports.definitions,
         })
     }
 

@@ -295,12 +295,13 @@ it with `shoal approvals --approve <number>` or `shoal approvals --deny <number>
 ## Ports
 
 ```sh
+shoal catalog port
 shoal leases port
 shoal acquire port web
 shoal release port web
 ```
 
-Use configured names/defaults when available. Repeating a reservation returns the
+Use the configured names and defaults `catalog port` lists when available. Repeating a reservation returns the
 same port. Pass `--reason "purpose"` for an ad hoc reservation.
 
 Exit 2 with `reserved: false` means a conflict suggestion, not a reservation.

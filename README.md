@@ -268,7 +268,8 @@ From a managed workspace:
 
 ```sh
 shoal acquire port web --reason "Development server"
-shoal leases                  # Every kind, with capacity
+shoal catalog                 # What each kind offers: configuration, devices, runtimes
+shoal leases                  # Every kind's leases and usage
 shoal release port web
 
 shoal acquire sim --queue     # macOS; requires configured simulator profiles

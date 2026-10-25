@@ -749,6 +749,9 @@ pub enum Method {
     PortOverview {
         workspace: String,
     },
+    PortCatalog {
+        workspace: String,
+    },
     ListApprovals {
         workspace: Option<String>,
     },
@@ -1028,6 +1031,7 @@ response_bodies! {
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
+    PortCatalog(crate::model::PortCatalog),
     ApprovalRequest(Box<crate::daemon::approvals::ApprovalRequest>),
     ApprovalRequests(Vec<crate::daemon::approvals::ApprovalRequest>),
     SecretGrant(crate::daemon::secrets::SecretGrant),

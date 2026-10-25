@@ -2818,16 +2818,19 @@ holds, in order, and stops at the first failure. A kind narrows it to that kind,
 to its pool, and `--name` or a port name to one lease; selecting nothing fails.
 Holds are released separately.
 
-`shoal leases` shows every kind's capacity and leases; a kind shows
+`shoal leases` shows every kind's leases; a kind shows
 only that kind, with repositories listed apart from other resources, and `--all`
-covers every workspace.
+covers every workspace. `shoal catalog` shows what each kind's leases draw from,
+its configuration and what the machine offers, for one workspace (`--workspace`,
+otherwise the current one or a picker); a kind shows only that kind.
 
 ### Port reservations
 
 ```sh
 shoal acquire port web --workspace fix-login --reason "Frontend dev server"
 shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
-shoal leases port --workspace fix-login  # Configured names and current leases
+shoal catalog port --workspace fix-login # Automatic range, named ports and conflict policy
+shoal leases port --workspace fix-login  # Current reservations
 shoal leases port --all                 # Every workspace
 shoal release port web --workspace fix-login
 shoal run --workspace fix-login -- sh -c 'my-server --port "$API_PORT"'

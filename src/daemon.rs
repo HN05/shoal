@@ -1013,6 +1013,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PortOverview { workspace } => {
             Body::PortOverview(manager.port_overview(&workspace).await?)
         }
+        Method::PortCatalog { workspace } => {
+            Body::PortCatalog(manager.port_catalog(&workspace).await?)
+        }
         Method::ListApprovals { workspace } => {
             Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
         }

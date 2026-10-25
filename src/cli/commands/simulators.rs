@@ -15,15 +15,15 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
-pub(super) async fn catalog(ctx: &Context) -> Result<i32> {
-    let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
-    ctx.show(&catalog, |catalog| {
-        outln!(
-            "{}",
-            serde_json::to_string_pretty(catalog).unwrap_or_default()
-        );
-    })?;
-    Ok(0)
+pub(super) async fn fetch_catalog(ctx: &Context) -> Result<SimulatorCatalog> {
+    request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await
+}
+
+pub(super) fn render_catalog(catalog: &SimulatorCatalog) {
+    outln!(
+        "{}",
+        serde_json::to_string_pretty(catalog).unwrap_or_default()
+    );
 }
 
 pub(super) async fn history(
