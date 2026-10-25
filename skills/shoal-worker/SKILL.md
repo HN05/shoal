@@ -113,9 +113,9 @@ reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 the forge reads job logs; checks from outside services have none.
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
-`shoal --json ci rerun --check '<check name>'` reruns a failed check on the PR's
+`shoal --json pr ci rerun --check '<check name>'` reruns a failed check on the PR's
 current head, after you have read its log and fixed or reported the cause, and
-`shoal --json ci cancel` cancels running ones; omit `--check` for all of them.
+`shoal --json pr ci cancel` cancels running ones; omit `--check` for all of them.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

@@ -1,4 +1,4 @@
-//! `shoal pr`, `shoal ci` and `shoal issue`: ask the daemon to list, open or
+//! `shoal pr`, `shoal pr ci` and `shoal issue`: ask the daemon to list, open or
 //! change items of the workspace's repository and report them as the forge
 //! now does.
 use std::path::Path;
@@ -31,6 +31,7 @@ use crate::{
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
+        PrCommand::Ci { command } => return ci(ctx, command).await,
         PrCommand::List(args) => return list(ctx, ItemKind::Pr, args).await,
         PrCommand::Open {
             workspace,

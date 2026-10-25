@@ -321,7 +321,7 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
         }
         command.args(args).output().unwrap()
     };
-    let output = run(Some("scoped"), &["completions", "bash"]);
+    let output = run(Some("scoped"), &["shell", "completions", "bash"]);
     success(output);
     assert_eq!(
         fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
@@ -333,7 +333,7 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
     success(output);
     assert_installed(&installed);
     // Up to date skills and other tools' directories are left alone.
-    let output = run(None, &["completions", "bash"]);
+    let output = run(None, &["shell", "completions", "bash"]);
     assert!(output.stderr.is_empty(), "{output:?}");
     assert!(!home.path().join(".claude").exists());
 }

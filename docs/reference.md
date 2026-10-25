@@ -2199,12 +2199,12 @@ as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `draft`.
 
 ```sh
-shoal ci rerun                      # rerun every failed job on the linked PR's head
-shoal ci cancel 12 --check rust     # cancel one running check of PR 12
+shoal pr ci rerun                      # rerun every failed job on the linked PR's head
+shoal pr ci cancel 12 --check rust     # cancel one running check of PR 12
 ```
 
-`shoal ci rerun` reruns failed jobs on the current head of the linked PR or the
-one named, and `shoal ci cancel` cancels running ones: every such CI job, leaving
+`shoal pr ci rerun` reruns failed jobs on the current head of the linked PR or the
+one named, and `shoal pr ci cancel` cancels running ones: every such CI job, leaving
 other providers' checks alone, or each repeated `--check` by the name `shoal view`
 shows, which must be a CI job in that state. The daemon uses the forge's job API
 as the agent account and records an `item_changed` event once a request succeeds;
@@ -2755,7 +2755,7 @@ and simulator leases for the current or named workspace, honoring `--state-dir`
 and scope with a 500 ms timeout, never starting a daemon or picker. A workspace
 the command would refuse for its state, or for `work setup` a running execution, is
 described by the reason; one without what the command acts on is left out. Targets sort before flags,
-also in fzf-tab. `shoal completions <shell>` prints scripts for
+also in fzf-tab. `shoal shell completions <shell>` prints scripts for
 Bash, Zsh, Fish, PowerShell, and Elvish.
 
 ### Recovery

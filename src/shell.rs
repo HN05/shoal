@@ -115,7 +115,7 @@ if [ -n "${ZSH_VERSION-}" ]; then
     autoload -Uz compinit
     compinit
   fi
-  source <(command shoal completions zsh)
+  source <(command shoal shell completions zsh)
 elif [ -n "${BASH_VERSION-}" ]; then
   if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then
     case " ${PROMPT_COMMAND[*]-} " in
@@ -128,7 +128,7 @@ elif [ -n "${BASH_VERSION-}" ]; then
       *) PROMPT_COMMAND="_shoal_recover_directory${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
     esac
   fi
-  eval "$(command shoal completions bash)"
+  eval "$(command shoal shell completions bash)"
 fi
 "#;
 

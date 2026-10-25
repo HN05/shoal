@@ -193,7 +193,7 @@ shoal watch                   # Wake on all linked item comments, checks, or clo
 shoal view                    # Linked items with state, failed CI logs, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
 shoal view pr 44 --check rust   # Show only this failed CI check's log
-shoal ci rerun --check rust     # Rerun a failed check on the linked PR; cancel stops running ones
+shoal pr ci rerun --check rust     # Rerun a failed check on the linked PR; cancel stops running ones
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs

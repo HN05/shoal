@@ -304,7 +304,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             ctx.json,
             Some(ctx.paths.state.clone()),
         ),
-        Command::Completions { shell } => {
+        Command::Shell {
+            command: ShellCommand::Completions { shell },
+        } => {
             let script = shell::completions(shell)?;
             ctx.emit(&script, json!({"script": script}))?;
             Ok(0)
@@ -366,7 +368,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Contribute(args) => contribute::contribute(&ctx, args).await,
         Command::Pr { command } => items::pr(&ctx, command).await,
-        Command::Ci { command } => items::ci(&ctx, command).await,
         Command::Issue { command } => items::issue(&ctx, command).await,
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,

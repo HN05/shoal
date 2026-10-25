@@ -72,7 +72,7 @@ impl Need {
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
-                | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "ci"
+                | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue"
                 | "notifications",
                 ..,
             ] => Self::Any,

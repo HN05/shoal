@@ -149,11 +149,6 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<SkillCommand>,
     },
-    /// Generate shell completion scripts.
-    Completions {
-        #[arg(value_enum)]
-        shell: clap_complete::Shell,
-    },
     /// Print shell integration for Bash or Zsh.
     Shell {
         #[command(subcommand)]
@@ -499,11 +494,6 @@ pub enum Command {
         #[command(subcommand)]
         command: PrCommand,
     },
-    /// Rerun failed or cancel running CI jobs of a PR.
-    Ci {
-        #[command(subcommand)]
-        command: CiCommand,
-    },
     /// Open, change, comment on, close or reopen an issue of the workspace's repository.
     Issue {
         #[command(subcommand)]
@@ -798,6 +788,11 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
+    /// Rerun failed or cancel running CI jobs of a PR.
+    Ci {
+        #[command(subcommand)]
+        command: CiCommand,
+    },
     /// List or search the workspace repository's PRs, newest first.
     List(ListArgs),
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
@@ -1701,6 +1696,11 @@ pub enum InternalCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ShellCommand {
+    /// Generate shell completion scripts.
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
     Init,
     #[command(hide = true)]
     Recover {

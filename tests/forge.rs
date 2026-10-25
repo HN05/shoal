@@ -2386,6 +2386,7 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     assert!(posts().is_empty());
 
     let rerun = fixture.ok(&[
+        "pr",
         "ci",
         "rerun",
         "8",

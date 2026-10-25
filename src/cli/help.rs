@@ -46,7 +46,6 @@ const GROUPS: &[(&str, &[&str])] = &[
             "review",
             "land",
             "pr",
-            "ci",
             "issue",
             "link",
             "unlink",
@@ -61,15 +60,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Configuration and installation",
         &[
-            "repo",
-            "config",
-            "install",
-            "update",
-            "daemon",
-            "shell",
-            "completions",
-            "skill",
-            "help",
+            "repo", "config", "install", "update", "daemon", "shell", "skill", "help",
         ],
     ),
 ];

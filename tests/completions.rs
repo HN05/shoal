@@ -51,7 +51,11 @@ fn bash_completes_commands_and_flags_without_a_daemon() {
     let home = tempfile::tempdir().unwrap();
     install_programs(home.path(), &["codex"]);
     let script = home.path().join("completions.bash");
-    fs::write(&script, generate(home.path(), &["completions", "bash"])).unwrap();
+    fs::write(
+        &script,
+        generate(home.path(), &["shell", "completions", "bash"]),
+    )
+    .unwrap();
     let output = support::isolated(home.path(), "bash").args(["--noprofile", "--norc", "-c", r#"
 source "$1"
 COMP_TYPE=9
@@ -71,7 +75,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
         String::from_utf8_lossy(&output.stderr)
     );
     let output = String::from_utf8(output.stdout).unwrap();
-    for expected in ["codex", "completions", "--cli", "--app", "--repair"] {
+    for expected in ["codex", "--cli", "--app", "--repair"] {
         assert!(
             output.lines().any(|line| line == expected),
             "missing {expected}: {output}"
@@ -108,8 +112,11 @@ fn shell_init_registers_completions_for_bash_and_zsh() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let json: serde_json::Value =
-        serde_json::from_slice(&generate(home.path(), &["--json", "completions", "zsh"])).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&generate(
+        home.path(),
+        &["--json", "shell", "completions", "zsh"],
+    ))
+    .unwrap();
     assert!(json["script"].as_str().unwrap().contains("#compdef shoal"));
 }
 
@@ -210,11 +217,7 @@ fn agents_without_installed_executables_are_not_completed() {
     // Only the fixture's bin, so agents installed on this machine stay out.
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
     for (words, expected, missing) in [
-        (
-            vec!["shoal", "c"],
-            &["claude", "completions"][..],
-            &["codex"][..],
-        ),
+        (vec!["shoal", "c"], &["claude"][..], &["codex"][..]),
         (vec!["shoal", "cod"], &[], &["codex"]),
         (vec!["shoal", "ha"], &[], &["happy"]),
         (vec!["shoal", "t"], &[], &["t3"]),
@@ -303,7 +306,11 @@ fn happy_completes_only_with_an_installed_agent_to_run() {
 fn zsh_completion_function_invokes_current_binary() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("completion.zsh");
-    fs::write(&script, generate(home.path(), &["completions", "zsh"])).unwrap();
+    fs::write(
+        &script,
+        generate(home.path(), &["shell", "completions", "zsh"]),
+    )
+    .unwrap();
     let output = support::isolated(home.path(), "zsh")
         .args([
             "-f",
