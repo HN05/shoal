@@ -612,6 +612,43 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         })
         .await
         .unwrap();
+    // Waiting for confirmation is not a failure the workspace records.
+    let unproven = manager
+        .stop_workspace(
+            &workspace.id,
+            crate::daemon::workspace::StopRequest::manual(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        unproven
+            .downcast_ref::<crate::daemon::workspace::UnprovenStop>()
+            .is_some()
+    );
+    assert_eq!(manager.workspace(&workspace.id).await.unwrap().error, None);
+    // A process using the directory blocks even an acknowledged stop.
+    let mut user = tokio::process::Command::new("sleep")
+        .arg("60")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let blocked = manager
+        .stop_workspace_acknowledged(
+            &workspace.id,
+            crate::daemon::workspace::StopRequest::manual(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        blocked.to_string().contains("use the workspace directory"),
+        "{blocked:#}"
+    );
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(inspection.executions.len(), 1);
+    user.kill().await.unwrap();
+    user.wait().await.unwrap();
+
     manager
         .stop_workspace_acknowledged(
             &workspace.id,

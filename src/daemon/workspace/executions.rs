@@ -934,14 +934,15 @@ impl Manager {
         let result = self
             .stop_executions_keeping(&workspace.id, policy, &request, protected)
             .await;
+        // A stop waiting for the user's confirmation has not failed.
+        let failure = result
+            .as_ref()
+            .err()
+            .filter(|error| error.downcast_ref::<UnprovenStop>().is_none());
         self.set_state(
             &workspace.id,
             reserved_state,
-            result
-                .as_ref()
-                .err()
-                .map(|e| format!("{e:#}"))
-                .or(workspace.error),
+            failure.map(|e| format!("{e:#}")).or(workspace.error),
         )
         .await?;
         result
@@ -1025,13 +1026,34 @@ impl Manager {
             execution.id,
             pids(&after.unreadable)
         );
-        if !after.launch_recorded && policy != StopPolicy::Acknowledged {
-            return Err(UnprovenStop {
-                execution: execution.id.clone(),
-            }
-            .into());
+        if !after.launch_recorded {
+            ensure!(
+                policy == StopPolicy::Acknowledged,
+                UnprovenStop {
+                    execution: execution.id.clone(),
+                }
+            );
+            self.ensure_directory_unused(&execution.workspace_id)
+                .await?;
         }
         self.forget_execution(&execution.id).await
+    }
+
+    /// Fail while processes use the workspace's directory: an acknowledgement
+    /// that an unprovable execution ended cannot cover a visible process.
+    async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
+        let path = self.workspace(workspace_id).await?.path;
+        let users = if path.is_dir() {
+            crate::process::in_directory(&path).await?
+        } else {
+            Vec::new()
+        };
+        ensure!(
+            users.is_empty(),
+            "processes still use the workspace directory: {}; stop them, then run shoal stop again",
+            users.join(", ")
+        );
+        Ok(())
     }
 
     /// Stop every verified process that still carries the workspace's identity,

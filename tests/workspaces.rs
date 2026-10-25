@@ -21824,6 +21824,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     );
     assert!(stderr.contains("pass --yes"), "{stderr}");
     assert_eq!(executions(&fixture), 1);
+    assert!(fixture.ok(&["status", "legacy"])["workspace"]["error"].is_null());
 
     let (output, transcript) = fixture.interactive(&["stop", "legacy"], "y\n");
     assert!(output.status.success(), "{transcript}");
