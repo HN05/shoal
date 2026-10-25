@@ -805,7 +805,8 @@ pub async fn related(
         .map(|(pid, _, _)| *pid)
         .collect();
     if live {
-        pids.extend(descendants(child.unwrap().pid, &rows));
+        pids.insert(child.unwrap().pid);
+        pids = descendants(pids, &rows);
     }
     let identities = pids
         .into_iter()
@@ -860,9 +861,8 @@ async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
     Ok(rows)
 }
 
-/// `root` and the PIDs whose parent links lead to it.
-fn descendants(root: u32, rows: &[(u32, u32, u32)]) -> HashSet<u32> {
-    let mut pids = HashSet::from([root]);
+/// `pids` and the PIDs whose parent links lead to one of them.
+fn descendants(mut pids: HashSet<u32>, rows: &[(u32, u32, u32)]) -> HashSet<u32> {
     loop {
         let previous = pids.len();
         for (pid, _, parent) in rows {
@@ -980,6 +980,36 @@ mod tests {
             ..this
         };
         assert_eq!(earlier.lineage_root(), None);
+        Ok(())
+    }
+
+    /// A group member whose parent exited, with a child that left the group,
+    /// while the leader lives.
+    #[tokio::test]
+    async fn children_of_an_orphaned_group_member_are_owned_with_a_live_leader() -> Result<()> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let script = r#"( sh -c 'perl -e "setpgrp(0,0); \$| = 1; print qq(\$\$\n); sleep 30"; :' & ); read _"#;
+        let mut leader = tokio::process::Command::new("sh")
+            .args(["-c", script])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true)
+            .spawn()?;
+        let identity = capture(leader.id().context("leader PID")?)?.context("leader")?;
+        let mut stdout = tokio::io::BufReader::new(leader.stdout.take().context("stdout")?);
+        let mut line = String::new();
+        stdout.read_line(&mut line).await?;
+        let child = capture(line.trim().parse()?)?.context("child outside the group")?;
+        let member = parent(child.pid).context("orphaned group member")?;
+        // The subshell that started the member exits on its own.
+        while parent(member).and_then(parent) == Some(identity.pid) {
+            tokio::task::yield_now().await;
+        }
+        let (owned, _) = related(Some(&identity), Some(identity.pid)).await?;
+        signal(&child, libc::SIGKILL)?;
+        leader.stdin.take().context("stdin")?.shutdown().await?;
+        assert!(owned.contains(&child));
         Ok(())
     }
 
