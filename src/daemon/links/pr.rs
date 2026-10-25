@@ -317,114 +317,112 @@ impl Manager {
     pub async fn sweep_prs(&self) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         for workspace in self.list_workspaces().await? {
-            if workspace.state != crate::state::WorkspaceState::Ready {
-                continue;
+            if workspace.state == crate::state::WorkspaceState::Ready {
+                self.sweep_workspace_prs(&workspace).await?;
             }
-            let mut registration = match self.pr_registration(&workspace.id).await {
-                Ok(Some(registration)) => registration,
-                Ok(None) => continue,
-                Err(error) => {
-                    self.record_retained(
-                        &workspace.id,
-                        crate::daemon::events::EventCause::Pr,
-                        &error,
-                    )
-                    .await?;
-                    self.notify(
-                        Some(&workspace.name),
-                        NotificationKind::CleanupFailed,
-                        format!("PR cleanup retained the workspace: {error:#}"),
-                    )
-                    .await;
-                    continue;
-                }
-            };
-            // A base stays until its stacked workspaces moved; a failure retries next sweep.
-            let restacked = self.advance_stack(&workspace, &registration.kind).await;
-            if let Ok(Some(error)) = &restacked {
-                registration.error = Some(format!("{STACK_ERROR}: {error:#}"));
-                self.save_registration(&workspace.id, &registration).await?;
-                continue;
-            }
-            // A repository that disabled PR cleanup keeps its watches waiting;
-            // unreadable config is recorded like a failed lookup.
-            let settings = self.workspace_settings(&workspace).await;
-            if restacked.is_ok()
-                && settings
-                    .as_ref()
-                    .is_ok_and(|settings| !settings.cleanup.pr.enabled)
-            {
-                // This sweep resolved any stored stack error; others stay.
-                if registration
-                    .error
-                    .as_deref()
-                    .is_some_and(|error| error.starts_with(STACK_ERROR))
-                {
-                    registration.error = None;
-                    self.save_registration(&workspace.id, &registration).await?;
-                }
-                continue;
-            }
-            // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
-            let result: Result<bool> = async {
-                restacked.context(STACK_ERROR)?;
-                settings?;
-                self.verify_worktree(&workspace).await?;
-                let head = current_head(&workspace).await?;
-                if !self
-                    .confirm_pr_completion(&workspace, &mut registration.kind, &head)
-                    .await?
-                {
-                    return Ok(false);
-                }
-                if self.keep_reason(&workspace.id).await?.is_some()
-                    || !self.completion_allows_cleanup(&workspace).await?
-                {
-                    return Ok(false);
-                }
-                if !self.remove_merged(&workspace.id, &head).await? {
-                    return Ok(false);
-                }
-                log!("PR cleanup removed {}", workspace.name);
-                Ok(true)
-            }
-            .await;
-            match &result {
-                Ok(true) => {
-                    let cause = match registration.kind {
-                        RegistrationKind::Watch { .. } => {
-                            "removed after all watched pull requests merged"
-                        }
-                        RegistrationKind::Acknowledgement { .. } => {
-                            "removed after the merge acknowledgement"
-                        }
-                    };
-                    self.notify(
-                        Some(&workspace.name),
-                        NotificationKind::WorkspaceRemoved,
-                        crate::daemon::workspace::removal_notice(&workspace.name, cause),
-                    )
-                    .await;
-                }
-                Ok(false) => {}
-                Err(error) => {
-                    self.record_retained(
-                        &workspace.id,
-                        crate::daemon::events::EventCause::Pr,
-                        error,
-                    )
-                    .await?;
-                    self.notify(
-                        Some(&workspace.name),
-                        NotificationKind::CleanupFailed,
-                        format!("PR cleanup retained the workspace: {error:#}"),
-                    )
-                    .await;
-                }
-            }
-            registration.error = result.err().map(|error| format!("{error:#}"));
-            self.save_registration(&workspace.id, &registration).await?;
         }
+        Ok(())
+    }
+
+    /// Advance the workspace's stack and remove it once its watched PRs are
+    /// complete. The caller holds the PR gate.
+    async fn sweep_workspace_prs(&self, workspace: &Workspace) -> Result<()> {
+        let mut registration = match self.pr_registration(&workspace.id).await {
+            Ok(Some(registration)) => registration,
+            Ok(None) => return Ok(()),
+            Err(error) => {
+                self.record_retained(&workspace.id, crate::daemon::events::EventCause::Pr, &error)
+                    .await?;
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::CleanupFailed,
+                    format!("PR cleanup retained the workspace: {error:#}"),
+                )
+                .await;
+                return Ok(());
+            }
+        };
+        // A base stays until its stacked workspaces moved; a failure retries next sweep.
+        let restacked = self.advance_stack(workspace, &registration.kind).await;
+        if let Ok(Some(error)) = &restacked {
+            registration.error = Some(format!("{STACK_ERROR}: {error:#}"));
+            self.save_registration(&workspace.id, &registration).await?;
+            return Ok(());
+        }
+        // A repository that disabled PR cleanup keeps its watches waiting;
+        // unreadable config is recorded like a failed lookup.
+        let settings = self.workspace_settings(workspace).await;
+        if restacked.is_ok()
+            && settings
+                .as_ref()
+                .is_ok_and(|settings| !settings.cleanup.pr.enabled)
+        {
+            // This sweep resolved any stored stack error; others stay.
+            if registration
+                .error
+                .as_deref()
+                .is_some_and(|error| error.starts_with(STACK_ERROR))
+            {
+                registration.error = None;
+                self.save_registration(&workspace.id, &registration).await?;
+            }
+            return Ok(());
+        }
+        // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
+        let result: Result<bool> = async {
+            restacked.context(STACK_ERROR)?;
+            settings?;
+            self.verify_worktree(workspace).await?;
+            let head = current_head(workspace).await?;
+            if !self
+                .confirm_pr_completion(workspace, &mut registration.kind, &head)
+                .await?
+            {
+                return Ok(false);
+            }
+            if self.keep_reason(&workspace.id).await?.is_some()
+                || !self.completion_allows_cleanup(workspace).await?
+            {
+                return Ok(false);
+            }
+            if !self.remove_merged(&workspace.id, &head).await? {
+                return Ok(false);
+            }
+            log!("PR cleanup removed {}", workspace.name);
+            Ok(true)
+        }
+        .await;
+        match &result {
+            Ok(true) => {
+                let cause = match registration.kind {
+                    RegistrationKind::Watch { .. } => {
+                        "removed after all watched pull requests merged"
+                    }
+                    RegistrationKind::Acknowledgement { .. } => {
+                        "removed after the merge acknowledgement"
+                    }
+                };
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::WorkspaceRemoved,
+                    crate::daemon::workspace::removal_notice(&workspace.name, cause),
+                )
+                .await;
+            }
+            Ok(false) => {}
+            Err(error) => {
+                self.record_retained(&workspace.id, crate::daemon::events::EventCause::Pr, error)
+                    .await?;
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::CleanupFailed,
+                    format!("PR cleanup retained the workspace: {error:#}"),
+                )
+                .await;
+            }
+        }
+        registration.error = result.err().map(|error| format!("{error:#}"));
+        self.save_registration(&workspace.id, &registration).await?;
         Ok(())
     }
 
