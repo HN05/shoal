@@ -25,7 +25,7 @@ pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<Simu
 pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
     let policy = &catalog.policy;
     outln!(
-        "Capacity: {} booted, {} devices; idle devices shut down after {} seconds",
+        "Capacity: {} booted, {} devices; idle devices deleted after {} seconds",
         policy.max_booted,
         policy.max_devices,
         policy.idle_seconds
