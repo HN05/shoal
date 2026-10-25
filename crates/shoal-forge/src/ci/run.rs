@@ -1,6 +1,6 @@
 //! Starting a CI workflow run on a branch, as the workspace's agent account.
-//! A started run is a new run, not a rerun of a PR's checks: the forge does
-//! not report it as one of them.
+//! A started run is a new run, not a rerun of a PR's checks; only a run on
+//! the PR's head commit reports checks there.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
@@ -28,13 +28,21 @@ pub struct StartedRun {
     pub url: Option<String>,
 }
 
+/// Refuse a workflow or branch no forge runs, before any lookup.
+pub fn validate_run(workflow: Option<&str>, branch: Option<&str>) -> Result<()> {
+    if let Some(branch) = branch {
+        ensure!(!branch.trim().is_empty(), "branch must be nonempty");
+    }
+    if let Some(workflow) = workflow {
+        ensure!(!workflow.trim().is_empty(), "workflow must be nonempty");
+    }
+    Ok(())
+}
+
 impl NewRun {
     /// Refuse a run no forge starts, before any request.
     pub fn validate(&self) -> Result<()> {
-        ensure!(!self.branch.trim().is_empty(), "branch must be nonempty");
-        if let Some(workflow) = &self.workflow {
-            ensure!(!workflow.trim().is_empty(), "workflow must be nonempty");
-        }
+        validate_run(self.workflow.as_deref(), Some(&self.branch))?;
         ensure!(
             self.inputs.keys().all(|key| !key.trim().is_empty()),
             "input names must be nonempty"

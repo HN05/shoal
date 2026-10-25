@@ -51,6 +51,7 @@ mod transfer;
 mod update;
 mod view;
 mod work;
+mod workflows;
 pub(in crate::cli) mod workspaces;
 mod worktree_hooks;
 
@@ -69,9 +70,9 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
-        HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
-        WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCiCommand,
+        ForgeCommand, HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand,
+        ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -291,6 +292,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 capabilities::capabilities(&ctx, repository.workspace).await
             }
             ForgeCommand::Api(args) => api::api(&ctx, args).await,
+            ForgeCommand::Ci {
+                command: ForgeCiCommand::Run(args),
+            } => workflows::run(&ctx, args).await,
         },
         Command::Run {
             name,
@@ -375,7 +379,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Contribute(args) => contribute::contribute(&ctx, args).await,
         Command::Pr { command } => items::pr(&ctx, command).await,
-        Command::Ci { command } => items::workflow(&ctx, command).await,
         Command::Issue { command } => items::issue(&ctx, command).await,
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,

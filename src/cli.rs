@@ -82,6 +82,24 @@ pub struct ApiArgs {
     pub workspace: Option<String>,
 }
 
+// Arguments of `shoal forge ci run`.
+#[derive(Debug, Args)]
+pub struct RunArgs {
+    /// Workflow file or ID, such as ci.yml, or a Bitbucket custom pipeline;
+    /// GitLab runs the branch's pipeline and takes none.
+    pub workflow: Option<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+    /// Branch to run on; defaults to the workspace's branch, the only one
+    /// workspace processes may run on.
+    #[arg(long)]
+    pub branch: Option<String>,
+    /// Pass a workflow input; repeat for more.
+    #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
+    pub inputs: Vec<(String, String)>,
+}
+
 // Arguments of `shoal export`.
 #[derive(Debug, Args)]
 pub struct ExportArgs {
@@ -475,11 +493,6 @@ pub enum Command {
         #[command(subcommand)]
         command: PrCommand,
     },
-    /// Start a CI workflow run on the workspace's branch or another.
-    Ci {
-        #[command(subcommand)]
-        command: WorkflowCommand,
-    },
     /// Open, change, comment on, close or reopen an issue of the workspace's repository.
     Issue {
         #[command(subcommand)]
@@ -855,28 +868,6 @@ pub enum CiCommand {
     Cancel {
         #[command(flatten)]
         checks: CiChecks,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum WorkflowCommand {
-    /// Start a workflow run on a branch. It is a new run, not a rerun: a PR's
-    /// failed checks stay failed.
-    Run {
-        /// Workflow file or ID, such as ci.yml, or a Bitbucket custom
-        /// pipeline; GitLab runs the branch's pipeline and takes none.
-        workflow: Option<String>,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-        /// Branch to run on; defaults to the workspace's branch, the only
-        /// one workspace processes may run on.
-        #[arg(long)]
-        branch: Option<String>,
-        /// Pass a workflow input; repeat for more.
-        #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
-        inputs: Vec<(String, String)>,
     },
 }
 
@@ -1615,6 +1606,21 @@ pub enum ForgeCommand {
     /// `[api] agent_writes` lets agents send others; anyone else sends any
     /// request with your own logins.
     Api(ApiArgs),
+    /// Start CI workflow runs on a branch.
+    Ci {
+        #[command(subcommand)]
+        command: ForgeCiCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ForgeCiCommand {
+    /// Start a workflow run on a branch.
+    ///
+    /// It is a new run, not a rerun of a PR's checks; on Forgejo a failed
+    /// check stays failed.
+    Run(RunArgs),
 }
 
 #[derive(Debug, Subcommand)]

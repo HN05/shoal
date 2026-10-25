@@ -1,6 +1,6 @@
-//! `shoal pr`, `shoal pr ci`, `shoal ci` and `shoal issue`: ask the daemon to
-//! list, open or change items of the workspace's repository, or start CI runs
-//! there, and report them as the forge now does.
+//! `shoal pr`, `shoal pr ci` and `shoal issue`: ask the daemon to list, open or
+//! change items of the workspace's repository and report them as the forge
+//! now does.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
@@ -8,13 +8,13 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     cli::{
         AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
-        WorkflowCommand, client, context::Context, ui,
+        client, context::Context, ui,
     },
     daemon::links::proposals::{OpenOutcome, Proposed},
     forge::{
         ForgeRepo,
         capability::Capability,
-        ci::{CiActed, CiAction, run::StartedRun},
+        ci::{CiActed, CiAction},
         items::{
             action::{Action, Edit, ThreadChange},
             attach::{self, Attachment},
@@ -149,36 +149,6 @@ pub(super) async fn ci(ctx: &Context, command: CiCommand) -> Result<i32> {
         &format!("{outcome} for {}: {}", acted.checks.join(", "), acted.url),
         &acted,
     )?;
-    Ok(0)
-}
-
-pub(super) async fn workflow(ctx: &Context, command: WorkflowCommand) -> Result<i32> {
-    let WorkflowCommand::Run {
-        workflow,
-        workspace,
-        branch,
-        inputs,
-    } = command;
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let started: StartedRun = client::request(
-        &ctx.paths,
-        Method::StartCiRun {
-            workspace,
-            workflow,
-            branch,
-            inputs: inputs.into_iter().collect(),
-        },
-    )
-    .await?;
-    let run = match &started.workflow {
-        Some(workflow) => format!("{workflow} on {}", started.branch),
-        None => started.branch.clone(),
-    };
-    let text = match &started.url {
-        Some(url) => format!("Run started for {run}: {url}"),
-        None => format!("Run started for {run}"),
-    };
-    ctx.emit(&text, &started)?;
     Ok(0)
 }
 

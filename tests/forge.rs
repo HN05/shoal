@@ -2462,6 +2462,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
     fixture.respond(json!({dispatch: {"status": 204}}));
     let started = fixture.ok(&[
+        "forge",
         "ci",
         "run",
         "deps.yml",
@@ -2510,6 +2511,14 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     let unscoped = fixture.request(json!({"start_ci_run": {"workspace": "topic",
         "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
     assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
+
+    // A bad argument is refused before the workspace picker.
+    let output = fixture.run(&["forge", "ci", "run", "deps.yml", "--branch", " "]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("branch must be nonempty"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -2519,7 +2528,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     fixture.respond(json!({
         dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765, "jobs": ["audit"]}},
     }));
-    let started = fixture.ok(&["ci", "run", "deps.yml", "--workspace", "topic"]);
+    let started = fixture.ok(&["forge", "ci", "run", "deps.yml", "--workspace", "topic"]);
     assert_eq!(
         started["url"],
         format!("{}/actions/runs/2765", fixture.web),
@@ -2529,7 +2538,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         writes(&fixture),
         [json!([dispatch, {"ref": "topic", "inputs": {}, "return_run_info": true}])]
     );
-    let output = fixture.run(&["ci", "run", "--workspace", "topic"]);
+    let output = fixture.run(&["forge", "ci", "run", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("starts a named workflow"),

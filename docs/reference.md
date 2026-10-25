@@ -2333,15 +2333,18 @@ running, and cancels the job's run; GitLab retries or cancels each job; Forgejo
 cancels each check's run. `--json` returns `url`, `action` and the
 `checks` acted on.
 
+#### CI workflow runs
+
 ```sh
-shoal ci run deps.yml                      # start a workflow run on the workspace's branch
-shoal ci run deps.yml --branch main --input level=full
+shoal forge ci run deps.yml               # start a workflow run on the workspace's branch
+shoal forge ci run deps.yml --branch main --input level=full
 ```
 
-`shoal ci run` starts a workflow run on the workspace's branch, or the one
+`shoal forge ci run` starts a workflow run on the workspace's branch, or the one
 `--branch` names, with each repeated `--input NAME=VALUE`. It is a new run, not
-a rerun: the forge does not report it as one of a PR's checks, so a failed check
-stays failed for `shoal view` and PR cleanup. GitHub, Forgejo and Gitea dispatch
+a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
+reports checks there like any other run. Forgejo attaches a dispatched run to no
+commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub, Forgejo and Gitea dispatch
 the named workflow file, or a GitHub workflow ID, which needs a
 `workflow_dispatch` trigger; GitLab runs the branch's pipeline, taking no
 workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
