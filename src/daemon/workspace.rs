@@ -112,6 +112,9 @@ pub struct Manager {
     /// without cancelling hooks or mutations already in progress.
     pub(super) background_operations: Arc<RwLock<()>>,
     pub(crate) pr_gate: Mutex<()>,
+    /// Orders copying a proposal's files and storing it against pruning, so
+    /// pruning never deletes the copies of a proposal not yet stored.
+    pub(crate) proposal_files: Mutex<()>,
     /// Orders announcing a question or approval request against withdrawing
     /// it, so a withdrawn one is never announced afterwards.
     pub(crate) announcement_gate: Mutex<()>,
@@ -213,6 +216,7 @@ impl Manager {
             config: watch::channel(Arc::new(config)).0,
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
+            proposal_files: Mutex::new(()),
             announcement_gate: Mutex::new(()),
             item_waits: Default::default(),
             chat_waits: Default::default(),

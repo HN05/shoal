@@ -85,6 +85,7 @@ impl Manager {
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
+        let files = self.proposal_files.lock().await;
         self.keep_attachments(&workspace.id, &mut issue.body, &mut issue.attachments)
             .await?;
         let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
@@ -104,7 +105,7 @@ impl Manager {
             proposals::ISSUE,
             specification,
         );
-        self.record_proposal(workspace, request, proposals::propose_issue)
+        self.record_proposal(workspace, request, proposals::propose_issue, files)
             .await
     }
 
@@ -117,6 +118,7 @@ impl Manager {
         commit: String,
         proposer: Proposer,
     ) -> Result<Proposed> {
+        let files = self.proposal_files.lock().await;
         self.keep_attachments(&workspace.id, &mut pull.body, &mut pull.attachments)
             .await?;
         let specification = Specification::Pull(PullSpecification {
@@ -126,15 +128,16 @@ impl Manager {
             follow_up: None,
         });
         let request = proposal(workspace, Target::PrOpen, proposals::PR, specification);
-        self.record_proposal(workspace, request, proposals::propose_pull)
+        self.record_proposal(workspace, request, proposals::propose_pull, files)
             .await
     }
 
     /// Copy the files a proposal attaches into Shoal's state and point
     /// `body` at the copies. The directory is named by the proposal's
     /// content, files included, so proposing it again reuses the copies and
-    /// finds the same request, and copies never change. The caller holds the
-    /// PR gate, which pruning takes too.
+    /// finds the same request, and copies never change. The caller holds
+    /// `proposal_files` until the proposal is stored, since pruning takes it
+    /// too.
     async fn keep_attachments(
         &self,
         owner: &str,
@@ -157,13 +160,14 @@ impl Manager {
     /// [`Self::prune_proposal_files`] for the cleanup sweep, which also
     /// catches proposals removed with their workspace or repository.
     pub(crate) async fn sweep_proposal_files(&self) -> Result<()> {
-        let _gate = self.pr_gate.lock().await;
+        let _files = self.proposal_files.lock().await;
         self.remove_unattached_files().await
     }
 
     /// Delete copied files no pending proposal attaches any more. Failure
-    /// only logs. The caller holds the PR gate.
+    /// only logs.
     pub(crate) async fn prune_proposal_files(&self) {
+        let _files = self.proposal_files.lock().await;
         if let Err(error) = self.remove_unattached_files().await {
             crate::daemon::log::log!("proposal files not pruned: {error:#}");
         }
@@ -188,13 +192,17 @@ impl Manager {
     }
 
     /// Store the proposal with `record` and tell the user about a new one.
+    /// `files`, held since its files were copied, is released once it is
+    /// stored.
     async fn record_proposal(
         &self,
         workspace: &Workspace,
         request: ApprovalRequest,
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
+        files: tokio::sync::MutexGuard<'_, ()>,
     ) -> Result<Proposed> {
         let (request, new) = self.store_proposal(request, record).await?;
+        drop(files);
         self.prune_proposal_files().await;
         if new {
             self.notify_approval(&workspace.name, &request).await;
