@@ -433,7 +433,7 @@ pub struct Ready {
     pub undraft: Option<bool>,
 }
 
-/// Whether `shoal unready` returns PRs whose marks it withdraws to draft.
+/// Whether `shoal ready --undo` returns PRs whose marks it withdraws to draft.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Unready {

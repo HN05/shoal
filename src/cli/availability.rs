@@ -48,8 +48,6 @@ impl Need {
             ["attach"] => Self::Session,
             ["cd"] => Self::Directory,
             ["stop"] => Self::Running,
-            ["undone"] => Self::Done,
-            ["unready"] => Self::Marks,
             ["repo", "labels" | "capabilities" | "api"] => Self::Any,
             ["work", "setup"] => Self::Setup,
             ["work", "rename"] => Self::Ready,
@@ -76,6 +74,18 @@ impl Need {
             [group, ..] if *group == internal::GROUP => Self::Any,
             _ => return None,
         })
+    }
+
+    /// Flags that change the operation also change which workspaces it offers.
+    pub fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self> {
+        if matches.try_get_one::<bool>("undo").ok().flatten() == Some(&true) {
+            match path {
+                ["done"] => return Some(Self::Done),
+                ["ready"] => return Some(Self::Marks),
+                _ => {}
+            }
+        }
+        Self::of(path)
     }
 
     /// The need of the command at `path`; configured commands need a ready

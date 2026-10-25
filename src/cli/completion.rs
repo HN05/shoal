@@ -108,7 +108,7 @@ pub fn command() -> Command {
             }
             leaf = child;
         }
-        typed.need = Need::of(&path);
+        typed.need = Need::of_matches(&path, leaf);
         typed.workspace = value(leaf, "workspace").or_else(|| {
             leaf.try_get_many::<OsString>("")
                 .ok()

@@ -382,12 +382,18 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             timeout,
             resume,
         } => links::watch(&ctx, items, timeout, resume).await,
-        Command::Ready { items } => links::ready(&ctx, items).await,
-        Command::Unready {
+        Command::Ready {
             items,
+            undo,
             draft,
             no_draft,
-        } => links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await,
+        } => {
+            if undo {
+                links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await
+            } else {
+                links::ready(&ctx, items).await
+            }
+        }
         Command::Split {
             branch,
             issue,
@@ -463,7 +469,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::Undone { workspace } => workspaces::undone(&ctx, workspace).await,
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }
@@ -516,7 +521,17 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 messages::show(&ctx, workspace).await
             }
         }
-        Command::Done { workspace, cleanup } => workspaces::done(&ctx, workspace, cleanup).await,
+        Command::Done {
+            workspace,
+            cleanup,
+            undo,
+        } => {
+            if undo {
+                workspaces::undone(&ctx, workspace).await
+            } else {
+                workspaces::done(&ctx, workspace, cleanup).await
+            }
+        }
         Command::Notifications {
             command: Some(NotificationsCommand::Clear),
             ..

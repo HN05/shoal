@@ -1741,8 +1741,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     // Workspaces without what the command acts on are left out.
     for args in [
         vec!["stop", ""],
-        vec!["undone", ""],
-        vec!["unready", "--workspace", ""],
+        vec!["done", "--undo", ""],
+        vec!["ready", "--undo", "--workspace", ""],
         vec!["release", "hold", "--workspace", ""],
         vec!["work", "base", "clear", "--workspace", ""],
     ] {
@@ -5563,7 +5563,7 @@ test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
 shoal done
 test "${PWD##*/}" = acknowledged
-shoal undone
+shoal done --undo
 rm untracked
 shoal done
 until ! shoal work inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
@@ -5581,7 +5581,7 @@ shoal add "$REPO" completed
 printf 'keep me' > untracked
 shoal done --cleanup
 test "${PWD##*/}" = completed
-shoal undone
+shoal done --undo
 rm untracked
 shoal done --cleanup
 until ! shoal work inspect completed >/dev/null 2>&1; do sleep 0.1; done
@@ -5930,7 +5930,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["work", "setup", "other"],
         vec!["link", "pr", "42", "assigned", "--workspace", "other"],
         vec!["unlink", "pr", "assigned", "--workspace", "other"],
-        vec!["undone", "other"],
+        vec!["done", "--undo", "other"],
         vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
         vec![
@@ -17205,7 +17205,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     for args in [
         &["ready", "--workspace", "other"][..],
         &["ready", "pr"],
-        &["unready", "pr", "12"],
+        &["ready", "--undo", "pr", "12"],
     ] {
         let output = scoped_command(&fixture, "reviewed", args);
         assert!(
@@ -17253,7 +17253,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         true
     );
 
-    let output = scoped_command(&fixture, "reviewed", &["unready"]);
+    let output = scoped_command(&fixture, "reviewed", &["ready", "--undo"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stdout)
@@ -20381,14 +20381,16 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         fixture.ok(&["work", "inspect", "issue-work"])["workspace"]["done"],
         true
     );
-    let undone = scoped(&fixture, &["undone"]);
+    let undone = scoped(&fixture, &["done", "--undo"]);
     assert_eq!(undone["withdrawn"]["cleanup"], true);
     let refused = fixture.run(&[
-        "exec",
+        "run",
+        "--workspace",
         "issue-work",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
-        "undone",
+        "done",
+        "--undo",
     ]);
     assert!(!refused.status.success());
     assert!(

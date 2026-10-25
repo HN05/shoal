@@ -284,16 +284,14 @@ pub enum Command {
     Ready {
         #[command(flatten)]
         items: ItemArgs,
-    },
-    /// Withdraw ready-for-review marks from all items, one kind, or a selected issue or PR.
-    Unready {
-        #[command(flatten)]
-        items: ItemArgs,
+        /// Withdraw ready-for-review marks from the selected items.
+        #[arg(long)]
+        undo: bool,
         /// Return the PRs whose marks are withdrawn to draft, overriding [unready] draft.
-        #[arg(long, overrides_with = "no_draft")]
+        #[arg(long, requires = "undo", overrides_with = "no_draft")]
         draft: bool,
         /// Leave the PRs' draft state unchanged, overriding [unready] draft.
-        #[arg(long, overrides_with = "draft")]
+        #[arg(long, requires = "undo", overrides_with = "draft")]
         no_draft: bool,
     },
     /// Restore stopped agent sessions and list interrupted commands.
@@ -372,11 +370,12 @@ pub enum Command {
     Done {
         workspace: Option<String>,
         /// Request cleanup even when [done] cleanup is false; preserve dirty or unpushed work.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "undo")]
         cleanup: bool,
+        /// Withdraw a recorded completion without keeping the workspace.
+        #[arg(long)]
+        undo: bool,
     },
-    /// Withdraw a recorded completion without keeping the workspace.
-    Undone { workspace: Option<String> },
     /// List what needs you: questions, approvals, agents needing input, failures and ready work.
     Inbox {
         /// List only this registered repository's items.
@@ -1205,14 +1204,15 @@ impl Cli {
             path.push(name.to_owned());
             leaf = child;
         }
+        let path: Vec<_> = path.iter().map(String::as_str).collect();
+        let need = availability::Need::of_matches(&path, leaf).unwrap_or(availability::Need::Ready);
         let mut cli = <Self as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
             .unwrap_or_else(|error| {
                 error
                     .format(&mut <Self as clap::CommandFactory>::command())
                     .exit()
             });
-        let path: Vec<_> = path.iter().map(String::as_str).collect();
-        cli.need = availability::Need::of_command(&path);
+        cli.need = need;
         cli
     }
 }
@@ -2243,16 +2243,33 @@ mod tests {
         ] {
             let command = Cli::try_parse_from(args).unwrap().command.unwrap();
             assert!(!command.is_administrative());
-            let Command::Done { cleanup, workspace } = command else {
+            let Command::Done {
+                cleanup,
+                workspace,
+                undo,
+            } = command
+            else {
                 panic!("wrong command");
             };
             assert_eq!(cleanup, expected);
+            assert!(!undo);
             assert!(workspace.is_none());
         }
         assert!(Cli::try_parse_from(["shoal", "done", "--keep"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--cleanup"]).is_err());
+        assert!(matches!(
+            Cli::try_parse_from(["shoal", "done", "--undo"])
+                .unwrap()
+                .command,
+            Some(Command::Done { undo: true, .. })
+        ));
+        for flag in ["--draft", "--no-draft"] {
+            assert!(Cli::try_parse_from(["shoal", "ready", flag]).is_err());
+            assert!(Cli::try_parse_from(["shoal", "ready", "--undo", flag]).is_ok());
+        }
         assert!(
             matches!(Cli::try_parse_from(["shoal", "done", "review", "--cleanup"]).unwrap().command,
-            Some(Command::Done { workspace: Some(name), cleanup: true }) if name == "review")
+            Some(Command::Done { workspace: Some(name), cleanup: true, undo: false }) if name == "review")
         );
     }
 

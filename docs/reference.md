@@ -414,7 +414,7 @@ rows span several, its status and the linked issue's title, cut with `…` to fi
 a terminal's width. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
-`needs input`, `finished` after `shoal done` until `shoal undone`, `ready`, the other [agent states](#agent-state),
+`needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 The header names the keys the list binds, most used first, on as many lines as
@@ -1868,7 +1868,7 @@ whether or not its agent ran `done`.
 cleanup = true    # Default: true
 ```
 
-`shoal undone [workspace]` withdraws a recorded completion and fails when none
+`shoal done --undo [workspace]` withdraws a recorded completion and fails when none
 is recorded; `--json` returns `{"withdrawn": <completion>}`. Scoped agents may mark only their own workspace or a child workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.
@@ -2349,10 +2349,10 @@ remain available. Previous PR registration and wait command spellings remain acc
 ### Ready for review
 
 ```sh
-shoal ready              # Mark every linked item, or the workspace when none are linked
-shoal ready pr 12        # Mark one linked PR; `ready issue` marks the linked issue
-shoal unready            # Withdraw all marks; select a kind or item like unlink
-shoal unready --draft    # Also return the PRs whose marks are withdrawn to draft
+shoal ready                   # Mark every linked item, or the workspace when none are linked
+shoal ready pr 12             # Mark one linked PR; `ready issue` marks the linked issue
+shoal ready --undo            # Withdraw all marks; select a kind or item like unlink
+shoal ready --undo --draft    # Also return the PRs whose marks are withdrawn to draft
 ```
 
 A mark says the agent considers the work for a linked issue or PR, or for the
@@ -2377,7 +2377,7 @@ the marks; every `shoal ready` runs it again.
 
 Before the hook, `shoal ready` takes each marked open PR that is a draft out of
 draft, as `shoal pr edit --no-draft` would; `[ready] undraft = false` keeps marks
-local. `shoal unready --draft`, or `[unready] draft = true`, returns the open PRs
+local. `shoal ready --undo --draft`, or `[unready] draft = true`, returns the open PRs
 whose marks it withdraws to draft first; `--no-draft` overrides that setting.
 A failed change reports the forge's error and exits non-zero, keeping the marks
 in both commands so either can be retried. Marks never change issues, and
@@ -2445,7 +2445,7 @@ first sweep that would remove the workspace, so its agent keeps running while yo
 decide to take the work back: idle, merged and PR cleanup, and cleanup after
 `shoal done`. A workspace that would not pass removal's checks, such as one with
 unsaved work after `done`, does not start it. `shoal status` shows when the grace
-period ends; a sweep that no longer removes the workspace, as after `undone`, a
+period ends; a sweep that no longer removes the workspace, as after `done --undo`, a
 new commit or new activity, ends it, and a later attempt starts a new one. The end
 time survives restarts, except that idle cleanup starts over with its timers. `shoal rm`, `shoal cleanup` and disk-space removal do not wait.
 
@@ -2657,7 +2657,7 @@ Scoped callers ask, list and withdraw only their own workspace's questions, or a
 child's with `--workspace`. An open question keeps the workspace from idle
 cleanup; removing the workspace deletes its questions. `shoal done` closes the
 workspace's open questions, and `withdraw` closes one of them: answers to a closed
-question are refused, waits on it fail, and `shoal undone` does not reopen it.
+question are refused, waits on it fail, and `shoal done --undo` does not reopen it.
 Withdrawing deletes the question's `question_asked` notification while it is
 unread, and otherwise raises `question_withdrawn`. A closed question keeps its
 number until the workspace goes.
@@ -2822,7 +2822,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 ### Scoped workspace commands
 
 PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
-`ready`, `unready` and `internal agent-state` are own-workspace scope exceptions.
+`ready` and `internal agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

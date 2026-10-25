@@ -163,7 +163,7 @@ shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
-shoal undone fix-login        # Withdraw a recorded done
+shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal branch                  # List branches removal kept for unpushed commits
 shoal branch rm               # Pick kept branches to delete with their commits

@@ -528,7 +528,8 @@ Root help groups built-in commands by task; workspace maintenance lives under
 `work`, repository administration under `repo`, PR checks under `pr ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
-workspace in either form.
+workspace in either form. `done --undo` withdraws completion and `ready --undo`
+withdraws review marks.
 Implicit question and approval decisions require stdin, stdout and stderr on a
 terminal, so redirected details cannot hide the decision being made.
 

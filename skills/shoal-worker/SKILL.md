@@ -121,7 +121,7 @@ current head, after you have read its log and fixed or reported the cause, and
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
 can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
 your questions is open, so ask with `shoal ask` when you need the user before the
-workspace goes. `shoal done` closes your open questions, and `shoal undone` does
+workspace goes. `shoal done` closes your open questions, and `shoal done --undo` does
 not reopen them. Holds belong to the user and host apps; you can list them with
 `shoal leases hold` but not acquire or release them. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
@@ -134,7 +134,7 @@ conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[ready] undraft = false`. When something new needs fixing, run
-`shoal unready` before fixing it (`--draft` also returns the PR to draft), and
+`shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
 finishing, run `shoal notify "<one-line message>"`; if it stops applying before
 the user reads it, withdraw it with
@@ -142,7 +142,7 @@ the user reads it, withdraw it with
 affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
 Questions).
 
-`shoal undone` withdraws a `shoal done` you ran too early. When the user gives
+`shoal done --undo` withdraws a `shoal done` you ran too early. When the user gives
 you more work during the grace period, run it before starting. It does not keep
 the workspace.
 
