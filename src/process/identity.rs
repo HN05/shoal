@@ -133,7 +133,26 @@ pub struct OwnedProcess {
 #[derive(Default)]
 pub struct Scan {
     pub processes: Vec<OwnedProcess>,
-    pub unreadable: Vec<Identity>,
+    pub unreadable: Vec<Unattributed>,
+}
+
+/// A live process no environment or ancestor attributes.
+#[derive(Debug, Clone)]
+pub struct Unattributed {
+    pub identity: Identity,
+    /// The oldest process of its unattributed ancestry, possibly exited; no
+    /// execution started after it owns any of them.
+    pub head: Identity,
+}
+
+#[cfg(test)]
+impl Unattributed {
+    pub fn alone(identity: Identity) -> Self {
+        Self {
+            head: identity.clone(),
+            identity,
+        }
+    }
 }
 
 /// Live same-user processes carrying one of the execution markers `ids`.
@@ -280,9 +299,10 @@ impl Inventory {
                         identity: process.identity.clone(),
                     });
                 }
-                Attribution::Unknown(head) if !scan.unreadable.contains(&head) => {
-                    scan.unreadable.push(head);
-                }
+                Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
+                    identity: process.identity.clone(),
+                    head,
+                }),
                 _ => {}
             }
         }
@@ -1093,7 +1113,8 @@ mod tests {
         ) && hides_environment(pid);
         let scan = scan(HashSet::from(["unrelated-execution".into()])).await;
         signal(&job, libc::SIGKILL)?;
-        assert_eq!(scan?.unreadable.contains(&job), hidden);
+        let unreadable = scan?.unreadable.iter().any(|u| u.identity == job);
+        assert_eq!(unreadable, hidden);
         Ok(())
     }
 
@@ -1228,7 +1249,7 @@ mod tests {
         let scan = scan(HashSet::from(["unrelated-execution".into()]))
             .await
             .unwrap();
-        assert!(!scan.unreadable.contains(&identity));
+        assert!(scan.unreadable.iter().all(|u| u.identity != identity));
         assert!(scan.processes.iter().all(|p| p.identity != identity));
         child.kill().await.unwrap();
         child.wait().await.unwrap();

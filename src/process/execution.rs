@@ -37,14 +37,15 @@ impl Processes {
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();
         let mut unreadable = Vec::new();
-        for identity in &scan.unreadable {
+        for process in &scan.unreadable {
             if execution
                 .wrapper
                 .as_ref()
-                .is_none_or(|w| identity.not_older_than(w))
-                && process::alive(identity)?
+                .is_none_or(|w| process.head.not_older_than(w))
+                && !owned.contains(&process.identity)
+                && process::alive(&process.identity)?
             {
-                unreadable.push(identity.clone());
+                unreadable.push(process.identity.clone());
             }
         }
         Ok(Self {
@@ -142,7 +143,7 @@ mod tests {
             group_id: Some(identity.pid),
         };
         let scan = process::Scan {
-            unreadable: vec![identity],
+            unreadable: vec![process::Unattributed::alone(identity)],
             ..Default::default()
         };
         let live = Processes::inspect(&execution, &scan).await.unwrap();
@@ -158,5 +159,44 @@ mod tests {
         assert!(exited.unreadable.is_empty());
         assert!(exited.visibility_complete());
         assert!(exited.completion_issue().is_none());
+    }
+
+    #[tokio::test]
+    async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_older()
+    -> anyhow::Result<()> {
+        use anyhow::Context;
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("60")
+            .kill_on_drop(true)
+            .spawn()?;
+        let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
+        let execution = Execution {
+            id: "test-execution".into(),
+            workspace_id: "test-workspace".into(),
+            state: crate::state::ExecutionState::Running,
+            wrapper: Some(identity.clone()),
+            child: None,
+            group_id: None,
+        };
+        let (prefix, _) = identity.birth.rsplit_once(':').context("birth")?;
+        let head = |birth: String| process::Identity {
+            pid: u32::MAX >> 1,
+            birth,
+            unique: None,
+        };
+        let scan = |head| process::Scan {
+            unreadable: vec![process::Unattributed {
+                identity: identity.clone(),
+                head,
+            }],
+            ..Default::default()
+        };
+        let exited_head = Processes::inspect(&execution, &scan(head(identity.birth.clone()))).await;
+        let older_head = Processes::inspect(&execution, &scan(head(format!("{prefix}:0")))).await;
+        child.kill().await?;
+        child.wait().await?;
+        assert_eq!(exited_head?.unreadable, std::slice::from_ref(&identity));
+        assert!(older_head?.unreadable.is_empty());
+        Ok(())
     }
 }

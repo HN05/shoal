@@ -246,7 +246,9 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
             .unwrap()
             .unwrap();
         let scan = || crate::process::identity::Scan {
-            unreadable: vec![identity.clone()],
+            unreadable: vec![crate::process::identity::Unattributed::alone(
+                identity.clone(),
+            )],
             ..Default::default()
         };
         assert!(
