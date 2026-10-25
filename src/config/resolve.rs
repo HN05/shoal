@@ -25,6 +25,12 @@ pub struct Effective {
     /// Each AI tool's launcher arguments, machine config like `providers`.
     #[serde(skip)]
     pub arguments: BTreeMap<String, crate::ai::Arguments>,
+    /// The tool each launch profile runs with the integration of.
+    #[serde(skip)]
+    pub integrations: BTreeMap<String, String>,
+    /// What each AI tool's tracked launches change in their environment.
+    #[serde(skip)]
+    pub environments: BTreeMap<String, crate::ai::Environment>,
     pub agent_resume: named_commands::Commands,
     pub worker_template: Option<String>,
     pub chat_template: Option<String>,
@@ -204,6 +210,8 @@ impl Effective {
             commands: merged.commands,
             providers: Default::default(),
             arguments: Default::default(),
+            integrations: Default::default(),
+            environments: Default::default(),
             agent_resume: merged.agent_resume,
             worker_template: merged.worker_template,
             chat_template: merged.chat_template,

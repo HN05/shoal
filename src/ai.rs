@@ -28,6 +28,41 @@ pub struct Agent {
     pub resume: Option<Vec<String>>,
     /// Arguments that resume the workspace's latest session.
     pub resume_latest: Option<Vec<String>>,
+    /// The AI tool this one is a launch profile of: it inherits that tool's
+    /// integration, launcher and arguments, each replaced by its own.
+    pub base: Option<String>,
+    /// Variables set for the tool's tracked launches, after the workspace's
+    /// `[env]`; a value starting with `~/` names a path under the home.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// Variables removed from the tool's tracked launches, whether inherited
+    /// or set by `[env]`.
+    #[serde(default)]
+    pub env_remove: Vec<String>,
+}
+
+/// What an AI tool's tracked launches change in the environment they would
+/// otherwise run with: values as written, and the variables they remove.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Environment {
+    set: BTreeMap<String, String>,
+    pub remove: BTreeSet<String>,
+}
+
+impl Environment {
+    /// The values set, with a leading `~/` naming a path under `home`.
+    pub fn values(&self, home: &Path) -> BTreeMap<String, OsString> {
+        self.set
+            .iter()
+            .map(|(variable, value)| {
+                let value = match value.strip_prefix("~/") {
+                    Some(relative) => home.join(relative).into_os_string(),
+                    None => value.into(),
+                };
+                (variable.clone(), value)
+            })
+            .collect()
+    }
 }
 
 /// What a provider's launcher takes after its command, from `[ai.<name>]`,
@@ -126,13 +161,84 @@ pub fn commands(agents: &Agents) -> impl Iterator<Item = (String, Vec<String>)> 
 }
 
 /// Every AI tool that runs as an agent: built-in, or configured with a
-/// launcher. A tool with only a skill directory is not one.
+/// launcher or a base. A tool with only a skill directory is not one.
 pub fn providers(agents: &Agents) -> BTreeSet<String> {
     PROVIDERS
         .iter()
         .map(|provider| provider.name.to_owned())
-        .chain(commands(agents).map(|(name, _)| name))
+        .chain(
+            agents
+                .iter()
+                .filter(|(_, agent)| agent.command.is_some() || agent.base.is_some())
+                .map(|(name, _)| name.clone()),
+        )
         .collect()
+}
+
+/// `name` and the tools it is a launch profile of, nearest first.
+/// Validation rejects cycles; the bound keeps an unvalidated one finite.
+fn lineage<'a>(agents: &'a Agents, name: &'a str) -> impl Iterator<Item = &'a str> {
+    std::iter::successors(Some(name), |name| agents.get(*name)?.base.as_deref())
+        .take(agents.len() + 1)
+}
+
+/// The tool whose integration `name` runs with: the end of its lineage.
+pub fn integration<'a>(agents: &'a Agents, name: &'a str) -> &'a str {
+    lineage(agents, name).last().unwrap_or(name)
+}
+
+/// The tool each launch profile runs with the integration of.
+pub fn integrations(agents: &Agents) -> BTreeMap<String, String> {
+    agents
+        .iter()
+        .filter(|(_, agent)| agent.base.is_some())
+        .map(|(name, _)| (name.clone(), integration(agents, name).to_owned()))
+        .collect()
+}
+
+/// Give each launch profile without a launcher of its own in `commands` the
+/// nearest one of its lineage there, so it follows whatever layer set it.
+pub fn inherit_launchers(agents: &Agents, commands: &mut Commands) {
+    for name in agents.keys() {
+        if commands.contains_key(name) {
+            continue;
+        }
+        let inherited = lineage(agents, name)
+            .skip(1)
+            .find_map(|base| commands.get(base))
+            .cloned();
+        if let Some(argv) = inherited {
+            commands.insert(name.clone(), argv);
+        }
+    }
+}
+
+/// The environment changes of every tool configured with any. A profile's
+/// own entries win over its base's.
+pub fn environments(agents: &Agents) -> BTreeMap<String, Environment> {
+    agents
+        .keys()
+        .map(|name| (name.clone(), environment(agents, name)))
+        .filter(|(_, environment)| *environment != Environment::default())
+        .collect()
+}
+
+fn environment(agents: &Agents, name: &str) -> Environment {
+    let lineage: Vec<_> = lineage(agents, name)
+        .filter_map(|name| agents.get(name))
+        .collect();
+    let mut environment = Environment::default();
+    for agent in lineage.into_iter().rev() {
+        for variable in &agent.env_remove {
+            environment.set.remove(variable);
+            environment.remove.insert(variable.clone());
+        }
+        for (variable, value) in &agent.env {
+            environment.remove.remove(variable);
+            environment.set.insert(variable.clone(), value.clone());
+        }
+    }
+    environment
 }
 
 /// The launcher arguments of every built-in or configured AI tool.
@@ -145,26 +251,29 @@ pub fn all_arguments(agents: &Agents) -> BTreeMap<String, Arguments> {
         .collect()
 }
 
-/// The arguments `name`'s launcher takes: each configured entry, else the
-/// built-in provider's.
+/// The arguments `name`'s launcher takes: each entry configured nearest in
+/// its lineage, else the built-in provider's at its end.
 pub fn arguments(agents: &Agents, name: &str) -> Arguments {
-    let builtin = PROVIDERS.iter().find(|provider| provider.name == name);
-    let configured = agents.get(name);
+    let root = integration(agents, name);
+    let builtin = PROVIDERS.iter().find(|provider| provider.name == root);
     let owned = |argv: &[&str]| argv.iter().map(|arg| arg.to_string()).collect();
-    let pick = |configured: Option<&Vec<String>>, builtin: Option<&[&str]>| {
-        configured.cloned().or_else(|| builtin.map(owned))
+    let pick = |configured: fn(&Agent) -> Option<&Vec<String>>, builtin: Option<&[&str]>| {
+        lineage(agents, name)
+            .find_map(|name| agents.get(name).and_then(configured))
+            .cloned()
+            .or_else(|| builtin.map(owned))
     };
     Arguments {
         instructions: pick(
-            configured.and_then(|agent| agent.instructions.as_ref()),
+            |agent| agent.instructions.as_ref(),
             builtin.and_then(|provider| provider.instructions),
         ),
         resume: pick(
-            configured.and_then(|agent| agent.resume.as_ref()),
+            |agent| agent.resume.as_ref(),
             builtin.and_then(|provider| provider.resume),
         ),
         resume_latest: pick(
-            configured.and_then(|agent| agent.resume_latest.as_ref()),
+            |agent| agent.resume_latest.as_ref(),
             builtin.and_then(|provider| provider.resume_latest),
         ),
     }
@@ -213,29 +322,47 @@ fn substitute(template: &[String], fields: &[(&str, &str)]) -> Vec<OsString> {
 }
 
 /// Each provider's user-level skill directory; `None` when it has none.
+/// A tool's own or nearest inherited `skill_dir`, else the directory of the
+/// built-in provider its lineage ends at, in the tool's environment.
 pub fn skill_dirs(agents: &Agents, home: &Path) -> Result<BTreeMap<String, Option<PathBuf>>> {
+    let names = PROVIDERS
+        .iter()
+        .map(|provider| provider.name)
+        .chain(agents.keys().map(String::as_str));
     let mut directories = BTreeMap::new();
-    for provider in PROVIDERS {
-        let directory = match provider.skill_dir {
-            SkillDir::Claude => crate::env::claude_config_dir()?
-                .unwrap_or_else(|| home.join(".claude"))
-                .join("skills"),
-            SkillDir::Home(relative) => home.join(relative),
-        };
-        directories.insert(provider.name.to_owned(), Some(directory));
-    }
-    for (name, agent) in agents {
-        let configured = agent
-            .skill_dir
-            .as_ref()
+    for name in names {
+        let configured = lineage(agents, name)
+            .find_map(|name| agents.get(name)?.skill_dir.as_ref())
             .map(|directory| skill_dir(directory, home))
             .transpose()?;
-        let entry = directories.entry(name.clone()).or_default();
-        if configured.is_some() {
-            *entry = configured;
-        }
+        let directory = match configured {
+            Some(directory) => Some(directory),
+            None => PROVIDERS
+                .iter()
+                .find(|provider| provider.name == integration(agents, name))
+                .map(|provider| {
+                    provider_skill_dir(provider, &environment(agents, name).values(home), home)
+                })
+                .transpose()?,
+        };
+        directories.insert(name.to_owned(), directory);
     }
     Ok(directories)
+}
+
+/// `provider`'s skill directory for a launch that adds `configured` to this
+/// process's environment.
+fn provider_skill_dir(
+    provider: &Provider,
+    configured: &BTreeMap<String, OsString>,
+    home: &Path,
+) -> Result<PathBuf> {
+    Ok(match provider.skill_dir {
+        SkillDir::Claude => crate::env::claude_config_dir_with(configured)?
+            .unwrap_or_else(|| home.join(".claude"))
+            .join("skills"),
+        SkillDir::Home(relative) => home.join(relative),
+    })
 }
 
 /// `commands` is the same file's `[commands]`, which must not define a
@@ -253,6 +380,11 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
         if let Some(argv) = &agent.command {
             validate_command(name, argv, commands).with_context(|| format!("ai.{name}.command"))?;
         }
+        if let Some(base) = &agent.base {
+            validate_launcher_name(name, commands).with_context(|| format!("ai.{name}"))?;
+            validate_base(agents, name, base).with_context(|| format!("ai.{name}.base"))?;
+        }
+        validate_environment(agents, name, agent).with_context(|| format!("ai.{name}"))?;
         for (key, argv, placeholders) in [
             (
                 "instructions",
@@ -272,6 +404,12 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
 }
 
 fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<()> {
+    validate_launcher_name(name, commands)?;
+    named_commands::validate(&Commands::from([(name.to_owned(), argv.to_vec())]))
+}
+
+/// A tool that runs as `shoal <name>` needs a name that reaches it.
+fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),
         "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_'"
@@ -285,7 +423,61 @@ fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<
         !commands.contains_key(name),
         "{name:?} is also defined in [commands]; keep one launcher"
     );
-    named_commands::validate(&Commands::from([(name.to_owned(), argv.to_vec())]))
+    Ok(())
+}
+
+/// A base is another AI tool that runs as an agent, and following bases
+/// from `name` ends at one without.
+fn validate_base(agents: &Agents, name: &str, base: &str) -> Result<()> {
+    ensure!(
+        providers(agents).contains(base),
+        "{base:?} is not a built-in AI tool or one configured with a command or base"
+    );
+    let mut seen = BTreeSet::from([name]);
+    let mut next = Some(base);
+    while let Some(tool) = next {
+        ensure!(
+            seen.insert(tool),
+            "bases of {name:?} form a cycle through {tool:?}"
+        );
+        next = agents.get(tool).and_then(|agent| agent.base.as_deref());
+    }
+    Ok(())
+}
+
+/// Variables follow `[env]`'s naming rules. Shoal reads where an agent keeps
+/// its config from the variables it sets, so those can be set, not removed.
+fn validate_environment(agents: &Agents, name: &str, agent: &Agent) -> Result<()> {
+    if agent.env.is_empty() && agent.env_remove.is_empty() {
+        return Ok(());
+    }
+    ensure!(
+        providers(agents).contains(name),
+        "env and env_remove need a command or base, or a built-in AI tool"
+    );
+    for (variable, value) in &agent.env {
+        crate::env::validate_configured_name("env", variable)?;
+        ensure!(
+            !value.contains('\0'),
+            "env value for {variable} contains NUL"
+        );
+    }
+    for variable in &agent.env_remove {
+        crate::env::validate_configured_name("env_remove", variable)?;
+        ensure!(
+            !crate::env::AGENT_CONFIG_VARIABLES.contains(&variable.as_str()),
+            "env_remove cannot remove {variable}; set it in env to the directory instead"
+        );
+    }
+    for variable in crate::env::AGENT_CONFIG_VARIABLES {
+        if let Some(directory) = agent.env.get(variable) {
+            ensure!(
+                directory.starts_with('/') || directory.starts_with("~/"),
+                "env {variable} must be an absolute path or start with ~/"
+            );
+        }
+    }
+    Ok(())
 }
 
 /// The names of Shoal's own subcommands. Building the CLI to read them
@@ -457,5 +649,118 @@ mod tests {
         }
         // Built-in providers may replace their launcher here as in [commands].
         parse("[ai.codex]\ncommand = ['codex']\n").unwrap();
+    }
+
+    #[test]
+    fn launch_profiles_inherit_along_their_bases() {
+        let agents = parse(
+            "[ai.claude-direct]\nbase = 'claude'\nresume = ['--resume={session}']\n\
+             env = { CLAUDE_CONFIG_DIR = '~/.claude-direct', MODE = 'direct' }\n\
+             env_remove = ['ANTHROPIC_BASE_URL', 'MODE_OLD']\n\
+             [ai.claude-fast]\nbase = 'claude-direct'\nenv = { MODE_OLD = 'kept' }\n\
+             env_remove = ['MODE']\n",
+        )
+        .unwrap();
+        assert!(providers(&agents).contains("claude-fast"));
+        assert_eq!(integration(&agents, "claude-fast"), "claude");
+        assert_eq!(
+            integrations(&agents),
+            BTreeMap::from([
+                ("claude-direct".to_owned(), "claude".to_owned()),
+                ("claude-fast".to_owned(), "claude".to_owned()),
+            ])
+        );
+        // The nearest entry wins, then the built-in provider's.
+        let fast = arguments(&agents, "claude-fast");
+        assert_eq!(
+            fast.resume_args(Some("s1")),
+            Some(vec!["--resume=s1".into()])
+        );
+        assert_eq!(fast.resume_args(None), Some(vec!["--continue".into()]));
+        assert_eq!(fast.instructions, arguments(&agents, "claude").instructions);
+        let environments = environments(&agents);
+        let fast = &environments["claude-fast"];
+        assert_eq!(
+            fast.values(Path::new("/home")),
+            BTreeMap::from([
+                (
+                    "CLAUDE_CONFIG_DIR".to_owned(),
+                    OsString::from("/home/.claude-direct")
+                ),
+                ("MODE_OLD".to_owned(), "kept".into()),
+            ])
+        );
+        assert_eq!(
+            fast.remove,
+            BTreeSet::from(["ANTHROPIC_BASE_URL".to_owned(), "MODE".to_owned()])
+        );
+        assert!(!environments.contains_key("claude"));
+        let directories = skill_dirs(&agents, Path::new("/home")).unwrap();
+        assert_eq!(
+            directories["claude-fast"],
+            Some("/home/.claude-direct/skills".into())
+        );
+    }
+
+    #[test]
+    fn launch_profiles_follow_the_launcher_in_effect() {
+        let agents = parse(
+            "[ai.droid]\ncommand = ['droid']\n\
+             [ai.droid-direct]\nbase = 'droid'\n\
+             [ai.claude-direct]\nbase = 'claude'\n\
+             [ai.claude-own]\nbase = 'claude'\ncommand = ['claude-own']\n",
+        )
+        .unwrap();
+        let mut commands = Commands::from([
+            ("claude".to_owned(), vec!["repo-claude".to_owned()]),
+            ("droid".to_owned(), vec!["droid".to_owned()]),
+            ("claude-own".to_owned(), vec!["claude-own".to_owned()]),
+        ]);
+        inherit_launchers(&agents, &mut commands);
+        assert_eq!(commands["claude-direct"], ["repo-claude"]);
+        assert_eq!(commands["droid-direct"], ["droid"]);
+        assert_eq!(commands["claude-own"], ["claude-own"]);
+    }
+
+    #[test]
+    fn launch_profiles_need_a_reachable_base_and_valid_variables() {
+        for (config, message) in [
+            ("[ai.direct]\nbase = 'missing'\n", "not a built-in AI tool"),
+            (
+                "[ai.notes]\nskill_dir = '/s'\n[ai.direct]\nbase = 'notes'\n",
+                "not a built-in AI tool",
+            ),
+            (
+                "[ai.one]\nbase = 'two'\n[ai.two]\nbase = 'one'\n",
+                "form a cycle",
+            ),
+            ("[ai.self]\nbase = 'self'\n", "form a cycle"),
+            ("[ai.work]\nbase = 'claude'\n", "built-in Shoal command"),
+            (
+                "[ai.direct]\nbase = 'claude'\n[commands]\ndirect = ['claude']\n",
+                "keep one launcher",
+            ),
+            (
+                "[ai.direct]\nbase = 'claude'\nenv = { 'bad-name' = 'x' }\n",
+                "invalid env",
+            ),
+            (
+                "[ai.direct]\nbase = 'claude'\nenv_remove = ['CLAUDE_CONFIG_DIR']\n",
+                "cannot remove CLAUDE_CONFIG_DIR",
+            ),
+            (
+                "[ai.direct]\nbase = 'claude'\nenv = { CODEX_HOME = 'relative' }\n",
+                "absolute path",
+            ),
+            (
+                "[ai.notes]\nenv = { MODE = 'x' }\n",
+                "need a command or base",
+            ),
+        ] {
+            let error = format!("{:#}", parse(config).unwrap_err());
+            assert!(error.contains(message), "{config}: {error}");
+        }
+        // Built-in tools take an environment of their own.
+        parse("[ai.claude]\nenv_remove = ['ANTHROPIC_BASE_URL']\n").unwrap();
     }
 }

@@ -178,13 +178,8 @@ pub fn render_configured_environment(
         .collect()
 }
 
-/// The configured Claude Code directory, if any; a relative override is an error.
-pub fn claude_config_dir() -> Result<Option<PathBuf>> {
-    absolute_dir_var(CLAUDE_CONFIG_DIR)
-}
-
-/// [`claude_config_dir`] of a process whose environment adds `configured`
-/// to this one's.
+/// The configured Claude Code directory, if any, of a process whose
+/// environment adds `configured` to this one's; a relative override is an error.
 pub fn claude_config_dir_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
     absolute_dir(
         CLAUDE_CONFIG_DIR,
@@ -203,10 +198,6 @@ fn configured_var(configured: &BTreeMap<String, OsString>, name: &str) -> Option
         .get(name)
         .cloned()
         .or_else(|| std::env::var_os(name))
-}
-
-fn absolute_dir_var(name: &str) -> Result<Option<PathBuf>> {
-    absolute_dir(name, std::env::var_os(name))
 }
 
 fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> {

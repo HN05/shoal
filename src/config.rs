@@ -706,6 +706,9 @@ impl Config {
         let mut effective = resolve::Stack::new(self, layers).resolve()?;
         effective.providers = crate::ai::providers(&self.ai);
         effective.arguments = crate::ai::all_arguments(&self.ai);
+        effective.integrations = crate::ai::integrations(&self.ai);
+        effective.environments = crate::ai::environments(&self.ai);
+        crate::ai::inherit_launchers(&self.ai, &mut effective.commands);
         Ok(effective)
     }
 }
