@@ -312,3 +312,7 @@ menu, listing or message, shows examples of the new interface, recorded as the
 shoal-worker skill describes. The tape runs a development build against a
 temporary `--state-dir` and repository under `target/`; commit the tape and its
 output only when a document uses them.
+For a change to try rather than watch, offer `python3 scripts/demo.py` as a
+demo (`shoal demo start shoal -- python3 scripts/demo.py`): it runs a
+development build against sample workspaces, questions and approvals in a
+temporary state directory.
