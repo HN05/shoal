@@ -1495,7 +1495,7 @@ workspace. `shoal cleanup` is the one command for what Shoal left behind: the
 candidates of both rules, without their idle periods and including where they are
 disabled, kept branches, and shared caches. It lists them with nothing selected,
 since deleting a kept branch loses its commits, and removes what the user picks;
-naming a kind acts on it without the picker. It is unavailable to scoped callers. `repo rm`
+naming a kind acts on that kind alone. It is unavailable to scoped callers. `repo rm`
 deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.

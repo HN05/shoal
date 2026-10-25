@@ -2541,7 +2541,7 @@ workspace. Without a terminal, or with `--dry-run`, it stops there. On a termina
 a picker offers the workspaces, kept branches and caches nothing is using, with
 nothing selected; Tab selects several, and deleting kept branches asks first unless
 `--yes` is given. `shoal cleanup workspaces`, `branches` and `caches` act on one
-kind without the picker; named workspaces that stay are reported in `kept`, and
+kind alone, where only `branches` without names or `--all` opens a picker; named workspaces that stay are reported in `kept`, and
 any it retained in `retained`. `--repo` limits each kind to one repository.
 Removals record the `manual` event cause. Workspace processes cannot run it.
 
