@@ -23,7 +23,23 @@ pub struct Identity {
     /// The kernel's never-reused process ID where the platform reports one,
     /// so the process's descendants stay attributable after it exits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unique: Option<u64>,
+    pub unique: Option<UniqueId>,
+}
+
+/// Unique process IDs start over at each boot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UniqueId {
+    pub boot: String,
+    pub id: u64,
+}
+
+impl Identity {
+    /// The unique ID that live processes' parent links can name: one recorded
+    /// in this boot.
+    fn lineage_root(&self) -> Option<u64> {
+        let unique = self.unique.as_ref()?;
+        (Some(&unique.boot) == boot_session()).then_some(unique.id)
+    }
 }
 
 /// PID and birth name the process; records made before `unique` existed
@@ -41,6 +57,7 @@ impl Eq for Identity {}
 /// replaces its image.
 struct Lineage {
     identity: Identity,
+    unique: Option<u64>,
     parent: Option<u64>,
     /// Launchd adopted it when its parent exited, rather than starting it.
     adopted: bool,
@@ -425,6 +442,11 @@ fn hides_environment(_pid: u32) -> bool {
     false
 }
 
+#[cfg(target_os = "linux")]
+fn boot_session() -> Option<&'static String> {
+    None
+}
+
 #[cfg(target_os = "macos")]
 fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
     let Some(info) = bsd_info(pid)? else {
@@ -439,11 +461,40 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         identity: Identity {
             pid,
             birth: format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec),
-            unique: Some(info.unique.unique),
+            unique: boot_session().map(|boot| UniqueId {
+                boot: boot.clone(),
+                id: info.unique.unique,
+            }),
         },
+        unique: Some(info.unique.unique),
         parent: Some(info.unique.parent_unique),
         adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique),
     }))
+}
+
+/// This boot's session UUID, which names the boot unique process IDs belong to.
+#[cfg(target_os = "macos")]
+fn boot_session() -> Option<&'static String> {
+    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    BOOT.get_or_init(|| {
+        let mut bytes = [0_u8; 64];
+        let mut len = bytes.len();
+        let result = unsafe {
+            libc::sysctlbyname(
+                c"kern.bootsessionuuid".as_ptr(),
+                bytes.as_mut_ptr().cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if result != 0 {
+            return None;
+        }
+        let session = std::ffi::CStr::from_bytes_until_nul(bytes.get(..len)?).ok()?;
+        Some(session.to_string_lossy().into_owned())
+    })
+    .as_ref()
 }
 
 /// Exec resets an adopted process's parent unique ID to launchd's, but not
@@ -611,6 +662,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
             birth: format!("{}:{}", boot.trim(), fields[19]),
             unique: None,
         },
+        unique: None,
         parent: None,
         // Linux shows every environment, so nothing depends on how a process
         // came to init.
@@ -745,7 +797,7 @@ pub async fn related(
     if live && child.map(alive).transpose()?.unwrap_or(false) {
         return Ok((identities, vec![]));
     }
-    let Some(root) = child.and_then(|child| child.unique) else {
+    let Some(root) = child.and_then(Identity::lineage_root) else {
         return Ok((vec![], identities));
     };
     let lineage = descended_from(root, &rows)?;
@@ -817,11 +869,11 @@ fn descended_from(root: u64, rows: &[(u32, u32, u32)]) -> Result<Vec<Identity>> 
 /// A parent's unique ID is lower than its children's, since the kernel
 /// assigns them in order, so one pass in that order finds every descendant.
 fn lineage_descendants(root: u64, mut lineages: Vec<Lineage>) -> Vec<Identity> {
-    lineages.sort_by_key(|lineage| lineage.identity.unique);
+    lineages.sort_by_key(|lineage| lineage.unique);
     let mut ancestors = HashSet::from([root]);
     let mut found = Vec::new();
     for lineage in lineages {
-        let (Some(unique), Some(parent)) = (lineage.identity.unique, lineage.parent) else {
+        let (Some(unique), Some(parent)) = (lineage.unique, lineage.parent) else {
             continue;
         };
         if ancestors.contains(&parent) {
@@ -877,8 +929,9 @@ mod tests {
             identity: Identity {
                 pid,
                 birth: pid.to_string(),
-                unique: Some(unique),
+                unique: None,
             },
+            unique: Some(unique),
             parent: Some(parent),
             adopted: false,
         };
@@ -893,6 +946,24 @@ mod tests {
     }
 
     #[test]
+    fn a_unique_id_recorded_in_another_boot_roots_no_lineage() -> Result<()> {
+        let this = capture(std::process::id())?.context("identify this process")?;
+        assert_eq!(
+            this.lineage_root(),
+            this.unique.as_ref().map(|unique| unique.id)
+        );
+        let earlier = Identity {
+            unique: Some(UniqueId {
+                boot: "an earlier boot".into(),
+                id: 1,
+            }),
+            ..this
+        };
+        assert_eq!(earlier.lineage_root(), None);
+        Ok(())
+    }
+
+    #[test]
     fn identity_equality_ignores_a_missing_unique_id() {
         let recorded = Identity {
             pid: 7,
@@ -900,7 +971,10 @@ mod tests {
             unique: None,
         };
         let captured = Identity {
-            unique: Some(42),
+            unique: Some(UniqueId {
+                boot: "boot".into(),
+                id: 42,
+            }),
             ..recorded.clone()
         };
         assert_eq!(recorded, captured);
