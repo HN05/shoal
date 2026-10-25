@@ -29,6 +29,10 @@ use crate::{
     state::{AgentState, QueueKind},
 };
 
+mod several;
+
+pub use several::pick_many;
+
 fn require_interactive(ctx: &Context) -> Result<()> {
     ensure!(
         ctx.interactive(),
@@ -315,24 +319,6 @@ pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)])
         .get(index)
         .map(|(choice, _)| choice.clone())
         .context("picker returned an unknown choice")
-}
-
-/// Choose any number of entries, with Tab selecting each, returning their
-/// ids in list order.
-pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
-    let extra = [
-        "--multi".to_owned(),
-        "--header".to_owned(),
-        "Tab: select   Enter: confirm".to_owned(),
-    ];
-    let output = picker_output(ctx, prompt, &entries, &extra)?;
-    let ids: Vec<String> = output.lines().map(entry_id).collect();
-    ensure!(
-        ids.iter()
-            .all(|id| entries.iter().any(|entry| &entry.0 == id)),
-        "picker returned an unknown item"
-    );
-    Ok(ids)
 }
 
 /// A picker whose keys are bound per view, and which Tab can switch to

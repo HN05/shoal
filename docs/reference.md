@@ -1837,7 +1837,7 @@ is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
 ```sh
 shoal cleanup branches --dry-run              # List kept branches and their unpushed commits
-shoal cleanup branches                        # Pick kept branches to delete; Tab selects several
+shoal cleanup branches                        # Pick kept branches to delete; Tab selects several, Ctrl-A all
 shoal cleanup branches fix-login --yes        # Delete one kept branch and its unpushed commits
 shoal cleanup branches --all --repo project   # Delete every kept branch of a repository
 ```
