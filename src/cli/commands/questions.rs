@@ -232,14 +232,8 @@ fn answered(question: &Question) -> String {
 
 /// Read an answer or choice number while keeping the question on the prompt line.
 async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
-    print_answer_context(ctx, &question);
-    let prompt = format!(
-        "{} ({}) [{}]",
-        question.ask.question, question.id, question.ask.recommendation
-    );
-    let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
-    match response.trim() {
-        "" if response.is_empty() => {
+    match read_question_action(ctx, &question)? {
+        QuestionAction::Recommend => {
             submit_answer(
                 ctx,
                 Method::AcceptQuestionRecommendation {
@@ -249,9 +243,33 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
             )
             .await
         }
-        "/withdraw" => withdraw_shown(ctx, question.workspace_id.clone(), question).await,
+        QuestionAction::Withdraw => {
+            withdraw_shown(ctx, question.workspace_id.clone(), question).await
+        }
+        QuestionAction::Answer(response) => {
+            answer(ctx, question.id, response, Some(question)).await
+        }
+    }
+}
+
+enum QuestionAction {
+    Recommend,
+    Withdraw,
+    Answer(String),
+}
+
+fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAction> {
+    print_answer_context(ctx, question);
+    let prompt = format!(
+        "{} ({}) [{}]",
+        question.ask.question, question.id, question.ask.recommendation
+    );
+    let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
+    match response.trim() {
+        "" if response.is_empty() => Ok(QuestionAction::Recommend),
+        "/withdraw" => Ok(QuestionAction::Withdraw),
         "/cancel" => Err(ui::SelectionCanceled.into()),
-        _ => answer(ctx, question.id, response, Some(question)).await,
+        _ => Ok(QuestionAction::Answer(response)),
     }
 }
 
