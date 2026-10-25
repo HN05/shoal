@@ -10,7 +10,7 @@ use crate::{
         forge_hosts::ForgeHosts,
         notifications::NotificationKind,
         store,
-        workspace::Manager,
+        workspace::{Manager, pr_gate::PrGuard},
     },
     forge::{ForgeRepo, account::Account, items::link::ItemKind, review::status::PrStatus},
     git,
@@ -191,12 +191,12 @@ impl Manager {
     }
 
     pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        self.set_pr_gated(selector, action, WatchCheck::Lookup)
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        self.set_pr_gated(&workspace.id, action, WatchCheck::Lookup)
             .await
     }
 
-    /// [`Self::set_pr`] for a caller already holding `pr_gate`.
+    /// [`Self::set_pr`] for a caller already holding the workspace's PR gate.
     pub(crate) async fn set_pr_gated(
         &self,
         selector: &str,
@@ -314,18 +314,38 @@ impl Manager {
 
     /// Watches survive restarts. A failed lookup never counts as a merge and a
     /// failed removal keeps its registration and ownership records for retry.
+    /// Each workspace's PR gate, and those of the workspaces stacked on it,
+    /// are held only while that workspace is handled.
     pub async fn sweep_prs(&self) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        for workspace in self.list_workspaces().await? {
-            if workspace.state == crate::state::WorkspaceState::Ready {
+        for listed in self.list_workspaces().await? {
+            if let Some((workspace, _guard)) = self.lock_for_pr_sweep(&listed).await? {
                 self.sweep_workspace_prs(&workspace).await?;
             }
         }
         Ok(())
     }
 
+    /// The `listed` workspace, read again under its PR gate and those of the
+    /// workspaces stacked on it, while it is ready. One that had a workspace
+    /// stacked on it since the listing waits for the next sweep.
+    async fn lock_for_pr_sweep(&self, listed: &Workspace) -> Result<Option<(Workspace, PrGuard)>> {
+        let locked = |id: &str| listed.stacked_workspaces.iter().any(|held| held.id == id);
+        let stacked = listed.stacked_workspaces.iter().map(|stacked| &stacked.id);
+        let guard = self.pr_gates.lock(stacked.chain([&listed.id])).await;
+        let Some(workspace) = self.find_workspace(&listed.id).await? else {
+            return Ok(None);
+        };
+        let unchanged = workspace
+            .stacked_workspaces
+            .iter()
+            .all(|stacked| locked(&stacked.id));
+        let ready = workspace.state == crate::state::WorkspaceState::Ready;
+        Ok((ready && unchanged).then_some((workspace, guard)))
+    }
+
     /// Advance the workspace's stack and remove it once its watched PRs are
-    /// complete. The caller holds the PR gate.
+    /// complete. The caller holds its PR gate and those of the workspaces
+    /// stacked on it.
     async fn sweep_workspace_prs(&self, workspace: &Workspace) -> Result<()> {
         let mut registration = match self.pr_registration(&workspace.id).await {
             Ok(Some(registration)) => registration,

@@ -14,8 +14,7 @@ impl Manager {
         branch: &str,
         caller_execution: Option<&str>,
     ) -> Result<Workspace> {
-        let _completion = self.pr_gate.lock().await;
-        let initial = self.workspace(selector).await?;
+        let (initial, _completion) = self.lock_pr_gate(selector).await?;
         let (repo, _git) = self.lock_repository(&initial.repository_id).await?;
         let workspace = self.workspace(&initial.id).await?;
         let _resources = self

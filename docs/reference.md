@@ -1993,9 +1993,9 @@ It follows normal global and repository configuration precedence and receives th
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs even when cleanup retains the
 workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
-Lifecycle and permit changes are rejected while it runs. The hook holds the
-completion/PR gate, so it must not call Shoal commands that change completion or
-PR registrations, including in other workspaces. Each `done` runs it again; daemon
+Lifecycle and permit changes are rejected while it runs. The hook holds its
+workspace's completion/PR gate, so it must not call Shoal commands that change
+that workspace's completion or PR registrations. Each `done` runs it again; daemon
 restart does not replay it.
 
 `post_agent_exit_cmd` runs alongside agent-exit notifications, including configured

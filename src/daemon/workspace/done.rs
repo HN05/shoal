@@ -34,8 +34,7 @@ impl Manager {
     /// Withdraw a recorded completion; only holds and open questions keep the
     /// workspace.
     pub async fn undo_done(&self, selector: &str) -> Result<Completion> {
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let completion = self
             .store
@@ -63,14 +62,14 @@ impl Manager {
     /// `cleanup` requests cleanup even when `[done] cleanup` is false.
     pub async fn mark_done(&self, selector: &str, cleanup: bool) -> Result<Completion> {
         // Serialize cleanup choices with the PR and completion sweeps.
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
         self.record_done(&workspace, head, cleanup).await
     }
 
-    /// Caller holds the PR gate and has verified ownership and this HEAD.
+    /// Caller holds the workspace's PR gate and has verified ownership and
+    /// this HEAD.
     pub(crate) async fn record_done(
         &self,
         workspace: &Workspace,
@@ -193,9 +192,13 @@ impl Manager {
         Ok(true)
     }
 
+    /// Each workspace's PR gate is held only while that workspace is handled.
     pub async fn sweep_completed(&self) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        for workspace in self.list_workspaces().await? {
+        for listed in self.list_workspaces().await? {
+            let _guard = self.pr_gates.lock([&listed.id]).await;
+            let Some(workspace) = self.find_workspace(&listed.id).await? else {
+                continue;
+            };
             if workspace.state != WorkspaceState::Ready {
                 continue;
             }

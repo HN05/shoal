@@ -22,6 +22,7 @@ mod lifecycle;
 mod location;
 mod ownership;
 pub(crate) mod paths;
+pub(crate) mod pr_gate;
 mod registry;
 mod rename;
 mod repo_configuration;
@@ -111,7 +112,7 @@ pub struct Manager {
     /// Readers cover background operations, so a writer can quiesce them
     /// without cancelling hooks or mutations already in progress.
     pub(super) background_operations: Arc<RwLock<()>>,
-    pub(crate) pr_gate: Mutex<()>,
+    pub(crate) pr_gates: pr_gate::PrGates,
     /// Orders copying a proposal's files and storing it against pruning, so
     /// pruning never deletes the copies of a proposal not yet stored.
     pub(crate) proposal_files: Mutex<()>,
@@ -215,7 +216,7 @@ impl Manager {
         Ok(Arc::new(Self {
             config: watch::channel(Arc::new(config)).0,
             config_reload: Mutex::new(()),
-            pr_gate: Mutex::new(()),
+            pr_gates: Default::default(),
             proposal_files: Mutex::new(()),
             announcement_gate: Mutex::new(()),
             item_waits: Default::default(),

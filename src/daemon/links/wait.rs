@@ -23,7 +23,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{MergeCheck, Snapshot, Update},
     },
-    model::{ConflictCheck, Workspace},
+    model::{ConflictCheck, Workspace, WorkspaceRef},
     repository,
 };
 
@@ -203,18 +203,23 @@ impl Manager {
     /// What the workspace's agent has not received: its messages and the
     /// updates queued on its cursor, without waiting or polling the forge.
     /// Delivery replaces a running watch, which would otherwise deliver the
-    /// same updates again. Cleanup and item changes hold `pr_gate` across
-    /// forge requests and workspace removals, longer than an agent waits for
-    /// its hook, so while one runs the updates wait for a later delivery.
+    /// same updates again. Cleanup and item changes hold a workspace's PR
+    /// gate across its forge requests and its removal, longer than an agent
+    /// waits for its hook, so while one runs the updates wait for a later
+    /// delivery.
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.agent_messages(&workspace.id).await?;
         // The messages share the response with the updates.
         let reserved = serde_json::to_vec(&messages)?.len();
-        let updates = match self.pr_gate.try_lock() {
-            Ok(_gate) => self.gated_agent_updates(workspace, reserved).await?,
-            Err(_) => Vec::new(),
+        let children = self.delegated_workspaces(&workspace.id).await?;
+        let updates = match self.pr_gates.try_lock(receiving(&workspace.id, &children)) {
+            Some(_gate) => {
+                self.gated_agent_updates(workspace, &children, reserved)
+                    .await?
+            }
+            None => Vec::new(),
         };
         if !delivery.is_current() {
             return Ok(Updates::superseded());
@@ -235,19 +240,26 @@ impl Manager {
         workspace: Workspace,
         reserved: usize,
     ) -> Result<Vec<Update>> {
-        let _gate = self.pr_gate.lock().await;
-        self.gated_agent_updates(workspace, reserved).await
+        let children = self.delegated_workspaces(&workspace.id).await?;
+        let _gate = self
+            .pr_gates
+            .lock(receiving(&workspace.id, &children))
+            .await;
+        self.gated_agent_updates(workspace, &children, reserved)
+            .await
     }
 
-    /// [`Self::agent_queued_updates`] for a caller already holding `pr_gate`.
+    /// [`Self::agent_queued_updates`] for a caller already holding the PR
+    /// gates of the workspace and its `children`.
     async fn gated_agent_updates(
         &self,
         workspace: Workspace,
+        children: &[WorkspaceRef],
         reserved: usize,
     ) -> Result<Vec<Update>> {
         let id = workspace.id.clone();
         let mut batch = own_batch(&id, self.queued_updates(workspace).await?);
-        batch.extend(self.delegated_pending(&id, None).await?);
+        batch.extend(self.delegated_pending(children, None).await?);
         self.fit_response(batch, reserved).await
     }
 
@@ -256,7 +268,7 @@ impl Manager {
     /// a delivery are acknowledged together, so a delivery is cut only when
     /// it comes first and does not fit alone; its remainder then moves to a
     /// new delivery and stays pending once the sent part is acknowledged. The
-    /// caller holds `pr_gate`.
+    /// caller holds the PR gates of the workspaces in `batch`.
     async fn fit_response(&self, mut batch: Batch, reserved: usize) -> Result<Vec<Update>> {
         let limit = (crate::protocol::MAX_FRAME - 256).saturating_sub(reserved);
         match frame_cut(&batch, limit) {
@@ -273,12 +285,16 @@ impl Manager {
         Ok(batch.into_iter().map(|(_, update)| update).collect())
     }
 
-    /// The updates queued on the cursors of the child workspaces whose
-    /// activity `id`'s agent receives, for their items of `kind` or every
+    /// The updates queued on the cursors of `children`, child workspaces
+    /// whose activity an agent receives, for their items of `kind` or every
     /// kind, each naming its workspace.
-    async fn delegated_pending(&self, id: &str, kind: Option<ItemKind>) -> Result<Batch> {
+    async fn delegated_pending(
+        &self,
+        children: &[WorkspaceRef],
+        kind: Option<ItemKind>,
+    ) -> Result<Batch> {
         let mut updates = Vec::new();
-        for child in self.delegated_workspaces(id).await? {
+        for child in children {
             let child_id = child.id.clone();
             let keys = self
                 .store
@@ -365,7 +381,12 @@ impl Manager {
     }
 
     async fn poll_item_activity(&self, id: &str, selection: &Selection) -> Result<Vec<Update>> {
-        let guard = self.pr_gate.lock().await;
+        // A selected item is the workspace's own.
+        let children = match selection.input {
+            Some(_) => Vec::new(),
+            None => self.delegated_workspaces(id).await?,
+        };
+        let guard = self.pr_gates.lock(receiving(id, &children)).await;
         let workspace = self.workspace(id).await?;
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
@@ -374,9 +395,7 @@ impl Manager {
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
         let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
-        if selection.input.is_none() {
-            batch.extend(self.delegated_pending(id, selection.kind).await?);
-        }
+        batch.extend(self.delegated_pending(&children, selection.kind).await?);
         // A wait returns messages on their own, without updates.
         let mut pending = self.fit_response(batch, 0).await?;
         if !pending.is_empty() {
@@ -703,7 +722,7 @@ impl Manager {
         observed_at: u64,
     ) -> Result<Vec<Update>> {
         let selection = selection.clone();
-        let _guard = self.pr_gate.lock().await;
+        let _guard = self.pr_gates.lock([id]).await;
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store.run(move |db| {
@@ -805,7 +824,7 @@ impl Manager {
         deliveries: Vec<String>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        // Without `pr_gate`: an agent's hook acknowledges within its timeout.
+        // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending.
         let waits = self.item_waits.clone();
@@ -832,6 +851,12 @@ impl Manager {
     }
 }
 
+/// The IDs of workspace `id` and of `children`, whose activity its agent
+/// receives: the PR gates a delivery to that agent holds.
+fn receiving<'a>(id: &'a str, children: &'a [WorkspaceRef]) -> impl Iterator<Item = &'a str> {
+    children.iter().map(|child| child.id.as_str()).chain([id])
+}
+
 /// A change the workspace's agent made to `url` through Shoal, which its
 /// watches do not report back: the comment or reply it posted and the state
 /// it set.
@@ -841,8 +866,9 @@ pub(crate) struct OwnChange<'a> {
     pub state: Option<&'a str>,
 }
 
-/// Record `change` on the workspace's cursor. The caller holds `pr_gate` from
-/// before the change, so no poll that observed it can record it first.
+/// Record `change` on the workspace's cursor. The caller holds the workspace's
+/// PR gate from before the change, so no poll that observed it can record it
+/// first.
 pub(crate) fn record_own_change(
     db: &rusqlite::Connection,
     workspace_id: &str,
@@ -1597,7 +1623,7 @@ mod tests {
         let queued = manager.agent_updates(&workspace.id).await.unwrap();
         let delivery = queued.updates[0].delivery.clone();
         // Cleanup holds the gate across forge requests and removals.
-        let gate = manager.pr_gate.lock().await;
+        let gate = manager.pr_gates.lock([&workspace.id]).await;
         let delivered = manager.agent_updates(&workspace.id).await.unwrap();
         assert!(delivered.updates.is_empty());
         assert_eq!(delivered.messages[0].message, "Rebase onto main");
@@ -1608,6 +1634,48 @@ mod tests {
         drop(gate);
         let after = manager.agent_updates(&workspace.id).await.unwrap();
         assert!(after.updates.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let parent = manager
+            .create_workspace(&repo.id, "parent".into(), None, None, None)
+            .await
+            .unwrap();
+        let other = manager
+            .create_workspace(&repo.id, "other".into(), None, None, None)
+            .await
+            .unwrap();
+        let child = manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+            .unwrap();
+        register_watch(&manager, &child.id, "child-pr").await;
+        manager
+            .queue_background_updates(
+                &child.id,
+                vec![("child-pr".into(), snapshot("first"))],
+                crate::time::unix_seconds(),
+            )
+            .await
+            .unwrap();
+        let unrelated = manager.pr_gates.lock([&other.id]).await;
+        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        assert_eq!(delivered.updates.len(), 1);
+        assert_eq!(delivered.updates[0].workspace.as_deref(), Some("child"));
+        drop(unrelated);
+        // The parent's agent receives the child's updates, so delivery waits
+        // for work on the child.
+        let read = manager.pr_gates.lock([&child.id]).await;
+        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        assert!(delivered.updates.is_empty());
+        drop(read);
     }
 
     #[tokio::test]

@@ -221,9 +221,10 @@ impl Manager {
         decision: ProposalDecision,
     ) -> Result<ApprovalRequest> {
         decision.validate(&request.target, approve)?;
-        // Cleanup holds the gate, so it cannot remove the workspace between
-        // opening the item and linking it, and two decisions cannot both open it.
-        let _gate = self.pr_gate.lock().await;
+        // Cleanup holds the workspace's gate, so it cannot remove the
+        // workspace between opening the item and linking it, and two
+        // decisions cannot both open it. The gate outlives the workspace.
+        let _gate = self.pr_gates.lock([&request.workspace_id]).await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
         let (request, message) = if approve {

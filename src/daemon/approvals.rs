@@ -813,14 +813,15 @@ impl Manager {
     /// shown, its decider is told instead.
     pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
         let workspace = self.workspace(selector).await?;
+        let workspace_id = workspace.id.clone();
         let selected = self
             .store
             .run(move |db| own_request(db, &workspace, id))
             .await?;
-        // Deciding a proposal opens its item under this gate before
-        // forgetting the request, which withdrawal must not split.
+        // Deciding a proposal opens its item under the workspace's gate
+        // before forgetting the request, which withdrawal must not split.
         let _decision = match selected.target.is_proposal() {
-            true => Some(self.pr_gate.lock().await),
+            true => Some(self.pr_gates.lock([workspace_id]).await),
             false => None,
         };
         let _announcement = self.announcement_gate.lock().await;

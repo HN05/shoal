@@ -22,10 +22,21 @@ impl Manager {
         selector: &str,
         base: Option<String>,
     ) -> Result<Workspace> {
-        // The PR sweep restacks under this gate, so a change cannot land
-        // between its retarget and its recorded move.
-        let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
+        let repository_id = workspace.repository_id.clone();
+        let base = match base {
+            Some(base) => Some(
+                self.store
+                    .run(move |db| base_workspace(db, &repository_id, &base))
+                    .await?,
+            ),
+            None => None,
+        };
+        // The PR sweep restacks under the gates of a base and the workspaces
+        // stacked on it, so a change cannot land between its retarget and its
+        // recorded move, nor stack a workspace on a base it is removing.
+        let _gate = self.pr_gates.lock(base.iter().chain([&workspace.id])).await;
+        let workspace = self.workspace(&workspace.id).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id);
         self.store
             .run(move |db| {

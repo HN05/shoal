@@ -530,8 +530,8 @@ impl Manager {
         snapshot: Snapshot,
         cause: EventCause,
     ) -> Result<bool> {
-        let _guard = self.pr_gate.lock().await;
-        self.remove_after_grace(selector, Removal::Automatic { snapshot, cause })
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        self.remove_after_grace(&workspace.id, Removal::Automatic { snapshot, cause })
             .await
     }
 

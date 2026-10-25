@@ -58,7 +58,7 @@ impl Manager {
         };
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
-        let _gate = self.pr_gate.lock().await;
+        let _gate = self.pr_gates.lock([&workspace.id]).await;
         let target = Target { kind, number, url };
         self.apply_own(&workspace.id, &forge, &account, target, &action)
             .await
@@ -66,7 +66,7 @@ impl Manager {
 
     /// Move the workspace's open PRs at `urls` into or out of draft as its
     /// agent account, leaving those already in that state unchanged. The
-    /// caller holds the PR gate.
+    /// caller holds the workspace's PR gate.
     pub(crate) async fn set_draft(
         &self,
         workspace: &Workspace,
@@ -142,7 +142,8 @@ impl Manager {
     }
 
     /// Apply `action` and record it as the workspace's own change, as well as
-    /// a comment it posted before failing. The caller holds the PR gate.
+    /// a comment it posted before failing. The caller holds the workspace's
+    /// PR gate.
     pub(super) async fn apply_own(
         &self,
         id: &str,
@@ -298,10 +299,9 @@ impl Manager {
         proposer: Option<Proposer>,
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
-        // Cleanup holds the gate, so it cannot remove the workspace between
-        // opening the issue and linking it.
-        let _gate = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        // Cleanup holds the workspace's gate, so it cannot remove the
+        // workspace between opening the issue and linking it.
+        let (workspace, _gate) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         // Refuse before creating anything that could not then be recorded
         // or linked.
@@ -427,10 +427,9 @@ impl Manager {
         options: PullOptions,
         proposer: Option<Proposer>,
     ) -> Result<OpenOutcome> {
-        // Cleanup holds the gate, so it cannot remove the workspace between
-        // opening the PR and linking it.
-        let _gate = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        // Cleanup holds the workspace's gate, so it cannot remove the
+        // workspace between opening the PR and linking it.
+        let (workspace, _gate) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = super::pr::current_head(&workspace).await?;
         anyhow::ensure!(

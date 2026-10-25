@@ -307,6 +307,61 @@ async fn completion_rechecks_work_after_removal_hooks() {
 }
 
 #[tokio::test]
+async fn a_removal_holds_only_its_own_workspaces_gate() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, manager, workspace) = fixture().await;
+    let other = manager
+        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let (started, release) = (root.path().join("started"), root.path().join("release"));
+    let hook = root.path().join("wait-for-release");
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
+            started.display(),
+            release.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+        )
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, true).await.unwrap();
+    let sweep = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.sweep_completed().await }
+    });
+    bounded(async {
+        while !started.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(manager.pr_gates.try_lock([&workspace.id]).is_none());
+    // Another workspace's commands do not wait for the removal.
+    bounded(manager.mark_done(&other.id, false)).await.unwrap();
+    bounded(manager.undo_done(&other.id)).await.unwrap();
+    assert!(!sweep.is_finished());
+    fs::write(&release, "").unwrap();
+    bounded(sweep).await.unwrap().unwrap();
+    assert!(!workspace.path.exists());
+    assert!(other.path.exists());
+}
+
+async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
+    tokio::time::timeout(std::time::Duration::from_secs(60), future)
+        .await
+        .expect("operation timed out")
+}
+
+#[tokio::test]
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
     manager.mark_done(&workspace.id, true).await.unwrap();

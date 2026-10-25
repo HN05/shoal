@@ -62,8 +62,16 @@ impl Manager {
         }
         let (forge, _, _) = self.pr_forge(base, url).await?;
         let target = forge.pull_request(&self.user_account(), url).await?.base;
-        // Reload: this sweep may already have removed or moved some of them.
-        for stacked in self.workspace(&base.id).await?.stacked_workspaces {
+        // Reload: they may have moved since. The caller holds the PR gates of
+        // those stacked when it read `base`, so one stacked since waits.
+        let stacked = self.workspace(&base.id).await?.stacked_workspaces;
+        let held = |id: &str| base.stacked_workspaces.iter().any(|held| held.id == id);
+        if !stacked.iter().all(|stacked| held(&stacked.id)) {
+            return Ok(Some(anyhow::anyhow!(
+                "a workspace was stacked on it during the sweep"
+            )));
+        }
+        for stacked in stacked {
             self.restack(&stacked, base, &target, &head).await?;
         }
         Ok(None)

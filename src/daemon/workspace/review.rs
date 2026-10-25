@@ -59,8 +59,7 @@ impl Manager {
         selector: &str,
         selection: Selection,
     ) -> Result<Vec<ReviewMark>> {
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
             .command(&settings)
@@ -198,8 +197,7 @@ impl Manager {
         selection: Selection,
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let explicit = self.explicit_item(&workspace, &selection).await?;
         let selected = self
             .selected_marks(&workspace.id, selection, explicit)

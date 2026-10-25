@@ -1380,7 +1380,10 @@ config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through
 a notification without undoing completion or blocking cleanup. Explicit signals
 rerun it; events are not queued or replayed on restart. Completion/PR serialization
-covers the hook, which must not call gated Shoal mutations. Completion without a
+is per workspace: cleanup sweeps hold a workspace's gate only while they handle it,
+including its forge lookups and removal, so commands for one workspace never wait
+for another's. It covers the hook, which must not call gated Shoal mutations for its
+workspace. Completion without a
 hook takes no resource guard, so an agent-exit hook may signal it; configured
 completion hooks cannot nest inside another guarded hook. A completion without
 cleanup suppresses idle and PR cleanup until another completion requests cleanup or

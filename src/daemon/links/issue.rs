@@ -48,11 +48,12 @@ impl Manager {
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        self.set_issue_gated(selector, input, title).await
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        self.set_issue_gated(&workspace.id, input, title).await
     }
 
-    /// [`Self::set_issue`] for a caller already holding `pr_gate`.
+    /// [`Self::set_issue`] for a caller already holding the workspace's PR
+    /// gate.
     pub(crate) async fn set_issue_gated(
         &self,
         selector: &str,
@@ -108,8 +109,7 @@ impl Manager {
     }
 
     pub async fn clear_issue(&self, selector: &str, input: Option<&str>) -> Result<()> {
-        let _guard = self.pr_gate.lock().await;
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let selected = match input {
             Some(input) => Some(self.issue_forge(&workspace, input).await?.2),
             None => None,
