@@ -224,15 +224,21 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the item and linking it, and two
         // decisions cannot both open it. The gate outlives the workspace.
-        let changed = self.decided_workspaces(&request, &decision).await?;
-        let _gate = self.pr_gates.lock(changed).await;
+        // A proposal this one duplicates takes its finding, so its gate is
+        // held too.
+        let duplicated = self.duplicated_proposal(&decision).await?;
+        let changed = duplicated.iter().map(|original| &original.workspace_id);
+        let _gate = self
+            .pr_gates
+            .lock(changed.chain([&request.workspace_id]))
+            .await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
         let (request, message) = if approve {
             self.approve_proposal(request, workspace.as_ref(), &decision)
                 .await?
         } else {
-            self.deny_proposal(request, workspace.as_ref(), &decision)
+            self.deny_proposal(request, workspace.as_ref(), &decision, duplicated.as_ref())
                 .await?
         };
         self.forget_proposal(request.key.clone()).await?;
@@ -243,20 +249,16 @@ impl Manager {
         Ok(request)
     }
 
-    /// The workspaces whose proposals deciding `request` changes: its own,
-    /// and that of the proposal it duplicates, which takes its finding.
-    async fn decided_workspaces(
+    /// The proposal `decision` names as the one it duplicates, as stored
+    /// before the decision takes its gate.
+    async fn duplicated_proposal(
         &self,
-        request: &ApprovalRequest,
         decision: &ProposalDecision,
-    ) -> Result<Vec<String>> {
-        let mut ids = vec![request.workspace_id.clone()];
-        if let Some(Duplicate::Approval(number)) = &decision.duplicate_of
-            && let Some(original) = self.approval_request(*number).await?
-        {
-            ids.push(original.workspace_id);
+    ) -> Result<Option<ApprovalRequest>> {
+        match &decision.duplicate_of {
+            Some(Duplicate::Approval(number)) => self.approval_request(*number).await,
+            _ => Ok(None),
         }
-        Ok(ids)
     }
 
     /// The stored request the user chose, still undecided.
@@ -598,12 +600,14 @@ impl Manager {
         Ok(Moved(Box::new(request.clone())))
     }
 
-    /// Deny the proposal, adding an issue's finding to what it duplicates.
+    /// Deny the proposal, adding an issue's finding to what it duplicates:
+    /// an issue, or the `duplicated` proposal whose gate the caller holds.
     async fn deny_proposal(
         &self,
         mut request: ApprovalRequest,
         workspace: Option<&Workspace>,
         decision: &ProposalDecision,
+        duplicated: Option<&ApprovalRequest>,
     ) -> Result<(ApprovalRequest, String)> {
         let outcome = match &decision.duplicate_of {
             Some(Duplicate::Issue(input)) => {
@@ -613,7 +617,7 @@ impl Manager {
                 format!(" as a duplicate of {url}; its text was added there as a comment")
             }
             Some(Duplicate::Approval(number)) => {
-                self.add_to_proposal(&request, *number).await?;
+                self.add_to_proposal(&request, *number, duplicated).await?;
                 format!(
                     " as a duplicate of approval {number}; its text is added as a comment if that issue is opened"
                 )
@@ -657,12 +661,22 @@ impl Manager {
     }
 
     /// Keep the proposal's finding with the pending issue proposal `number`,
-    /// which posts it once it is opened.
-    async fn add_to_proposal(&self, request: &ApprovalRequest, number: i64) -> Result<()> {
+    /// which posts it once it is opened. `locked` is that proposal as read
+    /// before taking its gate; a number since reused fails the decision.
+    async fn add_to_proposal(
+        &self,
+        request: &ApprovalRequest,
+        number: i64,
+        locked: Option<&ApprovalRequest>,
+    ) -> Result<()> {
         let mut original = self
             .approval_request(number)
             .await?
             .with_context(|| format!("unknown approval request {number}"))?;
+        ensure!(
+            locked.is_some_and(|locked| locked.key == original.key),
+            "approval request {number} changed while this decision waited; decide again"
+        );
         ensure!(
             original.key != request.key,
             "a proposal cannot duplicate itself"
@@ -1079,7 +1093,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_duplicate_decision_also_holds_the_original_proposals_gate() {
+    async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         let (root, manager) = manager().await;
         let path = repository(root.path(), "repo");
         let repo = manager
@@ -1087,63 +1101,75 @@ mod tests {
             .await
             .unwrap();
         let mut requests = Vec::new();
-        for name in ["original", "duplicate"] {
+        for name in ["original", "duplicate", "replacement"] {
             let workspace = manager
                 .create_workspace(&repo.id, name.into(), None, None, None)
                 .await
                 .unwrap();
-            let specification = Specification::Issue(IssueSpecification {
-                issue: NewIssue {
-                    title: "Flaky".into(),
-                    ..NewIssue::default()
-                },
-                repository: None,
-                link: false,
-                branch: name.into(),
-                commit: "head".into(),
-                agent: None,
-                duplicates: Vec::new(),
-                follow_up: None,
-            });
-            let request = proposal(
-                &workspace,
-                Target::IssueOpen,
-                proposals::ISSUE,
-                specification,
-            );
-            let (request, _) = manager
-                .store_proposal(request, proposals::propose_issue)
-                .await
-                .unwrap();
-            requests.push(request);
+            requests.push(store_issue_proposal(&manager, &workspace).await);
         }
-        let [original, duplicate] = &requests[..] else {
+        let [original, duplicate, replacement] = &requests[..] else {
             unreachable!()
         };
-        let plain = ProposalDecision::default();
-        let as_duplicate = ProposalDecision {
+        let decision = ProposalDecision {
             duplicate_of: Some(Duplicate::Approval(original.id)),
             ..ProposalDecision::default()
         };
-        let own = vec![duplicate.workspace_id.clone()];
+        let locked = manager.duplicated_proposal(&decision).await.unwrap();
         assert_eq!(
-            manager.decided_workspaces(duplicate, &plain).await.unwrap(),
-            own
+            locked.as_ref().map(|locked| &locked.key),
+            Some(&original.key)
         );
-        // The finding changes the original proposal, which its own decision
-        // or another duplicate may change at the same time.
-        let both = vec![
-            duplicate.workspace_id.clone(),
-            original.workspace_id.clone(),
-        ];
-        assert_eq!(
-            manager
-                .decided_workspaces(duplicate, &as_duplicate)
-                .await
-                .unwrap(),
-            both
+
+        // The original is decided and another workspace's proposal takes
+        // its number while the duplicate decision waits for the gates.
+        manager.forget_proposal(original.key.clone()).await.unwrap();
+        manager
+            .forget_proposal(replacement.key.clone())
+            .await
+            .unwrap();
+        let workspace = manager.workspace(&replacement.workspace_id).await.unwrap();
+        let reused = store_issue_proposal(&manager, &workspace).await;
+        assert_eq!(reused.id, original.id);
+        let error = manager
+            .add_to_proposal(duplicate, original.id, locked.as_ref())
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("changed while this decision waited"),
+            "{error:#}"
         );
+        let unchanged = manager.approval_request(reused.id).await.unwrap().unwrap();
+        assert!(unchanged.proposed_issue().unwrap().duplicates.is_empty());
     }
+
+    async fn store_issue_proposal(manager: &Manager, workspace: &Workspace) -> ApprovalRequest {
+        let specification = Specification::Issue(IssueSpecification {
+            issue: NewIssue {
+                title: format!("Flaky in {}", workspace.name),
+                ..NewIssue::default()
+            },
+            repository: None,
+            link: false,
+            branch: workspace.branch.clone(),
+            commit: "head".into(),
+            agent: None,
+            duplicates: Vec::new(),
+            follow_up: None,
+        });
+        let request = proposal(
+            workspace,
+            Target::IssueOpen,
+            proposals::ISSUE,
+            specification,
+        );
+        let (request, _) = manager
+            .store_proposal(request, proposals::propose_issue)
+            .await
+            .unwrap();
+        request
+    }
+
     #[tokio::test]
     async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         let (root, manager) = manager().await;
