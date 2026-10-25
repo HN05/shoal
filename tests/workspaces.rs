@@ -12012,7 +12012,9 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
          env_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n\
          [ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
     );
-    fs::write(&config, text).unwrap();
+    let chat_profile =
+        "[ai.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
+    fs::write(&config, format!("{text}{chat_profile}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
     fixture.ok(&[
@@ -12081,11 +12083,42 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     }
     assert!(!env.contains("CLAUDE_CONFIG_DIR="), "{env}");
 
-    // Removing the repository cleans the profile's trust entries too.
+    // A chat runs with its profile's environment and trusts the checkout in
+    // the profile's config directory.
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("INHERITED_TOKEN", "secret")
+            .args(["chat", "--agent", "claude-chat", "--here"]),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let env = fs::read_to_string(home.join("claude-env")).unwrap();
+    let chat = home.join("chat");
+    assert!(
+        env.lines()
+            .any(|line| line == format!("CLAUDE_CONFIG_DIR={}", chat.display())),
+        "{env}"
+    );
+    assert!(!env.contains("INHERITED_TOKEN="), "{env}");
+    let trusted = |config: &Path| {
+        let root: Value = serde_json::from_str(&fs::read_to_string(config).unwrap()).unwrap();
+        root["projects"]
+            .as_object()
+            .unwrap()
+            .contains_key(checkout.to_str().unwrap())
+    };
+    assert!(trusted(&chat.join(".claude.json")));
+
+    // Removing the repository cleans where each profile ran, though one of
+    // them is no longer configured.
+    fs::write(&config, &text).unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
     fixture.ok(&["repo", "rm", "profiled", "--yes"]);
-    let root: Value =
-        serde_json::from_str(&fs::read_to_string(direct.join(".claude.json")).unwrap()).unwrap();
-    assert_eq!(root["projects"], serde_json::json!({}));
+    for config in [direct.join(".claude.json"), chat.join(".claude.json")] {
+        assert!(!trusted(&config), "{}", config.display());
+    }
 }
 
 #[test]

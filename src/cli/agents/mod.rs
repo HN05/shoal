@@ -524,34 +524,36 @@ pub(in crate::cli) async fn trust_resumed(
 
 /// Trust a repository's checkout for a chat of agent `name` as workspace
 /// launches trust theirs. Failure only warns.
-pub(in crate::cli) fn trust_checkout(
+pub(in crate::cli) async fn trust_checkout(
     ctx: &Context,
     settings: &Effective,
     name: &str,
     repository: &Repository,
 ) {
     if let Some(trust) = integration(settings.integration(name)).trust_file() {
-        trust.trust_checkout(ctx, repository, &settings.environment(name));
+        trust
+            .trust_checkout(ctx, repository, &settings.environment(name))
+            .await;
     }
 }
 
 /// Remove every integration's trust entries for a repository after its
-/// deletion succeeds: where agents running with this process's environment
-/// keep them, where each AI tool's `[ai]` environment puts them, and where
-/// the daemon kept that its tracked agents ran with, which it then forgets.
-/// Cleanup is best effort and never fails the removal.
+/// deletion succeeds, both where agents running with this process's
+/// environment keep them and where the daemon kept that its agents ran
+/// with, which it then forgets. Cleanup is best effort and never fails the
+/// removal.
 pub(crate) async fn cleanup_repository_trust(
     ctx: &Context,
     repository: &Repository,
     workspace_paths: &[PathBuf],
 ) {
     let agent_environments = agent_environments(ctx, repository).await;
-    let environments: Vec<_> = profile_environments(ctx)
-        .into_iter()
-        .chain(agent_environments.iter().flatten().cloned())
-        .collect();
-    let warnings =
-        forget_repository_trust(&ctx.paths.home, repository, workspace_paths, &environments);
+    let warnings = forget_repository_trust(
+        &ctx.paths.home,
+        repository,
+        workspace_paths,
+        agent_environments.as_deref().unwrap_or_default(),
+    );
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
@@ -579,25 +581,6 @@ async fn agent_environments(
         );
     })
     .ok()
-}
-
-/// Where each AI tool's `[ai]` environment puts its config; none, with a
-/// warning, when the global config cannot be read.
-fn profile_environments(ctx: &Context) -> Vec<BTreeMap<String, String>> {
-    let config = match Config::load(&ctx.paths) {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!(
-                "warning: could not clean trust entries where [ai] env put agent configs: {error:#}"
-            );
-            return Vec::new();
-        }
-    };
-    crate::ai::environments(&config.ai)
-        .values()
-        .map(|profile| crate::env::agent_config_environment(&profile.values(&ctx.paths.home)))
-        .filter(|environment| !environment.is_empty())
-        .collect()
 }
 
 /// Have the daemon forget the removed repository's agent configs once their

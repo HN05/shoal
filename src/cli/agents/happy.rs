@@ -254,7 +254,9 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
         ),
     };
     if let Some(trust) = happy.trust_file() {
-        trust.trust_checkout(ctx, repository, &Default::default());
+        trust
+            .trust_checkout(ctx, repository, &Default::default())
+            .await;
     }
     let daemon_recorded = warn_without_daemon(ctx);
     // This process holds the chat until the session runs.

@@ -143,14 +143,33 @@ impl Manager {
     pub async fn keep_agent_environment(
         &self,
         selector: &str,
-        mut environment: BTreeMap<String, String>,
+        environment: BTreeMap<String, String>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
+        self.keep_environment(&workspace.repository_id, environment)
+            .await
+    }
+
+    /// [`Self::keep_agent_environment`] for a chat agent of the repository.
+    pub async fn keep_repository_agent_environment(
+        &self,
+        selector: &str,
+        environment: BTreeMap<String, String>,
+    ) -> Result<()> {
+        let repository = self.repository(selector).await?;
+        self.keep_environment(&repository.id, environment).await
+    }
+
+    async fn keep_environment(
+        &self,
+        repository_id: &str,
+        mut environment: BTreeMap<String, String>,
+    ) -> Result<()> {
         environment.retain(|name, _| crate::env::AGENT_CONFIG_VARIABLES.contains(&name.as_str()));
         if environment.is_empty() {
             return Ok(());
         }
-        self.store_agent_environment(&workspace.repository_id, &environment)
+        self.store_agent_environment(repository_id, &environment)
             .await
     }
 

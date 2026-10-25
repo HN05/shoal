@@ -565,6 +565,12 @@ pub enum Method {
         workspace: String,
         environment: std::collections::BTreeMap<String, String>,
     },
+    /// [`Method::KeepAgentEnvironment`] for a chat in the repository's
+    /// checkout, which belongs to no workspace.
+    KeepRepositoryAgentEnvironment {
+        repository: String,
+        environment: std::collections::BTreeMap<String, String>,
+    },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
         workspace: String,

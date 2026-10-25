@@ -110,7 +110,7 @@ pub(super) async fn begin(
     if !here && start_beside(ctx, &settings, &repo, &topic, &agent, &args).await? {
         return Ok(0);
     }
-    agents::trust_checkout(ctx, &settings, agent.name(), &repo);
+    agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
     run_here(

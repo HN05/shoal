@@ -22,6 +22,13 @@ pub(in crate::cli) struct TrustFile {
     remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
 }
 
+/// Whose agents ran with a config location: a workspace's, or a chat's in
+/// the repository's checkout.
+enum Holder<'a> {
+    Workspace(&'a Workspace),
+    Repository(&'a Repository),
+}
+
 pub(super) static CLAUDE_CODE: TrustFile = TrustFile {
     tool: "Claude Code",
     config: claude_config,
@@ -60,7 +67,8 @@ impl TrustFile {
     ) {
         let mut configured = workspaces::agent_environment(ctx, workspace).await;
         profile.layer(&mut configured, &ctx.paths.home);
-        self.keep_config_location(ctx, workspace, &configured).await;
+        self.keep_config_location(ctx, Holder::Workspace(workspace), &configured)
+            .await;
         let environment = AgentEnvironment {
             home: &ctx.paths.home,
             configured: &configured,
@@ -68,21 +76,28 @@ impl TrustFile {
         self.trust_workspace(ctx, workspace, &environment).await;
     }
 
-    /// Have the daemon keep where `configured` puts the tool's config.
-    /// Failure only warns.
+    /// Have the daemon keep where `configured` puts the tool's config for
+    /// the removal of `holder`'s repository. Failure only warns.
     async fn keep_config_location(
         &self,
         ctx: &Context,
-        workspace: &Workspace,
+        holder: Holder<'_>,
         configured: &std::collections::BTreeMap<String, std::ffi::OsString>,
     ) {
         let environment = env::agent_config_environment(configured);
         if environment.is_empty() {
             return;
         }
-        if let Err(error) =
-            client::keep_agent_environment(&ctx.paths, &workspace.id, environment).await
-        {
+        let kept = match holder {
+            Holder::Workspace(workspace) => {
+                client::keep_agent_environment(&ctx.paths, &workspace.id, environment).await
+            }
+            Holder::Repository(repository) => {
+                client::keep_repository_agent_environment(&ctx.paths, &repository.id, environment)
+                    .await
+            }
+        };
+        if let Err(error) = kept {
             eprintln!(
                 "warning: repository removal may leave {} trust entries behind: {error:#}",
                 self.tool
@@ -93,7 +108,7 @@ impl TrustFile {
     /// Trust a repository's checkout for a chat, which runs with this
     /// process's environment changed by `profile`, as workspace launches
     /// trust theirs; repository removal clears the entries.
-    pub(super) fn trust_checkout(
+    pub(super) async fn trust_checkout(
         &self,
         ctx: &Context,
         repository: &Repository,
@@ -101,6 +116,8 @@ impl TrustFile {
     ) {
         let mut configured = std::collections::BTreeMap::new();
         profile.layer(&mut configured, &ctx.paths.home);
+        self.keep_config_location(ctx, Holder::Repository(repository), &configured)
+            .await;
         let environment = AgentEnvironment {
             home: &ctx.paths.home,
             configured: &configured,

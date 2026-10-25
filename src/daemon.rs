@@ -905,6 +905,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?;
             Body::Ok
         }
+        Method::KeepRepositoryAgentEnvironment {
+            repository,
+            environment,
+        } => {
+            manager
+                .keep_repository_agent_environment(&repository, environment)
+                .await?;
+            Body::Ok
+        }
         Method::ForgetAgentEnvironments { repository_id } => {
             manager.forget_agent_environments(&repository_id).await?;
             Body::Ok

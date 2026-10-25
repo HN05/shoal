@@ -275,6 +275,23 @@ pub async fn keep_agent_environment(
     Ok(())
 }
 
+/// [`keep_agent_environment`] for a chat agent of `repository`.
+pub async fn keep_repository_agent_environment(
+    paths: &Paths,
+    repository: &str,
+    environment: std::collections::BTreeMap<String, String>,
+) -> Result<()> {
+    call(
+        paths,
+        Method::KeepRepositoryAgentEnvironment {
+            repository: repository.to_owned(),
+            environment,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 /// `None` when no daemon is listening on the socket.
 pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
     match request(paths, Method::Status).await {
