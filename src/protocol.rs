@@ -769,6 +769,9 @@ pub enum Method {
         workspace: String,
         name: String,
     },
+    SecretCatalog {
+        workspace: String,
+    },
     /// `shown` is the request the user was shown, which a later request
     /// reusing its number does not match.
     DecideApproval {
@@ -1040,6 +1043,7 @@ response_bodies! {
     ApprovalRequest(Box<crate::daemon::approvals::ApprovalRequest>),
     ApprovalRequests(Vec<crate::daemon::approvals::ApprovalRequest>),
     SecretGrant(crate::daemon::secrets::SecretGrant),
+    SecretCatalog(crate::daemon::secrets::SecretCatalog),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     ResourceCatalog(crate::daemon::resources::Catalog),

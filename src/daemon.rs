@@ -1034,6 +1034,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.release_secret(&workspace, name).await?;
             Body::Ok
         }
+        Method::SecretCatalog { workspace } => {
+            Body::SecretCatalog(manager.secret_catalog(&workspace).await?)
+        }
         Method::DecideApproval {
             id,
             approve,

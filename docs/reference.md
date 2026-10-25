@@ -1125,7 +1125,8 @@ beneath an agent drop the inherited values and launchers.
 
 A tool-scoped secret can set `requires_approval = true` and `approval_lifetime`
 like a [protected resource](#resource-approvals); an environment secret cannot,
-because it is fetched before the agent can ask. The agent requests access with
+because it is fetched before the agent can ask. `shoal catalog secret` lists the
+configured secrets with their tools and approval settings, without their commands. The agent requests access with
 `shoal acquire secret NAME --reason ...`, and the user decides with `shoal
 approvals`. Each run of a listed tool in a workspace asks the daemon about
 every secret it serves, under the current policy, and fetches a gated value

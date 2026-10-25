@@ -6368,6 +6368,8 @@ fn global_config_changes_reload_a_running_daemon() {
     let catalog = fixture.ok(&["catalog", "--workspace", "worker"]);
     assert_eq!(catalog["simulators"]["policy"], policy());
     assert!(catalog["ports"]["configured"].is_object());
+    assert_eq!(catalog["resources"], serde_json::json!({"pools": []}));
+    assert_eq!(catalog["secrets"], serde_json::json!({"secrets": []}));
     // Hand edits apply on an explicit reload; an invalid file keeps the running config.
     let config = fixture.root.path().join(".config/shoal/config.toml");
     let edited = fs::read_to_string(&config).unwrap();
@@ -16508,6 +16510,21 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         "[commands]\nclaude = ['show-token']\n",
     )
     .unwrap();
+    // The catalog shows what an agent may request, never how it is fetched.
+    let catalog = scoped_command(&fixture, "gated", &["catalog", "secret"]);
+    assert!(catalog.status.success(), "{catalog:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&catalog.stdout).unwrap(),
+        serde_json::json!({"secrets": [{
+            "name": "TOOL_TOKEN", "tools": ["show-token"],
+            "requires_approval": true, "approval_lifetime": "lease"
+        }]})
+    );
+    let rendered = fixture.run(&["catalog", "secret", "--workspace", "gated"]);
+    assert_eq!(
+        String::from_utf8_lossy(&rendered.stdout),
+        "TOOL_TOKEN: tools: show-token; approval required (lease)\n"
+    );
     let launch = || {
         let output = fixture.run(&["claude", "gated"]);
         (

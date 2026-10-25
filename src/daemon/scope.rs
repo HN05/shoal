@@ -138,6 +138,7 @@ pub async fn authorize(
         | Method::SimCatalog { workspace }
         | Method::SecretAcquire { workspace, .. }
         | Method::SecretRelease { workspace, .. }
+        | Method::SecretCatalog { workspace }
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),

@@ -405,6 +405,7 @@ and videos with `shoal pr comment --attach`, and put text frames in code blocks.
 
 ## Secrets
 
+`shoal catalog secret` lists the configured secrets and which need approval.
 A tool whose secret requires approval fails with the request to make. Run
 `shoal acquire secret NAME --reason "purpose"`, give the user the request
 ID, and rerun the tool once it is approved. The value never reaches your

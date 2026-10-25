@@ -1855,6 +1855,8 @@ pub enum CatalogKind {
     Resource,
     /// Related repositories that can be borrowed.
     Repo,
+    /// Agent secrets, the tools they serve and approval settings.
+    Secret,
 }
 
 #[derive(Debug, Subcommand)]

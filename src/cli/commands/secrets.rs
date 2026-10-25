@@ -5,8 +5,12 @@ use serde_json::json;
 
 use super::acquisition::{Acquisition, obtain};
 use crate::{
-    cli::{client, context::Context},
-    daemon::secrets::{SecretGrant, SecretRequest},
+    cli::{
+        client,
+        context::Context,
+        output::{Palette, Style},
+    },
+    daemon::secrets::{SecretCatalog, SecretGrant, SecretRequest},
     protocol::Method,
 };
 
@@ -36,6 +40,35 @@ pub(super) async fn acquire(
         |grant| ctx.emit(&describe(&grant), &grant),
         |message| json!({"acquired": false, "message": message}),
     )
+}
+
+pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SecretCatalog> {
+    let method = Method::SecretCatalog {
+        workspace: workspace.to_owned(),
+    };
+    client::request::<SecretCatalog>(&ctx.paths, method).await
+}
+
+pub(super) fn render_catalog(catalog: &SecretCatalog, palette: Palette) {
+    for secret in &catalog.secrets {
+        let delivery = if secret.tools.is_empty() {
+            "agent environment".to_owned()
+        } else {
+            format!("tools: {}", secret.tools.join(", "))
+        };
+        outln!(
+            "{}: {delivery}{}",
+            palette.paint(Style::Heading, &secret.name),
+            if secret.requires_approval {
+                format!("; approval required ({})", secret.approval_lifetime)
+            } else {
+                String::new()
+            }
+        );
+    }
+    if catalog.secrets.is_empty() {
+        outln!("No configured secrets");
+    }
 }
 
 fn describe(grant: &SecretGrant) -> String {
