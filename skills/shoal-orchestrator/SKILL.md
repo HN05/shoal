@@ -6,9 +6,13 @@ description: Use outside any Shoal workspace to coordinate work for the user —
 # Shoal orchestrator
 
 You run on the user's machine outside any managed workspace and hand work to
-agents that each own a workspace. Use `--json` and name every workspace
-explicitly: outside a workspace, commands without a target open an interactive
-picker. Do an assignment's work in its workspace through its agent, not in your
+agents that each own a workspace. Name every workspace explicitly: outside a
+workspace, commands without a target open an interactive picker.
+
+Commands print JSON and never prompt when `SHOAL_OUTPUT=json`, which Shoal sets
+for the chats it starts. Without it, as in a session Shoal did not start or a
+command run over `ssh`, pass `--json` to each command. A command that prints
+text despite the setting comes from a Shoal that predates it; pass `--json` too. Do an assignment's work in its workspace through its agent, not in your
 own checkout. Change or remove another agent's workspace only when the user asks.
 
 Sessions launched through Shoal are scoped to their own workspace and the
@@ -20,12 +24,12 @@ commands also decide approval requests, so act on those only as the user directs
 ## Start work
 
 ```sh
-shoal --json repo ls
-shoal --json add https://github.com/owner/repo/issues/34 --agent happy-codex
-shoal --json add my-project fix-login --agent happy-claude
-shoal --json add my-project fix-ui --base fix-login --agent happy-claude
-shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
-shoal --json contribute https://github.com/other/repo/issues/12 --agent happy-claude
+shoal repo ls
+shoal add https://github.com/owner/repo/issues/34 --agent happy-codex
+shoal add my-project fix-login --agent happy-claude
+shoal add my-project fix-ui --base fix-login --agent happy-claude
+shoal happy codex fix-login --prompt "Fix the login bug" -- --yolo
+shoal contribute https://github.com/other/repo/issues/12 --agent happy-claude
 ```
 
 `add` accepts a registered repository and branch, or an issue, PR or branch URL;
@@ -46,7 +50,7 @@ is in `prompt_file` and the user must send it from the app.
 
 With `max_agents` configured (the default starts agents one at a time while measured load allows), `add` may queue the agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
-daemon starts it when a slot frees; `shoal --json work --queue` lists entries, and
+daemon starts it when a slot frees; `shoal work --queue` lists entries, and
 `--now` or `--focus` starts one regardless only when the user asks.
 `--after <workspace|queued agent|issue>` (repeatable) queues an agent until that
 work is done; an issue's agent also waits for the issues its forge records as
@@ -56,11 +60,11 @@ it, and the entry lists what it still waits for in `waiting_for`.
 ## Follow progress
 
 ```sh
-shoal --json work
-shoal --json inbox      # Questions, approvals, waiting or failed workspaces, ready marks
-shoal --json status fix-login
-shoal --json alerts
-shoal --json internal events --follow --since <id>
+shoal work
+shoal inbox      # Questions, approvals, waiting or failed workspaces, ready marks
+shoal status fix-login
+shoal alerts
+shoal internal events --follow --since <id>
 ```
 
 Notifications report agent exits, messages agents sent with `shoal alerts send`,
@@ -68,12 +72,12 @@ questions they asked, busy resources, pending approval requests and cleanup Shoa
 workspace lifecycle changes, including `review_ready` marks agents set with
 `shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their
 hooks report, which `work` and `status` also show, without consuming notifications; resume from the
-last `id` you handled and resync with `shoal --json work` after a `gap`.
+last `id` you handled and resync with `shoal work` after a `gap`.
 
 ## Approval requests
 
 ```sh
-shoal --json approvals
+shoal approvals
 shoal approvals --approve <number>
 shoal approvals --deny <number>
 ```
@@ -85,7 +89,7 @@ capacity; the agent retries its acquisition.
 ## Questions
 
 ```sh
-shoal --json questions
+shoal questions
 shoal questions <number> --answer "<answer or choice number>"
 ```
 
@@ -102,7 +106,7 @@ ask the user about the rest.
 ## Finish and clean up
 
 Agents run `shoal done` themselves when their assignment is finished. For a
-workspace the user wants ended, use `shoal --json done <workspace>`,
+workspace the user wants ended, use `shoal done <workspace>`,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal acquire hold --workspace <workspace> --name review` and release the hold
@@ -111,7 +115,7 @@ existing one's checkpoints, and `shoal work restore <workspace> <number>` return
 to a checkpoint. To move a workspace to another machine, run
 `shoal export <workspace> --yes -o - | ssh <host> shoal --json import -`, then
 `shoal resume <workspace>` on that host starts its stopped agents in new
-sessions. `shoal --json cleanup` removes every workspace automatic
+sessions. `shoal cleanup` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `--dry-run` lists
 them and why it keeps each other workspace, as `status` gives in `cleanup_reason`;
 `--caches` also empties shared tool caches nothing is using. When the repository has no remote, `shoal land <workspace>`

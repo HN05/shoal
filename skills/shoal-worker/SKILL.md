@@ -5,11 +5,16 @@ description: Use inside a Shoal workspace to finish assignments with `shoal done
 
 # Shoal worker
 
-Use `--json`, omit targets for the current context, and request only needed resources.
+Commands print JSON and never prompt when `SHOAL_OUTPUT=json`, which Shoal sets
+for the agents it launches. Without it, as in a session Shoal did not start,
+pass `--json` to each command. A command that prints text despite the setting
+comes from a Shoal that predates it; pass `--json` too.
+
+Omit targets for the current context, and request only needed resources.
 When acquisition returns `approval_pending`, give the user the request number and wait
 for an unscoped `shoal approvals --approve <number>` or `shoal approvals --deny <number>`. When you no
 longer need a pending request, withdraw it with
-`shoal --json approvals withdraw <number>`. Supply `--reason` for
+`shoal approvals withdraw <number>`. Supply `--reason` for
 protected access; inspect your requests with `shoal approvals`. Retry after approval,
 and stop on `approval_denied`. Never remove scope to approve your own request.
 
@@ -22,7 +27,7 @@ assignment is finished: every watched PR merged, or no PR needed, in your
 workspace and in the child workspaces you split from it. Never end a
 session without it.
 
-Open your PR with `shoal --json pr open`: it pushes your branch, then links the
+Open your PR with `shoal pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
 A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
@@ -32,7 +37,7 @@ needs, and choose labels from `shoal repo labels`, which lists each with its mea
 Opening refuses an item without a label `required_labels` asks for; `pr open`,
 `issue open` and `ready` report `warnings` for missing labels or template
 headings, which you fix with `edit`. Change your PR or issue through Shoal,
-which acts as your agent account and records the change: `shoal --json pr edit`
+which acts as your agent account and records the change: `shoal pr edit`
 (`--title`, `--body-file`, `--add-label`, `--add-reviewer`,
 `--draft`/`--no-draft`), `pr comment --body-file`, `pr close`, and the same
 `issue` commands. `open`, `edit` and `comment` take `--attach FILE` for
@@ -42,10 +47,10 @@ Answer each review finding in its thread: `shoal view` shows every review commen
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
 They default to the linked item; pass a number or URL for another item in the
-repository. `shoal --json forge capabilities` lists what the repository's forge
+repository. `shoal forge capabilities` lists what the repository's forge
 supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. When no command covers a
-read, `shoal --json forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
+read, `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
 `glab api`. It refuses other methods unless the repository sets `[api]
 agent_writes`. File
@@ -54,7 +59,7 @@ workspace, and only `--link` assigns it to you. A problem that belongs to anothe
 repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`
 (or a repository URL on another forge); it usually becomes a proposal, and the
 repository may refuse it. Before opening one, search for an
-existing issue with `shoal --json issue list <words>` (`--state all`, `--label`,
+existing issue with `shoal issue list <words>` (`--state all`, `--label`,
 `--author`, `--limit`; `pr list` takes the same), and comment there instead of
 opening a duplicate. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
@@ -85,7 +90,7 @@ Codex in a zmx session, launched through Shoal: as context after tool calls,
 and after you end your turn by starting your next one with it. Handle each
 delivery by reading its items with `shoal view <url>`, then end your turn to
 wait; a delivery replaces a running watch. Other agents, Happy sessions
-included, run `shoal --json watch pr` from the workspace, handle the returned
+included, run `shoal watch pr` from the workspace, handle the returned
 `updates` by reading their items with `shoal view <url>`, then wait again. Comments
 and reviews are reported, as is each completed CI check or a merge conflict,
 again after a push or base change that leaves it conflicting, but
@@ -104,7 +109,7 @@ reports PR closure or merging and grants no permission to merge. A
 `base_merged` update means your base workspace landed. It says whether Shoal
 retargeted your PR; run the rebase command it gives and push with
 `git push --force-with-lease`. For the current
-state instead of changes, `shoal --json status` lists each watched PR in `prs`
+state instead of changes, `shoal status` lists each watched PR in `prs`
 with its state, merge conflicts, CI check results, review state and lookup errors.
 `shoal view` adds the linked issue and each item's description, comments and
 reviews with inline comments; use it instead of `gh` or `fj` to read them, with
@@ -113,9 +118,9 @@ reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 the forge reads job logs; checks from outside services have none.
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
-`shoal --json pr ci rerun --check '<check name>'` reruns a failed check on the PR's
+`shoal pr ci rerun --check '<check name>'` reruns a failed check on the PR's
 current head, after you have read its log and fixed or reported the cause, and
-`shoal --json pr ci cancel` cancels running ones; omit `--check` for all of them.
+`shoal pr ci cancel` cancels running ones; omit `--check` for all of them.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
@@ -148,10 +153,10 @@ the workspace.
 
 ## Checkpoints
 
-`shoal --json work checkpoint --name "<what comes next>"` keeps your workspace's HEAD
+`shoal work checkpoint --name "<what comes next>"` keeps your workspace's HEAD
 and unsaved files before a risky change; Shoal also takes one when you exit or
-are stopped. `shoal --json work restore <workspace>` lists them, and
-`shoal --json work restore <workspace> <number>` returns to one after keeping the
+are stopped. `shoal work restore <workspace>` lists them, and
+`shoal work restore <workspace> <number>` returns to one after keeping the
 current state in a new checkpoint. It refuses while another command runs in the
 workspace.
 
@@ -159,8 +164,8 @@ workspace.
 
 The user and Shoal can send messages to your workspace, such as a request to
 free memory or disk space. Claude Code and Codex launched through Shoal receive
-them with PR activity, as described above; a new message also ends `shoal --json watch pr`
-with a `messages` array, and `shoal --json messages` shows new ones. Each
+them with PR activity, as described above; a new message also ends `shoal watch pr`
+with a `messages` array, and `shoal messages` shows new ones. Each
 message is shown once. Follow it.
 
 ## Questions
@@ -169,7 +174,7 @@ When you need the user to decide something, ask a question rather than
 notifying:
 
 ```sh
-shoal --json questions ask "Which database should the cache use?" --recommend SQLite \
+shoal questions ask "Which database should the cache use?" --recommend SQLite \
   --reason "No server to run" --choice SQLite --choice Postgres
 ```
 
@@ -180,9 +185,9 @@ work meanwhile, or end your turn to wait. When you cannot continue without the
 answer, add `--wait`: it blocks without a time limit and prints the answer, so run
 it in the background when your tool calls time out. Asking the identical question
 again waits for the same one. Only the user answers, with `shoal questions`;
-`shoal --json questions` lists your workspace's open questions. When you no
+`shoal questions` lists your workspace's open questions. When you no
 longer need an answer, withdraw the question with
-`shoal --json questions withdraw <number>`. An open question keeps your
+`shoal questions withdraw <number>`. An open question keeps your
 workspace from idle cleanup.
 
 ## Workspace context
@@ -193,11 +198,11 @@ when run inside the child's directory. Agents launched independently in a manage
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.
 
-When unsure whether your checkout is managed, use `shoal --json work` and match
+When unsure whether your checkout is managed, use `shoal work` and match
 your working directory to a returned workspace `path`. Shoal's resources
 require a managed workspace; do not select another agent's workspace or create
 one just to obtain a lease.
-If workspace setup failed, `shoal --json work setup` reruns the configured setup
+If workspace setup failed, `shoal work setup` reruns the configured setup
 command and post-setup hook for the current workspace.
 
 The daemon, its service and the Shoal installation belong to the user; stopping
@@ -209,8 +214,8 @@ report the error with `shoal alerts send` and wait instead of working around it.
 ## Update from the default branch
 
 ```sh
-shoal --json repo sync
-shoal --json conflicts     # exit 1 lists the paths that conflict with main
+shoal repo sync
+shoal conflicts     # exit 1 lists the paths that conflict with main
 git rebase main            # or git merge main; use your repo's branch name
 ```
 
@@ -220,7 +225,7 @@ checked out, where `git fetch origin main:main` is refused. It never pushes or c
 with plain Git afterwards; other pushed branches are current as
 `origin/<branch>`. `shoal conflicts` checks committed HEAD against your base
 workspace's branch, otherwise the local default branch, or a branch you name,
-without touching the worktree. Without a watched PR, `shoal --json watch`
+without touching the worktree. Without a watched PR, `shoal watch`
 returns a `merge_conflict` update when that check newly fails. After rebasing a pushed branch, push it with
 `git push --force-with-lease`.
 
@@ -229,7 +234,7 @@ brings in their latest commits; use `origin/feature/api` for pushed work after
 `shoal repo sync`. Stay on your workspace's recorded branch. When it builds on
 another workspace's branch, record that with `shoal work base set <workspace>`;
 `shoal work base` shows it.
-When the repository has no remote, `shoal --json land` merges your committed
+When the repository has no remote, `shoal land` merges your committed
 branch into the default branch. Unless the repository sets `[land]
 requires_approval = false`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
@@ -242,9 +247,9 @@ found or one part of a large change, split it into a child workspace instead of
 switching branches or creating worktrees yourself:
 
 ```sh
-shoal --json split fix-typo                  # New branch from the default branch
-shoal --json split --issue 42                # Named after the issue, which it links
-shoal --json split api-part --base <branch>  # Stacked on your branch
+shoal split fix-typo                  # New branch from the default branch
+shoal split --issue 42                # Named after the issue, which it links
+shoal split api-part --base <branch>  # Stacked on your branch
 ```
 
 The child gets its own worktree, branch and setup; the result gives its `path`.
@@ -260,8 +265,8 @@ its own workspace and those below it.
 To have another agent do the child's work in parallel, start one there:
 
 ```sh
-shoal --json split --issue 43 --agent claude
-shoal --json split api-part --agent codex -- "Move the API client into its own crate"
+shoal split --issue 43 --agent claude
+shoal split api-part --agent codex -- "Move the API client into its own crate"
 ```
 
 It starts from the agent queue, detached, as the child's own agent, and its
@@ -283,8 +288,8 @@ it with `shoal approvals --approve <number>` or `shoal approvals --deny <number>
 ## Ports
 
 ```sh
-shoal --json leases port
-shoal --json acquire port web
+shoal leases port
+shoal acquire port web
 shoal release port web
 ```
 
@@ -300,8 +305,8 @@ environment: pass the number to the server explicitly.
 ## Resource pools
 
 ```sh
-shoal --json leases resource
-shoal --json acquire resource devices --queue
+shoal leases resource
+shoal acquire resource devices --queue
 shoal release resource devices
 ```
 
@@ -322,8 +327,8 @@ Release before changing mode; there are no atomic upgrades.
 ## Simulators
 
 ```sh
-shoal --json leases sim
-shoal --json acquire sim --queue
+shoal leases sim
+shoal acquire sim --queue
 shoal release sim
 ```
 
@@ -337,7 +342,7 @@ Normal reuse preserves apps, data, and settings. Only request a clean device
 when the task specifically requires pristine state:
 
 ```sh
-shoal --json acquire sim --clean --reason "Verify first-launch permission prompts"
+shoal acquire sim --clean --reason "Verify first-launch permission prompts"
 ```
 
 Give the actual task-specific reason; clean requests and their outcomes are
@@ -350,6 +355,6 @@ Release when finished; reservations and leases outlive the requesting command.
 ## Secrets
 
 A tool whose secret requires approval fails with the request to make. Run
-`shoal --json acquire secret NAME --reason "purpose"`, give the user the request
+`shoal acquire secret NAME --reason "purpose"`, give the user the request
 ID, and rerun the tool once it is approved. The value never reaches your
 environment; `shoal release secret NAME` gives up the grant.
