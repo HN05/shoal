@@ -374,7 +374,7 @@ branch name and launches an agent only with `--agent`.
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
-shoal repo list
+shoal repo ls
 shoal repo                               # Interactive repository menu
 shoal add my-project fix-login
 shoal add my-project fix-api --agent codex -- "Fix the API timeout"

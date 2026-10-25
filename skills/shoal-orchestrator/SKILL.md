@@ -20,7 +20,7 @@ commands also decide approval requests, so act on those only as the user directs
 ## Start work
 
 ```sh
-shoal --json repo list
+shoal --json repo ls
 shoal --json add https://github.com/owner/repo/issues/34 --agent happy-codex
 shoal --json add my-project fix-login --agent happy-claude
 shoal --json add my-project fix-ui --base fix-login --agent happy-claude

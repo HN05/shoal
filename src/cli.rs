@@ -1533,7 +1533,7 @@ pub enum RepoCommand {
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
-    List,
+    Ls,
 }
 
 #[derive(Debug, Subcommand)]

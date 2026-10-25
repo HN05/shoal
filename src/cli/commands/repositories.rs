@@ -80,7 +80,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 &repo,
             )?;
         }
-        RepoCommand::List => {
+        RepoCommand::Ls => {
             let repos = client::repositories(&ctx.paths).await?;
             ctx.show(&repos, |repos| {
                 let palette = Palette::stdout(ctx.json);

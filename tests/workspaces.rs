@@ -1335,9 +1335,9 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
 #[test]
 fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
-    let first = fixture.ok(&["repo", "list"]);
+    let first = fixture.ok(&["repo", "ls"]);
     fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
-    assert_eq!(fixture.ok(&["repo", "list"]), first);
+    assert_eq!(fixture.ok(&["repo", "ls"]), first);
     fs::write(fixture.repo.join("tracked"), "uncommitted source\n").unwrap();
     let workspace = fixture.add("fix-login");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -1426,7 +1426,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
         let destination = fixture.root.path().join(format!("old-uuid-{parent}"));
         clones.push(fixture.ok(&["repo", "add", &url, "--path", destination.to_str().unwrap()]));
         if parent == "one" {
-            let listing = fixture.run(&["repo", "list"]);
+            let listing = fixture.run(&["repo", "ls"]);
             assert!(String::from_utf8_lossy(&listing.stdout).contains("saldoir-server  file://"));
             fixture.ok(&["add", "saldoir-server", "feature"]);
         }
@@ -2281,7 +2281,7 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
         "local",
     ]);
     assert_eq!(repo["path"], fixture.repo.to_str().unwrap());
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     let workspace = fixture.ok(&["add", "local", "offline"]);
     assert_eq!(
         git(
@@ -2397,7 +2397,7 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
         }
         assert!(!fixture.root.path().join(&root[2..]).exists());
         assert!(!fixture.root.path().join("missing").exists());
-        assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     }
     // The already placed repository still creates workspaces in its own directory.
     let workspace = fixture.add("still-works");
@@ -2428,7 +2428,7 @@ fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
         stderr.contains("the Shoal daemon cannot write to"),
         "{stderr}"
     );
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -2723,13 +2723,13 @@ fn clone_path_preserves_existing_destinations_and_cleans_only_failed_new_clones(
             .success()
     );
     assert!(!failed.exists());
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
 fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     let fixture = Fixture::new();
-    let original = fixture.ok(&["repo", "list"])[0].clone();
+    let original = fixture.ok(&["repo", "ls"])[0].clone();
     let url = "https://example.invalid/team/project.git";
     let ssh_url = "git@example.invalid:team/project.git";
     git(&fixture.repo, &["remote", "add", "origin", url]);
@@ -2753,7 +2753,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     );
     assert_eq!(fixture.ok(&["repo", "add", ssh_url]), original);
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
     fixture.ok(&["add", ssh_url, "alias", "--base", "HEAD"]);
     fixture.ok(&["rm", "alias"]);
@@ -3033,7 +3033,7 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
 #[test]
 fn repositories_can_be_named_when_added_and_renamed_without_duplication() {
     let fixture = Fixture::new();
-    let original = fixture.ok(&["repo", "list"])[0]["id"].clone();
+    let original = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     let named = fixture.ok(&[
         "repo",
         "add",
@@ -3047,7 +3047,7 @@ fn repositories_can_be_named_when_added_and_renamed_without_duplication() {
     let renamed = fixture.ok(&["repo", "rename", "project", "renamed"]);
     assert_eq!(renamed["id"], original);
     assert_eq!(renamed["name"], "renamed");
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", "named"]);
 }
 
@@ -7129,7 +7129,7 @@ fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(
             result["repository_id"],
-            fixture.ok(&["repo", "list"])[0]["id"]
+            fixture.ok(&["repo", "ls"])[0]["id"]
         );
         assert_eq!(
             result,
@@ -7143,7 +7143,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     let mut fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "default_agent = 'codex'\n");
     fixture.add("worker");
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     let saved = fixture.ok(&["config", "set", "default_agent", "claude", "--repo", id]);
     assert_eq!(saved["repository_id"], id);
@@ -7232,7 +7232,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
 fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     let mut fixture = Fixture::new();
     let first = fixture.add("first");
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     assert!(fixture.ok(&["repo", "config", id])["toml"].is_null());
     let input = fixture.root.path().join("local.toml");
@@ -7333,7 +7333,7 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
 #[test]
 fn local_repository_config_is_isolated_and_deleted_only_with_its_repository() {
     let fixture = Fixture::new();
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[ports.web]\n").unwrap();
@@ -7369,7 +7369,7 @@ fn local_repository_config_is_isolated_and_deleted_only_with_its_repository() {
         0
     );
     assert!(input.exists());
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -8612,7 +8612,7 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
 #[test]
 fn repository_commands_pick_an_omitted_repository() {
     let fixture = Fixture::new();
-    let id = fixture.ok(&["repo", "list"])[0]["id"]
+    let id = fixture.ok(&["repo", "ls"])[0]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -8625,10 +8625,10 @@ fn repository_commands_pick_an_omitted_repository() {
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     let (output, _) = fixture.pick(&["repo", "rename"], &id, "renamed\n");
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["repo", "list"])[0]["name"], "renamed");
+    assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
     let (output, _) = fixture.pick(&["repo", "rm", "--yes"], &id, "");
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(fixture.ok(&["repo", "list"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["repo", "ls"]), serde_json::json!([]));
 }
 
 #[test]
@@ -10133,7 +10133,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     let second = fixture.add("second");
     let first_path = Path::new(first["path"].as_str().unwrap());
     let second_path = Path::new(second["path"].as_str().unwrap());
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let workspaces_dir = Path::new(repository["workspaces_dir"].as_str().unwrap());
     let repo_key = fs::canonicalize(&fixture.repo).unwrap();
     let workspaces_key = fs::canonicalize(workspaces_dir).unwrap();
@@ -10208,7 +10208,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!fixture.repo.exists());
     assert!(!first_path.exists());
     assert!(!Path::new(second["path"].as_str().unwrap()).exists());
-    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
     assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     let claude: Value = serde_json::from_str(
         &fs::read_to_string(fixture.root.path().join(".claude.json")).unwrap(),
@@ -10287,7 +10287,7 @@ fn repository_removal_preserves_external_worktrees_and_deletes_clone_on_retry() 
     fixture.ok(&["repo", "remove", &url, "--yes"]);
     assert!(!path.exists());
     assert!(fixture.repo.exists());
-    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -10328,7 +10328,7 @@ fn repository_removal_ignores_only_missing_prunable_unlocked_worktrees() {
     assert!(git(&fixture.repo, &["worktree", "list", "--porcelain"]).contains("prunable"));
     fixture.ok(&["repo", "rm", target, "--yes"]);
     assert!(!fixture.repo.exists());
-    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -10473,7 +10473,7 @@ fn repository_removal_keeps_the_confirmed_target_when_a_name_is_reassigned() {
     assert!(output.status.success(), "{transcript}");
     assert!(!fixture.repo.exists());
     assert!(other.join("tracked").exists());
-    let repositories = fixture.ok(&["repo", "list"]);
+    let repositories = fixture.ok(&["repo", "ls"]);
     assert!(
         repositories
             .as_array()
@@ -10575,7 +10575,7 @@ fn removal_preview_limits_large_untracked_directories() {
 fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_replacement() {
     use std::os::unix::fs::MetadataExt;
     let mut fixture = Fixture::new();
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     let metadata = fs::metadata(&fixture.repo).unwrap();
     let identity = format!("{}:{}", metadata.dev(), metadata.ino());
@@ -10601,13 +10601,13 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
     fs::rename(saved, &fixture.repo).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
-    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
 }
 
 #[test]
 fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
     let fixture = Fixture::new();
-    let id = fixture.ok(&["repo", "list"])[0]["id"]
+    let id = fixture.ok(&["repo", "ls"])[0]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -10634,7 +10634,7 @@ fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
 fn repository_removal_serializes_with_workspace_creation() {
     // Removal refuses a workspace while setup runs, so this race skips setup.
     let fixture = Fixture::with_config(Some("copy_ignored = false\n"));
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
         .command()
@@ -10651,7 +10651,7 @@ fn repository_removal_serializes_with_workspace_creation() {
             "unexpected add failure: {add:?}"
         );
     }
-    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
     assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     // The emptied repository directory goes with the registration.
     assert!(!Path::new(repo["workspaces_dir"].as_str().unwrap()).exists());
@@ -10663,7 +10663,7 @@ fn repository_removal_serializes_with_workspace_creation() {
 fn repository_removal_preserves_resources_on_failure_and_retries_after_restart() {
     let config = format!("{SIM_CONFIG}\n[resources.lock]\n");
     let mut fixture = Fixture::with_tools(Some(&config), true);
-    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[ports.web]\n").unwrap();
@@ -11330,7 +11330,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     let first_path = Path::new(first["path"].as_str().unwrap()).to_owned();
     let second = fixture.add("second");
     let second_path = Path::new(second["path"].as_str().unwrap());
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
     install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
@@ -11408,7 +11408,7 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let home = fixture.root.path();
     let workspace = fixture.add("trusted");
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     // Claude Code keys a worktree's trust by the repository checkout.
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
@@ -11490,7 +11490,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
         external.to_str().unwrap(),
     ]);
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
     let keys = [checkout.as_path(), path.as_path(), directory.as_path()];
@@ -13651,7 +13651,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
     ]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
-    let repo = fixture.ok(&["repo", "list"])[0]["id"].clone();
+    let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     fixture.ok(&[
         "config",
         "set",
@@ -14111,7 +14111,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
             )
             .unwrap();
-            let repository = fixture.ok(&["repo", "list"])[0].clone();
+            let repository = fixture.ok(&["repo", "ls"])[0].clone();
             let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
             assert_eq!(
                 config["projects"][directory.to_str().unwrap()]["trust_level"].as_str(),
@@ -14139,7 +14139,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             // Detached Claude launches skip the trust dialog like `shoal claude`.
             let config: Value =
                 serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
-            let repository = fixture.ok(&["repo", "list"])[0].clone();
+            let repository = fixture.ok(&["repo", "ls"])[0].clone();
             let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
             assert_eq!(
                 config["projects"][directory.to_str().unwrap()]["hasTrustDialogAccepted"],
@@ -15973,7 +15973,7 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
     fs::write(source.join("tracked"), "changed in source\n").unwrap();
     fs::write(source.join("untracked"), "preserve source\n").unwrap();
     let worktrees = git(&fixture.repo, &["worktree", "list", "--porcelain"]);
-    let repositories = fixture.ok(&["repo", "list"]);
+    let repositories = fixture.ok(&["repo", "ls"]);
     let destination =
         Path::new(repositories[0]["workspaces_dir"].as_str().unwrap()).join("copy-topic-2");
 
@@ -20760,7 +20760,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     install_recording_agent(&fixture, "claude");
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repository["id"].as_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 
@@ -21105,7 +21105,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let fixture = Fixture::with_config(Some("focus = false\n"));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");
-    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repository["id"].as_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 

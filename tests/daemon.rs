@@ -944,7 +944,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "expected Repository, received Ok",
         ),
         (
-            vec!["repo", "list"],
+            vec!["repo", "ls"],
             json!({"type": "ok"}),
             "expected Repositories, received Ok",
         ),
@@ -959,7 +959,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "scope_denied: denied",
         ),
         (
-            vec!["--json", "repo", "list"],
+            vec!["--json", "repo", "ls"],
             json!({"type": "error", "data": {"code": "operation_failed", "message": "failed: detail"}}),
             "operation_failed: failed: detail",
         ),

@@ -138,6 +138,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     );
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
+        (vec!["shoal", "repo", "l"], "ls"),
         (vec!["shoal", "rev"], "review"),
         (vec!["shoal", "don"], "done"),
         (vec!["shoal", "resu"], "resume"),
