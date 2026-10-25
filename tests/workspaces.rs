@@ -203,7 +203,7 @@ impl Fixture {
         let fzf = bin.join("fzf");
         install_test_script(
             &fzf,
-            "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
+            "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\ncase \"$*\" in *--expect=*) printf '\\n';; esac\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
         );
         let rows = self.root.path().join("picker-rows");
         let _ = fs::remove_file(&rows);
@@ -8349,7 +8349,7 @@ esac
     let decide = |pick: &str| {
         let mut command = fixture.command();
         command.arg("inbox").env("PICK", pick);
-        fixture.terminal_command(&mut command, "a\n", true)
+        fixture.terminal_command(&mut command, "y\n", true)
     };
     let id = pending["id"].as_u64().unwrap();
     let workspace = agent["id"].as_str().unwrap();
@@ -17407,10 +17407,71 @@ fn approval_picker_inspects_before_deciding_the_selected_request() {
     ));
     let id = pending["id"].to_string();
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
-    let (output, rows) = fixture.pick(&["approvals"], &id, "a\n");
+    let (output, rows) = fixture.pick(&["approvals"], &id, "Y\n");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("serve preview"), "{rows}");
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
+}
+
+#[test]
+fn approval_prompt_accepts_only_case_insensitive_y_or_n() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    let pending = pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let id = pending["id"].to_string();
+    for response in ["yes\n", "approve\n", "x\n", "\n"] {
+        let (output, transcript) =
+            fixture.interactive_command(fixture.command().args(["approvals", &id]), response);
+        assert_eq!(output.status.code(), Some(130), "{transcript}");
+        assert!(transcript.contains("[y/n]"), "{transcript}");
+        assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
+    }
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["approvals", &id]), "N\n");
+    assert!(output.status.success(), "{transcript}");
+    assert_eq!(fixture.ok(&["approvals", &id])["status"], "denied");
+}
+
+#[test]
+fn approval_list_shortcuts_decide_the_shown_request() {
+    for (key, status) in [("ctrl-a", "approved"), ("ctrl-d", "denied")] {
+        let fixture = Fixture::new();
+        set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+        fixture.add("agent");
+        let pending = pending_approval(scoped_command(
+            &fixture,
+            "agent",
+            &["acquire", "port", "web", "--reason", "serve preview"],
+        ));
+        install_test_script(
+            fixture.root.path().join("bin/fzf"),
+            r#"#!/bin/sh
+cat > "$HOME/picker-input"
+printf '%s\n' "$@" > "$HOME/picker-args"
+printf '%s\n' "$SHOAL_TEST_KEY"
+head -1 "$HOME/picker-input"
+"#,
+        );
+        let (output, transcript) = fixture.interactive_command(
+            fixture
+                .command()
+                .arg("approvals")
+                .env("SHOAL_TEST_KEY", key),
+            "",
+        );
+        assert!(output.status.success(), "{transcript}");
+        let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
+        assert!(args.contains("--expect=ctrl-a,ctrl-d"), "{args}");
+        assert_eq!(
+            fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
+            status
+        );
+    }
 }
 
 #[test]

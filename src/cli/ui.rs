@@ -195,6 +195,11 @@ fn modified_skill_with_io(
 }
 
 pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
+    input_or_cancel(ctx, prompt)?.context("canceled: no value supplied")
+}
+
+/// Read a prompt where empty input or EOF means cancellation.
+pub fn input_or_cancel(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     require_interactive(ctx)?;
     eprint!(
         "{} ",
@@ -205,8 +210,7 @@ pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
     let mut value = String::new();
     io::stdin().read_line(&mut value)?;
     let value = value.trim_end_matches(['\r', '\n']).to_owned();
-    ensure!(!value.is_empty(), "canceled: no value supplied");
-    Ok(value)
+    Ok((!value.is_empty()).then_some(value))
 }
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.

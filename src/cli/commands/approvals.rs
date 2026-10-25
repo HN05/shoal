@@ -71,21 +71,15 @@ async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result
         return Ok(0);
     }
     print_request(&request);
-    let action = prompt_action(ctx, &request)?;
-    match action.as_str() {
-        "escalate" => escalate(ctx, request.id, Some(request)).await,
-        "approve" | "deny" => {
-            submit(
-                ctx,
-                request.id,
-                action == "approve",
-                Some(request),
-                ProposalDecision::default(),
-            )
-            .await
-        }
-        _ => anyhow::bail!("unknown approval action"),
-    }
+    let approve = prompt_decision_answer(ctx, &request)?;
+    submit(
+        ctx,
+        request.id,
+        approve,
+        Some(request),
+        ProposalDecision::default(),
+    )
+    .await
 }
 
 async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
@@ -97,24 +91,13 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     Ok(request.decider.as_deref() == Some(owner.as_str()))
 }
 
-fn prompt_action(ctx: &Context, request: &ApprovalRequest) -> Result<String> {
-    let actions = if crate::env::inherits_scope(&ctx.paths.state) {
-        "[a]pprove / [d]eny / [e]scalate / [c]ancel"
-    } else {
-        "[a]pprove / [d]eny / [c]ancel"
-    };
-    let prompt = format!("Approval ({}) {actions}", request.id);
-    loop {
-        let action = ui::input(ctx, &prompt)?;
-        match action.trim().to_ascii_lowercase().as_str() {
-            "a" | "approve" => return Ok("approve".into()),
-            "d" | "deny" => return Ok("deny".into()),
-            "e" | "escalate" if crate::env::inherits_scope(&ctx.paths.state) => {
-                return Ok("escalate".into());
-            }
-            "c" | "cancel" => return Err(ui::SelectionCanceled.into()),
-            _ => eprintln!("Choose {actions}."),
-        }
+fn prompt_decision_answer(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
+    let prompt = format!("Approve ({})? [y/n]", request.id);
+    let answer = ui::input_or_cancel(ctx, &prompt)?.unwrap_or_default();
+    match answer.trim().to_ascii_lowercase().as_str() {
+        "y" => Ok(true),
+        "n" => Ok(false),
+        _ => Err(ui::SelectionCanceled.into()),
     }
 }
 
@@ -252,16 +235,21 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     let requests =
         request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
     if ctx.interactive() && !requests.is_empty() {
-        let entries = requests
-            .iter()
-            .map(|request| (request.id.to_string(), summary(request)))
-            .collect();
-        let id: i64 = ui::pick(ctx, "Approvals> ", entries)?.parse()?;
-        let selected = requests
-            .into_iter()
-            .find(|request| request.id == id)
-            .context("unknown approval request")?;
-        return show_request(ctx, Box::new(selected)).await;
+        let (selected, decision) = pick_request(ctx, requests)?;
+        return match decision {
+            Some(approve) => {
+                ensure_scope_token(ctx)?;
+                submit(
+                    ctx,
+                    selected.id,
+                    approve,
+                    Some(selected),
+                    ProposalDecision::default(),
+                )
+                .await
+            }
+            None => show_request(ctx, selected).await,
+        };
     }
     ctx.show(&requests, |requests| {
         for request in requests {
@@ -272,6 +260,28 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
         }
     })?;
     Ok(0)
+}
+
+fn pick_request(
+    ctx: &Context,
+    requests: Vec<ApprovalRequest>,
+) -> Result<(Box<ApprovalRequest>, Option<bool>)> {
+    let entries = requests
+        .iter()
+        .map(|request| (request.id.to_string(), summary(request)))
+        .collect();
+    let bindings = ui::KeyBindings(&[
+        ("enter", "inspect", None),
+        ("ctrl-a", "approve", Some(true)),
+        ("ctrl-d", "deny", Some(false)),
+    ]);
+    let picked = ui::pick_with_keys(ctx, "Approvals> ", entries, bindings)?;
+    let id: i64 = picked.id.parse()?;
+    let selected = requests
+        .into_iter()
+        .find(|request| request.id == id)
+        .context("unknown approval request")?;
+    Ok((Box::new(selected), picked.action))
 }
 
 async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {

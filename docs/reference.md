@@ -3014,7 +3014,9 @@ these requests, land requests from a scoped `shoal land`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --workspace <workspace>` filters
 by workspace. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its number
-shows its recorded settings and prompts for a decision. JSON and nonterminal output
+shows its recorded settings and prompts for `y` to approve or `n` to deny,
+case-insensitively; any other input cancels. In the list, Ctrl-A approves
+and Ctrl-D denies the selected request directly. JSON and nonterminal output
 print records without prompting. An unscoped user
 reviews the recorded settings and uses `shoal approvals --approve [number]` or
 `shoal approvals --deny [number]`; without a number, they pick among pending requests, shown

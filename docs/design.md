@@ -1214,7 +1214,8 @@ join again.
 
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` opens a request picker on a terminal, and a numbered request
-shows its details and prompts for a decision. Explicit `--approve` and `--deny` flags decide every kind: landing
+shows its details and prompts for a decision. Ctrl-A approves and Ctrl-D denies
+the selected request directly from the list. Explicit `--approve` and `--deny` flags decide every kind: landing
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
 In a shared repository everything an agent opens is seen by other people, so
