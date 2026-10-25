@@ -12381,9 +12381,10 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         );
         fixture.restart();
         assert!(fixture.ok(&["inspect", name])["pr_cleanup"].is_null());
-        assert_eq!(
-            fixture.ok(&["unlink", "pr", "assigned", "--workspace", name]),
-            serde_json::json!({"registered": false})
+        let again = fixture.run(&["unlink", "pr", "assigned", "--workspace", name]);
+        assert!(
+            String::from_utf8_lossy(&again.stderr).contains("no pr is linked as assigned"),
+            "{again:?}"
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     }

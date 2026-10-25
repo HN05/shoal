@@ -2327,7 +2327,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
 `shoal unlink <relation>` removes the relation's items; `unlink pr <relation>` or
 `unlink issue <relation>` removes one kind, and an explicit number or URL removes
-just that item. Removing the last
+just that item; unlinking fails when it selects nothing linked. Removing the last
 link does not mark done or undo recorded completion. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking
 remain available. Previous PR registration and wait command spellings remain accepted.
