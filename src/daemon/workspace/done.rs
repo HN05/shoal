@@ -85,7 +85,13 @@ impl Manager {
             cleanup: cleanup || settings.done.cleanup,
             error: None,
         };
-        let closed = self.persist_completion(&workspace.id, &completion).await?;
+        let persisted = self.persist_completion(&workspace.id, &completion).await?;
+        // Rerunning the hook is the one effect a repeated done may have left.
+        ensure!(
+            persisted.changed || hook.is_some(),
+            "assignment is already marked done at this HEAD"
+        );
+        let closed = persisted.closed;
         self.forget_last_session(&workspace.id);
         self.notify(
             Some(&workspace.name),
@@ -102,12 +108,10 @@ impl Manager {
 
     /// Record `completion` and close the workspace's open questions, which
     /// the finished assignment waits on no longer, waking waits on them.
-    /// Refuses a completion that changes nothing. Returns the closed
-    /// questions' numbers.
-    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Vec<i64>> {
+    async fn persist_completion(&self, id: &str, completion: &Completion) -> Result<Persisted> {
         let id = id.to_owned();
         let completion = completion.clone();
-        let closed = self
+        let persisted = self
             .store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -120,18 +124,17 @@ impl Manager {
                     [&id],
                 )?;
                 let closed = questions::close_open(&tx, &id)?;
-                ensure!(
-                    replaced || released > 0 || !closed.is_empty(),
-                    "assignment is already marked done at this HEAD"
-                );
                 tx.commit()?;
-                Ok(closed)
+                Ok(Persisted {
+                    changed: replaced || released > 0 || !closed.is_empty(),
+                    closed,
+                })
             })
             .await?;
-        if !closed.is_empty() {
+        if !persisted.closed.is_empty() {
             self.questions_changed.send_modify(|count| *count += 1);
         }
-        Ok(closed)
+        Ok(persisted)
     }
 
     /// The configured `post_done_cmd`, holding off permit and lifecycle changes
@@ -273,6 +276,15 @@ impl Manager {
             })
             .await
     }
+}
+
+/// What recording a completion changed.
+struct Persisted {
+    /// Whether it replaced another completion, released a hold or closed a
+    /// question.
+    changed: bool,
+    /// The numbers of the questions it closed.
+    closed: Vec<i64>,
 }
 
 /// Record `completion`, returning whether it differs from the recorded one:
