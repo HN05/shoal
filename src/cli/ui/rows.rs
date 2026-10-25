@@ -12,7 +12,7 @@ use crate::{
         output::{Palette, Style},
     },
     forge::items::link::{self, ItemKind},
-    model::{Chat, QueueEntry, Repository, ReviewMark, Workspace},
+    model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind},
 };
 
@@ -45,9 +45,36 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
+fn usage_cell(workspace: &Workspace) -> Cell {
+    (
+        workspace
+            .usage
+            .as_ref()
+            .map(usage_label)
+            .unwrap_or_default(),
+        Some(Style::Muted),
+    )
+}
+
+/// How lists and status show what a workspace's processes use:
+/// `12% CPU, 640 MiB`, without CPU until the daemon has measured it.
+pub fn usage_label(usage: &WorkspaceUsage) -> String {
+    const MIB: f64 = 1024.0 * 1024.0;
+    let memory = usage.memory_bytes as f64 / MIB;
+    let memory = if memory >= 1024.0 {
+        format!("{:.1} GiB", memory / 1024.0)
+    } else {
+        format!("{memory:.0} MiB")
+    };
+    match usage.cpu_percent {
+        Some(cpu) => format!("{cpu:.0}% CPU, {memory}"),
+        None => memory,
+    }
+}
+
 /// One aligned row per workspace: a status marker, the name, the repository
-/// when the rows span several (`(id, name)` pairs), the status, and the linked
-/// issue's title when known.
+/// when the rows span several (`(id, name)` pairs), the status, what its
+/// processes use, and the linked issue's title when known.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
@@ -126,7 +153,7 @@ impl<'a> WorkspaceTree<'a> {
     }
 
     /// The row of `workspace` at `depth`, then those of its children below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 4])>, workspace: &Workspace, depth: usize) {
+    fn push(&self, rows: &mut Vec<(String, [Cell; 5])>, workspace: &Workspace, depth: usize) {
         rows.push(tree_workspace_row(
             workspace,
             depth,
@@ -148,7 +175,7 @@ fn tree_workspace_row(
     depth: usize,
     stopped: &HashSet<String>,
     palette: Palette,
-) -> (String, [Cell; 4]) {
+) -> (String, [Cell; 5]) {
     let name = match depth {
         0 => workspace.name.clone(),
         depth => format!("{}└ {}", "  ".repeat(depth - 1), workspace.name),
@@ -160,6 +187,7 @@ fn tree_workspace_row(
             (name, Some(Style::Heading)),
             (String::new(), None),
             status_cell(status),
+            usage_cell(workspace),
             (
                 workspace.links.issue_title.clone().unwrap_or_default(),
                 None,
@@ -168,7 +196,7 @@ fn tree_workspace_row(
     )
 }
 
-fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (String, [Cell; 4]) {
+fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (String, [Cell; 5]) {
     let status = ListStatus::ProcessRunning;
     (
         palette.paint(Style::Heading, "◆"),
@@ -176,6 +204,7 @@ fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (Stri
             (chat_label(chat, repositories), Some(Style::Heading)),
             (String::new(), None),
             (status.label().into(), Some(status.style())),
+            (String::new(), None),
             (chat.agent.clone(), None),
         ],
     )
@@ -209,7 +238,7 @@ pub(super) fn rows_with_status(
         .into_iter()
         .map(|(status, cell)| (status.marker(palette), cell))
         .unzip();
-    let cells: Vec<[Cell; 4]> = workspaces
+    let cells: Vec<[Cell; 5]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
         .zip(statuses)
@@ -218,6 +247,7 @@ pub(super) fn rows_with_status(
                 (w.name.clone(), Some(Style::Heading)),
                 (repository, None),
                 status,
+                usage_cell(w),
                 (w.links.issue_title.clone().unwrap_or_default(), None),
             ]
         })
@@ -238,7 +268,7 @@ pub(super) fn rows_with_status(
 /// Rows of `width` with a state marker before their cells cut the title.
 fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
     width.map(|width| WidthLimit {
-        column: 3,
+        column: 4,
         width: width.saturating_sub(2),
     })
 }
@@ -541,6 +571,36 @@ mod tests {
         assert_eq!(
             queue_status_cell(&entry).0,
             "queued, position 2, after api, https://forge.example/o/r/issues/7"
+        );
+    }
+
+    #[test]
+    fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
+        let usage = |cpu_percent, memory_bytes| WorkspaceUsage {
+            cpu_percent,
+            memory_bytes,
+            processes: 3,
+        };
+        assert_eq!(usage_label(&usage(None, 640 << 20)), "640 MiB");
+        assert_eq!(
+            usage_label(&usage(Some(212.4), 3 << 29)),
+            "212% CPU, 1.5 GiB"
+        );
+        let plain = Palette::stdout(true);
+        let mut workspaces = vec![
+            workspace("a", "busy", "busy", WorkspaceState::Ready),
+            workspace("a", "quiet", "quiet", WorkspaceState::Ready),
+        ];
+        workspaces[0].usage = Some(usage(Some(50.0), 1 << 20));
+        workspaces[0].links.issue_title = Some("Title".into());
+        workspaces[1].links.issue_title = Some("Title".into());
+        let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain, None);
+        assert_eq!(
+            rows,
+            [
+                "○ busy   inactive  50% CPU, 1 MiB  Title",
+                "○ quiet  inactive                  Title",
+            ]
         );
     }
 

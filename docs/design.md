@@ -139,6 +139,11 @@ keep the execution, are rechecked periodically so it clears once they exit, and
 are the only outcome that notifies; `shoal doctor` inspects them, and
 `shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.
+The daemon also samples what each workspace's processes use, attributed by
+the workspace identity in their environment, so the user can see which
+workspace loads the machine; protection, warnings and admission do not use it
+yet. Processes that leave the workspace's environment, such as work handed
+to a shared server or container runtime, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can
 reduce load before anything stops. Warnings repeat per signal and workspace only

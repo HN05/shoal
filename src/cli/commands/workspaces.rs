@@ -1852,6 +1852,16 @@ fn render_status(view: &StatusView, json: bool) {
         );
     }
 
+    match &workspace.usage {
+        Some(usage) => outln!(
+            "Usage:         {}, {} process{}",
+            ui::usage_label(usage),
+            usage.processes,
+            if usage.processes == 1 { "" } else { "es" }
+        ),
+        None => outln!("Usage:         none"),
+    }
+
     outln!("Sessions:      {}", view.sessions.len());
     for session in &view.sessions {
         outln!("  {}", session.label());

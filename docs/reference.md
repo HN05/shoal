@@ -429,8 +429,13 @@ hidden `shoal internal`). Workspace processes see only the workspaces.
 Its rows, like `shoal work` and workspace pickers, are aligned and marked by what
 their status asks of you: ● your turn to answer, review or resume, ◐ an agent
 or process works, ○ quiet, ◌ changing state, or ✗ failed. Each names the workspace, its repository when the
-rows span several, its status and the linked issue's title, cut with `…` to fit
-a terminal's width. The status is the
+rows span several, its status, what its processes use while any run, and the
+linked issue's title, cut with `…` to fit a terminal's width. Usage counts every
+process carrying the workspace's `SHOAL_WORKSPACE_ID`: CPU as a percent of one
+core over the daemon's last ten-second sample, including children those
+processes have waited for, then memory, resident on Linux and the physical
+footprint on macOS. `shoal status` adds the process count, and `--json` gives
+`usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
