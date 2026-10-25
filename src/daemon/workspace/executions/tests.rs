@@ -490,6 +490,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         recover: true,
         running_ms: 0,
         awaiting_restore: None,
+        between_runs: false,
     };
     let stranger = Identity {
         pid: wrapper.pid,
@@ -575,6 +576,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         recover: true,
         running_ms: 0,
         awaiting_restore: None,
+        between_runs: false,
     };
     drop(started);
     // The record names no child, as after a proven pause, and a restart
@@ -602,10 +604,10 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
     assert_eq!(manager.agent_overload(&id).await, Some(protection));
 }
 
-/// A demo's wrapper waiting to run its command again reattaches without a
-/// child once the daemon forgot the exited one.
+/// A demo's wrapper between runs names its exited child, which the daemon
+/// may already have forgotten when it went away before answering.
 #[tokio::test]
-async fn a_wrapper_between_runs_reattaches_without_a_child() {
+async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
     let (_root, manager, workspace) = fixture("true").await;
     let wrapper = process::capture(std::process::id()).unwrap().unwrap();
     let started = manager
@@ -618,29 +620,21 @@ async fn a_wrapper_between_runs_reattaches_without_a_child() {
         .await
         .unwrap();
     let id = started.plan.id.clone();
-    let between_runs = Reattach {
+    let request = Reattach {
         execution: id.clone(),
         wrapper: wrapper.clone(),
-        child: None,
-        group_id: 0,
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
         scope_token: started.plan.scope_token.clone(),
         agent: None,
         recover: false,
         running_ms: 0,
         awaiting_restore: None,
+        between_runs: false,
     };
-    manager
-        .record_execution_child(id.clone(), Some(wrapper.clone()), wrapper.pid)
-        .await
-        .unwrap();
     drop(started);
     manager.detach_execution(&id).await;
-    // While the daemon records the child, a wrapper must name it.
-    let error = manager.reattach_execution(&between_runs).await.unwrap_err();
-    assert!(
-        format!("{error:#}").contains("process identity does not match"),
-        "{error:#}"
-    );
+    // The daemon released the exited child, then went away before answering.
     let forget = id.clone();
     manager
         .store
@@ -653,7 +647,18 @@ async fn a_wrapper_between_runs_reattaches_without_a_child() {
         })
         .await
         .unwrap();
-    let reattached = manager.reattach_execution(&between_runs).await.unwrap();
+    let error = manager.reattach_execution(&request).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("process identity does not match"),
+        "{error:#}"
+    );
+    let reattached = manager
+        .reattach_execution(&Reattach {
+            between_runs: true,
+            ..request
+        })
+        .await
+        .unwrap();
     assert_eq!(reattached.workspace.id, workspace.id);
 }
 
@@ -682,6 +687,7 @@ async fn setup_executions_cannot_reattach() {
             recover: false,
             running_ms: 0,
             awaiting_restore: None,
+            between_runs: false,
         })
         .await
         .unwrap_err();

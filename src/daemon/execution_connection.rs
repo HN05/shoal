@@ -348,6 +348,11 @@ async fn relay(
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
+                // A daemon update waits for the release, as it does for a start.
+                let _operation = match unattachable.take() {
+                    Some(operation) => operation,
+                    None => manager.background_operations.clone().read_owned().await,
+                };
                 // A refusal stops the demo instead of letting it run again.
                 let control = match manager.release_exited_child(execution_id, workspace).await {
                     Ok(()) => Control::ChildReleased,
@@ -700,6 +705,7 @@ mod tests {
                 recover: false,
                 running_ms: 0,
                 awaiting_restore: None,
+                between_runs: false,
             },
             manager.background_operations.clone().read_owned().await,
         ));

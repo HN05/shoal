@@ -440,6 +440,7 @@ async fn open_execution(
                 recover,
                 running_ms: 0,
                 awaiting_restore: None,
+                between_runs: false,
             },
         );
     }

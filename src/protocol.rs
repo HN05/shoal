@@ -1125,6 +1125,11 @@ pub struct Reattach {
     /// stopped; `child` and `group_id` then name the stopped child.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub awaiting_restore: Option<Protection>,
+    /// Set from a demo's report that its child exited until the next run
+    /// registers; `child` and `group_id` name the exited child, which the
+    /// daemon may already have forgotten.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub between_runs: bool,
 }
 
 /// Why protection stopped an agent, and what its automatic restore waits for.

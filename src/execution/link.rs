@@ -109,16 +109,16 @@ impl Link {
             reattach.request.child = child;
             reattach.request.group_id = group_id;
             reattach.request.awaiting_restore = None;
+            reattach.request.between_runs = false;
             reattach.armed = Some(Instant::now());
         }
     }
 
-    /// Keep reattaching while the wrapper waits to run its command again, as
-    /// a demo's does, after the daemon forgot the child that exited.
+    /// Keep reattaching from a demo's report that its child exited until the
+    /// next run registers, whether or not the daemon forgot the child yet.
     pub(super) fn between_runs(&mut self) {
         if let Some(reattach) = &mut self.reattach {
-            reattach.request.child = None;
-            reattach.request.group_id = 0;
+            reattach.request.between_runs = true;
         }
     }
 

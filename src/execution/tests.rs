@@ -156,6 +156,7 @@ fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream
             recover: false,
             running_ms: 0,
             awaiting_restore: None,
+            between_runs: false,
         },
     );
     (link, BufReader::new(server))

@@ -297,6 +297,7 @@ mod tests {
             recover: false,
             running_ms: 0,
             awaiting_restore: None,
+            between_runs: false,
         });
         // Clients that retry a connection closed unanswered keep waiting.
         for retried in [await_answer(), reattach] {

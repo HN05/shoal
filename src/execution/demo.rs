@@ -39,22 +39,23 @@ impl Restarts {
     }
 }
 
-/// Prepare the next run after the child exited: have the daemon release the
-/// child, then wait `delay`. Returns why the demo stopped instead when the
-/// daemon refuses the next run or a stop comes first.
+/// Prepare the next run after the child exited: wait `delay`, then have the
+/// daemon release the child and check the worktree, so the check holds when
+/// the next run starts. Returns why the demo stopped instead when a stop
+/// comes first or the daemon refuses the next run.
 pub(super) async fn next_run(link: &mut Link, delay: Duration) -> Result<Option<String>> {
-    if let Some(reason) = release_child(link).await? {
+    if let Some(reason) = await_restart(link, delay).await? {
         return Ok(Some(reason));
     }
-    // The daemon no longer records the child, so a reattachment names none.
-    link.between_runs();
-    await_restart(link, delay).await
+    release_child(link).await
 }
 
 /// Report the exited child until the daemon answers, telling a restarted
-/// daemon again, since it may have gone before the report arrived. Until the
-/// answer the daemon still records the child, so reattaching names it.
+/// daemon again, since it may have gone before the report arrived. From the
+/// report until the next run registers, a reattachment says the daemon may
+/// have forgotten the child.
 async fn release_child(link: &mut Link) -> Result<Option<String>> {
+    link.between_runs();
     loop {
         if !link.is_attached() {
             super::await_reattachment(link).await?;
