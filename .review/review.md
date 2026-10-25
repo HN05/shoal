@@ -60,7 +60,8 @@ instead of the PR delivery guidance below.
   `SHOAL_*` names stay reserved and port exports win collisions. Desktop handoffs
   may reuse existing processes and do not receive configured variables.
 - Untracked hooks use global defaults below repository config.
-  Workspace setup runs automatically on creation; `work setup` reruns it explicitly.
+  Manual workspace maintenance lives under `work`; setup runs automatically on
+  creation and `work setup` reruns it explicitly.
   Pre-setup hooks run untracked in the daemon after ownership and execution
   checks, with a timeout; failure gates readiness even without a setup command.
   Lifecycle and permit changes are excluded while the hook runs. Removal rechecks

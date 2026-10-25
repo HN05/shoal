@@ -337,7 +337,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     let binary = env!("CARGO_BIN_EXE_shoal");
     let denied = fixture.run(&[
-        "exec", "original", "--", binary, "rename", "other", "stolen",
+        "exec", "original", "--", binary, "work", "rename", "other", "stolen",
     ]);
     assert!(!denied.status.success());
     assert_eq!(
@@ -350,6 +350,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "--",
         binary,
         "--json",
+        "work",
         "rename",
         "feature/topic",
     ]);
@@ -358,7 +359,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let output = fixture
         .command()
         .current_dir(path)
-        .args(["--json", "rename", "by-directory"])
+        .args(["--json", "work", "rename", "by-directory"])
         .output()
         .unwrap();
     assert!(
@@ -370,9 +371,9 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
         "by-directory"
     );
-    let explicit = fixture.ok(&["rename", "by-directory", "explicit"]);
+    let explicit = fixture.ok(&["work", "rename", "by-directory", "explicit"]);
     assert_eq!(explicit["name"], "explicit");
-    assert!(!fixture.run(&["rename"]).status.success());
+    assert!(!fixture.run(&["work", "rename"]).status.success());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
         "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
@@ -499,7 +500,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
-    let renamed = fixture.ok(&["rename", "34-fix-api-timeout", "renamed-issue"]);
+    let renamed = fixture.ok(&["work", "rename", "34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(reopened["path"], created["path"]);
@@ -794,7 +795,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(imported["workspace"]["name"], "moving");
     assert_eq!(imported["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
     // The agent never reported a session, so it starts as a new agent
     // does, told the workspace moved.
     let record = fixture
@@ -1099,36 +1100,36 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     fs::write(path.join("notes"), "draft\n").unwrap();
     fixture.ok(&["rm", "scratch", "--yes"]);
     assert!(!path.exists());
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["work", "restore"]);
     assert_eq!(removed[0]["name"], "scratch");
     assert_eq!(removed[0]["cause"], "manual");
-    let listing = String::from_utf8(fixture.run(&["restore"]).stdout).unwrap();
+    let listing = String::from_utf8(fixture.run(&["work", "restore"]).stdout).unwrap();
     assert!(
         listing.starts_with("scratch  scratch  removed "),
         "{listing:?}"
     );
 
-    let restored = fixture.ok(&["restore", "scratch"]);
+    let restored = fixture.ok(&["work", "restore", "scratch"]);
     assert_eq!(restored["workspace"]["name"], "scratch");
     assert_eq!(restored["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
-    let missing = fixture.run(&["restore", "missing"]);
+    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
+    let missing = fixture.run(&["work", "restore", "missing"]);
     assert!(!missing.status.success());
     assert!(String::from_utf8_lossy(&missing.stderr).contains("no restorable workspace missing"));
 
     // The restored workspace keeps the removal's checkpoint, and returns to
     // any checkpoint after keeping the state it replaces.
-    let checkpoints = fixture.ok(&["restore", "scratch"]);
+    let checkpoints = fixture.ok(&["work", "restore", "scratch"]);
     assert_eq!(checkpoints[0]["number"], 1);
     assert_eq!(checkpoints[0]["cause"], "removal");
-    let checkpoint = fixture.ok(&["checkpoint", "scratch", "--name", "draft"]);
+    let checkpoint = fixture.ok(&["work", "checkpoint", "scratch", "--name", "draft"]);
     assert_eq!(checkpoint["number"], 2);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let restored = fixture.ok(&["restore", "scratch", "2"]);
+    let restored = fixture.ok(&["work", "restore", "scratch", "2"]);
     assert_eq!(restored["replaced"]["number"], 3);
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    let listing = String::from_utf8(fixture.run(&["restore", "scratch"]).stdout).unwrap();
+    let listing = String::from_utf8(fixture.run(&["work", "restore", "scratch"]).stdout).unwrap();
     let causes: Vec<_> = listing
         .lines()
         .map(|line| line.split("  ").nth(2).unwrap_or_default())
@@ -1162,7 +1163,7 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
         [],
     )
     .unwrap();
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["work", "restore"]);
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -1187,7 +1188,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.ok(&["rm", "picked", "--yes"]);
     fixture.ok(&["rm", "kept", "--yes"]);
 
-    let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
+    let (output, rows) = fixture.pick(&["work", "restore"], picked["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
@@ -1199,7 +1200,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
         "{rows:?}"
     );
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["work", "restore"]);
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -1208,9 +1209,9 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
         .collect();
     assert_eq!(names, ["kept"]);
 
-    fixture.ok(&["checkpoint", "picked", "--name", "draft"]);
+    fixture.ok(&["work", "checkpoint", "picked", "--name", "draft"]);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let (output, rows) = fixture.pick(&["restore", "picked"], "2", "");
+    let (output, rows) = fixture.pick(&["work", "restore", "picked"], "2", "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
@@ -1264,18 +1265,18 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     fixture.ok(&["rm", "removed", "--yes"]);
     let stopped = String::from_utf8(agent.wait_with_output().unwrap().stderr).unwrap();
     assert!(
-        stopped.contains("restore with shoal restore removed, then shoal resume removed"),
+        stopped.contains("restore with shoal work restore removed, then shoal resume removed"),
         "{stopped}"
     );
     let stopped = String::from_utf8(command.wait_with_output().unwrap().stderr).unwrap();
     assert!(!stopped.contains("shoal resume"), "{stopped}");
     assert!(!path.exists());
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["work", "restore"]);
     let agents = removed[0]["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{removed}");
     assert_eq!(agents[0]["record"]["agent"], "claude");
 
-    let restored = fixture.ok(&["restore", "removed"]);
+    let restored = fixture.ok(&["work", "restore", "removed"]);
     assert_eq!(restored["warnings"], serde_json::json!([]));
     assert_eq!(restored["workspace"]["path"], workspace["path"]);
     let execution = agents[0]["execution"].as_str().unwrap();
@@ -4939,13 +4940,13 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     assert!(output.status.success(), "{output:?}");
     // The removal record keeps the last session for the restored workspace.
     fixture.ok(&["rm", "quit", "--yes"]);
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["work", "restore"]);
     assert_eq!(
         removed[0]["last_session"],
         serde_json::json!({"agent": "claude", "session": "quit-session"}),
         "{removed}"
     );
-    let restored = fixture.ok(&["restore", "quit"]);
+    let restored = fixture.ok(&["work", "restore", "quit"]);
     assert_eq!(restored["warnings"], serde_json::json!([]));
     let output = fixture
         .command()
@@ -10100,7 +10101,7 @@ fn removal_confirmation_says_when_the_checkpoint_cannot_keep_the_files() {
     assert!(!no.status.success());
     assert!(prompt.contains("so they cannot be restored"), "{prompt}");
     assert!(
-        !prompt.contains("shoal restore brings them back"),
+        !prompt.contains("shoal work restore brings them back"),
         "{prompt}"
     );
     assert!(path.join("uncommitted").exists());
@@ -10124,7 +10125,7 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
         "{prompt}"
     );
     assert!(
-        prompt.contains("shoal restore brings them back"),
+        prompt.contains("shoal work restore brings them back"),
         "{prompt}"
     );
     assert!(prompt.contains("?? uncommitted"), "{prompt}");
@@ -14463,7 +14464,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     assert_eq!(notification["kind"], "workspace_removed");
     assert_eq!(
         notification["message"],
-        "removed after the merge acknowledgement; restore it with shoal restore waiter"
+        "removed after the merge acknowledgement; restore it with shoal work restore waiter"
     );
     follower.kill().unwrap();
     follower.wait().unwrap();
@@ -15517,7 +15518,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["--json", "adopt", "existing worktree"])
+        .args(["--json", "work", "adopt", "existing worktree"])
         .output()
         .unwrap();
     assert!(
@@ -15535,6 +15536,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     );
     fixture.restart();
     let again = fixture.ok(&[
+        "work",
         "adopt",
         "~/existing worktree",
         "--repo",
@@ -15593,7 +15595,14 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
     fs::write(source.join("tracked"), "changed\n").unwrap();
     fs::write(source.join("untracked"), "new\n").unwrap();
     fs::remove_file(source.join(".gitignore")).unwrap();
-    let output = fixture.ok(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.ok(&[
+        "work",
+        "adopt",
+        source.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     assert_eq!(output["branch"], "copy/topic-2");
     let destination = PathBuf::from(output["path"].as_str().unwrap());
     assert!(destination.starts_with(fixture.shoal_dir()));
@@ -15649,7 +15658,14 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
     let destination =
         Path::new(repositories[0]["workspaces_dir"].as_str().unwrap()).join("copy-topic-2");
 
-    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.run(&[
+        "work",
+        "adopt",
+        source.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace name already exists"));
     assert!(source.exists());
@@ -15695,13 +15711,27 @@ fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
         path
     };
     let first = add("copy/first", "first worktree");
-    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.ok(&[
+        "work",
+        "adopt",
+        first.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     let directory = PathBuf::from(output["path"].as_str().unwrap());
     let directory = directory.parent().unwrap();
     let source = add("copy/second", "second worktree");
     let planted = directory.join("copy-second-2");
     std::os::unix::fs::symlink(fixture.root.path().join("missing"), &planted).unwrap();
-    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.run(&[
+        "work",
+        "adopt",
+        source.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace path already exists"));
     assert!(planted.is_symlink());
@@ -15722,7 +15752,14 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
         fs::canonicalize(path).unwrap()
     };
     let first = add("copy/first", "first worktree");
-    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.ok(&[
+        "work",
+        "adopt",
+        first.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     let directory = PathBuf::from(output["path"].as_str().unwrap())
         .parent()
         .unwrap()
@@ -15731,7 +15768,14 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
     let source = add("copy/second", "second worktree");
     fs::remove_dir_all(&directory).unwrap();
     std::os::unix::fs::symlink(&source, &directory).unwrap();
-    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let output = fixture.run(&[
+        "work",
+        "adopt",
+        source.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--copy",
+    ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("overlaps the source worktree"));
     assert!(!source.join("copy-second-2").exists());
@@ -15774,7 +15818,7 @@ fn adopt_infers_a_checkout_with_a_separate_git_directory() {
         &checkout,
         &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
     );
-    let adopted = fixture.ok(&["adopt", path.to_str().unwrap()]);
+    let adopted = fixture.ok(&["work", "adopt", path.to_str().unwrap()]);
     assert_eq!(adopted["name"], "topic");
 }
 
@@ -15790,7 +15834,7 @@ fn adopt_infers_the_repository_from_the_worktree_remote() {
             &clone,
             &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
         );
-        let output = fixture.run(&["adopt", path.to_str().unwrap()]);
+        let output = fixture.run(&["work", "adopt", path.to_str().unwrap()]);
         assert!(!output.status.success());
         String::from_utf8_lossy(&output.stderr).into_owned()
     };
@@ -15834,7 +15878,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
             adopted.to_str().unwrap(),
         ],
     );
-    fixture.ok(&["adopt", adopted.to_str().unwrap(), "--repo", repo]);
+    fixture.ok(&["work", "adopt", adopted.to_str().unwrap(), "--repo", repo]);
     for protected in [
         offline.join("nested"),
         Path::new(registration["workspaces_dir"].as_str().unwrap()).join("nested"),

@@ -272,7 +272,7 @@ it; when the user's login cannot push there, the user's fork, created or reused,
 becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no workspace, queued agent, chat, pending
-issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
+issue proposal, kept branch or borrowed resource, nothing `shoal work restore` could
 use, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
@@ -333,7 +333,7 @@ adoption accepts an unlocked linked worktree root on a local branch of the regis
 conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
 adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.
-`adopt --copy` records a preparing workspace before creating a fresh worktree
+`work adopt --copy` records a preparing workspace before creating a fresh worktree
 under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, removes checkout files the source deleted at any
 depth, and adopts the copy on an available branch derived from the source branch; failures retain a failed record for normal removal.
@@ -372,7 +372,7 @@ agent still has work; resuming stays the user's. Approval
 requests go to the coordinator too when it holds an approved grant for the same
 thing; it decides them or passes them up, the user deciding at the top.
 
-`shoal rename` changes a ready workspace's checked-out branch and derived name
+`shoal work rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay
 with the workspace. The default branch, a branch checked out elsewhere, or a
 name collision is refused. No execution other than the scoped caller may be
@@ -1374,7 +1374,7 @@ checkpoint) persists before any file is deleted, so an interrupted or failed
 removal stays restorable; records of workspaces that still exist are not offered,
 and a retried removal replaces the record with a new checkpoint while the earlier
 one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
-the workspace. Records expire with their checkpoint. `shoal restore`
+the workspace. Records expire with their checkpoint. `shoal work restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
 snapshot's files without staging them, links what the record names and saves its

@@ -327,7 +327,7 @@ notification and tries again only once agents have no work or the config reloads
 
 ## Workspaces
 
-`shoal rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
+`shoal work rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
 branch and its derived workspace name while keeping the worktree path and
 owned resources and settings. Dirty files are preserved;
 Git keeps the branch's upstream and reflog. Remotes and open PR head branches
@@ -1102,7 +1102,7 @@ existing branch reports incompatibility. Nested components remain literal.
 Suffixes never change the derived workspace name.
 
 ### Adopting a worktree
-`shoal adopt <path>` registers an existing linked worktree in place
+`shoal work adopt <path>` registers an existing linked worktree in place
 and enters it with shell integration. The path is relative to the current directory
 (`~/` allowed) and must name its root. `--repo` selects the registered repository;
 otherwise it is the one whose checkout owns the worktree, else the only one sharing
@@ -1737,24 +1737,24 @@ Workspace processes cannot list or delete kept branches.
 ### Checkpoints and restore
 
 ```sh
-shoal checkpoint --name "before migration"  # keep the current workspace's state
-shoal restore topic    # pick one of topic's checkpoints, or open removed topic again
-shoal restore topic 3  # return topic to checkpoint 3
-shoal restore          # pick a removed workspace to open again
+shoal work checkpoint --name "before migration"  # keep the current workspace's state
+shoal work restore topic    # pick one of topic's checkpoints, or open removed topic again
+shoal work restore topic 3  # return topic to checkpoint 3
+shoal work restore          # pick a removed workspace to open again
 ```
 
 A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
 ignored ones, under `refs/shoal/checkpoints/<commit>` in the
-repository; taking one leaves the worktree and its index untouched. `shoal
-checkpoint [workspace]` takes one, and Shoal takes one when an agent exits or is
-stopped, before a restore to a checkpoint, and on every removal of an existing
+repository; taking one leaves the worktree and its index untouched.
+`shoal work checkpoint [workspace]` takes one, and Shoal takes one when an agent
+exits or is stopped, before a restore to a checkpoint, and on every removal of an existing
 worktree. An automatic checkpoint that would keep what the newest one keeps
 extends that one instead. When the unsaved files exceed `archive_max_mb`, include
 an untracked nested repository or a changed submodule, whose files it cannot hold,
 the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`; their
 numbers are never reused, so a number names one checkpoint for good.
 
-`shoal restore <workspace> <number>` keeps the current state in a new checkpoint,
+`shoal work restore <workspace> <number>` keeps the current state in a new checkpoint,
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back
 as uncommitted changes, deleting tracked changes and untracked files it lacks.
 It refuses while an execution other than the caller's own runs in the workspace,
@@ -1764,7 +1764,7 @@ inside or around an ignored file, which it would delete or overwrite and no
 checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
-`shoal restore` and `shoal restore <workspace>` open a picker of the removed
+`shoal work restore` and `shoal work restore <workspace>` open a picker of the removed
 workspaces or of an existing workspace's checkpoints and restore the one picked;
 without a terminal, or with `--json`, they list them instead. When
 `<workspace>` names a removed one, it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
@@ -1830,13 +1830,13 @@ reads in name order, it imports each one, going on after a failure, lists every
 workspace it opened and exits 1 naming each file it could not import or whose
 `post_setup_cmd` failed. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
-checkpoint, then restores it as `shoal restore` does; when that restore fails,
-`shoal restore <workspace>` retries it. On the machine that exported it, `shoal
+checkpoint, then restores it as `shoal work restore` does; when that restore fails,
+`shoal work restore <workspace>` retries it. On the machine that exported it, `shoal
 resume` continues each agent's reported session by ID, which Claude Code and
 Codex find from any directory; Shoal leaves the agents' session files alone.
 `--keep-sessions` keeps the sessions on any machine, such as one they were
-copied to, and `--new-sessions` on none. Every reopen, by import or `shoal
-restore`, trusts the workspace's path for the agents that resume there. An agent
+copied to, and `--new-sessions` on none. Every reopen, by import or
+`shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
 `[agent_resume]`. Workspace processes can neither export nor import.
@@ -1852,7 +1852,7 @@ false. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
-reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
+reversible with [`shoal work restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#workspace-holds) it. `done` closes the workspace's open
 [questions](#questions), so completion and PR cleanup wait only while a hold, a
 question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)

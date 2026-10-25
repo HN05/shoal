@@ -61,7 +61,7 @@ enum Target {
     Workspaces(Need),
     /// Workspaces described by what `shoal resume` restores in them.
     ResumeWorkspaces,
-    /// Removed workspaces `shoal restore` can open again, then existing
+    /// Removed workspaces `shoal work restore` can open again, then existing
     /// ones it can return to a checkpoint.
     RestorableWorkspaces,
     Pools,

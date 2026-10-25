@@ -77,9 +77,9 @@ shoal base set feature-api --workspace fix-api  # Record the workspace fix-api b
 shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
-shoal adopt ../existing-worktree             # Take ownership, including automatic cleanup
-shoal adopt --copy ../existing-worktree      # Copy work into Shoal's default directory
-shoal rename fix-login fix/login             # Rename its branch and workspace together
+shoal work adopt ../existing-worktree        # Take ownership, including automatic cleanup
+shoal work adopt --copy ../existing-worktree # Copy work into Shoal's default directory
+shoal work rename fix-login fix/login        # Rename its branch and workspace together
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
@@ -167,9 +167,9 @@ shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal branch                  # List branches removal kept for unpushed commits
 shoal branch rm               # Pick kept branches to delete with their commits
-shoal checkpoint fix-login    # Keep HEAD and unsaved files to return to later
-shoal restore fix-login       # Pick a checkpoint, or open a removed workspace again
-shoal restore fix-login 3     # Return the workspace to checkpoint 3
+shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
+shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
+shoal work restore fix-login 3     # Return the workspace to checkpoint 3
 shoal export fix-login -o - | ssh other shoal import - # Move the workspace to another machine
 shoal export --repo app --all -o moving # Export every workspace of app, a file each
 shoal import moving           # Import every workspace exported to a directory
@@ -359,11 +359,11 @@ merged workspaces after 4 idle hours whether or not their agent ran `shoal done`
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and why
 it keeps the others, `--caches` also empties shared caches nothing is using, and `shoal status` shows why it keeps one workspace.
-Every removal can be undone for 30 days: `shoal restore` picks a removed workspace,
-and `shoal restore <workspace>` opens one again with its uncommitted files and links;
+Every removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
+and `shoal work restore <workspace>` opens one again with its uncommitted files and links;
 `shoal resume` then continues the agents the removal stopped. Removal keeps the
-workspace's HEAD and unsaved files in a checkpoint, as `shoal checkpoint` does and
-Shoal does when an agent exits or is stopped; `shoal restore <workspace> <number>`
+workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` does and
+Shoal does when an agent exits or is stopped; `shoal work restore <workspace> <number>`
 returns an existing workspace to one of them. `shoal export <workspace> -o <file>`
 removes a workspace and writes that checkpoint and record to a file, and `shoal
 import <file>` opens it on another machine, where its agents start new sessions, or

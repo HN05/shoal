@@ -1,5 +1,5 @@
 //! Contribution repositories, which Shoal removes once nothing of them is
-//! left: no work, nothing waiting to start, and nothing `shoal restore`
+//! left: no work, nothing waiting to start, and nothing `shoal work restore`
 //! could still bring back.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};

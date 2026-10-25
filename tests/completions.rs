@@ -145,6 +145,10 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "run", "rev"], "review"),
         (vec!["shoal", "ins"], "install"),
         (vec!["shoal", "work", "set"], "setup"),
+        (vec!["shoal", "work", "ad"], "adopt"),
+        (vec!["shoal", "work", "ren"], "rename"),
+        (vec!["shoal", "work", "ch"], "checkpoint"),
+        (vec!["shoal", "work", "res"], "restore"),
         (vec!["shoal", "repo", "set"], "setup"),
         (vec!["shoal", "config", "i"], "install"),
         (vec!["shoal", "config", "s"], "show"),
@@ -178,8 +182,16 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         }
     }
     for shell in ["bash", "zsh"] {
-        let values = candidates(completion(home.path(), shell, &["shoal", "set"]));
-        assert!(!values.iter().any(|value| value == "setup"));
+        for (prefix, moved) in [
+            ("set", "setup"),
+            ("ad", "adopt"),
+            ("ren", "rename"),
+            ("ch", "checkpoint"),
+            ("rest", "restore"),
+        ] {
+            let values = candidates(completion(home.path(), shell, &["shoal", prefix]));
+            assert!(!values.iter().any(|value| value == moved));
+        }
     }
     assert!(!home.path().join("state").exists());
 }

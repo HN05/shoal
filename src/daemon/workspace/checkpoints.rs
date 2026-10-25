@@ -1,5 +1,5 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
-//! until they expire, which `shoal restore` returns the workspace to.
+//! until they expire, which `shoal work restore` returns the workspace to.
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -15,7 +15,7 @@ use crate::{
 };
 
 impl Manager {
-    /// `shoal checkpoint`: keep the workspace's current state.
+    /// `shoal work checkpoint`: keep the workspace's current state.
     pub async fn take_checkpoint(
         &self,
         selector: &str,
@@ -198,7 +198,7 @@ impl Manager {
             .await?
             .with_context(|| {
                 format!(
-                    "workspace {name} has no checkpoint {number}; shoal restore {name} lists them"
+                    "workspace {name} has no checkpoint {number}; shoal work restore {name} lists them"
                 )
             })?;
         let reserved_state = self

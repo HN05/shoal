@@ -24,7 +24,7 @@ impl Branch {
 pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &str) -> Result<()> {
     if let Some(tree) = git::checkout_of(repo, name, git::run).await? {
         anyhow::bail!(
-            "branch {name} is already checked out at {}; Shoal cannot create another worktree for it; use shoal adopt for an unmanaged linked worktree",
+            "branch {name} is already checked out at {}; Shoal cannot create another worktree for it; use shoal work adopt for an unmanaged linked worktree",
             tree.path.display()
         );
     }

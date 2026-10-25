@@ -47,6 +47,7 @@ mod stop;
 mod transfer;
 mod update;
 mod view;
+mod work;
 pub(in crate::cli) mod workspaces;
 
 #[cfg(test)]
@@ -65,8 +66,7 @@ use crate::{
     agent::CodexMode,
     cli::{
         ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ImportArgs, InternalCommand,
-        NotificationsCommand, QuestionsCommand, ShellCommand, WorkCommand, WorkspaceScope, agents,
-        client,
+        NotificationsCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -392,12 +392,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             draft,
             no_draft,
         } => links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await,
-        Command::Adopt {
-            path,
-            repository,
-            copy,
-        } => workspaces::adopt(&ctx, path, repository, copy).await,
-        Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
         Command::Split {
             branch,
             issue,
@@ -424,9 +418,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             inbox::list(&ctx, &filter).await
         }
         Command::Work {
-            command: Some(WorkCommand::Setup { workspace }),
+            command: Some(command),
             ..
-        } => workspaces::setup(&ctx, workspace).await,
+        } => work::run(&ctx, command).await,
         Command::Work {
             command: None,
             queue,
@@ -561,11 +555,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
         Command::Cleanup { dry_run, caches } => cleanup::run(&ctx, dry_run, caches).await,
         Command::Branch { command } => branches::run(&ctx, command).await,
-        Command::Checkpoint { workspace, name } => restore::checkpoint(&ctx, workspace, name).await,
-        Command::Restore {
-            workspace,
-            checkpoint,
-        } => restore::run(&ctx, workspace, checkpoint).await,
         Command::Export(ExportArgs {
             repository: Some(repository),
             output,

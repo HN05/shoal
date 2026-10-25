@@ -52,14 +52,15 @@ impl Need {
             ["undone"] => Self::Done,
             ["unready"] => Self::Marks,
             ["work", "setup"] => Self::Setup,
-            ["checkpoint"] => Self::Checkpoint,
+            ["work", "rename"] => Self::Ready,
+            ["work", "restore"] => Self::Any,
+            ["work", "checkpoint"] => Self::Checkpoint,
             ["base", "clear"] => Self::Base,
             ["hold", "release"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
-                "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "rename"
-                | "split" | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire"
-                | "release",
+                "run" | "exec" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split"
+                | "done" | "env" | "review" | "ask" | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
             | ["hold", "acquire"]
@@ -68,8 +69,8 @@ impl Need {
             [
                 "status" | "inspect" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
-                | "restore" | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr"
-                | "issue" | "ci" | "labels" | "capabilities" | "api" | "notifications",
+                | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "ci"
+                | "labels" | "capabilities" | "api" | "notifications",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

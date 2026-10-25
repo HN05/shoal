@@ -1,0 +1,27 @@
+//! Workspace maintenance commands beneath `shoal work`.
+use anyhow::Result;
+
+use crate::cli::{WorkCommand, context::Context};
+
+use super::{restore, workspaces};
+
+pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
+    match command {
+        WorkCommand::Adopt {
+            path,
+            repository,
+            copy,
+        } => workspaces::adopt(ctx, path, repository, copy).await,
+        WorkCommand::Rename { workspace, branch } => {
+            workspaces::rename(ctx, workspace, branch).await
+        }
+        WorkCommand::Checkpoint { workspace, name } => {
+            restore::checkpoint(ctx, workspace, name).await
+        }
+        WorkCommand::Restore {
+            workspace,
+            checkpoint,
+        } => restore::run(ctx, workspace, checkpoint).await,
+        WorkCommand::Setup { workspace } => workspaces::setup(ctx, workspace).await,
+    }
+}

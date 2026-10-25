@@ -3007,7 +3007,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
     // A workspace renamed meanwhile does not get the old branch's PR linked.
     let shoal = env!("CARGO_BIN_EXE_shoal");
     let rename = |from: &str, to: &str| {
-        let renamed = fixture.run(&["exec", from, "--", shoal, "--json", "rename", to]);
+        let renamed = fixture.run(&["exec", from, "--", shoal, "--json", "work", "rename", to]);
         assert!(renamed.status.success(), "{renamed:?}");
     };
     rename("topic", "renamed");

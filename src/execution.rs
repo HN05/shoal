@@ -681,7 +681,7 @@ impl Halt {
         let resume = format!("shoal resume {workspace} --execution {execution}");
         match self {
             Self::Pause { removed: true, .. } => {
-                format!("restore with shoal restore {workspace}, then {resume}")
+                format!("restore with shoal work restore {workspace}, then {resume}")
             }
             _ => format!("restore with {resume}"),
         }

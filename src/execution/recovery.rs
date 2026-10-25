@@ -300,7 +300,7 @@ fn write_record(
     Ok(path)
 }
 
-/// An agent stopped in a removed workspace, which `shoal restore` saves
+/// An agent stopped in a removed workspace, which `shoal work restore` saves
 /// again for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedAgent {

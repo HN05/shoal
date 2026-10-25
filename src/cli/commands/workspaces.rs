@@ -1950,7 +1950,7 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck) -> Result<()> {
     }
     if !check.unsaved_work().is_empty() {
         action.push_str(if !check.dirty || check.unsaved_files_archived {
-            "\nshoal restore brings them back until the checkpoint expires."
+            "\nshoal work restore brings them back until the checkpoint expires."
         } else {
             "\nThe checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored."
         });

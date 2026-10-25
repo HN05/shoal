@@ -183,7 +183,7 @@ pub struct Checkpoint {
     pub expires_at: u64,
 }
 
-/// A workspace `shoal restore` returned to one of its checkpoints, and the
+/// A workspace `shoal work restore` returned to one of its checkpoints, and the
 /// checkpoint of the state it replaced.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RestoredCheckpoint {
@@ -217,7 +217,7 @@ pub struct BranchTarget {
     pub head: String,
 }
 
-/// What `shoal restore` recreates of a removed workspace until `expires_at`.
+/// What `shoal work restore` recreates of a removed workspace until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemovedWorkspace {
     pub workspace_id: String,
@@ -241,7 +241,7 @@ pub struct RemovedWorkspace {
     pub expires_at: u64,
 }
 
-/// A workspace `shoal restore` opened again from its removal record; the
+/// A workspace `shoal work restore` opened again from its removal record; the
 /// caller sets it up and links its PRs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RestoredWorkspace {

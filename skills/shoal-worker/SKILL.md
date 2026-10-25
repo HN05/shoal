@@ -119,7 +119,7 @@ current head, after you have read its log and fixed or reported the cause, and
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
-can reopen a removed workspace with `shoal restore`. Cleanup waits while one of
+can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
 your questions is open, so ask with `shoal ask` when you need the user before the
 workspace goes. `shoal done` closes your open questions, and `shoal undone` does
 not reopen them. Holds belong to the user and host apps; you can list them with
@@ -148,10 +148,10 @@ the workspace.
 
 ## Checkpoints
 
-`shoal --json checkpoint --name "<what comes next>"` keeps your workspace's HEAD
+`shoal --json work checkpoint --name "<what comes next>"` keeps your workspace's HEAD
 and unsaved files before a risky change; Shoal also takes one when you exit or
-are stopped. `shoal --json restore <workspace>` lists them, and
-`shoal --json restore <workspace> <number>` returns to one after keeping the
+are stopped. `shoal --json work restore <workspace>` lists them, and
+`shoal --json work restore <workspace> <number>` returns to one after keeping the
 current state in a new checkpoint. It refuses while another command runs in the
 workspace.
 

@@ -308,24 +308,6 @@ pub enum Command {
         #[arg(long, overrides_with = "draft")]
         no_draft: bool,
     },
-    /// Bring an existing worktree under Shoal management, including cleanup.
-    Adopt {
-        /// Existing worktree root; files and Git settings are preserved, setup is skipped.
-        path: PathBuf,
-        /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Copy the work into a new worktree under the repository's Shoal directory.
-        #[arg(long)]
-        copy: bool,
-    },
-    /// Rename a workspace's Git branch and derived workspace name.
-    #[command(allow_missing_positional = true)]
-    Rename {
-        workspace: Option<String>,
-        /// New literal Git branch name.
-        branch: String,
-    },
     /// Restore stopped agent sessions and list interrupted commands.
     Resume {
         #[command(flatten)]
@@ -760,23 +742,6 @@ pub enum Command {
     Branch {
         #[command(subcommand)]
         command: Option<BranchCommand>,
-    },
-    /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
-    Checkpoint {
-        workspace: Option<String>,
-        /// Describe the checkpoint in shoal restore's list, in at most 200 characters.
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// Return a workspace to a checkpoint, or open a removed workspace again with its unsaved files and links.
-    ///
-    /// Without a workspace, picks a removed workspace to open again. With an existing workspace,
-    /// picks one of its checkpoints; with a checkpoint number as well, returns to it after
-    /// keeping the current state in a new checkpoint. Without a terminal, the choices are listed.
-    Restore {
-        workspace: Option<String>,
-        #[arg(requires = "workspace")]
-        checkpoint: Option<u64>,
     },
     /// Remove a workspace and write it to a file that shoal import opens on another machine.
     ///
@@ -1498,6 +1463,41 @@ pub enum BranchCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum WorkCommand {
+    /// Bring an existing worktree under Shoal management, including cleanup.
+    Adopt {
+        /// Existing worktree root; files and Git settings are preserved, setup is skipped.
+        path: PathBuf,
+        /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Copy the work into a new worktree under the repository's Shoal directory.
+        #[arg(long)]
+        copy: bool,
+    },
+    /// Rename a workspace's Git branch and derived workspace name.
+    #[command(allow_missing_positional = true)]
+    Rename {
+        workspace: Option<String>,
+        /// New literal Git branch name.
+        branch: String,
+    },
+    /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
+    Checkpoint {
+        workspace: Option<String>,
+        /// Describe the checkpoint in shoal work restore's list, in at most 200 characters.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Return a workspace to a checkpoint, or open a removed workspace again with its unsaved files and links.
+    ///
+    /// Without a workspace, picks a removed workspace to open again. With an existing workspace,
+    /// picks one of its checkpoints; with a checkpoint number as well, returns to it after
+    /// keeping the current state in a new checkpoint. Without a terminal, the choices are listed.
+    Restore {
+        workspace: Option<String>,
+        #[arg(requires = "workspace")]
+        checkpoint: Option<u64>,
+    },
     /// Run or retry workspace setup and the post-setup hook.
     Setup {
         /// Workspace to use; defaults to the current workspace or picker.
