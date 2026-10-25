@@ -8,7 +8,10 @@ use super::{
     Manager,
     executions::{Save, StopPolicy, StopRequest},
 };
-use crate::demos::{Launch, Running};
+use crate::{
+    demos::{Launch, Running},
+    model::Execution,
+};
 
 impl Manager {
     /// The running demos of `selector`'s workspace, or of every workspace.
@@ -46,11 +49,25 @@ impl Manager {
                 .run(move |db| crate::daemon::store::find_execution(db, &query))
                 .await?;
             if let Some(execution) = execution {
-                self.stop_disconnected(&execution, StopPolicy::RequireCompleteProof)
-                    .await?;
+                self.stop_disconnected_demo(&execution).await?;
             }
         }
         Ok(())
+    }
+
+    /// Stop a demo whose wrapper is away. Between runs the daemon already
+    /// proved the last run stopped and forgot it, so stopping what still
+    /// carries the execution's marker, the wrapper, completes the proof.
+    async fn stop_disconnected_demo(&self, execution: &Execution) -> Result<()> {
+        let between_runs = execution.child.is_none() && execution.group_id.is_none();
+        if !between_runs {
+            return self
+                .stop_disconnected(execution, StopPolicy::RequireCompleteProof)
+                .await;
+        }
+        self.stop_disconnected(execution, StopPolicy::ForRemoval)
+            .await?;
+        self.forget_execution(&execution.id).await
     }
 
     /// Ask the connected wrappers among `executions` to stop, returning the

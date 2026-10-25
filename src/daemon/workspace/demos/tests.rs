@@ -304,3 +304,31 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
     assert!(away.wait().is_ok_and(|status| !status.success()));
 }
+
+#[tokio::test]
+async fn stopping_an_away_demo_between_runs_ends_its_record() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let mut away = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let wrapper = crate::process::identity::capture(away.id()).unwrap();
+    let started = manager
+        .begin_execution_running(
+            &first.id,
+            wrapper,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    // The last run was released, so the record names no child.
+    drop(started);
+    manager.detach_execution(&id).await;
+    manager.stop_demos(&first.name, None).await.unwrap();
+    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    assert!(away.wait().is_ok_and(|status| !status.success()));
+}
