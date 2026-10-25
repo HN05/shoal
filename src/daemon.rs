@@ -734,6 +734,16 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             action,
             checks,
         } => Body::CiActed(manager.ci_action(&workspace, item, action, checks).await?),
+        Method::StartCiRun {
+            workspace,
+            workflow,
+            branch,
+            inputs,
+        } => Body::CiRunStarted(
+            manager
+                .start_ci_run(&workspace, workflow, branch, inputs)
+                .await?,
+        ),
         Method::FindWorkspaces { target } => {
             // Scoped callers find workspaces in their subtree only.
             let within = match caller {

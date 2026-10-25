@@ -194,6 +194,7 @@ shoal view                    # Linked items with state, failed CI logs, comment
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
 shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal pr ci rerun --check rust     # Rerun a failed check on the linked PR; cancel stops running ones
+shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs

@@ -121,6 +121,8 @@ include the failing step when the runner records it and a command to read the lo
 `shoal pr ci rerun --check '<check name>'` reruns a failed check on the PR's
 current head, after you have read its log and fixed or reported the cause, and
 `shoal pr ci cancel` cancels running ones; omit `--check` for all of them.
+`shoal ci run <workflow> --input NAME=VALUE` starts a workflow run on your
+branch; it is a new run, not a rerun, so a failed check on the PR stays failed.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

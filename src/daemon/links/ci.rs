@@ -1,12 +1,18 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
-//! as the workspace's agent account.
+//! and starting workflow runs on a branch, as the workspace's agent account.
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
 
 use super::actions::linked;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
-        ci::{CiActed, CiAction, checks::validate_check_name},
+        ci::{
+            CiActed, CiAction,
+            checks::validate_check_name,
+            run::{NewRun, StartedRun},
+        },
         items::link::ItemKind,
     },
 };
@@ -52,6 +58,30 @@ impl Manager {
             action,
             checks: plan.checks,
         })
+    }
+
+    /// Start `workflow` on `branch`, by default the workspace's, in the
+    /// workspace's repository.
+    pub async fn start_ci_run(
+        &self,
+        selector: &str,
+        workflow: Option<String>,
+        branch: Option<String>,
+        inputs: BTreeMap<String, String>,
+    ) -> Result<StartedRun> {
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
+        let run = NewRun {
+            workflow,
+            branch: branch.unwrap_or_else(|| workspace.branch.clone()),
+            inputs,
+        };
+        let account = self.agent_account(&workspace).await?;
+        forge
+            .start_run(&account, &run)
+            .await
+            .with_context(|| format!("could not start a CI run on {}", run.branch))
     }
 
     async fn record_ci_action(&self, id: &str, url: &str, action: CiAction) -> Result<()> {

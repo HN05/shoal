@@ -539,7 +539,7 @@ is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; workspace maintenance lives under
 `work`, repository administration under `repo`, forge inspection and API access under
-`forge`, PR checks under `pr ci`, and
+`forge`, PR checks under `pr ci`, branch workflow runs under `ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
@@ -1414,7 +1414,11 @@ Agents can also rerun failed and cancel running CI jobs on a PR's current head
 through the daemon, as the agent account and under the same scope, with each
 action recorded as an `item_changed` event. Each forge's own job API carries them
 out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, so
-Forgejo only cancels, and Bitbucket Pipelines are not supported.
+Forgejo only cancels, and Shoal acts on no Bitbucket Pipelines job.
+Agents may also start a workflow run on their own workspace's branch, on every
+forge including Bitbucket. A started run is not a rerun: forges attach it to no
+PR's checks, and on Forgejo it has no head commit or event, so it cannot replace
+the rerun Forgejo lacks.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run

@@ -2456,6 +2456,87 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
     assert!(fixture.requests().is_empty());
 }
 
+#[test]
+fn ci_runs_start_on_the_workspace_branch_with_inputs() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
+    fixture.respond(json!({dispatch: {"status": 204}}));
+    let started = fixture.ok(&[
+        "ci",
+        "run",
+        "deps.yml",
+        "--workspace",
+        "topic",
+        "--input",
+        "level=full",
+        "--input",
+        "note=a=b",
+    ]);
+    assert_eq!(
+        started,
+        json!({"workflow": "deps.yml", "branch": "topic"}),
+        "{started}"
+    );
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "topic", "inputs": {"level": "full", "note": "a=b"}}])]
+    );
+
+    // Workspace processes start runs only on their own branch.
+    let exported = fixture.ok(&["work", "env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let start = |branch: &str| {
+        fixture.request_as(
+            json!({"start_ci_run": {"workspace": "topic", "workflow": "deps.yml",
+                "branch": branch, "inputs": {}}}),
+            Some(scope),
+        )
+    };
+    let refused = start("main");
+    assert!(
+        refused["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("only on their workspace's branch"),
+        "{refused}"
+    );
+    assert!(fixture.requests().is_empty());
+    let started = start("topic");
+    assert_eq!(started["type"], "ci_run_started", "{started}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "topic", "inputs": {}}])]
+    );
+    let unscoped = fixture.request(json!({"start_ci_run": {"workspace": "topic",
+        "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
+    assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
+}
+
+#[test]
+fn forgejo_ci_runs_link_the_run_they_start() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
+    fixture.respond(json!({
+        dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765, "jobs": ["audit"]}},
+    }));
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--workspace", "topic"]);
+    assert_eq!(
+        started["url"],
+        format!("{}/actions/runs/2765", fixture.web),
+        "{started}"
+    );
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "topic", "inputs": {}, "return_run_info": true}])]
+    );
+    let output = fixture.run(&["ci", "run", "--workspace", "topic"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("starts a named workflow"),
+        "{output:?}"
+    );
+}
+
 /// Run a Shoal command inside the workspace, as its agent would.
 fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
     let shoal = env!("CARGO_BIN_EXE_shoal");

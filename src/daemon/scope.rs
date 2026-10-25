@@ -177,6 +177,16 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::StartCiRun {
+            workspace, branch, ..
+        } => {
+            let own = manager.workspace(workspace).await?.branch;
+            ensure!(
+                branch.as_ref().is_none_or(|branch| *branch == own),
+                "workspace processes start CI runs only on their workspace's branch"
+            );
+            Some(workspace)
+        }
         Method::DiscardStoppedWork { workspace, .. } => {
             ensure!(
                 manager.workspace(workspace).await?.id != *owner,

@@ -478,6 +478,13 @@ pub enum Method {
         action: crate::forge::ci::CiAction,
         checks: Vec<String>,
     },
+    /// Start a CI workflow run on a branch, by default the workspace's.
+    StartCiRun {
+        workspace: String,
+        workflow: Option<String>,
+        branch: Option<String>,
+        inputs: std::collections::BTreeMap<String, String>,
+    },
     /// Workspaces that link an item or hold a resource.
     FindWorkspaces {
         target: crate::model::WorkspaceTarget,
@@ -1011,6 +1018,7 @@ response_bodies! {
     SelectedItems(crate::model::Selected),
     CheckLog(crate::forge::ci::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
+    CiRunStarted(crate::forge::ci::run::StartedRun),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),

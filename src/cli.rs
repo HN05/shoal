@@ -475,6 +475,11 @@ pub enum Command {
         #[command(subcommand)]
         command: PrCommand,
     },
+    /// Start a CI workflow run on the workspace's branch or another.
+    Ci {
+        #[command(subcommand)]
+        command: WorkflowCommand,
+    },
     /// Open, change, comment on, close or reopen an issue of the workspace's repository.
     Issue {
         #[command(subcommand)]
@@ -850,6 +855,28 @@ pub enum CiCommand {
     Cancel {
         #[command(flatten)]
         checks: CiChecks,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum WorkflowCommand {
+    /// Start a workflow run on a branch. It is a new run, not a rerun: a PR's
+    /// failed checks stay failed.
+    Run {
+        /// Workflow file or ID, such as ci.yml, or a Bitbucket custom
+        /// pipeline; GitLab runs the branch's pipeline and takes none.
+        workflow: Option<String>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Branch to run on; defaults to the workspace's branch, the only
+        /// one workspace processes may run on.
+        #[arg(long)]
+        branch: Option<String>,
+        /// Pass a workflow input; repeat for more.
+        #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
+        inputs: Vec<(String, String)>,
     },
 }
 
@@ -1403,6 +1430,13 @@ fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
         Some(number) if IssueInput::parse(number) == IssueInput::Number => number.to_owned(),
         _ => input.to_owned(),
     })
+}
+
+fn workflow_input(input: &str) -> Result<(String, String), String> {
+    match input.split_once('=') {
+        Some((name, value)) if !name.is_empty() => Ok((name.into(), value.into())),
+        _ => Err("expected NAME=VALUE".into()),
+    }
 }
 
 /// clap parser for [`Agent`] that also advertises its values for completion.

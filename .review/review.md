@@ -92,6 +92,7 @@ instead of the PR delivery guidance below.
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing, opening and changing issues and PRs
   of the own repository except merging, rerunning or cancelling their CI jobs,
+  starting CI runs on their own branch,
   GET requests to the own repository's forge API, or others where `[api] agent_writes`
   allows them, own-repository sync and
   effective-configuration reads are allowed;
