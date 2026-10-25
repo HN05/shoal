@@ -137,6 +137,13 @@ pub(crate) trait Backend {
         None
     }
 
+    /// The endpoint for a read of `endpoint` a caller wrote, such as
+    /// through `shoal forge api`, so the forge applies the page size its
+    /// query asks for.
+    fn raw_read(&self, endpoint: String) -> String {
+        endpoint
+    }
+
     /// The query parameter that sizes a list page, and the size to ask for.
     fn page_size(&self) -> (&'static str, usize);
 
@@ -600,6 +607,10 @@ impl Backend for ForgeKind {
 
     fn reported_failure(&self, body: &Value) -> Option<String> {
         dispatch!(self, backend => backend.reported_failure(body))
+    }
+
+    fn raw_read(&self, endpoint: String) -> String {
+        dispatch!(self, backend => backend.raw_read(endpoint))
     }
 
     fn page_size(&self) -> (&'static str, usize) {

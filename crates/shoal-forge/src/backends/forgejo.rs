@@ -147,6 +147,12 @@ impl Backend for Forgejo {
         }
     }
 
+    /// Forgejo's Actions lists apply `limit` only with `page`, and without
+    /// one list every run, which can exceed the response bound.
+    fn raw_read(&self, endpoint: String) -> String {
+        first_page(endpoint)
+    }
+
     fn page_size(&self) -> (&'static str, usize) {
         ("limit", PAGE_SIZE)
     }
@@ -749,6 +755,23 @@ async fn owned_fork(repo: &ForgeRepo, account: &Account) -> Result<Option<String
         .transpose()
 }
 
+/// `endpoint` with `page=1` added when its query sets `limit` without a
+/// page; the first page is the default where the forge applies `limit`.
+fn first_page(endpoint: String) -> String {
+    let (request, fragment) = endpoint.split_at(endpoint.find('#').unwrap_or(endpoint.len()));
+    let Some((_, query)) = request.split_once('?') else {
+        return endpoint;
+    };
+    let keys: Vec<_> = query
+        .split('&')
+        .map(|pair| pair.split_once('=').map_or(pair, |(key, _)| key))
+        .collect();
+    if !keys.contains(&"limit") || keys.contains(&"page") {
+        return endpoint;
+    }
+    format!("{request}&page=1{fragment}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,6 +864,31 @@ mod tests {
         let full = serde_json::json!([1, 2]);
         assert!(Forgejo.page(&full, 2).unwrap().1);
         assert!(!Forgejo.page(&full, 3).unwrap().1);
+    }
+
+    #[test]
+    fn a_limit_without_a_page_reads_the_first_page() {
+        for (endpoint, read) in [
+            (
+                "repos/t/r/actions/runs?limit=8",
+                "repos/t/r/actions/runs?limit=8&page=1",
+            ),
+            (
+                "repos/t/r/actions/runs?status=success&limit=8#x",
+                "repos/t/r/actions/runs?status=success&limit=8&page=1#x",
+            ),
+            (
+                "repos/t/r/actions/runs?limit=8&page=3",
+                "repos/t/r/actions/runs?limit=8&page=3",
+            ),
+            ("repos/t/r/actions/runs", "repos/t/r/actions/runs"),
+            (
+                "repos/t/r/branches?unlimited=1",
+                "repos/t/r/branches?unlimited=1",
+            ),
+        ] {
+            assert_eq!(Forgejo.raw_read(endpoint.into()), read);
+        }
     }
 
     #[test]

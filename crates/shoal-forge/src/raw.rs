@@ -9,6 +9,7 @@ pub use crate::transport::api::HttpMethod;
 use crate::{
     ForgeRepo,
     account::Account,
+    backends::Backend,
     transport::api::{Request, encode},
 };
 
@@ -80,10 +81,11 @@ impl ForgeRepo {
     /// empty one.
     pub async fn raw(&self, account: &Account, raw: &RawRequest) -> Result<Value> {
         let endpoint = self.raw_endpoint(raw)?;
-        let mut request = Request::new(raw.method, endpoint, raw.body.clone());
-        if raw.method == HttpMethod::Get {
-            request = request.repeatable();
-        }
+        let request = if raw.method == HttpMethod::Get {
+            Request::new(raw.method, self.kind.raw_read(endpoint), raw.body.clone()).repeatable()
+        } else {
+            Request::new(raw.method, endpoint, raw.body.clone())
+        };
         self.send(account, &request).await
     }
 

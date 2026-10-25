@@ -2230,11 +2230,13 @@ prints on one line. `{owner}` and `{repo}` fill in the repository; on GitLab
 nested project. A path that names another host or has a `.` or `..` segment is
 refused. The request is a GET, or a POST with `--input`, a JSON body from a file
 or `-` for standard input, unless `-X` names another method. It uses the logins,
-rate limits and 64 MiB response bound of other forge requests. Processes inside
-a workspace send it as the [agent account](#agent-accounts), and only GET unless
-`[api] agent_writes` lets agents send other methods, which could merge, approve
-or skip required labels around Shoal's checks; anyone else sends any request
-with your own logins.
+rate limits and 64 MiB response bound of other forge requests. On Forgejo, a
+GET whose query sets `limit` without `page` reads the first page, since
+Forgejo's Actions lists otherwise ignore `limit` and return every run.
+Processes inside a workspace send it as the [agent account](#agent-accounts),
+and only GET unless `[api] agent_writes` lets agents send other methods, which
+could merge, approve or skip required labels around Shoal's checks; anyone
+else sends any request with your own logins.
 
 ```toml
 [api]

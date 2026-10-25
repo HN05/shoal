@@ -3267,9 +3267,11 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         .map(|n| json!({"name": format!("b{n}"), "commit": {"message": "\"x\"".repeat(100)}}))
         .collect();
     fixture.respond(json!({
-        "GET repos/team/project/branches?limit=400": {"body": branches},
+        "GET repos/team/project/branches?limit=400&page=1": {"body": branches},
         "PATCH repos/team/project": {"body": {"description": "new"}},
     }));
+    // Forgejo applies `limit` only with `page`, so a read that sets only a
+    // limit asks for the first page.
     let path = "/repos/{owner}/{repo}/branches?limit=400";
     let listed = fixture.ok(&["forge", "api", path, "--workspace", "topic"]);
     assert_eq!(listed, json!(branches));
@@ -3291,7 +3293,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "topic",
     ]);
     assert_eq!(edited, json!({"description": "new"}));
-    let read = "GET repos/team/project/branches?limit=400";
+    let read = "GET repos/team/project/branches?limit=400&page=1";
     assert_eq!(
         fixture.requests(),
         [
@@ -3331,7 +3333,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         ])]
     );
     fixture.respond(json!({
-        "GET repos/team/project/branches?limit=400": {"body": branches},
+        "GET repos/team/project/branches?limit=400&page=1": {"body": branches},
     }));
 
     // The agent reads as itself, and writes only when the repository lets it.
