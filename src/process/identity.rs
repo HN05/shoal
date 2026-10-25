@@ -59,8 +59,23 @@ struct Lineage {
     identity: Identity,
     unique: Option<u64>,
     parent: Option<u64>,
+    /// Read with the identity, so it names this process's parent.
+    parent_pid: u32,
     /// Launchd adopted it when its parent exited, rather than starting it.
     adopted: bool,
+}
+
+impl Lineage {
+    /// Whether `parent`, observed after this process, is the process it was
+    /// forked from rather than a later one reusing its PID: that one is born
+    /// after this process and has another unique ID.
+    fn forked_from(&self, parent: &Lineage) -> bool {
+        self.identity.not_older_than(&parent.identity)
+            && match (self.parent, parent.unique) {
+                (Some(link), Some(unique)) => link == unique,
+                _ => true,
+            }
+    }
 }
 
 pub fn capture(pid: u32) -> Result<Option<Identity>> {
@@ -174,16 +189,16 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
-    let listing = same_user_parents().await?;
+    let listing = same_user_pids().await?;
     let marker = format!("{marker}=").into_bytes();
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         let mut inventory = Inventory {
-            listed: listing.iter().map(|(pid, _)| *pid).collect(),
+            listed: listing.iter().copied().collect(),
             observed: HashMap::new(),
         };
-        for (pid, parent) in listing {
-            if let Some(process) = observe(pid, parent, &marker, &ids, settle_deadline)? {
+        for pid in listing {
+            if let Some(process) = observe(pid, &marker, &ids, settle_deadline)? {
                 inventory.observed.insert(pid, process);
             }
         }
@@ -193,12 +208,10 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     .context("process inventory worker failed")?
 }
 
-/// Same-user processes other than init and the daemon, with their parent PIDs.
-async fn same_user_parents() -> Result<Vec<(u32, u32)>> {
+/// Same-user processes other than init and the daemon.
+async fn same_user_pids() -> Result<Vec<u32>> {
     let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command
-        .args(["-ax", "-o", "pid=,uid=,ppid="])
-        .env("LC_ALL", "C");
+    command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
         .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
         .output()
@@ -207,7 +220,7 @@ async fn same_user_parents() -> Result<Vec<(u32, u32)>> {
     let mut inventory = Vec::new();
     for line in output.lines() {
         let fields: Vec<_> = line.split_whitespace().collect();
-        ensure!(fields.len() == 3, "invalid process inventory");
+        ensure!(fields.len() == 2, "invalid process inventory");
         let pid: u32 = fields[0].parse()?;
         // System daemons may run as negative UIDs such as nobody (-2);
         // they are never ours.
@@ -215,7 +228,7 @@ async fn same_user_parents() -> Result<Vec<(u32, u32)>> {
             continue;
         };
         if uid == unsafe { libc::geteuid() } && pid > 1 && pid != std::process::id() {
-            inventory.push((pid, fields[2].parse()?));
+            inventory.push(pid);
         }
     }
     Ok(inventory)
@@ -223,9 +236,7 @@ async fn same_user_parents() -> Result<Vec<(u32, u32)>> {
 
 /// One live process and what its own environment says about its owner.
 struct Observed {
-    identity: Identity,
-    parent: u32,
-    adopted: bool,
+    lineage: Lineage,
     evidence: Evidence,
 }
 
@@ -240,7 +251,6 @@ enum Evidence {
 /// Read `pid`'s environment for `marker`, unless it has exited.
 fn observe(
     pid: u32,
-    parent: u32,
     marker: &[u8],
     ids: &HashSet<String>,
     deadline: std::time::Instant,
@@ -263,12 +273,7 @@ fn observe(
         Visibility::Unreadable => Evidence::Unreadable,
         Visibility::Gone => return Ok(None),
     };
-    Ok(Some(Observed {
-        adopted: lineage.adopted,
-        identity: lineage.identity,
-        parent,
-        evidence,
-    }))
+    Ok(Some(Observed { lineage, evidence }))
 }
 
 #[derive(Clone)]
@@ -292,15 +297,16 @@ impl Inventory {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
         for (pid, process) in &self.observed {
+            let identity = &process.lineage.identity;
             match self.resolve(*pid, &mut attributions) {
-                Attribution::Owned(execution_id) if alive(&process.identity)? => {
+                Attribution::Owned(execution_id) if alive(identity)? => {
                     scan.processes.push(OwnedProcess {
                         execution_id,
-                        identity: process.identity.clone(),
+                        identity: identity.clone(),
                     });
                 }
                 Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
-                    identity: process.identity.clone(),
+                    identity: identity.clone(),
                     head,
                 }),
                 _ => {}
@@ -317,32 +323,41 @@ impl Inventory {
         let mut hidden: Vec<&Observed> = Vec::new();
         let mut current = pid;
         let attribution = loop {
+            let observed = self.observed.get(&current);
+            if let (Some(child), Some(parent)) = (hidden.last(), observed)
+                && !child.lineage.forked_from(&parent.lineage)
+            {
+                // The parent exited and its PID was reused.
+                break Attribution::Unknown(child.lineage.identity.clone());
+            }
             if let Some(attribution) = attributions.get(&current) {
                 break attribution.clone();
             }
-            let Some(process) = self.observed.get(&current) else {
+            let Some(process) = observed else {
                 break self.unobserved_parent(current, hidden.last().copied());
             };
+            let lineage = &process.lineage;
             match &process.evidence {
                 Evidence::Marked(id) => break Attribution::Owned(id.clone()),
                 Evidence::Unmarked => break Attribution::Foreign,
-                Evidence::Unreadable => break Attribution::Unknown(process.identity.clone()),
+                Evidence::Unreadable => break Attribution::Unknown(lineage.identity.clone()),
                 Evidence::Hidden => hidden.push(process),
             }
-            if process.parent <= 1 {
-                break if process.adopted {
-                    Attribution::Unknown(process.identity.clone())
+            if lineage.parent_pid <= 1 {
+                break if lineage.adopted {
+                    Attribution::Unknown(lineage.identity.clone())
                 } else {
                     Attribution::Foreign
                 };
             }
             if hidden.len() > MAX_ANCESTRY {
-                break Attribution::Unknown(process.identity.clone());
+                break Attribution::Unknown(lineage.identity.clone());
             }
-            current = process.parent;
+            current = lineage.parent_pid;
         };
-        for process in hidden.into_iter().chain(self.observed.get(&current)) {
-            attributions.insert(process.identity.pid, attribution.clone());
+        // A process decided by its own environment needs no walk to decide again.
+        for process in hidden {
+            attributions.insert(process.lineage.identity.pid, attribution.clone());
         }
         attribution
     }
@@ -357,7 +372,7 @@ impl Inventory {
             || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
         match child {
             Some(child) if self.listed.contains(&parent) || !exists => {
-                Attribution::Unknown(child.identity.clone())
+                Attribution::Unknown(child.lineage.identity.clone())
             }
             _ => Attribution::Foreign,
         }
@@ -488,6 +503,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         },
         unique: Some(info.unique.unique),
         parent: Some(info.unique.parent_unique),
+        parent_pid: bsd.pbi_ppid,
         adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique),
     }))
 }
@@ -684,6 +700,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         },
         unique: None,
         parent: None,
+        parent_pid: fields[1].parse()?,
         // Linux shows every environment, so nothing depends on how a process
         // came to init.
         adopted: false,
@@ -953,6 +970,7 @@ mod tests {
             },
             unique: Some(unique),
             parent: Some(parent),
+            parent_pid: 1,
             adopted: false,
         };
         // 10 has exited; 11 descends from it and 13 from 11, while 12 is
@@ -1063,28 +1081,28 @@ mod tests {
         Ok(())
     }
 
+    /// A process born in PID order, as the parents below precede children.
     fn observed(pid: u32, parent: u32, adopted: bool, evidence: Evidence) -> (u32, Observed) {
         let identity = Identity {
             pid,
-            birth: pid.to_string(),
+            birth: format!("1:{pid}"),
             unique: None,
         };
-        (
-            pid,
-            Observed {
-                identity,
-                parent,
-                adopted,
-                evidence,
-            },
-        )
+        let lineage = Lineage {
+            identity,
+            unique: None,
+            parent: None,
+            parent_pid: parent,
+            adopted,
+        };
+        (pid, Observed { lineage, evidence })
     }
 
     #[test]
     fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells() {
         use Evidence::{Hidden, Marked, Unmarked};
         let inventory = Inventory {
-            listed: HashSet::from([10, 11, 12, 20, 21, 30, 31, 32, 40, 41]),
+            listed: HashSet::from([10, 11, 12, 20, 21, 30, 31, 32, 40, 41, 51, 60]),
             observed: HashMap::from([
                 // A shell and its job under a marked agent.
                 observed(10, 9, false, Marked("execution".into())),
@@ -1100,6 +1118,10 @@ mod tests {
                 observed(30, 1, false, Hidden),
                 // A shell whose listed parent exited before it was observed.
                 observed(41, 40, false, Hidden),
+                // A shell whose parent exited and left its PID to a later
+                // marked process.
+                observed(51, 60, false, Hidden),
+                observed(60, 9, false, Marked("execution".into())),
             ]),
         };
         let mut attributions = HashMap::new();
@@ -1114,6 +1136,8 @@ mod tests {
         assert_eq!(resolve(32), "unknown under 31");
         assert_eq!(resolve(30), "foreign");
         assert_eq!(resolve(41), "unknown under 41");
+        assert_eq!(resolve(51), "unknown under 51");
+        assert_eq!(resolve(60), "owned by execution");
     }
 
     #[cfg(target_os = "macos")]
