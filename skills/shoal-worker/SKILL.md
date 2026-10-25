@@ -125,6 +125,8 @@ current head, after you have read its log and fixed or reported the cause, and
 your branch. It is a new run, not a rerun: on Forgejo a failed check on the PR
 stays failed. `shoal forge ci rerun <run-url>` (`--failed` for failed jobs only)
 and `shoal forge ci cancel <run-url>` act on one run of your branch.
+`shoal forge ci view <run-url>` shows a run's jobs and the log tails of failed
+ones, and `shoal forge ci list` its newest runs on your branch.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

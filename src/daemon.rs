@@ -744,6 +744,17 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .ci_run_action(&workspace, run, action, failed, caller.is_some())
                 .await?,
         ),
+        Method::ViewCiRun { workspace, run } => {
+            Body::CiRunView(manager.view_ci_run(&workspace, run).await?)
+        }
+        Method::CiRunJobLog {
+            workspace,
+            run,
+            job,
+        } => Body::CheckLog(manager.ci_run_job_log(&workspace, run, job).await?),
+        Method::ListCiRuns { workspace, filter } => {
+            Body::CiRuns(manager.list_ci_runs(&workspace, filter).await?)
+        }
         Method::StartCiRun {
             workspace,
             workflow,

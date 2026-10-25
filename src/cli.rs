@@ -1634,6 +1634,29 @@ pub enum ForgeCiCommand {
         #[command(flatten)]
         target: RunTarget,
     },
+    /// Show a workflow run's state, its jobs and the log tails of failed jobs.
+    View {
+        #[command(flatten)]
+        target: RunTarget,
+        /// Show only this job's log.
+        #[arg(long, value_name = "NAME")]
+        job: Option<String>,
+    },
+    /// List the newest workflow runs, on the workspace's branch by default.
+    List {
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Branch whose runs to list; defaults to the workspace's branch.
+        #[arg(long)]
+        branch: Option<String>,
+        /// List only this workflow file's runs; GitLab has none.
+        #[arg(long)]
+        workflow: Option<String>,
+        /// The most runs to list (1–100).
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
 }
 
 // A workflow run to act on.

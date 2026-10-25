@@ -2340,6 +2340,8 @@ shoal forge ci run deps.yml               # start a workflow run on the workspac
 shoal forge ci run deps.yml --branch main --input level=full
 shoal forge ci rerun 2765 --failed        # rerun a run's failed jobs
 shoal forge ci cancel https://forge.example/team/repo/actions/runs/2765
+shoal forge ci view 2765                  # a run's state, its jobs and failed jobs' logs
+shoal forge ci list --workflow deps.yml   # the newest runs on the workspace's branch
 ```
 
 `shoal forge ci run` starts a workflow run on the workspace's branch, or the one
@@ -2348,8 +2350,8 @@ a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
 reports checks there like any other run. Forgejo attaches a dispatched run to no
 commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub,
 Forgejo and Gitea dispatch the named workflow file, or a GitHub workflow ID,
-which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline, taking no
-workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
+which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline,
+taking no workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
 custom pipeline, or the branch's own without one, with the inputs as its
 variables. The daemon starts it as the [agent account](#agent-accounts), and
 processes inside a workspace may start runs only on that workspace's branch.
@@ -2365,6 +2367,17 @@ forge but Bitbucket. Processes inside a workspace act only on runs of that
 workspace's branch, so a PR's checks, whose runs may name the PR instead, are
 acted on with `shoal pr ci`. `--json` returns the run's `url` and the
 `action`.
+
+`shoal forge ci view` shows a run's state (`running`, `failed` or `finished`),
+branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
+shows a PR's; `--job` shows only that job's log, in any state. `shoal forge ci
+list` lists the newest runs, ten unless `--limit` says up to 100, on the
+workspace's branch or the one `--branch` names, and of one workflow file with
+`--workflow`, which GitLab does not take. Both read any run of the repository as
+the agent account, on every forge but Bitbucket. `--json` returns each run's
+`url`, `state`, `branch` and `workflow`, and for `view` its `jobs` with their
+`name`, `state` and `url`, the `logs` it read and the `errors` of those it could
+not.
 
 #### Forge API requests
 

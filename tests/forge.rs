@@ -2555,7 +2555,8 @@ fn forgejo_ci_runs_link_the_run_they_start() {
 fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let run = |id: u64, branch: &str| {
-        json!({"body": {"id": id, "head_branch": branch,
+        json!({"body": {"id": id, "head_branch": branch, "status": "completed",
+            "conclusion": "failure",
             "html_url": format!("https://github.com/team/project/actions/runs/{id}")}})
     };
     fixture.respond(json!({
@@ -2648,7 +2649,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     fixture.respond(json!({
         "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
-            {"id": 9331, "index_in_repo": 2765, "prettyref": "topic"}
+            {"id": 9331, "index_in_repo": 2765, "prettyref": "topic", "status": "running"}
         ]}},
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     }));
@@ -2670,6 +2671,80 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
         "{output:?}"
     );
     assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "topic",
+        "workflow_id": "deps.yml", "status": "failure"});
+    fixture.respond(json!({
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [run]}},
+        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+            {"id": 18344, "name": "build", "run_id": 9331, "status": "success"},
+            {"id": 18345, "name": "audit", "run_id": 9331, "status": "failure"}
+        ]},
+        "GET repos/team/project/actions/jobs/18345/logs":
+            {"body": "⭐ Run Audit\nadvisory found\n⚙️ [runner]: exitcode '1': failure\n"},
+        "GET repos/team/project/actions/jobs/18344/logs": {"body": "built\n"},
+        "GET repos/team/project/actions/runs?limit=5&page=1&ref=refs%2Fheads%2Ftopic&workflow_id=deps.yml":
+            {"body": {"workflow_runs": [run], "total_count": 1}},
+    }));
+    let url = format!("{}/actions/runs/2765", fixture.web);
+    let view = fixture.ok(&["forge", "ci", "view", "2765", "--workspace", "topic"]);
+    assert_eq!(view["url"], url, "{view}");
+    assert_eq!(
+        (&view["state"], &view["branch"], &view["workflow"]),
+        (&json!("failed"), &json!("topic"), &json!("deps.yml"))
+    );
+    assert_eq!(
+        view["jobs"],
+        json!([
+            {"name": "build", "state": "finished", "url": format!("{url}/jobs/0")},
+            {"name": "audit", "state": "failed", "url": format!("{url}/jobs/1")}
+        ])
+    );
+    // Only the failed job's log is read.
+    let logs = view["logs"].as_array().unwrap();
+    assert_eq!(logs.len(), 1, "{view}");
+    assert_eq!(logs[0]["name"], "audit");
+    assert_eq!(logs[0]["failed_step"], "Audit");
+    assert_eq!(logs[0]["job_url"], format!("{url}/jobs/1"));
+
+    let log = fixture.ok(&[
+        "forge",
+        "ci",
+        "view",
+        &url,
+        "--job",
+        "build",
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(log["text"], "built\n", "{log}");
+
+    // The workspace's branch is listed unless another is named.
+    let runs = fixture.ok(&[
+        "forge",
+        "ci",
+        "list",
+        "--workflow",
+        "deps.yml",
+        "--limit",
+        "5",
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(
+        runs,
+        json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
+    );
+    let output = fixture.run(&["forge", "ci", "list", "--limit", "0"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("limit must be between 1 and 100"),
+        "{output:?}"
+    );
 }
 
 /// Run a Shoal command inside the workspace, as its agent would.

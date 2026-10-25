@@ -8,6 +8,7 @@ mod listing;
 pub mod pr;
 pub mod proposals;
 mod raw;
+mod runs;
 mod stack;
 pub mod wait;
 

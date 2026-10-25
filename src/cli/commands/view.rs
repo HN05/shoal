@@ -140,7 +140,7 @@ async fn read_failed_logs(
     }
 }
 
-fn render_log(log: &CheckLog) {
+pub(super) fn render_log(log: &CheckLog) {
     outln!("{}: {}", log.url, log.name);
     if let Some(job) = &log.job_url {
         outln!("Job: {job}");

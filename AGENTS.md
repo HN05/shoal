@@ -59,7 +59,7 @@ when behavior changes, distinguishing decisions from proposals.
   acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, listing, opening and changing issues and PRs of the own repository, opening issues
   in other repositories as `[issue] other_repositories` allows, rerunning
-  or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch, and GET requests to the own repository's forge API, or
+  or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to the own repository's forge API, or
   others where `[api] agent_writes` allows them, are allowed, except merging a PR.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon

@@ -187,6 +187,7 @@ shoal repo labels                  # The repository's labels and what each one m
 shoal forge capabilities            # What the repository's forge supports, such as resolving threads
 shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
 shoal forge ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
+shoal forge ci view 2765            # A run's jobs and failed jobs' logs; list shows the newest runs
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to
