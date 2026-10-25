@@ -222,6 +222,11 @@ enum Row {
         workspace: String,
         url: Option<String>,
     },
+    /// A running demo, by its name.
+    Try {
+        workspace: String,
+        name: String,
+    },
     Workspace(String),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -247,6 +252,10 @@ impl Row {
                 workspace,
                 url: mark.url.clone(),
             },
+            Item::Try { demo } => Self::Try {
+                workspace,
+                name: demo.launch.name.clone(),
+            },
         }
     }
 
@@ -265,6 +274,7 @@ impl Row {
             Self::Ready { workspace, url } => {
                 format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
             }
+            Self::Try { workspace, name } => format!("try:{workspace}:{name}"),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -304,6 +314,10 @@ impl Row {
                 workspace,
                 url: (!detail.is_empty()).then(|| detail.to_owned()),
             },
+            "try" => Self::Try {
+                workspace,
+                name: detail.to_owned(),
+            },
             _ => anyhow::bail!("picker returned an unknown row"),
         })
     }
@@ -315,6 +329,7 @@ impl Row {
             | Self::NeedsInput(workspace)
             | Self::Failed(workspace)
             | Self::Ready { workspace, .. }
+            | Self::Try { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
             Self::Add => None,
@@ -549,8 +564,8 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
 }
 
 /// Answer a question, decide an approval as it was listed, attach to an
-/// agent that needs input, show a failure, view ready work, or enter a
-/// workspace.
+/// agent that needs input, show a failure, view ready work, open a demo,
+/// or enter a workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
         Row::Question { id, .. } => Command::Questions {
@@ -591,6 +606,11 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         } => Command::Status {
             workspace: Some(workspace),
             item: None,
+        },
+        Row::Try { workspace, name } => Command::Demo {
+            command: None,
+            name: Some(name),
+            workspace: Some(workspace),
         },
         Row::Workspace(workspace) => Command::Cd {
             workspace: Some(workspace),
@@ -713,4 +733,21 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             ],
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn demo_rows_round_trip_their_workspace_and_name() {
+        let row = Row::Try {
+            workspace: "workspace-id".into(),
+            name: "web".into(),
+        };
+        let Row::Try { workspace, name } = Row::parse(row.id()).unwrap() else {
+            panic!("expected a demo row");
+        };
+        assert_eq!((workspace.as_str(), name.as_str()), ("workspace-id", "web"));
+    }
 }

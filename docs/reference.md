@@ -444,15 +444,15 @@ a chat's status is `process running`.
 pending approval requests that no coordinating agent decides, including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
 agent needs input, failed
-workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
-marked item. There Enter answers a question, approves or denies a request after
+workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
+marked item, and running [demos](#demos) to try. There Enter answers a question, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
-mark on the workspace itself); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
+mark on the workspace itself), and opens a demo; Ctrl-T, Ctrl-O and Ctrl-F act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
-`kind` (`question`, `approval`, `needs_input`, `failed` or `ready`) with its
-`question`, `request` or `workspace` and a ready item's `mark`. A workspace
+`kind` (`question`, `approval`, `needs_input`, `failed`, `ready` or `try`) with its
+`question`, `request`, `workspace` or `demo` and a ready item's `mark`. A workspace
 process gets only its own items, printed, and none after clearing its scope
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories

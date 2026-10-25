@@ -126,7 +126,7 @@ After [adding an AI tool](docs/reference.md#agents), run
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
 shoal repo                    # Interactive repository menu
-shoal inbox                   # Questions, approvals, agents needing input, failures, ready work; --print to list
+shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal work                    # Workspaces, chats and queued agents; --print to list
 shoal work --queue            # Agents waiting for a slot under max_agents
 shoal work --chats            # Running chats

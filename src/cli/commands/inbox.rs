@@ -1,6 +1,6 @@
 //! `shoal inbox`: what needs the user now, each with its workspace: open
 //! questions, pending approvals, agents that need input, failed workspaces,
-//! and work marked ready at its current commit.
+//! work marked ready at its current commit, and demos to try.
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -19,6 +19,7 @@ use crate::{
         approvals::{ApprovalRequest, DecisionStatus},
         questions::{Listing, Question},
     },
+    demos::Running,
     model::{ReviewMark, Workspace},
     protocol::Method,
     state::WorkspaceState,
@@ -43,6 +44,9 @@ pub(in crate::cli) enum Item {
     Ready {
         workspace: Workspace,
         mark: ReviewMark,
+    },
+    Try {
+        demo: Running,
     },
 }
 
@@ -78,9 +82,8 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 }
 
 impl Inbox {
-    /// Questions, then approvals, agents that need input, failed workspaces and
-    /// ready marks,
-    /// for the workspaces `filter` keeps.
+    /// Questions, then approvals, agents that need input, failed workspaces,
+    /// ready marks and running demos, for the workspaces `filter` keeps.
     pub(in crate::cli) async fn request(ctx: &Context, filter: &ListFilter) -> Result<Self> {
         // Without its token, the daemon would answer a workspace process as the user.
         ensure!(
@@ -104,8 +107,16 @@ impl Inbox {
                     .as_deref()
                     .is_some_and(|repository| filter.keeps_detached(repository))
         };
+        let demos =
+            request::<Vec<Running>>(&ctx.paths, Method::ListDemos { workspace: None }).await?;
         let mut items = decision_items(questions, requests, &workspaces, detached);
         items.extend(workspace_items(&workspaces, &stopped));
+        items.extend(
+            demos
+                .into_iter()
+                .filter(|demo| workspaces.iter().any(|w| w.id == demo.workspace_id))
+                .map(|demo| Item::Try { demo }),
+        );
         Ok(Self { items, workspaces })
     }
 
@@ -214,6 +225,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
+            Self::Try { demo } => &demo.workspace_id,
         }
     }
 
@@ -233,6 +245,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
+            Self::Try { demo } => &demo.workspace,
         }
     }
 
@@ -243,6 +256,7 @@ impl Item {
             Self::NeedsInput { .. } => ("needs input", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } => ("ready", Style::Success),
+            Self::Try { .. } => ("ready to try", Style::Success),
         };
         (label.into(), Some(style))
     }
@@ -269,6 +283,7 @@ impl Item {
                     None => label,
                 }
             }
+            Self::Try { demo } => format!("demo {}", demo.launch.name),
         }
     }
 
