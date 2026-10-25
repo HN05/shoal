@@ -4737,6 +4737,43 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
 }
 
 #[test]
+fn a_parent_discards_only_the_stopped_work_of_its_children() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    fixture.add("other");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let save_agent = |name: &str| {
+        let id = fixture.ok(&["inspect", name])["workspace"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let state = fixture.root.path().join("state/workspaces").join(id);
+        fs::create_dir_all(&state).unwrap();
+        let record = state.join(format!("{name}-agent.recovery.json"));
+        fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+        record
+    };
+    let records = ["parent", "other", "child"].map(save_agent);
+    for args in [
+        &["resume", "parent", "--discard"][..],
+        &["resume", "other", "--discard"],
+        &["resume", "child"],
+        &["resume", "--all", "--discard"],
+    ] {
+        let output = scoped_command(&fixture, "parent", args);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+    }
+    assert!(records.iter().all(|record| record.exists()));
+    let output = scoped_command(&fixture, "parent", &["resume", "child", "--discard"]);
+    assert!(output.status.success(), "{output:?}");
+    let discarded: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(discarded["discarded"], serde_json::json!(["child-agent"]));
+    assert!(!records[2].exists());
+    assert!(records[..2].iter().all(|record| record.exists()));
+}
+
+#[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",

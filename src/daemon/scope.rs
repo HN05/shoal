@@ -167,6 +167,13 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::DiscardStoppedWork { workspace, .. } => {
+            ensure!(
+                manager.workspace(workspace).await?.id != *owner,
+                "workspace processes discard stopped work only in the workspaces below theirs"
+            );
+            Some(workspace)
+        }
         Method::DecideApproval { id, shown, .. } => {
             // A coordinating agent decides the requests routed to it. Only the
             // stored routing counts; the decision rechecks it with its grant.

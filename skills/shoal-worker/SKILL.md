@@ -271,7 +271,9 @@ messages naming the child instead of reaching the user. Answer its questions
 with `shoal answer <number> <answer>`, or ask the user yourself with
 `shoal ask` when the decision is theirs. Send it instructions with
 `shoal message --workspace <child> "<text>"`, or `--body-file <path>` for
-several lines.
+several lines. When a stopped child agent should not come back, such as one
+whose work is done, forget its saved session with
+`shoal resume <child> --discard`.
 
 A child agent's approval request comes to you when you hold an approved grant
 for the same thing; otherwise it passes you by, with a message saying so. Decide

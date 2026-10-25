@@ -258,7 +258,9 @@ with the signal as its stop reason, so `shoal resume --all` restores it after a
 reboot; other commands just end.
 Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
-Run stop and resume outside scoped executions.
+Run stop and resume outside scoped executions, except that a workspace process
+may discard the stopped work of a workspace below its own with
+`shoal resume <workspace> --discard`.
 
 `shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace,

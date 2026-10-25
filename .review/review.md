@@ -83,8 +83,8 @@ instead of the PR delivery guidance below.
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than `split`, removal, recovery and shared repository/service
   administration stay denied. For the workspaces below their own, scoped callers queue agents,
-  which the daemon starts detached so they never inherit the caller's scope, send agent messages
-  and answer questions; the nearest ancestor with an agent receives a child agent's messages,
+  which the daemon starts detached so they never inherit the caller's scope, send agent messages,
+  answer questions and discard stopped work; the nearest ancestor with an agent receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,

@@ -27,9 +27,10 @@ pub async fn select(
     execution: Option<String>,
     discard: bool,
 ) -> Result<i32> {
+    // The daemon checks that the workspace is below the caller's.
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "resume agents outside scoped executions"
+        !crate::env::inherits_scope(&ctx.paths.state) || (discard && scope.workspace.is_some()),
+        "resume agents outside scoped executions; workspace processes can only discard the stopped work of a workspace below theirs with shoal resume <workspace> --discard"
     );
     match ui::select_stopped_workspace(ctx, scope).await? {
         None => run_all(ctx, discard).await,
