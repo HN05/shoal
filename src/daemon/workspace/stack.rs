@@ -37,42 +37,51 @@ impl Manager {
         // recorded move, nor stack a workspace on a base it is removing.
         let _gate = self.pr_gates.lock(base.iter().chain([&workspace.id])).await;
         let workspace = self.workspace(&workspace.id).await?;
-        let (id, repository_id) = (workspace.id.clone(), workspace.repository_id);
+        let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let base = match &base {
-                    Some(base) => Some(base_workspace(&tx, &repository_id, base)?),
-                    None => None,
-                };
-                if let Some(base) = &base {
-                    ensure!(
-                        !store::exists(
-                            &tx,
-                            "WITH RECURSIVE chain(id) AS (
-                                SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
-                                JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
-                            ) SELECT 1 FROM chain WHERE id=?2",
-                            [base, &id],
-                        )?,
-                        "a workspace cannot build on itself or a workspace stacked on it"
-                    );
-                }
-                let changed = tx.execute(
-                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1 AND base_workspace_id IS NOT ?2",
-                    params![id, base],
-                )?;
-                match &base {
-                    Some(_) => ensure!(changed > 0, "the workspace already builds on that base"),
-                    None => ensure!(changed > 0, "the workspace has no base workspace"),
-                }
-                record_base_changed(&tx, &id, EventCause::Manual)?;
-                tx.commit()?;
-                Ok(())
-            })
+            .run(move |db| change_base(db, &repository_id, &id, base.as_deref()))
             .await?;
         self.workspace(&workspace.id).await
     }
+}
+
+/// Record the workspace `base` names as the base of workspace `id`, or clear
+/// it without one, and journal the change. Fails when nothing would change.
+fn change_base(
+    db: &mut Connection,
+    repository_id: &str,
+    id: &str,
+    base: Option<&str>,
+) -> Result<()> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let base = match base {
+        Some(base) => Some(base_workspace(&tx, repository_id, base)?),
+        None => None,
+    };
+    if let Some(base) = &base {
+        ensure!(
+            !store::exists(
+                &tx,
+                "WITH RECURSIVE chain(id) AS (
+                    SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
+                    JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
+                ) SELECT 1 FROM chain WHERE id=?2",
+                [base, id],
+            )?,
+            "a workspace cannot build on itself or a workspace stacked on it"
+        );
+    }
+    let changed = tx.execute(
+        "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1 AND base_workspace_id IS NOT ?2",
+        params![id, base],
+    )?;
+    match &base {
+        Some(_) => ensure!(changed > 0, "the workspace already builds on that base"),
+        None => ensure!(changed > 0, "the workspace has no base workspace"),
+    }
+    record_base_changed(&tx, id, EventCause::Manual)?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Journal the workspace's current base workspace.
