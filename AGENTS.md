@@ -67,7 +67,7 @@ when behavior changes, distinguishing decisions from proposals.
   removals), never fail the operation for one, collapse repeated polled events
   until read, and deny reading them to scoped callers. A scoped caller may send
   the user a message for its own workspace, separate from completion.
-- `shoal sync` fetches the default branch's remote and fast-forwards the local
+- `shoal repo sync` fetches the default branch's remote and fast-forwards the local
   default branch under the creation refresh rules. It never pushes or moves
   workspace branches; agents update their branch from it with plain Git.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
@@ -240,7 +240,7 @@ It opens one issue per new finding, labelled `audit/<focus>`; findings are
 advisory and never a required check. Close an audit issue when it is fixed, or
 explain in a comment or with `audit/wontfix` why it will not be.
 Issues and PRs carry one or more `area/` labels and one `type/` and one
-`complexity/` label; `shoal labels` lists what each means, and
+`complexity/` label; `shoal repo labels` lists what each means, and
 `.forgejo/scripts/labels.sh` creates the scheme. An issue states the problem or
 goal and what done looks like. One whose approach is settled is labelled
 `planned`, and agents implement it without asking; one that leaves a choice for

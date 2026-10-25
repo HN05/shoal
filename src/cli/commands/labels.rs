@@ -1,4 +1,4 @@
-//! `shoal labels`: the workspace repository's labels as the forge lists
+//! `shoal repo labels`: the workspace repository's labels as the forge lists
 //! them, so agents can pick the ones its scheme asks for.
 use anyhow::Result;
 

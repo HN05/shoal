@@ -380,11 +380,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             timeout,
             resume,
         } => links::watch(&ctx, items, timeout, resume).await,
-        Command::Labels(repository) => labels::labels(&ctx, repository.workspace).await,
-        Command::Capabilities(repository) => {
-            capabilities::capabilities(&ctx, repository.workspace).await
-        }
-        Command::Api(args) => api::api(&ctx, args).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready {
             items,
@@ -463,7 +458,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             let reviewer = review::Reviewer::new(manual, agent);
             review::start(&ctx, target, reviewer, args).await
         }
-        Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Land {
             workspace,
             push,

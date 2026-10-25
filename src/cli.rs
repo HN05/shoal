@@ -52,7 +52,7 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-/// The workspace whose repository `shoal labels` and `shoal capabilities`
+/// The workspace whose repository `shoal repo labels` and `shoal repo capabilities`
 /// read, outside the derived `Command` builder for the same reason (#997).
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
@@ -61,7 +61,7 @@ pub struct RepositoryArgs {
     pub workspace: Option<String>,
 }
 
-/// `shoal api` arguments, outside the derived `Command` builder for the same
+/// `shoal repo api` arguments, outside the derived `Command` builder for the same
 /// reason (#997).
 #[derive(Debug, Args)]
 pub struct ApiArgs {
@@ -282,16 +282,6 @@ pub enum Command {
         #[arg(long, value_name = "NAME")]
         check: Option<String>,
     },
-    /// List the repository's labels with their descriptions.
-    Labels(RepositoryArgs),
-    /// List what the repository's forge supports.
-    Capabilities(RepositoryArgs),
-    /// Send a request to the repository's forge API and print its JSON response.
-    ///
-    /// Workspace processes send it as the agent account, and only GET unless
-    /// `[api] agent_writes` lets agents send others; anyone else sends any
-    /// request with your own logins.
-    Api(ApiArgs),
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]
@@ -510,14 +500,6 @@ pub enum Command {
         /// Arguments forwarded to the review command or agent.
         #[arg(last = true)]
         args: Vec<OsString>,
-    },
-    /// Fetch a repository's remote and fast-forward its default branch.
-    ///
-    /// Never pushes or changes workspace branches; rebase or merge onto the
-    /// updated branch with Git.
-    Sync {
-        /// Registered repository; defaults to the current checkout or workspace.
-        repository: Option<String>,
     },
     /// Open the workspace's PR, or change, comment on, close, reopen or merge a PR.
     Pr {
@@ -1518,6 +1500,24 @@ pub enum WorkCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoCommand {
+    /// List the repository's labels with their descriptions.
+    Labels(RepositoryArgs),
+    /// List what the repository's forge supports.
+    Capabilities(RepositoryArgs),
+    /// Send a request to the repository's forge API and print its JSON response.
+    ///
+    /// Workspace processes send it as the agent account, and only GET unless
+    /// `[api] agent_writes` lets agents send others; anyone else sends any
+    /// request with your own logins.
+    Api(ApiArgs),
+    /// Fetch a repository's remote and fast-forward its default branch.
+    ///
+    /// Never pushes or changes workspace branches; rebase or merge onto the
+    /// updated branch with Git.
+    Sync {
+        /// Registered repository; defaults to the current checkout or workspace.
+        repository: Option<String>,
+    },
     /// Show or replace repository configuration stored locally by Shoal.
     Config {
         /// Registered repository; omit to choose one.

@@ -364,7 +364,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     };
     // The CLI asks the daemon, which asks the host and records its answer.
     for _ in 0..2 {
-        let labels = fixture.ok(&["labels", "--workspace", "topic"]);
+        let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
         assert_eq!(labels[0]["name"], "bug");
     }
     let label_list = "GET repos/team/project/labels?per_page=100&page=1";
@@ -661,7 +661,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
             .iter()
             .all(|request| request[0].as_str().unwrap().starts_with("GET")),
     );
-    let reported = fixture.ok(&["capabilities", "--workspace", "topic"]);
+    let reported = fixture.ok(&["repo", "capabilities", "--workspace", "topic"]);
     assert_eq!(reported["forge"], "Forgejo or Gitea", "{reported}");
     let capabilities = reported["capabilities"].as_array().unwrap();
     assert!(
@@ -3254,15 +3254,16 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "PATCH repos/team/project": {"body": {"description": "new"}},
     }));
     let path = "/repos/{owner}/{repo}/branches?limit=400";
-    let listed = fixture.ok(&["api", path, "--workspace", "topic"]);
+    let listed = fixture.ok(&["repo", "api", path, "--workspace", "topic"]);
     assert_eq!(listed, json!(branches));
-    let output = fixture.run(&["api", path, "--workspace", "topic"]);
+    let output = fixture.run(&["repo", "api", path, "--workspace", "topic"]);
     let printed = String::from_utf8_lossy(&output.stdout);
     assert!(printed.starts_with("[\n  {\n    \"commit\""), "{printed}");
     let body = fixture.root.path().join("body.json");
     fs::write(&body, r#"{"description": "new"}"#).unwrap();
     let body = body.to_str().unwrap();
     let edited = fixture.ok(&[
+        "repo",
         "api",
         "repos/{owner}/{repo}",
         "-X",
@@ -3287,7 +3288,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["api", "repos/..%2f..%2fuser"])
+        .args(["repo", "api", "repos/..%2f..%2fuser"])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -3297,6 +3298,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     // curl sends braces and brackets as given instead of expanding them.
     fixture.respond(json!({"GET repos/team/project/{a,b}[1-2]": {"body": {"one": true}}}));
     let globbed = fixture.ok(&[
+        "repo",
         "api",
         "repos/{owner}/{repo}/{a,b}[1-2]",
         "--workspace",
@@ -3316,7 +3318,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     }));
 
     // The agent reads as itself, and writes only when the repository lets it.
-    assert_eq!(scoped(&fixture, &["api", path]), json!(branches));
+    assert_eq!(scoped(&fixture, &["repo", "api", path]), json!(branches));
     assert_eq!(
         fixture.requests(),
         [json!([read, null, "token agenttoken"])]

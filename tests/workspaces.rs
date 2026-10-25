@@ -9832,7 +9832,7 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     let feature = git(&author, &["rev-parse", "HEAD"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     // A scoped agent syncs its own repository without moving its branch.
-    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "sync"]);
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "repo", "sync"]);
     assert!(
         output.status.success(),
         "{}",
@@ -9856,7 +9856,7 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     git(&author, &["switch", "main"]);
     commit_file(&author, "remote", "remote\n");
     git(&author, &["push", "origin", "main"]);
-    let output = fixture.run(&["sync", fixture.repo.to_str().unwrap()]);
+    let output = fixture.run(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("diverged"));
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), local);
@@ -9870,6 +9870,7 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
         "worker",
         "--",
         binary,
+        "repo",
         "sync",
         other.to_str().unwrap(),
     ]);

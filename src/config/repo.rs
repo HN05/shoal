@@ -462,7 +462,7 @@ pub struct Issue {
     pub planned_label: Option<String>,
 }
 
-/// Whether `shoal api` sends an agent's requests that are not reads.
+/// Whether `shoal repo api` sends an agent's requests that are not reads.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Api {

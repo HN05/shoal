@@ -28,7 +28,7 @@ A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
 yourself when the PR completes the issue. Before opening an issue or PR, read the
 repository's contribution rules and forge template for what the description
-needs, and choose labels from `shoal labels`, which lists each with its meaning.
+needs, and choose labels from `shoal repo labels`, which lists each with its meaning.
 Opening refuses an item without a label `required_labels` asks for; `pr open`,
 `issue open` and `ready` report `warnings` for missing labels or template
 headings, which you fix with `edit`. Change your PR or issue through Shoal,
@@ -42,10 +42,10 @@ Answer each review finding in its thread: `shoal view` shows every review commen
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
 They default to the linked item; pass a number or URL for another item in the
-repository. `shoal --json capabilities` lists what the repository's forge
+repository. `shoal --json repo capabilities` lists what the repository's forge
 supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. When no command covers a
-read, `shoal --json api 'repos/{owner}/{repo}/<path>'` sends a GET to the
+read, `shoal --json repo api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
 `glab api`. It refuses other methods unless the repository sets `[api]
 agent_writes`. File
@@ -209,12 +209,12 @@ report the error with `shoal notify` and wait instead of working around it.
 ## Update from the default branch
 
 ```sh
-shoal --json sync
+shoal --json repo sync
 shoal --json conflicts     # exit 1 lists the paths that conflict with main
 git rebase main            # or git merge main; use your repo's branch name
 ```
 
-`shoal sync` fetches your repository's remote and fast-forwards the local
+`shoal repo sync` fetches your repository's remote and fast-forwards the local
 default branch, advancing the registered checkout when it has that branch
 checked out, where `git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
 with plain Git afterwards; other pushed branches are current as
@@ -226,7 +226,7 @@ returns a `merge_conflict` update when that check newly fails. After rebasing a 
 
 Branches of other workspaces are shared refs, so `git merge feature/api`
 brings in their latest commits; use `origin/feature/api` for pushed work after
-`shoal sync`. Stay on your workspace's recorded branch. When it builds on
+`shoal repo sync`. Stay on your workspace's recorded branch. When it builds on
 another workspace's branch, record that with `shoal base set <workspace>`;
 `shoal base` shows it.
 When the repository has no remote, `shoal --json land` merges your committed

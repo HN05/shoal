@@ -183,9 +183,9 @@ shoal issue list --label bug flaky # Search issues by text, label, author and st
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal issue open --repo team/tool --title Bug # Open it in another repository
-shoal labels                  # The repository's labels and what each one means
-shoal capabilities            # What the repository's forge supports, such as resolving threads
-shoal api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
+shoal repo labels                  # The repository's labels and what each one means
+shoal repo capabilities            # What the repository's forge supports, such as resolving threads
+shoal repo api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to
@@ -209,7 +209,7 @@ Use `shoal <command> --help` for options.
 To move changes between your workspace and the default branch:
 
 ```sh
-shoal sync                    # Fetch and fast-forward the default branch
+shoal repo sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
 shoal land                    # Merge your branch into the default branch; no remote needed
 shoal land --push             # Then push the default branch instead of opening a PR

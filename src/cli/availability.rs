@@ -51,6 +51,7 @@ impl Need {
             ["stop"] => Self::Running,
             ["undone"] => Self::Done,
             ["unready"] => Self::Marks,
+            ["repo", "labels" | "capabilities" | "api"] => Self::Any,
             ["work", "setup"] => Self::Setup,
             ["work", "rename"] => Self::Ready,
             ["work", "restore"] => Self::Any,
@@ -70,7 +71,7 @@ impl Need {
                 "status" | "inspect" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
                 | "messages" | "questions" | "approvals" | "view" | "notify" | "message" | "resume"
                 | "base" | "hold" | "port" | "resource" | "sim" | "config" | "pr" | "issue" | "ci"
-                | "labels" | "capabilities" | "api" | "notifications",
+                | "notifications",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

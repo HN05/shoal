@@ -116,7 +116,7 @@ pub(super) async fn begin(
     run_here(ctx, &repo, &chat, &command)
 }
 
-/// Refresh the default branch as `shoal sync` does, so the agent reads what
+/// Refresh the default branch as `shoal repo sync` does, so the agent reads what
 /// the remote has; a chat still starts when the refresh fails.
 async fn sync(ctx: &Context, repo: &Repository) {
     let synced = ctx
