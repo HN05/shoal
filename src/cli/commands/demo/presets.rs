@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result};
 
-use super::{Chosen, running};
+use super::Chosen;
 use crate::{
     cli::{
         client,
@@ -20,19 +20,21 @@ use crate::{
     demos::{Launch, Preset},
     model::{PortReservation, Workspace},
     protocol::{Body, Method},
-    sim::{SimRequest, Simulator, SimulatorOverview},
+    sim::{SimRequest, Simulator},
 };
 
 /// The variable a web demo's port reaches its command as.
 const PORT: &str = "PORT";
 /// The variable a simulator demo's device reaches its command as.
 const SIM_UDID: &str = "SHOAL_SIM_UDID";
+/// The workspace's lease `shoal acquire sim` takes by default, so the demo
+/// shows the device the agent installed on.
+const SIM_LEASE: &str = "default";
 
 /// What the preset and ports provide the demo's command.
 #[derive(Debug, Default)]
 pub(super) struct Provided {
     pub environment: BTreeMap<String, String>,
-    pub leased_simulator: bool,
 }
 
 /// What a request gives, or the exit status of a declined one, which was
@@ -80,20 +82,17 @@ fn web(ports: &[PortReservation]) -> Provided {
             .map(|port| (PORT.to_owned(), port.port.to_string()))
             .into_iter()
             .collect(),
-        leased_simulator: false,
     }
 }
 
-/// The workspace's simulator as `SHOAL_SIM_UDID`. Every simulator demo shares
-/// the lease a demo took, so whichever stops last gives it up.
+/// The workspace's simulator as `SHOAL_SIM_UDID`. The lease stays with the
+/// workspace, as one `shoal acquire sim` takes does.
 async fn simulator(
     ctx: &Context,
     workspace: &Workspace,
     name: &str,
     queue: bool,
 ) -> Result<Declinable<Provided>> {
-    let demos_own = demos_own_simulator(ctx, workspace).await?;
-    let held = holds_simulator(ctx, workspace).await?;
     let sim = match lease_simulator(ctx, workspace, name, queue).await? {
         Ok(sim) => sim,
         Err(declined) => return Ok(Err(declined)),
@@ -101,7 +100,6 @@ async fn simulator(
     let udid = sim.udid.context("the leased simulator has no UDID")?;
     Ok(Ok(Provided {
         environment: BTreeMap::from([(SIM_UDID.to_owned(), udid)]),
-        leased_simulator: demos_own || !held,
     }))
 }
 
@@ -138,28 +136,6 @@ async fn reserve_port(
     }
 }
 
-/// Whether a running simulator demo of the workspace took its lease.
-async fn demos_own_simulator(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    Ok(running(ctx, Some(workspace))
-        .await?
-        .iter()
-        .any(|demo| demo.launch.preset == Some(Preset::Simulator) && demo.launch.leased_simulator))
-}
-
-async fn holds_simulator(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    let overview = client::request::<SimulatorOverview>(
-        &ctx.paths,
-        Method::SimOverview {
-            workspace: Some(workspace.id.clone()),
-        },
-    )
-    .await?;
-    Ok(overview.simulators.iter().any(|sim| {
-        sim.workspace_id.as_deref() == Some(&workspace.id)
-            && sim.lease_name.as_deref() == Some(crate::demos::SIM_LEASE)
-    }))
-}
-
 async fn lease_simulator(
     ctx: &Context,
     workspace: &Workspace,
@@ -169,7 +145,7 @@ async fn lease_simulator(
     let request = SimRequest {
         request_id: uuid::Uuid::new_v4().to_string(),
         clean: false,
-        name: crate::demos::SIM_LEASE.into(),
+        name: SIM_LEASE.into(),
         profile: None,
         device: None,
         runtime: None,
@@ -260,7 +236,6 @@ mod tests {
             environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
             host: "zmx".into(),
             place: "first-app".into(),
-            leased_simulator: false,
         }
     }
 

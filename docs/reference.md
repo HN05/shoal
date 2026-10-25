@@ -833,7 +833,7 @@ you; `ports` and `open` replace its parts:
 | Preset | Sets up |
 |---|---|
 | `web` | Reserves a port named after the demo, or the first of `ports`, and passes it as `PORT`. Opening prints `http://localhost:<port>`, and over SSH the `ssh -L` command that forwards it to your machine. |
-| `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. A lease the demo took ends with the workspace's last simulator demo. |
+| `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. The lease stays with the workspace until `shoal release sim` or removal, as one the agent takes does. |
 
 `shoal demo start [NAME] [--workspace W] [--preset P] [--port NAME]... [--open COMMAND] [-- COMMAND...]` starts
 the configured demo `NAME`, or the only one configured. A command after `--`

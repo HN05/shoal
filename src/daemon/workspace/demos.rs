@@ -2,16 +2,13 @@
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, Transaction, params};
 
 use super::{
     Manager,
     executions::{Save, StopRequest},
 };
-use crate::{
-    daemon::log,
-    demos::{Launch, Preset, Running},
-};
+use crate::demos::{Launch, Running};
 
 impl Manager {
     /// The running demos of `selector`'s workspace, or of every workspace.
@@ -55,49 +52,6 @@ impl Manager {
             let _ = sender.send(true);
         }
         Ok(())
-    }
-
-    /// The demo `execution` runs, if it runs one.
-    pub(crate) async fn demo_of(&self, execution: &str) -> Result<Option<Launch>> {
-        let execution = execution.to_owned();
-        self.store
-            .run(move |db| {
-                let record: Option<String> = db
-                    .query_row(
-                        "SELECT record FROM demos WHERE execution_id=?1",
-                        [execution],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                record
-                    .map(|record| serde_json::from_str(&record).context("invalid demo record"))
-                    .transpose()
-            })
-            .await
-    }
-
-    /// After a demo's execution ended, give up the simulator lease simulator
-    /// demos took once none of the workspace's runs any more. The daemon does
-    /// it, since the worker's scope may have ended with its agent.
-    pub(crate) async fn demo_ended(&self, workspace: &str, launch: &Launch) {
-        if launch.preset != Some(Preset::Simulator) || !launch.leased_simulator {
-            return;
-        }
-        let released = async {
-            let still_used = self
-                .demos(Some(workspace))
-                .await?
-                .iter()
-                .any(|demo| demo.launch.preset == Some(Preset::Simulator));
-            if !still_used {
-                self.release_simulator(workspace, crate::demos::SIM_LEASE.into())
-                    .await?;
-            }
-            anyhow::Ok(())
-        };
-        if let Err(error) = released.await {
-            log!("simulator of demo {} not released: {error:#}", launch.name);
-        }
     }
 }
 

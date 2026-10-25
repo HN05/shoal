@@ -53,10 +53,6 @@ pub struct Launch {
     /// there, such as a zmx session.
     pub host: String,
     pub place: String,
-    /// Starting the demo leased the workspace's simulator, which the last
-    /// simulator demo to stop releases.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub leased_simulator: bool,
 }
 
 /// A running demo as listings show it.
@@ -70,11 +66,6 @@ pub struct Running {
     #[serde(flatten)]
     pub launch: Launch,
 }
-
-/// The workspace's simulator lease a simulator demo uses: the one `shoal
-/// acquire sim` takes by default, so the demo shows the device the agent
-/// installed on.
-pub const SIM_LEASE: &str = "default";
 
 /// The `shoal demo` subcommands, which `shoal demo NAME` could not tell
 /// apart from a demo of that name.

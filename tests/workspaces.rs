@@ -23562,7 +23562,7 @@ fn web_demos_reserve_a_port_and_pass_it_as_port() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn simulator_demos_lease_the_simulator_until_they_stop() {
+fn simulator_demos_share_the_workspace_simulator() {
     let config = format!("{SIM_CONFIG}[done]\ncleanup = false\n");
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("tried");
@@ -23571,33 +23571,14 @@ fn simulator_demos_lease_the_simulator_until_they_stop() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert_eq!(app["leased_simulator"], true);
-    assert_eq!(
-        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["udid"],
-        udid
-    );
-    // A second simulator demo shares the device and the lease's release,
-    // which waits for the last simulator demo however they stop.
+    let leases = || fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"].clone();
+    assert_eq!(leases()[0]["udid"], udid);
+    // A second simulator demo runs on the same device.
     let widget = start_preset_demo(&fixture, "widget", "simulator", "SHOAL_SIM_UDID");
     assert_eq!(widget["environment"]["SHOAL_SIM_UDID"], udid);
-    assert_eq!(widget["leased_simulator"], true);
-    demo(&fixture, &["stop", "app", "--workspace", "tried"]);
-    wait_until("the first simulator demo to stop", || {
-        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
-            .as_array()
-            .unwrap()
-            .len()
-            == 1
-    });
-    assert_eq!(
-        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["workspace_id"],
-        workspace["id"]
-    );
     finish_preset_demo(&fixture, &workspace, "widget", &udid);
-    wait_until("the demo's simulator lease to end", || {
-        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["workspace_id"]
-            .is_null()
-    });
+    // The lease stays with the workspace, as one the agent takes does.
+    assert_eq!(leases()[0]["workspace_id"], workspace["id"]);
 }
 
 #[test]

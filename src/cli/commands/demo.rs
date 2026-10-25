@@ -208,7 +208,6 @@ async fn place(
         environment: provided.environment.clone(),
         host: host.to_owned(),
         place: place.to_owned(),
-        leased_simulator: provided.leased_simulator,
     };
     let worker = |host: &str, place: &str| {
         let launch = serde_json::to_string(&launch(host, place))?;

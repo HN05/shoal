@@ -530,14 +530,9 @@ async fn finish(
     if agent.is_some() && result.is_ok() {
         manager.stop_exited_agent_processes(&execution_id).await;
     }
-    // Its record goes with the execution's.
-    let demo = manager.demo_of(&execution_id).await.unwrap_or_default();
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
-    if let Some(demo) = &demo {
-        manager.demo_ended(&workspace.id, demo).await;
-    }
     if let Some(agent) = &agent
         && result.is_ok()
     {

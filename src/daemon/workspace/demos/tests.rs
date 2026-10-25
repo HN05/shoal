@@ -19,7 +19,6 @@ fn launch(name: &str) -> Launch {
         environment: BTreeMap::new(),
         host: "zmx".into(),
         place: format!("session-{name}"),
-        leased_simulator: false,
     }
 }
 

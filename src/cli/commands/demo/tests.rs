@@ -84,7 +84,6 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
         environment: BTreeMap::new(),
         host: "zmx".into(),
         place: "first-web".into(),
-        leased_simulator: false,
     };
     let listing = Listing {
         workspace: Some("first".into()),
