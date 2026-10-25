@@ -822,6 +822,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         links: WorkspaceLinks::default(),
         running: false,
         done: false,
+        usage: None,
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,

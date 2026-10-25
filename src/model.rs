@@ -93,6 +93,21 @@ pub struct Workspace {
     /// The running chat that opened this workspace.
     #[serde(default)]
     pub chat: Option<String>,
+    /// What its processes use, while any run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<WorkspaceUsage>,
+}
+
+/// The CPU and memory a workspace's processes use, from the daemon's latest
+/// sample of the processes carrying its identity.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceUsage {
+    /// Percent of one core used since the previous sample; absent until the
+    /// daemon has two.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f64>,
+    pub memory_bytes: u64,
+    pub processes: usize,
 }
 
 /// Another workspace a record refers to, with its current name and branch.
@@ -316,6 +331,7 @@ impl Workspace {
             links: WorkspaceLinks::default(),
             running: false,
             done: false,
+            usage: None,
         }
     }
 

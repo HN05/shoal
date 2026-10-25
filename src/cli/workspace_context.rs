@@ -67,6 +67,7 @@ mod tests {
             links: crate::model::WorkspaceLinks::default(),
             running: false,
             done: false,
+            usage: None,
             id: format!("id-{name}"),
             repository_id: "repo".into(),
             name: name.into(),

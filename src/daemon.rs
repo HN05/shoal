@@ -39,6 +39,7 @@ pub(crate) mod seed;
 pub mod store;
 mod warnings;
 pub mod workspace;
+mod workspace_usage;
 
 use std::{
     panic::AssertUnwindSafe,
@@ -121,6 +122,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
     spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "workspace usage",
+        workspace_usage::run,
+    );
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
     spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
     spawn_supervised(

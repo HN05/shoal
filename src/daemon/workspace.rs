@@ -200,6 +200,8 @@ pub struct Manager {
     pub(crate) execution_unknown: tokio::sync::Notify,
     /// Recent CPU readings for dynamic agent admission.
     pub(crate) cpu_usage: std::sync::Mutex<crate::daemon::cpu_usage::CpuUsage>,
+    /// What each workspace's processes used at the latest sample.
+    pub(crate) workspace_usage: std::sync::Mutex<crate::daemon::workspace_usage::WorkspaceUsages>,
     /// The commit and settings whose seed build last failed, per repository.
     pub(super) seed_failures: std::sync::Mutex<HashMap<String, (String, String)>>,
     /// Running seed builds, which repository removal cancels and waits for.
@@ -261,6 +263,7 @@ impl Manager {
             turn_retry_wake: tokio::sync::Notify::new(),
             execution_unknown: tokio::sync::Notify::new(),
             cpu_usage: Default::default(),
+            workspace_usage: Default::default(),
             seed_failures: Default::default(),
             seed_builds: Default::default(),
             forge_memories: Default::default(),
@@ -384,6 +387,25 @@ impl Manager {
             .await
     }
 
+    pub async fn workspace_ids(&self) -> Result<HashSet<String>> {
+        self.store
+            .run(|db| {
+                Ok(db
+                    .prepare("SELECT id FROM workspaces")?
+                    .query_map([], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// What the workspace's processes use, from the latest sample.
+    pub(crate) fn workspace_usage(&self, id: &str) -> Option<crate::model::WorkspaceUsage> {
+        self.workspace_usage
+            .lock()
+            .unwrap()
+            .get(id, tokio::time::Instant::now())
+    }
+
     /// The workspaces a caller lists, with review marks checked against
     /// HEAD. A workspace process sees its own subtree with its own workspace
     /// first, since scoped commands without a target act on the first one.
@@ -399,6 +421,9 @@ impl Manager {
                 self.annotate_review(workspace)
             })
             .await;
+        for workspace in &mut workspaces {
+            workspace.usage = self.workspace_usage(&workspace.id);
+        }
         Ok(workspaces)
     }
 

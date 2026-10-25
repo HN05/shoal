@@ -52,6 +52,13 @@ impl PartialEq for Identity {
 
 impl Eq for Identity {}
 
+impl std::hash::Hash for Identity {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pid.hash(state);
+        self.birth.hash(state);
+    }
+}
+
 /// A process's identity and its parent's unique ID, which the kernel keeps
 /// after the parent exits and launchd adopts the process, until the process
 /// replaces its image.
@@ -181,6 +188,17 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
 pub async fn scan_workspace(id: &str) -> Result<Vec<Identity>> {
     let scan = scan_marked(crate::env::WORKSPACE_ID, HashSet::from([id.to_owned()])).await?;
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
+}
+
+/// `scan_workspace` for each of the workspaces `ids`, pairing every process
+/// with the workspace it carries.
+pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identity)>> {
+    let scan = scan_marked(crate::env::WORKSPACE_ID, ids).await?;
+    Ok(scan
+        .processes
+        .into_iter()
+        .map(|p| (p.execution_id, p.identity))
+        .collect())
 }
 
 /// Inventory processes whose environment sets `marker` to one of `ids`; each
@@ -565,7 +583,7 @@ fn launchd_version() -> Option<u32> {
 }
 
 #[cfg(target_os = "macos")]
-fn parent(pid: u32) -> Option<u32> {
+pub(super) fn parent(pid: u32) -> Option<u32> {
     bsd_info(pid).ok().flatten().map(|info| info.bsd.pbi_ppid)
 }
 
@@ -714,7 +732,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
 }
 
 #[cfg(target_os = "linux")]
-fn parent(pid: u32) -> Option<u32> {
+pub(super) fn parent(pid: u32) -> Option<u32> {
     let stat = read_process_stat(&format!("/proc/{pid}/stat")).ok()??;
     stat_fields(&stat).ok()?.get(1)?.parse().ok()
 }
@@ -747,7 +765,7 @@ fn stat_image(stat: &str) -> Result<Image> {
 
 /// Fields after the parenthesized command name, starting with the state.
 #[cfg(target_os = "linux")]
-fn stat_fields(stat: &str) -> Result<Vec<&str>> {
+pub(super) fn stat_fields(stat: &str) -> Result<Vec<&str>> {
     Ok(stat
         .rsplit_once(')')
         .context("invalid process stat")?
@@ -757,7 +775,7 @@ fn stat_fields(stat: &str) -> Result<Vec<&str>> {
 }
 
 #[cfg(target_os = "linux")]
-fn read_process_stat(path: &str) -> Result<Option<String>> {
+pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
     match std::fs::read_to_string(path) {
         Ok(stat) => Ok(Some(stat)),
         // Linux returns ESRCH if the process exits between open and read.

@@ -58,6 +58,7 @@ impl Manager {
                 ))
             })
             .await?;
+        inspection.workspace.usage = self.workspace_usage(&inspection.workspace.id);
         inspection.simulators.retain(|simulator| {
             simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
         });
