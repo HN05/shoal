@@ -901,7 +901,9 @@ only to the agents of the workspaces below their own, which they coordinate.
 `shoal questions` opens a question picker on a terminal. A numbered question
 shows its recommendation and numbered choices, then reads a choice number or
 written answer with the question text and number on the prompt line. Enter accepts
-the recommendation shown in brackets literally, even when it is numeric. The inbox uses these same
+the recommendation shown in brackets literally, even when it is numeric; `/cancel`
+leaves the question open. Withdrawal belongs to the requester, outside the answer
+prompt. The inbox uses these same
 actions without changing its listing.
 
 Questions are how an agent asks the user for a decision whose answer is text,

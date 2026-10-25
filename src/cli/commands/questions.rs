@@ -243,9 +243,6 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
             )
             .await
         }
-        QuestionAction::Withdraw => {
-            withdraw_shown(ctx, question.workspace_id.clone(), question).await
-        }
         QuestionAction::Answer(response) => {
             answer(ctx, question.id, response, Some(question)).await
         }
@@ -254,7 +251,6 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
 
 enum QuestionAction {
     Recommend,
-    Withdraw,
     Answer(String),
 }
 
@@ -267,7 +263,6 @@ fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAc
     let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
     match response.trim() {
         "" if response.is_empty() => Ok(QuestionAction::Recommend),
-        "/withdraw" => Ok(QuestionAction::Withdraw),
         "/cancel" => Err(ui::SelectionCanceled.into()),
         _ => Ok(QuestionAction::Answer(response)),
     }
@@ -283,7 +278,7 @@ fn print_answer_context(ctx: &Context, question: &Question) {
     for (index, choice) in question.ask.choices.iter().enumerate() {
         eprintln!("({}) {choice}", index + 1);
     }
-    eprintln!("Enter accepts the recommendation; type a number or answer. /withdraw or /cancel.");
+    eprintln!("Enter accepts the recommendation; type a number or answer. /cancel to leave.");
 }
 
 /// One line with what the user needs to choose a question: its workspace,
