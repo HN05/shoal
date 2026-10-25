@@ -510,11 +510,64 @@ pub struct ManualCleanup {
 }
 
 impl ManualCleanup {
-    fn keep(&mut self, workspace: String, reason: CleanupReason) {
-        if self.dry_run {
+    /// A dry run lists why it keeps each workspace, and a request naming
+    /// workspaces says why it kept those.
+    fn keep(&mut self, workspace: String, reason: CleanupReason, named: bool) {
+        if self.dry_run || named {
             self.kept.push(Kept { workspace, reason });
         }
     }
+}
+
+/// Which items of one kind a cleanup request covers.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pick {
+    #[default]
+    None,
+    All,
+    /// Workspaces, or the repositories whose caches to empty, by name or ID.
+    Only(Vec<String>),
+}
+
+impl Pick {
+    fn covers(&self, name: &str, id: &str) -> bool {
+        match self {
+            Self::None => false,
+            Self::All => true,
+            Self::Only(names) => names.iter().any(|n| n == name || n == id),
+        }
+    }
+
+    /// Fails for a name none of `items`, as `(name, id)` pairs, has.
+    fn ensure_known<'a>(
+        &self,
+        items: impl Iterator<Item = (&'a str, &'a str)> + Clone,
+    ) -> Result<()> {
+        if let Self::Only(names) = self {
+            for selector in names {
+                ensure!(
+                    items
+                        .clone()
+                        .any(|(name, id)| selector == name || selector == id),
+                    "{selector} is not a workspace or repository this cleanup covers"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// What a cleanup request covers.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Selection {
+    #[serde(default)]
+    pub workspaces: Pick,
+    #[serde(default)]
+    pub caches: Pick,
+    /// Only this repository's workspaces and caches, by any repository selector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -537,20 +590,63 @@ pub struct CacheCleanup {
     pub emptying: Emptying,
 }
 
-/// Remove every workspace idle or merged cleanup would remove, now: the
-/// user's request replaces their idle periods and applies where they are
-/// disabled. With `caches`, empty the shared caches nothing is using afterwards.
-pub async fn on_request(manager: &Manager, dry_run: bool, caches: bool) -> Result<ManualCleanup> {
-    let mut report = remove_on_request(manager, dry_run).await?;
-    if caches {
-        report.caches = empty_caches_on_request(manager, dry_run).await?;
-    }
+/// Remove the selected workspaces idle or merged cleanup would remove, now:
+/// the user's request replaces their idle periods and applies where they are
+/// disabled. Then empty the selected shared caches nothing is using.
+pub async fn on_request(
+    manager: &Manager,
+    dry_run: bool,
+    selection: &Selection,
+) -> Result<ManualCleanup> {
+    let repository = match &selection.repository {
+        Some(selector) => Some(manager.repository(selector).await?.id),
+        None => None,
+    };
+    let repositories: Vec<_> = manager
+        .repositories()
+        .await?
+        .into_iter()
+        .filter(|repo| repository.as_ref().is_none_or(|id| *id == repo.id))
+        .collect();
+    let workspaces: Vec<_> = manager
+        .list_workspaces()
+        .await?
+        .into_iter()
+        .filter(|workspace| {
+            repository
+                .as_ref()
+                .is_none_or(|id| *id == workspace.repository_id)
+        })
+        .collect();
+    selection
+        .workspaces
+        .ensure_known(workspaces.iter().map(|w| (w.name.as_str(), w.id.as_str())))?;
+    selection.caches.ensure_known(
+        repositories
+            .iter()
+            .map(|repo| (crate::repository::name(repo), repo.id.as_str())),
+    )?;
+    let mut report = ManualCleanup {
+        dry_run,
+        ..ManualCleanup::default()
+    };
+    remove_on_request(manager, &mut report, workspaces, &selection.workspaces).await?;
+    report.caches =
+        empty_caches_on_request(manager, dry_run, repositories, &selection.caches).await?;
     Ok(report)
 }
 
-async fn empty_caches_on_request(manager: &Manager, dry_run: bool) -> Result<Vec<CacheCleanup>> {
+async fn empty_caches_on_request(
+    manager: &Manager,
+    dry_run: bool,
+    repositories: Vec<crate::model::Repository>,
+    pick: &Pick,
+) -> Result<Vec<CacheCleanup>> {
     let mut report = Vec::new();
-    for repo in manager.repositories().await? {
+    for repo in repositories {
+        if !pick.covers(crate::repository::name(&repo), &repo.id) {
+            continue;
+        }
         let emptying = match manager.empty_caches(&repo, dry_run).await {
             Ok(None) => continue,
             Ok(Some(emptying)) => emptying,
@@ -572,22 +668,27 @@ async fn empty_caches_on_request(manager: &Manager, dry_run: bool) -> Result<Vec
     Ok(report)
 }
 
-async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanup> {
-    let mut report = ManualCleanup {
-        dry_run,
-        ..ManualCleanup::default()
-    };
+async fn remove_on_request(
+    manager: &Manager,
+    report: &mut ManualCleanup,
+    workspaces: Vec<Workspace>,
+    pick: &Pick,
+) -> Result<()> {
+    let named = matches!(pick, Pick::Only(_));
     let mut fetches = merged::Fetches::default();
-    for workspace in manager.list_workspaces().await? {
+    for workspace in workspaces {
+        if !pick.covers(&workspace.name, &workspace.id) {
+            continue;
+        }
         if workspace.state != WorkspaceState::Ready {
             let state = workspace.state;
-            report.keep(workspace.name, CleanupReason::NotReady { state });
+            report.keep(workspace.name, CleanupReason::NotReady { state }, named);
             continue;
         }
         let snapshot = match requested_candidacy(manager, &workspace, &mut fetches).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
-                report.keep(workspace.name, reason);
+                report.keep(workspace.name, reason, named);
                 continue;
             }
             Err(error) => {
@@ -599,7 +700,7 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
                 continue;
             }
         };
-        if dry_run {
+        if report.dry_run {
             report.removed.push(workspace.name);
             continue;
         }
@@ -620,7 +721,7 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
             }
         }
     }
-    Ok(report)
+    Ok(())
 }
 
 /// The snapshot of an idle or merged cleanup candidate, or why idle cleanup
@@ -1342,7 +1443,11 @@ mod tests {
                 .collect::<Vec<_>>()
         };
 
-        let preview = on_request(&manager, true, false).await.unwrap();
+        let all = Selection {
+            workspaces: Pick::All,
+            ..Selection::default()
+        };
+        let preview = on_request(&manager, true, &all).await.unwrap();
         assert_eq!(preview.removed, ["idle"]);
         assert_eq!(retained(&preview), ["broken"]);
         let kept = preview
@@ -1359,7 +1464,29 @@ mod tests {
         );
         assert_eq!(names(&manager).await, ["broken", "dirty", "held", "idle"]);
 
-        let report = on_request(&manager, false, false).await.unwrap();
+        // Named workspaces say why they stay; others are left out.
+        let named = Selection {
+            workspaces: Pick::Only(vec!["dirty".into(), "held".into()]),
+            ..Selection::default()
+        };
+        let report = on_request(&manager, false, &named).await.unwrap();
+        assert!(report.removed.is_empty());
+        assert_eq!(
+            report
+                .kept
+                .iter()
+                .map(|kept| kept.workspace.as_str())
+                .collect::<Vec<_>>(),
+            ["dirty", "held"]
+        );
+        let unknown = Selection {
+            workspaces: Pick::Only(vec!["missing".into()]),
+            ..Selection::default()
+        };
+        assert!(on_request(&manager, false, &unknown).await.is_err());
+        assert_eq!(names(&manager).await, ["broken", "dirty", "held", "idle"]);
+
+        let report = on_request(&manager, false, &all).await.unwrap();
         assert!(!report.dry_run);
         assert_eq!(report.removed, ["idle"]);
         assert_eq!(retained(&report), ["broken"]);

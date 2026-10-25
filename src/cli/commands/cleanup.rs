@@ -7,7 +7,10 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    daemon::{caches::Emptying, cleanup::ManualCleanup},
+    daemon::{
+        caches::Emptying,
+        cleanup::{ManualCleanup, Pick, Selection},
+    },
     protocol::Method,
 };
 
@@ -15,7 +18,17 @@ pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i3
     let report = ctx
         .progress(
             "Cleaning up workspaces",
-            request::<ManualCleanup>(&ctx.paths, Method::Cleanup { dry_run, caches }),
+            request::<ManualCleanup>(
+                &ctx.paths,
+                Method::Cleanup {
+                    dry_run,
+                    selection: Selection {
+                        workspaces: Pick::All,
+                        caches: if caches { Pick::All } else { Pick::None },
+                        repository: None,
+                    },
+                },
+            ),
         )
         .await?;
     let failed = report

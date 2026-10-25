@@ -480,11 +480,12 @@ pub enum Method {
         workspace: String,
         unsaved: UnsavedWork,
     },
-    /// Remove idle cleanup candidates without waiting for their idle delay.
+    /// Remove idle and merged cleanup candidates without waiting for their
+    /// idle delay, and empty shared caches nothing is using.
     Cleanup {
         dry_run: bool,
-        /// Also empty the shared caches of repositories nothing is using.
-        caches: bool,
+        #[serde(flatten)]
+        selection: crate::daemon::cleanup::Selection,
     },
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,

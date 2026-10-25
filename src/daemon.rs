@@ -828,8 +828,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
                 .await?,
         ),
-        Method::Cleanup { dry_run, caches } => {
-            Body::Cleanup(cleanup::on_request(manager, dry_run, caches).await?)
+        Method::Cleanup { dry_run, selection } => {
+            Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
         Method::KeptBranches => Body::KeptBranches(manager.list_kept_branches().await?),
         Method::DeleteKeptBranches { branches } => {
