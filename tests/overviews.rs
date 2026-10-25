@@ -120,7 +120,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                     for (index, value) in values.iter().enumerate() {
                         if index == 1 {
                             assert_eq!(value["workspace"]["id"], index.to_string());
-                            assert_eq!(value["error"], "operation_failed: controlled failure");
+                            assert_eq!(value["error"], "controlled failure");
                             assert_eq!(value.as_object().unwrap().len(), 2);
                         } else if noun == "port" {
                             assert_eq!(value["workspace"]["id"], index.to_string());
@@ -141,9 +141,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                     let expected: String = (0..count)
                         .map(|index| {
                             if index == 1 {
-                                format!(
-                                    "workspace-{index:02}: operation_failed: controlled failure\n"
-                                )
+                                format!("workspace-{index:02}: controlled failure\n")
                             } else {
                                 format!("workspace-{index:02}\n{empty}\n")
                             }

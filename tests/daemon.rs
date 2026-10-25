@@ -961,7 +961,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         (
             vec!["--json", "repo", "ls"],
             json!({"type": "error", "data": {"code": "operation_failed", "message": "failed: detail"}}),
-            "operation_failed: failed: detail",
+            "failed: detail",
         ),
         (
             vec!["run", "--workspace", "worker", "--", "true"],

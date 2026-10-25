@@ -1031,8 +1031,13 @@ pub struct RemoteError {
     pub message: String,
 }
 
+/// `operation_failed` is every failure without a more specific code, so only
+/// the specific codes add to the message.
 impl std::fmt::Display for RemoteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.code == ErrorCode::OperationFailed {
+            return f.write_str(&self.message);
+        }
         write!(f, "{}: {}", self.code, self.message)
     }
 }
