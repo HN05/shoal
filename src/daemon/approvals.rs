@@ -987,6 +987,12 @@ impl Manager {
         }
     }
 
+    pub async fn show_approval(&self, id: i64) -> Result<ApprovalRequest> {
+        self.approval_request(id)
+            .await?
+            .with_context(|| format!("unknown approval request {id}"))
+    }
+
     /// A request's target never changes, so it can be read before taking the
     /// gate its decision needs.
     pub(crate) async fn approval_request(&self, id: i64) -> Result<Option<ApprovalRequest>> {

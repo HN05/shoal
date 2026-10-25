@@ -994,6 +994,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListApprovals { workspace } => {
             Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
         }
+        Method::ShowApproval { id } => {
+            Body::ApprovalRequest(Box::new(manager.show_approval(id).await?))
+        }
         Method::SecretAcquire {
             workspace,
             name,

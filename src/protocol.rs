@@ -720,6 +720,9 @@ pub enum Method {
     ListApprovals {
         workspace: Option<String>,
     },
+    ShowApproval {
+        id: i64,
+    },
     /// Confirm the caller may fetch a configured secret, requesting approval
     /// when it is gated; the daemon never sees the value.
     SecretAcquire {

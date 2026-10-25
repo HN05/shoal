@@ -977,3 +977,78 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
     manager.notify_approval(&child.name, &other).await;
     assert_eq!(user_requests().await, 3);
 }
+
+#[tokio::test]
+async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
+    use crate::daemon::{
+        approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+        questions::Ask,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    for (workspace, allowed) in [(&parent, true), (&child, true), (&other, false)] {
+        let approval = manager
+            .request_approval(ApprovalRequest::new(
+                &workspace.id,
+                Target::Secret("token".into()),
+                "default",
+                Specification::Secret(SecretSpecification {
+                    command: vec!["token-source".into()],
+                    tools: vec![],
+                }),
+                Lifetime::Workspace,
+                Some("Inspect a request"),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        let question = manager
+            .ask_question(
+                &workspace.id,
+                Ask {
+                    question: "Which database?".into(),
+                    recommendation: "SQLite".into(),
+                    reason: None,
+                    choices: vec![],
+                },
+            )
+            .await
+            .unwrap();
+        for mut method in [
+            Method::ShowApproval { id: approval.id },
+            Method::ShowQuestion { id: question.id },
+        ] {
+            assert_eq!(
+                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+                    .await
+                    .is_ok(),
+                allowed
+            );
+        }
+    }
+}

@@ -174,6 +174,24 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::ShowApproval { id } => {
+            let request = manager.show_approval(*id).await?;
+            ensure!(
+                manager.within_subtree(owner, &request.workspace_id).await?,
+                "workspace processes inspect only approval requests in their workspace tree"
+            );
+            None
+        }
+        Method::ShowQuestion { id } => {
+            let question = manager.question(*id).await?;
+            ensure!(
+                manager
+                    .within_subtree(owner, &question.workspace_id)
+                    .await?,
+                "workspace processes inspect only questions in their workspace tree"
+            );
+            None
+        }
         Method::DecideApproval { id, shown, .. } => {
             // A coordinating agent decides the requests routed to it. Only the
             // stored routing counts; the decision rechecks it with its grant.
