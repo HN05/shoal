@@ -63,6 +63,7 @@ pub(super) async fn provide(
             }
         }
         Some(Preset::Simulator) => {
+            let demos_own = demos_own_simulator(ctx, workspace).await?;
             let held = holds_simulator(ctx, workspace).await?;
             let sim = match lease_simulator(ctx, workspace, &chosen.name, queue).await? {
                 Ok(sim) => sim,
@@ -70,7 +71,9 @@ pub(super) async fn provide(
             };
             let udid = sim.udid.context("the leased simulator has no UDID")?;
             provided.environment.insert(SIM_UDID.into(), udid);
-            provided.leased_simulator = !held;
+            // Every simulator demo shares the lease a demo took, so whichever
+            // stops last gives it up.
+            provided.leased_simulator = demos_own || !held;
         }
         None => {}
     }
@@ -108,6 +111,14 @@ async fn reserve_port(
         Body::ApprovalRequest(request) => Ok(Err(approvals::declined(ctx, &request)?)),
         body => Err(body.unexpected("Port or ApprovalRequest")),
     }
+}
+
+/// Whether a running simulator demo of the workspace took its lease.
+async fn demos_own_simulator(ctx: &Context, workspace: &Workspace) -> Result<bool> {
+    Ok(running(ctx, Some(workspace))
+        .await?
+        .iter()
+        .any(|demo| demo.launch.preset == Some(Preset::Simulator) && demo.launch.leased_simulator))
 }
 
 async fn holds_simulator(ctx: &Context, workspace: &Workspace) -> Result<bool> {
