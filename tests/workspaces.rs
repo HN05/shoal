@@ -457,7 +457,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     assert!(diff.status.success());
     assert!(String::from_utf8_lossy(&diff.stdout).contains("changed after rename"));
     // The new name selects the workspace and its completion.
-    fixture.ok(&["undone", "feature-topic"]);
+    fixture.ok(&["done", "--undo", "feature-topic"]);
     fixture.ok(&["done", "feature-topic"]);
     for field in [
         "id",
@@ -17291,7 +17291,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .get("review")
             .is_none()
     );
-    let output = scoped_command(&fixture, "reviewed", &["unready"]);
+    let output = scoped_command(&fixture, "reviewed", &["ready", "--undo"]);
     assert!(!output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("nothing is marked ready"),
@@ -20608,7 +20608,12 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         fixture.ok(&["leases", "hold", "--workspace", "held"]),
         expected
     );
-    fixture.ok(&["release", "--workspace", "held"]);
+    let empty = fixture.run(&["release", "--workspace", "held"]);
+    assert!(!empty.status.success(), "{empty:?}");
+    assert!(
+        String::from_utf8_lossy(&empty.stderr).contains("no leases or requests to release"),
+        "{empty:?}"
+    );
     assert_eq!(
         fixture.ok(&["leases", "hold", "--workspace", "held"]),
         expected
