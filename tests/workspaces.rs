@@ -2949,6 +2949,17 @@ fn kept_branches_are_listed_and_deleted_on_request() {
             .is_empty()
     };
 
+    // A dry run lists only the named branches, and refuses unknown ones.
+    assert_eq!(
+        names(&fixture.ok(&["cleanup", "branches", "second", "--dry-run"])),
+        ["second"]
+    );
+    assert!(
+        !fixture
+            .run(&["cleanup", "branches", "missing", "--dry-run"])
+            .status
+            .success()
+    );
     let piped = fixture.run(&["cleanup", "branches", "first"]);
     assert!(!piped.status.success());
     assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
@@ -4348,9 +4359,10 @@ fn configured_environment_renders_for_tracked_commands() {
     // The repository keeps its caches until cleanup empties them.
     assert!(Path::new(cache).join("entry").exists());
     let report = fixture.ok(&["cleanup", "caches"]);
+    let repository_id = &fixture.ok(&["repo", "ls"])[0]["id"];
     assert_eq!(
         report["caches"],
-        serde_json::json!([{"repository": "repo with ' quotes & $literal", "outcome": "emptied", "caches": ["go"]}])
+        serde_json::json!([{"repository": "repo with ' quotes & $literal", "repository_id": repository_id, "outcome": "emptied", "caches": ["go"]}])
     );
     assert!(!Path::new(cache).exists());
 }

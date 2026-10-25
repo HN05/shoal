@@ -69,7 +69,7 @@ pub(super) async fn delete(ctx: &Context, selected: &[KeptBranch]) -> Result<Vec
 }
 
 /// The kept branches `names` name, each in exactly one repository.
-fn select_named(kept: Vec<KeptBranch>, names: &[String]) -> Result<Vec<KeptBranch>> {
+pub(super) fn select_named(kept: Vec<KeptBranch>, names: &[String]) -> Result<Vec<KeptBranch>> {
     let mut selected = Vec::new();
     for name in names {
         let mut matches = kept.iter().filter(|branch| &branch.branch == name);

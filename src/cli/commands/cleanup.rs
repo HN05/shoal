@@ -89,34 +89,56 @@ async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     if args.dry_run || !ctx.interactive() || choices.is_empty() {
         return Ok(listing);
     }
-    let picked = ui::pick_many(ctx, "Clean up> ", choices)?;
-    ensure!(!picked.is_empty(), "nothing selected");
-    let chosen = |prefix: &str| -> Vec<String> {
-        picked
-            .iter()
-            .filter_map(|id| id.strip_prefix(prefix))
-            .map(str::to_owned)
-            .collect()
-    };
-    let selected: Vec<KeptBranch> = listing
-        .branches
-        .into_iter()
-        .enumerate()
-        .filter(|(index, _)| chosen(BRANCH).contains(&index.to_string()))
-        .map(|(_, branch)| branch)
-        .collect();
-    branches::confirm(ctx, &selected, args.yes)?;
-    let (workspaces, caches) = (chosen(WORKSPACE), chosen(CACHES));
-    let cleanup = if workspaces.is_empty() && caches.is_empty() {
+    let ids = ui::pick_many(ctx, "Clean up> ", choices)?;
+    ensure!(!ids.is_empty(), "nothing selected");
+    let picked = Picked::resolve(&ids, listing.branches);
+    branches::confirm(ctx, &picked.branches, args.yes)?;
+    let cleanup = if picked.workspaces.is_empty() && picked.caches.is_empty() {
         ManualCleanup::default()
     } else {
-        let selection = selection(args, Pick::Only(workspaces), Pick::Only(caches));
+        let selection = selection(
+            args,
+            Pick::Only(picked.workspaces),
+            Pick::Only(picked.caches),
+        );
         clean(ctx, false, selection).await?
     };
     Ok(Report {
         cleanup,
-        branches: branches::delete(ctx, &selected).await?,
+        branches: branches::delete(ctx, &picked.branches).await?,
     })
+}
+
+/// What the user picked: workspace names, the IDs of repositories whose
+/// caches to empty, and kept branches.
+struct Picked {
+    workspaces: Vec<String>,
+    caches: Vec<String>,
+    branches: Vec<KeptBranch>,
+}
+
+impl Picked {
+    /// Resolve the picker's row IDs, as [`choices`] made them, against the
+    /// listed kept branches.
+    fn resolve(ids: &[String], kept: Vec<KeptBranch>) -> Self {
+        let chosen = |prefix: &str| -> Vec<String> {
+            ids.iter()
+                .filter_map(|id| id.strip_prefix(prefix))
+                .map(str::to_owned)
+                .collect()
+        };
+        let branches = chosen(BRANCH);
+        Self {
+            workspaces: chosen(WORKSPACE),
+            caches: chosen(CACHES),
+            branches: kept
+                .into_iter()
+                .enumerate()
+                .filter(|(index, _)| branches.contains(&index.to_string()))
+                .map(|(_, branch)| branch)
+                .collect(),
+        }
+    }
 }
 
 async fn delete_branches(
@@ -131,10 +153,12 @@ async fn delete_branches(
         ..ManualCleanup::default()
     };
     if args.dry_run {
-        return Ok(Report {
-            cleanup,
-            branches: kept,
-        });
+        let branches = if names.is_empty() {
+            kept
+        } else {
+            branches::select_named(kept, names)?
+        };
+        return Ok(Report { cleanup, branches });
     }
     let selected = branches::select(ctx, kept, names, all)?;
     branches::confirm(ctx, &selected, args.yes)?;
@@ -149,7 +173,8 @@ const BRANCH: &str = "branch:";
 const CACHES: &str = "caches:";
 
 /// The picker's rows: the workspaces to remove, kept branches, and caches
-/// nothing is using, each labelled with its kind.
+/// nothing is using, each labelled with its kind. Caches go by repository ID,
+/// and a repository name another listed one shares carries its ID too.
 fn choices(listing: &Report) -> Vec<(String, String)> {
     let workspaces = listing
         .cleanup
@@ -164,10 +189,21 @@ fn choices(listing: &Report) -> Vec<(String, String)> {
         let Emptying::Emptied { caches } = &cleanup.emptying else {
             return None;
         };
-        let repository = &cleanup.repository;
+        let shared = listing
+            .cleanup
+            .caches
+            .iter()
+            .filter(|other| other.repository == cleanup.repository)
+            .count()
+            > 1;
+        let label = if shared {
+            format!("{} ({})", cleanup.repository, cleanup.repository_id)
+        } else {
+            cleanup.repository.clone()
+        };
         Some((
-            format!("{CACHES}{repository}"),
-            format!("caches     {repository}  {}", caches.join(", ")),
+            format!("{CACHES}{}", cleanup.repository_id),
+            format!("caches     {label}  {}", caches.join(", ")),
         ))
     });
     workspaces.chain(branches).chain(caches).collect()

@@ -586,6 +586,7 @@ pub struct Kept {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CacheCleanup {
     pub repository: String,
+    pub repository_id: String,
     #[serde(flatten)]
     pub emptying: Emptying,
 }
@@ -662,6 +663,7 @@ async fn empty_caches_on_request(
         };
         report.push(CacheCleanup {
             repository: crate::repository::name(&repo).to_owned(),
+            repository_id: repo.id.clone(),
             emptying,
         });
     }
