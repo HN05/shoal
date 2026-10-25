@@ -1,6 +1,6 @@
 //! Same-user process ownership for cooperative recovery. Never expose process
-//! arguments/environment; only the explicit execution marker and scoped
-//! ancestors' state directories leave this module.
+//! arguments/environment; only the explicit execution marker, ancestor PIDs
+//! and scoped ancestors' state directories leave this module.
 use crate::protocol::timing;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
@@ -23,33 +23,33 @@ pub fn capture(pid: u32) -> Result<Option<Identity>> {
     platform_identity(pid)
 }
 
+/// This process's ancestors, nearest first, until init or a reparented
+/// (daemonized) process ends the chain.
+pub fn ancestors() -> impl Iterator<Item = u32> {
+    std::iter::successors(Some(std::os::unix::process::parent_id()), |pid| {
+        parent(*pid)
+    })
+    .take_while(|pid| *pid > 1)
+    .take(MAX_ANCESTRY)
+}
+
 /// State directories of this process's ancestors that started with workspace
 /// scope, nearest first. Ancestors keep their initial environment when a
-/// descendant clears its own; only reparenting (daemonizing) leaves the chain.
-/// Unreadable ancestors are skipped, so this is cooperative, not a boundary.
+/// descendant clears its own. Unreadable ancestors are skipped, so this is
+/// cooperative, not a boundary.
 pub fn scoped_ancestor_state_dirs() -> Vec<PathBuf> {
     let token = format!("{}=", crate::env::SCOPE_TOKEN).into_bytes();
     let state = format!("{}=", crate::env::STATE_DIR).into_bytes();
-    let mut dirs = Vec::new();
-    let mut pid = std::os::unix::process::parent_id();
-    for _ in 0..MAX_ANCESTRY {
-        if pid <= 1 {
-            break;
-        }
-        if let Ok(environment) = environment(pid)
-            && environment.iter().any(|entry| entry.starts_with(&token))
-            && let Some(dir) = environment
+    ancestors()
+        .filter_map(|pid| environment(pid).ok())
+        .filter(|environment| environment.iter().any(|entry| entry.starts_with(&token)))
+        .filter_map(|environment| {
+            environment
                 .iter()
                 .find_map(|entry| entry.strip_prefix(state.as_slice()))
-        {
-            dirs.push(PathBuf::from(OsStr::from_bytes(dir)));
-        }
-        let Some(next) = parent(pid) else {
-            break;
-        };
-        pid = next;
-    }
-    dirs
+                .map(|dir| PathBuf::from(OsStr::from_bytes(dir)))
+        })
+        .collect()
 }
 
 pub fn alive(identity: &Identity) -> Result<bool> {
