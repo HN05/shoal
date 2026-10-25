@@ -59,10 +59,10 @@ pub(super) fn demo_screen(place: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&log).into_owned())
 }
 
+/// In the workspace's state directory, which its removal deletes.
 fn log_path(paths: &Paths, workspace_id: &str, name: &str) -> PathBuf {
     paths
-        .state
+        .workspace_state(workspace_id)
         .join("demos")
-        .join(workspace_id)
         .join(format!("{name}.log"))
 }

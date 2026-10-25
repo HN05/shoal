@@ -23635,3 +23635,62 @@ fn a_demo_outlives_the_command_that_started_it() {
             .is_empty()
     });
 }
+
+#[test]
+fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
+    let fixture = Fixture::new();
+    fixture.add("tried");
+    let other = fixture.add("other");
+    demo(
+        &fixture,
+        &[
+            "start",
+            "--workspace",
+            "other",
+            "--",
+            "sh",
+            "-c",
+            "echo hello; exec sleep 600",
+        ],
+    );
+    let log = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(other["id"].as_str().unwrap())
+        .join("demos/demo.log");
+    wait_until("the demo to write its log", || {
+        fs::read_to_string(&log).is_ok_and(|text| text.contains("hello"))
+    });
+    // A workspace process without its token still acts only on its own.
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let refused = fixture.run(&[
+        "run",
+        "--workspace",
+        "tried",
+        "--",
+        "env",
+        "-u",
+        "SHOAL_SCOPE_TOKEN",
+        binary,
+        "demo",
+        "stop",
+        "--workspace",
+        "other",
+    ]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("cleared its scope token"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+    assert_eq!(
+        demo(&fixture, &["ls", "--workspace", "other"])["running"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    fixture.ok(&["rm", "other", "--yes"]);
+    assert!(!log.exists());
+}

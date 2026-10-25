@@ -856,7 +856,7 @@ demo of the workspace.
 Each demo runs as a tracked command where queued agents start: a background
 Herdr tab inside Herdr, otherwise a detached zmx session
 named `<workspace>-<name>`, and without zmx in the background, writing a log in
-the state directory, where it takes no keys. A command that exits runs again; an exit
+the workspace's state directory, which removal deletes, and takes no keys. A command that exits runs again; an exit
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30
 seconds. Stopping the demo, `shoal stop`, `shoal done` without `--keep-demos`
 and removing the workspace end it, and its session with it; a running demo keeps the workspace from idle cleanup as
