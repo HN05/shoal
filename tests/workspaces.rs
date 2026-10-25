@@ -19742,6 +19742,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         [
             "--state-dir",
             state.to_str().unwrap(),
+            "--text",
             "internal",
             "herdr",
             "--close-when-done"
