@@ -12009,10 +12009,12 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     text.push_str(
         "[env]\nPROXY_URL = 'http://proxy'\nKEPT = 'kept'\n\
          [ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
-         env_remove = ['PROXY_URL', 'INHERITED_TOKEN']\n",
+         env_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n\
+         [ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
     );
     fs::write(&config, text).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
+    commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
     fixture.ok(&[
         "repo",
         "add",
@@ -12021,6 +12023,8 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
         "profiled",
     ]);
     fixture.add("profiled");
+    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "profiled"]);
+    let reserved = format!("WEB_PORT={}", port["port"]);
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
     install_test_script(
@@ -12064,6 +12068,11 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
         true
     );
     assert!(!home.join(".claude.json").exists());
+
+    // Neither removing nor setting it moves a reserved port.
+    assert!(env.lines().any(|line| line == reserved), "{env}");
+    let (_, env) = launch("claude-port");
+    assert!(env.lines().any(|line| line == reserved), "{env}");
 
     // Claude itself keeps the environment it inherits.
     let (_, env) = launch("claude");

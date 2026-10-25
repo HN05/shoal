@@ -961,6 +961,7 @@ fn spawn(
     if let Some(auth) = auth {
         auth.apply(&mut process);
     }
+    export_execution(&mut process, paths, plan);
     let quiet = matches!(mode, Mode::Setup { json: true });
     let (stdin, stdout, stderr) = match mode {
         Mode::Detached { log } => {
@@ -1009,11 +1010,16 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
     Ok(())
 }
 
-/// Export the execution's identity and port reservations, dropping stale port
-/// variables inherited from an enclosing execution.
+/// Export the workspace's identity and `[env]`, dropping stale port variables
+/// inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     env::apply_workspace_identity(process, &plan.workspace, paths);
     env::apply_configured(process, &plan.environment);
+}
+
+/// Export the execution's scope and port reservations last, so no configured
+/// variable replaces or removes them.
+fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     process
         .envs(env::workspace_environment(
             &plan.workspace,
