@@ -1,70 +1,193 @@
-//! Removing idle cleanup candidates without waiting for their idle delay.
-use anyhow::Result;
+//! Removing what Shoal left behind: the workspaces idle or merged cleanup
+//! would remove, branches removal kept, and shared caches.
+use anyhow::{Result, ensure};
+use serde::Serialize;
 
 use crate::{
     cli::{
+        CleanupArgs, CleanupKind,
         client::request,
         context::Context,
         output::{Palette, Style},
+        ui,
     },
     daemon::{
         caches::Emptying,
         cleanup::{ManualCleanup, Pick, Selection},
     },
+    model::KeptBranch,
     protocol::Method,
 };
 
-pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i32> {
-    let report = ctx
-        .progress(
-            "Cleaning up workspaces",
-            request::<ManualCleanup>(
-                &ctx.paths,
-                Method::Cleanup {
-                    dry_run,
-                    selection: Selection {
-                        workspaces: Pick::All,
-                        caches: if caches { Pick::All } else { Pick::None },
-                        repository: None,
-                    },
-                },
-            ),
-        )
-        .await?;
-    let failed = report
+use super::branches;
+
+/// What a cleanup removed, or would remove in a dry run.
+#[derive(Serialize)]
+struct Report {
+    #[serde(flatten)]
+    cleanup: ManualCleanup,
+    /// Kept branches: those a dry run lists, or those deleted.
+    branches: Vec<KeptBranch>,
+}
+
+pub(super) async fn run(
+    ctx: &Context,
+    kind: Option<CleanupKind>,
+    args: CleanupArgs,
+) -> Result<i32> {
+    let report = match kind {
+        None => everything(ctx, &args).await?,
+        Some(CleanupKind::Workspaces { names }) => {
+            let workspaces = if names.is_empty() {
+                Pick::All
+            } else {
+                Pick::Only(names)
+            };
+            let selection = selection(&args, workspaces, Pick::None);
+            Report {
+                cleanup: clean(ctx, args.dry_run, selection).await?,
+                branches: Vec::new(),
+            }
+        }
+        Some(CleanupKind::Caches) => {
+            let selection = selection(&args, Pick::None, Pick::All);
+            Report {
+                cleanup: clean(ctx, args.dry_run, selection).await?,
+                branches: Vec::new(),
+            }
+        }
+        Some(CleanupKind::Branches { names, all }) => {
+            delete_branches(ctx, &args, &names, all).await?
+        }
+    };
+    show(ctx, &report)
+}
+
+fn selection(args: &CleanupArgs, workspaces: Pick, caches: Pick) -> Selection {
+    Selection {
+        workspaces,
+        caches,
+        repository: args.repo.clone(),
+    }
+}
+
+async fn clean(ctx: &Context, dry_run: bool, selection: Selection) -> Result<ManualCleanup> {
+    ctx.progress(
+        "Cleaning up",
+        request::<ManualCleanup>(&ctx.paths, Method::Cleanup { dry_run, selection }),
+    )
+    .await
+}
+
+/// List every kind; on a terminal, remove what the user picks.
+async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
+    let listing = Report {
+        cleanup: clean(ctx, true, selection(args, Pick::All, Pick::All)).await?,
+        branches: branches::kept(ctx, args.repo.as_deref()).await?,
+    };
+    let choices = choices(&listing);
+    if args.dry_run || !ctx.interactive() || choices.is_empty() {
+        return Ok(listing);
+    }
+    let picked = ui::pick_many(ctx, "Clean up> ", choices)?;
+    ensure!(!picked.is_empty(), "nothing selected");
+    let chosen = |prefix: &str| -> Vec<String> {
+        picked
+            .iter()
+            .filter_map(|id| id.strip_prefix(prefix))
+            .map(str::to_owned)
+            .collect()
+    };
+    let selected: Vec<KeptBranch> = listing
+        .branches
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| chosen(BRANCH).contains(&index.to_string()))
+        .map(|(_, branch)| branch)
+        .collect();
+    branches::confirm(ctx, &selected, args.yes)?;
+    let (workspaces, caches) = (chosen(WORKSPACE), chosen(CACHES));
+    let cleanup = if workspaces.is_empty() && caches.is_empty() {
+        ManualCleanup::default()
+    } else {
+        let selection = selection(args, Pick::Only(workspaces), Pick::Only(caches));
+        clean(ctx, false, selection).await?
+    };
+    Ok(Report {
+        cleanup,
+        branches: branches::delete(ctx, &selected).await?,
+    })
+}
+
+async fn delete_branches(
+    ctx: &Context,
+    args: &CleanupArgs,
+    names: &[String],
+    all: bool,
+) -> Result<Report> {
+    let kept = branches::kept(ctx, args.repo.as_deref()).await?;
+    let cleanup = ManualCleanup {
+        dry_run: args.dry_run,
+        ..ManualCleanup::default()
+    };
+    if args.dry_run {
+        return Ok(Report {
+            cleanup,
+            branches: kept,
+        });
+    }
+    let selected = branches::select(ctx, kept, names, all)?;
+    branches::confirm(ctx, &selected, args.yes)?;
+    Ok(Report {
+        cleanup,
+        branches: branches::delete(ctx, &selected).await?,
+    })
+}
+
+const WORKSPACE: &str = "workspace:";
+const BRANCH: &str = "branch:";
+const CACHES: &str = "caches:";
+
+/// The picker's rows: the workspaces to remove, kept branches, and caches
+/// nothing is using, each labelled with its kind.
+fn choices(listing: &Report) -> Vec<(String, String)> {
+    let workspaces = listing
+        .cleanup
+        .removed
+        .iter()
+        .map(|name| (format!("{WORKSPACE}{name}"), format!("workspace  {name}")));
+    let branches = branches::lines(&listing.branches)
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| (format!("{BRANCH}{index}"), format!("branch     {line}")));
+    let caches = listing.cleanup.caches.iter().filter_map(|cleanup| {
+        let Emptying::Emptied { caches } = &cleanup.emptying else {
+            return None;
+        };
+        let repository = &cleanup.repository;
+        Some((
+            format!("{CACHES}{repository}"),
+            format!("caches     {repository}  {}", caches.join(", ")),
+        ))
+    });
+    workspaces.chain(branches).chain(caches).collect()
+}
+
+fn show(ctx: &Context, report: &Report) -> Result<i32> {
+    let cleanup = &report.cleanup;
+    let failed = cleanup
         .caches
         .iter()
-        .any(|cleanup| matches!(cleanup.emptying, Emptying::Failed { .. }));
-    ctx.show(&report, |report| {
-        if report.removed.is_empty() && report.retained.is_empty() {
-            outln!("No workspaces to clean up");
+        .any(|caches| matches!(caches.emptying, Emptying::Failed { .. }));
+    ctx.show(report, |report| {
+        if cleanup.dry_run {
+            show_listing(report);
+        } else {
+            show_outcome(report, ctx.json);
         }
-        let palette = Palette::stdout(ctx.json);
-        for name in &report.removed {
-            if report.dry_run {
-                outln!("Would remove {name}");
-            } else {
-                outln!(
-                    "{}",
-                    palette.paint(Style::Success, format!("Removed {name}"))
-                );
-            }
-        }
-        if !report.kept.is_empty() {
-            outln!("Kept:");
-            let width = report
-                .kept
-                .iter()
-                .map(|kept| kept.workspace.chars().count())
-                .max()
-                .unwrap_or(0);
-            for kept in &report.kept {
-                outln!("  {:width$}  {}", kept.workspace, kept.reason);
-            }
-        }
-        show_caches(report, ctx.json);
+        show_kept(cleanup);
         let palette = Palette::stderr(ctx.json);
-        for retained in &report.retained {
+        for retained in &cleanup.retained {
             eprintln!(
                 "{}",
                 palette.paint(
@@ -73,40 +196,118 @@ pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i3
                 )
             );
         }
+        for caches in &cleanup.caches {
+            if let Emptying::Failed { error } = &caches.emptying {
+                eprintln!(
+                    "{}",
+                    palette.paint(
+                        Style::Error,
+                        format!("Could not empty caches of {}: {error}", caches.repository)
+                    )
+                );
+            }
+        }
     })?;
-    Ok(if report.retained.is_empty() && !failed {
+    Ok(if cleanup.retained.is_empty() && !failed {
         0
     } else {
         1
     })
 }
 
-fn show_caches(report: &ManualCleanup, json: bool) {
-    let palette = Palette::stdout(json);
-    for cleanup in &report.caches {
-        let repository = &cleanup.repository;
-        match &cleanup.emptying {
-            Emptying::Emptied { caches } if report.dry_run => {
-                outln!("Would empty caches of {repository}: {}", caches.join(", "));
-            }
-            Emptying::Emptied { caches } => outln!(
-                "{}",
-                palette.paint(
-                    Style::Success,
-                    format!("Emptied caches of {repository}: {}", caches.join(", "))
-                )
-            ),
-            Emptying::Busy { caches } => outln!(
-                "Kept caches of {repository}: {} (an execution or seed build is running)",
-                caches.join(", ")
-            ),
-            Emptying::Failed { error } => eprintln!(
-                "{}",
-                Palette::stderr(json).paint(
-                    Style::Error,
-                    format!("Could not empty caches of {repository}: {error}")
-                )
-            ),
+/// What a dry run found, by kind.
+fn show_listing(report: &Report) {
+    let cleanup = &report.cleanup;
+    let caches = |busy: bool| -> Vec<String> {
+        cleanup
+            .caches
+            .iter()
+            .filter_map(|cleanup| match &cleanup.emptying {
+                Emptying::Emptied { caches } if !busy => Some((cleanup, caches)),
+                Emptying::Busy { caches } if busy => Some((cleanup, caches)),
+                _ => None,
+            })
+            .map(|(cleanup, caches)| format!("{}  {}", cleanup.repository, caches.join(", ")))
+            .collect()
+    };
+    let groups = [
+        ("Workspaces to remove", cleanup.removed.clone()),
+        ("Kept branches", branches::lines(&report.branches)),
+        ("Caches to empty", caches(false)),
+        ("Caches in use", caches(true)),
+    ];
+    if groups[..3].iter().all(|(_, lines)| lines.is_empty()) {
+        outln!("Nothing to clean up");
+    }
+    for (heading, lines) in groups {
+        if lines.is_empty() {
+            continue;
         }
+        outln!("{heading}:");
+        for line in lines {
+            outln!("  {line}");
+        }
+    }
+}
+
+/// What a cleanup removed.
+fn show_outcome(report: &Report, json: bool) {
+    let cleanup = &report.cleanup;
+    let palette = Palette::stdout(json);
+    let mut done = cleanup
+        .removed
+        .iter()
+        .map(|name| format!("Removed {name}"))
+        .chain(
+            report
+                .branches
+                .iter()
+                .map(|kept| format!("Deleted branch {} in {}", kept.branch, kept.repository)),
+        )
+        .chain(
+            cleanup
+                .caches
+                .iter()
+                .filter_map(|caches| match &caches.emptying {
+                    Emptying::Emptied { caches: names } => Some(format!(
+                        "Emptied caches of {}: {}",
+                        caches.repository,
+                        names.join(", ")
+                    )),
+                    _ => None,
+                }),
+        )
+        .peekable();
+    if done.peek().is_none() && cleanup.retained.is_empty() {
+        outln!("Nothing to clean up");
+    }
+    for line in done {
+        outln!("{}", palette.paint(Style::Success, line));
+    }
+    for caches in &cleanup.caches {
+        if let Emptying::Busy { caches: names } = &caches.emptying {
+            outln!(
+                "Kept caches of {}: {} (an execution or seed build is running)",
+                caches.repository,
+                names.join(", ")
+            );
+        }
+    }
+}
+
+/// The workspaces cleanup kept, with why.
+fn show_kept(cleanup: &ManualCleanup) {
+    if cleanup.kept.is_empty() {
+        return;
+    }
+    outln!("Kept workspaces:");
+    let width = cleanup
+        .kept
+        .iter()
+        .map(|kept| kept.workspace.chars().count())
+        .max()
+        .unwrap_or(0);
+    for kept in &cleanup.kept {
+        outln!("  {:width$}  {}", kept.workspace, kept.reason);
     }
 }

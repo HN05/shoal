@@ -1732,7 +1732,7 @@ an unmarked `.caches` is in the way; registrations without a repository director
 literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
-`shoal cleanup --caches` and [disk space](#overload-protection) cleanup empty a
+`shoal cleanup caches` and [disk space](#overload-protection) cleanup empty a
 repository's caches, configured or not, while none of its tracked executions and
 no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
@@ -1765,16 +1765,16 @@ is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 ### Kept branches
 
 ```sh
-shoal branch                         # List kept branches and their unpushed commits
-shoal branch rm                      # Pick kept branches to delete; Tab selects several
-shoal branch rm fix-login --yes      # Delete one kept branch and its unpushed commits
-shoal branch rm --all --repo project # Delete every kept branch of a repository
+shoal cleanup branches --dry-run              # List kept branches and their unpushed commits
+shoal cleanup branches                        # Pick kept branches to delete; Tab selects several
+shoal cleanup branches fix-login --yes        # Delete one kept branch and its unpushed commits
+shoal cleanup branches --all --repo project   # Delete every kept branch of a repository
 ```
 
-`shoal branch` lists the branches removal kept and Shoal has not deleted yet,
-with how many of their commits no remote-tracking ref or the default branch has,
-and their last commit.
-`shoal branch rm` deletes them with those commits after `Are you sure? [y/N]`, or
+`shoal cleanup branches --dry-run` lists the branches removal kept and Shoal has
+not deleted yet, in `branches`, with how many of their commits no remote-tracking
+ref or the default branch has, and their last commit.
+`shoal cleanup branches` deletes them with those commits after `Are you sure? [y/N]`, or
 with `--yes`; it checks every branch first and deletes none when one has moved
 since it was listed, is checked out or is no longer kept, or when its
 repository's default branch is unknown. Name a branch kept in several repositories
@@ -2524,11 +2524,26 @@ enabled = true
 idle_minutes = 240
 ```
 
-`shoal cleanup` removes idle and merged workspaces now, without their idle
-periods and also where those rules are disabled, and reports any it retained; `--dry-run` lists them
-instead, with the reason `status` gives for keeping each other workspace. `--caches`
-also empties [shared caches](#shared-caches) nothing is using, reporting each
-repository's `caches` with the `outcome` `emptied`, `busy` or `failed`. Removals record the `manual` event cause. Workspace processes cannot run it.
+```sh
+shoal cleanup                        # Pick what to remove; Tab selects several
+shoal cleanup --dry-run              # List what is left behind, and why other workspaces stay
+shoal cleanup workspaces             # Remove every idle and merged workspace now
+shoal cleanup workspaces fix-login   # Remove one, or report why it stays
+shoal cleanup caches --repo project  # Empty one repository's shared caches
+```
+
+`shoal cleanup` lists what Shoal left behind: in `removed`, the idle and merged
+workspaces it would remove now, without their idle periods and also where those
+rules are disabled; in `branches`, [kept branches](#kept-branches); and in `caches`,
+[shared caches](#shared-caches), each repository's with the `outcome` `emptied`,
+`busy` or `failed`. `kept` gives the reason `status` gives for keeping each other
+workspace. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
+a picker offers the workspaces, kept branches and caches nothing is using, with
+nothing selected; Tab selects several, and deleting kept branches asks first unless
+`--yes` is given. `shoal cleanup workspaces`, `branches` and `caches` act on one
+kind without the picker; named workspaces that stay are reported in `kept`, and
+any it retained in `retained`. `--repo` limits each kind to one repository.
+Removals record the `manual` event cause. Workspace processes cannot run it.
 
 ```toml
 [cleanup.auto]

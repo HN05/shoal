@@ -504,7 +504,7 @@ sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
 gives a repository one directory per cache, and `[env]` maps it to the tool's
 variable with `{cache.NAME}`, so workspaces stop repeating downloads and
 compilation. The scope is explicit because a cache shared by live workspaces is
-only safe for such tools. A cache is disposable, so `cleanup --caches` and disk
+only safe for such tools. A cache is disposable, so `cleanup caches` and disk
 space cleanup empty it, but only while no tracked execution or seed build of the
 repository runs; registering an execution prepares the directories in the
 transaction that records it, so emptying under the store's write lock cannot
@@ -1471,10 +1471,8 @@ count, never remote-tracking refs, which a narrowed fetch mapping or a deleted
 remote branch can leave stale. A kept branch that moved or went away, is the
 default branch or belongs to a workspace again is forgotten; one checked out, or
 the start or target of a rebase or bisect elsewhere, waits. Removal records name the branches kept before Shoal remembered them.
-`shoal branch` lists the kept branches, and
-`shoal branch rm` deletes the ones the user picks, several at once, after
+`shoal cleanup` deletes the kept branches the user picks, several at once, after
 checking each is still at the commit removal left it on and not checked out.
-It is repository administration, unavailable to scoped callers.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Every unattended
@@ -1493,9 +1491,11 @@ stacked or child workspaces or holds, and no recorded activity, file change or p
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
 minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
-workspace. `shoal cleanup` removes the candidates of both rules on request without
-their idle periods, including where they are disabled; it is unavailable to
-scoped callers. `repo rm`
+workspace. `shoal cleanup` is the one command for what Shoal left behind: the
+candidates of both rules, without their idle periods and including where they are
+disabled, kept branches, and shared caches. It lists them with nothing selected,
+since deleting a kept branch loses its commits, and removes what the user picks;
+naming a kind acts on it without the picker. It is unavailable to scoped callers. `repo rm`
 deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.

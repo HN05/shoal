@@ -714,7 +714,7 @@ fn cleanup_removes_idle_candidates_on_request() {
     let binary = env!("CARGO_BIN_EXE_shoal");
     let denied = fixture.run(&["run", "--workspace", "dirty", "--", binary, "cleanup"]);
     assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("workspace processes can only"));
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot administer Shoal"));
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
     assert_eq!(preview["removed"], serde_json::json!(["clean"]));
     assert_eq!(
@@ -723,12 +723,24 @@ fn cleanup_removes_idle_candidates_on_request() {
     );
     let text = fixture.run(&["cleanup", "--dry-run"]);
     let text = String::from_utf8(text.stdout).unwrap();
-    assert!(
-        text.contains("Would remove clean\nKept:\n  dirty  Uncommitted or untracked changes\n"),
-        "{text:?}"
+    assert_eq!(
+        text,
+        "Workspaces to remove:\n  clean\nKept workspaces:\n  dirty  Uncommitted or untracked changes\n"
     );
+    // Without a terminal, cleanup without a kind only lists.
+    assert_eq!(fixture.ok(&["cleanup"])["dry_run"], true);
     assert!(Path::new(clean["path"].as_str().unwrap()).exists());
-    let report = fixture.ok(&["cleanup"]);
+    // A named workspace that stays says why.
+    let named = fixture.ok(&["cleanup", "workspaces", "dirty"]);
+    assert_eq!(named["removed"], serde_json::json!([]));
+    assert_eq!(named["kept"][0]["workspace"], "dirty");
+    assert!(
+        !fixture
+            .run(&["cleanup", "workspaces", "missing"])
+            .status
+            .success()
+    );
+    let report = fixture.ok(&["cleanup", "workspaces"]);
     assert_eq!(report["removed"], serde_json::json!(["clean"]));
     assert_eq!(report["retained"], serde_json::json!([]));
     assert_eq!(report["kept"], serde_json::json!([]));
@@ -2912,8 +2924,9 @@ fn kept_branches_are_listed_and_deleted_on_request() {
         commit_file(Path::new(workspace["path"].as_str().unwrap()), name, name);
         assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], false);
     }
-    let names = |listed: &Value| -> Vec<String> {
-        listed
+    let idle = fixture.add("idle");
+    let names = |report: &Value| -> Vec<String> {
+        report["branches"]
             .as_array()
             .unwrap()
             .iter()
@@ -2921,8 +2934,14 @@ fn kept_branches_are_listed_and_deleted_on_request() {
             .collect()
     };
     assert_eq!(
-        names(&fixture.ok(&["branch"])),
+        names(&fixture.ok(&["cleanup", "branches", "--dry-run"])),
         ["first", "second", "third"]
+    );
+    let text = fixture.run(&["cleanup", "--dry-run"]);
+    let text = String::from_utf8(text.stdout).unwrap();
+    assert!(
+        text.starts_with("Workspaces to remove:\n  idle\nKept branches:\n"),
+        "{text:?}"
     );
     let branch_exists = |name: &str| {
         !git(&fixture.repo, &["branch", "--list", name])
@@ -2930,30 +2949,34 @@ fn kept_branches_are_listed_and_deleted_on_request() {
             .is_empty()
     };
 
-    let piped = fixture.run(&["branch", "rm", "first"]);
+    let piped = fixture.run(&["cleanup", "branches", "first"]);
     assert!(!piped.status.success());
     assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
-    let missing = fixture.run(&["branch", "rm", "missing", "--yes"]);
+    let missing = fixture.run(&["cleanup", "branches", "missing", "--yes"]);
     assert!(!missing.status.success());
     assert!(String::from_utf8_lossy(&missing.stderr).contains("not a kept branch"));
     assert!(branch_exists("first"));
 
-    // The picker selects several branches at once.
+    // One picker offers every kind; Tab selects several, and deleting
+    // branches asks first.
     let picker = fixture.root.path().join("bin/fzf");
     install_test_script(
         &picker,
-        "#!/bin/sh\nawk -F '\\t' '$2 ~ /(first|second) /'\n",
+        "#!/bin/sh\nawk -F '\\t' '$2 ~ /(first|second) |workspace  idle/'\n",
     );
-    let (output, transcript) = fixture.interactive(&["branch", "rm"], "y\n");
+    let (output, transcript) = fixture.interactive(&["cleanup"], "y\n");
     assert!(output.status.success(), "{transcript}");
     assert!(transcript.contains("1 unpushed commit"), "{transcript}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Removed idle"), "{stdout}");
     assert!(!branch_exists("first") && !branch_exists("second"));
     assert!(branch_exists("third"));
+    assert!(!Path::new(idle["path"].as_str().unwrap()).exists());
 
-    let deleted = fixture.ok(&["branch", "rm", "--all", "--yes"]);
+    let deleted = fixture.ok(&["cleanup", "branches", "--all", "--yes"]);
     assert_eq!(names(&deleted), ["third"]);
     assert!(!branch_exists("third"));
-    assert!(names(&fixture.ok(&["branch"])).is_empty());
+    assert!(names(&fixture.ok(&["cleanup", "branches", "--dry-run"])).is_empty());
 }
 
 #[test]
@@ -4324,7 +4347,7 @@ fn configured_environment_renders_for_tracked_commands() {
     fixture.ok(&["rm", "env-values"]);
     // The repository keeps its caches until cleanup empties them.
     assert!(Path::new(cache).join("entry").exists());
-    let report = fixture.ok(&["cleanup", "--caches"]);
+    let report = fixture.ok(&["cleanup", "caches"]);
     assert_eq!(
         report["caches"],
         serde_json::json!([{"repository": "repo with ' quotes & $literal", "outcome": "emptied", "caches": ["go"]}])
@@ -21444,7 +21467,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     // which needs a default branch it can fetch.
     git(&fixture.repo, &["remote", "remove", "origin"]);
     assert_eq!(
-        fixture.ok(&["cleanup"])["removed"],
+        fixture.ok(&["cleanup", "workspaces"])["removed"],
         serde_json::json!(["issue-work"])
     );
 }

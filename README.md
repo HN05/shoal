@@ -164,8 +164,7 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
-shoal branch                  # List branches removal kept for unpushed commits
-shoal branch rm               # Pick kept branches to delete with their commits
+shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
 shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal work restore fix-login 3     # Return the workspace to checkpoint 3
@@ -353,14 +352,17 @@ tools such as `agent-browser`, values fetched from your secret store; see
 `shoal rm` removes a workspace and its resources, prompting only before it deletes
 uncommitted work. It deletes the branch too unless the branch has commits that are
 on no remote and not on the default branch; Shoal deletes such a kept branch once
-they are, and `shoal branch rm` deletes kept branches, several at a time, with
+they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
 their commits. `shoal stop` keeps the workspace.
 
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
-Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and why
-it keeps the others, `--caches` also empties shared caches nothing is using, and `shoal status` shows why it keeps one workspace.
+`shoal cleanup` lists what Shoal left behind: those workspaces, kept branches, and
+shared caches nothing is using, with why it keeps the other workspaces. On a terminal
+it opens a picker, where Tab selects several, and removes what you pick.
+`shoal cleanup workspaces`, `branches` or `caches` acts on one kind, and `shoal status`
+shows why it keeps one workspace.
 Every removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
 and `shoal work restore <workspace>` opens one again with its uncommitted files and links;
 `shoal resume` then continues the agents the removal stopped. Removal keeps the

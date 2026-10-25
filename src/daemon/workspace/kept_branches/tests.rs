@@ -302,7 +302,7 @@ async fn a_ref_outside_the_fetch_mapping_does_not_approve_deletion() {
     assert!(branch_exists(&repo, "topic"));
     assert_eq!(remembered(&manager, &repo).await, ["topic"]);
     // The stale ref hides its commits from the count, not the branch from
-    // shoal branch rm.
+    // shoal cleanup branches.
     let listed = manager.list_kept_branches().await.unwrap();
     let names: Vec<_> = listed.iter().map(|branch| branch.branch.as_str()).collect();
     assert_eq!(names, ["topic"]);

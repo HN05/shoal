@@ -570,25 +570,15 @@ pub enum Command {
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
-    /// Remove every workspace idle or merged cleanup would remove, without waiting for their idle periods.
+    /// Remove what Shoal left behind: workspaces cleanup would remove, kept branches and caches.
     ///
-    /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces are
-    /// kept, and the unsaved files of merged ones go into their checkpoints.
+    /// Without a kind, lists them; on a terminal, a picker offers them, where Tab selects several
+    /// and nothing starts selected.
     Cleanup {
-        /// List the workspaces without removing them.
-        #[arg(long)]
-        dry_run: bool,
-        /// Also empty the shared caches of repositories without running executions.
-        #[arg(long)]
-        caches: bool,
-    },
-    /// List or delete the branches Shoal kept when it removed their workspaces.
-    ///
-    /// Removal keeps a branch only while some of its commits are on no remote and not on the
-    /// default branch, and deletes it once they are. Without a subcommand, lists them.
-    Branch {
         #[command(subcommand)]
-        command: Option<BranchCommand>,
+        kind: Option<CleanupKind>,
+        #[command(flatten)]
+        args: CleanupArgs,
     },
     /// Remove a workspace and write it to a file that shoal import opens on another machine.
     ///
@@ -1268,7 +1258,7 @@ impl Command {
             self,
             Command::Doctor { .. }
                 | Command::Contribute(_)
-                | Command::Branch { .. }
+                | Command::Cleanup { .. }
                 | Command::Update
                 | Command::Config {
                     command: ConfigCommand::Install { .. }
@@ -1390,23 +1380,41 @@ pub enum SkillCommand {
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
-pub enum BranchCommand {
-    /// List kept branches and how many commits only they have.
-    Ls,
-    /// Delete kept branches and the commits only they have.
+pub enum CleanupKind {
+    /// Remove the workspaces idle or merged cleanup would remove, without waiting for their idle
+    /// periods.
     ///
-    /// Without branch names, choose them in a picker, where Tab selects several.
-    Rm {
-        branches: Vec<String>,
+    /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces are
+    /// kept, and the unsaved files of merged ones go into their checkpoints. Names limit it to those
+    /// workspaces.
+    Workspaces { names: Vec<String> },
+    /// Delete branches Shoal kept when it removed their workspaces, with the commits only they have.
+    ///
+    /// Removal keeps a branch only while some of its commits are on no remote and not on the
+    /// default branch, and deletes it once they are. Without names or --all, choose them in a
+    /// picker, where Tab selects several.
+    Branches {
+        names: Vec<String>,
         /// Delete every kept branch.
-        #[arg(long, conflicts_with = "branches")]
+        #[arg(long, conflicts_with = "names")]
         all: bool,
-        /// Only branches of this repository, by name or ID.
-        #[arg(long)]
-        repo: Option<String>,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
     },
+    /// Empty the shared caches of repositories without running executions.
+    Caches,
+}
+
+// Options of `shoal cleanup` that every kind takes.
+#[derive(Debug, Args)]
+pub struct CleanupArgs {
+    /// List what would be removed without removing anything.
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+    /// Only this repository's workspaces, kept branches and caches, by name or ID.
+    #[arg(long, global = true)]
+    pub repo: Option<String>,
+    /// Delete kept branches without asking.
+    #[arg(short = 'y', long, global = true)]
+    pub yes: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -2299,11 +2307,13 @@ mod tests {
     }
 
     #[test]
-    fn kept_branch_commands_are_administrative() {
+    fn cleanup_commands_are_administrative() {
         for args in [
-            vec!["shoal", "branch"],
-            vec!["shoal", "branch", "ls"],
-            vec!["shoal", "branch", "rm", "--all", "--yes"],
+            vec!["shoal", "cleanup"],
+            vec!["shoal", "cleanup", "--dry-run"],
+            vec!["shoal", "cleanup", "workspaces", "--repo", "project"],
+            vec!["shoal", "cleanup", "branches", "--all", "--yes"],
+            vec!["shoal", "cleanup", "caches", "--dry-run"],
         ] {
             let command = Cli::try_parse_from(args).unwrap().command.unwrap();
             assert!(command.is_administrative());

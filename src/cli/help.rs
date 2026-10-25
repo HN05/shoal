@@ -21,7 +21,6 @@ const GROUPS: &[(&str, &[&str])] = &[
             "done",
             "rm",
             "cleanup",
-            "branch",
             "export",
             "import",
         ],
