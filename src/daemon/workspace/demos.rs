@@ -1,7 +1,7 @@
 //! Demos the daemon records with the executions that run them, so a demo
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
@@ -56,8 +56,8 @@ impl Manager {
 }
 
 /// Record `launch` as the demo `execution` runs, in the transaction that
-/// registers the execution. A demo of the same name that is still stopping
-/// gives up its record.
+/// registers the execution. A record lasts as long as its execution, so a
+/// name still recorded belongs to a demo that runs or is stopping.
 pub(super) fn record(
     tx: &Transaction<'_>,
     execution: &str,
@@ -65,10 +65,16 @@ pub(super) fn record(
     launch: &Launch,
 ) -> Result<()> {
     crate::demos::validate_name(&launch.name)?;
-    tx.execute(
-        "DELETE FROM demos WHERE workspace_id=?1 AND name=?2",
+    let taken = crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM demos WHERE workspace_id=?1 AND name=?2",
         params![workspace, launch.name],
     )?;
+    ensure!(
+        !taken,
+        "demo {} is already running; stop it before starting another",
+        launch.name
+    );
     tx.execute(
         "INSERT INTO demos(execution_id,workspace_id,name,started_at,record) VALUES (?1,?2,?3,?4,?5)",
         params![

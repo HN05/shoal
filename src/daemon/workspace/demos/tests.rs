@@ -77,7 +77,26 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     assert_eq!(own.len(), 1);
     assert_eq!(own[0].execution_id, tui.plan.id);
 
-    // A new start of the same name takes the record from the one stopping.
+    // A name belongs to one demo until its execution ends.
+    let error = manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("already running"),
+        "{error:#}"
+    );
+    manager
+        .finish_execution(web.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
     let replacement = manager
         .begin_execution_running(
             &first.id,
@@ -91,13 +110,6 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     let demos = manager.demos(Some(&first.id)).await.unwrap();
     assert_eq!(demos.len(), 1);
     assert_eq!(demos[0].execution_id, replacement.plan.id);
-
-    manager
-        .finish_execution(replacement.plan.id.clone(), ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
-    drop(web);
 }
 
 #[tokio::test]
