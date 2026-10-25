@@ -277,7 +277,7 @@ Run stop and resume outside scoped executions, except that a workspace process
 may discard the stopped work of a workspace below its own with
 `shoal resume <workspace> --discard`.
 
-`shoal resume [workspace]` restores a saved agent recovery record after its
+`shoal resume [workspace...]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace,
 or pick the agent by name, stop time and reason on a terminal. Without a
 workspace, resume uses the current workspace when it has something to resume,
@@ -292,7 +292,8 @@ Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
-`--all` resumes every workspace whose assignment is not done and reports commands without an agent,
+Several workspaces, which each need stopped work, or `--all` for every workspace whose
+assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
 pane it stopped in once that pane is back at its prompt. Otherwise it restores a

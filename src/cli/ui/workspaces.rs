@@ -115,37 +115,38 @@ pub async fn select_workspace_filter(
     }
 }
 
-/// Like `select_workspace_filter`, but the current workspace counts only with
+/// Like `select_workspaces`, but the current workspace counts only with
 /// something to resume, and the picker lists what each workspace has to
-/// resume. Without anything to resume anywhere it selects all.
-pub async fn select_stopped_workspace(
+/// resume. `None` when nothing is resumable anywhere.
+pub async fn select_stopped_workspaces(
     ctx: &Context,
-    scope: WorkspaceScope,
-) -> Result<Option<String>> {
-    if scope.all {
-        return Ok(None);
+    names: Vec<String>,
+) -> Result<Option<Vec<String>>> {
+    if !names.is_empty() {
+        return select_workspaces(ctx, names).await.map(Some);
     }
-    let explicit = scope.workspace.is_some();
-    let workspaces =
-        match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
-            Resolution::Workspace(id) if explicit || resumable(&ctx.paths, &id).is_some() => {
-                return Ok(Some(id));
-            }
-            Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
-            Resolution::Picker(workspaces) => workspaces,
-        };
-    pick_resume_workspace(ctx, workspaces)
+    let workspaces = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) if resumable(&ctx.paths, &id).is_some() => {
+            return Ok(Some(vec![id]));
+        }
+        Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
+        Resolution::Picker(workspaces) => workspaces,
+    };
+    let Some(entries) = resume_entries(ctx, workspaces) else {
+        return Ok(None);
+    };
+    pick_many(ctx, "Workspaces> ", entries).map(Some)
 }
 
 /// Workspaces with stopped work come first, then those with a last session;
-/// `None` picks all, or nothing is resumable.
-fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Option<String>> {
+/// `None` when nothing is resumable.
+fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> {
     let mut rows = workspaces
         .into_iter()
         .map(|w| (resumable(&ctx.paths, &w.id), w))
         .collect::<Vec<_>>();
     if rows.iter().all(|(resumable, _)| resumable.is_none()) {
-        return Ok(None);
+        return None;
     }
     rows.sort_by_key(|(resumable, _)| match resumable {
         Some((_, true)) => 0,
@@ -167,10 +168,7 @@ fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Op
         Palette::stderr(ctx.json),
         picker_width(),
     );
-    let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(labels).collect();
-    entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
-    let id = pick(ctx, "Workspace> ", entries)?;
-    Ok((id != ALL_ID).then_some(id))
+    Some(workspaces.into_iter().map(|w| w.id).zip(labels).collect())
 }
 
 /// What `shoal resume` restores in a workspace, such as `stopped: claude,

@@ -9417,7 +9417,7 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     let (output, rows) = fixture.pick(&["resume"], second["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert_eq!(rows.len(), 3, "{rows:?}");
     assert!(
         rows[0].contains("second") && rows[0].contains("stopped: 1 command"),
         "{rows:?}"
@@ -9426,7 +9426,6 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
         let row = rows.iter().find(|row| row.contains(name)).unwrap();
         assert!(row.contains("nothing to resume"), "{rows:?}");
     }
-    assert_eq!(rows[3], "--all\tAll workspaces", "{rows:?}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("Stopped commands in second"),
         "{output:?}"
@@ -9435,11 +9434,36 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     fixture.save_stopped_command(&first);
     let (output, rows) = fixture.pick_in(idle_path, &["resume"], first["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(rows.lines().count(), 4, "{rows}");
+    assert_eq!(rows.lines().count(), 3, "{rows}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("Stopped commands in first"),
         "{output:?}"
     );
+    // Several workspaces resume together, each with stopped work.
+    fixture.save_stopped_command(&first);
+    fixture.save_stopped_command(&second);
+    let refused = fixture.run(&["resume", "first", "idle"]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("idle has no stopped agents"),
+        "{refused:?}"
+    );
+    let refused = fixture.run(&["resume", "first", "second", "--execution", "any"]);
+    assert!(!refused.status.success());
+    let picked = format!(
+        "{} {}",
+        first["id"].as_str().unwrap(),
+        second["id"].as_str().unwrap()
+    );
+    let (output, _) = fixture.pick(&["resume"], &picked, "");
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for name in ["first", "second"] {
+        assert!(
+            stdout.contains(&format!("Stopped commands in {name}")),
+            "{stdout}"
+        );
+    }
 }
 
 #[test]

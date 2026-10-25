@@ -574,10 +574,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             ..
         } => notifications::list(&ctx, all, keep_unread, limit).await,
         Command::Resume {
-            scope,
+            targets,
             execution,
             discard,
-        } => resume::select(&ctx, scope, execution, discard).await,
+        } => resume::select(&ctx, targets, execution, discard).await,
         Command::Stop { targets, yes } => stop::run(&ctx, targets, yes).await,
         Command::Rm {
             workspace,

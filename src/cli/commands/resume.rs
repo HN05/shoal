@@ -1,6 +1,6 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 use crate::{
-    cli::{WorkspaceScope, client, context::Context, terminal, ui},
+    cli::{WorkspaceTargets, client, context::Context, terminal, ui},
     daemon::{
         recovery::{ReconcileOptions, Report},
         workspace::Discarded,
@@ -19,24 +19,37 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// `shoal resume`: the selected workspace, or every one for `--all`, the
-/// picker's entry for all, or when no workspace has stopped work.
+/// `shoal resume`: the selected workspaces, or every one for `--all` or when
+/// no workspace has stopped work.
 pub async fn select(
     ctx: &Context,
-    scope: WorkspaceScope,
+    targets: WorkspaceTargets,
     execution: Option<String>,
     discard: bool,
 ) -> Result<i32> {
     // The daemon checks that the workspace is below the caller's, which
     // needs the scope token: a process that cleared it stays refused.
-    let checked_discard = crate::env::is_scoped() && discard && scope.workspace.is_some();
+    let checked_discard = crate::env::is_scoped() && discard && targets.workspace.len() == 1;
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state) || checked_discard,
         "resume agents outside scoped executions; workspace processes can only discard the stopped work of a workspace below theirs with shoal resume <workspace> --discard"
     );
-    match ui::select_stopped_workspace(ctx, scope).await? {
-        None => run_all(ctx, discard).await,
-        Some(workspace) => run(ctx, workspace, execution, discard).await,
+    let selected = if targets.all {
+        None
+    } else {
+        ui::select_stopped_workspaces(ctx, targets.workspace).await?
+    };
+    match selected.as_deref() {
+        None => run_all(ctx, None, discard).await,
+        Some([workspace]) => run(ctx, workspace.clone(), execution, discard).await,
+        Some(workspaces) => {
+            ensure!(
+                execution.is_none(),
+                "--execution selects a stopped execution of one workspace"
+            );
+            let workspaces = stopped_in(ctx, workspaces).await?;
+            run_all(ctx, Some(workspaces), discard).await
+        }
     }
 }
 
@@ -344,8 +357,15 @@ async fn reconcile_stale_execution(
 /// can reuse that place; otherwise one agent resumes in this terminal, several
 /// in the backend's background, and without a backend each is listed for its
 /// own terminal.
-async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
-    let stopped = stopped_work(ctx, discard).await?;
+async fn run_all(
+    ctx: &Context,
+    selected: Option<Vec<(Workspace, Saved)>>,
+    discard: bool,
+) -> Result<i32> {
+    let stopped = match selected {
+        Some(stopped) => stopped,
+        None => stopped_work(ctx, discard).await?,
+    };
     if stopped.is_empty() {
         ctx.emit(
             "No stopped agents or commands",
@@ -432,6 +452,26 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         }
     })?;
     Ok(0)
+}
+
+/// The stopped work of the workspaces `selectors` name, refusing one with
+/// nothing stopped: only resuming it by itself continues its last session.
+async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspace, Saved)>> {
+    let mut stopped = Vec::new();
+    for selector in selectors {
+        let workspace = client::inspect(&ctx.paths, selector.clone())
+            .await?
+            .workspace;
+        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+        saved.retain_unattended();
+        ensure!(
+            !saved.is_empty(),
+            "{} has no stopped agents or commands to resume; resume it by itself to continue its last session",
+            workspace.name
+        );
+        stopped.push((workspace, saved));
+    }
+    Ok(stopped)
 }
 
 /// The workspaces with stopped work that no waiting wrapper restores. A done

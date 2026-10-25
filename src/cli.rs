@@ -335,7 +335,7 @@ pub enum Command {
     /// Restore stopped agent sessions and list interrupted commands.
     Resume {
         #[command(flatten)]
-        scope: WorkspaceScope,
+        targets: WorkspaceTargets,
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
         execution: Option<String>,
