@@ -98,21 +98,21 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         (config, "cannot administer"),
         ("skill install", "cannot install user-level skills"),
         ("shell recover /", "cannot navigate outside their worktree"),
-        ("restore", "cannot reopen removed workspaces"),
+        ("work restore", "cannot reopen removed workspaces"),
         ("export -o -", "cannot export workspaces"),
         ("import -", "cannot import workspaces"),
         ("notifications", "cannot read or clear notifications"),
         ("notifications clear", "cannot read or clear notifications"),
         (
-            "answer 1 yes",
+            "questions 1 --answer yes",
             "cannot answer questions without their scope token",
         ),
         (
-            "approve 1",
+            "approvals 1 --approve",
             "cannot decide approval requests without their scope token",
         ),
         (
-            "escalate 1",
+            "approvals 1 --escalate",
             "cannot decide approval requests without their scope token",
         ),
     ] {
