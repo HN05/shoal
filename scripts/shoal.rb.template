@@ -33,7 +33,7 @@ class Shoal < Formula
   def caveats
     <<~EOS
       Start the per-user daemon:
-        shoal install
+        shoal daemon install
 
       Install the agent skills into each tool's existing skill directory:
         shoal skill install
