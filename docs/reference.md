@@ -822,6 +822,11 @@ open = ["scripts/open-demo.sh"]        # Optional: what `shoal demo tui` runs in
 [demos.web]
 preset = "web"                         # How the demo reaches you; see below
 cmd = ["npm", "run", "dev"]
+scheme = "https"                       # Optional: the URL's scheme; http by default
+
+[demos.dns]
+preset = "server"                      # A port to reach without a URL
+cmd = ["scripts/dns.sh"]               # Reads PORT
 ```
 
 Each `[demos.NAME]` resolves per repository as one unit, like a named port. Names
@@ -832,13 +837,14 @@ you; `ports` and `open` replace its parts:
 
 | Preset | Sets up |
 |---|---|
-| `web` | Reserves a port named after the demo, or the first of `ports`, and passes it as `PORT`. Opening prints `http://localhost:<port>`, and over SSH the `ssh -L` command that forwards it to your machine. |
+| `server` | Reserves a TCP port named after the demo, or the first of `ports`, and passes it as `PORT`. Opening prints `localhost:<port>`, and over SSH the `ssh -L` command that forwards it to your machine. |
+| `web` | `server` for a page you open in a browser: opening prints `http://localhost:<port>`, or `https://` with `scheme = "https"`. |
 | `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. The lease stays with the workspace until `shoal release sim` or removal, as one the agent takes does. |
 
-`shoal demo start [NAME] [--workspace W] [--preset P] [--port NAME]... [--open COMMAND] [-- COMMAND...]` starts
+`shoal demo start [NAME] [--workspace W] [--preset P] [--scheme S] [--port NAME]... [--open COMMAND] [-- COMMAND...]` starts
 the configured demo `NAME`, or the only one configured. A command after `--`
 replaces the configured one, or defines a demo of that name, `demo` by default;
-`--preset` and `--port` replace the configured ones, and `--open` replaces `open`
+`--preset`, `--scheme` and `--port` replace the configured ones, and `--open` replaces `open`
 with a shell command. Starting a running name replaces
 it. A workspace can run several demos. The start returns once the demo runs,
 printing how to open it, and a workspace process also notifies you.

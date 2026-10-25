@@ -1125,6 +1125,9 @@ pub enum DemoCommand {
         /// How the demo reaches the user, replacing the configured preset.
         #[arg(long, value_enum)]
         preset: Option<crate::demos::Preset>,
+        /// A web demo's URL scheme, replacing the configured one; http by default.
+        #[arg(long, value_enum)]
+        scheme: Option<crate::demos::Scheme>,
         /// Shell command `shoal demo NAME` runs instead of opening the demo.
         #[arg(long, value_name = "COMMAND")]
         open: Option<String>,

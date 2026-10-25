@@ -17,7 +17,7 @@ use crate::{
     },
     config::repo::ConflictPolicy,
     daemon::ports::PortRequest,
-    demos::{Launch, Preset},
+    demos::{Launch, Preset, Scheme},
     model::{PortReservation, Workspace},
     protocol::{Body, Method},
     sim::{SimRequest, Simulator},
@@ -53,7 +53,7 @@ pub(super) async fn provide(
         Err(declined) => return Ok(Err(declined)),
     };
     Ok(match chosen.demo.preset {
-        Some(Preset::Web) => Ok(web(&ports)),
+        Some(Preset::Server | Preset::Web) => Ok(server(&ports)),
         Some(Preset::Simulator) => simulator(ctx, workspace, &chosen.name, queue).await?,
         None => Ok(Provided::default()),
     })
@@ -74,8 +74,8 @@ async fn reserve_ports(
     Ok(Ok(ports))
 }
 
-/// A web demo's first port, as `PORT`.
-fn web(ports: &[PortReservation]) -> Provided {
+/// A serving demo's first port, as `PORT`.
+fn server(ports: &[PortReservation]) -> Provided {
     Provided {
         environment: ports
             .first()
@@ -103,11 +103,11 @@ async fn simulator(
     }))
 }
 
-/// The configured ports, or for a web demo one named after it.
+/// The configured ports, or for a serving demo one named after it.
 fn port_names(chosen: &Chosen) -> Vec<String> {
     match (&chosen.demo.ports, chosen.demo.preset) {
         (Some(ports), _) => ports.clone(),
-        (None, Some(Preset::Web)) => vec![chosen.name.clone()],
+        (None, Some(preset)) if preset.serves() => vec![chosen.name.clone()],
         (None, _) => Vec::new(),
     }
 }
@@ -200,12 +200,18 @@ fn show_simulator(launch: &Launch) -> Result<()> {
 fn instructions(preset: Preset, launch: &Launch, ssh: Option<&str>) -> Result<Vec<String>> {
     let host = ssh.and_then(|connection| connection.split_whitespace().nth(2));
     Ok(match preset {
-        Preset::Web => {
+        Preset::Server | Preset::Web => {
             let port = launch
                 .environment
                 .get(PORT)
                 .with_context(|| format!("demo {} has no port", launch.name))?;
-            let mut lines = vec![format!("http://localhost:{port}")];
+            let address = format!("localhost:{port}");
+            let mut lines = vec![if preset == Preset::Web {
+                let scheme = launch.scheme.unwrap_or(Scheme::Http);
+                format!("{scheme}://{address}")
+            } else {
+                address
+            }];
             if let Some(host) = host {
                 let user = std::env::var("USER").unwrap_or_default();
                 lines.push(format!(
@@ -240,6 +246,7 @@ mod tests {
             name: "app".into(),
             preset: Some(preset),
             open: None,
+            scheme: None,
             environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
             host: "zmx".into(),
             place: "first-app".into(),
@@ -264,6 +271,28 @@ mod tests {
     }
 
     #[test]
+    fn web_demos_may_use_https() {
+        let mut web = launch(Preset::Web, PORT, "49200");
+        web.scheme = Some(Scheme::Https);
+        assert_eq!(
+            instructions(Preset::Web, &web, None).unwrap(),
+            ["https://localhost:49200"]
+        );
+    }
+
+    #[test]
+    fn server_demos_print_their_address_without_a_scheme() {
+        let dns = launch(Preset::Server, PORT, "49300");
+        assert_eq!(
+            instructions(Preset::Server, &dns, None).unwrap(),
+            ["localhost:49300"]
+        );
+        let over_ssh =
+            instructions(Preset::Server, &dns, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap();
+        assert!(over_ssh[1].starts_with("Forward the port first: ssh -L 49300:localhost:49300 "));
+    }
+
+    #[test]
     fn simulator_demos_name_their_device_over_ssh() {
         let app = launch(Preset::Simulator, SIM_UDID, "UDID-1");
         assert_eq!(
@@ -284,6 +313,7 @@ mod tests {
                 cmd: vec!["serve".into()],
                 preset,
                 open: None,
+                scheme: None,
                 ports,
             },
             command: Vec::new(),
@@ -293,6 +323,7 @@ mod tests {
             port_names(&chosen(Some(Preset::Web), Some(vec!["web".into()]))),
             ["web"]
         );
+        assert_eq!(port_names(&chosen(Some(Preset::Server), None)), ["site"]);
         assert!(port_names(&chosen(None, None)).is_empty());
     }
 }

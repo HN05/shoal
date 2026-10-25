@@ -5,6 +5,7 @@ fn demo(cmd: &[&str]) -> Demo {
         cmd: cmd.iter().map(|arg| (*arg).to_owned()).collect(),
         preset: None,
         open: None,
+        scheme: None,
         ports: None,
     }
 }
@@ -54,6 +55,7 @@ fn start_options_replace_the_configured_parts() {
     .unwrap()
     .with(Overrides {
         preset: Some(Preset::Web),
+        scheme: None,
         open: Some("echo $PORT".into()),
         ports: vec!["api".into()],
     });
@@ -82,6 +84,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
         name: "web".into(),
         preset: Some(Preset::Web),
         open: None,
+        scheme: None,
         environment: BTreeMap::new(),
         host: "zmx".into(),
         place: "first-web".into(),
@@ -111,6 +114,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
 fn start_options_are_checked_before_anything_is_chosen() {
     let overrides = |open: Option<&str>, ports: &[&str]| Overrides {
         preset: None,
+        scheme: None,
         open: open.map(str::to_owned),
         ports: ports.iter().map(|port| (*port).to_owned()).collect(),
     };

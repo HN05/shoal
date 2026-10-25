@@ -12,12 +12,29 @@ use crate::state::states;
 states!(
     /// How a demo reaches the user, beyond attaching to its session.
     Preset: ValueEnum {
-        /// A server on a reserved port the user opens by URL.
+        /// A server on a reserved port the user reaches by address.
+        Server => "server",
+        /// A server on a reserved port the user opens in a browser.
         Web => "web",
         /// An app on the workspace's leased simulator.
         Simulator => "simulator",
     }
 );
+
+states!(
+    /// How a web demo's URL begins.
+    Scheme: ValueEnum {
+        Http => "http",
+        Https => "https",
+    }
+);
+
+impl Preset {
+    /// Whether the demo serves on a reserved port.
+    pub fn serves(self) -> bool {
+        matches!(self, Self::Server | Self::Web)
+    }
+}
 
 /// One `[demos.NAME]` table.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -34,6 +51,9 @@ pub struct Demo {
     /// Port reservations made before the demo starts, replacing the preset's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ports: Option<Vec<String>>,
+    /// A web demo's URL scheme; `http` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<Scheme>,
 }
 
 /// What a demo's wrapper records with its execution: everything opening,
@@ -47,6 +67,8 @@ pub struct Launch {
     pub preset: Option<Preset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<Scheme>,
     /// Variables the preset gives the command, such as `PORT`; opening the
     /// demo receives them too.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -115,6 +137,15 @@ impl Demo {
         for port in self.ports.iter().flatten() {
             crate::validate::lowercase_name("port", port)?;
         }
+        self.validate_scheme()
+    }
+
+    /// A scheme belongs to a web demo's URL.
+    pub fn validate_scheme(&self) -> Result<()> {
+        ensure!(
+            self.scheme.is_none() || self.preset == Some(Preset::Web),
+            "scheme applies only to the web preset"
+        );
         Ok(())
     }
 }
@@ -138,6 +169,7 @@ mod tests {
             cmd: cmd.iter().map(|arg| (*arg).to_owned()).collect(),
             preset: None,
             open: None,
+            scheme: None,
             ports: None,
         }
     }
@@ -161,5 +193,10 @@ mod tests {
         let mut ports = demo(&["server"]);
         ports.ports = Some(vec!["Web".into()]);
         assert!(ports.validate().is_err());
+        let mut https = demo(&["server"]);
+        https.scheme = Some(Scheme::Https);
+        assert!(https.validate().is_err());
+        https.preset = Some(Preset::Web);
+        assert!(https.validate().is_ok());
     }
 }

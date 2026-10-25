@@ -50,6 +50,7 @@ pub(super) async fn run(
         Some(DemoCommand::Start {
             name,
             preset,
+            scheme,
             open,
             ports,
             queue,
@@ -58,6 +59,7 @@ pub(super) async fn run(
         }) => {
             let overrides = Overrides {
                 preset,
+                scheme,
                 open,
                 ports,
             };
@@ -91,6 +93,7 @@ fn requested_name<'a>(command: Option<&'a DemoCommand>, name: Option<&'a str>) -
 /// What `shoal demo start` replaces in the configured demo.
 struct Overrides {
     preset: Option<Preset>,
+    scheme: Option<crate::demos::Scheme>,
     open: Option<String>,
     ports: Vec<String>,
 }
@@ -133,6 +136,7 @@ async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
+    chosen.demo.validate_scheme()?;
     replace(ctx, &workspace, &chosen.name).await?;
     let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
         Ok(provided) => provided,
@@ -174,6 +178,7 @@ fn choose(
             cmd: Vec::new(),
             preset: None,
             open: None,
+            scheme: None,
             ports: None,
         });
         return Ok(Chosen {
@@ -219,6 +224,9 @@ impl Chosen {
         if overrides.preset.is_some() {
             self.demo.preset = overrides.preset;
         }
+        if overrides.scheme.is_some() {
+            self.demo.scheme = overrides.scheme;
+        }
         if let Some(open) = overrides.open {
             self.demo.open = Some(vec!["sh".into(), "-c".into(), open]);
         }
@@ -245,6 +253,7 @@ async fn place(
         name: chosen.name.clone(),
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
+        scheme: chosen.demo.scheme,
         environment: provided.environment.clone(),
         host: host.to_owned(),
         place: place.to_owned(),

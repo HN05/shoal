@@ -377,8 +377,9 @@ shoal demo stop tui
 ```
 
 Shoal keeps the command running, restarts it when it exits, and tells the user
-how to open it; `shoal demo` and the inbox open it for them. The `web` preset
-reserves a port and passes it as `PORT`; the `simulator` preset leases the
+how to open it; `shoal demo` and the inbox open it for them. The `server`
+preset reserves a port and passes it as `PORT`, and `web` does the same for a
+page the user opens in a browser; the `simulator` preset leases the
 workspace's simulator and passes its UDID as `SHOAL_SIM_UDID`. While the user
 tries it, read the screen and type into it to look at the same state they do.
 `shoal done` stops your demos; pass `--keep-demos` when the user is still trying

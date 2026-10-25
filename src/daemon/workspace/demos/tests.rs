@@ -17,6 +17,7 @@ fn launch(name: &str) -> Launch {
         name: name.into(),
         preset: None,
         open: None,
+        scheme: None,
         environment: BTreeMap::new(),
         host: "zmx".into(),
         place: format!("session-{name}"),
