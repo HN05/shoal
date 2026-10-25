@@ -599,42 +599,66 @@ pub async fn on_request(
     dry_run: bool,
     selection: &Selection,
 ) -> Result<ManualCleanup> {
-    let repository = match &selection.repository {
-        Some(selector) => Some(manager.repository(selector).await?.id),
-        None => None,
-    };
-    let repositories: Vec<_> = manager
-        .repositories()
-        .await?
-        .into_iter()
-        .filter(|repo| repository.as_ref().is_none_or(|id| *id == repo.id))
-        .collect();
-    let workspaces: Vec<_> = manager
-        .list_workspaces()
-        .await?
-        .into_iter()
-        .filter(|workspace| {
-            repository
-                .as_ref()
-                .is_none_or(|id| *id == workspace.repository_id)
-        })
-        .collect();
-    selection
-        .workspaces
-        .ensure_known(workspaces.iter().map(|w| (w.name.as_str(), w.id.as_str())))?;
-    selection.caches.ensure_known(
-        repositories
-            .iter()
-            .map(|repo| (crate::repository::name(repo), repo.id.as_str())),
-    )?;
+    let targets = Targets::of(manager, selection).await?;
     let mut report = ManualCleanup {
         dry_run,
         ..ManualCleanup::default()
     };
-    remove_on_request(manager, &mut report, workspaces, &selection.workspaces).await?;
+    remove_on_request(
+        manager,
+        &mut report,
+        targets.workspaces,
+        &selection.workspaces,
+    )
+    .await?;
     report.caches =
-        empty_caches_on_request(manager, dry_run, repositories, &selection.caches).await?;
+        empty_caches_on_request(manager, dry_run, targets.repositories, &selection.caches).await?;
     Ok(report)
+}
+
+/// The workspaces and repositories a cleanup request can reach.
+struct Targets {
+    workspaces: Vec<Workspace>,
+    repositories: Vec<crate::model::Repository>,
+}
+
+impl Targets {
+    /// Those of the selected repository, or all, once every name the
+    /// selection gives is among them.
+    async fn of(manager: &Manager, selection: &Selection) -> Result<Self> {
+        let repository = match &selection.repository {
+            Some(selector) => Some(manager.repository(selector).await?.id),
+            None => None,
+        };
+        let within = |id: &str| repository.as_deref().is_none_or(|only| only == id);
+        let targets = Self {
+            workspaces: manager
+                .list_workspaces()
+                .await?
+                .into_iter()
+                .filter(|workspace| within(&workspace.repository_id))
+                .collect(),
+            repositories: manager
+                .repositories()
+                .await?
+                .into_iter()
+                .filter(|repo| within(&repo.id))
+                .collect(),
+        };
+        selection.workspaces.ensure_known(
+            targets
+                .workspaces
+                .iter()
+                .map(|w| (w.name.as_str(), w.id.as_str())),
+        )?;
+        selection.caches.ensure_known(
+            targets
+                .repositories
+                .iter()
+                .map(|repo| (crate::repository::name(repo), repo.id.as_str())),
+        )?;
+        Ok(targets)
+    }
 }
 
 async fn empty_caches_on_request(
