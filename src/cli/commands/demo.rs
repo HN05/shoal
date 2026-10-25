@@ -475,13 +475,15 @@ fn find(demos: Vec<Running>, name: &str, workspace: Option<&Workspace>) -> Resul
     }
 }
 
-/// The workspace whose demos to show: the one named, the caller's own for a
-/// workspace process, the current one, or `None` for every workspace.
+/// The workspace whose demos to show: the one named, the current one, a
+/// workspace process's own, or `None` for every workspace.
 async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Workspace>> {
     let id = match workspace {
         Some(selector) => Some(ui::explicit_workspace(ctx, selector).await?),
+        // A workspace process selects as start and stop do: the directory's
+        // workspace, which may be a child of its own, otherwise its own.
         None if crate::env::is_scoped() => {
-            Some(ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?)
+            Some(ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?)
         }
         None => {
             let workspaces = client::workspaces(&ctx.paths).await?;
