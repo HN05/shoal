@@ -348,8 +348,10 @@ async fn relay(
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
-                // A daemon update waits for the release, as it does for a start.
-                let _operation = match unattachable.take() {
+                // A daemon update waits from the release until the next run
+                // registers, as it does for a start, so it cannot detach the
+                // wrapper while that registration waits for its answer.
+                let operation = match unattachable.take() {
                     Some(operation) => operation,
                     None => manager.background_operations.clone().read_owned().await,
                 };
@@ -364,6 +366,7 @@ async fn relay(
                     }
                 };
                 protocol::write(writer, &control).await?;
+                *unattachable = Some(operation);
             }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
