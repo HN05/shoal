@@ -43,6 +43,14 @@ pub(super) struct Launch {
     pub after: Vec<Dependency>,
 }
 
+/// What the daemon's start of a queued launch needs from this process: its
+/// terminal host's variables and its output setting.
+fn launch_environment() -> std::collections::BTreeMap<String, String> {
+    let mut env = terminal::environment();
+    env.extend([crate::env::output_setting()]);
+    env
+}
+
 /// Ask the daemon for a slot for `launch`, which `plan` starts.
 pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Result<Admission> {
     let request = QueueRequest {
@@ -51,7 +59,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         agent: launch.agent,
         issue_title: launch.issue_title,
         plan: serde_json::to_string(plan)?,
-        env: terminal::environment(),
+        env: launch_environment(),
         now: launch.now,
         workspace: None,
         after: launch.after,
@@ -103,7 +111,7 @@ pub(super) async fn queue_in(
         agent,
         issue_title,
         plan: serde_json::to_string(plan)?,
-        env: terminal::environment(),
+        env: launch_environment(),
         now: false,
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),

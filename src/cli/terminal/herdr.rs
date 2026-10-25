@@ -357,6 +357,9 @@ fn tab_command(ctx: &Context, cwd: &Path, label: &str, focus: bool) -> Result<Co
     create
         .arg("--env")
         .arg(format!("XDG_CONFIG_HOME={}", config_home.display()));
+    // Likewise its output setting, which agents the tab starts inherit.
+    let (name, value) = crate::env::output_setting();
+    create.arg("--env").arg(format!("{name}={value}"));
     Ok(create)
 }
 

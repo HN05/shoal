@@ -7,8 +7,9 @@ selects JSON, which also turns off prompts without confirming anything: a comman
 that would ask still needs `--yes`. `--text` overrides `SHOAL_OUTPUT`, and an
 unset or empty `SHOAL_OUTPUT` means `text`; any other value fails. Errors use the
 selected format on stderr. The agents Shoal starts, including chats and resumed
-sessions, get `SHOAL_OUTPUT=json` unless they inherit a setting; the commands and
-shells it runs only inherit one. An agent Shoal does not start, such as one an
+sessions, get `SHOAL_OUTPUT=json` unless the command that launches them sets a
+nonempty value, which they keep, also when they start later from the queue or in
+a Herdr tab; the commands and shells Shoal runs only inherit one. An agent Shoal does not start, such as one an
 app launch opens, gets JSON by default only when its own environment sets it.
 
 Human-readable output uses color when its destination is a terminal. Set a

@@ -19726,7 +19726,8 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
             .args(args)
             .env("HERDR_ENV", "1")
             .env("HERDR_WORKSPACE_ID", "w1")
-            .env("SHOAL_SHELL_DIRECTIVE", &directive),
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .env("SHOAL_OUTPUT", "text"),
         "",
     );
     assert!(caller.status.success(), "{caller:?}");
@@ -19735,6 +19736,8 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let calls = herdr_calls(&fixture);
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
     assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
+    // The tab gets the caller's output setting, not the Herdr server's.
+    assert!(calls[0].iter().any(|arg| arg == "SHOAL_OUTPUT=text"));
     assert_eq!(&calls[1][..3], ["pane", "run", "w1:p9"]);
     let state = fixture.root.path().join("state");
     assert_eq!(
@@ -22127,6 +22130,55 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
+}
+
+/// A queued agent starts from the daemon, which gives it the output setting
+/// of the caller that queued it rather than its own.
+#[test]
+fn a_queued_agent_keeps_its_callers_output_setting() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nrecorder = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    // The daemon's worker starts the queued agent in a detached session.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["add", repo, "first", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        fixture
+            .ok(&["work"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["work", "--queue"]) == serde_json::json!([])
+    });
+    let output = fixture
+        .command()
+        .env("SHOAL_OUTPUT", "text")
+        .args(["--json", "add", repo, "second", "--agent", "recorder"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(queued["state"], "queued", "{queued}");
+    // Removal frees the slot, which a stopped agent keeps for its resume.
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
+    fixture.ok(&["rm", "first", "--yes"]);
+    let recorded = fixture.root.path().join("queued-output");
+    wait_until("the queued agent start", || recorded.exists());
+    wait_until("the queued agent's record", || {
+        !fs::read_to_string(&recorded).unwrap().is_empty()
+    });
+    assert_eq!(fs::read_to_string(&recorded).unwrap(), "text");
+    fixture.ok(&["stop", "second"]);
 }
 
 /// Replace the managed daemon's executable while a request and an event

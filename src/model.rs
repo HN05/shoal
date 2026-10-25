@@ -690,7 +690,8 @@ pub struct QueueRequest {
     pub agent: String,
     pub issue_title: Option<String>,
     pub plan: String,
-    /// Terminal multiplexer variables the start needs to reach the same window.
+    /// Terminal multiplexer variables the start needs to reach the same window,
+    /// and the caller's output setting.
     pub env: std::collections::BTreeMap<String, String>,
     /// Start at once regardless of the limits; the agent still takes a slot.
     pub now: bool,

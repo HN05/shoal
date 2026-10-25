@@ -409,11 +409,22 @@ pub fn selects_json(setting: Option<&OsStr>) -> Result<bool> {
 }
 
 /// The [`OUTPUT`] default an agent Shoal launches gets: JSON, unless this
-/// process already carries a setting, which the agent inherits instead.
+/// process already carries a nonempty setting, which the agent inherits instead.
 pub fn agent_output() -> Option<(&'static str, &'static str)> {
-    std::env::var_os(OUTPUT)
-        .is_none()
+    agent_output_under(std::env::var_os(OUTPUT).as_deref())
+}
+
+fn agent_output_under(setting: Option<&OsStr>) -> Option<(&'static str, &'static str)> {
+    setting
+        .is_none_or(OsStr::is_empty)
         .then_some((OUTPUT, "json"))
+}
+
+/// This process's [`OUTPUT`] setting, empty when it has none, for a launch
+/// that starts in another environment, such as the daemon's, to use in place
+/// of that environment's own.
+pub fn output_setting() -> (String, String) {
+    (OUTPUT.into(), std::env::var(OUTPUT).unwrap_or_default())
 }
 
 pub fn scope_token() -> Option<String> {
@@ -506,6 +517,19 @@ pub(crate) fn queue_entry() -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agents_default_to_json_unless_their_launcher_carries_a_setting() {
+        for setting in [None, Some("")] {
+            assert_eq!(
+                agent_output_under(setting.map(OsStr::new)),
+                Some((OUTPUT, "json"))
+            );
+        }
+        for setting in ["text", "json", "invalid"] {
+            assert_eq!(agent_output_under(Some(OsStr::new(setting))), None);
+        }
+    }
 
     fn path_of(command: &Command) -> Option<OsString> {
         command
