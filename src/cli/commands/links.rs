@@ -249,11 +249,7 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
         },
     )
     .await?;
-    let message = if marks.is_empty() {
-        "No ready-for-review marks".to_owned()
-    } else {
-        format!("Ready-for-review marks cleared:\n{}", review_lines(&marks))
-    };
+    let message = format!("Ready-for-review marks cleared:\n{}", review_lines(&marks));
     ctx.emit(&message, &marks)?;
     Ok(0)
 }

@@ -2361,8 +2361,9 @@ Marks never notify, record completion, or affect cleanup; use `shoal notify` to
 ask for attention. New commits make a mark outdated: `work` shows
 `ready (outdated)`, and `status`, `inspect` and `work --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
-`shoal inbox` lists every current mark across repositories. Unlinking an
-item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
+`shoal inbox` lists every current mark across repositories. `unready` fails when
+it selects no mark. Unlinking an item withdraws its mark, and removal deletes
+all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--workspace` selects another one for unscoped callers.
 
