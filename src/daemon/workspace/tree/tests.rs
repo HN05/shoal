@@ -1165,16 +1165,68 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             )
             .await
             .unwrap();
-        for mut method in [
-            Method::ShowApproval { id: approval.id },
-            Method::ShowQuestion { id: question.id },
-        ] {
-            assert_eq!(
-                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        for (id, approval_request) in [(approval.id, true), (question.id, false)] {
+            let read = || {
+                if approval_request {
+                    Method::ShowApproval { id }
+                } else {
+                    Method::ShowQuestion { id }
+                }
+            };
+            let mut method = read();
+            let caller =
+                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            assert_eq!(caller.is_ok(), allowed);
+            if !allowed {
+                continue;
+            }
+            let caller = caller.unwrap();
+            assert!(
+                crate::daemon::operation(&manager, read(), caller.as_ref())
                     .await
-                    .is_ok(),
-                allowed
+                    .is_ok()
             );
+            // Model the number being reassigned to an outside record after authorization.
+            let replacement_owner = other.id.clone();
+            let replacing = read();
+            manager.store.run(move |db| {
+                match replacing {
+                    Method::ShowApproval { id } => {
+                        db.execute(
+                            "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.workspace_id',?1) WHERE number=?2",
+                            rusqlite::params![replacement_owner, id],
+                        )?;
+                    }
+                    Method::ShowQuestion { id } => {
+                        db.execute("UPDATE questions SET workspace_id=?1 WHERE number=?2", rusqlite::params![replacement_owner, id])?;
+                    }
+                    _ => unreachable!(),
+                }
+                Ok(())
+            }).await.unwrap();
+            let error = crate::daemon::operation(&manager, read(), caller.as_ref())
+                .await
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("in their workspace tree"),
+                "{error:#}"
+            );
+            manager
+                .store
+                .run(move |db| {
+                    match method {
+                        Method::ShowApproval { id } => {
+                            db.execute("DELETE FROM access_requests WHERE number=?1", [id])?;
+                        }
+                        Method::ShowQuestion { id } => {
+                            db.execute("DELETE FROM questions WHERE number=?1", [id])?;
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok(())
+                })
+                .await
+                .unwrap();
         }
     }
 }

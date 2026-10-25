@@ -958,7 +958,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListQuestions { workspace } => {
             Body::Questions(manager.questions(workspace.as_deref()).await?)
         }
-        Method::ShowQuestion { id } => Body::Question(manager.question(id).await?),
+        Method::ShowQuestion { id } => {
+            Body::Question(scope::show_question(manager, caller, id).await?)
+        }
         Method::WithdrawApproval { workspace, id } => {
             Body::ApprovalRequest(Box::new(manager.withdraw_approval(&workspace, id).await?))
         }
@@ -1000,7 +1002,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
         }
         Method::ShowApproval { id } => {
-            Body::ApprovalRequest(Box::new(manager.show_approval(id).await?))
+            Body::ApprovalRequest(Box::new(scope::show_approval(manager, caller, id).await?))
         }
         Method::SecretAcquire {
             workspace,

@@ -2,7 +2,11 @@
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{
+        approvals::ApprovalRequest,
+        questions::Question,
+        workspace::{ExecutionKind, Manager},
+    },
     forge::items::action::Action,
     protocol::{ConfigTarget, Method},
 };
@@ -175,21 +179,11 @@ pub async fn authorize(
             Some(workspace)
         }
         Method::ShowApproval { id } => {
-            let request = manager.show_approval(*id).await?;
-            ensure!(
-                manager.within_subtree(owner, &request.workspace_id).await?,
-                "workspace processes inspect only approval requests in their workspace tree"
-            );
+            show_approval(manager, Some(&caller), *id).await?;
             None
         }
         Method::ShowQuestion { id } => {
-            let question = manager.question(*id).await?;
-            ensure!(
-                manager
-                    .within_subtree(owner, &question.workspace_id)
-                    .await?,
-                "workspace processes inspect only questions in their workspace tree"
-            );
+            show_question(manager, Some(&caller), *id).await?;
             None
         }
         Method::DecideApproval { id, shown, .. } => {
@@ -277,4 +271,42 @@ impl Caller {
     pub fn kind(&self) -> Option<ExecutionKind> {
         self.execution.as_ref().map(|execution| execution.kind)
     }
+}
+
+/// Return the snapshot whose owner was checked, including after authorization.
+pub(super) async fn show_approval(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    id: i64,
+) -> Result<ApprovalRequest> {
+    let request = manager.show_approval(id).await?;
+    inspect_owner(manager, caller, &request.workspace_id, "approval requests").await?;
+    Ok(request)
+}
+
+pub(super) async fn show_question(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    id: i64,
+) -> Result<Question> {
+    let question = manager.question(id).await?;
+    inspect_owner(manager, caller, &question.workspace_id, "questions").await?;
+    Ok(question)
+}
+
+async fn inspect_owner(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    workspace: &str,
+    kind: &str,
+) -> Result<()> {
+    if let Some(caller) = caller {
+        ensure!(
+            manager
+                .within_subtree(&caller.workspace_id, workspace)
+                .await?,
+            "workspace processes inspect only {kind} in their workspace tree"
+        );
+    }
+    Ok(())
 }
