@@ -97,7 +97,7 @@ fn refusal(kind: ItemKind, missing: &[&str], available: &[Label]) -> String {
 /// The warning for an existing item that lacks required labels.
 fn missing_warning(item: &Item, missing: &[&str]) -> String {
     format!(
-        "{} has no label starting with {}; shoal labels lists them and {} adds one",
+        "{} has no label starting with {}; shoal repo labels lists them and {} adds one",
         name(item),
         missing.join(", "),
         edit(item, "--add-label")
@@ -107,7 +107,7 @@ fn missing_warning(item: &Item, missing: &[&str]) -> String {
 /// The warning for an item without labels in a repository that has some.
 fn unlabeled_warning(item: &Item) -> String {
     format!(
-        "{} has no labels; shoal labels lists the repository's labels and {} adds them",
+        "{} has no labels; shoal repo labels lists the repository's labels and {} adds them",
         name(item),
         edit(item, "--add-label")
     )
@@ -400,7 +400,7 @@ mod tests {
     fn label_warnings_name_the_edit_that_fixes_them() {
         assert_eq!(
             missing_warning(&item(ItemKind::Pr), &["area/"]),
-            "PR #12 has no label starting with area/; shoal labels lists them and \
+            "PR #12 has no label starting with area/; shoal repo labels lists them and \
              shoal pr edit 12 --add-label adds one"
         );
         assert!(unlabeled_warning(&item(ItemKind::Issue)).contains("shoal issue edit 12"));
