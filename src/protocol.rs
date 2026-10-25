@@ -666,6 +666,11 @@ pub enum Method {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<crate::daemon::questions::Question>,
     },
+    /// Accept the stored recommendation literally, including numeric text.
+    AcceptQuestionRecommendation {
+        id: i64,
+        shown: Option<crate::daemon::questions::Question>,
+    },
     /// Long-lived: the question once it is answered. What it asks tells it
     /// from a later question reusing its number.
     AwaitAnswer {

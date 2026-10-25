@@ -199,12 +199,15 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 }
 
 async fn answer(ctx: &Context, id: i64, answer: String, shown: Option<Question>) -> Result<i32> {
+    submit_answer(ctx, Method::AnswerQuestion { id, answer, shown }).await
+}
+
+async fn submit_answer(ctx: &Context, method: Method) -> Result<i32> {
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions without their scope token"
     );
-    let question =
-        request::<Question>(&ctx.paths, Method::AnswerQuestion { id, answer, shown }).await?;
+    let question = request::<Question>(&ctx.paths, method).await?;
     ctx.emit(&answered(&question), &question)?;
     Ok(0)
 }
@@ -224,10 +227,22 @@ fn answered(question: &Question) -> String {
 /// Read an answer or choice number while keeping the question on the prompt line.
 async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
     print_answer_context(ctx, &question);
-    let prompt = format!("{} ({})", question.ask.question, question.id);
-    let response = ui::input_with_default(ctx, &prompt, &question.ask.recommendation)?
-        .ok_or(ui::SelectionCanceled)?;
+    let prompt = format!(
+        "{} ({}) [{}]",
+        question.ask.question, question.id, question.ask.recommendation
+    );
+    let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
     match response.trim() {
+        "" if response.is_empty() => {
+            submit_answer(
+                ctx,
+                Method::AcceptQuestionRecommendation {
+                    id: question.id,
+                    shown: Some(question),
+                },
+            )
+            .await
+        }
         "/withdraw" => withdraw(ctx, Some(question.workspace_id), question.id).await,
         "/cancel" => Err(ui::SelectionCanceled.into()),
         _ => answer(ctx, question.id, response, Some(question)).await,

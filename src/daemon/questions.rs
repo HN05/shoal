@@ -314,13 +314,30 @@ fn store_answer(
     Ok(())
 }
 
+enum Answer {
+    Text(String),
+    Recommendation,
+}
+
+impl Answer {
+    fn resolve(&self, ask: &Ask) -> Result<String> {
+        match self {
+            Self::Text(text) => ask.resolve(text),
+            Self::Recommendation => {
+                validate_answer(&ask.recommendation)?;
+                Ok(ask.recommendation.clone())
+            }
+        }
+    }
+}
+
 /// Record `answer` and queue the message that carries it, together. With
 /// `shown`, the question the user was shown, a later question reusing its
 /// number is refused.
 fn record_answer(
     tx: &Transaction<'_>,
     id: i64,
-    answer: &str,
+    answer: &Answer,
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = open_question(tx, id)?;
@@ -328,7 +345,7 @@ fn record_answer(
         shown.is_none_or(|shown| question.is_same(shown)),
         "question {id} changed since it was shown; choose again"
     );
-    let answer = question.ask.resolve(answer)?;
+    let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
     let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
     store_answer(tx, &mut question, answer, message_id)?;
@@ -491,6 +508,25 @@ impl Manager {
         &self,
         id: i64,
         answer: String,
+        shown: Option<Question>,
+    ) -> Result<Question> {
+        self.record_question_answer(id, Answer::Text(answer), shown)
+            .await
+    }
+
+    pub async fn accept_question_recommendation(
+        &self,
+        id: i64,
+        shown: Option<Question>,
+    ) -> Result<Question> {
+        self.record_question_answer(id, Answer::Recommendation, shown)
+            .await
+    }
+
+    async fn record_question_answer(
+        &self,
+        id: i64,
+        answer: Answer,
         shown: Option<Question>,
     ) -> Result<Question> {
         let question = self

@@ -17654,23 +17654,36 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
 fn question_prompt_accepts_the_recommendation_with_enter() {
     let fixture = Fixture::new();
     fixture.add("asker");
-    let question = fixture.ok(&[
-        "ask",
-        "Which database?",
-        "--recommend",
-        "SQLite",
-        "--workspace",
-        "asker",
-    ]);
-    let id = question["id"].to_string();
-    let (output, transcript) =
-        fixture.terminal_command(fixture.command().args(["questions", &id]), "\n", true);
-    assert!(output.status.success(), "{transcript}");
-    assert!(
-        transcript.contains("Which database? (1) [SQLite]:"),
-        "{transcript}"
-    );
-    assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
+    for (recommendation, choices, input, expected) in [
+        ("SQLite", vec![], "\n", "SQLite"),
+        ("2", vec!["2", "4"], "\n", "2"),
+        ("2", vec!["2", "4"], "2\n", "4"),
+        ("/cancel", vec![], "\n", "/cancel"),
+        ("/withdraw", vec![], "\n", "/withdraw"),
+    ] {
+        let text = format!("Choose {recommendation} for {input:?}?");
+        let mut args = vec![
+            "ask",
+            &text,
+            "--recommend",
+            recommendation,
+            "--workspace",
+            "asker",
+        ];
+        for choice in choices {
+            args.extend(["--choice", choice]);
+        }
+        let question = fixture.ok(&args);
+        let id = question["id"].to_string();
+        let (output, transcript) =
+            fixture.terminal_command(fixture.command().args(["questions", &id]), input, true);
+        assert!(output.status.success(), "{transcript}");
+        assert!(
+            transcript.contains(&format!("{text} ({id}) [{recommendation}]:")),
+            "{transcript}"
+        );
+        assert_eq!(fixture.ok(&["questions", &id])["answer"], expected);
+    }
 }
 
 #[test]

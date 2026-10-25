@@ -203,19 +203,8 @@ pub fn input_or_cancel(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     Ok(read_input(ctx, prompt)?.filter(|value| !value.is_empty()))
 }
 
-/// Enter accepts the displayed default; EOF still cancels.
-pub fn input_with_default(ctx: &Context, prompt: &str, default: &str) -> Result<Option<String>> {
-    let prompt = format!("{prompt} [{default}]");
-    Ok(read_input(ctx, &prompt)?.map(|value| {
-        if value.is_empty() {
-            default.to_owned()
-        } else {
-            value
-        }
-    }))
-}
-
-fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
+/// Read a line, preserving blank input; EOF means cancellation.
+pub fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     require_interactive(ctx)?;
     eprint!(
         "{} ",

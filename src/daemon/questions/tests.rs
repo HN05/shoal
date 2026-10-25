@@ -119,6 +119,30 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
 }
 
 #[tokio::test]
+async fn recommended_numeric_answers_are_literal_and_bound_to_the_shown_question() {
+    let (_root, manager, workspace) = fixture().await;
+    let mut request = ask("Which number?", &["2", "4"]);
+    request.recommendation = "2".into();
+    let question = manager.ask_question(&workspace.id, request).await.unwrap();
+    let mut stale = question.clone();
+    stale.ask.recommendation = "4".into();
+    let error = manager
+        .accept_question_recommendation(question.id, Some(stale))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("changed since it was shown"));
+    let answered = manager
+        .accept_question_recommendation(question.id, Some(question))
+        .await
+        .unwrap();
+    assert_eq!(answered.answer.as_deref(), Some("2"));
+    assert_eq!(
+        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn free_text_answers_may_span_lines() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager

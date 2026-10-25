@@ -965,6 +965,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WithdrawQuestion { workspace, id } => {
             Body::Question(manager.withdraw_question(&workspace, id).await?)
         }
+        Method::AcceptQuestionRecommendation { id, shown } => {
+            Body::Question(manager.accept_question_recommendation(id, shown).await?)
+        }
         Method::AnswerQuestion { id, answer, shown } => {
             Body::Question(manager.answer_question(id, answer, shown).await?)
         }

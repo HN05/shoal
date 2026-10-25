@@ -225,7 +225,8 @@ pub async fn authorize(
         Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
             bail!("holds belong to the user and host apps; workspace processes ask with shoal ask")
         }
-        Method::AnswerQuestion { id, shown, .. } => {
+        Method::AnswerQuestion { id, shown, .. }
+        | Method::AcceptQuestionRecommendation { id, shown } => {
             // A coordinating agent answers the questions of the workspaces
             // below its own. The answer binds to the question authorized
             // here, which the answer refuses once a later question reuses
