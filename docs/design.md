@@ -519,7 +519,11 @@ Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
 Nested executions keep scope, and the CLI refuses scoped operations to a process
 whose ancestor carries scope for the same state directory, so removing the token
-from a descendant's environment does not lift them. Unscoped callers may export a ready, verified
+from a descendant's environment does not lift them. A tracked execution's wrapper
+records its own process identity in the state directory before it spawns the
+command, until the command exits, and the command's identity while it lives,
+because macOS hides other processes' environments; an exported environment is
+recognised only where an ancestor's environment is readable. Unscoped callers may export a ready, verified
 workspace's identity, current port variables and a fresh token through `work env`.
 Exported tokens persist across restarts until explicitly revoked or the workspace
 is removed; they register no execution and do not prevent cleanup.

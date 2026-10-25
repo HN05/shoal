@@ -2,6 +2,7 @@ pub mod execution;
 pub mod identity;
 pub mod load;
 pub mod machine;
+pub mod scoped;
 
 use crate::tools::Tool;
 use anyhow::{Context, Result};

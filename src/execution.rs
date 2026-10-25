@@ -726,7 +726,7 @@ async fn supervise(
     recovery_record: Option<&Path>,
 ) -> Result<Outcome> {
     let signals = ExecutionSignals::new()?;
-    let (mut child, group, _terminal) =
+    let (mut child, group, _terminal, _scope) =
         register_child(link, paths, plan, command, mode, auth, recovery_record).await?;
     let (status, recovery, stopped) = wait_for_child(link, &mut child, &group, signals).await?;
     // A command owns its process group; descendants do not outlive its lease.
@@ -749,8 +749,14 @@ async fn register_child(
     mode: &Mode,
     auth: Option<&AgentLaunch>,
     recovery_record: Option<&Path>,
-) -> Result<(Child, ProcessGroup, Option<Terminal>)> {
-    let (child, group, mut terminal) = spawn_registered_child(paths, plan, command, mode, auth)?;
+) -> Result<(
+    Child,
+    ProcessGroup,
+    Option<Terminal>,
+    process::scoped::Records,
+)> {
+    let (child, group, mut terminal, scope) =
+        spawn_registered_child(paths, plan, command, mode, auth)?;
     register_process(link, &group).await?;
     consume_recovery_records(mode, recovery_record)?;
     report_detached_launch(plan, mode, &group)?;
@@ -758,7 +764,7 @@ async fn register_child(
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
     group.send(libc::SIGCONT);
-    Ok((child, group, terminal))
+    Ok((child, group, terminal, scope))
 }
 
 fn spawn_registered_child(
@@ -767,13 +773,22 @@ fn spawn_registered_child(
     command: &[OsString],
     mode: &Mode,
     auth: Option<&AgentLaunch>,
-) -> Result<(Child, ProcessGroup, Option<Terminal>)> {
+) -> Result<(
+    Child,
+    ProcessGroup,
+    Option<Terminal>,
+    process::scoped::Records,
+)> {
     // Capture before spawning, and restore after child/process-group cleanup,
     // including failures before the terminal handoff.
     let terminal = Terminal::capture(true)?;
+    // Descendants that clear their scope token find the wrapper's record from
+    // their first instruction, and the child's once the wrapper is gone.
+    let mut scope = process::scoped::Records::wrapper(&paths.state)?;
     let child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
-    Ok((child, group, terminal))
+    scope.command(group.pid())?;
+    Ok((child, group, terminal, scope))
 }
 
 async fn register_process(link: &mut Link, group: &ProcessGroup) -> Result<()> {

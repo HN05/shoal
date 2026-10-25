@@ -406,9 +406,11 @@ pub fn chat() -> Option<String> {
 
 /// True when this process or an ancestor carries scope for the `state`
 /// directory, so clearing Shoal variables in a child does not lift its
-/// execution's limits.
+/// execution's limits. Tracked executions record their processes; an exported
+/// environment is found only where ancestors' environments are readable.
 pub fn inherits_scope(state: &std::path::Path) -> bool {
     is_scoped()
+        || crate::process::scoped::recorded_ancestor(state)
         || crate::process::identity::scoped_ancestor_state_dirs()
             .iter()
             .any(|dir| same_directory(dir, state))
