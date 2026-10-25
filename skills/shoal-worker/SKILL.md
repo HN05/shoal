@@ -123,7 +123,8 @@ current head, after you have read its log and fixed or reported the cause, and
 `shoal pr ci cancel` cancels running ones; omit `--check` for all of them.
 `shoal forge ci run <workflow> --input NAME=VALUE` starts a workflow run on
 your branch. It is a new run, not a rerun: on Forgejo a failed check on the PR
-stays failed.
+stays failed. `shoal forge ci rerun <run-url>` (`--failed` for failed jobs only)
+and `shoal forge ci cancel <run-url>` act on one run of your branch.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

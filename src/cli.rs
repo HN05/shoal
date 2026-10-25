@@ -1621,6 +1621,29 @@ pub enum ForgeCiCommand {
     /// It is a new run, not a rerun of a PR's checks; on Forgejo a failed
     /// check stays failed.
     Run(RunArgs),
+    /// Rerun a workflow run; GitLab retries only its failed jobs.
+    Rerun {
+        #[command(flatten)]
+        target: RunTarget,
+        /// Rerun only the run's failed jobs.
+        #[arg(long)]
+        failed: bool,
+    },
+    /// Cancel a running workflow run.
+    Cancel {
+        #[command(flatten)]
+        target: RunTarget,
+    },
+}
+
+// A workflow run to act on.
+#[derive(Debug, Args)]
+pub struct RunTarget {
+    /// The run's web URL, as `shoal forge ci run` or a check links it, or the number in it.
+    pub run: String,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

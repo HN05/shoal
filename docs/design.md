@@ -1419,6 +1419,9 @@ Agents may also start a workflow run on their own workspace's branch, on every
 forge including Bitbucket. A started run is not a rerun of a PR's checks: on
 Forgejo it has no head commit or event, so it cannot replace the rerun Forgejo
 lacks, while elsewhere only a run on the PR's head commit reports checks there.
+`forge ci` also reruns and cancels one run by its URL; `pr ci` stays the way to act
+on a PR's checks. Workspace processes act only on runs of their own branch, which
+the daemon reads from the run before acting.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run

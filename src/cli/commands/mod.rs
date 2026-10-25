@@ -70,9 +70,9 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCiCommand,
-        ForgeCommand, HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand,
-        ShellCommand, WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
+        HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
+        WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -292,9 +292,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 capabilities::capabilities(&ctx, repository.workspace).await
             }
             ForgeCommand::Api(args) => api::api(&ctx, args).await,
-            ForgeCommand::Ci {
-                command: ForgeCiCommand::Run(args),
-            } => workflows::run(&ctx, args).await,
+            ForgeCommand::Ci { command } => workflows::ci(&ctx, command).await,
         },
         Command::Run {
             name,

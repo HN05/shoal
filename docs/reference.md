@@ -2338,21 +2338,33 @@ cancels each check's run. `--json` returns `url`, `action` and the
 ```sh
 shoal forge ci run deps.yml               # start a workflow run on the workspace's branch
 shoal forge ci run deps.yml --branch main --input level=full
+shoal forge ci rerun 2765 --failed        # rerun a run's failed jobs
+shoal forge ci cancel https://forge.example/team/repo/actions/runs/2765
 ```
 
 `shoal forge ci run` starts a workflow run on the workspace's branch, or the one
 `--branch` names, with each repeated `--input NAME=VALUE`. It is a new run, not
 a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
 reports checks there like any other run. Forgejo attaches a dispatched run to no
-commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub, Forgejo and Gitea dispatch
-the named workflow file, or a GitHub workflow ID, which needs a
-`workflow_dispatch` trigger; GitLab runs the branch's pipeline, taking no
+commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub,
+Forgejo and Gitea dispatch the named workflow file, or a GitHub workflow ID,
+which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline, taking no
 workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
 custom pipeline, or the branch's own without one, with the inputs as its
 variables. The daemon starts it as the [agent account](#agent-accounts), and
 processes inside a workspace may start runs only on that workspace's branch.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not.
+
+`shoal forge ci rerun` and `shoal forge ci cancel` act on one run, named by its
+web URL, as `forge ci run` or a check links it, or by the number in that URL.
+`rerun` reruns every job of a finished run, or with `--failed` only its failed
+jobs; GitLab retries only failed and cancelled jobs either way, and Forgejo,
+Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every
+forge but Bitbucket. Processes inside a workspace act only on runs of that
+workspace's branch, so a PR's checks, whose runs may name the PR instead, are
+acted on with `shoal pr ci`. `--json` returns the run's `url` and the
+`action`.
 
 #### Forge API requests
 

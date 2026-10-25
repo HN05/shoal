@@ -2546,6 +2546,127 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     );
 }
 
+#[test]
+fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let run = |id: u64, branch: &str| {
+        json!({"body": {"id": id, "head_branch": branch,
+            "html_url": format!("https://github.com/team/project/actions/runs/{id}")}})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/actions/runs/12": run(12, "topic"),
+        "GET repos/team/project/actions/runs/13": run(13, "main"),
+        "POST repos/team/project/actions/runs/12/rerun-failed-jobs": {"status": 201},
+        "POST repos/team/project/actions/runs/12/cancel": {"status": 202},
+        "POST repos/team/project/actions/runs/13/rerun": {"status": 201},
+    }));
+    let url = "https://github.com/team/project/actions/runs/12";
+    let rerun = fixture.ok(&[
+        "forge",
+        "ci",
+        "rerun",
+        &format!("{url}/job/34"),
+        "--failed",
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(rerun, json!({"url": url, "action": "rerun"}));
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/12/rerun-failed-jobs",
+            null
+        ])]
+    );
+
+    // Workspace processes act only on runs of their own branch.
+    let exported = fixture.ok(&["work", "env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let act = |run: &str, action: &str, scope| {
+        fixture.request_as(
+            json!({"ci_run_action": {"workspace": "topic", "run": run, "action": action,
+                "failed": false}}),
+            scope,
+        )
+    };
+    let cancel = act("12", "cancel", Some(scope));
+    assert_eq!(cancel["type"], "ci_run_acted", "{cancel}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/12/cancel",
+            null
+        ])]
+    );
+    let refused = act("13", "rerun", Some(scope));
+    assert!(
+        refused["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("only on CI runs of their workspace's branch"),
+        "{refused}"
+    );
+    assert!(writes(&fixture).is_empty());
+    let unscoped = act("13", "rerun", None);
+    assert_eq!(unscoped["type"], "ci_run_acted", "{unscoped}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/13/rerun",
+            null
+        ])]
+    );
+
+    // A run of another repository, or no run at all, is refused.
+    let other = act(
+        "https://github.com/other/project/actions/runs/12",
+        "cancel",
+        None,
+    );
+    assert!(
+        other["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("is not a CI run of"),
+        "{other}"
+    );
+    let output = fixture.run(&["forge", "ci", "cancel", "ci.yml"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("by its web URL"),
+        "{output:?}"
+    );
+}
+
+#[test]
+fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    fixture.respond(json!({
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
+            {"id": 9331, "index_in_repo": 2765, "prettyref": "topic"}
+        ]}},
+        "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
+    }));
+    let url = format!("{}/actions/runs/2765", fixture.web);
+    let cancel = fixture.ok(&["forge", "ci", "cancel", &url, "--workspace", "topic"]);
+    assert_eq!(cancel["url"], url, "{cancel}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/9331/cancel",
+            null
+        ])]
+    );
+    let output = fixture.run(&["forge", "ci", "rerun", "2765", "--workspace", "topic"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Shoal cannot rerun CI jobs on Forgejo or Gitea"),
+        "{output:?}"
+    );
+    assert!(fixture.requests().is_empty());
+}
+
 /// Run a Shoal command inside the workspace, as its agent would.
 fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
     let shoal = env!("CARGO_BIN_EXE_shoal");

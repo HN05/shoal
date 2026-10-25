@@ -478,6 +478,14 @@ pub enum Method {
         action: crate::forge::ci::CiAction,
         checks: Vec<String>,
     },
+    /// Rerun or cancel one CI workflow run, named by its web URL or the
+    /// number in it; `failed` reruns only its failed jobs.
+    CiRunAction {
+        workspace: String,
+        run: String,
+        action: crate::forge::ci::CiAction,
+        failed: bool,
+    },
     /// Start a CI workflow run on a branch, by default the workspace's.
     StartCiRun {
         workspace: String,
@@ -1019,6 +1027,7 @@ response_bodies! {
     CheckLog(crate::forge::ci::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
     CiRunStarted(crate::forge::ci::run::StartedRun),
+    CiRunActed(crate::forge::ci::run_action::RunActed),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),

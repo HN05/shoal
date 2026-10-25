@@ -1,8 +1,9 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
-//! and starting workflow runs on a branch, as the workspace's agent account.
+//! and starting, rerunning and cancelling workflow runs on a branch, as the
+//! workspace's agent account.
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use super::actions::linked;
 use crate::{
@@ -12,9 +13,11 @@ use crate::{
             CiActed, CiAction,
             checks::validate_check_name,
             run::{NewRun, StartedRun},
+            run_action::{Run, RunActed, validate_run_reference},
         },
         items::link::ItemKind,
     },
+    model::Workspace,
 };
 
 impl Manager {
@@ -84,10 +87,48 @@ impl Manager {
             .with_context(|| format!("could not start a CI run on {}", run.branch))
     }
 
+    /// Rerun or cancel the run `input` names in the workspace's repository;
+    /// workspace processes act only on runs of their workspace's branch.
+    pub async fn ci_run_action(
+        &self,
+        selector: &str,
+        input: String,
+        action: CiAction,
+        failed: bool,
+        scoped: bool,
+    ) -> Result<RunActed> {
+        validate_run_reference(&input)?;
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        let forge = self.workspace_forge(&workspace).await?;
+        let account = self.agent_account(&workspace).await?;
+        let run = forge
+            .find_run(&account, &input, action)
+            .await
+            .with_context(|| format!("could not {action} CI run {input}"))?;
+        if scoped {
+            on_own_branch(&workspace, &run)?;
+        }
+        forge
+            .act_on_run(&account, &run, action, failed)
+            .await
+            .with_context(|| format!("could not {action} {}", run.url))
+    }
+
     async fn record_ci_action(&self, id: &str, url: &str, action: CiAction) -> Result<()> {
         let (id, url) = (id.to_owned(), url.to_owned());
         self.store
             .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, action.as_str()))
             .await
     }
+}
+
+/// Refuse a run on any branch but the workspace's.
+fn on_own_branch(workspace: &Workspace, run: &Run) -> Result<()> {
+    ensure!(
+        run.branch.as_deref() == Some(workspace.branch.as_str()),
+        "workspace processes act only on CI runs of their workspace's branch; \
+         use shoal pr ci for a PR's checks"
+    );
+    Ok(())
 }

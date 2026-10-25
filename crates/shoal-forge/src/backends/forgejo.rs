@@ -78,9 +78,9 @@ impl Backend for Forgejo {
     fn support(&self, capability: Capability) -> Support {
         match capability {
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
-            Capability::RerunJobs => {
-                Support::Unsupported(Some("rerun them from the web UI or push a fix"))
-            }
+            Capability::RerunJobs => Support::Unsupported(Some(
+                "rerun them from the web UI, push a fix, or start a new run with shoal forge ci run",
+            )),
             Capability::CancelJobs
             | Capability::StartRuns
             | Capability::ReadJobLogs
