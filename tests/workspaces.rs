@@ -23572,7 +23572,10 @@ fn simulator_demos_lease_the_simulator_until_they_stop() {
         .unwrap()
         .to_owned();
     assert_eq!(app["leased_simulator"], true);
-    assert_eq!(fixture.ok(&["sim", "tried"])["simulators"][0]["udid"], udid);
+    assert_eq!(
+        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["udid"],
+        udid
+    );
     // A second simulator demo shares the device and the lease's release,
     // which waits for the last simulator demo however they stop.
     let widget = start_preset_demo(&fixture, "widget", "simulator", "SHOAL_SIM_UDID");
@@ -23587,12 +23590,13 @@ fn simulator_demos_lease_the_simulator_until_they_stop() {
             == 1
     });
     assert_eq!(
-        fixture.ok(&["sim", "tried"])["simulators"][0]["workspace_id"],
+        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["workspace_id"],
         workspace["id"]
     );
     finish_preset_demo(&fixture, &workspace, "widget", &udid);
     wait_until("the demo's simulator lease to end", || {
-        fixture.ok(&["sim", "tried"])["simulators"][0]["workspace_id"].is_null()
+        fixture.ok(&["leases", "sim", "--workspace", "tried"])["simulators"][0]["workspace_id"]
+            .is_null()
     });
 }
 
