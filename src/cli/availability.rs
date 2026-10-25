@@ -68,8 +68,8 @@ impl Need {
             | ["demo", "start"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "export" | "doctor" | "leases"
-                | "messages" | "questions" | "approvals" | "view" | "resume" | "sim" | "config"
-                | "pr" | "issue" | "alerts" | "demo",
+                | "messages" | "questions" | "approvals" | "view" | "resume" | "catalog"
+                | "history" | "config" | "pr" | "issue" | "alerts" | "demo",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

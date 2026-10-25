@@ -6861,7 +6861,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
     );
     let clean: Value = serde_json::from_slice(&clean.stdout).unwrap();
     assert_eq!(clean["udid"], second["udid"]);
-    let history = fixture.ok(&["sim", "history", "--all"]);
+    let history = fixture.ok(&["history", "sim", "--all"]);
     assert_eq!(history.as_array().unwrap().len(), 1);
     assert_eq!(history[0]["apps_removed"], 1);
     assert_eq!(history[0]["erase_completed"], true);
@@ -6888,12 +6888,12 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
             .status
             .success()
     );
-    let history = fixture.ok(&["sim", "history", "--all"]);
+    let history = fixture.ok(&["history", "sim", "--all"]);
     assert_eq!(history[0]["status"], "failed");
     assert!(history[0]["action"].is_null());
     let page = fixture.ok(&[
-        "sim",
         "history",
+        "sim",
         "--all",
         "--before",
         &history[0]["id"].to_string(),
@@ -6908,8 +6908,8 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         "--",
         env!("CARGO_BIN_EXE_shoal"),
         "--json",
-        "sim",
         "history",
+        "sim",
         "--all",
     ]);
     assert_eq!(
@@ -6917,11 +6917,11 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         serde_json::json!([])
     );
     fixture.ok(&["rm", "third"]);
-    assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
+    assert_eq!(fixture.ok(&["history", "sim", "--all"]), history);
     fixture.daemon.child.kill().unwrap();
     fixture.daemon.child.wait().unwrap();
     fixture.restart();
-    assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
+    assert_eq!(fixture.ok(&["history", "sim", "--all"]), history);
     let devices: Value = serde_json::from_str(
         &fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
     )
@@ -6969,7 +6969,7 @@ fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
         "Verify clean system settings",
     ]);
     assert_ne!(first["udid"], second["udid"]);
-    let history = fixture.ok(&["sim", "history", "--all"]);
+    let history = fixture.ok(&["history", "sim", "--all"]);
     assert_eq!(history[0]["action"], "create");
     assert_eq!(history[1]["status"], "failed");
     assert!(
@@ -7004,7 +7004,7 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
         .spawn()
         .unwrap();
     wait_until("busy simulator history entry", || {
-        let entries = fixture.ok(&["sim", "history", "--all"]);
+        let entries = fixture.ok(&["history", "sim", "--all"]);
         entries.as_array().unwrap().len() == 1 && entries[0]["status"] == "busy"
     });
     fixture.ok(&[
@@ -7017,7 +7017,7 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
     ]);
     let output = waiting.wait_with_output().unwrap();
     assert!(output.status.success());
-    let entries = fixture.ok(&["sim", "history", "--all"]);
+    let entries = fixture.ok(&["history", "sim", "--all"]);
     assert_eq!(entries.as_array().unwrap().len(), 1);
     assert!(entries[0]["attempts"].as_u64().unwrap() >= 2);
     assert_eq!(entries[0]["status"], "acquired");
@@ -7069,7 +7069,7 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
     ]);
     assert_ne!(clean["udid"], phone["udid"]);
     assert_ne!(clean["udid"], tablet["udid"]);
-    let history = fixture.ok(&["sim", "history", "--all"]);
+    let history = fixture.ok(&["history", "sim", "--all"]);
     assert_eq!(history[0]["action"], "create_after_eviction");
     assert_eq!(history[0]["evicted"][0]["udid"], tablet["udid"]);
     assert_eq!(history[0]["evicted"][0]["installed_apps"], 0);
@@ -7098,7 +7098,7 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
             .contains("--clean requires --reason")
     );
     assert_eq!(
-        fixture.ok(&["sim", "history", "--all"])[0]["status"],
+        fixture.ok(&["history", "sim", "--all"])[0]["status"],
         "failed"
     );
     assert!(!fixture.root.path().join("sim-devices.json").exists());
@@ -7126,7 +7126,7 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
             .status
             .success()
     );
-    let entry = &fixture.ok(&["sim", "history", "--all"])[0];
+    let entry = &fixture.ok(&["history", "sim", "--all"])[0];
     assert_eq!(entry["status"], "failed");
     assert_eq!(entry["action"], "erase");
     assert_eq!(entry["erase_completed"], false);
@@ -7228,7 +7228,7 @@ fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership() 
             }
         );
         assert_eq!(
-            fixture.ok(&["sim", "history", "--all"])[0]["status"],
+            fixture.ok(&["history", "sim", "--all"])[0]["status"],
             "failed"
         );
         fixture.restart();
@@ -19468,7 +19468,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let history = fixture.ok(&["sim", "history", "agent"]);
+    let history = fixture.ok(&["history", "sim", "--workspace", "agent"]);
     assert_eq!(history[0]["status"], "acquired");
     assert_eq!(
         history

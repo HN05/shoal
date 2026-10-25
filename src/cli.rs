@@ -523,6 +523,13 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
+    /// Show configuration and available inventory for a kind.
+    Catalog { kind: CatalogKind },
+    /// Show recorded requests for a kind.
+    History {
+        #[command(subcommand)]
+        kind: HistoryKind,
+    },
     /// Inspect approval requests and choose or submit a decision.
     #[command(args_conflicts_with_subcommands = true)]
     Approvals {
@@ -530,11 +537,6 @@ pub enum Command {
         command: Option<ApprovalsCommand>,
         #[command(flatten)]
         args: ApprovalsArgs,
-    },
-    /// Show the simulator catalog and clean-device history.
-    Sim {
-        #[command(subcommand)]
-        command: SimCommand,
     },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
@@ -1838,15 +1840,23 @@ pub enum DaemonCommand {
     },
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum CatalogKind {
+    /// Device types, installed runtimes and machine profiles.
+    Sim,
+}
+
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
-pub enum SimCommand {
-    /// Show available device types, installed runtimes, and machine profiles.
-    Catalog,
+pub enum HistoryKind {
     /// Review clean-device requests, including failed and busy requests.
-    History {
-        #[command(flatten)]
-        scope: WorkspaceScope,
+    Sim {
+        /// Workspace to show; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
         #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=50))]
         limit: u32,
         /// Show entries older than this audit ID.

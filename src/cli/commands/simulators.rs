@@ -5,7 +5,7 @@ use serde_json::json;
 use super::acquisition::{Acquisition, obtain};
 use crate::{
     cli::{
-        SimCommand, WorkspaceScope,
+        WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
@@ -15,44 +15,42 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
-pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
-    match command {
-        SimCommand::Catalog => {
-            let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
-            ctx.show(&catalog, |catalog| {
-                outln!(
-                    "{}",
-                    serde_json::to_string_pretty(catalog).unwrap_or_default()
-                );
-            })?;
-            Ok(0)
-        }
-        SimCommand::History {
-            scope,
+pub(super) async fn catalog(ctx: &Context) -> Result<i32> {
+    let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
+    ctx.show(&catalog, |catalog| {
+        outln!(
+            "{}",
+            serde_json::to_string_pretty(catalog).unwrap_or_default()
+        );
+    })?;
+    Ok(0)
+}
+
+pub(super) async fn history(
+    ctx: &Context,
+    scope: WorkspaceScope,
+    limit: u32,
+    before: Option<i64>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace_filter(ctx, scope).await?;
+    let entries = request::<Vec<AuditEntry>>(
+        &ctx.paths,
+        Method::SimHistory {
+            workspace,
             limit,
             before,
-        } => {
-            let workspace = ui::select_workspace_filter(ctx, scope).await?;
-            let entries = request::<Vec<AuditEntry>>(
-                &ctx.paths,
-                Method::SimHistory {
-                    workspace,
-                    limit,
-                    before,
-                },
-            )
-            .await?;
-            ctx.show(&entries, |entries| {
-                for entry in entries {
-                    render_history_entry(entry);
-                }
-                if entries.is_empty() {
-                    outln!("No clean-device requests");
-                }
-            })?;
-            Ok(0)
+        },
+    )
+    .await?;
+    ctx.show(&entries, |entries| {
+        for entry in entries {
+            render_history_entry(entry);
         }
-    }
+        if entries.is_empty() {
+            outln!("No clean-device requests");
+        }
+    })?;
+    Ok(0)
 }
 
 /// Exit 2 means the simulator is busy or awaiting approval; a queued request

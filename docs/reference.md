@@ -3010,7 +3010,7 @@ device = "iPhone 17"
 ```
 
 Omitting `runtime` from a profile or `--runtime` with `--device` selects the latest
-installed, available iOS runtime compatible with the device. `shoal sim catalog`
+installed, available iOS runtime compatible with the device. `shoal catalog sim`
 lists installed device types and runtimes; nothing is downloaded.
 Repository config may set `[simulators] preferred = ["phone"]`;
 flags override it, and `allow_any = true` permits unconfigured `--device`
@@ -3037,7 +3037,7 @@ for retry. Only the default CoreSimulator device set and one daemon are covered.
 
 ```sh
 shoal acquire sim --clean --reason "Verify first-launch permission prompts"
-shoal sim history                  # --all, --limit 50, --before <id>
+shoal history sim                  # --workspace W or --all, --limit 50, --before <id>
 ```
 
 Normal handoff preserves device state. `--clean` returns a fresh or erased

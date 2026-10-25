@@ -49,7 +49,10 @@ const GROUPS: &[(&str, &[&str])] = &[
             "ready",
         ],
     ),
-    ("Shared resources", &["acquire", "release", "leases", "sim"]),
+    (
+        "Shared resources",
+        &["acquire", "release", "leases", "catalog", "history"],
+    ),
     ("Diagnostics and activity", &["alerts", "doctor"]),
     (
         "Configuration and installation",

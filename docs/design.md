@@ -1339,9 +1339,12 @@ Leases use top-level verbs that take the kind first: `acquire <kind>`,
 positional workspace. Like `unlink`, omitting the item or kind widens release
 to every lease of that kind or in the workspace; listings combine configuration
 or capacity with leases. Holds use the same verbs but keep a workspace
-rather than share capacity; releasing leases without a kind preserves holds. Simulator
-machine inventory and audit history live under `sim`. All-workspace overviews that need independent per-workspace
-reads use bounded concurrency, retain workspace order and report every failure.
+rather than share capacity; releasing leases without a kind preserves holds.
+`catalog <kind>` and `history <kind>` show what a kind offers and its audit
+trail, starting with simulator machine inventory and clean-device requests;
+there is no separate `sim` group. All-workspace overviews that need independent
+per-workspace reads use bounded concurrency, retain workspace order and report
+every failure.
 
 ## Removal and recovery
 

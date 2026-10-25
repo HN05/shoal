@@ -68,9 +68,9 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
-        ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
-        WorkspaceScope, agents, client,
+        AlertsCommand, ApprovalsCommand, CatalogKind, Cli, Command, ConfigCommand, ExportArgs,
+        ForgeCommand, HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand,
+        ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -676,7 +676,17 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Sim { command } => simulators::run(&ctx, command).await,
+        Command::Catalog { kind } => match kind {
+            CatalogKind::Sim => simulators::catalog(&ctx).await,
+        },
+        Command::History { kind } => match kind {
+            HistoryKind::Sim {
+                workspace,
+                all,
+                limit,
+                before,
+            } => simulators::history(&ctx, WorkspaceScope { workspace, all }, limit, before).await,
+        },
         Command::Doctor {
             scope,
             repair,
