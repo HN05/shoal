@@ -15093,6 +15093,30 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     assert_eq!(command("saved")["layer"], "saved_repository_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
     assert_eq!(command("shadowed")["layer"], "saved_repository_config");
+
+    let other = fixture.add("other-commands");
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    fs::write(
+        other_path.join(".shoal.toml"),
+        "[commands]\nother = ['other-worktree-only']\n",
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "run", "--workspace", "other-commands"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(listed.iter().any(|entry| entry["name"] == "other"));
+    assert!(!listed.iter().any(|entry| entry["name"] == "worktree"));
+    assert!(
+        !fixture
+            .run(&["run", "--workspace", "missing-workspace"])
+            .status
+            .success()
+    );
 }
 
 #[test]

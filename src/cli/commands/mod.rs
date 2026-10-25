@@ -292,7 +292,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             args,
         } => match name {
             Some(name) => agents::run_named(&ctx, &name, workspace, args).await,
-            None if args.is_empty() => configured::list(&ctx).await,
+            None if args.is_empty() => configured::list(&ctx, workspace).await,
             None => workspaces::exec(&ctx, workspace, args).await,
         },
         Command::Custom(words) => match configured::invocation(words)? {

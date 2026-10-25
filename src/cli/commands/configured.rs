@@ -44,9 +44,9 @@ enum BareName {
     BuiltIn,
 }
 
-pub(super) async fn list(ctx: &Context) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
-    let layers = current_layers(ctx).await?;
+    let layers = listing_layers(ctx, workspace).await?;
     let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
 
     let built_ins: BTreeSet<_> = crate::cli::Cli::command()
@@ -87,6 +87,16 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
+/// An explicit workspace takes precedence over the current directory.
+async fn listing_layers(ctx: &Context, workspace: Option<String>) -> Result<ConfigLayers> {
+    if workspace.is_some() {
+        let workspace =
+            ui::select_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await?;
+        return workspace_layers(ctx, workspace).await;
+    }
+    current_layers(ctx).await
+}
+
 /// The repository layers of the current workspace; none without a running
 /// daemon or a current workspace.
 async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
@@ -100,10 +110,14 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
     let Some(workspace) = workspace else {
         return Ok(ConfigLayers::default());
     };
+    workspace_layers(ctx, workspace.id.clone()).await
+}
+
+async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLayers> {
     Ok(*request::<Box<ConfigLayers>>(
         &ctx.paths,
         Method::LayeredConfig {
-            target: ConfigTarget::Workspace(workspace.id.clone()),
+            target: ConfigTarget::Workspace(workspace),
         },
     )
     .await?)
