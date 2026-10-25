@@ -391,9 +391,15 @@ pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Resul
             None => terminal::open_demo(&demo.launch).await,
         };
     };
-    let workspace = client::inspect(&ctx.paths, demo.workspace_id.clone())
-        .await?
-        .workspace;
+    // The worktree must still be the recorded one before anything runs there.
+    let workspace: Workspace = client::request(
+        &ctx.paths,
+        Method::VerifyWorkspace {
+            workspace: demo.workspace_id.clone(),
+            on_branch: false,
+        },
+    )
+    .await?;
     let status = tokio::process::Command::new(&open[0])
         .args(&open[1..])
         .current_dir(&workspace.path)
