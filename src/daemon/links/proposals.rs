@@ -224,7 +224,8 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the item and linking it, and two
         // decisions cannot both open it. The gate outlives the workspace.
-        let _gate = self.pr_gates.lock([&request.workspace_id]).await;
+        let changed = self.decided_workspaces(&request, &decision).await?;
+        let _gate = self.pr_gates.lock(changed).await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
         let (request, message) = if approve {
@@ -240,6 +241,22 @@ impl Manager {
             self.tell_workspace(&workspace.id, message).await;
         }
         Ok(request)
+    }
+
+    /// The workspaces whose proposals deciding `request` changes: its own,
+    /// and that of the proposal it duplicates, which takes its finding.
+    async fn decided_workspaces(
+        &self,
+        request: &ApprovalRequest,
+        decision: &ProposalDecision,
+    ) -> Result<Vec<String>> {
+        let mut ids = vec![request.workspace_id.clone()];
+        if let Some(Duplicate::Approval(number)) = &decision.duplicate_of
+            && let Some(original) = self.approval_request(*number).await?
+        {
+            ids.push(original.workspace_id);
+        }
+        Ok(ids)
     }
 
     /// The stored request the user chose, still undecided.
@@ -1058,6 +1075,73 @@ mod tests {
         assert!(
             format!("{error:#}").contains("changed while it waited"),
             "{error:#}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_duplicate_decision_also_holds_the_original_proposals_gate() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let mut requests = Vec::new();
+        for name in ["original", "duplicate"] {
+            let workspace = manager
+                .create_workspace(&repo.id, name.into(), None, None, None)
+                .await
+                .unwrap();
+            let specification = Specification::Issue(IssueSpecification {
+                issue: NewIssue {
+                    title: "Flaky".into(),
+                    ..NewIssue::default()
+                },
+                repository: None,
+                link: false,
+                branch: name.into(),
+                commit: "head".into(),
+                agent: None,
+                duplicates: Vec::new(),
+                follow_up: None,
+            });
+            let request = proposal(
+                &workspace,
+                Target::IssueOpen,
+                proposals::ISSUE,
+                specification,
+            );
+            let (request, _) = manager
+                .store_proposal(request, proposals::propose_issue)
+                .await
+                .unwrap();
+            requests.push(request);
+        }
+        let [original, duplicate] = &requests[..] else {
+            unreachable!()
+        };
+        let plain = ProposalDecision::default();
+        let as_duplicate = ProposalDecision {
+            duplicate_of: Some(Duplicate::Approval(original.id)),
+            ..ProposalDecision::default()
+        };
+        let own = vec![duplicate.workspace_id.clone()];
+        assert_eq!(
+            manager.decided_workspaces(duplicate, &plain).await.unwrap(),
+            own
+        );
+        // The finding changes the original proposal, which its own decision
+        // or another duplicate may change at the same time.
+        let both = vec![
+            duplicate.workspace_id.clone(),
+            original.workspace_id.clone(),
+        ];
+        assert_eq!(
+            manager
+                .decided_workspaces(duplicate, &as_duplicate)
+                .await
+                .unwrap(),
+            both
         );
     }
     #[tokio::test]
