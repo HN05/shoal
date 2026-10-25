@@ -7,7 +7,9 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{Host, Place, PlaceName, Placement};
+use super::{DemoWorker, Host, Place, PlaceName, Placement};
+
+mod demo;
 use crate::cli::{
     client,
     commands::{
@@ -117,6 +119,28 @@ impl Host for Herdr {
 
     fn closes_with(&self, paths: &crate::paths::Paths, workspace: &str) -> bool {
         closes_with(paths, workspace)
+    }
+
+    fn start_demo<'a>(
+        &'a self,
+        ctx: &'a Context,
+        workspace: &'a Workspace,
+        name: &'a str,
+        worker: &'a DemoWorker<'a>,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { demo::start(ctx, workspace, name, worker).await.map(Some) })
+    }
+
+    fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(demo::open(place))
+    }
+
+    fn demo_screen<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<String>> {
+        Box::pin(demo::screen(place))
+    }
+
+    fn send_demo_keys<'a>(&'a self, place: &'a str, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(demo::send(place, keys))
     }
 }
 
