@@ -6,7 +6,11 @@ use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet, ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf, time::Duration,
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    os::unix::ffi::OsStrExt,
+    path::PathBuf,
+    time::Duration,
 };
 
 /// Deeper chains are not plausible process trees; stop rather than loop.
@@ -38,6 +42,8 @@ impl Eq for Identity {}
 struct Lineage {
     identity: Identity,
     parent: Option<u64>,
+    /// Launchd adopted it when its parent exited, rather than starting it.
+    adopted: bool,
 }
 
 pub fn capture(pid: u32) -> Result<Option<Identity>> {
@@ -132,55 +138,193 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
+    let listing = same_user_parents().await?;
+    let marker = format!("{marker}=").into_bytes();
+    tokio::task::spawn_blocking(move || {
+        let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+        let mut inventory = Inventory {
+            listed: listing.iter().map(|(pid, _)| *pid).collect(),
+            observed: HashMap::new(),
+        };
+        for (pid, parent) in listing {
+            if let Some(process) = observe(pid, parent, &marker, &ids, settle_deadline)? {
+                inventory.observed.insert(pid, process);
+            }
+        }
+        inventory.attribute()
+    })
+    .await
+    .context("process inventory worker failed")?
+}
+
+/// Same-user processes other than init and the daemon, with their parent PIDs.
+async fn same_user_parents() -> Result<Vec<(u32, u32)>> {
     let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
+    command
+        .args(["-ax", "-o", "pid=,uid=,ppid="])
+        .env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
         .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
         .output()
         .await
         .context("process inventory failed")?;
-    let marker = format!("{marker}=").into_bytes();
-    tokio::task::spawn_blocking(move || {
+    let mut inventory = Vec::new();
+    for line in output.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        ensure!(fields.len() == 3, "invalid process inventory");
+        let pid: u32 = fields[0].parse()?;
+        // System daemons may run as negative UIDs such as nobody (-2);
+        // they are never ours.
+        let Ok(uid) = fields[1].parse::<u32>() else {
+            continue;
+        };
+        if uid == unsafe { libc::geteuid() } && pid > 1 && pid != std::process::id() {
+            inventory.push((pid, fields[2].parse()?));
+        }
+    }
+    Ok(inventory)
+}
+
+/// One live process and what its own environment says about its owner.
+struct Observed {
+    identity: Identity,
+    parent: u32,
+    adopted: bool,
+    evidence: Evidence,
+}
+
+enum Evidence {
+    Marked(String),
+    Unmarked,
+    Unreadable,
+    /// Settled empty, which a platform binary's hidden environment also reads as.
+    Hidden,
+}
+
+/// Read `pid`'s environment for `marker`, unless it has exited.
+fn observe(
+    pid: u32,
+    parent: u32,
+    marker: &[u8],
+    ids: &HashSet<String>,
+    deadline: std::time::Instant,
+) -> Result<Option<Observed>> {
+    let Some(lineage) = lineage(pid)? else {
+        return Ok(None);
+    };
+    let evidence = match visibility(&lineage.identity, deadline)? {
+        Visibility::Environment(environment)
+            if environment.is_empty() && hides_environment(pid) =>
+        {
+            Evidence::Hidden
+        }
+        Visibility::Environment(environment) => environment
+            .iter()
+            .find_map(|entry| entry.strip_prefix(marker))
+            .and_then(|id| std::str::from_utf8(id).ok())
+            .filter(|id| ids.contains(*id))
+            .map_or(Evidence::Unmarked, |id| Evidence::Marked(id.into())),
+        Visibility::Unreadable => Evidence::Unreadable,
+        Visibility::Gone => return Ok(None),
+    };
+    Ok(Some(Observed {
+        adopted: lineage.adopted,
+        identity: lineage.identity,
+        parent,
+        evidence,
+    }))
+}
+
+#[derive(Clone)]
+enum Attribution {
+    Owned(String),
+    Foreign,
+    /// Its owner cannot be told; the identity heads the processes it covers.
+    Unknown(Identity),
+}
+
+/// The inventoried PIDs and the processes among them still alive to observe.
+struct Inventory {
+    listed: HashSet<u32>,
+    observed: HashMap<u32, Observed>,
+}
+
+impl Inventory {
+    /// Attribute every observed process and collect the scan, checking that
+    /// owned processes still live.
+    fn attribute(&self) -> Result<Scan> {
+        let mut attributions = HashMap::new();
         let mut scan = Scan::default();
-        let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        for line in output.lines() {
-            let fields: Vec<_> = line.split_whitespace().collect();
-            ensure!(fields.len() == 2, "invalid process inventory");
-            let pid: u32 = fields[0].parse()?;
-            // System daemons may run as negative UIDs such as nobody (-2);
-            // they are never ours.
-            let Ok(uid) = fields[1].parse::<u32>() else {
-                continue;
-            };
-            if uid != unsafe { libc::geteuid() } || pid <= 1 || pid == std::process::id() {
-                continue;
-            }
-            let Some(identity) = capture(pid)? else {
-                continue;
-            };
-            match visibility(&identity, settle_deadline)? {
-                Visibility::Environment(environment) => {
-                    if let Some(id) = environment
-                        .iter()
-                        .find_map(|entry| entry.strip_prefix(marker.as_slice()))
-                        .and_then(|id| std::str::from_utf8(id).ok())
-                        .filter(|id| ids.contains(*id))
-                        && alive(&identity)?
-                    {
-                        scan.processes.push(OwnedProcess {
-                            execution_id: id.into(),
-                            identity,
-                        });
-                    }
+        for (pid, process) in &self.observed {
+            match self.resolve(*pid, &mut attributions) {
+                Attribution::Owned(execution_id) if alive(&process.identity)? => {
+                    scan.processes.push(OwnedProcess {
+                        execution_id,
+                        identity: process.identity.clone(),
+                    });
                 }
-                Visibility::Unreadable => scan.unreadable.push(identity),
-                Visibility::Gone => {}
+                Attribution::Unknown(head) if !scan.unreadable.contains(&head) => {
+                    scan.unreadable.push(head);
+                }
+                _ => {}
             }
         }
         Ok(scan)
-    })
-    .await
-    .context("process inventory worker failed")?
+    }
+
+    /// `pid`'s owner by its own environment, or for a hidden one by the
+    /// nearest ancestor whose environment tells, as its environment was
+    /// inherited from there. A hidden process launchd adopted has no ancestor
+    /// left to tell.
+    fn resolve(&self, pid: u32, attributions: &mut HashMap<u32, Attribution>) -> Attribution {
+        let mut hidden: Vec<&Observed> = Vec::new();
+        let mut current = pid;
+        let attribution = loop {
+            if let Some(attribution) = attributions.get(&current) {
+                break attribution.clone();
+            }
+            let Some(process) = self.observed.get(&current) else {
+                break self.unobserved_parent(current, hidden.last().copied());
+            };
+            match &process.evidence {
+                Evidence::Marked(id) => break Attribution::Owned(id.clone()),
+                Evidence::Unmarked => break Attribution::Foreign,
+                Evidence::Unreadable => break Attribution::Unknown(process.identity.clone()),
+                Evidence::Hidden => hidden.push(process),
+            }
+            if process.parent <= 1 {
+                break if process.adopted {
+                    Attribution::Unknown(process.identity.clone())
+                } else {
+                    Attribution::Foreign
+                };
+            }
+            if hidden.len() > MAX_ANCESTRY {
+                break Attribution::Unknown(process.identity.clone());
+            }
+            current = process.parent;
+        };
+        for process in hidden.into_iter().chain(self.observed.get(&current)) {
+            attributions.insert(process.identity.pid, attribution.clone());
+        }
+        attribution
+    }
+
+    /// A parent left out of the inventory belongs to another user or is the
+    /// daemon, neither of which can carry a marker it did not start with. A
+    /// listed one that cannot be observed has exited, or exits after the
+    /// inventory, and leaves `child` without an ancestor to tell.
+    fn unobserved_parent(&self, parent: u32, child: Option<&Observed>) -> Attribution {
+        let exists = parent == std::process::id()
+            || unsafe { libc::kill(parent as i32, 0) } == 0
+            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+        match child {
+            Some(child) if self.listed.contains(&parent) || !exists => {
+                Attribution::Unknown(child.identity.clone())
+            }
+            _ => Attribution::Foreign,
+        }
+    }
 }
 
 enum Visibility {
@@ -262,6 +406,25 @@ fn image(_pid: u32) -> Result<Image> {
     Ok(Image::Settled)
 }
 
+/// macOS 27 hides the environments of its own platform binaries, such as
+/// shells, from other processes; one that cannot be checked counts as hidden.
+#[cfg(target_os = "macos")]
+fn hides_environment(pid: u32) -> bool {
+    const CS_OPS_STATUS: u32 = 0;
+    const CS_PLATFORM_BINARY: u32 = 0x0400_0000;
+    unsafe extern "C" {
+        fn csops(pid: libc::pid_t, ops: u32, status: *mut u32, size: usize) -> libc::c_int;
+    }
+    let mut status = 0_u32;
+    let result = unsafe { csops(pid as i32, CS_OPS_STATUS, &mut status, size_of::<u32>()) };
+    result != 0 || status & CS_PLATFORM_BINARY != 0
+}
+
+#[cfg(target_os = "linux")]
+fn hides_environment(_pid: u32) -> bool {
+    false
+}
+
 #[cfg(target_os = "macos")]
 fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
     let Some(info) = bsd_info(pid)? else {
@@ -279,7 +442,33 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
             unique: Some(info.unique.unique),
         },
         parent: Some(info.unique.parent_unique),
+        adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique),
     }))
+}
+
+/// Exec resets an adopted process's parent unique ID to launchd's, but not
+/// the version of the PID it was forked from.
+#[cfg(target_os = "macos")]
+fn started_by_launchd(process: &UniqueIdentifiers) -> bool {
+    // Launchd is the first process the kernel starts.
+    const LAUNCHD_UNIQUE: u64 = 1;
+    static LAUNCHD_VERSION: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    let version = LAUNCHD_VERSION.get_or_init(|| {
+        let mut launchd = std::mem::MaybeUninit::<UniqueIdentifiers>::zeroed();
+        let size = std::mem::size_of::<UniqueIdentifiers>();
+        let result = unsafe {
+            libc::proc_pidinfo(
+                1,
+                PROC_PIDUNIQIDENTIFIERINFO,
+                0,
+                launchd.as_mut_ptr().cast(),
+                size as i32,
+            )
+        };
+        (result as usize == size).then(|| unsafe { launchd.assume_init() }.id_version as u32)
+    });
+    process.parent_unique == LAUNCHD_UNIQUE
+        && version.is_none_or(|version| version == process.original_parent_version)
 }
 
 #[cfg(target_os = "macos")]
@@ -287,8 +476,9 @@ fn parent(pid: u32) -> Option<u32> {
     bsd_info(pid).ok().flatten().map(|info| info.bsd.pbi_ppid)
 }
 
-/// `proc_bsdinfowithuniqid` from XNU's private `proc_info` flavors, which
-/// libc does not bind: one read gives the birth and unique IDs together.
+/// `proc_bsdinfowithuniqid` and `proc_uniqidentifierinfo` from XNU's private
+/// `proc_info` flavors, which libc does not bind: one read gives the birth and
+/// unique IDs together.
 #[cfg(target_os = "macos")]
 #[repr(C)]
 struct BsdInfo {
@@ -308,6 +498,8 @@ struct UniqueIdentifiers {
     reserved: [u64; 2],
 }
 
+#[cfg(target_os = "macos")]
+const PROC_PIDUNIQIDENTIFIERINFO: i32 = 17;
 #[cfg(target_os = "macos")]
 const PROC_PIDT_BSDINFOWITHUNIQID: i32 = 18;
 
@@ -420,6 +612,9 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
             unique: None,
         },
         parent: None,
+        // Linux shows every environment, so nothing depends on how a process
+        // came to init.
+        adopted: false,
     }))
 }
 
@@ -685,6 +880,7 @@ mod tests {
                 unique: Some(unique),
             },
             parent: Some(parent),
+            adopted: false,
         };
         // 10 has exited; 11 descends from it and 13 from 11, while 12 is
         // another branch whose parent 9 is no descendant of 10.
@@ -743,6 +939,59 @@ mod tests {
         Ok(())
     }
 
+    fn observed(pid: u32, parent: u32, adopted: bool, evidence: Evidence) -> (u32, Observed) {
+        let identity = Identity {
+            pid,
+            birth: pid.to_string(),
+            unique: None,
+        };
+        (
+            pid,
+            Observed {
+                identity,
+                parent,
+                adopted,
+                evidence,
+            },
+        )
+    }
+
+    #[test]
+    fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells() {
+        use Evidence::{Hidden, Marked, Unmarked};
+        let inventory = Inventory {
+            listed: HashSet::from([10, 11, 12, 20, 21, 30, 31, 32, 40, 41]),
+            observed: HashMap::from([
+                // A shell and its job under a marked agent.
+                observed(10, 9, false, Marked("execution".into())),
+                observed(11, 10, false, Hidden),
+                observed(12, 11, false, Hidden),
+                // A shell under an unmarked terminal.
+                observed(20, 1, false, Unmarked),
+                observed(21, 20, false, Hidden),
+                // A job launchd adopted after its shell exited, and its child.
+                observed(31, 1, true, Hidden),
+                observed(32, 31, false, Hidden),
+                // A job launchd started.
+                observed(30, 1, false, Hidden),
+                // A shell whose listed parent exited before it was observed.
+                observed(41, 40, false, Hidden),
+            ]),
+        };
+        let mut attributions = HashMap::new();
+        let mut resolve = |pid| match inventory.resolve(pid, &mut attributions) {
+            Attribution::Owned(id) => format!("owned by {id}"),
+            Attribution::Foreign => "foreign".into(),
+            Attribution::Unknown(head) => format!("unknown under {}", head.pid),
+        };
+        assert_eq!(resolve(12), "owned by execution");
+        assert_eq!(resolve(11), "owned by execution");
+        assert_eq!(resolve(21), "foreign");
+        assert_eq!(resolve(32), "unknown under 31");
+        assert_eq!(resolve(30), "foreign");
+        assert_eq!(resolve(41), "unknown under 41");
+    }
+
     #[cfg(target_os = "macos")]
     fn executable(pid: u32) -> Option<PathBuf> {
         let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
@@ -750,6 +999,28 @@ mod tests {
             unsafe { libc::proc_pidpath(pid as i32, path.as_mut_ptr().cast(), path.len() as u32) };
         path.truncate(usize::try_from(len).ok()?);
         Some(PathBuf::from(OsStr::from_bytes(&path)))
+    }
+
+    /// A shell's background job that launchd adopted, on a macOS that hides
+    /// a platform binary's environment.
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> {
+        let output = tokio::process::Command::new("sh")
+            .args(["-c", "sleep 30 </dev/null >/dev/null 2>&1 & echo $!"])
+            .output()
+            .await?;
+        let pid = std::str::from_utf8(&output.stdout)?.trim().parse()?;
+        let job = capture(pid)?.context("background job")?;
+        let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+        let hidden = matches!(
+            visibility(&job, deadline)?,
+            Visibility::Environment(environment) if environment.is_empty()
+        ) && hides_environment(pid);
+        let scan = scan(HashSet::from(["unrelated-execution".into()])).await;
+        signal(&job, libc::SIGKILL)?;
+        assert_eq!(scan?.unreadable.contains(&job), hidden);
+        Ok(())
     }
 
     #[test]

@@ -530,8 +530,9 @@ whose ancestor carries scope for the same state directory, so removing the token
 from a descendant's environment does not lift them. A tracked execution's wrapper
 records its own process identity in the state directory before it spawns the
 command, until the command exits, and the command's identity while it lives,
-because macOS hides other processes' environments; an exported environment is
-recognised only where an ancestor's environment is readable. Unscoped callers may export a ready, verified
+because macOS hides the environments of its own platform binaries, such as
+shells; an exported environment is recognised only where an ancestor's
+environment is readable. Unscoped callers may export a ready, verified
 workspace's identity, current port variables and a fresh token through `work env`.
 Exported tokens persist across restarts until explicitly revoked or the workspace
 is removed; they register no execution and do not prevent cleanup.
@@ -1602,7 +1603,10 @@ exit first stops its verified processes outside its process group, so background
 shell commands do not outlive it. A reported command
 exit clears its execution and permits setup readiness only when marker, child and
 group evidence has no survivors and environment visibility is complete; a settled
-empty environment is readable evidence. The reporting wrapper may remain alive
+empty environment is readable evidence, except a macOS platform binary's, which
+reads that way when hidden. A hidden environment takes the attribution of the
+nearest ancestor whose environment tells; one launchd adopted after its parent
+exited has none and counts as unreadable. The reporting wrapper may remain alive
 awaiting acknowledgement. Recovery polls
 incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved

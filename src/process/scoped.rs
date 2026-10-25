@@ -1,7 +1,8 @@
 //! Processes running with workspace scope, recorded in the state directory by
 //! their execution wrapper. Parent links and birth identities stay readable
-//! where other processes' environments do not (macOS 27 hides them), so a
-//! descendant that cleared its scope token still finds a recorded ancestor.
+//! where other processes' environments do not (macOS 27 hides those of its
+//! own platform binaries, such as shells), so a descendant that cleared its
+//! scope token still finds a recorded ancestor.
 use super::identity::{self, Identity};
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use anyhow::{Context, Result};

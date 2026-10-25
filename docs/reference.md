@@ -2948,7 +2948,10 @@ A reported command exit retains an unknown execution and prevents setup readines
 while child/group survivors or live unreadable environments remain. Exiting
 processes do not count, and a process still publishing its environment after exec
 is read again for up to two seconds; a settled empty environment is readable and
-does not identify an execution. Setup verification failures retain the workspace
+does not identify an execution. macOS hides the environments of its own
+binaries, such as shells, which then count as their nearest ancestor with a
+readable environment does, or as unreadable when launchd adopted them after
+their parent exited. Setup verification failures retain the workspace
 and report the command's exit status, blocking PIDs or inspection error, and
 recovery commands. `doctor` identifies unreadable PIDs without exposing their
 arguments or environments. After checking
