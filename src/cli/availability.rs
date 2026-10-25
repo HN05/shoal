@@ -54,7 +54,7 @@ impl Need {
             ["work", "restore"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["work", "base", "clear"] => Self::Base,
-            ["work", "base", ..] | ["work", "inspect"] => Self::Any,
+            ["work", "base", ..] => Self::Any,
             ["work", "env"] => Self::Ready,
             ["release", "hold"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,

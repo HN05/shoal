@@ -1426,8 +1426,6 @@ pub enum WorkCommand {
         #[arg(long)]
         revoke: Option<String>,
     },
-    /// Show detailed workspace and execution records.
-    Inspect { workspace: Option<String> },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.

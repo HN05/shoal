@@ -11,7 +11,6 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
         WorkCommand::Env { workspace, revoke } => {
             workspaces::environment(ctx, workspace, revoke).await
         }
-        WorkCommand::Inspect { workspace } => workspaces::inspect(ctx, workspace).await,
         WorkCommand::Adopt {
             path,
             repository,

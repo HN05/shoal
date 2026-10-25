@@ -1311,14 +1311,14 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     }));
     fixture.ok(&["link", "8", "assigned", "--workspace", "topic"]);
     fixture.ok(&["link", "#9", "assigned", "--workspace", "topic"]);
-    let links = &fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
     let marks = fixture.ok(&["ready", "#9", "--workspace", "topic"]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
     fixture.ok(&["unlink", "8", "assigned", "--workspace", "topic"]);
-    let links = &fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert!(links["issue"].is_null(), "{links}");
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
@@ -1329,7 +1329,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     fixture.requests();
     fixture.ok(&["unlink", "10", "related", "--workspace", "topic"]);
     assert!(fixture.requests().is_empty());
-    let links = &fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"];
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
 }
 
@@ -1448,7 +1448,7 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["linked"], forge == Forge::GitHub);
         // Linked or not, the issue is recorded as opened by the workspace.
         assert_eq!(
-            fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["opened"],
+            fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
             json!([{"kind": "issue", "url": url, "title": "Flaky"}])
         );
         let sent: Vec<_> = fixture
@@ -1467,7 +1467,7 @@ fn issues_open_with_labels_and_link_on_request() {
                         json!({"title": "Flaky", "body": "", "labels": ["bug"]})
                     )]
                 );
-                let links = &fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"];
+                let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
                 assert_eq!(links["issue"], url);
                 assert_eq!(links["issue_title"], "Flaky");
             }
@@ -1541,12 +1541,12 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             .find(|request| request[0] == "POST repos/team/project/pulls")
             .unwrap();
         assert_eq!(created[1], expected);
-        let path = fixture.ok(&["work", "inspect", "topic"])["workspace"]["path"].clone();
+        let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
         assert_eq!(
             git(&remote, &["rev-parse", "refs/heads/topic"]),
             git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
         );
-        let links = fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["prs"].clone();
+        let links = fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"].clone();
         assert_eq!(links, json!([url]));
 
         // An open PR for the branch is linked instead of opening another.
@@ -1604,7 +1604,7 @@ fn pr_open_pushes_to_a_fork_and_opens_the_pr_from_it() {
         .find(|request| request[0] == "POST repos/team/project/pulls")
         .unwrap();
     assert_eq!(created[1]["head"], "someone:topic");
-    let path = fixture.ok(&["work", "inspect", "topic"])["workspace"]["path"].clone();
+    let path = fixture.ok(&["status", "topic"])["workspace"]["path"].clone();
     assert_eq!(
         git(&fork, &["rev-parse", "refs/heads/topic"]),
         git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
@@ -1621,7 +1621,7 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
         &fixture.repo,
         &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
     );
-    let workspace = fixture.ok(&["work", "inspect", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap());
     let refused = |message: &str| {
         let output = fixture.run(&["pr", "open", "--workspace", "topic"]);
@@ -2529,7 +2529,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 
     // A worktree replaced while the proposal waits is refused before
     // anything is sent, and the proposal stays.
-    let workspace = fixture.ok(&["work", "inspect", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
@@ -2553,7 +2553,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     );
     assert_eq!(fixture.ok(&["approvals"]), json!([]));
     assert_eq!(
-        fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Flaky test"}])
     );
     assert_eq!(
@@ -2697,7 +2697,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
         "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
         "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
     }));
-    let workspace = fixture.ok(&["work", "inspect", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = || git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
 
@@ -2788,7 +2788,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
             {"title": "Fix", "body": "", "head": "topic", "base": "main", "draft": false}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
         json!([url])
     );
     assert!(messages(&fixture)[0].ends_with(&format!("{url} was opened and linked.")));
@@ -2821,7 +2821,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
         ]);
     }
     config(&["config", "remote.pushDefault", "alice"]);
-    let workspace = fixture.ok(&["work", "inspect", "topic"])["workspace"].clone();
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
     let mut opened = pull(9, "open", "Fix", &[]);
@@ -3058,7 +3058,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         [json!(["PUT repos/team/project/issues/9/labels", {"labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["prs"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["prs"],
         json!([url])
     );
 }
@@ -3181,7 +3181,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
             {"title": "Wrong finding", "body": "", "labels": ["bug"]}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Wrong finding"}])
     );
     assert_eq!(
@@ -3247,7 +3247,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         [json!(["POST repos/them/tool/issues", {"title": "Crash", "body": "", "labels": []}])]
     );
     assert_eq!(
-        fixture.ok(&["work", "inspect", "topic"])["workspace"]["links"]["opened"],
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Crash"}])
     );
 }

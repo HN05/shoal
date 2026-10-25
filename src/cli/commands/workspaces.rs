@@ -1861,18 +1861,6 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
     }
 }
 
-pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let inspection = client::inspect(&ctx.paths, workspace).await?;
-    ctx.show(&inspection, |inspection| {
-        outln!(
-            "{}",
-            serde_json::to_string_pretty(inspection).unwrap_or_default()
-        );
-    })?;
-    Ok(0)
-}
-
 pub(super) async fn remove(ctx: &Context, workspace: Option<String>, yes: bool) -> Result<i32> {
     if let Some(selector) = &workspace
         && let Some(code) = super::agent_queue::remove(ctx, selector).await?

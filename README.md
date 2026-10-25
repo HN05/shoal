@@ -152,7 +152,6 @@ shoal chat my-project          # Discuss the repository with an agent in its che
 shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
-shoal work inspect fix-login       # Detailed workspace and execution records
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal messages send "Stop the dev server" --workspace fix-login  # Message the workspace's agents

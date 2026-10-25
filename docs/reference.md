@@ -403,7 +403,6 @@ shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status pr 12                       # Workspaces that link PR 12
 shoal status resource devices            # Workspaces that hold a devices lease
-shoal work inspect fix-login
 shoal stop fix-login                     # Stop agents and commands for shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
@@ -430,7 +429,7 @@ state unless ready; for a ready workspace it is, in order of precedence,
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
 the diff, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
-opens Codex/T3 apps, or runs a shell command, Ctrl-O inspects, Ctrl-S stops,
+opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal work --print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: your own workspaces first, then each running [chat](#chats)
@@ -447,7 +446,7 @@ pending approval requests that no coordinating agent decides, including issue
 agent needs input, failed
 workspaces, and [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item. There Enter answers a question, approves or denies a request after
-asking which, refusing one that replaced the request listed, attaches to the agent that needs input, inspects a failed
+asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
@@ -505,8 +504,7 @@ names the first condition that keeps the workspace from automatic cleanup, holds
 open questions, a pending PR proposal, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
-in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
-execution records. Workspace records from `work --json` and `inspect --json` include
+in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
@@ -1166,7 +1164,7 @@ shoal work base set feature-a --workspace feature-b
 The base must be another workspace of the same repository and must not create
 a cycle; setting the current base, or clearing none, fails. Scoped callers may set their own workspace's base. Removing a base
 workspace moves the workspaces stacked on it to its own base workspace, or to
-none. `status` shows both directions; `work --json` and `inspect` give
+none. `status` shows both directions; `work --json` and `status --json` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
 Once every watched PR of a base workspace has merged, with its HEAD among the
@@ -1209,7 +1207,7 @@ completion and PR cleanup included, with `cleanup_reason` `children`, until the
 child is removed; each child completes on its own with `shoal done`. Removing a
 parent moves its children to its own parent, or to none, and records a
 `parent_changed` event. `work` lists children indented below their parent;
-`status` shows both directions, and `work --json` and `inspect` give
+`status` shows both directions, and `work --json` and `status --json` give
 `parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
 
 `--agent` starts an agent of its own in the ready child, prompted with the
@@ -1937,8 +1935,7 @@ Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.
 Release remains available while the workspace record exists. Holds belong to the
 user and to apps hosting external sessions: scoped callers can list their own
-workspace's holds but not acquire or release them. `status`, `work inspect`,
-and `work --json` show holds on the workspace record. `rm` lists holders before
+workspace's holds but not acquire or release them. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges

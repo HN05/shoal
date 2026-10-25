@@ -35,7 +35,7 @@ enum Key {
     Delete,
     Execute,
     Add,
-    Inspect,
+    Status,
     Stop,
     Attach,
     Diff,
@@ -49,7 +49,7 @@ impl Key {
         Self::Diff,
         Self::Add,
         Self::Execute,
-        Self::Inspect,
+        Self::Status,
         Self::Stop,
         Self::Delete,
     ];
@@ -61,7 +61,7 @@ impl Key {
             Self::Delete => "ctrl-d",
             Self::Execute => "ctrl-e",
             Self::Add => "ctrl-a",
-            Self::Inspect => "ctrl-o",
+            Self::Status => "ctrl-o",
             Self::Stop => "ctrl-s",
             Self::Attach => "ctrl-t",
             Self::Diff => "ctrl-f",
@@ -75,7 +75,7 @@ impl Key {
             Self::Delete => "delete",
             Self::Execute => "execute",
             Self::Add => "add",
-            Self::Inspect => "inspect",
+            Self::Status => "status",
             Self::Stop => "stop",
             Self::Attach => "attach",
             Self::Diff => "diff",
@@ -95,7 +95,7 @@ impl Key {
     fn allowed_scoped(self) -> bool {
         matches!(
             self,
-            Self::Enter | Self::Execute | Self::Inspect | Self::Diff
+            Self::Enter | Self::Execute | Self::Status | Self::Diff
         )
     }
 }
@@ -122,7 +122,7 @@ impl View {
     fn binds(self, key: Key) -> bool {
         match self {
             Self::Inbox => !matches!(key, Key::Execute | Key::Stop | Key::Delete),
-            Self::Notifications => matches!(key, Key::Enter | Key::Inspect | Key::Add),
+            Self::Notifications => matches!(key, Key::Enter | Key::Status | Key::Add),
             Self::Work => true,
         }
     }
@@ -548,7 +548,7 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
 }
 
 /// Answer a question, decide an approval as it was listed, attach to an
-/// agent that needs input, inspect a failure, view ready work, or enter a
+/// agent that needs input, show a failure, view ready work, or enter a
 /// workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
@@ -568,15 +568,9 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             workspace: Some(workspace),
             session: None,
         },
-        Row::Failed(workspace) => Command::Work {
-            command: Some(crate::cli::WorkCommand::Inspect {
-                workspace: Some(workspace),
-            }),
-            queue: false,
-            chats: false,
-            repository: None,
-            status: Vec::new(),
-            print: false,
+        Row::Failed(workspace) => Command::Status {
+            workspace: Some(workspace),
+            item: None,
         },
         Row::Ready {
             workspace,
@@ -637,13 +631,9 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             workspace,
             confirmation: ConfirmationArgs::default(),
         },
-        Key::Inspect => Command::Work {
-            command: Some(crate::cli::WorkCommand::Inspect { workspace }),
-            queue: false,
-            chats: false,
-            repository: None,
-            status: Vec::new(),
-            print: false,
+        Key::Status => Command::Status {
+            workspace,
+            item: None,
         },
         Key::Stop => Command::Stop {
             scope: WorkspaceScope {
