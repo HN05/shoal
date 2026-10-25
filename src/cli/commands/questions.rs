@@ -148,17 +148,7 @@ fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace }).await?;
     if ctx.interactive() && !listing.questions.is_empty() {
-        let entries = listing
-            .questions
-            .iter()
-            .map(|question| (question.id.to_string(), summary(question)))
-            .collect();
-        let id: i64 = ui::pick(ctx, "Questions> ", entries)?.parse()?;
-        let question = listing
-            .questions
-            .into_iter()
-            .find(|question| question.id == id)
-            .context("picker returned an unknown question")?;
+        let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;
     }
     ctx.show(&listing, |listing| {
@@ -173,6 +163,18 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
         }
     })?;
     Ok(0)
+}
+
+fn pick_question(ctx: &Context, questions: Vec<Question>) -> Result<Question> {
+    let entries = questions
+        .iter()
+        .map(|question| (question.id.to_string(), summary(question)))
+        .collect();
+    let id: i64 = ui::pick(ctx, "Questions> ", entries)?.parse()?;
+    questions
+        .into_iter()
+        .find(|question| question.id == id)
+        .context("picker returned an unknown question")
 }
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
