@@ -19799,7 +19799,17 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
             format!("{name}-agent"),
         ));
     }
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["resume", "--all"])
+            .env("HERDR_ENV", "1")
+            .env("HERDR_WORKSPACE_ID", "w1")
+            .env("HERDR_TAB_ID", "w1:t1")
+            .env("HERDR_PANE_ID", "w1:p1")
+            .env("SHOAL_OUTPUT", "text"),
+        "",
+    );
     assert!(output.status.success(), "{output:?} {transcript}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("Resuming 2 agents in Herdr tabs"),
@@ -19817,6 +19827,13 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     assert_eq!(calls[0][..4], ["pane", "process-info", "--pane", "w1:p5"]);
     assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
     resumed(&calls[1], &expected[0]);
+    // The reused pane's shell gets the caller's output setting for the agent,
+    // and the resume there shows text to the person at that pane.
+    assert!(
+        calls[1][3].starts_with("env SHOAL_OUTPUT=text "),
+        "{calls:?}"
+    );
+    assert!(calls[1][3].contains(" --text resume "), "{calls:?}");
     assert_eq!(calls[2][..4], ["pane", "process-info", "--pane", "w1:p6"]);
     let create = &calls[3];
     assert_eq!(create[..2], ["tab", "create"]);

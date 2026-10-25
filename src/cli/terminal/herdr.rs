@@ -231,7 +231,11 @@ async fn run_at_prompt(ctx: &Context, pane: &str, args: &[OsString]) -> Result<b
     if !at_prompt(pane).await {
         return Ok(false);
     }
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
+    // The pane's shell keeps its own environment, so the caller's output
+    // setting goes along for the agent this starts.
+    let (name, value) = env::output_setting();
+    let mut argv = vec!["env".into(), format!("{name}={value}").into()];
+    argv.extend(internal::shoal_argv(&ctx.paths)?);
     argv.extend_from_slice(args);
     run_in_pane(pane, &argv).await?;
     Ok(true)
