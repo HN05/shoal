@@ -27,9 +27,10 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     };
     let notifications = request::<Vec<Notification>>(&ctx.paths, method).await?;
     ctx.show(&notifications, |notifications| {
-        let palette = Palette::stdout(ctx.json);
-        for notification in notifications {
-            outln!("{}", render(notification, palette));
+        let now = crate::time::unix_seconds() as i64;
+        let rows = notifications.iter().map(|n| cells(n, now)).collect();
+        for line in ui::aligned(rows, Palette::stdout(ctx.json)) {
+            outln!("{line}");
         }
         if notifications.is_empty() {
             outln!("No {}notifications", if all { "" } else { "new " });
@@ -127,7 +128,10 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
         let notification = Notification::try_from(response.body)?;
         delivered = notification.id;
         ctx.show(&notification, |notification| {
-            outln!("{}", render(notification, palette));
+            outln!(
+                "{}",
+                render(notification, palette, crate::time::unix_seconds() as i64)
+            );
         })?;
         if raise {
             crate::stdout::write(|stdout| {
@@ -153,19 +157,23 @@ fn terminal_notification(notification: &Notification) -> String {
     format!("\x1b]9;{text}\x07")
 }
 
-fn render(notification: &Notification, palette: Palette) -> String {
-    format!(
-        "{}  {}  {}",
-        palette.paint(
-            Style::Muted,
-            crate::time::local_minutes(notification.created_at)
+fn render(notification: &Notification, palette: Palette, now: i64) -> String {
+    ui::aligned(vec![cells(notification, now)], palette).concat()
+}
+
+/// When, read at `now`, the workspace, and the message.
+fn cells(notification: &Notification, now: i64) -> [ui::Cell; 3] {
+    [
+        (
+            crate::time::local_ago(notification.created_at, now),
+            Some(Style::Muted),
         ),
-        palette.paint(
-            Style::Heading,
-            notification.workspace.as_deref().unwrap_or("-")
+        (
+            notification.workspace.clone().unwrap_or_else(|| "-".into()),
+            Some(Style::Heading),
         ),
-        notification.message
-    )
+        (notification.message.clone(), None),
+    ]
 }
 
 #[cfg(test)]

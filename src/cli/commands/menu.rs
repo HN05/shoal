@@ -457,12 +457,13 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
 /// One aligned row per notification: when, its workspace, and the message,
 /// dimmed once read and cut to fit the picker.
 fn notification_labels(notifications: &[Notification]) -> Vec<String> {
+    let now = crate::time::unix_seconds() as i64;
     let cells = notifications
         .iter()
         .map(|notification| {
             [
                 (
-                    crate::time::local_minutes(notification.created_at),
+                    crate::time::local_ago(notification.created_at, now),
                     Some(Style::Muted),
                 ),
                 (

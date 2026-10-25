@@ -543,7 +543,9 @@ shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
 withdraws review marks. Creating a question uses `questions ask`; notifications use `alerts`, with
-`alerts send` to send one.
+`alerts send` to send one. Notification rows, in `alerts` and the picker, show
+the time for today's and otherwise how long ago they came in whole days, weeks,
+months or years, such as `1 day ago` or `2 weeks ago`.
 Approval snapshots carry their stable request key through the CLI so reused
 numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
