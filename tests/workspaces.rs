@@ -445,6 +445,8 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     let diff = fixture.run(&["diff", "feature-topic"]);
     assert!(diff.status.success());
     assert!(String::from_utf8_lossy(&diff.stdout).contains("changed after rename"));
+    // The new name selects the workspace and its completion.
+    fixture.ok(&["undone", "feature-topic"]);
     fixture.ok(&["done", "feature-topic"]);
     for field in [
         "id",
