@@ -536,11 +536,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             cleanup,
             undo,
+            keep_demos,
         } => {
             if undo {
                 workspaces::undone(&ctx, workspace).await
             } else {
-                workspaces::done(&ctx, workspace, cleanup).await
+                workspaces::done(&ctx, workspace, cleanup, keep_demos).await
             }
         }
         Command::Alerts {

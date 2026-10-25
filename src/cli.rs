@@ -368,6 +368,9 @@ pub enum Command {
         /// Withdraw a recorded completion without keeping the workspace.
         #[arg(long)]
         undo: bool,
+        /// Leave the workspace's demos running until cleanup removes it.
+        #[arg(long, conflicts_with = "undo")]
+        keep_demos: bool,
     },
     /// List what needs you: questions, approvals, agents needing input, failures and ready work.
     Inbox {
@@ -2338,16 +2341,27 @@ mod tests {
                 cleanup,
                 workspace,
                 undo,
+                keep_demos,
             } = command
             else {
                 panic!("wrong command");
             };
             assert_eq!(cleanup, expected);
-            assert!(!undo);
+            assert!(!undo && !keep_demos);
             assert!(workspace.is_none());
         }
         assert!(Cli::try_parse_from(["shoal", "done", "--keep"]).is_err());
         assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--cleanup"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--keep-demos"]).is_err());
+        assert!(matches!(
+            Cli::try_parse_from(["shoal", "done", "--keep-demos"])
+                .unwrap()
+                .command,
+            Some(Command::Done {
+                keep_demos: true,
+                ..
+            })
+        ));
         assert!(matches!(
             Cli::try_parse_from(["shoal", "done", "--undo"])
                 .unwrap()
@@ -2360,7 +2374,7 @@ mod tests {
         }
         assert!(
             matches!(Cli::try_parse_from(["shoal", "done", "review", "--cleanup"]).unwrap().command,
-            Some(Command::Done { workspace: Some(name), cleanup: true, undo: false }) if name == "review")
+            Some(Command::Done { workspace: Some(name), cleanup: true, undo: false, .. }) if name == "review")
         );
     }
 

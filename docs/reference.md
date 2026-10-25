@@ -858,8 +858,8 @@ Herdr tab inside Herdr, otherwise a detached zmx session
 named `<workspace>-<name>`, and without zmx in the background, writing a log in
 the state directory, where it takes no keys. A command that exits runs again; an exit
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30
-seconds. Stopping the demo, `shoal stop` and removing the workspace end it, and
-its session with it; a running demo keeps the workspace from idle cleanup as
+seconds. Stopping the demo, `shoal stop`, `shoal done` without `--keep-demos`
+and removing the workspace end it, and its session with it; a running demo keeps the workspace from idle cleanup as
 other commands do.
 
 ### Chats
@@ -1954,7 +1954,8 @@ user. It replaces a recorded completion at another HEAD, with another cleanup
 choice or a cleanup error, and fails when it would change nothing: the same
 completion with no open question to close and no `post_done_cmd` to rerun.
 `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
-false. The setting follows normal repository and worktree configuration
+false. It then stops the workspace's [demos](#demos) unless `--keep-demos` leaves
+them running until cleanup. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is

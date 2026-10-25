@@ -23394,7 +23394,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
 
 #[test]
 fn demos_restart_until_stopped_and_show_their_screen() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
     let workspace = fixture.add("tried");
     let runs = Path::new(workspace["path"].as_str().unwrap()).join("runs");
     // Without zmx or Herdr on PATH the demo runs in the background with a log.
@@ -23436,6 +23436,9 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     let text = screen["screen"].as_str().unwrap();
     assert!(text.contains("failing"), "{text}");
     assert!(text.contains("demo exited with status 3"), "{text}");
+    fixture.ok(&["done", "tried", "--keep-demos"]);
+    let listing = demo(&["ls", "--workspace", "tried"]);
+    assert_eq!(listing["running"].as_array().unwrap().len(), 1);
 
     demo(&["stop", "demo", "--workspace", "tried"]);
     wait_until("the demo to stop", || {
@@ -23457,7 +23460,8 @@ fn demos_restart_until_stopped_and_show_their_screen() {
 
 #[test]
 fn demo_presets_reserve_a_port_and_lease_the_simulator_until_stopped() {
-    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    let config = format!("{SIM_CONFIG}[done]\ncleanup = false\n");
+    let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("tried");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let bin = fixture.root.path().join("bin");
@@ -23480,27 +23484,43 @@ fn demo_presets_reserve_a_port_and_lease_the_simulator_until_stopped() {
     let started = |name: &str, preset: &str, variable: &str| {
         let script = format!("echo ${variable} > {name}.env; exec sleep 600");
         demo(&[
-            "start", name, "--preset", preset, "--workspace", "tried", "--", "sh", "-c", &script,
+            "start",
+            name,
+            "--preset",
+            preset,
+            "--workspace",
+            "tried",
+            "--",
+            "sh",
+            "-c",
+            &script,
         ])
     };
 
     let web = started("site", "web", "PORT");
     let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
     let leases = fixture.ok(&["leases", "port", "--workspace", "tried"]);
-    assert!(leases.to_string().contains(&format!("\"port\":{port}")), "{leases}");
+    assert!(
+        leases.to_string().contains(&format!("\"port\":{port}")),
+        "{leases}"
+    );
     wait_until("the web demo to receive its port", || {
         fs::read_to_string(path.join("site.env")).is_ok_and(|text| text.trim() == port)
     });
 
     let app = started("app", "simulator", "SHOAL_SIM_UDID");
-    let udid = app["environment"]["SHOAL_SIM_UDID"].as_str().unwrap().to_owned();
+    let udid = app["environment"]["SHOAL_SIM_UDID"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     assert_eq!(app["leased_simulator"], true);
     assert_eq!(fixture.ok(&["sim", "tried"])["simulators"][0]["udid"], udid);
     wait_until("the simulator demo to receive its device", || {
         fs::read_to_string(path.join("app.env")).is_ok_and(|text| text.trim() == udid)
     });
 
-    demo(&["stop", "--workspace", "tried"]);
+    // Completion stops every demo of the workspace.
+    fixture.ok(&["done", "tried"]);
     wait_until("the demos to stop", || {
         demo(&["ls", "--workspace", "tried"])["running"]
             .as_array()
