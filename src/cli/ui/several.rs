@@ -10,6 +10,10 @@ use crate::cli::{
     output::{Palette, Style},
 };
 
+/// Tab selects an entry and moves on to the next, which the bottom-up list
+/// shows above it; Shift-Tab moves back.
+const NEXT: &str = "tab:toggle+up,btab:toggle+down";
+
 /// Ctrl-A selects every listed entry, or clears the selection once all of
 /// them are selected.
 const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -lt \"$FZF_MATCH_COUNT\" ] && echo select-all || echo deselect-all";
@@ -20,6 +24,9 @@ const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -lt \"$FZF_MA
 pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
     let extra = [
         "--multi".to_owned(),
+        "--marker=✓".to_owned(),
+        "--bind".to_owned(),
+        NEXT.to_owned(),
         "--bind".to_owned(),
         SELECT_ALL.to_owned(),
         "--header".to_owned(),
