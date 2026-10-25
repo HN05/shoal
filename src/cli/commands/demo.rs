@@ -20,6 +20,8 @@ use crate::{
     protocol::{ConfigTarget, Method},
 };
 
+mod presets;
+
 /// The name an ad hoc demo takes when the agent gives none.
 const DEFAULT_NAME: &str = "demo";
 /// How often a start checks that its worker recorded the demo.
@@ -40,7 +42,7 @@ pub(super) async fn run(
             preset,
             open,
             ports,
-            queue: _,
+            queue,
             workspace,
             command,
         }) => {
@@ -49,7 +51,7 @@ pub(super) async fn run(
                 open,
                 ports,
             };
-            start(ctx, workspace, name, overrides, command).await
+            start(ctx, workspace, name, overrides, queue, command).await
         }
         Some(DemoCommand::Stop { name, workspace }) => stop(ctx, workspace, name).await,
         Some(DemoCommand::Ls { workspace }) => list(ctx, workspace).await,
@@ -86,6 +88,7 @@ async fn start(
     workspace: Option<String>,
     name: Option<String>,
     overrides: Overrides,
+    queue: bool,
     command: Vec<OsString>,
 ) -> Result<i32> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -95,7 +98,11 @@ async fn start(
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
     // A demo of the same name gives way, so the new one takes its record.
     stop_named(ctx, &workspace, Some(chosen.name.clone())).await?;
-    let launch = place(ctx, &settings, &workspace, &chosen).await?;
+    let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
+        Ok(provided) => provided,
+        Err(declined) => return Ok(declined),
+    };
+    let launch = place(ctx, &settings, &workspace, &chosen, provided).await?;
     let running = await_record(ctx, &workspace, &launch).await?;
     let opening = format!("shoal demo {} --workspace {}", chosen.name, workspace.name);
     if crate::env::is_scoped() {
@@ -192,15 +199,16 @@ async fn place(
     settings: &crate::config::Effective,
     workspace: &Workspace,
     chosen: &Chosen,
+    provided: presets::Provided,
 ) -> Result<Launch> {
     let launch = |host: &str, place: &str| Launch {
         name: chosen.name.clone(),
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
-        environment: BTreeMap::new(),
+        environment: provided.environment.clone(),
         host: host.to_owned(),
         place: place.to_owned(),
-        leased_simulator: false,
+        leased_simulator: provided.leased_simulator,
     };
     let worker = |host: &str, place: &str| {
         let launch = serde_json::to_string(&launch(host, place))?;
@@ -374,11 +382,14 @@ fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
     ui::pick_choice(ctx, "Open demo> ", &choices).cloned()
 }
 
-/// Open a running demo in this terminal: its `open` command, or else the
-/// host's view of it.
+/// Open a running demo in this terminal: its `open` command, its preset's
+/// way, or else the host's view of it.
 pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
     let Some(open) = &demo.launch.open else {
-        return terminal::open_demo(&demo.launch).await;
+        return match demo.launch.preset {
+            Some(preset) => presets::open(preset, &demo.launch),
+            None => terminal::open_demo(&demo.launch).await,
+        };
     };
     let workspace = client::inspect(&ctx.paths, demo.workspace_id.clone())
         .await?
@@ -464,6 +475,22 @@ async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Run
         },
     )
     .await
+}
+
+/// The demo worker: run the demo until it stops, then give up the simulator
+/// it leased once no other simulator demo of the workspace uses it.
+pub(super) async fn worker(
+    ctx: &Context,
+    workspace: String,
+    launch: Launch,
+    command: Vec<OsString>,
+) -> Result<i32> {
+    let leased = launch.leased_simulator;
+    let code = crate::execution::run_demo(&ctx.paths, workspace.clone(), launch, command).await?;
+    if leased {
+        presets::release_simulator(ctx, &workspace).await?;
+    }
+    Ok(code)
 }
 
 /// The last `count` lines of `screen` with trailing blank lines dropped.

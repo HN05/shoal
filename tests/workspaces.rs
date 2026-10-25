@@ -23454,3 +23454,60 @@ fn demos_restart_until_stopped_and_show_their_screen() {
             .success()
     );
 }
+
+#[test]
+fn demo_presets_reserve_a_port_and_lease_the_simulator_until_stopped() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    let workspace = fixture.add("tried");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    let bin = fixture.root.path().join("bin");
+    let demo = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .env("PATH", fixture.restricted_path(&bin))
+            .arg("--json")
+            .arg("demo")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let started = |name: &str, preset: &str, variable: &str| {
+        let script = format!("echo ${variable} > {name}.env; exec sleep 600");
+        demo(&[
+            "start", name, "--preset", preset, "--workspace", "tried", "--", "sh", "-c", &script,
+        ])
+    };
+
+    let web = started("site", "web", "PORT");
+    let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
+    let leases = fixture.ok(&["leases", "port", "--workspace", "tried"]);
+    assert!(leases.to_string().contains(&format!("\"port\":{port}")), "{leases}");
+    wait_until("the web demo to receive its port", || {
+        fs::read_to_string(path.join("site.env")).is_ok_and(|text| text.trim() == port)
+    });
+
+    let app = started("app", "simulator", "SHOAL_SIM_UDID");
+    let udid = app["environment"]["SHOAL_SIM_UDID"].as_str().unwrap().to_owned();
+    assert_eq!(app["leased_simulator"], true);
+    assert_eq!(fixture.ok(&["sim", "tried"])["simulators"][0]["udid"], udid);
+    wait_until("the simulator demo to receive its device", || {
+        fs::read_to_string(path.join("app.env")).is_ok_and(|text| text.trim() == udid)
+    });
+
+    demo(&["stop", "--workspace", "tried"]);
+    wait_until("the demos to stop", || {
+        demo(&["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
+    wait_until("the demo's simulator lease to end", || {
+        fixture.ok(&["sim", "tried"])["simulators"][0]["workspace_id"].is_null()
+    });
+}

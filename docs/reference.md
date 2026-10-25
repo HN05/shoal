@@ -818,15 +818,28 @@ stay out of sight. A repository names its demos in TOML:
 [demos.tui]
 cmd = ["cargo", "run", "--", "inbox"]  # Run in the workspace, restarted when it exits
 open = ["scripts/open-demo.sh"]        # Optional: what `shoal demo tui` runs instead
+
+[demos.web]
+preset = "web"                         # How the demo reaches you; see below
+cmd = ["npm", "run", "dev"]
 ```
 
 Each `[demos.NAME]` resolves per repository as one unit, like a named port. Names
-follow port names, except the `shoal demo` subcommands.
+follow port names, except the `shoal demo` subcommands. `ports` names
+[reservations](#port-reservations) made before the demo starts, taking another
+free port when a configured one is in use. A `preset` says how the demo reaches
+you; `ports` and `open` replace its parts:
 
-`shoal demo start [NAME] [--workspace W] [--open COMMAND] [-- COMMAND...]` starts
+| Preset | Sets up |
+|---|---|
+| `web` | Reserves a port named after the demo, or the first of `ports`, and passes it as `PORT`. Opening prints `http://localhost:<port>`, and over SSH the `ssh -L` command that forwards it to your machine. |
+| `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. A lease the demo took ends with the workspace's last simulator demo. |
+
+`shoal demo start [NAME] [--workspace W] [--preset P] [--port NAME]... [--open COMMAND] [-- COMMAND...]` starts
 the configured demo `NAME`, or the only one configured. A command after `--`
 replaces the configured one, or defines a demo of that name, `demo` by default;
-`--open` replaces `open` with a shell command. Starting a running name replaces
+`--preset` and `--port` replace the configured ones, and `--open` replaces `open`
+with a shell command. Starting a running name replaces
 it. A workspace can run several demos. The start returns once the demo runs,
 printing how to open it, and a workspace process also notifies you.
 
