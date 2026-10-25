@@ -97,6 +97,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             workspace: "first".into(),
             execution_id: "execution".into(),
             started_at: 0,
+            has_run: true,
             launch,
         }],
     };

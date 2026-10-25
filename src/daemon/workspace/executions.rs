@@ -529,6 +529,7 @@ impl Manager {
                     updated == 1,
                     "execution already registered or no longer exists"
                 );
+                super::demos::mark_run(&tx, &id)?;
                 // A restored agent takes over the slot its restore kept.
                 tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [&id])?;
                 tx.commit()?;

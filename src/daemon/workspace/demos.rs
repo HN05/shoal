@@ -130,7 +130,7 @@ pub(super) fn record(
 
 fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
     let mut statement = db.prepare(
-        "SELECT d.workspace_id,w.name,d.execution_id,d.started_at,d.record
+        "SELECT d.workspace_id,w.name,d.execution_id,d.started_at,d.record,d.has_run
          FROM demos d JOIN workspaces w ON w.id=d.workspace_id
          WHERE ?1 IS NULL OR d.workspace_id=?1 ORDER BY w.name,d.name",
     )?;
@@ -141,19 +141,31 @@ fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
             row.get::<_, String>(2)?,
             row.get::<_, i64>(3)?,
             row.get::<_, String>(4)?,
+            row.get::<_, bool>(5)?,
         ))
     })?;
     rows.map(|row| {
-        let (workspace_id, workspace, execution_id, started_at, record) = row?;
+        let (workspace_id, workspace, execution_id, started_at, record, has_run) = row?;
         Ok(Running {
             workspace_id,
             workspace,
             execution_id,
             started_at: started_at as u64,
+            has_run,
             launch: serde_json::from_str(&record).context("invalid demo record")?,
         })
     })
     .collect()
+}
+
+/// Note in the transaction registering an execution's child that its demo,
+/// if it runs one, has started its command.
+pub(super) fn mark_run(tx: &Transaction<'_>, execution: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE demos SET has_run=1 WHERE execution_id=?1",
+        [execution],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

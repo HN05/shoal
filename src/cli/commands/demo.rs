@@ -122,6 +122,7 @@ async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
+    ensure_runnable(&workspace, &chosen.command)?;
     replace(ctx, &workspace, &chosen.name).await?;
     let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
         Ok(provided) => provided,
@@ -258,26 +259,36 @@ async fn place(
 /// Wait until the worker has recorded `launch`, which shows its command runs.
 async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
     let deadline = tokio::time::Instant::now() + START_LIMIT;
+    let mut recorded_before = false;
     loop {
         let recorded = running(ctx, Some(workspace))
             .await?
             .into_iter()
             .find(|demo| demo.launch.id == launch.id);
-        if let Some(demo) = recorded {
-            return Ok(demo);
+        match recorded {
+            Some(demo) if demo.has_run => return Ok(demo),
+            Some(_) => recorded_before = true,
+            // The record went with an execution whose command never ran.
+            None if recorded_before => return Err(not_started(launch).await),
+            None => {}
         }
         if tokio::time::Instant::now() >= deadline {
-            let screen = terminal::demo_screen(launch).await.unwrap_or_default();
-            bail!(
-                "demo {} did not start{}",
-                launch.name,
-                last_lines(&screen, 20)
-                    .map(|lines| format!(":\n{lines}"))
-                    .unwrap_or_default()
-            );
+            return Err(not_started(launch).await);
         }
         tokio::time::sleep(START_POLL).await;
     }
+}
+
+/// Why the demo did not start, from the end of what its place shows.
+async fn not_started(launch: &Launch) -> anyhow::Error {
+    let screen = terminal::demo_screen(launch).await.unwrap_or_default();
+    anyhow::anyhow!(
+        "demo {} did not start{}",
+        launch.name,
+        last_lines(&screen, 20)
+            .map(|lines| format!(":\n{lines}"))
+            .unwrap_or_default()
+    )
 }
 
 async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) -> Result<i32> {
@@ -294,6 +305,25 @@ async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) ->
         json!({"stopping": true, "name": name}),
     )?;
     Ok(0)
+}
+
+/// Refuse a command whose executable is missing before anything starts, as
+/// its demo would end before its record says it ran.
+fn ensure_runnable(workspace: &Workspace, command: &[OsString]) -> Result<()> {
+    let program = command.first().context("a demo needs a command")?;
+    let path = std::path::Path::new(program);
+    let found = if path.is_relative() && path.components().count() > 1 {
+        crate::fsutil::is_executable(&workspace.path.join(path)).unwrap_or(false)
+    } else {
+        let search = std::env::var_os("PATH").unwrap_or_default();
+        crate::cli::agents::program_available(&program.to_string_lossy(), &search)
+    };
+    ensure!(
+        found,
+        "cannot start the demo: {} is not an executable in the workspace or on PATH",
+        program.to_string_lossy()
+    );
+    Ok(())
 }
 
 /// Stop a running demo `name` and wait for it to end, so the new one neither

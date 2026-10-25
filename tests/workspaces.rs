@@ -23693,4 +23693,26 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     );
     fixture.ok(&["rm", "other", "--yes"]);
     assert!(!log.exists());
+
+    // A command that cannot run never reports a started demo.
+    let missing = fixture.run(&[
+        "demo",
+        "start",
+        "--workspace",
+        "tried",
+        "--",
+        "/nonexistent/program",
+    ]);
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("not an executable"),
+        "{}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+    assert!(
+        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }

@@ -65,6 +65,8 @@ pub struct Running {
     pub execution_id: String,
     /// Unix seconds.
     pub started_at: u64,
+    /// The demo's command has started; a start reports the demo only then.
+    pub has_run: bool,
     #[serde(flatten)]
     pub launch: Launch,
 }

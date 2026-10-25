@@ -414,6 +414,7 @@ const DEMOS: &str = "CREATE TABLE demos (
     name TEXT NOT NULL,
     started_at INTEGER NOT NULL,
     record TEXT NOT NULL,
+    has_run INTEGER NOT NULL DEFAULT 0 CHECK(has_run IN (0,1)),
     UNIQUE(workspace_id,name)
 );";
 
