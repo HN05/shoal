@@ -1653,6 +1653,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         );
     }
     for words in [
+        vec!["work", "inspect", "fi"],
         vec!["link", "pr", "42", "assigned", "--workspace", "fi"],
         vec!["unlink", "pr", "assigned", "--workspace", "fi"],
     ] {

@@ -41,6 +41,8 @@ struct Typed {
     /// `--all` is already on the line.
     all: bool,
     custom: Option<String>,
+    /// The selected command also governs inherited global workspace options.
+    need: Option<Need>,
     settings: OnceLock<Settings>,
 }
 
@@ -93,7 +95,9 @@ pub fn command() -> Command {
             .flatten()
             .cloned();
         let mut leaf = &matches;
+        let mut path = Vec::new();
         while let Some((name, child)) = leaf.subcommand() {
+            path.push(name);
             if child
                 .try_get_many::<OsString>("")
                 .ok()
@@ -104,6 +108,7 @@ pub fn command() -> Command {
             }
             leaf = child;
         }
+        typed.need = Need::of(&path);
         typed.workspace = value(leaf, "workspace").or_else(|| {
             leaf.try_get_many::<OsString>("")
                 .ok()
@@ -170,7 +175,9 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
         [.., parent, _] => parent.as_str(),
         _ => "",
     };
-    let need = Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>());
+    let need = typed
+        .need
+        .unwrap_or_else(|| Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>()));
     // A workspace argument beside `--all` offers it first among the names,
     // so the flag itself is not listed again after them.
     let offer_all = ["workspace", "all"]
