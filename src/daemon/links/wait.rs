@@ -203,14 +203,19 @@ impl Manager {
     /// What the workspace's agent has not received: its messages and the
     /// updates queued on its cursor, without waiting or polling the forge.
     /// Delivery replaces a running watch, which would otherwise deliver the
-    /// same updates again.
+    /// same updates again. Cleanup and item changes hold `pr_gate` across
+    /// forge requests and workspace removals, longer than an agent waits for
+    /// its hook, so while one runs the updates wait for a later delivery.
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.agent_messages(&workspace.id).await?;
         // The messages share the response with the updates.
         let reserved = serde_json::to_vec(&messages)?.len();
-        let updates = self.agent_queued_updates(workspace, reserved).await?;
+        let updates = match self.pr_gate.try_lock() {
+            Ok(_gate) => self.gated_agent_updates(workspace, reserved).await?,
+            Err(_) => Vec::new(),
+        };
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
@@ -231,6 +236,15 @@ impl Manager {
         reserved: usize,
     ) -> Result<Vec<Update>> {
         let _gate = self.pr_gate.lock().await;
+        self.gated_agent_updates(workspace, reserved).await
+    }
+
+    /// [`Self::agent_queued_updates`] for a caller already holding `pr_gate`.
+    async fn gated_agent_updates(
+        &self,
+        workspace: Workspace,
+        reserved: usize,
+    ) -> Result<Vec<Update>> {
         let id = workspace.id.clone();
         let mut batch = own_batch(&id, self.queued_updates(workspace).await?);
         batch.extend(self.delegated_pending(&id, None).await?);
@@ -791,7 +805,9 @@ impl Manager {
         deliveries: Vec<String>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        let _guard = self.pr_gate.lock().await;
+        // Without `pr_gate`: an agent's hook acknowledges within its timeout.
+        // One transaction removes exactly the acknowledged deliveries, so
+        // whatever a poll or a split queues meanwhile stays pending.
         let waits = self.item_waits.clone();
         let agents = self.tracked_agents().await;
         self.store
@@ -1551,6 +1567,47 @@ mod tests {
             .unwrap();
         let after = manager.agent_updates(&workspace.id).await.unwrap();
         assert!(after.updates.is_empty() && after.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hook_delivery_does_not_wait_for_the_pr_gate() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "gated".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        manager
+            .queue_background_updates(
+                &workspace.id,
+                vec![("pr".into(), snapshot("first"))],
+                crate::time::unix_seconds(),
+            )
+            .await
+            .unwrap();
+        manager
+            .send_agent_message(&workspace.id, "Rebase onto main".into())
+            .await
+            .unwrap();
+        let queued = manager.agent_updates(&workspace.id).await.unwrap();
+        let delivery = queued.updates[0].delivery.clone();
+        // Cleanup holds the gate across forge requests and removals.
+        let gate = manager.pr_gate.lock().await;
+        let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+        assert!(delivered.updates.is_empty());
+        assert_eq!(delivered.messages[0].message, "Rebase onto main");
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![delivery])
+            .await
+            .unwrap();
+        drop(gate);
+        let after = manager.agent_updates(&workspace.id).await.unwrap();
+        assert!(after.updates.is_empty());
     }
 
     #[tokio::test]

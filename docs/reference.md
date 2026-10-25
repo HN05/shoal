@@ -2599,7 +2599,8 @@ printed it.
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
 events, so a working agent receives new messages, and the activity on its linked
 issues and PRs that the daemon has queued for the next watch, as additional
-context after its next tool call or prompt. Delivering through the hook replaces a running watch in
+context after its next tool call or prompt. Activity queued while cleanup or
+another item change runs comes with a later delivery. Delivering through the hook replaces a running watch in
 the workspace, which ends with `superseded: true`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
 turn it waits up to a week for the next message or item activity, prints it and
