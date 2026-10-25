@@ -3330,6 +3330,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "topic",
         "--",
         shoal,
+        "repo",
         "api",
         "repos/{owner}/{repo}",
         "--input",
