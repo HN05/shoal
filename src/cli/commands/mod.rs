@@ -505,9 +505,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => questions::withdraw(&ctx, workspace, id).await,
         Command::Questions {
             command: None,
-            workspace,
-        } => questions::list(&ctx, workspace).await,
-        Command::Answer { id, answer } => questions::answer(&ctx, id, answer).await,
+            args,
+        } => questions::run(&ctx, args).await,
         Command::Messages { workspace, hook } => {
             if hook {
                 messages::hook(&ctx).await

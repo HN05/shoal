@@ -179,7 +179,7 @@ as a message naming the question, like any other message. Continue with other
 work meanwhile, or end your turn to wait. When you cannot continue without the
 answer, add `--wait`: it blocks without a time limit and prints the answer, so run
 it in the background when your tool calls time out. Asking the identical question
-again waits for the same one. Only the user answers, with `shoal answer`;
+again waits for the same one. Only the user answers, with `shoal questions`;
 `shoal --json questions` lists your workspace's open questions. When you no
 longer need an answer, withdraw the question with
 `shoal --json questions withdraw <number>`. An open question keeps your
@@ -268,7 +268,7 @@ It starts from the agent queue, detached, as the child's own agent, and its
 issue and PR activity goes to it rather than to you. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user. Answer its questions
-with `shoal answer <number> <answer>`, or ask the user yourself with
+with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal ask` when the decision is theirs. Send it instructions with
 `shoal message --workspace <child> "<text>"`, or `--body-file <path>` for
 several lines. When a stopped child agent should not come back, such as one

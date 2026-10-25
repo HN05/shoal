@@ -185,7 +185,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 ("id", _, "approvals") | ("id", "approvals", "withdraw") => {
                     Some(Target::ApprovalRequests)
                 }
-                ("id", _, "answer") | ("id", "questions", "withdraw") => Some(Target::Questions),
+                ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),

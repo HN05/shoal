@@ -552,9 +552,12 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
 /// workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
-        Row::Question { id, .. } => Command::Answer {
-            id: Some(id),
-            answer: None,
+        Row::Question { id, .. } => Command::Questions {
+            command: None,
+            args: crate::cli::QuestionsArgs {
+                id: Some(id),
+                ..Default::default()
+            },
         },
         Row::Approval { id, created_at, .. } => {
             return Ok(Choice::Done(

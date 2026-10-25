@@ -1221,7 +1221,7 @@ the workspace's agent exited or was stopped. Without a coordinator, or when its 
 the user receives them as before. A workspace without an agent of its own is its
 coordinator's own work, so what a process does there reaches the user. A
 coordinator answers a question asked below it with
-`shoal answer <number> <answer>`, or passes it up: an agent with its own
+`shoal questions <number> --answer <answer>`, or passes it up: an agent with its own
 `shoal ask`, a chat by asking the user in the chat.
 
 ### Repositories
@@ -2620,23 +2620,29 @@ messages and send messages only to the agents of the [workspaces below their own
 
 ```sh
 shoal ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
-shoal questions [workspace]          # Open questions
+shoal questions [--workspace W]      # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
-shoal answer [number] [answer]       # Answer text or a choice number; omitted, pick and type
+shoal questions <number>             # Inspect and choose an answer
+shoal questions <number> --answer <answer> # Answer text or a choice number
 ```
 
 `shoal ask` records a question for the user from a workspace's agents: the
 decision, the recommended answer, an optional reason and optional choices, each
 one line with the same limits as `notify`. It raises a `question_asked`
-notification and prints the question number. `shoal answer` records the answer,
+notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,
 resolving a choice number to that choice, and queues it for the workspace's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent; it confirms with the question text, since a
 stale notification may name a reused number. An answer may span lines, up to 4096 bytes.
 Delivering the answer deletes the question. A new question takes the smallest
-number no stored question holds, across workspaces; without a number,
-`answer` picks among open questions, showing each one's workspace, recommendation
-and choices, and refuses the answer if another question took the number meanwhile.
+number no stored question holds, across workspaces. On a terminal,
+`shoal questions` opens a picker; selecting a question or naming its number opens
+a prompt with its text and number on the input line, alongside the recommendation
+and numbered choices. Enter accepts the recommendation shown in brackets; type a choice number or
+answer text for another answer, `/withdraw` to withdraw
+the question, or `/cancel` to leave. The answer is refused if another question
+took the number meanwhile. With JSON or without a terminal, listing and inspection
+print records without prompting.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
 also delivers its message; it survives daemon restarts, waiting up to two minutes
 for a daemon that went away to return and know the caller's scope again, or 10

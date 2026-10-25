@@ -381,19 +381,13 @@ pub enum Command {
         #[arg(long, hide = true, requires = "workspace")]
         resume: Option<i64>,
     },
-    /// List open questions from workspace agents.
+    /// Review and answer questions from workspace agents.
     #[command(args_conflicts_with_subcommands = true)]
     Questions {
         #[command(subcommand)]
         command: Option<QuestionsCommand>,
-        workspace: Option<String>,
-    },
-    /// Answer a question from a workspace's agents.
-    Answer {
-        /// Question number; omit to choose an open question.
-        id: Option<i64>,
-        /// The answer, or a choice number; omit to be prompted.
-        answer: Option<String>,
+        #[command(flatten)]
+        args: QuestionsArgs,
     },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
@@ -1205,6 +1199,21 @@ pub enum ApprovalsCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+}
+
+#[derive(Debug, Default, Args)]
+pub struct QuestionsArgs {
+    /// Question number; omit to choose an open question.
+    pub id: Option<i64>,
+    /// List questions from this workspace.
+    #[arg(long, conflicts_with = "id")]
+    pub workspace: Option<String>,
+    /// Send an answer or choice number.
+    #[arg(long, requires = "id", conflicts_with = "withdraw")]
+    pub answer: Option<String>,
+    /// Withdraw a question no longer needed.
+    #[arg(long, requires = "id")]
+    pub withdraw: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -2312,5 +2321,37 @@ mod tests {
     fn update_is_administrative() {
         let update = Cli::try_parse_from(["shoal", "update"]).unwrap();
         assert!(update.command.unwrap().is_administrative());
+    }
+
+    #[test]
+    fn numbered_requests_keep_inspection_and_actions_distinct() {
+        for args in [
+            vec!["shoal", "approvals", "42"],
+            vec!["shoal", "approvals", "42", "--approve"],
+            vec!["shoal", "questions", "17"],
+            vec!["shoal", "questions", "17", "--answer", "SQLite"],
+        ] {
+            assert!(Cli::try_parse_from(args).is_ok());
+        }
+        for args in [
+            vec!["shoal", "approvals", "42", "--approve", "--deny"],
+            vec![
+                "shoal",
+                "questions",
+                "17",
+                "--answer",
+                "SQLite",
+                "--withdraw",
+            ],
+        ] {
+            assert!(Cli::try_parse_from(&args).is_err(), "{args:?}");
+        }
+        // Removed built-ins remain available as user-configured command names.
+        for name in ["approve", "deny", "escalate", "answer"] {
+            assert!(matches!(
+                Cli::try_parse_from(["shoal", name]).unwrap().command,
+                Some(Command::Custom(_))
+            ));
+        }
     }
 }

@@ -1,12 +1,11 @@
-//! `shoal ask` records a question for the user, `shoal questions` lists them,
-//! `shoal answer` sends the user's answer to the asking agents and
-//! `shoal questions withdraw` closes one they no longer need answered.
+//! Record questions and let the user inspect, answer or withdraw them.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
+        QuestionsArgs,
         client::{self, request},
         context::Context,
         installed::{Executable, arguments, replace_option},
@@ -16,6 +15,30 @@ use crate::{
     daemon::questions::{Ask, Listing, Question},
     protocol::Method,
 };
+
+pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
+    match args.id {
+        Some(id) if args.withdraw => withdraw(ctx, None, id).await,
+        Some(id) if args.answer.is_some() => {
+            answer(ctx, id, args.answer.unwrap_or_default(), None).await
+        }
+        Some(id) => {
+            let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
+            show(ctx, question).await
+        }
+        None => list(ctx, args.workspace).await,
+    }
+}
+
+async fn show(ctx: &Context, question: Question) -> Result<i32> {
+    if ctx.interactive() && question.is_open() {
+        return prompt_answer(ctx, question).await;
+    }
+    ctx.show(&question, |question| {
+        outln!("{}", render(question, Palette::stdout(ctx.json)))
+    })?;
+    Ok(0)
+}
 
 pub(super) async fn ask(
     ctx: &Context,
@@ -124,6 +147,20 @@ fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace }).await?;
+    if ctx.interactive() && !listing.questions.is_empty() {
+        let entries = listing
+            .questions
+            .iter()
+            .map(|question| (question.id.to_string(), summary(question)))
+            .collect();
+        let id: i64 = ui::pick(ctx, "Questions> ", entries)?.parse()?;
+        let question = listing
+            .questions
+            .into_iter()
+            .find(|question| question.id == id)
+            .context("picker returned an unknown question")?;
+        return show(ctx, question).await;
+    }
     ctx.show(&listing, |listing| {
         let palette = Palette::stdout(ctx.json);
         for question in &listing.questions {
@@ -139,7 +176,14 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = match workspace {
+        Some(workspace) => workspace,
+        None => {
+            request::<Question>(&ctx.paths, Method::ShowQuestion { id })
+                .await?
+                .workspace_id
+        }
+    };
     let question =
         request::<Question>(&ctx.paths, Method::WithdrawQuestion { workspace, id }).await?;
     ctx.emit(
@@ -152,24 +196,11 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
     Ok(0)
 }
 
-pub(super) async fn answer(ctx: &Context, id: Option<i64>, answer: Option<String>) -> Result<i32> {
-    // A process that cleared the scope token it inherits would answer as the user.
+async fn answer(ctx: &Context, id: i64, answer: String, shown: Option<Question>) -> Result<i32> {
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions without their scope token"
     );
-    let (id, answer, shown) = match (id, answer) {
-        (Some(id), Some(answer)) => (id, answer, None),
-        // Workspace processes answer only the questions of the workspaces
-        // below theirs, by number.
-        _ if crate::env::inherits_scope(&ctx.paths.state) => {
-            anyhow::bail!("workspace processes answer with shoal answer <number> <answer>")
-        }
-        (id, _) => {
-            let (question, answer) = prompt_answer(ctx, id).await?;
-            (question.id, answer, Some(question))
-        }
-    };
     let question =
         request::<Question>(&ctx.paths, Method::AnswerQuestion { id, answer, shown }).await?;
     ctx.emit(&answered(&question), &question)?;
@@ -188,39 +219,30 @@ fn answered(question: &Question) -> String {
     )
 }
 
-/// Show the open question `id`, or one the user picks, and read the answer.
-async fn prompt_answer(ctx: &Context, id: Option<i64>) -> Result<(Question, String)> {
-    let question = select_open(ctx, id).await?;
-    eprintln!("{}", render(&question, Palette::stderr(ctx.json)));
-    let answer = ui::input(ctx, "Answer")?;
-    Ok((question, answer))
+/// Read an answer or choice number while keeping the question on the prompt line.
+async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
+    print_answer_context(ctx, &question);
+    let prompt = format!("{} ({})", question.ask.question, question.id);
+    let response = ui::input_with_default(ctx, &prompt, &question.ask.recommendation)?
+        .ok_or(ui::SelectionCanceled)?;
+    match response.trim() {
+        "/withdraw" => withdraw(ctx, Some(question.workspace_id), question.id).await,
+        "/cancel" => Err(ui::SelectionCanceled.into()),
+        _ => answer(ctx, question.id, response, Some(question)).await,
+    }
 }
 
-/// The open question `id`, or one the user picks.
-async fn select_open(ctx: &Context, id: Option<i64>) -> Result<Question> {
-    let Some(id) = id else {
-        return pick_open(ctx).await;
-    };
-    let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
-    question.ensure_open()?;
-    Ok(question)
-}
-
-/// Choose among the newest open questions.
-async fn pick_open(ctx: &Context) -> Result<Question> {
-    let questions = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace: None })
-        .await?
-        .questions;
-    ensure!(!questions.is_empty(), "no open questions");
-    let entries = questions
-        .iter()
-        .map(|question| (question.id.to_string(), summary(question)))
-        .collect();
-    let id: i64 = ui::pick(ctx, "Question> ", entries)?.parse()?;
-    questions
-        .into_iter()
-        .find(|question| question.id == id)
-        .context("picker returned an unknown question")
+fn print_answer_context(ctx: &Context, question: &Question) {
+    let palette = Palette::stderr(ctx.json);
+    eprintln!("{}", palette.paint(Style::Muted, &question.workspace));
+    eprintln!("Recommended: {}", question.ask.recommendation);
+    if let Some(reason) = &question.ask.reason {
+        eprintln!("{reason}");
+    }
+    for (index, choice) in question.ask.choices.iter().enumerate() {
+        eprintln!("({}) {choice}", index + 1);
+    }
+    eprintln!("Enter accepts the recommendation; type a number or answer. /withdraw or /cancel.");
 }
 
 /// One line with what the user needs to choose a question: its workspace,

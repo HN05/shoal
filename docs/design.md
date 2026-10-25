@@ -888,6 +888,12 @@ pre-trust hooks where the agent requires review. Identical unread messages colla
 and scoped processes may read their own workspace's messages and send messages
 only to the agents of the workspaces below their own, which they coordinate.
 
+`shoal questions` opens a question picker on a terminal. A numbered question
+shows its recommendation and numbered choices, then reads a choice number or
+written answer with the question text and number on the prompt line. Enter accepts
+the recommendation shown in brackets. The inbox uses these same
+actions without changing its listing.
+
 Questions are how an agent asks the user for a decision whose answer is text,
 separate from approvals, whose answer is yes or no. A question states the
 decision and the agent's recommendation, so most answers are a word or a choice

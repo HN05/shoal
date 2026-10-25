@@ -164,6 +164,8 @@ instead of the PR delivery guidance below.
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
   user scripts own external resource integrations.
+- Numbered questions and approvals inspect records without mutation in JSON or
+  nonterminal output; interactive prompts preserve the shown request when deciding.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision, or one by the coordinating agent a child workspace's request was routed
   to because it holds an approved grant for the same target and settings; it may pass

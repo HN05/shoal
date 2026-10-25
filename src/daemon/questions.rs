@@ -161,7 +161,7 @@ impl Question {
     fn notification(&self) -> String {
         shorten(
             format!(
-                "question {} (answer with shoal answer {}): {} Recommended: {}",
+                "question {} (answer with shoal questions {}): {} Recommended: {}",
                 self.id, self.id, self.ask.question, self.ask.recommendation
             ),
             crate::validate::MAX_MESSAGE_LEN,

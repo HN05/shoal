@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 67;
+const SCHEMA_VERSION: i64 = 68;
 
 #[cfg(test)]
 mod benchmark;
@@ -398,6 +398,12 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (65, REPOSITORY_AGENT_ENVIRONMENTS, None),
     (66, REPOSITORY_CONTRIBUTIONS, None),
     (67, REPOSITORY_MOVES, None),
+    (68, "UPDATE notifications SET message=replace(message,
+        'shoal approve ', 'shoal approvals --approve ')
+        WHERE kind='approval_requested';
+        UPDATE notifications SET message=replace(message,
+        'shoal answer ', 'shoal questions ')
+        WHERE kind='question_asked';", None),
 ];
 
 /// Repositories `shoal contribute` registered, which Shoal removes once
@@ -1362,12 +1368,13 @@ mod tests {
     }
 
     #[test]
-    fn migrated_approval_notifications_name_the_renamed_command() -> Result<()> {
+    fn migrated_notifications_name_the_numbered_commands() -> Result<()> {
         let mut db = historical_database(39)?;
         db.execute_batch(
             "INSERT INTO notifications(created_at,workspace,kind,message) VALUES
                 (1,'w','access_requested','access 7: port/web / web: serve; approve with shoal access approve 7'),
-                (2,'w','agent_message','run shoal access approve 7');",
+                (2,'w','agent_message','run shoal access approve 7'),
+                (3,'w','question_asked','question 4 (answer with shoal answer 4): Which database?');",
         )?;
         migrate(&mut db)?;
         let rows = db
@@ -1379,9 +1386,14 @@ mod tests {
             [
                 (
                     "approval_requested".into(),
-                    "access 7: port/web / web: serve; approve with shoal approve 7".into()
+                    "access 7: port/web / web: serve; approve with shoal approvals --approve 7"
+                        .into()
                 ),
                 ("agent_message".into(), "run shoal access approve 7".into()),
+                (
+                    "question_asked".into(),
+                    "question 4 (answer with shoal questions 4): Which database?".into()
+                ),
             ]
         );
         Ok(())

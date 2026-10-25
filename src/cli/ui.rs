@@ -200,6 +200,22 @@ pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
 
 /// Read a prompt where empty input or EOF means cancellation.
 pub fn input_or_cancel(ctx: &Context, prompt: &str) -> Result<Option<String>> {
+    Ok(read_input(ctx, prompt)?.filter(|value| !value.is_empty()))
+}
+
+/// Enter accepts the displayed default; EOF still cancels.
+pub fn input_with_default(ctx: &Context, prompt: &str, default: &str) -> Result<Option<String>> {
+    let prompt = format!("{prompt} [{default}]");
+    Ok(read_input(ctx, &prompt)?.map(|value| {
+        if value.is_empty() {
+            default.to_owned()
+        } else {
+            value
+        }
+    }))
+}
+
+fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     require_interactive(ctx)?;
     eprint!(
         "{} ",
@@ -208,9 +224,10 @@ pub fn input_or_cancel(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     io::stderr().flush()?;
     let _cancel = InterruptCancels::install();
     let mut value = String::new();
-    io::stdin().read_line(&mut value)?;
-    let value = value.trim_end_matches(['\r', '\n']).to_owned();
-    Ok((!value.is_empty()).then_some(value))
+    if io::stdin().read_line(&mut value)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(value.trim_end_matches(['\r', '\n']).to_owned()))
 }
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.

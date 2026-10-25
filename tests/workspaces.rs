@@ -8313,6 +8313,10 @@ esac
         String::from_utf8_lossy(&output.stdout).contains("Answered question 1 from asker"),
         "{output:?}"
     );
+    assert!(
+        transcript.contains("Which database? (1) [SQLite]:"),
+        "{transcript}"
+    );
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     // A row Tab loaded is chosen like the first view's: Enter on a
     // notification enters its workspace.
@@ -17026,7 +17030,7 @@ fn agents_withdraw_questions_they_no_longer_need_answered() {
         fixture.ok(&["questions"]),
         serde_json::json!({"questions": [], "omitted": 0})
     );
-    let refused = fixture.run(&["answer", &id, "Postgres"]);
+    let refused = fixture.run(&["questions", &id, "--answer", "Postgres"]);
     assert!(
         String::from_utf8_lossy(&refused.stderr).contains("was withdrawn"),
         "{refused:?}"
@@ -17057,11 +17061,11 @@ fn agents_wait_for_the_answer_to_their_question() {
     assert_eq!(question["recommendation"], "SQLite");
     let id = question["id"].to_string();
 
-    let output = scoped_command(&fixture, "asker", &["answer", &id, "1"]);
+    let output = scoped_command(&fixture, "asker", &["questions", &id, "--answer", "1"]);
     assert!(!output.status.success(), "agents cannot answer: {output:?}");
     let renamed = fixture.rename("asker", "renamed");
     assert_eq!(renamed["data"]["name"], "renamed", "{renamed}");
-    fixture.ok(&["answer", &id, "2"]);
+    fixture.ok(&["questions", &id, "--answer", "2"]);
     let output = asker.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -17109,7 +17113,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    fixture.ok(&["answer", &id, "Redis"]);
+    fixture.ok(&["questions", &id, "--answer", "Redis"]);
     let output = resumed.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -17472,6 +17476,53 @@ head -1 "$HOME/picker-input"
             status
         );
     }
+}
+
+#[test]
+fn question_picker_answers_the_selected_question_with_a_suggestion() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let question = fixture.ok(&[
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+        "--choice",
+        "SQLite",
+        "--choice",
+        "Postgres",
+        "--workspace",
+        "asker",
+    ]);
+    let id = question["id"].to_string();
+    assert_eq!(fixture.ok(&["questions", &id])["answer"], Value::Null);
+    let (output, rows) = fixture.pick(&["questions"], "1", "1\n");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("Which database?"), "{rows}");
+    assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
+}
+
+#[test]
+fn question_prompt_accepts_the_recommendation_with_enter() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let question = fixture.ok(&[
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+        "--workspace",
+        "asker",
+    ]);
+    let id = question["id"].to_string();
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["questions", &id]), "\n");
+    assert!(output.status.success(), "{transcript}");
+    assert!(
+        transcript.contains("Which database? (1) [SQLite]:"),
+        "{transcript}"
+    );
+    assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
 }
 
 #[test]

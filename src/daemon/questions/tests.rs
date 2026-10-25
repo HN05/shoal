@@ -55,7 +55,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     assert_eq!(
         asked[0].message,
         format!(
-            "question {} (answer with shoal answer {}): Which database? Recommended: SQLite",
+            "question {} (answer with shoal questions {}): Which database? Recommended: SQLite",
             first.id, first.id
         )
     );
@@ -447,7 +447,7 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     let message = &notifications[0].message;
     assert!(message.len() <= crate::validate::MAX_MESSAGE_LEN);
     assert!(message.starts_with(&format!(
-        "question {} (answer with shoal answer {}): question 0 ",
+        "question {} (answer with shoal questions {}): question 0 ",
         first.id, first.id
     )));
     assert!(message.ends_with('…'));
