@@ -36,6 +36,11 @@ pub(super) async fn run(
     name: Option<String>,
     workspace: Option<String>,
 ) -> Result<i32> {
+    // Without its token, the daemon would answer a workspace process as the user.
+    ensure!(
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "a workspace process that cleared its scope token cannot use shoal demo"
+    );
     match command {
         None => open(ctx, name, workspace).await,
         Some(DemoCommand::Start {
