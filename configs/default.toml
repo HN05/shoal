@@ -202,6 +202,12 @@ end = 65535
 # [caches.go]
 # scope = "shared"
 
+# A command `shoal demo start` keeps running for the user to try; `preset`
+# ("web" or "simulator") says how `shoal demo` opens it.
+# [demos.web]
+# preset = "web"
+# cmd = ["npm", "run", "dev"]
+
 [simulators]
 # Xcode simulator leases (macOS).
 max_booted = 2

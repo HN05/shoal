@@ -10,6 +10,7 @@ mod caches;
 mod cli;
 mod config;
 mod daemon;
+mod demos;
 mod env;
 mod execution;
 mod fsutil;

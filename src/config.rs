@@ -139,6 +139,7 @@ pub struct Config {
     /// Environment variables layered per repository and rendered for a workspace.
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, repo::Cache>,
+    pub demos: BTreeMap<String, crate::demos::Demo>,
     /// Build tools whose usual setup every repository's workspaces share
     /// unless the repository names its own.
     pub presets: Option<Vec<crate::presets::Preset>>,
@@ -630,6 +631,7 @@ impl Config {
             },
             env: self.env.clone(),
             caches: self.caches.clone(),
+            demos: self.demos.clone(),
             presets: self.presets.clone(),
             secrets: self.secrets.clone(),
             resources: self.resources.clone(),
@@ -691,6 +693,7 @@ impl Config {
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
         crate::env::validate_configured_environment(&config.env)?;
         crate::caches::validate(&config.caches)?;
+        crate::demos::validate(&config.demos)?;
         crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
         crate::secrets::validate(&config.secrets)?;
         // A global file is complete on its own: its bounds must combine with

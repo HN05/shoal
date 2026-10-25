@@ -91,6 +91,8 @@ pub struct RepoConfig {
     pub ports: PortDefaults,
     pub env: BTreeMap<String, String>,
     pub caches: BTreeMap<String, Cache>,
+    /// Commands kept running for the user to try, by name.
+    pub demos: BTreeMap<String, crate::demos::Demo>,
     /// Build tools whose usual setup the repository's workspaces share; an
     /// empty list turns off presets a lower layer names.
     pub presets: Option<Vec<crate::presets::Preset>>,
@@ -311,6 +313,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
     crate::caches::validate(&config.caches)?;
+    crate::demos::validate(&config.demos)?;
     crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
     crate::secrets::validate(&config.secrets)?;
     config.seed.validate()?;
