@@ -114,14 +114,19 @@ def shell(env):
     return subprocess.call([program, "-i"], env=env, cwd=env["HOME"])
 
 
-def main():
-    shoal = build()
-    if SANDBOX.exists():
-        # A daemon left by an interrupted run still owns the old state.
-        bin_dir = SANDBOX / "bin"
-        if (bin_dir / "shoal").exists():
-            run(["daemon", "stop"], environment(SANDBOX, bin_dir), check=False)
-        shutil.rmtree(SANDBOX)
+def clear_sandbox():
+    """Remove the last run's sandbox, stopping a daemon an interrupted run left."""
+    if not SANDBOX.exists():
+        return
+    bin_dir = SANDBOX / "bin"
+    if (bin_dir / "shoal").exists():
+        run(["daemon", "stop"], environment(SANDBOX, bin_dir), check=False)
+    shutil.rmtree(SANDBOX)
+
+
+def prepare_sandbox(shoal):
+    """A fresh sandbox where `shoal` is the build, returning its environment."""
+    clear_sandbox()
     bin_dir = SANDBOX / "bin"
     bin_dir.mkdir(parents=True)
     home = SANDBOX / "home"
@@ -130,7 +135,11 @@ def main():
     (home / ".zshrc").write_text("PROMPT='shoal-demo %1~ %# '\n")
     (home / ".bashrc").write_text("PS1='shoal-demo \\W \\$ '\n")
     (bin_dir / "shoal").symlink_to(shoal)
-    env = environment(SANDBOX, bin_dir)
+    return environment(SANDBOX, bin_dir)
+
+
+def main():
+    env = prepare_sandbox(build())
     daemon = start_daemon(env)
     try:
         fill(env)
