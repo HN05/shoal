@@ -1401,7 +1401,7 @@ pub(super) async fn setup_workspace(
         let name = &workspace.name;
         ensure!(
             ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes`"
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes`"
         );
         eprintln!(
             "{} for {name}: {error}",

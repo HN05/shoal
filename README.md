@@ -317,7 +317,8 @@ in global config; see [Git profiles](docs/reference.md#git-profiles).
 
 New workspaces get the repository checkout's ignored local files, such as `.env`;
 set `copy_ignored = false` in that file to turn this off. The same file can name a
-`setup_cmd` and hooks around setup, assignment completion,
+`setup_cmd`, run automatically on workspace creation or explicitly with
+`shoal work setup [workspace]`, and hooks around setup, assignment completion,
 agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.

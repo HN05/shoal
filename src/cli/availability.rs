@@ -51,7 +51,7 @@ impl Need {
             ["stop"] => Self::Running,
             ["undone"] => Self::Done,
             ["unready"] => Self::Marks,
-            ["setup"] => Self::Setup,
+            ["work", "setup"] => Self::Setup,
             ["checkpoint"] => Self::Checkpoint,
             ["base", "clear"] => Self::Base,
             ["hold", "release"] => Self::Holds,

@@ -347,8 +347,6 @@ pub enum Command {
         #[arg(long)]
         session: Option<String>,
     },
-    /// Run or retry workspace setup.
-    Setup { workspace: Option<String> },
     /// Send the user a notification about a workspace without marking it done.
     Notify {
         /// One line of text, such as "PR #12 is ready to merge".
@@ -448,8 +446,11 @@ pub enum Command {
         #[arg(long)]
         print: bool,
     },
-    /// List the work going on: workspaces, chats and queued agents.
+    /// List ongoing work, or manage a workspace.
+    #[command(args_conflicts_with_subcommands = true)]
     Work {
+        #[command(subcommand)]
+        command: Option<WorkCommand>,
         /// List only the agents waiting for a slot under max_agents.
         #[arg(long, conflicts_with = "chats")]
         queue: bool,
@@ -1496,6 +1497,15 @@ pub enum BranchCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum WorkCommand {
+    /// Run or retry workspace setup and the post-setup hook.
+    Setup {
+        /// Workspace to use; defaults to the current workspace or picker.
+        workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum RepoCommand {
     /// Show or replace repository configuration stored locally by Shoal.
     Config {
@@ -2099,6 +2109,34 @@ mod tests {
                     })
                 })
             ));
+        }
+    }
+
+    #[test]
+    fn work_setup_accepts_a_workspace_without_listing_filters() {
+        for workspace in [None, Some("worker")] {
+            let mut args = vec!["shoal", "work", "setup"];
+            args.extend(workspace);
+            let cli = Cli::try_parse_from(args).unwrap();
+            assert!(matches!(
+                cli.command,
+                Some(Command::Work {
+                    command: Some(WorkCommand::Setup { workspace: target }),
+                    ..
+                }) if target.as_deref() == workspace
+            ));
+        }
+        for filters in [
+            vec!["--queue"],
+            vec!["--chats"],
+            vec!["--repo", "project"],
+            vec!["--status", "ready"],
+            vec!["--print"],
+        ] {
+            let mut args = vec!["shoal", "work"];
+            args.extend(filters);
+            args.extend(["setup", "worker"]);
+            assert!(Cli::try_parse_from(args).is_err());
         }
     }
 

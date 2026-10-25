@@ -197,7 +197,7 @@ When unsure whether your checkout is managed, use `shoal --json work` and match
 your working directory to a returned workspace `path`. Shoal's resources
 require a managed workspace; do not select another agent's workspace or create
 one just to obtain a lease.
-If workspace setup failed, `shoal --json setup` reruns the configured setup
+If workspace setup failed, `shoal --json work setup` reruns the configured setup
 command and post-setup hook for the current workspace.
 
 The daemon, its service and the Shoal installation belong to the user; stopping

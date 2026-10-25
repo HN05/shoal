@@ -576,7 +576,7 @@ impl Manager {
                         if code == 0 {
                             format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; inspect with shoal doctor")
                         } else {
-                            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal setup")
+                            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal work setup")
                         }
                     });
                     let state = if error.is_none() {

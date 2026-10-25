@@ -457,7 +457,7 @@ interactive fzf picker; a deleted current directory provides no workspace contex
 The picker leaves out workspaces without what the command acts on, such as an
 agent session for `attach` or a running agent or command for `stop`, and reports
 when none is left. Workspaces the command would refuse for their state, or for
-`setup` a running execution, come last with the reason in place of their status.
+`work setup` a running execution, come last with the reason in place of their status.
 `cd`, `attach` and the commands that open, show or run something in one workspace
 remember, across terminals, the workspaces each acted on, and take `-` as the
 target for the latest one other than the current workspace; `cd` also remembers
@@ -1115,7 +1115,7 @@ Adoption preserves commits, dirty files, and Git settings without fetching, setu
 or post-setup hooks. It takes full Shoal ownership with normal cleanup, including
 the pre-remove hook. Disable automatic cleanup
 in repository configuration before adopting work that should stay indefinitely.
-Use `shoal setup` explicitly when setup is wanted.
+Use `shoal work setup` explicitly when setup is wanted.
 
 Pass `--copy` to create a new branch worktree under the repository's Shoal
 directory, copy the source worktree's files into it, and leave the source in
@@ -1253,7 +1253,7 @@ is another registered checkout, the selector is ambiguous and lists both matches
 
 `repo setup [repository] [--agent NAME] [-- ARGS]` starts an agent that writes
 the repository's `.shoal.toml`: setup, named ports, commands and resource pools,
-checked with `config show` and `setup` and then committed. It runs in the
+checked with `config show` and `work setup` and then committed. It runs in the
 repository's `shoal-setup` workspace, opening one on that branch when none
 exists. The agent is `--agent`, else `default_agent`, else one chosen from the
 agent picker; arguments after `--` go to the agent.
@@ -1516,7 +1516,7 @@ arguments and shell logic inside them.
 `pre_setup_cmd` runs in the daemon before tracked setup, after ownership and
 execution checks, with a 60-second limit. It works without a `setup_cmd`.
 Failure marks the workspace failed and skips setup;
-retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
+retry with `shoal work setup`. Lifecycle and permit changes are rejected while it runs.
 
 Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
 repository checkout's ignored files, such as `.env` or local signing settings,
@@ -1537,7 +1537,7 @@ inspection (default). JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. Then choose explicitly:
 
 ```sh
-shoal setup fix-login                      # Rerun setup and the post-setup hook
+shoal work setup fix-login                 # Rerun setup and the post-setup hook
 shoal doctor fix-login --repair             # Ignore the failure after ownership checks
 shoal rm fix-login --yes                    # Delete this workspace
 ```
@@ -1546,7 +1546,7 @@ Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token or port variables, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
-terminal after `add` or `setup` has a ready workspace and before any `--agent`; a
+terminal after `add` or `work setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
 `pre_remove_cmd` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
 after the removal checks pass and managed commands stop, without a terminal and with
@@ -2747,7 +2747,7 @@ paths without a daemon; with one running it also suggests repository-configured
 commands, repositories, workspaces, pools, members, lease names, ports,
 and simulator leases for the current or named workspace, honoring `--state-dir`
 and scope with a 500 ms timeout, never starting a daemon or picker. A workspace
-the command would refuse for its state, or for `setup` a running execution, is
+the command would refuse for its state, or for `work setup` a running execution, is
 described by the reason; one without what the command acts on is left out. Targets sort before flags,
 also in fzf-tab. `shoal completions <shell>` prints scripts for
 Bash, Zsh, Fish, PowerShell, and Elvish.
@@ -2817,7 +2817,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 `ready`, `unready` and `internal agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
+`status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They `land` only with [approval](#land-into-the-default-branch) and cannot reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands

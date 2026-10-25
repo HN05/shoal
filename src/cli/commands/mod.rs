@@ -65,7 +65,8 @@ use crate::{
     agent::CodexMode,
     cli::{
         ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ImportArgs, InternalCommand,
-        NotificationsCommand, QuestionsCommand, ShellCommand, WorkspaceScope, agents, client,
+        NotificationsCommand, QuestionsCommand, ShellCommand, WorkCommand, WorkspaceScope, agents,
+        client,
         context::Context,
         output::{Palette, Style},
     },
@@ -173,6 +174,7 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
             Some(Some(menu::View::Inbox))
         }
         Some(Command::Work {
+            command: None,
             queue: false,
             chats: false,
             repository: None,
@@ -414,7 +416,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             split::run(&ctx, workspace, split).await
         }
         Command::Internal { command } => internal(ctx, command).await,
-        Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Inbox {
             repository,
             print: _,
@@ -423,6 +424,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             inbox::list(&ctx, &filter).await
         }
         Command::Work {
+            command: Some(WorkCommand::Setup { workspace }),
+            ..
+        } => workspaces::setup(&ctx, workspace).await,
+        Command::Work {
+            command: None,
             queue,
             chats,
             repository,

@@ -1561,8 +1561,8 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
         for _ in 0..depth {
             words.extend([shoal, "exec", "first", "--"]);
         }
-        words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=2"]);
-        words.extend([shoal, "--", "shoal", "setup", ""]);
+        words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=3"]);
+        words.extend([shoal, "--", "shoal", "work", "setup", ""]);
         let output = fixture.command().args(&words[1..]).output().unwrap();
         assert!(output.status.success(), "{output:?}");
         String::from_utf8(output.stdout).unwrap()
@@ -4001,7 +4001,7 @@ def terminal_settings():
     return settings
 before = terminal_settings()
 group = os.tcgetpgrp(0)
-command = [binary, 'setup', 'terminal'] if mode == 'hook' else [
+command = [binary, 'work', 'setup', 'terminal'] if mode == 'hook' else [
     binary, 'exec', 'terminal', '--', 'python3', agent, mode]
 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 try:
@@ -5764,7 +5764,7 @@ fn execution_scope_limits_management_and_expires() {
         .spawn()
         .unwrap();
     wait_until("sibling execution", || sibling_started.exists());
-    let output = scoped(&["setup", "worker"]);
+    let output = scoped(&["work", "setup", "worker"]);
     assert!(!output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("active or unknown execution"),
@@ -5772,7 +5772,7 @@ fn execution_scope_limits_management_and_expires() {
     );
     fixture.ok(&["stop", "worker"]);
     assert!(!sibling.wait().unwrap().success());
-    let output = scoped(&["setup", "worker"]);
+    let output = scoped(&["work", "setup", "worker"]);
     assert!(
         output.status.success(),
         "{}",
@@ -5804,7 +5804,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["stop", "worker"],
         vec!["inspect", "other"],
         vec!["exec", "other", "--", "true"],
-        vec!["setup", "other"],
+        vec!["work", "setup", "other"],
         vec!["link", "pr", "42", "assigned", "--workspace", "other"],
         vec!["unlink", "pr", "assigned", "--workspace", "other"],
         vec!["undone", "other"],
@@ -5868,11 +5868,11 @@ fn setup_commands_cannot_recursively_run_setup() {
     let setup = Path::new(worker["path"].as_str().unwrap()).join("setup.sh");
     fs::write(
         &setup,
-        format!("#!/bin/sh\n'{}' setup\n", env!("CARGO_BIN_EXE_shoal")),
+        format!("#!/bin/sh\n'{}' work setup\n", env!("CARGO_BIN_EXE_shoal")),
     )
     .unwrap();
 
-    let output = fixture.run(&["setup", "worker"]);
+    let output = fixture.run(&["work", "setup", "worker"]);
     assert!(!output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr)
@@ -10557,7 +10557,7 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
 
     // Rerunning setup keeps files the workspace already has.
     fs::write(path.join(".env"), "TOKEN=2\n").unwrap();
-    assert_eq!(fixture.ok(&["setup", "copied"])["state"], "ready");
+    assert_eq!(fixture.ok(&["work", "setup", "copied"])["state"], "ready");
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
 
     commit_resource_config(&fixture.repo, "copy_ignored = false\n");
@@ -10613,7 +10613,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert_eq!(issues.len(), 1);
     let issue = issues[0].as_str().unwrap();
     assert!(issue.contains("setup failed (exit 17"));
-    assert!(issue.contains("retry with shoal setup"));
+    assert!(issue.contains("retry with shoal work setup"));
     assert!(issue.contains("alternatively, use --repair"));
     let output = fixture.run(&["doctor", "failed-setup"]);
     assert_eq!(output.status.code(), Some(2));
@@ -10642,7 +10642,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command \"prepare\""));
     fs::write(&script, "#!/bin/sh\nprintf complete > setup-result\n").unwrap();
-    assert_eq!(fixture.ok(&["setup", "failed-setup"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["work", "setup", "failed-setup"])["state"],
+        "ready"
+    );
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["setup_finished"],
         true
@@ -10837,7 +10840,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     );
     assert!(
         !fixture
-            .run(&["--json", "setup", "interrupted"])
+            .run(&["--json", "work", "setup", "interrupted"])
             .status
             .success()
     );
@@ -10941,7 +10944,10 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert!(!failed_path.join("agent-started").exists());
-    assert_eq!(fixture.ok(&["setup", "hook-fails"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["work", "setup", "hook-fails"])["state"],
+        "ready"
+    );
     assert!(
         fs::read_to_string(home.join("post-setup-ran"))
             .unwrap()
@@ -15072,7 +15078,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         .command()
         .env("AGENT_TOKEN", "inherited")
         .env("SHOAL_SECRET_ENV", "AGENT_TOKEN")
-        .args(["setup", "secrets"])
+        .args(["work", "setup", "secrets"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -15162,7 +15168,7 @@ fn tool_secrets_reach_only_their_tools() {
         .command()
         .env("PATH", path)
         .env("SHOAL_SECRET_TOOLS", &launchers)
-        .args(["setup", "tool-secrets"])
+        .args(["work", "setup", "tool-secrets"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -16174,7 +16180,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     for args in [
         vec!["resource", "acquire", "signing", "hooked"],
         vec!["resource", "release", "signing", "hooked"],
-        vec!["setup", "hooked"],
+        vec!["work", "setup", "hooked"],
         vec!["rm", "hooked", "--yes"],
     ] {
         let output = fixture.run(&args);
@@ -16332,7 +16338,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         "before\n"
     );
     fs::remove_file(home.join("fail-before")).unwrap();
-    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    assert_eq!(fixture.ok(&["work", "setup", "hooked"])["state"], "ready");
     assert_eq!(
         fs::read_to_string(home.join("setup-order")).unwrap(),
         "before\nbefore\nsetup\n"
@@ -16344,7 +16350,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         "pre_setup_cmd = '/usr/bin/true'\n",
     )
     .unwrap();
-    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    assert_eq!(fixture.ok(&["work", "setup", "hooked"])["state"], "ready");
     fs::write(fixture.repo.join(".shoal.toml"), "").unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
     git(
@@ -18339,7 +18345,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         false
     );
     for args in [
-        vec!["setup", "hooked"],
+        vec!["work", "setup", "hooked"],
         vec!["rm", "hooked", "--yes"],
         vec!["resource", "acquire", "device", "hooked"],
     ] {
@@ -19829,7 +19835,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["status"],
         vec!["inspect"],
         vec!["port"],
-        vec!["setup"],
+        vec!["work", "setup"],
         vec!["exec", "--", env!("CARGO_BIN_EXE_shoal"), "port"],
     ] {
         let output = scoped(&args);

@@ -397,7 +397,7 @@ survivors. Failures preserve files, branches, and leases; process-verification
 failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
-`setup` reruns setup explicitly; nothing retries automatically.
+`work setup` reruns setup explicitly; nothing retries automatically.
 Tracked setup starts by copying the repository checkout's ignored files through
 Worktrunk unless `copy_ignored = false`, so local files like `.env` arrive without a
 setup script and failures gate readiness; `.worktreeinclude` selects what to copy.

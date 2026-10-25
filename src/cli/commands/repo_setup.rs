@@ -111,7 +111,7 @@ fn prompt(repo: &Repository, workspace: &Workspace) -> String {
          tasks, and resource pools for services or devices that tasks must not use at \
          the same time. The options are described in {REFERENCE}.\n\n\
          Check the result with `shoal config show` and test the setup script with \
-         `shoal setup`, then commit the config and any scripts it runs.",
+         `shoal work setup`, then commit the config and any scripts it runs.",
         name = repository::name(repo),
         branch = workspace.branch,
     )

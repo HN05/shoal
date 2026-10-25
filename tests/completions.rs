@@ -144,7 +144,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "done", "--c"], "--cleanup"),
         (vec!["shoal", "run", "rev"], "review"),
         (vec!["shoal", "ins"], "install"),
-        (vec!["shoal", "set"], "setup"),
+        (vec!["shoal", "work", "set"], "setup"),
+        (vec!["shoal", "repo", "set"], "setup"),
         (vec!["shoal", "config", "i"], "install"),
         (vec!["shoal", "config", "s"], "show"),
         (vec!["shoal", "config", "install", "d"], "default"),
@@ -175,6 +176,10 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
                 "{shell} {words:?}: {values:?}"
             );
         }
+    }
+    for shell in ["bash", "zsh"] {
+        let values = candidates(completion(home.path(), shell, &["shoal", "set"]));
+        assert!(!values.iter().any(|value| value == "setup"));
     }
     assert!(!home.path().join("state").exists());
 }
