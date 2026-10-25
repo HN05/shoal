@@ -42,8 +42,8 @@ pub(super) async fn tracked(
     execution::run_recovery(&ctx.paths, workspace.id, command, name, replaces).await
 }
 
-/// The agent's configured command with Shoal's instructions, its hooks, the
-/// prompt and the forwarded arguments.
+/// The agent's configured command with Shoal's instructions, its workspace
+/// arguments, the prompt and the forwarded arguments.
 async fn command(
     ctx: &Context,
     integration: &dyn Integration,
@@ -67,7 +67,7 @@ async fn command(
         name,
         instructions,
         prompt.clone(),
-        integration.hook_args()?,
+        super::workspace_args(&ctx.paths, settings, name, workspace).await?,
         args.clone(),
     );
     configured::expand_with_fields(

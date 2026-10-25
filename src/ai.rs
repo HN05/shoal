@@ -28,6 +28,9 @@ pub struct Agent {
     pub resume: Option<Vec<String>>,
     /// Arguments that resume the workspace's latest session.
     pub resume_latest: Option<Vec<String>>,
+    /// Arguments that give the agent another working directory,
+    /// `{directory}`; empty gives none.
+    pub add_dir: Option<Vec<String>>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,
@@ -89,6 +92,7 @@ pub struct Arguments {
     pub instructions: Option<Vec<String>>,
     pub resume: Option<Vec<String>>,
     pub resume_latest: Option<Vec<String>>,
+    pub add_dir: Option<Vec<String>>,
 }
 
 /// A provider available without configuration.
@@ -99,6 +103,7 @@ pub struct Provider {
     instructions: Option<&'static [&'static str]>,
     resume: Option<&'static [&'static str]>,
     resume_latest: Option<&'static [&'static str]>,
+    add_dir: Option<&'static [&'static str]>,
 }
 
 enum SkillDir {
@@ -123,6 +128,7 @@ pub const PROVIDERS: &[Provider] = &[
         // Codex's worktrees feature widens `--last` to every linked worktree
         // of the repository; restore this workspace's session.
         resume_latest: Some(&["resume", "--last", "-c", "features.worktrees=false"]),
+        add_dir: Some(&["--add-dir", "{directory}"]),
     },
     Provider {
         name: "claude",
@@ -131,6 +137,9 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: Some(&["--append-system-prompt", "{instructions}"]),
         resume: Some(&["--resume", "{session}"]),
         resume_latest: Some(&["--continue"]),
+        // `--add-dir` takes every following argument up to the next option,
+        // which would include a prompt; the joined form takes one.
+        add_dir: Some(&["--add-dir={directory}"]),
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -140,6 +149,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        add_dir: None,
     },
     Provider {
         name: "pi",
@@ -148,6 +158,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        add_dir: None,
     },
     Provider {
         name: "grok",
@@ -156,6 +167,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        add_dir: None,
     },
 ];
 
@@ -294,6 +306,10 @@ pub fn arguments(agents: &Agents, name: &str) -> Arguments {
             |agent| agent.resume_latest.as_ref(),
             builtin.and_then(|provider| provider.resume_latest),
         ),
+        add_dir: pick(
+            |agent| agent.add_dir.as_ref(),
+            builtin.and_then(|provider| provider.add_dir),
+        ),
     }
 }
 
@@ -328,6 +344,19 @@ impl Arguments {
                 .as_ref()
                 .map(|template| substitute(template, &[])),
         }
+    }
+
+    /// The arguments that give the agent `directory` as another working
+    /// directory; none when it takes no such arguments.
+    pub fn add_dir_args(&self, directory: &Path) -> Vec<OsString> {
+        let Some(template) = &self.add_dir else {
+            return Vec::new();
+        };
+        // Placeholders render into text, which a path need not be.
+        let Some(directory) = directory.to_str() else {
+            return Vec::new();
+        };
+        substitute(template, &[("{directory}", directory)])
     }
 }
 
@@ -416,6 +445,11 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
                 validate_arguments(argv, placeholders)
                     .with_context(|| format!("ai.{name}.{key}"))?;
             }
+        }
+        // An empty `add_dir` turns the built-in one off.
+        if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
+            validate_arguments(argv, &["{directory}"])
+                .with_context(|| format!("ai.{name}.add_dir"))?;
         }
     }
     Ok(())
@@ -649,6 +683,42 @@ mod tests {
             let error = format!("{:#}", parse(config).unwrap_err());
             assert!(error.contains(message), "{config}: {error}");
         }
+    }
+
+    #[test]
+    fn directory_arguments_name_one_directory_each() {
+        let directory = Path::new("/shoal/repo");
+        let agents = parse(
+            "[ai.codex]\nadd_dir = []\n\
+             [ai.droid]\ncommand = ['droid']\nadd_dir = ['--dir', '{directory}']\n",
+        )
+        .unwrap();
+        assert_eq!(
+            arguments(&agents, "claude").add_dir_args(directory),
+            [OsString::from("--add-dir=/shoal/repo")]
+        );
+        assert_eq!(
+            arguments(&Agents::new(), "codex").add_dir_args(directory),
+            [OsString::from("--add-dir"), "/shoal/repo".into()]
+        );
+        assert!(
+            arguments(&agents, "codex")
+                .add_dir_args(directory)
+                .is_empty()
+        );
+        assert_eq!(
+            arguments(&agents, "droid").add_dir_args(directory),
+            [OsString::from("--dir"), "/shoal/repo".into()]
+        );
+        assert!(arguments(&agents, "pi").add_dir_args(directory).is_empty());
+        let error = format!(
+            "{:#}",
+            parse("[ai.droid]\nadd_dir = ['--dir']\n").unwrap_err()
+        );
+        assert!(
+            error.contains("ai.droid.add_dir") && error.contains("{directory}"),
+            "{error}"
+        );
     }
 
     #[test]

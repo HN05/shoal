@@ -169,8 +169,13 @@ async fn built_in_restore_child() {
             .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
-        // Restored sessions keep receiving agent messages.
-        let hooks = crate::cli::agents::hook_args(agent).unwrap();
+        // Restored sessions keep receiving agent messages and may work in
+        // the child workspaces beside theirs.
+        let directory = workspace.path.parent().unwrap();
+        let launch_args = crate::cli::agents::hook_args(agent)
+            .unwrap()
+            .into_iter()
+            .chain(crate::ai::arguments(&Default::default(), agent).add_dir_args(directory));
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );
@@ -181,7 +186,7 @@ async fn built_in_restore_child() {
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
             .map(std::ffi::OsString::from)
-            .chain(hooks)
+            .chain(launch_args)
             .chain([std::ffi::OsString::from(prompt)])
             .collect();
         assert_eq!(recovery.command, expected);

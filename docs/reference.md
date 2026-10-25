@@ -713,6 +713,7 @@ skill_dir = "~/.factory/skills" # Optional; see agent skills below
 instructions = ["--system-prompt", "{instructions}"] # Optional
 resume = ["--resume", "{session}"]                    # Optional
 resume_latest = ["--continue"]                        # Optional
+add_dir = ["--add-dir", "{directory}"]                # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
@@ -734,7 +735,7 @@ env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
 
 A profile gets its base's hooks, trust entries and waking, and each of its
 launcher (the one in effect for the workspace), `skill_dir`, `instructions`,
-`resume` and `resume_latest` it does not set; a base may itself be a profile.
+`resume`, `resume_latest` and `add_dir` it does not set; a base may itself be a profile.
 `env` sets and `env_remove` removes variables for the tool's tracked agents and
 chats, after `[env]`, the agent account and secrets; a value starting with `~/`
 names a path under the home directory. Any AI tool, built-in ones included,
@@ -746,6 +747,10 @@ the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoi
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).
+`add_dir` gives a workspace's agent, fresh or restored, the repository's workspaces
+directory, where `shoal split` puts children, as another working directory
+`{directory}`, so a sandbox or a setting such as Claude Code's
+`blockReadsOutsideWorkingDirectories` lets it work in them; an empty list gives none.
 Each entry replaces the built-in one for Claude, Codex and the other built-in tools.
 Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context

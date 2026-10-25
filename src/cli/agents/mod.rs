@@ -464,6 +464,45 @@ pub(crate) fn hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
     integration(name).hook_args()
 }
 
+/// What a workspace's agent `name` runs with besides its instructions, prompt
+/// and forwarded arguments: Shoal's hooks, and the repository's workspaces
+/// directory as another working directory, so it may work in the child
+/// workspaces it splits there.
+pub(crate) async fn workspace_args(
+    paths: &crate::paths::Paths,
+    settings: &Effective,
+    name: &str,
+    workspace: &Workspace,
+) -> Result<Vec<OsString>> {
+    let mut args = hook_args(settings.integration(name))?;
+    if let Some(directory) = workspaces_dir(paths, workspace).await {
+        args.extend(settings.arguments(name).add_dir_args(&directory));
+    }
+    Ok(args)
+}
+
+/// The directory in which `workspace`'s repository keeps its workspaces,
+/// resolved as agents compare paths; `None`, with a warning when it cannot be
+/// looked up, when there is none.
+async fn workspaces_dir(paths: &crate::paths::Paths, workspace: &Workspace) -> Option<PathBuf> {
+    let directory = client::repositories(paths).await.and_then(|repositories| {
+        repositories
+            .into_iter()
+            .find(|repository| repository.id == workspace.repository_id)
+            .map(|repository| repository.workspaces_dir)
+            .context("workspace repository is missing")
+    });
+    match directory {
+        Ok(directory) => {
+            directory.map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
+        }
+        Err(error) => {
+            eprintln!("warning: could not give the agent the workspaces directory: {error:#}");
+            None
+        }
+    }
+}
+
 /// Arguments that register Shoal's hooks for a chat of an agent with
 /// integration `name`.
 pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString>> {

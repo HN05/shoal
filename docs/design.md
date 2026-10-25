@@ -782,9 +782,9 @@ names select any named command through the same configuration layers. Agents run
 as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
-and inserted prompt text remain literal. A provider's instruction and resume
-arguments are configuration, built in for the tools Shoal ships; an integration
-keyed by agent name adds only what configuration cannot express, such as hooks,
+and inserted prompt text remain literal. A provider's instruction, resume and
+extra directory arguments are configuration, built in for the tools Shoal ships;
+an integration keyed by agent name adds only what configuration cannot express, such as hooks,
 trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
 sessions), so commands never name a tool. Other names add no tool-specific setup.
 A `base` makes an entry a launch profile of another tool, run with the
@@ -797,7 +797,10 @@ variable.
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings, plus permission for a workspace's
 agent to run the Shoal commands that finish its assignment, so completion never
-depends on Claude Code's auto-mode check. Both trust the repository's checkout,
+depends on Claude Code's auto-mode check. A workspace's agent also gets the
+repository's workspaces directory as a working directory, so it works in the
+children it splits there without leaving its sandbox or permission rules; chats
+split nothing and get none. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy

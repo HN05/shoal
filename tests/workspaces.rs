@@ -4685,6 +4685,49 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
+fn workspace_agents_get_the_workspaces_directory_ahead_of_their_prompt() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("directories");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let directory = fs::canonicalize(path.parent().unwrap()).unwrap();
+    let directory = directory.to_str().unwrap();
+    let bin = fixture.root.path().join("directory-bin");
+    for agent in ["codex", "claude", "pi"] {
+        let stub = bin.join(agent);
+        install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
+    }
+    let claude_dir = format!("--add-dir={directory}");
+    for (agent, expected) in [
+        ("claude", vec![claude_dir.as_str(), "user prompt"]),
+        ("codex", vec!["--add-dir", directory, "user prompt"]),
+        ("pi", vec!["user prompt"]),
+    ] {
+        let mut command = fixture.command();
+        command.arg(agent);
+        if agent == "codex" {
+            command.arg("--cli");
+        }
+        let output = command
+            .args(["directories", "--", "user prompt"])
+            .env("PATH", fixture.restricted_path(&bin))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let args = strip_guidance(&stdout, '\0');
+        let args: Vec<_> = args.split('\0').filter(|arg| !arg.is_empty()).collect();
+        assert!(
+            args.windows(expected.len())
+                .any(|window| window == expected),
+            "{agent}: {args:?}"
+        );
+        if agent == "pi" {
+            assert!(!args.iter().any(|arg| arg.contains("add-dir")), "{args:?}");
+        }
+    }
+}
+
+#[test]
 fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
     let fixture = Fixture::new();
     let workspace = fixture.add("instructions");
@@ -4755,7 +4798,7 @@ fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
             let stdout = String::from_utf8(output.stdout).unwrap();
-            let args = without_message_hooks(&stdout.split('\0').collect::<Vec<_>>());
+            let args = without_launch_arguments(&stdout.split('\0').collect::<Vec<_>>());
             let instructions = if agent == "claude" {
                 assert_eq!(args[0], "--append-system-prompt");
                 args[1].to_owned()
@@ -18167,15 +18210,19 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     );
 }
 
-/// Agent arguments without the hooks that deliver agent messages, which
-/// built-in launches register.
-fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
+/// Agent arguments without the hooks that deliver agent messages and the
+/// workspaces directory, which built-in launches add.
+fn without_launch_arguments<'a>(args: &[&'a str]) -> Vec<&'a str> {
     let mut remaining = Vec::new();
     let mut args = args.iter();
     while let Some(&arg) = args.next() {
+        if arg.starts_with("--add-dir=") {
+            continue;
+        }
         match (arg, args.clone().next()) {
             ("--settings", Some(value)) if value.contains("messages --hook") => {}
             ("-c", Some(value)) if value.starts_with("hooks.") => {}
+            ("--add-dir", Some(_)) => {}
             _ => {
                 remaining.push(arg);
                 continue;
@@ -18186,11 +18233,12 @@ fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
     remaining
 }
 
-/// Captured agent arguments, one per `separator`, without message hooks or
-/// arguments that carry only Shoal's built-in guidance.
+/// Captured agent arguments, one per `separator`, without launch arguments
+/// or arguments that carry only Shoal's built-in guidance.
 fn strip_shoal_arguments(text: &str, separator: char) -> String {
     let text = strip_guidance(text, separator);
-    without_message_hooks(&text.split(separator).collect::<Vec<_>>()).join(&separator.to_string())
+    without_launch_arguments(&text.split(separator).collect::<Vec<_>>())
+        .join(&separator.to_string())
 }
 
 /// Every agent prompt starts with Shoal's guidance, which spans these lines.
