@@ -23561,3 +23561,58 @@ fn simulator_demos_lease_the_simulator_until_they_stop() {
         fixture.ok(&["sim", "tried"])["simulators"][0]["workspace_id"].is_null()
     });
 }
+
+#[test]
+fn a_demo_outlives_the_command_that_started_it() {
+    let fixture = Fixture::new();
+    fixture.add("tried");
+    let bin = fixture.root.path().join("bin");
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    // A tracked command starts the demo, as an agent does, then exits.
+    let output = fixture
+        .command()
+        .env("PATH", fixture.restricted_path(&bin))
+        .args([
+            "run",
+            "--workspace",
+            "tried",
+            "--",
+            binary,
+            "--json",
+            "demo",
+            "start",
+        ])
+        .args(["--", "sh", "-c", "exec sleep 600"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // Its completion scan finds none of its processes in the demo, so the
+    // command finishes and the demo keeps running.
+    wait_until("the starting command to finish", || {
+        fixture.ok(&["work", "inspect", "tried"])["executions"]
+            .as_array()
+            .unwrap()
+            .len()
+            == 1
+    });
+    let executions = fixture.ok(&["work", "inspect", "tried"])["executions"].clone();
+    assert_eq!(executions[0]["state"], "running", "{executions}");
+    assert_eq!(
+        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    demo(&fixture, &["stop", "--workspace", "tried"]);
+    wait_until("the demo to stop", || {
+        demo(&fixture, &["ls", "--workspace", "tried"])["running"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
+}

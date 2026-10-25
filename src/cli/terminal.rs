@@ -228,6 +228,10 @@ pub(in crate::cli) trait Host: Sync {
     }
 }
 
+/// Variables a demo's worker must not inherit from the agent that starts it:
+/// the agent's execution marker would make the agent's exit stop the demo.
+const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
+
 /// The demo worker's argv for the handle of the place it runs in.
 pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&str) -> Result<Vec<OsString>> + Send + Sync + 'a;
 

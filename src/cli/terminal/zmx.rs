@@ -333,7 +333,7 @@ async fn run_in_background(ctx: &Context, workspace: &Workspace, args: &[OsStrin
 async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
     ensure_program("background launch", Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
-    run_in_new_session(&free_name(name, &taken), argv, env).await
+    run_in_new_session(&free_name(name, &taken), argv, env, &[]).await
 }
 
 /// Start a demo in a new detached session named after the workspace and the
@@ -342,12 +342,24 @@ async fn start_demo(workspace: &Workspace, name: &str, worker: &DemoWorker<'_>) 
     ensure_program("demo", Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let session = free_name(&format!("{}-{name}", workspace.name), &taken);
-    run_in_new_session(&session, &worker(&session)?, &[]).await?;
+    run_in_new_session(
+        &session,
+        &worker(&session)?,
+        &[],
+        super::NOT_INHERITED_BY_DEMOS,
+    )
+    .await?;
     Ok(session)
 }
 
-/// Create the session `name` and run `argv` there as `start_detached` describes.
-async fn run_in_new_session(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
+/// Create the session `name` and run `argv` there as `start_detached`
+/// describes, without the variables `clear` names.
+async fn run_in_new_session(
+    name: &str,
+    argv: &[OsString],
+    env: &[(&str, &str)],
+    clear: &[&str],
+) -> Result<()> {
     let words = argv
         .iter()
         .map(|arg| arg.to_str().context("Shoal command path is not UTF-8"))
@@ -357,13 +369,22 @@ async fn run_in_new_session(name: &str, argv: &[OsString], env: &[(&str, &str)])
         .args(["run", name, "-d", "true"])
         .envs(env.iter().copied())
         .stdin(std::process::Stdio::null());
+    for name in clear {
+        create.env_remove(name);
+    }
     Run::new(create)
         .checked()
         .await
         .context("create a zmx session")?;
     let mut send = Command::new(Tool::Zmx.program());
+    // A session zmx started elsewhere may carry them anyway.
+    let unset = if clear.is_empty() {
+        String::new()
+    } else {
+        format!("unset {}; ", clear.join(" "))
+    };
     send.args(["send", name]).arg(format!(
-        "{}=1 {} && exit; exec \"$SHELL\" -l\r",
+        "{unset}{}=1 {} && exit; exec \"$SHELL\" -l\r",
         env::ENDS_SESSION,
         crate::shell::quote(&words)
     ));

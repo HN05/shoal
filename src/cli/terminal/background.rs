@@ -27,13 +27,18 @@ pub(super) fn start_demo(
         fs::create_dir_all(directory).with_context(|| format!("create {}", directory.display()))?;
     }
     let output = File::create(&log).with_context(|| format!("create {}", log.display()))?;
-    std::process::Command::new(&argv[0])
+    let mut command = std::process::Command::new(&argv[0]);
+    command
         .args(&argv[1..])
         .current_dir(&workspace.path)
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output)
-        .process_group(0)
+        .process_group(0);
+    for name in super::NOT_INHERITED_BY_DEMOS {
+        command.env_remove(name);
+    }
+    command
         .spawn()
         .context("start the demo in the background")?;
     Ok(place.to_owned())
