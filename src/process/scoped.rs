@@ -132,12 +132,16 @@ mod tests {
     #[test]
     fn a_living_command_keeps_its_record_after_its_wrapper_drops() -> Result<()> {
         let state = tempfile::tempdir()?;
-        let mut command = std::process::Command::new("sleep").arg("30").spawn()?;
+        // `cat` lives until its stdin closes, after the assertion.
+        let mut command = std::process::Command::new("cat")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .spawn()?;
         let mut records = Records::wrapper(state.path())?;
         records.command(command.id())?;
         drop(records);
         let kept = any_recorded(state.path(), [command.id()].into_iter());
-        command.kill()?;
+        drop(command.stdin.take());
         command.wait()?;
         assert!(kept);
         Ok(())
