@@ -144,6 +144,16 @@ pub struct WorkspaceScope {
     pub all: bool,
 }
 
+/// The workspaces of a command that acts on several.
+#[derive(Debug, Default, Args)]
+pub struct WorkspaceTargets {
+    #[arg(value_name = "WORKSPACE")]
+    pub workspace: Vec<String>,
+    /// All workspaces.
+    #[arg(long, conflicts_with = "workspace")]
+    pub all: bool,
+}
+
 // Every subcommand enum defers its commands' arguments until parsing reaches
 // them: the whole tree takes megabytes that stay resident in each long-lived
 // process, such as an agent's wrapper and hooks. A command's attributes apply
@@ -599,10 +609,10 @@ pub enum Command {
         #[arg(long, requires = "repair")]
         reclaim: bool,
     },
-    /// Stop tracked agents and commands, saving them for `shoal resume`; keep the workspace.
+    /// Stop tracked agents and commands, saving them for `shoal resume`; keep the workspaces.
     Stop {
         #[command(flatten)]
-        scope: WorkspaceScope,
+        targets: WorkspaceTargets,
         /// Treat executions Shoal cannot prove ended as stopped without asking.
         #[arg(short = 'y', long)]
         yes: bool,

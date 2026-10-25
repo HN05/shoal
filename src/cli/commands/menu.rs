@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     cli::{
-        Command, ConfirmationArgs, ItemArgs, WorkspaceScope, agents, client,
+        Command, ConfirmationArgs, ItemArgs, WorkspaceTargets, agents, client,
         client::request,
         context::Context,
         internal::{Worker, internal_command},
@@ -657,8 +657,8 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             item: None,
         },
         Key::Stop => Command::Stop {
-            scope: WorkspaceScope {
-                workspace,
+            targets: WorkspaceTargets {
+                workspace: workspace.into_iter().collect(),
                 all: false,
             },
             yes: false,

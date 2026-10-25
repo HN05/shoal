@@ -4881,10 +4881,11 @@ fn stop_and_manual_removal_terminate_connected_executions() {
 }
 
 #[test]
-fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
+fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     let fixture = Fixture::new();
     let mut children = Vec::new();
-    for name in ["first", "second"] {
+    let running = ["first", "second", "third"];
+    for name in running {
         fixture.add(name);
         children.push(
             fixture
@@ -4905,7 +4906,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
         );
     }
     fixture.add("unused");
-    for name in ["first", "second"] {
+    for name in running {
         wait_until("execution registration", || {
             !fixture.ok(&["status", name])["executions"]
                 .as_array()
@@ -4913,16 +4914,30 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
                 .is_empty()
         });
     }
-    let stopped = fixture.ok(&["stop", "--all"]);
-    let mut names = stopped["stopped"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|name| name.as_str().unwrap())
-        .collect::<Vec<_>>();
-    names.sort();
-    assert_eq!(names, ["first", "second"]);
-    assert!(stopped["failed"].as_array().unwrap().is_empty());
+    let stopped_names = |args: &[&str]| {
+        let stopped = fixture.ok(args);
+        assert!(stopped["failed"].as_array().unwrap().is_empty());
+        let mut names = stopped["stopped"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| name.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        stopped_names(&["stop", "first", "second"]),
+        ["first", "second"]
+    );
+    assert_eq!(
+        fixture.ok(&["status", "third"])["executions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(stopped_names(&["stop", "--all"]), ["third"]);
     for mut child in children {
         assert!(!child.wait().unwrap().success());
     }
@@ -4937,7 +4952,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     let resumed = fixture.ok(&["resume", "--all"]);
     assert_eq!(
         resumed["commands"].as_array().unwrap().len(),
-        2,
+        3,
         "{resumed}"
     );
     assert!(resumed["agents"].as_array().unwrap().is_empty());
@@ -5565,11 +5580,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
     );
 
     for action in ["status", "stop"] {
-        // Stop leaves the idle workspaces out of its picker, offering all.
-        let pick = match action {
-            "stop" => "--all",
-            _ => other["id"].as_str().unwrap(),
-        };
+        let pick = other["id"].as_str().unwrap();
         for (cwd, explicit, json, expected, picker) in [
             (nested.as_path(), None, false, &own, false),
             (nested.as_path(), None, true, &own, false),
@@ -5595,6 +5606,13 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             }
             command.arg(action).args(explicit);
             let output = command.output().unwrap();
+            if picker && action == "stop" {
+                // Stop leaves the idle workspaces out of its picker, which
+                // has nothing to offer.
+                assert!(!output.status.success(), "{output:?}");
+                assert!(!picked.exists());
+                continue;
+            }
             assert!(output.status.success(), "{action}: {output:?}");
             assert_eq!(picked.exists(), picker);
             if picker {
@@ -9374,13 +9392,9 @@ fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     assert!(rows.contains("first"), "{rows}");
     assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
     // Stop leaves out workspaces with nothing running.
-    let (output, rows) = fixture.pick(&["stop"], "--all", "");
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(rows, "--all\tAll workspaces\n", "{rows}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("No running agents or commands"),
-        "{output:?}"
-    );
+    let (output, rows) = fixture.pick(&["stop"], "", "");
+    assert!(!output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
 }
 
 #[test]

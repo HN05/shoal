@@ -160,6 +160,7 @@ shoal messages send "Stop the dev server" --workspace fix-login  # Message the w
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
 shoal stop fix-login          # Stop agents and commands; save them for shoal resume
+shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup

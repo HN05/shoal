@@ -5,10 +5,10 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        WorkspaceScope,
+        WorkspaceTargets,
         client::{self, request},
         context::Context,
-        output::{Palette, Style},
+        output::Style,
         ui,
     },
     execution::recovery,
@@ -17,10 +17,23 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
 };
 
-pub(super) async fn run(ctx: &Context, scope: WorkspaceScope, yes: bool) -> Result<i32> {
-    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
+pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
+    if targets.all {
         return stop_all(ctx).await;
-    };
+    }
+    match ui::select_workspaces(ctx, targets.workspace)
+        .await?
+        .as_slice()
+    {
+        [workspace] => stop_one(ctx, workspace.clone(), yes).await,
+        workspaces => {
+            let workspaces = inspect_each(ctx, workspaces).await?;
+            stop_each(ctx, ui::Report::new("stopped"), &workspaces, "", yes).await
+        }
+    }
+}
+
+async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     stop(ctx, &workspace, yes).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let saved = recovery::pending(&ctx.paths, &workspace.id)?;
@@ -69,65 +82,85 @@ async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
     request_stop(true).await
 }
 
-/// Stop every settled workspace with a running execution, in parallel; one
-/// failure does not keep the others running.
+/// The workspaces `selectors` name, refusing an unknown one before any stops.
+async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspace>> {
+    let mut workspaces = Vec::new();
+    for selector in selectors {
+        workspaces.push(
+            client::inspect(&ctx.paths, selector.clone())
+                .await?
+                .workspace,
+        );
+    }
+    Ok(workspaces)
+}
+
+/// Stop every settled workspace with a running execution.
 async fn stop_all(ctx: &Context) -> Result<i32> {
+    let mut report = ui::Report::new("stopped");
     let mut running = Vec::new();
-    let mut failed = Vec::new();
+    let mut unknown = false;
     for workspace in client::workspaces(&ctx.paths).await? {
         match is_running(ctx, &workspace).await {
             Ok(true) => running.push(workspace),
             Ok(false) => {}
-            Err(error) => failed.push((workspace.name, format!("{error:#}"))),
+            Err(error) => {
+                report.failed(ctx, &workspace.name, &error);
+                unknown = true;
+            }
         }
     }
-    let results = join_all(running.iter().map(|workspace| {
+    if running.is_empty() && !unknown {
+        ctx.emit(
+            "No running agents or commands",
+            json!({"stopped": [], "failed": []}),
+        )?;
+        return Ok(0);
+    }
+    stop_each(ctx, report, &running, " --all", false).await
+}
+
+/// Stop `workspaces` in parallel, adding to `report`; one failure does not
+/// keep the others running, and an execution Shoal cannot prove ended fails
+/// its workspace unless `acknowledge_unproven`. `resume` follows `shoal
+/// resume` in the hint to restore them, which otherwise names each one.
+async fn stop_each(
+    ctx: &Context,
+    mut report: ui::Report,
+    workspaces: &[Workspace],
+    resume: &str,
+    acknowledge_unproven: bool,
+) -> Result<i32> {
+    let results = join_all(workspaces.iter().map(|workspace| {
         request::<()>(
             &ctx.paths,
             Method::StopWorkspace {
                 workspace: workspace.id.clone(),
-                acknowledge_unproven: false,
+                acknowledge_unproven,
             },
         )
     }))
     .await;
     let mut stopped = Vec::new();
-    for (workspace, result) in running.iter().zip(results) {
+    for (workspace, result) in workspaces.iter().zip(results) {
+        let name = workspace.name.as_str();
         match result {
-            Ok(()) => stopped.push(workspace.name.as_str()),
-            Err(error) => failed.push((workspace.name.clone(), format!("{error:#}"))),
+            Ok(()) => {
+                report.done(ctx, &format!("Stopped {name}"), json!(name));
+                stopped.push(name);
+            }
+            Err(error) => report.failed(ctx, name, &error),
         }
     }
-    let output = json!({
-        "stopped": stopped,
-        "failed": failed
-            .iter()
-            .map(|(workspace, error)| json!({"workspace": workspace, "error": error}))
-            .collect::<Vec<_>>(),
-    });
-    ctx.show(&output, |_| {
-        if stopped.is_empty() && failed.is_empty() {
-            outln!("No running agents or commands");
-        }
-        let palette = Palette::stdout(ctx.json);
-        for name in &stopped {
-            outln!(
-                "{}",
-                palette.paint(Style::Success, format!("Stopped {name}"))
-            );
-        }
-        let palette = Palette::stderr(ctx.json);
-        for (name, error) in &failed {
-            eprintln!(
-                "{}",
-                palette.paint(Style::Error, format!("Not stopped {name}: {error}"))
-            );
-        }
-        if !stopped.is_empty() {
-            outln!("Restore with shoal resume --all");
-        }
-    })?;
-    Ok(if failed.is_empty() { 0 } else { 1 })
+    if !ctx.json && !stopped.is_empty() {
+        let resume = if resume.is_empty() {
+            format!(" {}", stopped.join(" "))
+        } else {
+            resume.to_owned()
+        };
+        outln!("Restore with shoal resume{resume}");
+    }
+    report.finish(ctx)
 }
 
 /// Disconnected executions are left for `shoal stop <workspace>` rather than

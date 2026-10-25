@@ -4,7 +4,10 @@ use std::{collections::HashSet, io};
 
 use anyhow::{Result, ensure};
 
-use super::{Cell, Entries, pick, pick_many, picker_width, rows_with_status, status_cell};
+use super::{
+    Cell, Entries, pick, pick_many, picker_width, require_interactive, rows_with_status,
+    status_cell,
+};
 use crate::{
     cli::{
         WorkspaceScope,
@@ -282,6 +285,7 @@ pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
+    require_interactive(ctx)?;
     let entries = workspace_entries(ctx, workspaces).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick_many(ctx, "Workspaces> ", entries)

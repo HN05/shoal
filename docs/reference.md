@@ -256,12 +256,12 @@ delay it: a `recovery_blocked` notification names them, and the wrapper keeps
 waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
-`shoal stop [workspace]` stops tracked agents and commands through their wrappers,
+`shoal stop [workspace...]` stops tracked agents and commands through their wrappers,
 which print what stopped them and how to restore them, retaining work and resource leases. Agents save recovery records; commands started
 with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
-`--all` stops every ready or failed workspace with a running execution in parallel,
-reporting each failure without keeping the others running.
+Several workspaces, or `--all` for every ready or failed workspace with a running
+execution, stop in parallel, reporting each failure without keeping the others running.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
 closing its terminal, logging out or shutting down sends, is saved the same way,
 with the signal as its stop reason, so `shoal resume --all` restores it after a
