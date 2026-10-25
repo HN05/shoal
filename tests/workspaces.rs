@@ -12001,6 +12001,85 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
 }
 
 #[test]
+fn launch_profiles_run_with_their_base_integration_and_own_environment() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let config = home.join(".config/shoal/config.toml");
+    let mut text = fs::read_to_string(&config).unwrap();
+    text.push_str(
+        "[env]\nPROXY_URL = 'http://proxy'\nKEPT = 'kept'\n\
+         [ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
+         env_remove = ['PROXY_URL', 'INHERITED_TOKEN']\n",
+    );
+    fs::write(&config, text).unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "profiled",
+    ]);
+    fixture.add("profiled");
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
+    install_test_script(
+        home.join("bin/claude"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\nenv > \"$HOME/claude-env\"\n",
+    );
+    let launch = |agent: &str| {
+        let output = fixture
+            .command()
+            .args([agent, "profiled"])
+            .env("INHERITED_TOKEN", "secret")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        (
+            fs::read_to_string(home.join("claude-args")).unwrap(),
+            fs::read_to_string(home.join("claude-env")).unwrap(),
+        )
+    };
+
+    // The profile gets Claude's instructions and hooks with its own
+    // environment, and trust lands in its config directory.
+    let (args, env) = launch("claude-direct");
+    for flag in ["--append-system-prompt\n", "--settings\n"] {
+        assert!(args.contains(flag), "{args}");
+    }
+    let direct = home.join("direct");
+    assert!(
+        env.lines()
+            .any(|line| line == format!("CLAUDE_CONFIG_DIR={}", direct.display())),
+        "{env}"
+    );
+    assert!(env.lines().any(|line| line == "KEPT=kept"), "{env}");
+    for removed in ["PROXY_URL=", "INHERITED_TOKEN="] {
+        assert!(!env.lines().any(|line| line.starts_with(removed)), "{env}");
+    }
+    let root: Value =
+        serde_json::from_str(&fs::read_to_string(direct.join(".claude.json")).unwrap()).unwrap();
+    assert_eq!(
+        root["projects"][checkout.to_str().unwrap()]["hasTrustDialogAccepted"],
+        true
+    );
+    assert!(!home.join(".claude.json").exists());
+
+    // Claude itself keeps the environment it inherits.
+    let (_, env) = launch("claude");
+    for kept in ["PROXY_URL=http://proxy", "INHERITED_TOKEN=secret"] {
+        assert!(env.lines().any(|line| line == kept), "{env}");
+    }
+    assert!(!env.contains("CLAUDE_CONFIG_DIR="), "{env}");
+
+    // Removing the repository cleans the profile's trust entries too.
+    fixture.ok(&["repo", "rm", "profiled", "--yes"]);
+    let root: Value =
+        serde_json::from_str(&fs::read_to_string(direct.join(".claude.json")).unwrap()).unwrap();
+    assert_eq!(root["projects"], serde_json::json!({}));
+}
+
+#[test]
 fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let fixture = Fixture::new();
     let home = fixture.root.path();

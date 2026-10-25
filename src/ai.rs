@@ -63,6 +63,23 @@ impl Environment {
             })
             .collect()
     }
+
+    /// `configured`, the variables a launch adds to this process's, with
+    /// these changes.
+    pub fn layer(&self, configured: &mut BTreeMap<String, OsString>, home: &Path) {
+        for variable in &self.remove {
+            configured.remove(variable);
+        }
+        configured.extend(self.values(home));
+    }
+
+    /// Make these changes to `command`'s environment.
+    pub fn apply(&self, command: &mut std::process::Command, home: &Path) {
+        for variable in &self.remove {
+            command.env_remove(variable);
+        }
+        command.envs(self.values(home));
+    }
 }
 
 /// What a provider's launcher takes after its command, from `[ai.<name>]`,

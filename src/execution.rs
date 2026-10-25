@@ -416,6 +416,10 @@ async fn prepare_agent_launch(
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
         integration: agent.map(|agent| settings.integration(agent).to_owned()),
+        environment: agent
+            .map(|agent| settings.environment(agent))
+            .unwrap_or_default(),
+        home: paths.home.clone(),
     }))
 }
 
@@ -713,6 +717,9 @@ struct AgentLaunch {
     output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
     integration: Option<String>,
+    /// What the agent's `[ai]` entry changes in its environment, last.
+    environment: crate::ai::Environment,
+    home: PathBuf,
 }
 
 impl AgentLaunch {
@@ -720,6 +727,7 @@ impl AgentLaunch {
         self.account.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
+        self.environment.apply(command.as_std_mut(), &self.home);
     }
 }
 

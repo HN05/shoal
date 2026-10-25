@@ -113,7 +113,13 @@ pub(super) async fn begin(
     agents::trust_checkout(ctx, &settings, agent.name(), &repo);
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
-    run_here(ctx, &repo, &chat, &command)
+    run_here(
+        ctx,
+        &repo,
+        &chat,
+        &command,
+        &settings.environment(agent.name()),
+    )
 }
 
 /// Refresh the default branch as `shoal repo sync` does, so the agent reads what
@@ -284,16 +290,24 @@ fn instructions(settings: &Effective, repo: &Repository) -> String {
 }
 
 /// Replace this process with the agent, so the terminal's signals reach it
-/// alone and the process the daemon recorded for `chat` runs it. Workspaces
-/// the agent opens belong to the chat.
-fn run_here(ctx: &Context, repo: &Repository, chat: &Chat, command: &[OsString]) -> Result<i32> {
+/// alone and the process the daemon recorded for `chat` runs it, changed by
+/// the agent's `profile`. Workspaces the agent opens belong to the chat.
+fn run_here(
+    ctx: &Context,
+    repo: &Repository,
+    chat: &Chat,
+    command: &[OsString],
+    profile: &crate::ai::Environment,
+) -> Result<i32> {
     let (program, args) = command
         .split_first()
         .context("the agent command is empty")?;
-    let error = std::process::Command::new(program)
+    let mut process = std::process::Command::new(program);
+    process
         .args(args)
         .current_dir(&repo.path)
-        .envs(crate::env::chat_environment(chat, &ctx.paths))
-        .exec();
+        .envs(crate::env::chat_environment(chat, &ctx.paths));
+    profile.apply(&mut process, &ctx.paths.home);
+    let error = process.exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))
 }

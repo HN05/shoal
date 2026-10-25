@@ -163,7 +163,9 @@ async fn start(
     super::ensure_available(&format!("happy-{}", agent.as_str()), settings)?;
     let (prompt, args) = session_input(settings, workspace, agent, prompt, args);
     if let Some(trust) = happy.trust_file() {
-        trust.trust_tracked(ctx, workspace).await;
+        trust
+            .trust_tracked(ctx, workspace, &Default::default())
+            .await;
     }
     let daemon_recorded = warn_without_daemon(ctx);
     let stamp_millis = std::time::SystemTime::now()
@@ -252,7 +254,7 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
         ),
     };
     if let Some(trust) = happy.trust_file() {
-        trust.trust_checkout(ctx, repository);
+        trust.trust_checkout(ctx, repository, &Default::default());
     }
     let daemon_recorded = warn_without_daemon(ctx);
     // This process holds the chat until the session runs.

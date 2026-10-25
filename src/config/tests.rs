@@ -358,7 +358,10 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
 
 #[test]
 fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
-    let global: Config = toml::from_str("[ai.claude-direct]\nbase = 'claude'\n").unwrap();
+    let global: Config = toml::from_str(
+        "[ai.claude-direct]\nbase = 'claude'\nenv_remove = ['ANTHROPIC_BASE_URL']\n",
+    )
+    .unwrap();
     let repo = repo::parse("[commands]\nclaude = ['claude', '--verbose']\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert!(effective.providers.contains("claude-direct"));
@@ -369,6 +372,13 @@ fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
         effective.arguments("claude-direct"),
         effective.arguments("claude")
     );
+    assert!(
+        effective
+            .environment("claude-direct")
+            .remove
+            .contains("ANTHROPIC_BASE_URL")
+    );
+    assert_eq!(effective.environment("claude"), Default::default());
 }
 
 fn change(key: &str, value: Option<&str>) -> edit::Change {

@@ -199,6 +199,11 @@ impl Effective {
         self.integrations.get(name).map_or(name, String::as_str)
     }
 
+    /// What agent `name`'s tracked launches change in their environment.
+    pub fn environment(&self, name: &str) -> crate::ai::Environment {
+        self.environments.get(name).cloned().unwrap_or_default()
+    }
+
     fn from_merged(merged: RepoConfig) -> Result<Self> {
         fn built_in<T>(value: Option<T>, key: &str) -> Result<T> {
             value.with_context(|| format!("{key} has no built-in default"))

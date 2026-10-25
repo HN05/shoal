@@ -50,10 +50,16 @@ impl TrustFile {
     }
 
     /// [`Self::trust_workspace`] for a tracked agent, which runs with the
-    /// workspace's `[env]`, after the daemon keeps where that puts the
-    /// tool's config for repository removal.
-    pub(super) async fn trust_tracked(&self, ctx: &Context, workspace: &Workspace) {
-        let configured = workspaces::agent_environment(ctx, workspace).await;
+    /// workspace's `[env]` changed by `profile`, after the daemon keeps
+    /// where that puts the tool's config for repository removal.
+    pub(super) async fn trust_tracked(
+        &self,
+        ctx: &Context,
+        workspace: &Workspace,
+        profile: &crate::ai::Environment,
+    ) {
+        let mut configured = workspaces::agent_environment(ctx, workspace).await;
+        profile.layer(&mut configured, &ctx.paths.home);
         self.keep_config_location(ctx, workspace, &configured).await;
         let environment = AgentEnvironment {
             home: &ctx.paths.home,
@@ -85,11 +91,22 @@ impl TrustFile {
     }
 
     /// Trust a repository's checkout for a chat, which runs with this
-    /// process's environment, as workspace launches trust theirs; repository
-    /// removal clears the entries.
-    pub(super) fn trust_checkout(&self, ctx: &Context, repository: &Repository) {
+    /// process's environment changed by `profile`, as workspace launches
+    /// trust theirs; repository removal clears the entries.
+    pub(super) fn trust_checkout(
+        &self,
+        ctx: &Context,
+        repository: &Repository,
+        profile: &crate::ai::Environment,
+    ) {
+        let mut configured = std::collections::BTreeMap::new();
+        profile.layer(&mut configured, &ctx.paths.home);
+        let environment = AgentEnvironment {
+            home: &ctx.paths.home,
+            configured: &configured,
+        };
         self.trust(
-            &AgentEnvironment::inherited(&ctx.paths.home),
+            &environment,
             &repository_trust_paths(repository, &repository.path),
         );
     }

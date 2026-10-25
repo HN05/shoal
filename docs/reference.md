@@ -561,7 +561,8 @@ workspace outside the workspaces directory gets its own trust entry.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` takes
-precedence over Shoal's environment; chats and desktop apps use Shoal's. A trust
+precedence over Shoal's environment; chats and desktop apps use Shoal's. One set
+in the tool's [`[ai]` `env`](#agents) takes precedence over both. A trust
 update failure warns and still launches the agent. Removing a repository removes
 its trust entries from these files, and from those its workspaces' `[env]` selects,
 while preserving other project settings. When the daemon removes a
@@ -721,6 +722,27 @@ same name replaces it; defining both in the global file is an error. Names that
 collide with built-in commands are rejected. The picker and completion offer AI
 tools only.
 
+A `base` makes a tool a launch profile of another, here Claude on its own
+claude.ai login while `claude` keeps going through a proxy:
+
+```toml
+[ai.claude-direct]
+base = "claude"
+env = { CLAUDE_CONFIG_DIR = "~/.claude-direct" }
+env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
+```
+
+A profile gets its base's hooks, trust entries and waking, and each of its
+launcher (the one in effect for the workspace), `skill_dir`, `instructions`,
+`resume` and `resume_latest` it does not set; a base may itself be a profile.
+`env` sets and `env_remove` removes variables for the tool's tracked agents and
+chats, after `[env]`, the agent account and secrets; a value starting with `~/`
+names a path under the home directory. Any AI tool, built-in ones included,
+takes them. Trust entries and skills follow a `CLAUDE_CONFIG_DIR` or `CODEX_HOME`
+set there, which must be absolute or start with `~/`, and cannot be removed.
+Unsetting a variable does not undo one the agent's own settings file sets, such as
+the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
+
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).
@@ -728,8 +750,8 @@ Each entry replaces the built-in one for Claude, Codex and the other built-in to
 Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
-remain literal. Claude and Codex also get Shoal's hooks and trust entries, which
-other tools do without. A workspace's Claude Code agent is also allowed to run the
+remain literal. Claude and Codex, and their launch profiles, also get Shoal's
+hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
 `shoal` commands that report on and finish its assignment, with or without `--json`;
 the daemon still limits them to its scope. `--agent` and `default_agent` also
 accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool

@@ -777,6 +777,12 @@ arguments are configuration, built in for the tools Shoal ships; an integration
 keyed by agent name adds only what configuration cannot express, such as hooks,
 trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
 sessions), so commands never name a tool. Other names add no tool-specific setup.
+A `base` makes an entry a launch profile of another tool, run with the
+integration its chain of bases ends at, so one tool can run with several
+environments, such as a second login, without losing that setup. Its `env` and
+`env_remove` apply to its launches after `[env]`; Shoal reads where the agent
+keeps its config from them, so they can move that directory but not remove its
+variable.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings, plus permission for a workspace's
