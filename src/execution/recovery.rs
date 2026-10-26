@@ -535,7 +535,7 @@ pub(super) enum Waited {
 
 /// Wait for the daemon's verdict. While the daemon restarts, the link
 /// reattaches and the next daemon continues the wait.
-pub(super) async fn wait(link: &mut super::Link) -> Result<Waited> {
+pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
     use super::link::{Received, Refused};
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
