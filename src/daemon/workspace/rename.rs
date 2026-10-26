@@ -151,7 +151,24 @@ impl Manager {
         if self.rename_intent(&workspace.id).await?.is_none() {
             return Ok(workspace);
         }
-        let id = workspace.id.clone();
+        self.reserve_rename_repair(&workspace.id).await?;
+        let finished = self.finish_workspace_rename(&workspace, false).await;
+        let (state, error) = match &finished {
+            Ok(_) => (WorkspaceState::Ready, None),
+            Err(error) => (
+                WorkspaceState::Failed,
+                Some(format!("rename needs repair: {error:#}")),
+            ),
+        };
+        self.set_state(&workspace.id, state, error).await?;
+        finished?;
+        self.workspace(&workspace.id).await
+    }
+
+    /// Move a ready or failed workspace into reconciling for finishing its
+    /// pending rename, without the resource guard its caller already holds.
+    async fn reserve_rename_repair(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -170,18 +187,7 @@ impl Manager {
                 tx.commit()?;
                 Ok(())
             })
-            .await?;
-        let finished = self.finish_workspace_rename(&workspace, false).await;
-        let (state, error) = match &finished {
-            Ok(_) => (WorkspaceState::Ready, None),
-            Err(error) => (
-                WorkspaceState::Failed,
-                Some(format!("rename needs repair: {error:#}")),
-            ),
-        };
-        self.set_state(&workspace.id, state, error).await?;
-        finished?;
-        self.workspace(&workspace.id).await
+            .await
     }
 
     pub(crate) async fn ensure_no_pending_rename(&self, id: &str) -> Result<()> {

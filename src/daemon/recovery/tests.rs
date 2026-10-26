@@ -124,7 +124,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
     let error = second
         .await?
         .expect_err("the unfinished rename cannot be repaired");
-    assert!(format!("{error:#}").contains("restore one before repair"));
+    assert!(format!("{error:#}").contains("check out one of them"));
     assert_eq!(
         manager.workspace(&workspace.id).await?.state,
         WorkspaceState::Failed
