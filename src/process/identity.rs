@@ -194,7 +194,6 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         let mut inventory = Inventory {
-            listed: listing.iter().copied().collect(),
             observed: HashMap::new(),
         };
         for pid in listing {
@@ -284,10 +283,15 @@ enum Attribution {
     Unknown(Identity),
 }
 
-/// The inventoried PIDs and the processes among them still alive to observe.
+/// The inventoried processes still alive to observe.
 struct Inventory {
-    listed: HashSet<u32>,
     observed: HashMap<u32, Observed>,
+}
+
+/// Signalling is refused only for a live process of another user.
+fn another_users(pid: u32) -> bool {
+    let result = unsafe { libc::kill(pid as i32, 0) };
+    result != 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 impl Inventory {
@@ -362,16 +366,13 @@ impl Inventory {
         attribution
     }
 
-    /// A parent left out of the inventory belongs to another user or is the
-    /// daemon, neither of which can carry a marker it did not start with. A
-    /// listed one that cannot be observed has exited, or exits after the
-    /// inventory, and leaves `child` without an ancestor to tell.
+    /// A parent that is the daemon or belongs to another user carries no
+    /// marker it did not start with. Any other parent left unobserved has
+    /// exited or escaped the inventory and leaves `child` without an ancestor
+    /// to tell.
     fn unobserved_parent(&self, parent: u32, child: Option<&Observed>) -> Attribution {
-        let exists = parent == std::process::id()
-            || unsafe { libc::kill(parent as i32, 0) } == 0
-            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
         match child {
-            Some(child) if self.listed.contains(&parent) || !exists => {
+            Some(child) if parent != std::process::id() && !another_users(parent) => {
                 Attribution::Unknown(child.lineage.identity.clone())
             }
             _ => Attribution::Foreign,
@@ -1104,10 +1105,14 @@ mod tests {
     }
 
     #[test]
-    fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells() {
+    fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells() -> Result<()>
+    {
         use Evidence::{Hidden, Marked, Unmarked};
+        // A live parent the inventory missed, which `cat` keeps until its stdin closes.
+        let mut unlisted = std::process::Command::new("cat")
+            .stdin(std::process::Stdio::piped())
+            .spawn()?;
         let inventory = Inventory {
-            listed: HashSet::from([10, 11, 12, 20, 21, 30, 31, 32, 40, 41, 51, 60]),
             observed: HashMap::from([
                 // A shell and its job under a marked agent.
                 observed(10, 9, false, Marked("execution".into())),
@@ -1122,11 +1127,14 @@ mod tests {
                 // A job launchd started.
                 observed(30, 1, false, Hidden),
                 // A shell whose listed parent exited before it was observed.
-                observed(41, 40, false, Hidden),
+                // Above every system's highest PID, so no process has it.
+                observed(41, 4_194_305, false, Hidden),
                 // A shell whose parent exited and left its PID to a later
                 // marked process.
                 observed(51, 60, false, Hidden),
                 observed(60, 9, false, Marked("execution".into())),
+                // A shell whose live parent is missing from the inventory.
+                observed(u32::MAX >> 1, unlisted.id(), false, Hidden),
             ]),
         };
         let mut attributions = HashMap::new();
@@ -1143,6 +1151,11 @@ mod tests {
         assert_eq!(resolve(41), "unknown under 41");
         assert_eq!(resolve(51), "unknown under 51");
         assert_eq!(resolve(60), "owned by execution");
+        let missed = resolve(u32::MAX >> 1);
+        drop(unlisted.stdin.take());
+        unlisted.wait()?;
+        assert_eq!(missed, format!("unknown under {}", u32::MAX >> 1));
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
