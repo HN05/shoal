@@ -5,12 +5,13 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 
 use super::Manager;
 use crate::{
     daemon::{agent_messages, log, notifications::NotificationKind},
+    model::Workspace,
     state::{AgentState, TurnFailure},
 };
 
@@ -97,17 +98,27 @@ enum Scheduled {
     Exhausted,
 }
 
-/// Schedule the retry of the turn `failure` ended in `execution`: the next
-/// attempt after a delivered one, the first for a new execution, and the
-/// same one when the failure is reported again before it is due.
-fn schedule(
-    tx: &Transaction<'_>,
+/// Why Shoal stops retrying a turn.
+enum GiveUp {
+    /// A retry does not fix the failure.
+    Unfixable,
+    /// The turn failed on its last attempt.
+    Exhausted(TurnFailure),
+}
+
+/// Record the turn `failure` ended in `execution` as its workspace's
+/// retry: the next attempt after a delivered one, the first for a new
+/// execution, and the same one when the failure is reported again before it
+/// is due.
+fn record_failure(
+    db: &mut Connection,
     workspace_id: &str,
     execution: &str,
     failure: TurnFailure,
     now: i64,
     spread: f64,
 ) -> Result<Scheduled> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let previous: Option<(String, u32, i64, bool)> = tx
         .query_row(
             "SELECT execution_id,attempt,due_at,delivered FROM workspace_turn_retries
@@ -123,30 +134,94 @@ fn schedule(
         }
         _ => (1, now + delay(1, spread)),
     };
-    if attempt > ATTEMPTS {
+    let scheduled = if attempt > ATTEMPTS {
+        remove(&tx, workspace_id)?;
+        Scheduled::Exhausted
+    } else {
         tx.execute(
-            "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
-            [workspace_id],
+            "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
+             VALUES (?1,?2,?3,?4,?5,0)
+             ON CONFLICT(workspace_id) DO UPDATE SET execution_id=excluded.execution_id,
+                 failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
+            params![workspace_id, execution, failure, attempt, due_at],
         )?;
-        return Ok(Scheduled::Exhausted);
-    }
-    tx.execute(
-        "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
-         VALUES (?1,?2,?3,?4,?5,0)
-         ON CONFLICT(workspace_id) DO UPDATE SET execution_id=excluded.execution_id,
-             failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
-        params![workspace_id, execution, failure, attempt, due_at],
-    )?;
-    Ok(Scheduled::Waiting)
+        Scheduled::Waiting
+    };
+    tx.commit()?;
+    Ok(scheduled)
 }
 
-/// A retry whose attempt is due, with the turn state its workspace reports.
+fn remove(db: &Connection, workspace_id: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
+        [workspace_id],
+    )?;
+    Ok(())
+}
+
+/// A retry whose attempt is due at `now`, with whether it may be delivered:
+/// the reporting execution still runs the idle agent and the assignment is
+/// not finished.
 struct Due {
     workspace_id: String,
     failure: TurnFailure,
     attempt: u32,
-    /// Whether the reporting execution still runs the idle agent.
-    idle: bool,
+    deliverable: bool,
+}
+
+fn due(db: &Connection, now: i64) -> Result<Vec<Due>> {
+    Ok(db
+        .prepare(
+            "SELECT r.workspace_id,r.failure,r.attempt,
+                s.state IS 'idle' AND s.execution_id IS r.execution_id
+                AND NOT EXISTS (SELECT 1 FROM workspace_completion c
+                    WHERE c.workspace_id=r.workspace_id)
+             FROM workspace_turn_retries r
+             LEFT JOIN workspace_agent_state s ON s.workspace_id=r.workspace_id
+             WHERE r.delivered=0 AND r.due_at<=?1",
+        )?
+        .query_map([now], |row| {
+            Ok(Due {
+                workspace_id: row.get(0)?,
+                failure: row.get(1)?,
+                attempt: row.get(2)?,
+                deliverable: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Ask each agent whose retry is due at `now` and may be delivered to
+/// continue, queueing its message and marking the retry delivered together,
+/// and drop the other due ones. One transaction checks and delivers, so a
+/// turn that starts meanwhile never receives a cancelled retry. Whether a
+/// message was queued, and when the next retry is due.
+fn deliver_due(db: &mut Connection, now: i64) -> Result<(bool, Option<i64>)> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let mut queued = false;
+    for due in due(&tx, now)? {
+        if !due.deliverable {
+            remove(&tx, &due.workspace_id)?;
+            continue;
+        }
+        agent_messages::insert(
+            &tx,
+            &due.workspace_id,
+            &continuation(due.failure, due.attempt),
+        )?;
+        tx.execute(
+            "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
+            [&due.workspace_id],
+        )?;
+        queued = true;
+    }
+    let next = tx.query_row(
+        "SELECT MIN(due_at) FROM workspace_turn_retries WHERE delivered=0",
+        [],
+        |row| row.get(0),
+    )?;
+    tx.commit()?;
+    Ok((queued, next))
 }
 
 /// The message that asks the agent to continue.
@@ -180,133 +255,70 @@ impl Manager {
         failure: TurnFailure,
         execution: &str,
     ) -> Result<()> {
-        let Some(agent) = self.agent_name(execution).await else {
+        let Some(agent) = self.retrying_agent(execution).await else {
             return Ok(());
         };
-        if !crate::ai::retries(&self.config().ai, &agent) {
-            return Ok(());
-        }
         let workspace = self.workspace(selector).await?;
         if !failure.retryable() {
-            self.cancel_turn_retry(&workspace.id).await?;
-            let message = format!(
-                "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
-            );
-            self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
+            return self
+                .give_up_turn(&workspace, &agent, GiveUp::Unfixable)
                 .await;
-            return Ok(());
         }
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
-        let now = i64::try_from(crate::time::unix_seconds())?;
-        let spread = spread();
+        let (now, spread) = (i64::try_from(crate::time::unix_seconds())?, spread());
         let scheduled = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let scheduled = schedule(&tx, &id, &execution, failure, now, spread)?;
-                tx.commit()?;
-                Ok(scheduled)
-            })
+            .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
             .await?;
-        if scheduled == Scheduled::Exhausted {
-            let message = format!(
-                "{agent}'s turn still fails ({}) after {ATTEMPTS} attempts; Shoal stopped retrying it",
-                failure.describe()
-            );
-            self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
-                .await;
+        match scheduled {
+            Scheduled::Waiting => self.turn_retry_wake.notify_one(),
+            Scheduled::Exhausted => {
+                let reason = GiveUp::Exhausted(failure);
+                self.give_up_turn(&workspace, &agent, reason).await?;
+            }
         }
-        self.turn_retry_wake.notify_one();
         Ok(())
     }
 
-    async fn cancel_turn_retry(&self, workspace_id: &str) -> Result<()> {
-        let workspace_id = workspace_id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
-                    [workspace_id],
-                )?;
-                Ok(())
-            })
-            .await
+    /// The name of the agent `execution` runs when its AI tool has `retry`
+    /// on.
+    async fn retrying_agent(&self, execution: &str) -> Option<String> {
+        let agent = self.agent_name(execution).await?;
+        crate::ai::retries(&self.config().ai, &agent).then_some(agent)
     }
 
-    /// Ask each agent whose retry is due to continue, dropping a retry whose
-    /// agent is no longer the reporting one idle or whose assignment is
-    /// finished; the time the next one is due.
+    /// Drop the workspace's retry and tell whoever receives its agent's
+    /// events why Shoal stops retrying.
+    async fn give_up_turn(&self, workspace: &Workspace, agent: &str, reason: GiveUp) -> Result<()> {
+        let id = workspace.id.clone();
+        self.store.run(move |db| remove(db, &id)).await?;
+        let message = match reason {
+            GiveUp::Unfixable => format!(
+                "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
+            ),
+            GiveUp::Exhausted(failure) => format!(
+                "{agent}'s turn still fails ({}) after {ATTEMPTS} attempts; Shoal stopped retrying it",
+                failure.describe()
+            ),
+        };
+        self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
+            .await;
+        Ok(())
+    }
+
+    /// Deliver the retries due now; when the next one is due.
     pub(crate) async fn deliver_turn_retries(&self) -> Result<Option<i64>> {
-        let now = i64::try_from(crate::time::unix_seconds())?;
-        for due in self.due_turn_retries(now).await? {
-            let deliver = due.idle && self.completion(&due.workspace_id).await?.is_none();
-            self.deliver_turn_retry(due, deliver).await?;
-        }
-        self.store
-            .run(|db| {
-                Ok(db.query_row(
-                    "SELECT MIN(due_at) FROM workspace_turn_retries WHERE delivered=0",
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
+        self.deliver_turn_retries_at(i64::try_from(crate::time::unix_seconds())?)
             .await
     }
 
-    async fn due_turn_retries(&self, now: i64) -> Result<Vec<Due>> {
-        self.store
-            .run(move |db| {
-                Ok(db
-                    .prepare(
-                        "SELECT r.workspace_id,r.failure,r.attempt,
-                            s.state IS 'idle' AND s.execution_id IS r.execution_id
-                         FROM workspace_turn_retries r
-                         LEFT JOIN workspace_agent_state s ON s.workspace_id=r.workspace_id
-                         WHERE r.delivered=0 AND r.due_at<=?1",
-                    )?
-                    .query_map([now], |row| {
-                        Ok(Due {
-                            workspace_id: row.get(0)?,
-                            failure: row.get(1)?,
-                            attempt: row.get(2)?,
-                            idle: row.get(3)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
-    }
-
-    /// Queue the continuation and mark the retry delivered together, or drop
-    /// the retry when it may not be `deliver`ed.
-    async fn deliver_turn_retry(&self, due: Due, deliver: bool) -> Result<()> {
-        let queued = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                if !deliver {
-                    tx.execute(
-                        "DELETE FROM workspace_turn_retries WHERE workspace_id=?1 AND delivered=0",
-                        [&due.workspace_id],
-                    )?;
-                    tx.commit()?;
-                    return Ok(false);
-                }
-                let message = continuation(due.failure, due.attempt);
-                agent_messages::insert(&tx, &due.workspace_id, &message)?;
-                tx.execute(
-                    "UPDATE workspace_turn_retries SET delivered=1
-                     WHERE workspace_id=?1 AND attempt=?2 AND delivered=0",
-                    params![due.workspace_id, due.attempt],
-                )?;
-                tx.commit()?;
-                Ok(true)
-            })
-            .await?;
+    /// Deliver the retries due at `now`, as [`deliver_due`] does.
+    async fn deliver_turn_retries_at(&self, now: i64) -> Result<Option<i64>> {
+        let (queued, next) = self.store.run(move |db| deliver_due(db, now)).await?;
         if queued {
             self.agent_messages_changed.send_modify(|count| *count += 1);
         }
-        Ok(())
+        Ok(next)
     }
 }
 

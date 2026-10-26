@@ -83,16 +83,13 @@ async fn report(manager: &Manager, workspace: &Workspace, execution: &str, state
 }
 
 /// Make the pending retry due now and deliver it.
+/// Deliver every pending retry, however far off it is due.
 async fn deliver_now(manager: &Manager) -> Option<i64> {
-    manager
-        .store
-        .run(|db| {
-            db.execute("UPDATE workspace_turn_retries SET due_at=0", [])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager.deliver_turn_retries().await.unwrap()
+    manager.deliver_turn_retries_at(i64::MAX).await.unwrap()
+}
+
+fn now() -> i64 {
+    i64::try_from(crate::time::unix_seconds()).unwrap()
 }
 
 async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
@@ -108,28 +105,28 @@ async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
 #[tokio::test]
 async fn a_failed_turn_waits_then_asks_the_idle_agent_to_continue() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
-    let before = i64::try_from(crate::time::unix_seconds()).unwrap();
+    let before = now();
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    let after = now();
     let pending = retry(&manager, &workspace).await.unwrap();
     assert_eq!(
         (pending.failure, pending.attempt, pending.delivered),
         (TurnFailure::Overloaded, 1, false)
     );
     assert!(
-        (before + 24..=before + 37).contains(&pending.due_at),
+        (before + 24..=after + 36).contains(&pending.due_at),
         "{pending:?}"
     );
     // A second report of the same failure, such as from a proxy, keeps it.
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     assert_eq!(retry(&manager, &workspace).await.unwrap(), pending);
-    // Nothing is due yet.
-    assert_eq!(
-        manager.deliver_turn_retries().await.unwrap(),
-        Some(pending.due_at)
-    );
+    // Nothing is delivered before it is due.
+    let early = manager.deliver_turn_retries_at(pending.due_at - 1);
+    assert_eq!(early.await.unwrap(), Some(pending.due_at));
     assert!(messages(&manager, &workspace).await.is_empty());
 
-    assert_eq!(deliver_now(&manager).await, None);
+    let due = manager.deliver_turn_retries_at(pending.due_at);
+    assert_eq!(due.await.unwrap(), None);
     let asked = messages(&manager, &workspace).await;
     assert_eq!(asked.len(), 1);
     assert!(asked[0].contains("(API overloaded)"), "{asked:?}");
@@ -160,6 +157,16 @@ async fn a_new_turn_or_a_busy_agent_cancels_a_retry() {
     // An agent that is no longer idle when the retry is due is not asked.
     fail(&manager, &workspace, &execution, TurnFailure::ServerError).await;
     report(&manager, &workspace, &execution, AgentState::Waiting).await;
+    assert_eq!(deliver_now(&manager).await, None);
+    assert_eq!(retry(&manager, &workspace).await, None);
+    assert!(messages(&manager, &workspace).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_finished_assignment_drops_its_retry() {
+    let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
+    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    manager.mark_done(&workspace.name, false).await.unwrap();
     assert_eq!(deliver_now(&manager).await, None);
     assert_eq!(retry(&manager, &workspace).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
