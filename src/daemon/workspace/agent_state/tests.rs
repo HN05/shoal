@@ -155,3 +155,18 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         [&child.name]
     );
 }
+
+#[tokio::test]
+async fn a_failed_turn_leaves_the_agent_idle() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    manager
+        .set_agent_state(&workspace.name, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let status = manager
+        .report_turn_failure(&workspace.name, TurnFailure::Overloaded, None, None)
+        .await
+        .unwrap();
+    assert_eq!(status.state, AgentState::Idle);
+}

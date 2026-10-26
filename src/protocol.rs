@@ -351,6 +351,14 @@ pub enum Method {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
     },
+    /// [`Method::SetAgentState`] idle for a turn `failure` ended, which may
+    /// schedule a retry of the turn.
+    ReportTurnFailure {
+        workspace: String,
+        failure: crate::state::TurnFailure,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
     SetIssue {
         workspace: String,
         url: String,

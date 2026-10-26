@@ -2576,7 +2576,9 @@ read it instead of each inferring it from the terminal. Shoal's terminal
 Claude Code and Codex launches, including `add --agent` and resumed sessions, register
 the hooks with the [message hooks](#agent-messages); Happy sessions do not.
 A session that starts, resumes or clears reports `idle`, so a new agent shows
-`waiting` until its first turn.
+`waiting` until its first turn. A turn an API error ends reports `idle` through
+`shoal internal turn-failed --integration <name>`, which also reads the failure
+the integration's hook event names.
 Neither agent has a hook for an interrupted turn: Claude Code shows `working` until
 it notifies that its prompt is waiting for input, and Codex until its next turn
 ends. Codex has no hook for a permission prompt, so it reports `working`
@@ -3022,7 +3024,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 ### Scoped workspace commands
 
 PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
-`ready` and `internal agent-state` are own-workspace scope exceptions.
+`ready`, `internal agent-state` and `internal turn-failed` are own-workspace scope
+exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

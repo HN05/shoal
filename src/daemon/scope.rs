@@ -166,7 +166,7 @@ pub async fn authorize(
             );
             Some(workspace)
         }
-        Method::SetAgentState { workspace, .. } => {
+        Method::SetAgentState { workspace, .. } | Method::ReportTurnFailure { workspace, .. } => {
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.
             ensure!(

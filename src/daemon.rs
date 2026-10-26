@@ -823,6 +823,18 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                     .await?,
             )
         }
+        Method::ReportTurnFailure {
+            workspace,
+            failure,
+            session,
+        } => {
+            let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
+            Body::AgentStatus(
+                manager
+                    .report_turn_failure(&workspace, failure, execution, session)
+                    .await?,
+            )
+        }
         Method::WorkspaceDone { workspace, cleanup } => {
             Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }

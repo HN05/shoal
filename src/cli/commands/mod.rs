@@ -732,6 +732,10 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         InternalCommand::AgentState { state, workspace } => {
             agent_state::run(&ctx, workspace, state).await
         }
+        InternalCommand::TurnFailed {
+            integration,
+            workspace,
+        } => agent_state::turn_failed(&ctx, workspace, &integration).await,
         InternalCommand::Wake {
             agent,
             workspace,

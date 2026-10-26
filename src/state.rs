@@ -205,6 +205,16 @@ states!(AgentState: ValueEnum {
     /// The agent finished its turn.
     Idle => "idle",
 });
+states!(TurnFailure {
+    /// The API refused the request for a rate or usage limit.
+    RateLimited => "rate_limited",
+    /// The API was overloaded.
+    Overloaded => "overloaded",
+    /// The API failed on its side.
+    ServerError => "server_error",
+    /// Any other error, such as authentication or an invalid request.
+    Other => "other",
+});
 
 #[cfg(test)]
 mod tests {

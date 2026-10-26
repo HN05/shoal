@@ -80,6 +80,12 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
+    /// The failure that `event`, from its hook for a turn an API error ended,
+    /// reports; `None` for an agent without one.
+    fn turn_failure(&self, _event: &serde_json::Value) -> Option<crate::state::TurnFailure> {
+        None
+    }
+
     /// Why the agent cannot run under `settings`, such as an integration
     /// turned off in config; pickers and completion leave it out.
     fn unavailable(&self, _settings: &Effective) -> Option<&'static str> {
@@ -525,6 +531,14 @@ pub(in crate::cli) async fn start_chat(
 /// typing a prompt.
 pub(crate) fn wakes_by_prompt(name: &str) -> bool {
     integration(name).wakes_by_prompt()
+}
+
+/// The failure an agent with integration `name` reports in `event`.
+pub(in crate::cli) fn turn_failure(
+    name: &str,
+    event: &serde_json::Value,
+) -> Option<crate::state::TurnFailure> {
+    integration(name).turn_failure(event)
 }
 
 /// Trust the path of `workspace`, reopened from `removed`, for each agent

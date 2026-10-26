@@ -13,7 +13,7 @@ use crate::{
     agent::hooks,
     cli::context::Context,
     config::{Effective, templates::Delivery},
-    state::AgentState,
+    state::{AgentState, TurnFailure},
 };
 
 pub(super) struct Claude;
@@ -34,6 +34,17 @@ impl Integration for Claude {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CLAUDE_CODE)
+    }
+
+    /// `StopFailure` names Claude Code's error kind; a gateway such as a
+    /// proxy reports an overloaded upstream as a server error.
+    fn turn_failure(&self, event: &Value) -> Option<TurnFailure> {
+        Some(match event["error"].as_str()? {
+            "rate_limit" => TurnFailure::RateLimited,
+            "overloaded" => TurnFailure::Overloaded,
+            "server_error" => TurnFailure::ServerError,
+            _ => TurnFailure::Other,
+        })
     }
 }
 
@@ -97,7 +108,8 @@ fn lifecycle_rules() -> Vec<String> {
 /// session that starts, resumes or clears waits for its first turn. A
 /// finished tool call, failed or not, means a permission prompt or question
 /// was answered. No hook follows an interrupted turn, so Claude Code's notice
-/// that its prompt has waited for input reports the turn finished.
+/// that its prompt has waited for input reports the turn finished. A turn an
+/// API error ends reports its failure, which leaves the agent idle.
 fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -129,7 +141,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
             hooks::state(shoal, Some("idle_prompt"), AgentState::Idle),
         ),
         ("Stop", hooks::state(shoal, None, AgentState::Idle)),
-        ("StopFailure", hooks::state(shoal, None, AgentState::Idle)),
+        ("StopFailure", hooks::turn_failed(shoal, "claude")),
     ]
 }
 
@@ -193,6 +205,7 @@ mod tests {
         }
         let states: Vec<_> = state_hooks("shoal")
             .into_iter()
+            .filter(|(event, _)| *event != "StopFailure")
             .map(|(event, group)| {
                 let command = group["hooks"][0]["command"].as_str().unwrap().to_owned();
                 let state = command.split(' ').nth(3).unwrap().to_owned();
@@ -216,8 +229,15 @@ mod tests {
                 ),
                 expected("Notification", Some("idle_prompt"), "idle"),
                 expected("Stop", None, "idle"),
-                expected("StopFailure", None, "idle"),
             ]
+        );
+        // A turn an API error ended reports its failure, read from the event.
+        let failed = settings["hooks"]["StopFailure"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(
+            failed.contains(" internal turn-failed --integration claude "),
+            "{failed}"
         );
         // A second group waits in the background to wake the idle agent,
         // after a failed turn as after one that ended normally.
@@ -256,6 +276,23 @@ mod tests {
         ] {
             assert!(allow.contains(&json!(rule)), "{rule}: {allow:?}");
         }
+    }
+
+    #[test]
+    fn stop_failure_errors_name_the_turn_failure() {
+        for (error, failure) in [
+            ("rate_limit", Some(TurnFailure::RateLimited)),
+            ("overloaded", Some(TurnFailure::Overloaded)),
+            ("server_error", Some(TurnFailure::ServerError)),
+            ("authentication_failed", Some(TurnFailure::Other)),
+        ] {
+            let event = json!({"hook_event_name": "StopFailure", "error": error});
+            assert_eq!(Claude.turn_failure(&event), failure, "{error}");
+        }
+        assert_eq!(
+            Claude.turn_failure(&json!({"hook_event_name": "Stop"})),
+            None
+        );
     }
 
     #[test]

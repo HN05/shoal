@@ -1779,6 +1779,16 @@ pub enum InternalCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+    /// Report a turn an API error ended, with the failure the hook event of an
+    /// agent with this integration names; Shoal's agent hooks call it.
+    TurnFailed {
+        /// The integration whose hook event stdin carries.
+        #[arg(long)]
+        integration: String,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Wait for the next agent messages or item activity of the workspace or
     /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
     /// hooks run it in the background so the update starts the idle agent's

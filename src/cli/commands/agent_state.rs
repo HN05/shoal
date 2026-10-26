@@ -1,4 +1,5 @@
-//! `shoal internal agent-state`: the turn state an agent's hooks report for its workspace.
+//! `shoal internal agent-state` and `turn-failed`: the turn state, and the
+//! failure that ended a turn, that an agent's hooks report for its workspace.
 use std::{
     io::{IsTerminal, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -16,7 +17,7 @@ use crate::{
     execution::recovery,
     model::AgentStatus,
     protocol::Method,
-    state::AgentState,
+    state::{AgentState, TurnFailure},
 };
 
 pub(super) async fn run(
@@ -25,7 +26,7 @@ pub(super) async fn run(
     state: AgentState,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
-    let session = hook_session();
+    let session = hook_event().as_ref().and_then(session_of);
     let status: AgentStatus = request(
         &ctx.paths,
         Method::SetAgentState {
@@ -35,6 +36,34 @@ pub(super) async fn run(
         },
     )
     .await?;
+    emit(ctx, status)
+}
+
+/// Report the turn that the hook event of an agent with `integration`
+/// says an API error ended, which leaves the agent idle. An event the
+/// integration cannot read reports an unknown failure.
+pub(super) async fn turn_failed(
+    ctx: &Context,
+    workspace: Option<String>,
+    integration: &str,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
+    let event = hook_event().unwrap_or_default();
+    let failure =
+        crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
+    let status: AgentStatus = request(
+        &ctx.paths,
+        Method::ReportTurnFailure {
+            workspace,
+            failure,
+            session: session_of(&event),
+        },
+    )
+    .await?;
+    emit(ctx, status)
+}
+
+fn emit(ctx: &Context, status: AgentStatus) -> Result<i32> {
     ctx.emit(
         &format!("Agent state: {}", ui::agent_state_label(status.state)),
         status,
@@ -47,14 +76,14 @@ pub(super) async fn run(
 /// inherited an open pipe or socket may never write or close it.
 const EVENT_WAIT: Duration = Duration::from_secs(2);
 
-/// The session ID in the event Claude Code and Codex pass their hooks on
-/// stdin; a terminal, a silent input or another input reports none.
-fn hook_session() -> Option<String> {
+/// The event Claude Code and Codex pass their hooks on stdin; a terminal, a
+/// silent input or another input reports none.
+fn hook_event() -> Option<serde_json::Value> {
     let stdin = std::io::stdin();
     if stdin.is_terminal() || !readable_within(stdin.as_fd(), EVENT_WAIT) {
         return None;
     }
-    session_of(stdin.lock())
+    first_value(stdin.lock())
 }
 
 /// Whether `fd` has input or has reached its end within `wait`.
@@ -75,13 +104,16 @@ fn readable_within(fd: BorrowedFd<'_>, wait: Duration) -> bool {
     }
 }
 
-/// The session of the first JSON value in `event`, read without waiting for
-/// the input to close.
-fn session_of(event: impl Read) -> Option<String> {
-    let event: serde_json::Value = serde_json::Deserializer::from_reader(event)
+/// The first JSON value in `input`, read without waiting for it to close.
+fn first_value(input: impl Read) -> Option<serde_json::Value> {
+    serde_json::Deserializer::from_reader(input)
         .into_iter()
         .next()?
-        .ok()?;
+        .ok()
+}
+
+/// The agent session a hook event names.
+fn session_of(event: &serde_json::Value) -> Option<String> {
     event["session_id"]
         .as_str()
         .filter(|session| recovery::valid_session(session))
@@ -96,13 +128,14 @@ mod tests {
     fn hook_events_name_their_session() {
         let event =
             br#"{"session_id":"0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f","hook_event_name":"Stop"}"#;
+        let session = |input: &[u8]| first_value(input).as_ref().and_then(session_of);
         assert_eq!(
-            session_of(&event[..]).as_deref(),
+            session(&event[..]).as_deref(),
             Some("0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f")
         );
-        assert_eq!(session_of(&br#"{"session_id":"--help"}"#[..]), None);
-        assert_eq!(session_of(&br#"{"hook_event_name":"Stop"}"#[..]), None);
-        assert_eq!(session_of(&b""[..]), None);
+        assert_eq!(session(br#"{"session_id":"--help"}"#), None);
+        assert_eq!(session(br#"{"hook_event_name":"Stop"}"#), None);
+        assert_eq!(session(b""), None);
     }
 
     #[test]
@@ -114,7 +147,10 @@ mod tests {
         writer.write_all(br#"{"session_id":"0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f"}"#)?;
         assert!(readable_within(reader.as_fd(), Duration::from_millis(50)));
         assert_eq!(
-            session_of(&reader).as_deref(),
+            first_value(&reader)
+                .as_ref()
+                .and_then(session_of)
+                .as_deref(),
             Some("0b0e5f3c-7d2a-4c55-9f1e-1a2b3c4d5e6f")
         );
         drop(writer);

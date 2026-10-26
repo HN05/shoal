@@ -4,7 +4,11 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::{execution::recovery, model::AgentStatus, state::AgentState};
+use crate::{
+    execution::recovery,
+    model::AgentStatus,
+    state::{AgentState, TurnFailure},
+};
 
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
     Ok(db
@@ -70,6 +74,19 @@ impl Manager {
             self.agent_wake_changed.send_modify(|count| *count += 1);
         }
         Ok(status)
+    }
+
+    /// Record the turn `failure` ended as reported from `execution`, which
+    /// leaves the agent idle.
+    pub async fn report_turn_failure(
+        &self,
+        selector: &str,
+        _failure: TurnFailure,
+        execution: Option<String>,
+        session: Option<String>,
+    ) -> Result<AgentStatus> {
+        self.set_agent_state(selector, AgentState::Idle, execution, session)
+            .await
     }
 }
 
