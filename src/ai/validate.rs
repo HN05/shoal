@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use clap::CommandFactory;
 
-use super::{Agent, Agents, PROVIDERS, providers};
+use super::{Agent, Agents, PROVIDERS, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
 
 /// `commands` is the same file's `[commands]`, which must not define a
@@ -31,7 +31,7 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
         }
         validate_environment(agents, name, agent).with_context(|| format!("ai.{name}"))?;
         ensure!(
-            agent.retry.is_none() || providers(agents).contains(name),
+            agent.retry.is_none() || runs_as_agent(agents, name),
             "ai.{name}.retry needs a command or base, or a built-in AI tool"
         );
         for (key, argv, placeholders) in [
@@ -84,7 +84,7 @@ fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
 /// from `name` ends at one without.
 fn validate_base(agents: &Agents, name: &str, base: &str) -> Result<()> {
     ensure!(
-        providers(agents).contains(base),
+        runs_as_agent(agents, base),
         "{base:?} is not a built-in AI tool or one configured with a command or base"
     );
     let mut seen = BTreeSet::from([name]);
@@ -106,7 +106,7 @@ fn validate_environment(agents: &Agents, name: &str, agent: &Agent) -> Result<()
         return Ok(());
     }
     ensure!(
-        providers(agents).contains(name),
+        runs_as_agent(agents, name),
         "env and env_remove need a command or base, or a built-in AI tool"
     );
     for (variable, value) in &agent.env {

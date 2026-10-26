@@ -179,7 +179,14 @@ async fn built_in_restore_child() {
         let launch_args = crate::cli::agents::hook_args(agent)
             .unwrap()
             .into_iter()
-            .chain(crate::ai::arguments(&Default::default(), agent).add_dir_args(directory));
+            .chain(
+                crate::ai::Table::default().tools[agent]
+                    .launch
+                    .as_ref()
+                    .unwrap()
+                    .arguments
+                    .add_dir_args(directory),
+            );
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );

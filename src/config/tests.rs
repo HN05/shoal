@@ -364,21 +364,15 @@ fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
     .unwrap();
     let repo = repo::parse("[commands]\nclaude = ['claude', '--verbose']\n").unwrap();
     let effective = global.effective(&repo).unwrap();
-    assert!(effective.providers.contains("claude-direct"));
+    assert!(crate::ai::agents(&effective.tools).any(|agent| agent == "claude-direct"));
     assert_eq!(effective.integration("claude-direct"), "claude");
     assert_eq!(effective.integration("codex"), "codex");
     assert_eq!(effective.commands["claude-direct"], ["claude", "--verbose"]);
-    assert_eq!(
-        effective.arguments("claude-direct"),
-        effective.arguments("claude")
-    );
-    assert!(
-        effective
-            .environment("claude-direct")
-            .remove
-            .contains("ANTHROPIC_BASE_URL")
-    );
-    assert_eq!(effective.environment("claude"), Default::default());
+    let direct = effective.launch("claude-direct");
+    assert_eq!(direct.arguments, effective.launch("claude").arguments);
+    assert!(direct.environment.remove.contains("ANTHROPIC_BASE_URL"));
+    assert_eq!(effective.launch("claude").environment, Default::default());
+    assert_eq!(effective.launch("undefined"), &Default::default());
 }
 
 fn change(key: &str, value: Option<&str>) -> edit::Change {

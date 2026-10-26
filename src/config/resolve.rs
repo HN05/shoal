@@ -20,17 +20,9 @@ use crate::{
 #[derive(Debug, Serialize)]
 pub struct Effective {
     pub commands: named_commands::Commands,
-    /// AI tools that run as agents; machine config, so no layer overrides it.
-    pub providers: std::collections::BTreeSet<String>,
-    /// Each AI tool's launcher arguments, machine config like `providers`.
+    /// Every AI tool; machine config, so no layer overrides it.
     #[serde(skip)]
-    pub arguments: BTreeMap<String, crate::ai::Arguments>,
-    /// The tool each launch profile runs with the integration of.
-    #[serde(skip)]
-    pub integrations: BTreeMap<String, String>,
-    /// What each AI tool's tracked launches change in their environment.
-    #[serde(skip)]
-    pub environments: BTreeMap<String, crate::ai::Environment>,
+    pub tools: crate::ai::Tools,
     pub agent_resume: named_commands::Commands,
     pub worker_template: Option<String>,
     pub chat_template: Option<String>,
@@ -188,21 +180,24 @@ impl RepoConfig {
 }
 
 impl Effective {
-    /// Agent `name`'s launcher arguments; an agent no AI tool describes takes
-    /// none.
-    pub fn arguments(&self, name: &str) -> crate::ai::Arguments {
-        self.arguments.get(name).cloned().unwrap_or_default()
+    /// Agent `name`'s launch profile; an agent no AI tool describes takes no
+    /// arguments and changes nothing in its environment.
+    pub fn launch(&self, name: &str) -> &crate::ai::LaunchProfile {
+        static NONE: LazyLock<crate::ai::LaunchProfile> = LazyLock::new(Default::default);
+        self.tools
+            .get(name)
+            .and_then(|tool| tool.launch.as_ref())
+            .unwrap_or(&NONE)
     }
 
     /// The agent whose integration agent `name` runs with: its own, unless
-    /// it is a launch profile of another.
+    /// it is a launch profile of an integrated tool.
     pub fn integration<'a>(&'a self, name: &'a str) -> &'a str {
-        self.integrations.get(name).map_or(name, String::as_str)
-    }
-
-    /// What agent `name`'s tracked launches change in their environment.
-    pub fn environment(&self, name: &str) -> crate::ai::Environment {
-        self.environments.get(name).cloned().unwrap_or_default()
+        match self.tools.get(name).map(|tool| tool.integration) {
+            Some(crate::ai::IntegrationKind::Claude) => "claude",
+            Some(crate::ai::IntegrationKind::Codex) => "codex",
+            _ => name,
+        }
     }
 
     fn from_merged(merged: RepoConfig) -> Result<Self> {
@@ -220,10 +215,7 @@ impl Effective {
         let named = presets.as_deref().unwrap_or_default();
         Ok(Self {
             commands: merged.commands,
-            providers: Default::default(),
-            arguments: Default::default(),
-            integrations: Default::default(),
-            environments: Default::default(),
+            tools: Default::default(),
             agent_resume: merged.agent_resume,
             worker_template: merged.worker_template,
             chat_template: merged.chat_template,

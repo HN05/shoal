@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for AgentLimit {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub ai: crate::ai::Agents,
+    pub ai: crate::ai::Table,
     pub commands: named_commands::Commands,
     pub agent_resume: named_commands::Commands,
     /// Retired with issue templates; read so configs written by earlier
@@ -599,7 +599,7 @@ impl Config {
                 .commands
                 .clone()
                 .into_iter()
-                .chain(crate::ai::commands(&self.ai))
+                .chain(crate::ai::commands(&self.ai.entries))
                 .collect(),
             agent_resume: self.agent_resume.clone(),
             retired_issue_template: self.retired_issue_template.clone(),
@@ -667,7 +667,7 @@ impl Config {
         config
             .cleanup
             .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
-        crate::ai::validate(&config.ai, &config.commands, &paths.home)?;
+        crate::ai::validate(&config.ai.entries, &config.commands, &paths.home)?;
         config.root_dir(paths)?;
         templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
@@ -707,11 +707,8 @@ impl Config {
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
         let mut effective = resolve::Stack::new(self, layers).resolve()?;
-        effective.providers = crate::ai::providers(&self.ai);
-        effective.arguments = crate::ai::all_arguments(&self.ai);
-        effective.integrations = crate::ai::integrations(&self.ai);
-        effective.environments = crate::ai::environments(&self.ai);
-        crate::ai::inherit_launchers(&self.ai, &mut effective.commands);
+        crate::ai::inherit_launchers(&self.ai.tools, &mut effective.commands);
+        effective.tools = self.ai.tools.clone();
         Ok(effective)
     }
 }

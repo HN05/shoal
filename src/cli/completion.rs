@@ -338,7 +338,9 @@ impl Typed {
         let Ok(paths) = Paths::new(state) else {
             return Settings {
                 commands: named_commands::defaults(),
-                providers: crate::ai::providers(&Default::default()),
+                providers: crate::ai::agents(&crate::ai::Table::default().tools)
+                    .map(str::to_owned)
+                    .collect(),
                 agents: crate::ai::PROVIDERS
                     .iter()
                     .map(|provider| provider.name.to_owned())
@@ -385,8 +387,10 @@ impl Typed {
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
             .collect();
-        crate::ai::inherit_launchers(&global.ai, &mut commands);
-        let providers = crate::ai::providers(&global.ai);
+        crate::ai::inherit_launchers(&global.ai.tools, &mut commands);
+        let providers: BTreeSet<_> = crate::ai::agents(&global.ai.tools)
+            .map(str::to_owned)
+            .collect();
         let agents = global.resolve(&layers).map_or_else(
             |_| providers.iter().cloned().collect(),
             |settings| agents::names(&settings),

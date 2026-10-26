@@ -259,8 +259,9 @@ pub(super) async fn run_named(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let providers = crate::ai::providers(&Config::load(&ctx.paths)?.ai);
-    if !providers.contains(name) && !integrations().any(|(served, _)| served == name) {
+    let tools = Config::load(&ctx.paths)?.ai.tools;
+    let runs_as_agent = crate::ai::agents(&tools).any(|agent| agent == name);
+    if !runs_as_agent && !integrations().any(|(served, _)| served == name) {
         return configured::run(ctx, name, workspace, args).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -326,9 +327,9 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
         .iter()
         .map(|provider| provider.name.to_owned())
         .collect();
-    for name in &settings.providers {
-        if !names.contains(name) {
-            names.push(name.clone());
+    for name in crate::ai::agents(&settings.tools) {
+        if !names.iter().any(|known| known == name) {
+            names.push(name.to_owned());
         }
     }
     names.extend(
@@ -482,7 +483,7 @@ pub(crate) async fn workspace_args(
 ) -> Result<Vec<OsString>> {
     let mut args = hook_args(settings.integration(name))?;
     if let Some(directory) = workspaces_dir(paths, workspace).await {
-        args.extend(settings.arguments(name).add_dir_args(&directory));
+        args.extend(settings.launch(name).arguments.add_dir_args(&directory));
     }
     Ok(args)
 }
@@ -569,8 +570,8 @@ pub(in crate::cli) async fn trust_resumed(
         .map(|last| last.agent.as_str());
     for name in stopped.chain(last) {
         if let Some(trust) = integration(settings.integration(name)).trust_file() {
-            let profile = settings.environment(name);
-            trust.trust_tracked(ctx, workspace, &profile).await;
+            let profile = &settings.launch(name).environment;
+            trust.trust_tracked(ctx, workspace, profile).await;
         }
     }
 }
@@ -585,7 +586,7 @@ pub(in crate::cli) async fn trust_checkout(
 ) {
     if let Some(trust) = integration(settings.integration(name)).trust_file() {
         trust
-            .trust_checkout(ctx, repository, &settings.environment(name))
+            .trust_checkout(ctx, repository, &settings.launch(name).environment)
             .await;
     }
 }

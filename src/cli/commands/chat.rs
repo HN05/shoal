@@ -118,7 +118,7 @@ pub(super) async fn begin(
         &repo,
         &chat,
         &command,
-        &settings.environment(agent.name()),
+        &settings.launch(agent.name()).environment,
     )
 }
 
@@ -252,7 +252,7 @@ fn command(
 ) -> Result<Vec<OsString>> {
     let name = agent.name();
     // Instructions that join the prompt start a turn before the user speaks.
-    let (instructions, opening) = match settings.arguments(name).instructions {
+    let (instructions, opening) = match settings.launch(name).arguments.instructions {
         Some(_) => (instructions, opening),
         None => (
             templates::chat_first_message(&instructions, opening.as_deref()).unwrap_or_default(),

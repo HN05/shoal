@@ -1,10 +1,28 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ffi::OsString,
+};
+
 use super::*;
 use crate::config::named_commands::Commands;
 
-fn parse(text: &str) -> Result<Agents> {
+fn parse(text: &str) -> Result<Tools> {
     let config: crate::config::Config = toml::from_str(text)?;
-    validate(&config.ai, &config.commands, Path::new("/home"))?;
-    Ok(config.ai)
+    validate(&config.ai.entries, &config.commands, Path::new("/home"))?;
+    Ok(config.ai.tools)
+}
+
+/// The launch profile of `name`, which runs as an agent.
+fn launch<'a>(tools: &'a Tools, name: &str) -> &'a LaunchProfile {
+    tools[name].launch.as_ref().unwrap()
+}
+
+fn arguments<'a>(tools: &'a Tools, name: &str) -> &'a Arguments {
+    &launch(tools, name).arguments
+}
+
+fn runs_as_agent(tools: &Tools, name: &str) -> bool {
+    agents(tools).any(|agent| agent == name)
 }
 
 #[test]
@@ -15,16 +33,9 @@ fn configured_providers_add_launchers_and_skill_directories() {
              [ai.notes]\nskill_dir = '/skills'\n",
     )
     .unwrap();
-    assert_eq!(
-        commands(&agents).collect::<Vec<_>>(),
-        [(
-            "droid".to_owned(),
-            vec!["droid".to_owned(), "{args}".into()]
-        )]
-    );
-    assert!(providers(&agents).contains("droid"));
+    assert!(runs_as_agent(&agents, "droid"));
     // Skill-only tools are not agents, so `shoal notes` stays a command error.
-    assert!(!providers(&agents).contains("notes"));
+    assert!(!runs_as_agent(&agents, "notes"));
     let directories = skill_dirs(&agents, Path::new("/home")).unwrap();
     assert_eq!(directories["claude"], Some("/home/claude-skills".into()));
     assert_eq!(directories["codex"], Some("/home/.agents/skills".into()));
@@ -36,7 +47,7 @@ fn configured_providers_add_launchers_and_skill_directories() {
 
 #[test]
 fn instruction_arguments_preserve_empty_and_literal_text() {
-    let agents = Agents::new();
+    let agents = Table::default().tools;
     for name in ["claude", "codex"] {
         assert_eq!(
             arguments(&agents, name).instruction_args(""),
@@ -100,7 +111,7 @@ fn directory_arguments_name_one_directory_each() {
         [OsString::from("--add-dir=/shoal/repo")]
     );
     assert_eq!(
-        arguments(&Agents::new(), "codex").add_dir_args(directory),
+        arguments(&Table::default().tools, "codex").add_dir_args(directory),
         [OsString::from("--add-dir"), "/shoal/repo".into()]
     );
     assert!(
@@ -149,11 +160,11 @@ fn retry_defaults_to_on_for_claude_and_its_profiles() {
          [ai.droid]\ncommand = ['droid']\n",
     )
     .unwrap();
-    assert!(retries(&Agents::new(), "claude"));
-    assert!(retries(&agents, "claude-direct"));
-    assert!(retries(&agents, "claude-fast"));
+    assert!(Table::default().tools["claude"].retry);
+    assert!(agents["claude-direct"].retry);
+    assert!(agents["claude-fast"].retry);
     for name in ["codex", "opencode", "pi", "grok", "droid"] {
-        assert!(!retries(&agents, name), "{name}");
+        assert!(!agents[name].retry, "{name}");
     }
 }
 
@@ -167,12 +178,12 @@ fn retry_uses_the_nearest_explicit_setting() {
          [ai.droid-profile]\nbase = 'droid'\n",
     )
     .unwrap();
-    assert!(!retries(&agents, "claude"));
-    assert!(!retries(&agents, "claude-direct"));
-    assert!(retries(&agents, "claude-auto"));
-    assert!(!retries(&agents, "claude-manual"));
-    assert!(retries(&agents, "droid"));
-    assert!(retries(&agents, "droid-profile"));
+    assert!(!agents["claude"].retry);
+    assert!(!agents["claude-direct"].retry);
+    assert!(agents["claude-auto"].retry);
+    assert!(!agents["claude-manual"].retry);
+    assert!(agents["droid"].retry);
+    assert!(agents["droid-profile"].retry);
     let error = format!("{:#}", parse("[ai.notes]\nretry = true\n").unwrap_err());
     assert!(error.contains("ai.notes.retry needs"), "{error}");
 }
@@ -187,15 +198,11 @@ fn launch_profiles_inherit_along_their_bases() {
              env_remove = ['MODE']\n",
     )
     .unwrap();
-    assert!(providers(&agents).contains("claude-fast"));
-    assert_eq!(integration(&agents, "claude-fast"), "claude");
-    assert_eq!(
-        integrations(&agents),
-        BTreeMap::from([
-            ("claude-direct".to_owned(), "claude".to_owned()),
-            ("claude-fast".to_owned(), "claude".to_owned()),
-        ])
-    );
+    assert!(runs_as_agent(&agents, "claude-fast"));
+    assert_eq!(agents["claude-fast"].integration, IntegrationKind::Claude);
+    assert_eq!(agents["claude-fast"].bases, ["claude-direct", "claude"]);
+    assert_eq!(agents["codex"].integration, IntegrationKind::Codex);
+    assert_eq!(agents["pi"].integration, IntegrationKind::None);
     // The nearest entry wins, then the built-in provider's.
     let fast = arguments(&agents, "claude-fast");
     assert_eq!(
@@ -204,8 +211,7 @@ fn launch_profiles_inherit_along_their_bases() {
     );
     assert_eq!(fast.resume_args(None), Some(vec!["--continue".into()]));
     assert_eq!(fast.instructions, arguments(&agents, "claude").instructions);
-    let environments = environments(&agents);
-    let fast = &environments["claude-fast"];
+    let fast = &launch(&agents, "claude-fast").environment;
     assert_eq!(
         fast.values(Path::new("/home")),
         BTreeMap::from([
@@ -220,7 +226,10 @@ fn launch_profiles_inherit_along_their_bases() {
         fast.remove,
         BTreeSet::from(["ANTHROPIC_BASE_URL".to_owned(), "MODE".to_owned()])
     );
-    assert!(!environments.contains_key("claude"));
+    assert_eq!(
+        launch(&agents, "claude").environment,
+        Environment::default()
+    );
     let directories = skill_dirs(&agents, Path::new("/home")).unwrap();
     assert_eq!(
         directories["claude-fast"],

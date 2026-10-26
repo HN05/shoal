@@ -142,7 +142,8 @@ fn instruction_args(
     instructions: &str,
 ) -> Option<Vec<OsString>> {
     settings
-        .arguments(agent.as_str())
+        .launch(agent.as_str())
+        .arguments
         .instruction_args(instructions)
         .filter(|_| happy::accepts_prompt(agent))
 }

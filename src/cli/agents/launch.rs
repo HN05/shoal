@@ -20,8 +20,8 @@ pub(super) async fn tracked(
 ) -> Result<i32> {
     ensure_available(&launch.name, &launch.settings)?;
     if let Some(trust) = integration.trust_file() {
-        let profile = launch.settings.environment(&launch.name);
-        trust.trust_tracked(ctx, &launch.workspace, &profile).await;
+        let profile = &launch.settings.launch(&launch.name).environment;
+        trust.trust_tracked(ctx, &launch.workspace, profile).await;
     }
     let command = command(ctx, integration, &launch).await?;
     let Launch {
@@ -117,7 +117,11 @@ fn separate_instructions(
     prompt: Option<String>,
 ) -> (Vec<OsString>, String) {
     let prompt = prompt.unwrap_or_default();
-    match settings.arguments(name).instruction_args(&instructions) {
+    match settings
+        .launch(name)
+        .arguments
+        .instruction_args(&instructions)
+    {
         Some(instruction_args) => (instruction_args, prompt),
         None => (
             Vec::new(),

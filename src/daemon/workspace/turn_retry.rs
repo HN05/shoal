@@ -395,7 +395,13 @@ impl Manager {
     /// on.
     async fn retrying_agent(&self, execution: &str) -> Option<String> {
         let agent = self.agent_name(execution).await?;
-        crate::ai::retries(&self.config().ai, &agent).then_some(agent)
+        let retries = self
+            .config()
+            .ai
+            .tools
+            .get(&agent)
+            .is_some_and(|tool| tool.retry);
+        retries.then_some(agent)
     }
 
     /// Drop the workspace's retry and tell whoever receives its agent's

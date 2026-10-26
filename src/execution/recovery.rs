@@ -116,7 +116,7 @@ impl Recovery {
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
         let name = agent.replace(' ', "-");
         let configured = settings.agent_resume.get(&name);
-        let resume_args = settings.arguments(&name).resume_args(session);
+        let resume_args = settings.launch(&name).arguments.resume_args(session);
         let automatic = configured.is_some() || resume_args.is_some();
         let mut message = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",

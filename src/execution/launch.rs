@@ -329,7 +329,7 @@ async fn prepare_agent_launch(
         output: has_agent.then(env::agent_output).flatten(),
         integration: agent.map(|agent| settings.integration(agent).to_owned()),
         environment: agent
-            .map(|agent| settings.environment(agent))
+            .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),
         home: paths.home.clone(),
     }))
