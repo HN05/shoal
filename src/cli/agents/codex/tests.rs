@@ -92,7 +92,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
     // The built-in one gives way to Shoal's provider with its login.
     for config in [None, Some("model_provider = 'openai'\n")] {
         let builtin = routed(config).unwrap();
-        assert_eq!(builtin[1], "model_provider=shoal-proxy");
+        assert_eq!(builtin[1], "model_provider=\"shoal-proxy\"");
         let provider = builtin[3].to_str().unwrap();
         assert!(provider.contains("requires_openai_auth=true"), "{provider}");
         assert!(

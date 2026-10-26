@@ -855,9 +855,11 @@ proxy = "cliproxy"
 The agent's wrapper runs one proxy on a loopback port for as long as the agent
 runs and points the agent at it: Claude Code through `ANTHROPIC_BASE_URL` in the
 settings Shoal passes, which win over its own settings and environment; Codex by
-moving the `base_url` of the provider its config names, keeping that provider's
-own credentials, or, on its built-in OpenAI provider, through a provider Shoal
-defines with the same login, whose upstream is then
+moving the `base_url` of the provider the launch selects, from its config, the
+profile `--profile` or the config's `profile` names, and the `-c` overrides it
+is launched with, keeping that provider's own credentials, or, on its built-in
+OpenAI provider, through a provider Shoal defines with the same login, whose
+upstream is then
 `https://chatgpt.com/backend-api/codex` for a ChatGPT login or
 `https://api.openai.com/v1` for an API key. The proxy forwards each request with
 the agent's own credentials, or, with a `key`, sends the upstream that key as
