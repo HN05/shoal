@@ -33,7 +33,7 @@ pub enum InternalCommand {
     TurnFailed {
         /// The integration whose hook event stdin carries.
         #[arg(long)]
-        integration: String,
+        integration: crate::ai::IntegrationKind,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

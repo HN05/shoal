@@ -44,15 +44,16 @@ pub struct LaunchProfile {
     pub environment: Environment,
 }
 
-/// The Shoal integration a tool runs with: that of the built-in tool its
-/// lineage ends at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntegrationKind {
-    Claude,
-    Codex,
-    /// Configuration says everything about the tool.
-    None,
-}
+crate::state::states!(
+    /// The Shoal integration a tool runs with: that of the built-in tool its
+    /// lineage ends at. Agent hooks name it to the commands they run.
+    IntegrationKind: ValueEnum {
+        Claude => "claude",
+        Codex => "codex",
+        /// Configuration says everything about the tool.
+        None => "none",
+    }
+);
 
 #[derive(Debug, Clone)]
 enum SkillDir {

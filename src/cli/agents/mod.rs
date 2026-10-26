@@ -2,8 +2,9 @@
 //! command with the arguments its provider describes (see [`crate::ai`]); an
 //! [`Integration`] adds what configuration cannot say for a tool Shoal knows,
 //! such as hooks, trust entries or a launch of its own. Adding an agent means
-//! configuration, plus an integration listed in [`INTEGRATIONS`] (or in
-//! [`OPTIONAL`] behind its Cargo feature) when the tool needs one.
+//! configuration, plus an integration its [`IntegrationKind`] selects when
+//! the tool needs one; an integration may also add agents of its own
+//! ([`ADDED`], behind its Cargo feature).
 mod claude;
 mod codex;
 mod desktop;
@@ -23,6 +24,7 @@ use futures_util::future::BoxFuture;
 
 use crate::{
     agent::Agent,
+    ai::IntegrationKind,
     cli::{
         client,
         commands::configured,
@@ -125,28 +127,39 @@ struct Configured;
 
 impl Integration for Configured {}
 
-/// Integrations by the agent name they serve. A name not listed here needs
-/// none.
-const INTEGRATIONS: &[(&str, &dyn Integration)] =
-    &[("claude", &claude::Claude), ("codex", &codex::Codex)];
+fn integration(kind: IntegrationKind) -> &'static dyn Integration {
+    match kind {
+        IntegrationKind::Claude => &claude::Claude,
+        IntegrationKind::Codex => &codex::Codex,
+        IntegrationKind::None => &Configured,
+    }
+}
 
-/// Integrations built only with their Cargo feature.
+/// Agents an integration adds besides the AI tools, with the integration
+/// that runs each; built only with the integration's Cargo feature.
 #[cfg(feature = "happy")]
-const OPTIONAL: &[(&str, &dyn Integration)] = &[
+const ADDED: &[(&str, &dyn Integration)] = &[
     ("happy-claude", &happy::CLAUDE),
     ("happy-codex", &happy::CODEX),
 ];
 #[cfg(not(feature = "happy"))]
-const OPTIONAL: &[(&str, &dyn Integration)] = &[];
+const ADDED: &[(&str, &dyn Integration)] = &[];
 
-fn integrations() -> impl Iterator<Item = (&'static str, &'static dyn Integration)> {
-    INTEGRATIONS.iter().chain(OPTIONAL).copied()
+/// The integration that runs `name`, when an integration adds that agent.
+fn added(name: &str) -> Option<&'static dyn Integration> {
+    ADDED
+        .iter()
+        .find(|(added, _)| *added == name)
+        .map(|(_, integration)| *integration)
 }
 
-fn integration(name: &str) -> &'static dyn Integration {
-    integrations()
-        .find(|(served, _)| *served == name)
-        .map_or(&Configured, |(_, integration)| integration)
+/// The integration agent `name` runs with under `settings`: its AI tool's,
+/// else that of the integration adding it.
+fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integration {
+    match settings.integration(name) {
+        IntegrationKind::None => added(name).unwrap_or(&Configured),
+        kind => integration(kind),
+    }
 }
 
 /// One launch of an agent in a ready workspace; settings are never cached
@@ -215,7 +228,7 @@ pub(in crate::cli) fn runs_in_session(
     prompted: bool,
     tracked: bool,
 ) -> bool {
-    !integration(settings.integration(agent.name())).launches_itself(settings, prompted, tracked)
+    !agent_integration(settings, agent.name()).launches_itself(settings, prompted, tracked)
         && terminal::keeps_agents_in_sessions(ctx, settings)
 }
 
@@ -231,7 +244,7 @@ pub(super) async fn launch_agent(
 ) -> Result<i32> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let integration = integration(settings.integration(agent.name()));
+    let integration = agent_integration(&settings, agent.name());
     let mut launch = Launch {
         name: agent.into(),
         workspace,
@@ -261,7 +274,7 @@ pub(super) async fn run_named(
 ) -> Result<i32> {
     let tools = Config::load(&ctx.paths)?.ai.tools;
     let runs_as_agent = crate::ai::agents(&tools).any(|agent| agent == name);
-    if !runs_as_agent && !integrations().any(|(served, _)| served == name) {
+    if !runs_as_agent && added(name).is_none() {
         return configured::run(ctx, name, workspace, args).await;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -333,12 +346,13 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
         }
     }
     names.extend(
-        integrations()
+        ADDED
+            .iter()
             .filter(|(name, integration)| {
                 !names.iter().any(|known| known == name)
                     && integration.unavailable(settings).is_none()
             })
-            .map(|(name, _)| name.to_owned())
+            .map(|(name, _)| (*name).to_owned())
             .collect::<Vec<_>>(),
     );
     names
@@ -350,9 +364,9 @@ pub(in crate::cli) fn builtin_names() -> Vec<String> {
         .iter()
         .map(|provider| provider.name.to_owned())
         .collect();
-    for (name, _) in integrations() {
+    for (name, _) in ADDED {
         if !names.iter().any(|known| known == name) {
-            names.push(name.to_owned());
+            names.push((*name).to_owned());
         }
     }
     names
@@ -409,7 +423,7 @@ pub(in crate::cli) fn happy_agents<'a>(_installed: &Installed<'a>) -> Vec<&'a st
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
 pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
-    if let Some(reason) = integration(settings.integration(name)).unavailable(settings) {
+    if let Some(reason) = agent_integration(settings, name).unavailable(settings) {
         anyhow::bail!("cannot start {name}: {reason}");
     }
     ensure_installed(name, &settings.commands)
@@ -439,7 +453,7 @@ pub(in crate::cli) fn ensure_program(name: &str, program: &str) -> Result<()> {
 /// The executables an agent starts; `None` when it has no launcher. Terminal
 /// agents launched on a terminal also start its session host.
 fn programs<'a>(name: &str, commands: &'a Commands) -> Option<Vec<&'a str>> {
-    if let Some(programs) = integration(name).programs() {
+    if let Some(programs) = added(name).and_then(|integration| integration.programs()) {
         return Some(programs);
     }
     commands
@@ -466,9 +480,9 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
 }
 
 /// Arguments that register Shoal's hooks for the session of an agent with
-/// integration `name`, as [`Effective::integration`] resolves it.
-pub(crate) fn hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
-    integration(name).hook_args()
+/// integration `kind`.
+pub(crate) fn hook_args(kind: IntegrationKind) -> std::io::Result<Vec<OsString>> {
+    integration(kind).hook_args()
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
@@ -511,9 +525,9 @@ async fn workspaces_dir(paths: &crate::paths::Paths, workspace: &Workspace) -> O
 }
 
 /// Arguments that register Shoal's hooks for a chat of an agent with
-/// integration `name`.
-pub(in crate::cli) fn chat_hook_args(name: &str) -> std::io::Result<Vec<OsString>> {
-    integration(name).chat_hook_args()
+/// integration `kind`.
+pub(in crate::cli) fn chat_hook_args(kind: IntegrationKind) -> std::io::Result<Vec<OsString>> {
+    integration(kind).chat_hook_args()
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it
@@ -523,23 +537,23 @@ pub(in crate::cli) async fn start_chat(
     name: &str,
     chat: &ChatLaunch,
 ) -> Result<Option<i32>> {
-    integration(chat.settings.integration(name))
+    agent_integration(&chat.settings, name)
         .chat(ctx, chat)
         .await
 }
 
-/// Whether the wrapper of an agent with integration `name` wakes it by
+/// Whether the wrapper of an agent with integration `kind` wakes it by
 /// typing a prompt.
-pub(crate) fn wakes_by_prompt(name: &str) -> bool {
-    integration(name).wakes_by_prompt()
+pub(crate) fn wakes_by_prompt(kind: IntegrationKind) -> bool {
+    integration(kind).wakes_by_prompt()
 }
 
-/// The failure an agent with integration `name` reports in `event`.
+/// The failure an agent with integration `kind` reports in `event`.
 pub(in crate::cli) fn turn_failure(
-    name: &str,
+    kind: IntegrationKind,
     event: &serde_json::Value,
 ) -> Option<crate::state::TurnFailure> {
-    integration(name).turn_failure(event)
+    integration(kind).turn_failure(event)
 }
 
 /// Trust the path of `workspace`, reopened from `removed`, for each agent
@@ -569,7 +583,7 @@ pub(in crate::cli) async fn trust_resumed(
         .filter(|last| last.session.is_some())
         .map(|last| last.agent.as_str());
     for name in stopped.chain(last) {
-        if let Some(trust) = integration(settings.integration(name)).trust_file() {
+        if let Some(trust) = agent_integration(&settings, name).trust_file() {
             let profile = &settings.launch(name).environment;
             trust.trust_tracked(ctx, workspace, profile).await;
         }
@@ -584,7 +598,7 @@ pub(in crate::cli) async fn trust_checkout(
     name: &str,
     repository: &Repository,
 ) {
-    if let Some(trust) = integration(settings.integration(name)).trust_file() {
+    if let Some(trust) = agent_integration(settings, name).trust_file() {
         trust
             .trust_checkout(ctx, repository, &settings.launch(name).environment)
             .await;
@@ -672,7 +686,11 @@ pub(crate) fn forget_repository_trust(
         .collect();
     let mut cleaned: Vec<&trust::TrustFile> = Vec::new();
     let mut warnings = Vec::new();
-    for (_, integration) in integrations() {
+    let integrations = IntegrationKind::ALL
+        .iter()
+        .map(|kind| integration(*kind))
+        .chain(ADDED.iter().map(|(_, integration)| *integration));
+    for integration in integrations {
         let Some(trust) = integration.trust_file() else {
             continue;
         };

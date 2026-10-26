@@ -11,6 +11,7 @@ use super::{
 };
 use crate::{
     agent::hooks,
+    ai::IntegrationKind,
     cli::context::Context,
     config::{Effective, templates::Delivery},
     state::{AgentState, TurnFailure},
@@ -141,7 +142,10 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
             hooks::state(shoal, Some("idle_prompt"), AgentState::Idle),
         ),
         ("Stop", hooks::state(shoal, None, AgentState::Idle)),
-        ("StopFailure", hooks::turn_failed(shoal, "claude")),
+        (
+            "StopFailure",
+            hooks::turn_failed(shoal, IntegrationKind::Claude),
+        ),
     ]
 }
 

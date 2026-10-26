@@ -81,10 +81,7 @@ pub(super) async fn run_tracked(
 impl TrackedLaunch {
     /// The terminal session to wake the agent in when it is idle.
     fn wake_session(&self, mode: &Mode) -> Option<PromptSession> {
-        let integration = self
-            .auth
-            .as_ref()
-            .and_then(|auth| auth.integration.as_deref());
+        let integration = self.auth.as_ref().and_then(|auth| auth.integration);
         wake::session(integration, mode)
     }
 
@@ -327,7 +324,7 @@ async fn prepare_agent_launch(
         account: settings.agent_auth.prepare(paths, &config.git)?,
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
-        integration: agent.map(|agent| settings.integration(agent).to_owned()),
+        integration: agent.map(|agent| settings.integration(agent)),
         environment: agent
             .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),

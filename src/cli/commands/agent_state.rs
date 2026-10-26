@@ -45,7 +45,7 @@ pub(super) async fn run(
 pub(super) async fn turn_failed(
     ctx: &Context,
     workspace: Option<String>,
-    integration: &str,
+    integration: crate::ai::IntegrationKind,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let event = hook_event().unwrap_or_default();

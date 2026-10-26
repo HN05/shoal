@@ -20,7 +20,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::TurnFailed {
             integration,
             workspace,
-        } => agent_state::turn_failed(&ctx, workspace, &integration).await,
+        } => agent_state::turn_failed(&ctx, workspace, integration).await,
         InternalCommand::Wake {
             agent,
             workspace,

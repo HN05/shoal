@@ -190,14 +190,12 @@ impl Effective {
             .unwrap_or(&NONE)
     }
 
-    /// The agent whose integration agent `name` runs with: its own, unless
-    /// it is a launch profile of an integrated tool.
-    pub fn integration<'a>(&'a self, name: &'a str) -> &'a str {
-        match self.tools.get(name).map(|tool| tool.integration) {
-            Some(crate::ai::IntegrationKind::Claude) => "claude",
-            Some(crate::ai::IntegrationKind::Codex) => "codex",
-            _ => name,
-        }
+    /// The integration agent `name` runs with; none for an agent no AI tool
+    /// describes.
+    pub fn integration(&self, name: &str) -> crate::ai::IntegrationKind {
+        self.tools
+            .get(name)
+            .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
     fn from_merged(merged: RepoConfig) -> Result<Self> {

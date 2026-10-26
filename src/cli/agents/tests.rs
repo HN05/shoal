@@ -56,10 +56,10 @@ fn launches_name_the_missing_program_or_undefined_agent() {
 
 #[test]
 fn integrations_serve_only_the_names_they_list() {
-    assert!(integration("claude").trust_file().is_some());
-    assert!(integration("codex").wakes_by_prompt());
-    assert!(!integration("claude").wakes_by_prompt());
-    let configured = integration("droid");
+    assert!(integration(IntegrationKind::Claude).trust_file().is_some());
+    assert!(integration(IntegrationKind::Codex).wakes_by_prompt());
+    assert!(!integration(IntegrationKind::Claude).wakes_by_prompt());
+    let configured = integration(IntegrationKind::None);
     assert!(configured.trust_file().is_none());
     assert!(configured.hook_args().unwrap().is_empty());
     assert_eq!(

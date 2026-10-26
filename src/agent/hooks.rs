@@ -73,12 +73,12 @@ fn report(shoal: &str, state: AgentState) -> String {
 /// The group that reports a turn an API error ended for an agent with
 /// `integration`, which reads the failure from the hook's event; the turn
 /// leaves the agent idle. It never fails, as [`state`] does not.
-pub fn turn_failed(shoal: &str, integration: &str) -> Value {
+pub fn turn_failed(shoal: &str, integration: crate::ai::IntegrationKind) -> Value {
     json!({ "hooks": [{
         "type": "command",
         "command": format!(
             "{shoal} internal turn-failed --integration {} >/dev/null 2>&1 || true",
-            crate::shell::quote(&[integration])
+            crate::shell::quote(&[integration.as_str()])
         ),
         "timeout": 10,
     }] })

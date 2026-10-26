@@ -176,17 +176,18 @@ async fn built_in_restore_child() {
         // Restored sessions keep receiving agent messages and may work in
         // the child workspaces beside theirs.
         let directory = workspace.path.parent().unwrap();
-        let launch_args = crate::cli::agents::hook_args(agent)
-            .unwrap()
-            .into_iter()
-            .chain(
-                crate::ai::Table::default().tools[agent]
-                    .launch
-                    .as_ref()
-                    .unwrap()
-                    .arguments
-                    .add_dir_args(directory),
-            );
+        let launch_args =
+            crate::cli::agents::hook_args(crate::ai::Table::default().tools[agent].integration)
+                .unwrap()
+                .into_iter()
+                .chain(
+                    crate::ai::Table::default().tools[agent]
+                        .launch
+                        .as_ref()
+                        .unwrap()
+                        .arguments
+                        .add_dir_args(directory),
+                );
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );

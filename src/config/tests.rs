@@ -365,8 +365,18 @@ fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
     let repo = repo::parse("[commands]\nclaude = ['claude', '--verbose']\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert!(crate::ai::agents(&effective.tools).any(|agent| agent == "claude-direct"));
-    assert_eq!(effective.integration("claude-direct"), "claude");
-    assert_eq!(effective.integration("codex"), "codex");
+    assert_eq!(
+        effective.integration("claude-direct"),
+        crate::ai::IntegrationKind::Claude
+    );
+    assert_eq!(
+        effective.integration("codex"),
+        crate::ai::IntegrationKind::Codex
+    );
+    assert_eq!(
+        effective.integration("undefined"),
+        crate::ai::IntegrationKind::None
+    );
     assert_eq!(effective.commands["claude-direct"], ["claude", "--verbose"]);
     let direct = effective.launch("claude-direct");
     assert_eq!(direct.arguments, effective.launch("claude").arguments);

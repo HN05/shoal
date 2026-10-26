@@ -12,6 +12,7 @@ use serde_json::json;
 
 use super::{ChatLaunch, Integration, Launch, trust::TrustFile};
 use crate::{
+    ai::IntegrationKind,
     cli::{
         client,
         context::Context,
@@ -33,7 +34,10 @@ pub(super) const CODEX: Happy = Happy(Agent::Codex);
 impl Happy {
     /// The integration of the agent Happy runs.
     fn inner(&self) -> &'static dyn Integration {
-        super::integration(self.0.as_str())
+        super::integration(match self.0 {
+            Agent::Claude => IntegrationKind::Claude,
+            Agent::Codex => IntegrationKind::Codex,
+        })
     }
 }
 
