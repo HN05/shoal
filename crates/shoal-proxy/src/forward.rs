@@ -21,7 +21,7 @@ use tokio::{net::TcpStream, sync::mpsc::UnboundedSender};
 
 use crate::{
     Event, Upstream,
-    retry::{self, Failure, Outage},
+    retry::{self, Failure, Outage, Policy},
     stream::{self, Opening, Protocol},
 };
 
@@ -66,7 +66,7 @@ struct Failed {
 }
 
 impl Forwarder {
-    pub(crate) fn new(upstream: Upstream, events: UnboundedSender<Event>) -> Self {
+    pub(crate) fn new(upstream: Upstream, events: UnboundedSender<Event>, policy: Policy) -> Self {
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_webpki_roots()
             .https_or_http()
@@ -75,7 +75,7 @@ impl Forwarder {
         Self {
             upstream,
             client: Client::builder(TokioExecutor::new()).build(connector),
-            outage: Outage::default(),
+            outage: Outage::new(policy),
             events,
         }
     }
@@ -119,7 +119,27 @@ impl Forwarder {
         }
     }
 
+    /// Send `request` once. While the upstream is down the attempt gets
+    /// only the outage's remaining budget, so a stalled upstream cannot keep
+    /// the proxy from giving up.
     async fn attempt(&self, request: &Buffered) -> Attempt {
+        let Some(remaining) = self.outage.remaining() else {
+            return self.send(request).await;
+        };
+        match tokio::time::timeout(remaining, self.send(request)).await {
+            Ok(attempt) => attempt,
+            Err(_) => Attempt::Failed(Failed {
+                failure: Failure::Unreachable,
+                retry_after: None,
+                in_stream: false,
+                response: bad_gateway(&anyhow::anyhow!(
+                    "the upstream did not answer before the proxy gave up on its outage"
+                )),
+            }),
+        }
+    }
+
+    async fn send(&self, request: &Buffered) -> Attempt {
         let sent = match request.to_upstream(&self.upstream) {
             Ok(sent) => self.client.request(sent).await,
             Err(error) => return Attempt::Answered(bad_gateway(&error)),

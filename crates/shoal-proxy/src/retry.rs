@@ -39,19 +39,40 @@ impl Failure {
     }
 }
 
-/// The first wait after a failed attempt, doubling for each later one.
-const FIRST_WAIT: Duration = Duration::from_secs(1);
-/// The longest wait between attempts.
-const MAX_WAIT: Duration = Duration::from_secs(30);
-/// How long the proxy retries through one outage before it passes failures
-/// on to the agent, until a request succeeds again.
-pub(crate) const OUTAGE_BUDGET: Duration = Duration::from_secs(5 * 60);
+/// How long the proxy waits between attempts and retries one outage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Policy {
+    /// The first wait after a failed attempt, doubling for each later one.
+    pub first_wait: Duration,
+    /// The longest wait between attempts.
+    pub max_wait: Duration,
+    /// How long the proxy retries through one outage before it passes
+    /// failures on to the agent, until a request succeeds again.
+    pub budget: Duration,
+}
+
+/// The policy every proxy runs with; it has no options.
+pub(crate) const POLICY: Policy = Policy {
+    first_wait: Duration::from_secs(1),
+    max_wait: Duration::from_secs(30),
+    budget: Duration::from_secs(5 * 60),
+};
+
+impl Policy {
+    fn backoff(&self, attempt: u32) -> Duration {
+        self.first_wait
+            .saturating_mul(1 << attempt.saturating_sub(1).min(16))
+            .min(self.max_wait)
+    }
+}
 
 /// The upstream's current outage, which every request shares: once a
 /// request gave up on it, requests fail at once instead of each waiting it
 /// out again.
-#[derive(Default)]
-pub(crate) struct Outage(Mutex<State>);
+pub(crate) struct Outage {
+    policy: Policy,
+    state: Mutex<State>,
+}
 
 #[derive(Default)]
 enum State {
@@ -65,6 +86,13 @@ enum State {
 }
 
 impl Outage {
+    pub(crate) fn new(policy: Policy) -> Self {
+        Self {
+            policy,
+            state: Mutex::new(State::Up),
+        }
+    }
+
     /// The wait before trying again after attempt `attempt` failed, the
     /// upstream's own `Retry-After` when it gives one; `None`, giving up on
     /// the outage, when that would outlast its budget or a request already
@@ -75,14 +103,16 @@ impl Outage {
         retry_after: Option<Duration>,
     ) -> Option<Duration> {
         let now = Instant::now();
-        let mut state = self.0.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
         let started = match *state {
             State::Up => now,
             State::Down(started) => started,
             State::GivenUp => return None,
         };
-        let wait = retry_after.unwrap_or_else(|| backoff(attempt));
-        let fits = OUTAGE_BUDGET
+        let wait = retry_after.unwrap_or_else(|| self.policy.backoff(attempt));
+        let fits = self
+            .policy
+            .budget
             .checked_sub(now - started)
             .is_some_and(|remaining| wait <= remaining);
         *state = if fits {
@@ -93,16 +123,20 @@ impl Outage {
         fits.then_some(wait)
     }
 
+    /// How much of the budget is left while the upstream is down, which
+    /// bounds each attempt then; `None` otherwise, when an attempt may take
+    /// as long as the upstream needs.
+    pub(crate) fn remaining(&self) -> Option<Duration> {
+        match *self.state.lock().unwrap() {
+            State::Down(started) => Some(self.policy.budget.saturating_sub(started.elapsed())),
+            State::Up | State::GivenUp => None,
+        }
+    }
+
     /// A request succeeded, so the next failure starts a new outage.
     pub(crate) fn ended(&self) {
-        *self.0.lock().unwrap() = State::Up;
+        *self.state.lock().unwrap() = State::Up;
     }
-}
-
-fn backoff(attempt: u32) -> Duration {
-    FIRST_WAIT
-        .saturating_mul(1 << attempt.saturating_sub(1).min(16))
-        .min(MAX_WAIT)
 }
 
 /// The wait a `Retry-After` header in seconds asks for.
@@ -141,25 +175,31 @@ mod tests {
 
     #[test]
     fn waits_double_from_a_second_to_half_a_minute() {
-        let waits: Vec<_> = (1..=7).map(|attempt| backoff(attempt).as_secs()).collect();
+        let waits: Vec<_> = (1..=7)
+            .map(|attempt| POLICY.backoff(attempt).as_secs())
+            .collect();
         assert_eq!(waits, [1, 2, 4, 8, 16, 30, 30]);
-        assert_eq!(backoff(u32::MAX), MAX_WAIT);
+        assert_eq!(POLICY.backoff(u32::MAX), POLICY.max_wait);
     }
 
     #[tokio::test(start_paused = true)]
     async fn an_outage_is_retried_for_its_budget_until_a_request_succeeds() {
-        let outage = Outage::default();
-        assert_eq!(outage.next_wait(1, None), Some(FIRST_WAIT));
+        let outage = Outage::new(POLICY);
+        assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
         // The upstream's own wait wins, but not past the budget.
         let asked = Some(Duration::from_secs(90));
         assert_eq!(outage.next_wait(2, asked), asked);
-        tokio::time::advance(OUTAGE_BUDGET - Duration::from_secs(60)).await;
+        assert_eq!(outage.remaining(), Some(POLICY.budget));
+        tokio::time::advance(POLICY.budget - Duration::from_secs(60)).await;
+        assert_eq!(outage.remaining(), Some(Duration::from_secs(60)));
         assert_eq!(outage.next_wait(3, None), Some(Duration::from_secs(4)));
         // A wait past the budget gives up, and later requests too.
         assert_eq!(outage.next_wait(4, asked), None);
         assert_eq!(outage.next_wait(1, None), None);
+        assert_eq!(outage.remaining(), None);
         outage.ended();
-        assert_eq!(outage.next_wait(1, None), Some(FIRST_WAIT));
+        assert_eq!(outage.remaining(), None);
+        assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
     }
 
     #[test]

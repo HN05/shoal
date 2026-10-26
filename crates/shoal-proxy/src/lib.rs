@@ -40,10 +40,18 @@ impl Proxy {
     /// Listen on a free loopback port for requests to forward to `upstream`,
     /// telling `events` about retries.
     pub async fn bind(upstream: Upstream, events: UnboundedSender<Event>) -> std::io::Result<Self> {
+        Self::bind_with(upstream, events, retry::POLICY).await
+    }
+
+    async fn bind_with(
+        upstream: Upstream,
+        events: UnboundedSender<Event>,
+        policy: retry::Policy,
+    ) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
         Ok(Self {
             listener,
-            forwarder: Arc::new(forward::Forwarder::new(upstream, events)),
+            forwarder: Arc::new(forward::Forwarder::new(upstream, events, policy)),
         })
     }
 
