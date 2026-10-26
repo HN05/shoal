@@ -50,6 +50,12 @@ pub(in crate::cli) trait Integration: Sync {
         Ok(Vec::new())
     }
 
+    /// Whether its launches can send their API requests to Shoal's proxy,
+    /// which [`Self::hook_args`] and [`Self::route_through_proxy`] then do.
+    fn routes_through_proxy(&self) -> bool {
+        false
+    }
+
     /// Fill in the proxy placeholders of `args` with the proxy's `url`, for
     /// the agent running with `environment`.
     fn route_through_proxy(
@@ -445,6 +451,12 @@ pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Resu
     if let Some(reason) = agent_options(settings, name).off {
         anyhow::bail!("cannot start {name}: {reason}");
     }
+    ensure!(
+        settings.proxy(name).is_none()
+            || integration(settings.integration(name)).routes_through_proxy(),
+        "cannot start {name}: Shoal cannot send its API requests through a proxy; \
+         remove proxy from its [ai.{name}]"
+    );
     ensure_installed(name, &settings.commands)
 }
 
@@ -503,6 +515,11 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
 /// Shoal's proxy.
 pub(crate) fn hook_args(kind: IntegrationKind, proxied: bool) -> std::io::Result<Vec<OsString>> {
     integration(kind).hook_args(proxied)
+}
+
+/// Whether an agent with integration `kind` can go through Shoal's proxy.
+pub(crate) fn routes_through_proxy(kind: IntegrationKind) -> bool {
+    integration(kind).routes_through_proxy()
 }
 
 /// `command` of an agent with integration `kind`, running with `configured`

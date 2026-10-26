@@ -52,6 +52,10 @@ impl Integration for Codex {
         config_overrides(false)
     }
 
+    fn routes_through_proxy(&self) -> bool {
+        true
+    }
+
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CODEX)
     }

@@ -303,6 +303,12 @@ async fn open_execution(
     Ok((link, plan))
 }
 
+/// The upstream `agent`'s proxy forwards to, when it has one it can use.
+fn proxied_upstream<'a>(settings: &'a crate::config::Effective, agent: &str) -> Option<&'a str> {
+    let upstream = settings.proxy(agent)?;
+    crate::cli::agents::routes_through_proxy(settings.integration(agent)).then_some(upstream)
+}
+
 async fn prepare_agent_launch(
     paths: &Paths,
     workspace: &str,
@@ -332,7 +338,8 @@ async fn prepare_agent_launch(
             .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),
         home: paths.home.clone(),
-        proxy: match agent.and_then(|agent| settings.proxy(agent)) {
+        // Only an agent the integration can point at the proxy uses one.
+        proxy: match agent.and_then(|agent| proxied_upstream(&settings, agent)) {
             Some(upstream) => Some(crate::proxy::start(upstream).await?),
             None => None,
         },

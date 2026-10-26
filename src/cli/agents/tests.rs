@@ -67,3 +67,22 @@ fn integrations_serve_only_the_names_they_list() {
         ["codex".to_owned(), "claude".to_owned()]
     );
 }
+
+#[test]
+fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
+    let config: crate::config::Config = toml::from_str(
+        "[proxy.local]\nupstream = 'http://127.0.0.1:8317'\n\
+         [ai.pi]\nproxy = 'local'\n[ai.claude]\nproxy = 'local'\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let error = ensure_available("pi", &settings).unwrap_err().to_string();
+    assert!(
+        error.contains("cannot send its API requests through a proxy"),
+        "{error}"
+    );
+    // Claude can; whether it is installed is another matter.
+    if let Err(error) = ensure_available("claude", &settings) {
+        assert!(!error.to_string().contains("proxy"), "{error}");
+    }
+}
