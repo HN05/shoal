@@ -2751,22 +2751,30 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
 fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let job = |id: u64, name: &str, conclusion: &str| json!({"id": id, "name": name, "status": "completed", "conclusion": conclusion});
-    let mut first = vec![job(1, "test", "success")];
-    first.extend((2..=100).map(|id| job(id, &format!("shard {id}"), "success")));
-    fixture.respond(json!({
+    // Eleven pages: a successful "test" job first, and a failed one last.
+    let mut responses = json!({
         "GET repos/team/project/actions/runs/12": {"body": {"id": 12, "head_branch": "topic",
             "status": "completed", "conclusion": "failure",
             "html_url": "https://github.com/team/project/actions/runs/12"}},
-        "GET repos/team/project/actions/runs/12/jobs?per_page=100&page=1":
-            {"body": {"total_count": 101, "jobs": first}},
-        "GET repos/team/project/actions/runs/12/jobs?per_page=100&page=2":
-            {"body": {"total_count": 101, "jobs": [job(101, "test", "failure")]}},
-        "GET repos/team/project/actions/jobs/101/logs": {"body": "boom\n"},
-    }));
+        "GET repos/team/project/actions/jobs/1001/logs": {"body": "boom\n"},
+    });
+    for page in 1..=11_u64 {
+        let jobs = (page * 100 - 99..=(page * 100).min(1001))
+            .map(|id| match id {
+                1 => job(id, "test", "success"),
+                1001 => job(id, "test", "failure"),
+                _ => job(id, &format!("shard {id}"), "success"),
+            })
+            .collect::<Vec<_>>();
+        responses
+            [format!("GET repos/team/project/actions/runs/12/jobs?per_page=100&page={page}")] =
+            json!({"body": {"total_count": 1001, "jobs": jobs}});
+    }
+    fixture.respond(responses);
     let view = fixture.ok(&["forge", "ci", "view", "12", "--workspace", "topic"]);
-    assert_eq!(view["jobs"].as_array().unwrap().len(), 101, "{view}");
-    // The failed job on the second page is the one whose log is read, though
-    // a successful job shares its name.
+    assert_eq!(view["jobs"].as_array().unwrap().len(), 1001);
+    // The failed job on the last page is the one whose log is read, though a
+    // successful job shares its name.
     let logs = view["logs"].as_array().unwrap();
     assert_eq!(logs.len(), 1, "{view}");
     assert_eq!(
@@ -2795,7 +2803,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         "view",
         "12",
         "--job-id",
-        "101",
+        "1001",
         "--workspace",
         "topic",
     ]);

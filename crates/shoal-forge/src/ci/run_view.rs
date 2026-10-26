@@ -16,8 +16,6 @@ use crate::{
 pub const MAX_RUNS: usize = 100;
 /// The jobs one page of a run's jobs holds.
 pub(crate) const JOBS_PAGE: usize = 100;
-/// The most pages of a run's jobs Shoal reads.
-const MAX_JOB_PAGES: u32 = 10;
 
 /// A job of a run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,7 +127,7 @@ impl ForgeRepo {
     /// Every job of `run`, reading page after page while pages are full.
     async fn jobs_of(&self, account: &Account, run: &Run) -> Result<Vec<RunJob>> {
         let mut jobs = Vec::new();
-        for page in 1..=MAX_JOB_PAGES {
+        for page in 1.. {
             let Some(path) = self.kind.run_jobs_path(run, page) else {
                 break;
             };
