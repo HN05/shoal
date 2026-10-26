@@ -7,6 +7,7 @@ mod completion;
 mod demo;
 mod detached;
 mod link;
+mod mode;
 mod pause;
 pub mod recovery;
 mod spawn;
@@ -27,7 +28,7 @@ use crate::{
         client,
         internal::{Worker, internal_command},
     },
-    daemon::{approvals::Undecided, workspace::ExecutionKind},
+    daemon::approvals::Undecided,
     env,
     model::ExecutionPlan,
     paths::Paths,
@@ -39,68 +40,12 @@ use completion::report_completion;
 #[cfg(feature = "happy")]
 pub use detached::launch_detached;
 use link::Link;
+use mode::Mode;
 use pause::{AfterPause, Halt, pause_agent, record_stopped_command};
 use spawn::AgentLaunch;
 pub use supervise::exit_code;
 use supervise::{Outcome, supervise};
 pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
-
-#[derive(Clone)]
-enum Mode {
-    /// An arbitrary command chosen by the caller; `record` keeps it for
-    /// `shoal resume` to report when `shoal stop` interrupts it.
-    Command {
-        record: bool,
-    },
-    /// A restored agent session; `records` are consumed once it starts.
-    Recovery {
-        records: Vec<PathBuf>,
-    },
-    /// A caller-chosen command without a terminal: no stdin, output appended
-    /// to `log`, and the launch reported on stdout for the spawning CLI.
-    Detached {
-        log: PathBuf,
-    },
-    Land {
-        json: bool,
-        push: bool,
-    },
-    /// A command publishing for the workspace under its agent account, with
-    /// output on stderr so stdout stays for the caller's result.
-    Publish,
-    /// The repository's configured setup command; `json` keeps stdout clean.
-    Setup {
-        json: bool,
-    },
-    /// A demo, restarted whenever its command exits until it is stopped.
-    Demo {
-        launch: Box<crate::demos::Launch>,
-    },
-}
-
-impl Mode {
-    fn kind(&self) -> ExecutionKind {
-        match self {
-            Self::Command { .. }
-            | Self::Recovery { .. }
-            | Self::Detached { .. }
-            | Self::Publish
-            | Self::Demo { .. } => ExecutionKind::Command,
-            Self::Land { .. } => ExecutionKind::Land,
-            Self::Setup { .. } => ExecutionKind::Setup,
-        }
-    }
-
-    fn is_setup(&self) -> bool {
-        matches!(self, Mode::Setup { .. })
-    }
-
-    /// Commands keep running across a daemon restart; setup and landing
-    /// depend on gates the daemon holds.
-    fn reattaches(&self) -> bool {
-        self.kind() == ExecutionKind::Command
-    }
-}
 
 /// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
 pub async fn run(
