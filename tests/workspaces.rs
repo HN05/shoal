@@ -6559,6 +6559,35 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 }
 
 #[test]
+fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
+    let fixture = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    let environment = |fixture: &Fixture| -> Vec<String> {
+        fixture
+            .ok(&["alerts", "--all", "--keep-unread"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "environment_problem")
+            .map(|event| event["message"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    wait_until("the startup environment alert", || {
+        environment(&fixture)
+            .iter()
+            .any(|message| message.contains("now named worker_template"))
+    });
+    // Reloading checks again; the unread alert collapses rather than repeating.
+    fixture.ok(&["daemon", "reload"]);
+    assert_eq!(
+        environment(&fixture)
+            .iter()
+            .filter(|message| message.contains("now named worker_template"))
+            .count(),
+        1
+    );
+}
+
+#[test]
 #[cfg(target_os = "macos")]
 fn global_config_changes_reload_a_running_daemon() {
     let fixture = Fixture::with_tools(None, true);

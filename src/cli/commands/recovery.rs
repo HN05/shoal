@@ -17,26 +17,6 @@ use crate::{
     protocol::Method,
 };
 
-/// Whether the global config sets something Shoal no longer reads or already
-/// says; `config show` reports the repository layers too.
-fn global_config_check(ctx: &Context) -> Check {
-    let retired = crate::config::Config::load_with_templates(&ctx.paths)
-        .map(|config| config.repository_layer().normalize());
-    match retired {
-        Ok(retired) if retired.is_empty() => Check::new(
-            "global_config",
-            CheckStatus::Ok,
-            "The global config sets no retired or redundant settings".to_owned(),
-        ),
-        Ok(retired) => Check::new("global_config", CheckStatus::Warning, retired.join("; ")),
-        Err(error) => Check::new(
-            "global_config",
-            CheckStatus::Error,
-            format!("Could not read the global config: {error:#}"),
-        ),
-    }
-}
-
 pub(super) async fn run(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -70,7 +50,9 @@ pub(super) async fn run(
             .checks
             .extend(crate::daemon::doctor::unavailable_checks());
     }
-    report.checks.push(global_config_check(ctx));
+    report
+        .checks
+        .push(crate::daemon::doctor::global_config_check(&ctx.paths));
     let shell_loaded =
         std::env::var_os(crate::env::SHELL_DIRECTIVE).is_some_and(|value| !value.is_empty());
     report.checks.push(Check::new(

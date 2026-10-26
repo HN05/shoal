@@ -10,7 +10,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{log, notifications::NotificationKind, workspace::Manager},
     git,
     state::states,
     tools::{Dependency, Tool},
@@ -186,7 +186,51 @@ fn worktree_report(name: String, root: &Path, problems: Vec<String>) -> Vec<Chec
         .collect()
 }
 
+/// Whether the global config sets something Shoal no longer reads or already
+/// says; `config show` reports the repository layers too.
+pub fn global_config_check(paths: &crate::paths::Paths) -> Check {
+    let retired = crate::config::Config::load_with_templates(paths)
+        .map(|config| config.repository_layer().normalize());
+    match retired {
+        Ok(retired) if retired.is_empty() => Check::new(
+            "global_config",
+            CheckStatus::Ok,
+            "The global config sets no retired or redundant settings".to_owned(),
+        ),
+        Ok(retired) => Check::new("global_config", CheckStatus::Warning, retired.join("; ")),
+        Err(error) => Check::new(
+            "global_config",
+            CheckStatus::Error,
+            format!("Could not read the global config: {error:#}"),
+        ),
+    }
+}
+
 impl Manager {
+    /// Record an alert for each problem with the daemon's tools, `root_dir`,
+    /// registered checkouts and the global config, as the daemon starts or
+    /// reloads its config. Identical unread alerts collapse into one.
+    pub async fn report_environment(&self) {
+        let mut checks = dependencies(std::env::var_os("PATH").as_deref());
+        checks.push(root_dir(self.config().root_dir(&self.paths)).await);
+        checks.push(global_config_check(&self.paths));
+        match self.repositories().await {
+            Ok(repositories) => {
+                for repo in repositories {
+                    checks.push(checkout(&repo).await);
+                }
+            }
+            Err(error) => log!("environment check skipped repositories: {error:#}"),
+        }
+        for check in checks
+            .into_iter()
+            .filter(|check| check.status != CheckStatus::Ok)
+        {
+            self.notify(None, NotificationKind::EnvironmentProblem, check.message)
+                .await;
+        }
+    }
+
     pub async fn diagnose(&self) -> Result<Vec<Check>> {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
         checks.push(self.cleanup_check());

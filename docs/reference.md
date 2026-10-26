@@ -2769,7 +2769,9 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup, and automatic cleanup that starts failing. `shoal alerts send` adds a one-line message (at most 512 bytes, without
+idle cleanup, automatic cleanup that starts failing, and, when the daemon starts or
+reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
+a checkout with `core.bare` set, or retired settings in the global config. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the

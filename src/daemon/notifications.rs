@@ -64,6 +64,9 @@ states!(NotificationKind {
     RepositoryRemoved => "repository_removed",
     /// An API failure ended an agent's turn and Shoal does not retry it.
     TurnFailed => "turn_failed",
+    /// The daemon's environment or the global config has a problem, such as
+    /// a missing tool, found when the daemon starts or reloads its config.
+    EnvironmentProblem => "environment_problem",
 });
 
 impl NotificationKind {

@@ -98,6 +98,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     }
     manager.learn_recorded_forge_hosts().await?;
     manager.audit_worktrees().await?;
+    tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.report_environment().await }
+    });
     let listener = ownership.listen()?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -517,6 +521,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::ReloadConfig => {
             manager.reload_config().await?;
+            manager.report_environment().await;
             Body::Ok
         }
         Method::ListRepositories => {

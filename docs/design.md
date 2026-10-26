@@ -1616,7 +1616,9 @@ failure and repair guidance; repair restores verified worktrees and clears
 executions proven stopped while preserving work and leases. Added
 environment and untracked-worktree checks are diagnosis only. The daemon
 checks its own PATH using the shared executable catalog and Git worktree
-registrations under owned repository roots;
+registrations under owned repository roots, and records an alert for each
+environment problem when it starts or reloads its config, so the user learns of
+one without running a diagnostic;
 the CLI diagnoses daemon health before requesting workspace checks and checks
 shell integration locally, including when the daemon is unavailable. Opening
 persistence only migrates schema. Under the daemon lock, startup then atomically
