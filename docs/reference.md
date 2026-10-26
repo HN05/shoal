@@ -1230,7 +1230,7 @@ otherwise it is the one whose checkout owns the worktree, else the only one shar
 its `origin` remote, else one chosen interactively. Its local branch derives the workspace name;
 name or ownership conflicts fail. Main checkouts, detached or locked worktrees,
 and paths overlapping protected locations are refused. Repeating adoption reopens
-a verified ready workspace; it cannot repair a moved or replaced managed worktree.
+a verified ready workspace; it cannot repair a moved managed worktree.
 At a workspace's recorded path, when its worktree exists but Shoal cannot verify
 it owns it, adoption reclaims it: check the worktree yourself first, since adopting
 it re-marks a linked worktree of the recorded repository on the recorded branch

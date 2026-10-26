@@ -332,7 +332,8 @@ takes a path; the CLI infers its repository from the owning checkout, then a uni
 adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership
 conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
-adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.
+adoption cannot repair a moved managed worktree, and repairs one whose metadata was
+replaced only by reclaiming it at its recorded path. Never adopt a main checkout.
 `work adopt --copy` records a preparing workspace before creating a fresh worktree
 under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, removes checkout files the source deleted at any
