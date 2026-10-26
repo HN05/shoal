@@ -38,6 +38,9 @@ pub struct Tool {
     /// Whether Shoal retries a turn an API failure ended; on by default for
     /// the Claude integration.
     pub retry: bool,
+    /// The `[proxy.<name>]` its tracked agents reach their API through: the
+    /// one named nearest in its lineage.
+    pub proxy: Option<String>,
 }
 
 /// What a tool's launcher takes besides its command, which `[commands]` may
@@ -139,6 +142,7 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         bases: lineage[1..].iter().map(|base| (*base).to_owned()).collect(),
         skill_dir: skill_directory(&configured, builtin),
         retry: retries(&configured, integration),
+        proxy: configured.iter().find_map(|agent| agent.proxy.clone()),
     }
 }
 

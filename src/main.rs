@@ -25,6 +25,7 @@ mod presets;
 mod process;
 mod profile;
 mod protocol;
+mod proxy;
 mod removal;
 mod repository;
 mod secrets;

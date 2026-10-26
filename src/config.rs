@@ -149,6 +149,8 @@ pub struct Config {
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: crate::sim::SimConfig,
+    /// Retrying proxies an AI tool's agents reach their API through.
+    pub proxy: crate::proxy::Proxies,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -671,6 +673,8 @@ impl Config {
             .cleanup
             .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
         crate::ai::validate(&config.ai.entries, &config.commands, &paths.home)?;
+        crate::proxy::validate(&config.proxy)?;
+        crate::proxy::validate_references(&config.ai.entries, &config.proxy)?;
         config.root_dir(paths)?;
         templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
@@ -711,6 +715,7 @@ impl Config {
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
         let mut effective = resolve::Stack::new(self, layers).resolve()?;
         crate::ai::inherit_launchers(&self.ai.tools, &mut effective.commands);
+        effective.proxies = crate::proxy::upstreams(&self.ai.tools, &self.proxy);
         effective.tools = self.ai.tools.clone();
         Ok(effective)
     }

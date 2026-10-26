@@ -23,6 +23,9 @@ pub struct Effective {
     /// Every AI tool; machine config, so no layer overrides it.
     #[serde(skip)]
     pub tools: crate::ai::Tools,
+    /// The upstream each AI tool's tracked agents reach through a proxy.
+    #[serde(skip)]
+    pub proxies: BTreeMap<String, String>,
     pub agent_resume: named_commands::Commands,
     pub worker_template: Option<String>,
     pub chat_template: Option<String>,
@@ -212,6 +215,7 @@ impl Effective {
         Ok(Self {
             commands: merged.commands,
             tools: Default::default(),
+            proxies: Default::default(),
             agent_resume: merged.agent_resume,
             worker_template: merged.worker_template,
             chat_template: merged.chat_template,

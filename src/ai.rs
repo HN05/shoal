@@ -52,6 +52,8 @@ pub struct Agent {
     /// Whether Shoal retries a turn an API failure ended, for an agent whose
     /// integration reports failed turns.
     pub retry: Option<bool>,
+    /// The `[proxy.<name>]` the tool's tracked agents reach their API through.
+    pub proxy: Option<String>,
 }
 
 /// The `[ai]` table as written and every AI tool resolved from it once,

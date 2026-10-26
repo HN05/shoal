@@ -1099,6 +1099,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shoal-forge",
+ "shoal-proxy",
  "shoal-subprocess",
  "socket2",
  "tempfile",

@@ -17,6 +17,7 @@ rusqlite = "0.40.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shoal-forge = { path = "crates/shoal-forge" }
+shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
 tempfile = "3"
 tokio = "1"
@@ -31,9 +32,12 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = ["happy"]
+default = ["happy", "proxy"]
 # Detached Happy sessions, which seed prompts through Happy's encrypted server.
 happy = ["dep:aes-gcm", "dep:crypto_box", "dep:crypto_secretbox"]
+# A retrying proxy between agents and their API upstream, with its HTTP and
+# TLS dependencies.
+proxy = ["dep:shoal-proxy"]
 
 [dependencies]
 aes-gcm = { version = "0.11", optional = true }
@@ -52,6 +56,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-forge = { workspace = true, features = ["clap", "rusqlite"] }
+shoal-proxy = { workspace = true, optional = true }
 shoal-subprocess.workspace = true
 socket2 = "0.6"
 tempfile.workspace = true
