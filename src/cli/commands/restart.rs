@@ -2,7 +2,7 @@
 //! current binary in the terminal it already has.
 use std::{collections::HashMap, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 use tokio::time::{Instant, sleep, sleep_until};
 
@@ -31,6 +31,11 @@ pub(super) async fn run(
     agent: Option<Agent>,
     wait: bool,
 ) -> Result<i32> {
+    // A process that cleared its scope token is still the workspace's.
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "restart agents outside scoped executions"
+    );
     let selection = Selection::load(ctx, targets).await?;
     let plan = selection.plan(agent.as_ref().map(Agent::name));
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
@@ -45,8 +50,9 @@ pub(super) async fn run(
         return Ok(0);
     }
     let mut report = ui::Report::new("restarted", "restart");
-    report.field("skipped", report_skipped(ctx, &plan.skipped));
-    restart_in_turn(ctx, &mut report, plan.restarts, wait).await?;
+    let mut skipped = report_skipped(ctx, &plan.skipped);
+    skipped.extend(restart_in_turn(ctx, &mut report, plan.restarts, wait).await?);
+    report.field("skipped", skipped.into());
     report.finish(ctx, "")
 }
 
@@ -179,7 +185,7 @@ fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> 
 }
 
 /// Print each skipped agent, returning their JSON entries.
-fn report_skipped(ctx: &Context, skipped: &[Skipped]) -> Value {
+fn report_skipped(ctx: &Context, skipped: &[Skipped]) -> Vec<Value> {
     let palette = Palette::stdout(ctx.json);
     skipped
         .iter()
@@ -226,25 +232,31 @@ impl Restart {
 }
 
 /// Restart `restarts` one at a time, each at least the admission stagger
-/// after the previous start, and with `wait` only once its turn ended.
+/// after the previous start, and with `wait` only once its turn ended,
+/// returning the JSON entries of agents that stopped running meanwhile.
 async fn restart_in_turn(
     ctx: &Context,
     report: &mut ui::Report,
     mut restarts: Vec<Restart>,
     wait: bool,
-) -> Result<()> {
+) -> Result<Vec<Value>> {
     let total = restarts.len();
+    let mut position = 0;
     let mut previous: Option<Instant> = None;
-    for position in 1..=total {
-        let index = if wait {
-            next_idle(ctx, &mut restarts).await?
-        } else {
-            0
-        };
-        let restart = restarts.remove(index);
+    let mut gone = Vec::new();
+    while !restarts.is_empty() {
         if let Some(previous) = previous {
             sleep_until(previous + STAGGER).await;
         }
+        let restart = if wait {
+            let Some(restart) = next_idle(ctx, &mut restarts, &mut gone).await? else {
+                break;
+            };
+            restart
+        } else {
+            restarts.remove(0)
+        };
+        position += 1;
         let name = &restart.workspace.name;
         match restart.run(ctx).await {
             Ok(()) => {
@@ -258,16 +270,25 @@ async fn restart_in_turn(
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    Ok(())
+    Ok(gone)
 }
 
-/// The position of the first of `restarts` whose turn ended, waiting until
-/// one has; an agent waiting for the user or without turn reports works.
-async fn next_idle(ctx: &Context, restarts: &mut [Restart]) -> Result<usize> {
+/// Take the first of `restarts` whose turn ended, from states read now,
+/// waiting until one has; an agent waiting for the user or without turn
+/// reports works. Agents that stopped running are reported into `gone`.
+async fn next_idle(
+    ctx: &Context,
+    restarts: &mut Vec<Restart>,
+    gone: &mut Vec<Value>,
+) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
+        gone.extend(report_skipped(ctx, &refresh(ctx, restarts).await?));
+        if restarts.is_empty() {
+            return Ok(None);
+        }
         if let Some(index) = restarts.iter().position(Restart::idle) {
-            return Ok(index);
+            return Ok(Some(restarts.remove(index)));
         }
         if !told && !ctx.json {
             let names: Vec<_> = restarts
@@ -278,23 +299,37 @@ async fn next_idle(ctx: &Context, restarts: &mut [Restart]) -> Result<usize> {
             told = true;
         }
         sleep(TURN_POLL_INTERVAL).await;
-        refresh_turns(ctx, restarts).await?;
     }
 }
 
-/// Read each workspace's agent state again.
-async fn refresh_turns(ctx: &Context, restarts: &mut [Restart]) -> Result<()> {
+/// Read each workspace's agent state again, and drop the agents that no
+/// longer run, returning them.
+async fn refresh(ctx: &Context, restarts: &mut Vec<Restart>) -> Result<Vec<Skipped>> {
     let states: HashMap<_, _> = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
         .map(|workspace| (workspace.id, workspace.agent_state))
         .collect();
-    for restart in restarts {
+    let running: Vec<RunningAgent> = request(&ctx.paths, ExecutionMethod::ListAgents).await?;
+    let (live, ended) = std::mem::take(restarts).into_iter().partition(|restart| {
+        running
+            .iter()
+            .any(|agent| agent.execution == restart.agent.execution)
+    });
+    *restarts = live;
+    for restart in restarts.iter_mut() {
         if let Some(state) = states.get(&restart.workspace.id) {
             restart.workspace.agent_state = *state;
         }
     }
-    Ok(())
+    Ok(ended
+        .into_iter()
+        .map(|restart: Restart| Skipped {
+            workspace: restart.workspace.name,
+            agent: restart.agent.agent,
+            reason: "the agent no longer runs".into(),
+        })
+        .collect())
 }
 
 #[cfg(test)]
