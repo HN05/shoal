@@ -6570,26 +6570,27 @@ fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
             .map(|event| event["message"].as_str().unwrap().to_owned())
             .collect()
     };
-    let retired = |messages: Vec<String>| {
-        messages
+    let reported = |fixture: &Fixture, setting: &str| {
+        environment(fixture)
             .iter()
-            .any(|message| message.contains("now named worker_template"))
+            .any(|message| message.contains(setting))
     };
-    let started = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    let fixture = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    // The startup check reads the config before it records its alerts, so
+    // this one shows it is past reading by the time the config changes.
     wait_until("the startup environment alert", || {
-        retired(environment(&started))
+        reported(&fixture, "agent_template")
     });
-    // A setting added later is reported once the config is reloaded.
-    let fixture = Fixture::new();
-    assert!(!retired(environment(&fixture)));
+    // A setting added later is reported only by the reload.
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "agent_template = 'Work carefully.'\n",
+        "issue_template = 'Describe the bug.'\n",
     )
     .unwrap();
+    assert!(!reported(&fixture, "issue_template"));
     fixture.ok(&["daemon", "reload"]);
     wait_until("the reload environment alert", || {
-        retired(environment(&fixture))
+        reported(&fixture, "issue_template")
     });
 }
 
