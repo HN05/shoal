@@ -176,12 +176,11 @@ async fn sample(manager: &Manager, tracked: Vec<(String, Identity)>) -> Result<S
     let ids = manager.workspace_ids().await?;
     let running = identity::scan_workspaces(ids).await?;
     let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
-    let exited: Vec<_> = tracked
+    let missed: Vec<_> = tracked
         .into_iter()
         .filter(|(_, identity)| !found.contains(identity))
         .collect();
-    let candidates = running.into_iter().chain(exited).collect();
-    tokio::task::spawn_blocking(move || read(candidates, state))
+    tokio::task::spawn_blocking(move || read(running, missed, state))
         .await
         .context("workspace usage worker failed")?
 }
@@ -202,24 +201,31 @@ fn state(identity: &Identity) -> Result<State> {
     })
 }
 
-/// The candidates' readings, each kept by the `state` its process is in once
-/// read: one that exits after the scan is still followed until reaped.
+/// The readings of the processes the scan `found` and of those it `missed`,
+/// each kept by the `state` its process is in once read: one that exits after
+/// the scan is still followed until reaped. A missed process counts only
+/// while unreaped, since one still running no longer carries the identity.
 fn read(
-    candidates: Vec<(String, Identity)>,
+    found: Vec<(String, Identity)>,
+    missed: Vec<(String, Identity)>,
     state: impl Fn(&Identity) -> Result<State>,
 ) -> Result<Sample> {
     let mut processes = HashMap::new();
     let mut unreaped = HashSet::new();
-    for (workspace, identity) in candidates {
+    let candidates = found
+        .into_iter()
+        .map(|candidate| (candidate, true))
+        .chain(missed.into_iter().map(|candidate| (candidate, false)));
+    for ((workspace, identity), scanned) in candidates {
         let Some(reading) = usage::read(identity.pid)? else {
             continue;
         };
         match state(&identity)? {
-            State::Running => {}
+            State::Running if scanned => {}
             State::Unreaped => {
                 unreaped.insert(identity.clone());
             }
-            State::Gone => continue,
+            State::Running | State::Gone => continue,
         }
         processes.insert(identity, (workspace, reading));
     }
@@ -344,11 +350,22 @@ mod tests {
     fn processes_exiting_after_the_scan_are_followed_unreaped() {
         let own = own_process();
         let candidates = vec![("a".to_owned(), own.clone())];
-        let exited = read(candidates.clone(), |_| Ok(State::Unreaped)).unwrap();
+        let exited = read(candidates.clone(), Vec::new(), |_| Ok(State::Unreaped)).unwrap();
         assert!(exited.processes.contains_key(&own));
         assert_eq!(exited.unreaped, HashSet::from([own.clone()]));
-        let gone = read(candidates, |_| Ok(State::Gone)).unwrap();
+        let gone = read(candidates, Vec::new(), |_| Ok(State::Gone)).unwrap();
         assert!(gone.processes.is_empty() && gone.unreaped.is_empty());
+    }
+
+    #[test]
+    fn processes_the_scan_misses_count_only_while_unreaped() {
+        let own = own_process();
+        let missed = || vec![("a".to_owned(), own.clone())];
+        // Running without the identity, such as after an exec that dropped it.
+        let running = read(Vec::new(), missed(), |_| Ok(State::Running)).unwrap();
+        assert!(running.processes.is_empty());
+        let exited = read(Vec::new(), missed(), |_| Ok(State::Unreaped)).unwrap();
+        assert_eq!(exited.unreaped, HashSet::from([own.clone()]));
     }
 
     /// A process whose usage reads: this test's own.
@@ -388,7 +405,7 @@ mod tests {
         let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
             .await
             .unwrap();
-        let sample = read(processes, state).unwrap();
+        let sample = read(processes, Vec::new(), state).unwrap();
         assert!(sample.unreaped.is_empty());
         let [(identity, (workspace, reading))] =
             Vec::from_iter(sample.processes).try_into().unwrap();
