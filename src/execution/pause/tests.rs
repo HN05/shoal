@@ -12,7 +12,7 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
         Some("free disk space is below 2 GiB")
     );
     assert_eq!(
-        protection.manual_restore(&protection.restore("worker", "id")),
+        protection.manual_restore("worker", "id"),
         "shoal: agent stopped: free disk space is below 2 GiB; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
     );
     let stop = Halt::Pause {
@@ -22,7 +22,7 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
     assert_eq!(stop.saved_reason(), None);
     assert_eq!(stop.stated_reason(), ": stopped by shoal stop");
     assert_eq!(
-        stop.manual_restore(&stop.restore("worker", "id")),
+        stop.manual_restore("worker", "id"),
         "shoal: agent stopped: stopped by shoal stop; restore with shoal resume worker --execution id"
     );
     let removal = Halt::Pause {
@@ -30,7 +30,7 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
         removed: true,
     };
     assert_eq!(
-        removal.manual_restore(&removal.restore("worker", "id")),
+        removal.manual_restore("worker", "id"),
         "shoal: agent stopped: the workspace is being removed; restore with shoal work restore worker, then shoal resume worker --execution id"
     );
     let pause = Halt::Pause {

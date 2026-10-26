@@ -40,7 +40,7 @@ pub(super) async fn pause_agent(
     match &saved {
         // The terminal may have closed with the session.
         Ok(_) if !automatic => {
-            let restore = stop.manual_restore(&stop.restore(&plan.workspace.name, &plan.id));
+            let restore = stop.manual_restore(&plan.workspace.name, &plan.id);
             let _ = writeln!(std::io::stderr(), "{restore}");
         }
         Ok(_) => {}
@@ -245,14 +245,15 @@ impl Halt {
     }
 
     /// The line for an agent that does not restore itself.
-    fn manual_restore(&self, restore: &str) -> String {
+    fn manual_restore(&self, workspace: &str, execution: &str) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
             Self::Pause { .. } | Self::Ended { .. } => String::new(),
         };
         format!(
-            "shoal: agent stopped{}; {condition}{restore}",
-            self.stated_reason()
+            "shoal: agent stopped{}; {condition}{}",
+            self.stated_reason(),
+            self.restore(workspace, execution)
         )
     }
 }
