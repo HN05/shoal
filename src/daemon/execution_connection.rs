@@ -340,6 +340,7 @@ async fn relay(
                     .await?;
                 if agent.is_some() {
                     manager.forget_last_session(&workspace.id);
+                    manager.finish_restart(execution_id, Ok(())).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
             }
@@ -442,11 +443,14 @@ struct OverloadRecovery {
     update_hold: Option<OwnedRwLockReadGuard<()>>,
 }
 
-/// Choose the control for a stop: an overload stop, a detach for a daemon
-/// shutdown the wrapper outlives, or the execution's stop request.
+/// Choose the control for a stop: an overload stop, a restart, a detach for
+/// a daemon shutdown the wrapper outlives, or the execution's stop request.
 async fn prepare_stop(manager: &Manager, stopping: Stopping<'_>) -> PreparedStop {
     if let Some(protection) = manager.agent_overload(stopping.execution_id).await {
         return prepare_overload_stop(manager, stopping, protection).await;
+    }
+    if manager.restart_requested(stopping.execution_id).await {
+        return prepare_restart();
     }
     let control = if stopping.reattach && manager.shutting_down() {
         Control::Detach
@@ -481,6 +485,26 @@ async fn prepare_overload_stop(
         recovery: Some(OverloadRecovery {
             recovering,
             update_hold,
+        }),
+    }
+}
+
+/// A restart stops the agent as protection does, so wrappers of every
+/// release restore it, and recovers it whatever the overload policy.
+fn prepare_restart() -> PreparedStop {
+    let Protection {
+        reason,
+        resumes_when,
+    } = Protection::restart();
+    PreparedStop {
+        control: Control::OverloadStop {
+            recover: true,
+            reason,
+            resumes_when,
+        },
+        recovery: Some(OverloadRecovery {
+            recovering: true,
+            update_hold: None,
         }),
     }
 }

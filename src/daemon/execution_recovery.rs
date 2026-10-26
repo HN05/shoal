@@ -1,6 +1,7 @@
 //! A stopped wrapper waits until its processes are proven stopped and the
-//! agent queue admits its restore, or finishes normally when recovery is
-//! cancelled. Failed ownership checks never authorize a replacement process.
+//! agent queue admits its restore, or only for the proof when `shoal restart`
+//! stopped it, and finishes normally when recovery is cancelled. Failed
+//! ownership checks never authorize a replacement process.
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
@@ -29,6 +30,9 @@ pub(super) async fn pause(
     recover: bool,
 ) -> Result<Action> {
     ensure!(recover, "execution is not eligible for overload recovery");
+    if manager.restart_requested(execution_id).await {
+        return restart(manager, execution_id, workspace_id, incoming, stop).await;
+    }
     if !manager.agent_was_overloaded(execution_id).await {
         return Ok(Action::Stop(requested_reason(manager, execution_id).await));
     }
@@ -54,14 +58,7 @@ pub(super) async fn pause(
     }
     let ready = tokio::select! {
         biased;
-        event = incoming.recv() => match event.context("execution disconnected")?? {
-            ExecutionEvent::Finished { exit_code } => return Ok(Action::Finished(exit_code)),
-            _ => return Err(anyhow::anyhow!("unexpected event during overload recovery")),
-        },
-        changed = stop.changed() => {
-            changed?;
-            return Ok(Action::Stop(requested_reason(manager, execution_id).await));
-        }
+        action = interrupted(manager, execution_id, incoming, stop) => return action,
         () = recovery_disabled(manager) => {
             return Ok(Action::Stop(Some("automatic recovery was disabled".into())));
         }
@@ -82,6 +79,76 @@ pub(super) async fn pause(
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
+}
+
+/// Restore an agent `shoal restart` stopped once its processes are proven
+/// stopped, answering the restart when it does not resume.
+async fn restart(
+    manager: &Manager,
+    execution_id: &str,
+    workspace_id: &str,
+    incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
+    stop: &mut watch::Receiver<bool>,
+) -> Result<Action> {
+    let action = restart_once_stopped(manager, execution_id, workspace_id, incoming, stop).await;
+    if let Ok(Action::Stop(reason)) = &action {
+        let reason = reason
+            .clone()
+            .unwrap_or_else(|| "the restart was cancelled".into());
+        manager.finish_restart(execution_id, Err(reason)).await;
+    }
+    action
+}
+
+async fn restart_once_stopped(
+    manager: &Manager,
+    execution_id: &str,
+    workspace_id: &str,
+    incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
+    stop: &mut watch::Receiver<bool>,
+) -> Result<Action> {
+    let stopped = match manager
+        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .await
+    {
+        Ok(stopped) => stopped,
+        Err(error) => return Ok(restore_failed(error)),
+    };
+    let ready = tokio::select! {
+        biased;
+        action = interrupted(manager, execution_id, incoming, stop) => return action,
+        ready = async {
+            await_stopped(manager, execution_id, workspace_id, stopped).await?;
+            manager.checkpoint_after_agent(workspace_id).await;
+            anyhow::Ok(())
+        } => ready,
+    };
+    let resume = async {
+        ready?;
+        resume(manager, execution_id, workspace_id).await
+    }
+    .await;
+    Ok(resume.unwrap_or_else(restore_failed))
+}
+
+/// Resolves when the wrapper finishes or a stop cancels the restore it waits for.
+async fn interrupted(
+    manager: &Manager,
+    execution_id: &str,
+    incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
+    stop: &mut watch::Receiver<bool>,
+) -> Result<Action> {
+    tokio::select! {
+        biased;
+        event = incoming.recv() => match event.context("execution disconnected")?? {
+            ExecutionEvent::Finished { exit_code } => Ok(Action::Finished(exit_code)),
+            _ => Err(anyhow::anyhow!("unexpected event while the agent waits for its restore")),
+        },
+        changed = stop.changed() => {
+            changed?;
+            Ok(Action::Stop(requested_reason(manager, execution_id).await))
+        }
+    }
 }
 
 fn restore_failed(error: anyhow::Error) -> Action {
@@ -181,6 +248,12 @@ async fn prepare_resume(
     if assignment_done(manager, workspace_id).await? {
         return Ok(done_cancels_restore());
     }
+    resume(manager, execution_id, workspace_id).await
+}
+
+/// Resume the stopped agent with the workspace's ports, unless a stop
+/// cancelled its restore.
+async fn resume(manager: &Manager, execution_id: &str, workspace_id: &str) -> Result<Action> {
     let ports = manager.list_ports(Some(workspace_id)).await?;
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))

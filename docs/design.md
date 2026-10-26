@@ -139,6 +139,18 @@ keep the execution, are rechecked periodically so it clears once they exit, and
 are the only outcome that notifies; `shoal doctor` inspects them, and
 `shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.
+`shoal restart` restarts agents in place through the same wrapper path, so the
+agent stays in its terminal: the daemon sends the stop protection sends, with
+the reason `restarted by shoal restart` and recovery whatever the overload
+policy, so wrappers of earlier releases restore it too, and resumes the agent
+once its processes are proven stopped, outside the agent queue, since it keeps
+its slot. The restore command resolves the agent again, so an updated agent
+binary runs; the wrapper keeps its own Shoal binary. The CLI restarts one agent
+at a time, idle ones first, starting the next once the daemon registers the
+restarted agent and at least the admission stagger after the previous start.
+Agents without a restore command and executions whose wrapper is gone are left
+to `shoal stop` and `shoal resume`; a restart that cannot start the agent leaves
+its record for `shoal resume`.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
 workspace loads the machine; protection, warnings and admission do not use it

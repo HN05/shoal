@@ -67,7 +67,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 141;
+pub const VERSION: u32 = 142;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -458,6 +458,7 @@ response_bodies! {
     Hold(crate::model::WorkspaceHold),
     QueueAdmission(crate::model::QueueAdmission),
     QueueEntries(Vec<crate::model::QueueEntry>),
+    RunningAgents(Vec<crate::model::RunningAgent>),
     QueueEntry(crate::model::QueueEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
@@ -650,7 +651,23 @@ impl Protection {
             resumes_when: default_resumes_when(),
         }
     }
+
+    /// `shoal restart`, whose wrapper restores the agent once its processes
+    /// stop. Wrappers handle it as any protection stop they restore.
+    pub(crate) fn restart() -> Self {
+        Self {
+            reason: RESTART_REASON.into(),
+            resumes_when: "its processes stop".into(),
+        }
+    }
+
+    pub(crate) fn is_restart(&self) -> bool {
+        self.reason == RESTART_REASON
+    }
 }
+
+/// The stop reason a restarted agent's wrapper shows and saves.
+const RESTART_REASON: &str = "restarted by shoal restart";
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]

@@ -12,6 +12,7 @@ use std::{
 };
 use tokio::net::UnixListener;
 
+mod agent_restart;
 mod restart;
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its

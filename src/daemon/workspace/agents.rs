@@ -1,13 +1,15 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
 use std::time::{Duration, Instant};
-use tokio::sync::{OwnedRwLockReadGuard, watch};
+use tokio::sync::{OwnedRwLockReadGuard, oneshot, watch};
 
 use super::{GuardMode, Manager, capacity::Activity};
 pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
+
+mod restart;
 
 pub(super) struct Agent {
     name: String,
@@ -21,12 +23,16 @@ pub(super) struct Agent {
     /// Holds back a daemon update from the stop until the execution's
     /// connection takes over, so an update waits for the restore.
     update_hold: Option<OwnedRwLockReadGuard<()>>,
+    /// Set while `shoal restart` restarts the agent; answers its request
+    /// once the agent runs again, or why it does not.
+    restart: Option<oneshot::Sender<Result<(), String>>>,
 }
 
 impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
         self.update_hold = None;
+        self.restart = None;
     }
 
     /// Whether protection stopped the agent and it awaits automatic recovery.
@@ -230,6 +236,7 @@ impl Manager {
                     stop: stop.clone(),
                     overload: None,
                     update_hold: None,
+                    restart: None,
                 },
             );
         }
@@ -340,7 +347,8 @@ impl Manager {
         let agent = agents
             .get_mut(id)
             .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
-        if agent.overload.is_none() {
+        let restarting = agent.restart.is_some();
+        if agent.overload.is_none() && !restarting {
             return Ok(false);
         }
         stop.send(false)?;
@@ -350,6 +358,10 @@ impl Manager {
         let (name, workspace) = (agent.name.clone(), agent.workspace.clone());
         drop(agents);
         drop(connections);
+        // `shoal restart` reports its own restarts.
+        if restarting {
+            return Ok(true);
+        }
         self.notify(
             Some(&workspace),
             NotificationKind::AgentResumed,
@@ -360,10 +372,15 @@ impl Manager {
     }
 
     /// Restore the protection stop of an agent whose wrapper reattached
-    /// while waiting for its automatic restore.
+    /// while waiting for its automatic restore. A restart continues without
+    /// the request that asked for it, which ended with the previous daemon.
     pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
         if let Some(agent) = self.agents.lock().await.get_mut(id) {
-            agent.overload = Some(protection);
+            if protection.is_restart() {
+                agent.restart = Some(oneshot::channel().0);
+            } else {
+                agent.overload = Some(protection);
+            }
         }
     }
 

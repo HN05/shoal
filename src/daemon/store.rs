@@ -950,6 +950,13 @@ pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>>
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {
+    Ok(db
+        .prepare(&format!("SELECT {EXECUTION_COLUMNS} FROM executions"))?
+        .query_map([], execution)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
     Ok(db.query_row(
         "SELECT setup_finished FROM workspaces WHERE id=?1",

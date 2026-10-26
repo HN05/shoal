@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use super::super::{
     answer::Answer,
     execution_connection,
-    scope::{Caller, Scoped},
+    scope::{Caller, Scoped, denied},
     workspace::{ExecutionKind, Manager},
 };
 use crate::protocol::{Body, ExecutionMethod};
@@ -50,12 +50,20 @@ pub(super) async fn handle(
             );
             Body::Ok
         }
+        ExecutionMethod::ListAgents => Body::RunningAgents(manager.running_agents().await?),
+        ExecutionMethod::RestartAgent { execution } => {
+            manager.restart_agent(&execution).await?;
+            Body::Ok
+        }
     }))
 }
 
 impl Scoped for ExecutionMethod {
     async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
+            ExecutionMethod::ListAgents | ExecutionMethod::RestartAgent { .. } => {
+                return Err(denied());
+            }
             ExecutionMethod::CheckLanding => {
                 ensure!(
                     caller.kind() == Some(ExecutionKind::Land),

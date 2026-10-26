@@ -676,6 +676,17 @@ pub struct Chat {
     pub started_at: i64,
 }
 
+/// A connected agent, or an execution whose wrapper is gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunningAgent {
+    pub execution: String,
+    pub workspace_id: String,
+    /// `None` for an execution whose wrapper is gone, which may have run an agent.
+    pub agent: Option<String>,
+    /// Whether its wrapper can start its session again.
+    pub restorable: bool,
+}
+
 /// An agent launch or restore waiting for, or starting in, a `max_agents` slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {

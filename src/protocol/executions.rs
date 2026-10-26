@@ -30,13 +30,18 @@ pub enum ExecutionMethod {
     },
     /// Verify that this worker belongs to an unscoped caller's landing execution.
     CheckLanding,
+    /// Connected agents, and executions whose wrapper is gone, which may run one.
+    ListAgents,
+    /// Stop the agent of `execution` and start its session again in its
+    /// terminal, answering once the restarted agent runs.
+    RestartAgent { execution: String },
 }
 
 impl ExecutionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Execute { .. } => Lifetime::Open,
-            Self::CheckLanding => Lifetime::Reply,
+            Self::CheckLanding | Self::ListAgents | Self::RestartAgent { .. } => Lifetime::Reply,
         }
     }
 }
