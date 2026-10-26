@@ -26,6 +26,9 @@ const STALE: Duration = Duration::from_secs(30);
 struct Sample {
     time: Instant,
     processes: HashMap<Identity, (String, Reading)>,
+    /// Processes that exited but whose parent has not reaped them, so their
+    /// time has not reached it yet. They use no memory and are not counted.
+    unreaped: HashSet<Identity>,
 }
 
 #[derive(Default)]
@@ -57,6 +60,18 @@ impl WorkspaceUsages {
         }
     }
 
+    /// The processes of the latest sample, which the next one follows until
+    /// their parents reap them.
+    fn tracked(&self) -> Vec<(String, Identity)> {
+        self.latest.as_ref().map_or_else(Vec::new, |latest| {
+            latest
+                .processes
+                .iter()
+                .map(|(identity, (workspace, _))| (workspace.clone(), identity.clone()))
+                .collect()
+        })
+    }
+
     /// The latest usage of the workspace `id`, while it has processes and
     /// sampling has not stalled.
     pub(crate) fn get(&self, id: &str, now: Instant) -> Option<WorkspaceUsage> {
@@ -69,7 +84,8 @@ impl WorkspaceUsages {
 }
 
 /// Each workspace's processes and memory in `current`, with the CPU they
-/// used since `previous`. A process that started since counts all its time.
+/// used since `previous`. A process that started since counts all its time,
+/// and one that exited counts until its parent reaps it.
 /// One that ended since was reaped into the time of its nearest ancestor
 /// still in its workspace, directly or through ancestors that ended too, and
 /// that workspace already counted the time it had before.
@@ -78,8 +94,10 @@ fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, Workspa
     let mut cpu: HashMap<&str, i128> = HashMap::new();
     for (identity, (workspace, reading)) in &current.processes {
         let entry = usage.entry(workspace.clone()).or_default();
-        entry.processes += 1;
-        entry.memory_bytes = entry.memory_bytes.saturating_add(reading.memory);
+        if !current.unreaped.contains(identity) {
+            entry.processes += 1;
+            entry.memory_bytes = entry.memory_bytes.saturating_add(reading.memory);
+        }
         let before = previous
             .and_then(|previous| previous.processes.get(identity))
             .map_or(0, |(_, before)| before.cpu);
@@ -145,30 +163,48 @@ fn reaped_within(
 
 pub(super) async fn run(manager: Arc<Manager>) {
     loop {
-        let sample = sample(&manager).await;
+        let tracked = manager.workspace_usage.lock().unwrap().tracked();
+        let sample = sample(&manager, tracked).await;
         manager.workspace_usage.lock().unwrap().record(sample);
         tokio::time::sleep(SAMPLE_INTERVAL).await;
     }
 }
 
-async fn sample(manager: &Manager) -> Result<Sample> {
+/// The workspaces' processes, and those of `tracked` that have exited
+/// unreaped, whose environment no scan can read.
+async fn sample(manager: &Manager, tracked: Vec<(String, Identity)>) -> Result<Sample> {
     let ids = manager.workspace_ids().await?;
-    let processes = identity::scan_workspaces(ids).await?;
-    let processes = tokio::task::spawn_blocking(move || read(processes))
-        .await
-        .context("workspace usage worker failed")??;
-    Ok(Sample {
-        time: Instant::now(),
-        processes,
+    let running = identity::scan_workspaces(ids).await?;
+    let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
+    let exited: Vec<_> = tracked
+        .into_iter()
+        .filter(|(_, identity)| !found.contains(identity))
+        .collect();
+    tokio::task::spawn_blocking(move || {
+        let mut processes = read(running, identity::alive)?;
+        let unreaped = read(exited, identity::unreaped)?;
+        let unreaped_identities = unreaped.keys().cloned().collect();
+        processes.extend(unreaped);
+        Ok(Sample {
+            time: Instant::now(),
+            processes,
+            unreaped: unreaped_identities,
+        })
     })
+    .await
+    .context("workspace usage worker failed")?
 }
 
-/// Each process's reading, leaving out those that ended since the scan.
-fn read(processes: Vec<(String, Identity)>) -> Result<HashMap<Identity, (String, Reading)>> {
+/// Each process's reading, leaving out those `still` no longer holds for
+/// once read, such as ones that ended since the scan.
+fn read(
+    processes: Vec<(String, Identity)>,
+    still: impl Fn(&Identity) -> Result<bool>,
+) -> Result<HashMap<Identity, (String, Reading)>> {
     let mut readings = HashMap::new();
     for (workspace, identity) in processes {
         if let Some(reading) = usage::read(identity.pid)?
-            && identity::alive(&identity)?
+            && still(&identity)?
         {
             readings.insert(identity, (workspace, reading));
         }
@@ -207,6 +243,7 @@ mod tests {
         Sample {
             time,
             processes: processes.into_iter().collect(),
+            unreaped: HashSet::new(),
         }
     }
 
@@ -262,6 +299,30 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn exited_children_count_once_their_parent_reaps_them() {
+        let start = Instant::now();
+        let first = sample(
+            start,
+            [process(10, 1, "a", 0), process(11, 10, "a", 2 * SECOND)],
+        );
+        // 11 used one more second and exited; 10 has not reaped it yet.
+        let mut second = sample(
+            start + Duration::from_secs(10),
+            [process(10, 1, "a", 0), process(11, 10, "a", 3 * SECOND)],
+        );
+        second.unreaped.insert(process(11, 10, "a", 0).0);
+        let exited = usage(Some(&first), &second);
+        assert_eq!(exited["a"].cpu_percent, Some(10.0));
+        assert_eq!(exited["a"].processes, 1);
+        assert_eq!(exited["a"].memory_bytes, 1024);
+        let third = sample(
+            start + Duration::from_secs(20),
+            [process(10, 1, "a", 3 * SECOND)],
+        );
+        assert_eq!(usage(Some(&second), &third)["a"].cpu_percent, Some(0.0));
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn processes_reaped_elsewhere_lower_no_usage() {
         let start = Instant::now();
         let first = sample(start, [process(10, 1, "a", 5 * SECOND)]);
@@ -289,7 +350,7 @@ mod tests {
         let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
             .await
             .unwrap();
-        let readings = read(processes).unwrap();
+        let readings = read(processes, identity::alive).unwrap();
         let [(identity, (workspace, reading))] = Vec::from_iter(readings).try_into().unwrap();
         assert_eq!(Some(identity.pid), child.id());
         assert_eq!(workspace, id);

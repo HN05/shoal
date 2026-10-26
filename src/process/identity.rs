@@ -127,6 +127,16 @@ pub fn alive(identity: &Identity) -> Result<bool> {
     Ok(capture(identity.pid)?.as_ref() == Some(identity))
 }
 
+/// Whether the process `identity` names has exited without its parent
+/// reaping it yet, so its CPU time has not reached the parent's.
+pub fn unreaped(identity: &Identity) -> Result<bool> {
+    ensure!(
+        identity.pid > 1 && identity.pid <= i32::MAX as u32,
+        "invalid process ID"
+    );
+    platform_unreaped(identity)
+}
+
 pub fn signal(identity: &Identity, signal: i32) -> Result<()> {
     ensure!(
         identity.pid != std::process::id(),
@@ -583,6 +593,19 @@ fn launchd_version() -> Option<u32> {
 }
 
 #[cfg(target_os = "macos")]
+fn platform_unreaped(identity: &Identity) -> Result<bool> {
+    // SZOMB in sys/proc.h.
+    const ZOMBIE: u32 = 5;
+    let Some(info) = bsd_info(identity.pid)? else {
+        return Ok(false);
+    };
+    let bsd = &info.bsd;
+    Ok(bsd.pbi_status == ZOMBIE
+        && bsd.pbi_uid == unsafe { libc::geteuid() }
+        && format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec) == identity.birth)
+}
+
+#[cfg(target_os = "macos")]
 pub(super) fn parent(pid: u32) -> Option<u32> {
     bsd_info(pid).ok().flatten().map(|info| info.bsd.pbi_ppid)
 }
@@ -729,6 +752,17 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         // came to init.
         adopted: false,
     }))
+}
+
+#[cfg(target_os = "linux")]
+fn platform_unreaped(identity: &Identity) -> Result<bool> {
+    let Some(stat) = read_process_stat(&format!("/proc/{}/stat", identity.pid))? else {
+        return Ok(false);
+    };
+    let fields = stat_fields(&stat)?;
+    ensure!(fields.len() > 19, "incomplete process stat");
+    let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
+    Ok(fields[0] == "Z" && format!("{}:{}", boot.trim(), fields[19]) == identity.birth)
 }
 
 #[cfg(target_os = "linux")]
@@ -1223,6 +1257,31 @@ mod tests {
         let unreadable = scan?.unreadable.iter().any(|u| u.identity == job);
         assert_eq!(unreadable, hidden);
         Ok(())
+    }
+
+    #[test]
+    fn exited_children_stay_unreaped_until_waited_for() {
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "read line"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let identity = capture(child.id()).unwrap().unwrap();
+        assert!(!unreaped(&identity).unwrap());
+        // Closing its input ends the shell; nothing waits for it yet.
+        drop(child.stdin.take());
+        // A hang guard well past any exit.
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while !unreaped(&identity).unwrap() {
+            assert!(std::time::Instant::now() < deadline, "child never exited");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!alive(&identity).unwrap());
+        // Workspace usage reads the time an exited child awaits its parent with.
+        #[cfg(target_os = "linux")]
+        assert!(super::super::usage::read(identity.pid).unwrap().is_some());
+        child.wait().unwrap();
+        assert!(!unreaped(&identity).unwrap());
     }
 
     #[test]
