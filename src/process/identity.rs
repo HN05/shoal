@@ -504,7 +504,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         unique: Some(info.unique.unique),
         parent: Some(info.unique.parent_unique),
         parent_pid: bsd.pbi_ppid,
-        adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique),
+        adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique, launchd_version()),
     }))
 }
 
@@ -534,13 +534,20 @@ fn boot_session() -> Option<&'static String> {
 }
 
 /// Exec resets an adopted process's parent unique ID to launchd's, but not
-/// the version of the PID it was forked from.
+/// the version of the PID it was forked from, so only launchd's version read
+/// and matching shows that launchd started it.
 #[cfg(target_os = "macos")]
-fn started_by_launchd(process: &UniqueIdentifiers) -> bool {
+fn started_by_launchd(process: &UniqueIdentifiers, launchd: Option<u32>) -> bool {
     // Launchd is the first process the kernel starts.
     const LAUNCHD_UNIQUE: u64 = 1;
+    process.parent_unique == LAUNCHD_UNIQUE && launchd == Some(process.original_parent_version)
+}
+
+/// Launchd's PID version, which it keeps for the whole boot.
+#[cfg(target_os = "macos")]
+fn launchd_version() -> Option<u32> {
     static LAUNCHD_VERSION: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    let version = LAUNCHD_VERSION.get_or_init(|| {
+    *LAUNCHD_VERSION.get_or_init(|| {
         let mut launchd = std::mem::MaybeUninit::<UniqueIdentifiers>::zeroed();
         let size = std::mem::size_of::<UniqueIdentifiers>();
         let result = unsafe {
@@ -553,9 +560,7 @@ fn started_by_launchd(process: &UniqueIdentifiers) -> bool {
             )
         };
         (result as usize == size).then(|| unsafe { launchd.assume_init() }.id_version as u32)
-    });
-    process.parent_unique == LAUNCHD_UNIQUE
-        && version.is_none_or(|version| version == process.original_parent_version)
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -1138,6 +1143,23 @@ mod tests {
         assert_eq!(resolve(41), "unknown under 41");
         assert_eq!(resolve(51), "unknown under 51");
         assert_eq!(resolve(60), "owned by execution");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn launchd_starts_a_process_only_by_a_read_and_matching_version() {
+        let process = |parent_unique, original_parent_version| UniqueIdentifiers {
+            uuid: [0; 16],
+            unique: 2,
+            parent_unique,
+            id_version: 0,
+            original_parent_version,
+            reserved: [0; 2],
+        };
+        assert!(started_by_launchd(&process(1, 7), Some(7)));
+        assert!(!started_by_launchd(&process(1, 7), None));
+        assert!(!started_by_launchd(&process(1, 8), Some(7)));
+        assert!(!started_by_launchd(&process(5, 7), Some(7)));
     }
 
     #[cfg(target_os = "macos")]
