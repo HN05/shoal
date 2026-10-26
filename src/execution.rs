@@ -9,6 +9,7 @@ mod detached;
 mod link;
 mod pause;
 pub mod recovery;
+mod spawn;
 mod terminal;
 mod wake;
 
@@ -18,11 +19,11 @@ use std::{
     io::{IsTerminal, Write},
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
-    process::{ExitStatus, Stdio},
+    process::ExitStatus,
     time::{Duration, Instant},
 };
 use tokio::{
-    process::{Child, Command},
+    process::Child,
     signal::unix::{Signal, SignalKind, signal},
     time::timeout,
 };
@@ -46,6 +47,7 @@ pub use detached::launch_detached;
 use detached::{DetachedLaunch, report_launch};
 use link::{Link, Received, Refused};
 use pause::{AfterPause, Halt, pause_agent, record_stopped_command};
+use spawn::{AgentLaunch, spawn};
 pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
 
 /// Exit status as a shell would report it: the code, or 128 + signal.
@@ -504,29 +506,6 @@ enum Outcome {
     },
 }
 
-/// What an agent's or publishing child receives beyond the workspace
-/// environment: the agent account and, for agents, the configured secrets and
-/// the output default.
-struct AgentLaunch {
-    account: crate::agent_auth::Launch,
-    secrets: crate::secrets::Launch,
-    output: Option<(&'static str, &'static str)>,
-    /// The agent's integration, which launch profiles share with their base.
-    integration: Option<String>,
-    /// What the agent's `[ai]` entry changes in its environment, last.
-    environment: crate::ai::Environment,
-    home: PathBuf,
-}
-
-impl AgentLaunch {
-    fn apply(&self, command: &mut Command) {
-        self.account.apply(command);
-        self.secrets.apply(command);
-        command.envs(self.output);
-        self.environment.apply(command.as_std_mut(), &self.home);
-    }
-}
-
 /// Launch the command, register its process group, and wait for it to exit or
 /// for a stop request.
 async fn supervise(
@@ -740,80 +719,6 @@ impl ExecutionSignals {
             quit: signal(SignalKind::quit())?,
         })
     }
-}
-
-fn spawn(
-    paths: &Paths,
-    plan: &ExecutionPlan,
-    command: &[OsString],
-    mode: &Mode,
-    auth: Option<&AgentLaunch>,
-) -> Result<Child> {
-    let mut process = Command::new(&command[0]);
-    process
-        .args(&command[1..])
-        .current_dir(&plan.workspace.path);
-    configure_environment(&mut process, paths, plan);
-    if let Some(auth) = auth {
-        auth.apply(&mut process);
-    }
-    export_execution(&mut process, paths, plan);
-    // A demo is the user's, so the agent's output setting stays behind, and
-    // its own port or device wins over a reservation exported as `PORT`.
-    if let Mode::Demo { launch } = mode {
-        process.env_remove(env::OUTPUT).envs(&launch.environment);
-    }
-    let quiet = matches!(mode, Mode::Setup { json: true });
-    let (stdin, stdout, stderr) = match mode {
-        Mode::Detached { log } => {
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(log)
-                .with_context(|| format!("open {}", log.display()))?;
-            let copy = file.try_clone()?;
-            (Stdio::null(), Stdio::from(file), Stdio::from(copy))
-        }
-        Mode::Publish => (
-            Stdio::inherit(),
-            Stdio::from(std::io::stderr()),
-            Stdio::inherit(),
-        ),
-        _ if quiet => (
-            Stdio::null(),
-            Stdio::from(std::io::stderr()),
-            Stdio::inherit(),
-        ),
-        _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
-    };
-    process
-        .stdin(stdin)
-        .stdout(stdout)
-        .stderr(stderr)
-        .process_group(0)
-        .kill_on_drop(true)
-        .spawn()
-        .context("launch workspace command")
-}
-
-/// Export the workspace's identity and `[env]`, dropping stale port variables
-/// inherited from an enclosing execution.
-fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    env::apply_workspace_identity(process, &plan.workspace, paths);
-    env::apply_configured(process, &plan.environment);
-}
-
-/// Export the execution's scope and port reservations last, so no configured
-/// variable replaces or removes them.
-fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    process
-        .envs(env::workspace_environment(
-            &plan.workspace,
-            paths,
-            &plan.ports,
-            &plan.scope_token,
-        ))
-        .env(env::EXECUTION_ID, &plan.id);
 }
 
 /// The command's process group; killed when dropped.
