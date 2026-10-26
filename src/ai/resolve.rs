@@ -130,11 +130,6 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         arguments: arguments(&configured, builtin),
         environment: environment(&configured),
     };
-    let skill_dir = configured
-        .iter()
-        .find_map(|agent| agent.skill_dir.clone())
-        .map(SkillDir::Configured)
-        .or_else(|| builtin.map(|provider| SkillDir::Builtin(provider.skill_dir)));
     let integration = builtin.map_or(IntegrationKind::None, |provider| provider.integration);
     Tool {
         name: name.to_owned(),
@@ -142,11 +137,8 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         launch,
         integration,
         bases: lineage[1..].iter().map(|base| (*base).to_owned()).collect(),
-        skill_dir,
-        retry: configured
-            .iter()
-            .find_map(|agent| agent.retry)
-            .unwrap_or(integration == IntegrationKind::Claude),
+        skill_dir: skill_directory(&configured, builtin),
+        retry: retries(&configured, integration),
     }
 }
 
@@ -156,6 +148,25 @@ fn lineage<'a>(entries: &'a Agents, name: &'a str) -> Vec<&'a str> {
     std::iter::successors(Some(name), |name| entries.get(*name)?.base.as_deref())
         .take(entries.len() + 1)
         .collect()
+}
+
+/// The `skill_dir` configured nearest in `configured`, the entries of a
+/// lineage, else `builtin`'s.
+fn skill_directory(configured: &[&Agent], builtin: Option<&Provider>) -> Option<SkillDir> {
+    configured
+        .iter()
+        .find_map(|agent| agent.skill_dir.clone())
+        .map(SkillDir::Configured)
+        .or_else(|| builtin.map(|provider| SkillDir::Builtin(provider.skill_dir)))
+}
+
+/// The `retry` configured nearest in `configured`, the entries of a lineage;
+/// without one, on for the Claude integration.
+fn retries(configured: &[&Agent], integration: IntegrationKind) -> bool {
+    configured
+        .iter()
+        .find_map(|agent| agent.retry)
+        .unwrap_or(integration == IntegrationKind::Claude)
 }
 
 /// Each argument template configured nearest in `configured`, the entries
