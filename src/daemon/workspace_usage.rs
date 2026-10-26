@@ -556,20 +556,19 @@ mod tests {
 
     #[tokio::test]
     async fn readings_cover_the_processes_carrying_a_workspace_identity() {
-        use tokio::io::AsyncBufReadExt;
         let id = uuid::Uuid::new_v4().to_string();
-        let mut child = tokio::process::Command::new("sh")
-            .args(["-c", "echo ready; exec sleep 600"])
+        // The test binary's own helper, since platform binaries such as
+        // macOS's sh hide their environment.
+        let child = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "process::identity::tests::marked_child",
+                "--ignored",
+            ])
+            .stdout(std::process::Stdio::null())
             .env(crate::env::WORKSPACE_ID, &id)
-            .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .unwrap();
-        // The line proves the shell runs with its own environment.
-        let mut line = String::new();
-        tokio::io::BufReader::new(child.stdout.take().unwrap())
-            .read_line(&mut line)
-            .await
             .unwrap();
         let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
             .await
