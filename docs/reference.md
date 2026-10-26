@@ -460,15 +460,18 @@ pending approval requests that no coordinating agent decides, including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
 agent needs input, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
-marked item, and running [demos](#demos). There Enter answers a question, approves or denies a request after
+marked item, running [demos](#demos), and Git worktrees under a repository's
+Shoal directory that no workspace owns. There Enter answers a question, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
-mark on the workspace itself), and opens a demo; Ctrl-T, Ctrl-O and Ctrl-F act on the row's
+mark on the workspace itself), opens a demo, and adopts an untracked worktree
+with [`shoal work adopt`](#adopting-a-worktree); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
-`kind` (`question`, `approval`, `needs_input`, `failed`, `ready` or `demo`) with its
-`question`, `request`, `workspace` or `demo` and a ready item's `mark`. A workspace
-process gets only its own items, printed, and none after clearing its scope
+`kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo` or
+`untracked`) with its `question`, `request`, `workspace`, `demo` or `worktree`
+(`repository_id` and `path`) and a ready item's `mark`. A workspace
+process gets only its own items, never untracked worktrees, printed, and none after clearing its scope
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A

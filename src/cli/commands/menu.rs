@@ -227,6 +227,8 @@ enum Row {
         workspace: String,
         name: String,
     },
+    /// A worktree no workspace owns, by its path.
+    Untracked(String),
     Workspace(String),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -256,6 +258,9 @@ impl Row {
                 workspace,
                 name: demo.launch.name.clone(),
             },
+            Item::Untracked { worktree } => {
+                Self::Untracked(worktree.path.to_string_lossy().into_owned())
+            }
         }
     }
 
@@ -275,6 +280,7 @@ impl Row {
                 format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
             }
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
+            Self::Untracked(path) => format!("untracked:{path}"),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -290,6 +296,9 @@ impl Row {
         };
         if kind == "notification" {
             return Ok(Self::Notification(rest.to_owned()));
+        }
+        if kind == "untracked" {
+            return Ok(Self::Untracked(rest.to_owned()));
         }
         let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let workspace = workspace.to_owned();
@@ -332,7 +341,7 @@ impl Row {
             | Self::Demo { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
-            Self::Add => None,
+            Self::Untracked(_) | Self::Add => None,
         }
     }
 }
@@ -611,6 +620,18 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             command: None,
             name: Some(name),
             workspace: Some(workspace),
+        },
+        Row::Untracked(path) => Command::Work {
+            command: Some(crate::cli::WorkCommand::Adopt {
+                path: path.into(),
+                repository: None,
+                copy: false,
+            }),
+            queue: false,
+            chats: false,
+            repository: None,
+            status: Vec::new(),
+            print: false,
         },
         Row::Workspace(workspace) => Command::Cd {
             workspace: Some(workspace),

@@ -1616,7 +1616,8 @@ per run of failed passes.
 `doctor` reports current issues by default, falling back to the recorded
 failure and repair guidance; repair restores verified worktrees and clears
 executions proven stopped while preserving work and leases. Added
-environment and untracked-worktree checks are diagnosis only. The daemon
+environment and untracked-worktree checks are diagnosis only; the inbox lists
+untracked worktrees too, skipping a repository whose Git gate is busy. The daemon
 checks its own PATH using the shared executable catalog and Git worktree
 registrations under owned repository roots, and records an alert for each
 environment problem when it starts or reloads its config, so the user learns of

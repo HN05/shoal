@@ -207,6 +207,13 @@ pub struct RestoredCheckpoint {
     pub replaced: Checkpoint,
 }
 
+/// A Git worktree under a repository's Shoal directory that no workspace owns.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UntrackedWorktree {
+    pub repository_id: String,
+    pub path: std::path::PathBuf,
+}
+
 /// A branch removal kept because only it has some commits: none of them is on
 /// a remote or the default branch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

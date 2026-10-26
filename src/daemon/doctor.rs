@@ -1,9 +1,6 @@
 //! Daemon diagnostics, separate from workspace recovery mutations. They
 //! change no work; asking forge hosts again records their answers.
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -68,42 +65,6 @@ pub fn unavailable_checks() -> Vec<Check> {
         .collect()
 }
 
-/// What Shoal owns under a repository's workspace directory.
-struct OwnedWorktrees {
-    tracked: HashSet<PathBuf>,
-    seed: crate::seed::Layout,
-    verified_seed: bool,
-}
-
-impl OwnedWorktrees {
-    /// Warnings for the seed path when Shoal did not create it and for each
-    /// Git worktree under `root`, other than the checkout, that Shoal does not own.
-    fn problems(&self, checkout: &Path, root: &Path, trees: &[git::Worktree]) -> Vec<String> {
-        let seed_path = self.seed.worktree();
-        let foreign_seed = (seed_path.symlink_metadata().is_ok() && !self.verified_seed).then(|| {
-            format!(
-                "Seed path is not Shoal's seed worktree; Shoal will neither rebuild nor remove it: {}",
-                seed_path.display()
-            )
-        });
-        let untracked = trees
-            .iter()
-            .filter(|tree| {
-                tree.path.starts_with(root)
-                    && tree.path != checkout
-                    && !(self.verified_seed && self.seed.is_worktree(&tree.path))
-                    && !self.tracked.contains(&tree.path)
-            })
-            .map(|tree| {
-                format!(
-                    "Git worktree is not tracked by Shoal: {}",
-                    tree.path.display()
-                )
-            });
-        foreign_seed.into_iter().chain(untracked).collect()
-    }
-}
-
 /// One warning per problem, or one passing check when there are none.
 fn worktree_report(name: String, root: &Path, problems: Vec<String>) -> Vec<Check> {
     if problems.is_empty() {
@@ -152,29 +113,6 @@ impl Manager {
                     root.display()
                 ),
             )],
-        })
-    }
-
-    /// The caller holds the repository's Git gate so ownership stays current.
-    async fn owned_worktrees(
-        &self,
-        repo: &crate::model::Repository,
-        root: &Path,
-    ) -> Result<OwnedWorktrees> {
-        let tracked = self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .map(|w| w.path)
-            .collect();
-        let seed = crate::seed::Layout::new(root, &repo.id);
-        let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)
-            .await
-            .unwrap_or(false);
-        Ok(OwnedWorktrees {
-            tracked,
-            seed,
-            verified_seed,
         })
     }
 }

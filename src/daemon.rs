@@ -38,6 +38,7 @@ pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
 pub mod store;
+mod untracked;
 mod warnings;
 pub mod workspace;
 mod workspace_usage;
@@ -931,6 +932,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         ),
         Method::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
+        }
+        Method::UntrackedWorktrees => {
+            Body::UntrackedWorktrees(manager.untracked_worktrees().await?)
         }
         Method::KeptBranches { repository } => {
             Body::KeptBranches(manager.list_kept_branches(repository.as_deref()).await?)

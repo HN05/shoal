@@ -9749,6 +9749,66 @@ fn work_lists_only_the_selected_statuses() {
 }
 
 #[test]
+fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("tracked");
+    let root = Path::new(workspace["path"].as_str().unwrap())
+        .parent()
+        .unwrap()
+        .to_owned();
+    let stray = root.join("stray");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "stray",
+            stray.to_str().unwrap(),
+        ],
+    );
+    let untracked = |fixture: &Fixture| -> Vec<Value> {
+        fixture
+            .ok(&["inbox"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["kind"] == "untracked")
+            .cloned()
+            .collect()
+    };
+    let listed = untracked(&fixture);
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert_eq!(
+        Path::new(listed[0]["worktree"]["path"].as_str().unwrap()),
+        fs::canonicalize(&stray).unwrap()
+    );
+    let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
+    assert!(text.contains("untracked"), "{text}");
+    assert!(text.contains("adopt it with shoal work adopt"), "{text}");
+    // Workspace processes see only their own tree.
+    let scoped = fixture
+        .command()
+        .args([
+            "run",
+            "--workspace",
+            "tracked",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+            "inbox",
+        ])
+        .output()
+        .unwrap();
+    assert!(scoped.status.success(), "{scoped:?}");
+    assert!(!String::from_utf8_lossy(&scoped.stdout).contains("untracked"));
+
+    fixture.ok(&["work", "adopt", stray.to_str().unwrap()]);
+    assert!(untracked(&fixture).is_empty());
+}
+
+#[test]
 fn inbox_lists_what_needs_the_user_by_kind() {
     let fixture = Fixture::new();
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");

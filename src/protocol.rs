@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 140;
+pub const VERSION: u32 = 141;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -561,6 +561,9 @@ pub enum Method {
     ForgetAgentEnvironments {
         repository_id: String,
     },
+    /// Git worktrees under repositories' Shoal directories that no
+    /// workspace owns.
+    UntrackedWorktrees,
     /// Branches removal kept because only they have some commits, only
     /// those of one repository when a selector names it.
     KeptBranches {
@@ -1066,6 +1069,7 @@ response_bodies! {
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
     AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
     KeptBranches(Vec<crate::model::KeptBranch>),
+    UntrackedWorktrees(Vec<crate::model::UntrackedWorktree>),
     RestoredWorkspace(crate::model::RestoredWorkspace),
     Checkpoint(crate::model::Checkpoint),
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),

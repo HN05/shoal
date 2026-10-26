@@ -1,6 +1,7 @@
 //! `shoal inbox`: what needs the user now, each with its workspace: open
 //! questions, pending approvals, agents that need input, failed workspaces,
-//! work marked ready at its current commit, and running demos.
+//! work marked ready at its current commit, running demos, and Git worktrees
+//! under Shoal's directories that no workspace owns.
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -20,7 +21,7 @@ use crate::{
         questions::{Listing, Question},
     },
     demos::Running,
-    model::{ReviewMark, Workspace},
+    model::{ReviewMark, UntrackedWorktree, Workspace},
     protocol::Method,
     state::WorkspaceState,
 };
@@ -47,6 +48,10 @@ pub(in crate::cli) enum Item {
     },
     Demo {
         demo: Running,
+    },
+    /// A worktree with no workspace, so it belongs to no listed one.
+    Untracked {
+        worktree: UntrackedWorktree,
     },
 }
 
@@ -117,6 +122,17 @@ impl Inbox {
                 .filter(|demo| workspaces.iter().any(|w| w.id == demo.workspace_id))
                 .map(|demo| Item::Demo { demo }),
         );
+        // Workspace processes see their own tree, which no untracked worktree is in.
+        if !crate::env::is_scoped() {
+            let untracked =
+                request::<Vec<UntrackedWorktree>>(&ctx.paths, Method::UntrackedWorktrees).await?;
+            items.extend(
+                untracked
+                    .into_iter()
+                    .filter(|worktree| filter.keeps_detached(&worktree.repository_id))
+                    .map(|worktree| Item::Untracked { worktree }),
+            );
+        }
         Ok(Self { items, workspaces })
     }
 
@@ -226,14 +242,16 @@ impl Item {
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
             Self::Demo { demo } => &demo.workspace_id,
+            Self::Untracked { .. } => "",
         }
     }
 
     /// The repository that owns a proposed issue, which outlives the
-    /// workspace that proposed it.
+    /// workspace that proposed it, or an untracked worktree.
     fn repository_id(&self) -> Option<&str> {
         match self {
             Self::Approval { request } => request.repository_id.as_deref(),
+            Self::Untracked { worktree } => Some(&worktree.repository_id),
             _ => None,
         }
     }
@@ -246,6 +264,7 @@ impl Item {
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
             Self::Demo { demo } => &demo.workspace,
+            Self::Untracked { .. } => "",
         }
     }
 
@@ -257,6 +276,7 @@ impl Item {
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } => ("ready", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
+            Self::Untracked { .. } => ("untracked", Style::Warning),
         };
         (label.into(), Some(style))
     }
@@ -284,12 +304,14 @@ impl Item {
                 }
             }
             Self::Demo { demo } => demo.launch.name.clone(),
+            Self::Untracked { worktree } => worktree.path.display().to_string(),
         }
     }
 
     fn note(&self) -> String {
         match self {
             Self::Question { question } => format!("recommends {}", question.ask.recommendation),
+            Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
             _ => String::new(),
         }
     }
