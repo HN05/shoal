@@ -245,6 +245,33 @@ async fn requests_reach_the_upstream_with_their_own_credentials() {
 }
 
 #[tokio::test]
+async fn an_upstream_key_replaces_the_agents_credentials() {
+    let upstream = FakeUpstream::start(|_| reply(200, "done")).await;
+    let keyed = upstream.url("").with_key("proxy-key").unwrap();
+    let (addr, _events) = proxy(keyed).await;
+    send(
+        addr,
+        Request::post("/v1/messages")
+            .header("x-api-key", "agent-key")
+            .header("authorization", "Bearer agent-token")
+            .header("anthropic-version", "2023-06-01"),
+        "{}",
+    )
+    .await;
+    let headers = &upstream.requests()[0].headers;
+    assert_eq!(headers.get_all("authorization").iter().count(), 1);
+    assert_eq!(headers["authorization"], "Bearer proxy-key");
+    assert!(headers.get("x-api-key").is_none());
+    assert_eq!(headers["anthropic-version"], "2023-06-01");
+    for key in ["", "line\nbreak"] {
+        assert!(upstream.url("").with_key(key).is_err(), "{key:?}");
+    }
+    // The key never shows in what the upstream prints.
+    let printed = format!("{:?}", upstream.url("").with_key("proxy-key").unwrap());
+    assert!(!printed.contains("proxy-key"), "{printed}");
+}
+
+#[tokio::test]
 async fn transient_failures_are_retried_until_the_upstream_recovers() {
     let upstream = FakeUpstream::start(|received| match received.len() {
         1 => reply(529, "overloaded"),

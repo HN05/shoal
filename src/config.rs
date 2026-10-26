@@ -715,7 +715,7 @@ impl Config {
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
         let mut effective = resolve::Stack::new(self, layers).resolve()?;
         crate::ai::inherit_launchers(&self.ai.tools, &mut effective.commands);
-        effective.proxies = crate::proxy::upstreams(&self.ai.tools, &self.proxy);
+        effective.proxies = crate::proxy::routes(&self.ai.tools, &self.proxy);
         effective.tools = self.ai.tools.clone();
         Ok(effective)
     }

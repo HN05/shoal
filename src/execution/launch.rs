@@ -235,6 +235,9 @@ async fn prepare_tracked_launch(
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
     let (link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
+    if let Some(auth) = auth.as_mut() {
+        auth.start_proxy(&plan.environment).await?;
+    }
     if let Some(proxy) = auth.as_mut().and_then(|auth| auth.proxy.as_mut()) {
         proxy.report_turns(paths, &plan.workspace.id, &plan.id);
     }
@@ -303,10 +306,10 @@ async fn open_execution(
     Ok((link, plan))
 }
 
-/// The upstream `agent`'s proxy forwards to, when it has one it can use.
-fn proxied_upstream<'a>(settings: &'a crate::config::Effective, agent: &str) -> Option<&'a str> {
-    let upstream = settings.proxy(agent)?;
-    crate::cli::agents::routes_through_proxy(settings.integration(agent)).then_some(upstream)
+/// The proxy `agent`'s requests go through, when it has one it can use.
+fn usable_proxy(settings: &crate::config::Effective, agent: &str) -> Option<crate::proxy::Proxy> {
+    let proxy = settings.proxy(agent)?;
+    crate::cli::agents::routes_through_proxy(settings.integration(agent)).then(|| proxy.clone())
 }
 
 async fn prepare_agent_launch(
@@ -339,10 +342,8 @@ async fn prepare_agent_launch(
             .unwrap_or_default(),
         home: paths.home.clone(),
         // Only an agent the integration can point at the proxy uses one.
-        proxy: match agent.and_then(|agent| proxied_upstream(&settings, agent)) {
-            Some(upstream) => Some(crate::proxy::start(upstream).await?),
-            None => None,
-        },
+        routed: agent.and_then(|agent| usable_proxy(&settings, agent)),
+        proxy: None,
     }))
 }
 

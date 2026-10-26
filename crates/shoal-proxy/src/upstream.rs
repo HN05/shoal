@@ -1,7 +1,8 @@
-//! The upstream the proxy forwards to: a scheme and authority, and a path
-//! prefix that comes before each request's own path.
+//! The upstream the proxy forwards to: a scheme and authority, a path
+//! prefix that comes before each request's own path, and the key it may
+//! take in place of the agent's own credentials.
 use anyhow::{Context, Result, ensure};
-use hyper::Uri;
+use hyper::{Uri, header::HeaderValue};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Upstream {
@@ -9,6 +10,8 @@ pub struct Upstream {
     authority: String,
     /// The path before each request's, without a trailing slash.
     prefix: String,
+    /// The `Authorization` the upstream gets instead of the agent's.
+    key: Option<HeaderValue>,
 }
 
 impl Upstream {
@@ -34,7 +37,25 @@ impl Upstream {
             scheme: scheme.to_owned(),
             authority: authority.as_str().to_owned(),
             prefix: uri.path().trim_end_matches('/').to_owned(),
+            key: None,
         })
+    }
+
+    /// This upstream reached with `key` as a bearer token, such as an API key
+    /// of CLIProxyAPI's, instead of the credentials each agent sends.
+    pub fn with_key(mut self, key: &str) -> Result<Self> {
+        let mut value = HeaderValue::from_str(&format!("Bearer {key}"))
+            .ok()
+            .filter(|_| !key.is_empty())
+            .context("an upstream key must be visible ASCII text")?;
+        value.set_sensitive(true);
+        self.key = Some(value);
+        Ok(self)
+    }
+
+    /// The `Authorization` that replaces the agent's credentials.
+    pub(crate) fn key(&self) -> Option<&HeaderValue> {
+        self.key.as_ref()
     }
 
     /// The upstream's `host[:port]`, which requests name as their `Host`.

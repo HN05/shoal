@@ -23,9 +23,9 @@ pub struct Effective {
     /// Every AI tool; machine config, so no layer overrides it.
     #[serde(skip)]
     pub tools: crate::ai::Tools,
-    /// The upstream each AI tool's tracked agents reach through a proxy.
+    /// The proxy each AI tool's tracked agents reach their upstream through.
     #[serde(skip)]
-    pub proxies: BTreeMap<String, String>,
+    pub proxies: BTreeMap<String, crate::proxy::Proxy>,
     pub agent_resume: named_commands::Commands,
     pub worker_template: Option<String>,
     pub chat_template: Option<String>,
@@ -199,9 +199,10 @@ impl Effective {
             .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
-    /// The upstream agent `name`'s tracked launches reach through a proxy.
-    pub fn proxy(&self, name: &str) -> Option<&str> {
-        self.proxies.get(name).map(String::as_str)
+    /// The proxy agent `name`'s tracked launches reach their upstream
+    /// through.
+    pub fn proxy(&self, name: &str) -> Option<&crate::proxy::Proxy> {
+        self.proxies.get(name)
     }
 
     fn from_merged(merged: RepoConfig) -> Result<Self> {

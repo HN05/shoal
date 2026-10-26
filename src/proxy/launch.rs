@@ -145,11 +145,18 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
     }
 }
 
-/// Start a proxy to `upstream` on a free loopback port, serving on this
-/// process's runtime.
+/// Start `proxy` on a free loopback port, serving on this process's
+/// runtime, with its key from `variable` of the agent's environment when it
+/// names one.
 #[cfg(feature = "proxy")]
-pub async fn start(upstream: &str) -> Result<Running> {
-    let upstream = shoal_proxy::Upstream::parse(upstream)?;
+pub async fn start(
+    proxy: &super::Proxy,
+    variable: impl Fn(&str) -> Option<std::ffi::OsString>,
+) -> Result<Running> {
+    let mut upstream = shoal_proxy::Upstream::parse(&proxy.upstream)?;
+    if let Some(key) = &proxy.key {
+        upstream = upstream.with_key(&key.value(variable)?)?;
+    }
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     let proxy = shoal_proxy::Proxy::bind(upstream, sender)
         .await
@@ -164,7 +171,10 @@ pub async fn start(upstream: &str) -> Result<Running> {
 }
 
 #[cfg(not(feature = "proxy"))]
-pub async fn start(_upstream: &str) -> Result<Running> {
+pub async fn start(
+    _proxy: &super::Proxy,
+    _variable: impl Fn(&str) -> Option<std::ffi::OsString>,
+) -> Result<Running> {
     anyhow::bail!(
         "this Shoal was built without the proxy feature, so it cannot start [proxy] tables"
     )

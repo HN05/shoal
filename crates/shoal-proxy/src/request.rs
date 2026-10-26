@@ -24,6 +24,10 @@ pub(crate) const HOP_BY_HOP: [&str; 8] = [
     "upgrade",
 ];
 
+/// Headers that carry the agent's credentials, which an upstream key
+/// replaces.
+const CREDENTIALS: [HeaderName; 2] = [header::AUTHORIZATION, HeaderName::from_static("x-api-key")];
+
 /// An agent request read whole, so the proxy can send it again.
 pub(crate) struct Buffered {
     method: Method,
@@ -70,19 +74,28 @@ impl Buffered {
     }
 
     /// This request addressed to `upstream`, with its own headers but the
-    /// upstream's `Host`.
+    /// upstream's `Host`, and the upstream's key when it has one.
     pub(crate) fn to_upstream(&self, upstream: &Upstream) -> Result<Request<Full<Bytes>>> {
         let mut request = Request::builder()
             .method(self.method.clone())
             .uri(upstream.join(&self.path_and_query)?)
             .body(Full::new(self.body.clone()))?;
         let headers = request.headers_mut();
+        let key = upstream.key();
         for (name, value) in &self.headers {
-            if forwarded(name) && name != header::HOST && name != header::CONTENT_LENGTH {
+            let replaced = key.is_some() && CREDENTIALS.contains(name);
+            if forwarded(name)
+                && !replaced
+                && name != header::HOST
+                && name != header::CONTENT_LENGTH
+            {
                 headers.append(name, value.clone());
             }
         }
         headers.insert(header::HOST, HeaderValue::from_str(upstream.authority())?);
+        if let Some(key) = key {
+            headers.insert(header::AUTHORIZATION, key.clone());
+        }
         // The proxy reads the stream, so it must arrive uncompressed.
         if self.protocol.is_some() {
             headers.insert(

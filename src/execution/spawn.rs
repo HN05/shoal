@@ -20,12 +20,36 @@ pub(super) struct AgentLaunch {
     /// What the agent's `[ai]` entry changes in its environment, last.
     pub(super) environment: crate::ai::Environment,
     pub(super) home: PathBuf,
-    /// The proxy the agent's API requests go through, which runs as long as
-    /// this wrapper does.
+    /// The proxy the agent's API requests go through, which
+    /// [`AgentLaunch::start_proxy`] runs as long as this wrapper does.
+    pub(super) routed: Option<crate::proxy::Proxy>,
     pub(super) proxy: Option<crate::proxy::Running>,
 }
 
 impl AgentLaunch {
+    /// Start the agent's proxy, which may take its key from the environment
+    /// the agent runs with: the workspace's `environment` with the agent's
+    /// own over it, else this process's.
+    pub(super) async fn start_proxy(
+        &mut self,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> Result<()> {
+        let Some(routed) = &self.routed else {
+            return Ok(());
+        };
+        let mut configured = environment.clone();
+        configured.extend(self.secrets.environment());
+        let removed = |name: &str| self.environment.remove.contains(name);
+        self.environment.layer(&mut configured, &self.home);
+        let variable = |name: &str| match configured.get(name) {
+            Some(value) => Some(value.clone()),
+            None if removed(name) => None,
+            None => std::env::var_os(name),
+        };
+        self.proxy = Some(crate::proxy::start(routed, variable).await?);
+        Ok(())
+    }
+
     /// `command` with its proxy placeholders filled in, for an agent that
     /// runs with the workspace's `environment` and its own.
     fn route(

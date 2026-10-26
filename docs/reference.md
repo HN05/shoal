@@ -844,6 +844,7 @@ API requests through Shoal's retrying proxy to the `upstream` of a global
 ```toml
 [proxy.cliproxy]
 upstream = "http://127.0.0.1:8317"   # CLIProxyAPI
+key = { env = "CLIPROXY_API_KEY" }   # or key = "<the key itself>"
 
 [ai.claude]
 proxy = "cliproxy"
@@ -857,7 +858,12 @@ own credentials, or, on its built-in OpenAI provider, through a provider Shoal
 defines with the same login, whose upstream is then
 `https://chatgpt.com/backend-api/codex` for a ChatGPT login or
 `https://api.openai.com/v1` for an API key. The proxy forwards each request with
-the agent's own credentials and retries what the agent would otherwise fail on:
+the agent's own credentials, or, with a `key`, sends the upstream that key as
+`Authorization: Bearer` in their place, so an agent on its own login can reach
+an upstream such as CLIProxyAPI that wants its own key. `key` is the key itself
+or `{ env = "<variable>" }`, read when the agent starts from the environment it
+runs with, `[env]`, secrets and the tool's `env` included; a variable that is
+not set fails the launch. The proxy retries what the agent would otherwise fail on:
 a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
 that reports one of those before any content, waiting from a second, doubling to
 half a minute, or as long as the upstream's `Retry-After`, or the reset time its

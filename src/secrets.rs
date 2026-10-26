@@ -98,6 +98,11 @@ impl Launch {
         })
     }
 
+    /// The environment secrets, each with its value.
+    pub fn environment(&self) -> impl Iterator<Item = (String, OsString)> + '_ {
+        self.environment.iter().cloned()
+    }
+
     /// Put the launchers first on the child's PATH, ahead of directories an
     /// earlier step prepended.
     pub fn apply(&self, command: &mut tokio::process::Command) {
