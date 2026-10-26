@@ -264,7 +264,12 @@ impl Item {
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
             Self::Demo { demo } => &demo.workspace,
-            Self::Untracked { .. } => "",
+            // The directory a workspace adopting it would be named after.
+            Self::Untracked { worktree } => worktree
+                .path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
         }
     }
 
@@ -304,7 +309,7 @@ impl Item {
                 }
             }
             Self::Demo { demo } => demo.launch.name.clone(),
-            Self::Untracked { worktree } => worktree.path.display().to_string(),
+            Self::Untracked { worktree } => home_relative(&worktree.path),
         }
     }
 
@@ -314,5 +319,18 @@ impl Item {
             Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
             _ => String::new(),
         }
+    }
+}
+
+/// A path under the home directory as `~/…`, which keeps its end in view when
+/// a row is cut to fit.
+fn home_relative(path: &std::path::Path) -> String {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    match home
+        .as_deref()
+        .and_then(|home| path.strip_prefix(home).ok())
+    {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
     }
 }
