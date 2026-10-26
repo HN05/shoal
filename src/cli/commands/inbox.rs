@@ -125,7 +125,7 @@ impl Inbox {
         // Workspace processes see their own tree, which no untracked worktree is in.
         if !crate::env::is_scoped() {
             let untracked =
-                request::<Vec<UntrackedWorktree>>(&ctx.paths, Method::UntrackedWorktrees).await?;
+                client::pages::<UntrackedWorktree>(&ctx.paths, Method::UntrackedWorktrees).await?;
             items.extend(
                 untracked
                     .into_iter()

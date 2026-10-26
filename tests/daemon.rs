@@ -1045,6 +1045,66 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
 }
 
 #[test]
+fn inbox_reads_untracked_worktrees_over_several_frames() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let listener = support::fake_daemon::bind_fake_daemon(root.path());
+    listener.set_nonblocking(true).unwrap();
+    let worktree = |n: usize| json!({"repository_id": "repo", "path": format!("/repo/stray-{n}")});
+    let daemon = thread::spawn(move || {
+        loop {
+            let stream = wait_for("client connection", || match listener.accept() {
+                Ok((stream, _)) => Some(stream),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+                Err(error) => panic!("{error}"),
+            });
+            let request = support::fake_daemon::read_request(&stream).unwrap();
+            // Unit methods are a string, the others an object keyed by name.
+            let method = match &request["method"] {
+                Value::String(name) => name.clone(),
+                Value::Object(fields) => fields.keys().next().unwrap().clone(),
+                other => panic!("unexpected method {other}"),
+            };
+            let reply = match method.as_str() {
+                "list_workspaces" => json!({"type": "workspaces", "data": []}),
+                "list_questions" => {
+                    json!({"type": "questions", "data": {"questions": [], "omitted": 0}})
+                }
+                "list_approvals" => json!({"type": "approval_requests", "data": []}),
+                "list_demos" => json!({"type": "demos", "data": []}),
+                "untracked_worktrees" => {
+                    // Two pages, then the end of the listing.
+                    let frames = [
+                        json!({"type": "untracked_worktrees", "data": [worktree(0), worktree(1)]}),
+                        json!({"type": "untracked_worktrees", "data": [worktree(2)]}),
+                        json!({"type": "ok"}),
+                    ]
+                    .map(|reply| support::fake_daemon::frame(&request, reply))
+                    .concat();
+                    (&stream).write_all(frames.as_bytes()).unwrap();
+                    break;
+                }
+                method => panic!("unexpected request {method}"),
+            };
+            support::fake_daemon::write_reply(&stream, &request, reply);
+        }
+    });
+    let output = command(root.path())
+        .args(["--json", "inbox"])
+        .output()
+        .unwrap();
+    daemon.join().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let items: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let paths: Vec<_> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["worktree"]["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, ["/repo/stray-0", "/repo/stray-1", "/repo/stray-2"]);
+}
+
+#[test]
 fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());

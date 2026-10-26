@@ -460,6 +460,10 @@ async fn serve(
             let listed = server.manager.removed_workspaces().await;
             return write_pages(stream, request.id, listed, Body::RemovedWorkspaces).await;
         }
+        Method::UntrackedWorktrees => {
+            let listed = server.manager.untracked_worktrees().await;
+            return write_pages(stream, request.id, listed, Body::UntrackedWorktrees).await;
+        }
         Method::AgentEnvironments { repository_id } => {
             let listed = server.manager.agent_environments(&repository_id).await;
             return write_pages(stream, request.id, listed, Body::AgentEnvironments).await;
@@ -520,6 +524,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::CiRunJobs { .. }
         | Method::ListCiRuns { .. }
         | Method::RemovedWorkspaces
+        | Method::UntrackedWorktrees
         | Method::AgentEnvironments { .. } => {
             anyhow::bail!("unsupported operation")
         }
@@ -932,9 +937,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         ),
         Method::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
-        }
-        Method::UntrackedWorktrees => {
-            Body::UntrackedWorktrees(manager.untracked_worktrees().await?)
         }
         Method::KeptBranches { repository } => {
             Body::KeptBranches(manager.list_kept_branches(repository.as_deref()).await?)

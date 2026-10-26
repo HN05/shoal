@@ -562,7 +562,7 @@ pub enum Method {
         repository_id: String,
     },
     /// Git worktrees under repositories' Shoal directories that no
-    /// workspace owns.
+    /// workspace owns; in pages.
     UntrackedWorktrees,
     /// Branches removal kept because only they have some commits, only
     /// those of one repository when a selector names it.
