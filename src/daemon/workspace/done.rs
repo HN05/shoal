@@ -123,6 +123,8 @@ impl Manager {
                     [&id],
                 )?;
                 let closed = questions::close_open(&tx, &id)?;
+                // A finished assignment leaves its failed turn alone.
+                super::turn_retry::cancel(&tx, &id)?;
                 tx.commit()?;
                 Ok(Persisted {
                     changed: replaced || released > 0 || !closed.is_empty(),

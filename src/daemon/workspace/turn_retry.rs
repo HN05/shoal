@@ -135,7 +135,7 @@ fn record_failure(
         _ => (1, now + delay(1, spread)),
     };
     let scheduled = if attempt > ATTEMPTS {
-        remove(&tx, workspace_id)?;
+        cancel(&tx, workspace_id)?;
         Scheduled::Exhausted
     } else {
         tx.execute(
@@ -151,7 +151,8 @@ fn record_failure(
     Ok(scheduled)
 }
 
-fn remove(db: &Connection, workspace_id: &str) -> Result<()> {
+/// Drop the workspace's retry.
+pub(super) fn cancel(db: &Connection, workspace_id: &str) -> Result<()> {
     db.execute(
         "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
         [workspace_id],
@@ -201,7 +202,7 @@ fn deliver_due(db: &mut Connection, now: i64) -> Result<(bool, Option<i64>)> {
     let mut queued = false;
     for due in due(&tx, now)? {
         if !due.deliverable {
-            remove(&tx, &due.workspace_id)?;
+            cancel(&tx, &due.workspace_id)?;
             continue;
         }
         agent_messages::insert(
@@ -291,7 +292,7 @@ impl Manager {
     /// events why Shoal stops retrying.
     async fn give_up_turn(&self, workspace: &Workspace, agent: &str, reason: GiveUp) -> Result<()> {
         let id = workspace.id.clone();
-        self.store.run(move |db| remove(db, &id)).await?;
+        self.store.run(move |db| cancel(db, &id)).await?;
         let message = match reason {
             GiveUp::Unfixable => format!(
                 "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
