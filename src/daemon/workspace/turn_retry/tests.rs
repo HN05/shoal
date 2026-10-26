@@ -114,8 +114,8 @@ async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn a_failed_turn_waits_then_asks_the_idle_agent_to_continue() {
-    let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
+async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
     let before = now();
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     let after = now();
@@ -210,12 +210,13 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
 }
 
 #[tokio::test]
-async fn retries_need_the_switch_and_a_failure_a_retry_can_fix() {
-    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+async fn retries_respect_opt_out_and_need_a_failure_a_retry_can_fix() {
+    let (_temp, manager, workspace, execution, _connection) =
+        agent("[ai.claude]\nretry = false\n").await;
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     assert_eq!(retry(&manager, &workspace).await, None);
 
-    manager.publish_config(global_config(RETRY_ON));
+    manager.publish_config(global_config(""));
     fail(&manager, &workspace, &execution, TurnFailure::Other).await;
     assert_eq!(retry(&manager, &workspace).await, None);
     let notifications = manager.notifications(false, 10).await.unwrap();

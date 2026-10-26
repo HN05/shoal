@@ -759,10 +759,12 @@ set there, which must be absolute or start with `~/`, and cannot be removed.
 Unsetting a variable does not undo one the agent's own settings file sets, such as
 the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
-`retry = true` on a tool, which its launch profiles inherit, retries a turn an
-API error ended, for agents whose integration reports failed turns: Claude Code,
-through its `StopFailure` hook. After a rate limit, an overloaded API or a server
-error, Shoal waits half a minute, doubling for each later attempt up to a quarter
+`retry` defaults to `true` for Claude Code and its launch profiles, and `false`
+for other tools. Set `retry = false` under `[ai.claude]` to opt out; a tool's
+launch profiles inherit its setting unless they override it. Retries apply to a
+turn an API error ended, for agents whose integration reports failed turns:
+Claude Code, through its `StopFailure` hook. After a rate limit, an overloaded
+API or a server error, Shoal waits half a minute, doubling for each later attempt up to a quarter
 hour, then sends the idle agent a [message](#agent-messages) to continue its
 unfinished work, which reaches it in a new turn of the same conversation. A new
 turn before then cancels the retry, and the agent's exit, completion or the

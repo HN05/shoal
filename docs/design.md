@@ -819,8 +819,9 @@ environments, such as a second login, without losing that setup. Its `env` and
 `env_remove` apply to its launches after `[env]`; Shoal reads where the agent
 keeps its config from them, so they can move that directory but not remove its
 variable.
-Turn retry is opt-in per tool with `retry` and has no tuning options: the
-backoff and attempt limit are built in. It knows no agent: an integration that
+Turn retry defaults to on for Claude and its launch profiles, off for other
+tools, and is overridden per tool with `retry`; the backoff and attempt limit
+are built in. Retry scheduling knows no agent: an integration that
 can report why a turn failed maps the agent's error to Shoal's failure, and the
 daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to

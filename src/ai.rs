@@ -220,11 +220,11 @@ pub fn integration<'a>(agents: &'a Agents, name: &'a str) -> &'a str {
 }
 
 /// Whether Shoal retries `name`'s failed turns: the `retry` set nearest in
-/// its lineage, off without one.
+/// its lineage, defaulting to on for the Claude integration.
 pub fn retries(agents: &Agents, name: &str) -> bool {
     lineage(agents, name)
         .find_map(|name| agents.get(name)?.retry)
-        .unwrap_or(false)
+        .unwrap_or_else(|| integration(agents, name) == "claude")
 }
 
 /// The tool each launch profile runs with the integration of.

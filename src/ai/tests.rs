@@ -141,16 +141,37 @@ fn provider_launchers_need_reachable_unique_names() {
 }
 
 #[test]
-fn retry_is_off_until_a_tool_or_its_base_turns_it_on() {
+fn retry_defaults_to_on_for_claude_and_its_profiles() {
     let agents = parse(
-        "[ai.claude]\nretry = true\n[ai.claude-direct]\nbase = 'claude'\n\
-             [ai.claude-manual]\nbase = 'claude'\nretry = false\n",
+        "[ai.claude-direct]\nbase = 'claude'\n\
+         [ai.claude-fast]\nbase = 'claude-direct'\n\
+         [ai.droid]\ncommand = ['droid']\n",
     )
     .unwrap();
-    assert!(retries(&agents, "claude"));
+    assert!(retries(&Agents::new(), "claude"));
     assert!(retries(&agents, "claude-direct"));
+    assert!(retries(&agents, "claude-fast"));
+    for name in ["codex", "opencode", "pi", "grok", "droid"] {
+        assert!(!retries(&agents, name), "{name}");
+    }
+}
+
+#[test]
+fn retry_uses_the_nearest_explicit_setting() {
+    let agents = parse(
+        "[ai.claude]\nretry = false\n[ai.claude-direct]\nbase = 'claude'\n\
+         [ai.claude-auto]\nbase = 'claude-direct'\nretry = true\n\
+         [ai.claude-manual]\nbase = 'claude-auto'\nretry = false\n\
+         [ai.droid]\ncommand = ['droid']\nretry = true\n\
+         [ai.droid-profile]\nbase = 'droid'\n",
+    )
+    .unwrap();
+    assert!(!retries(&agents, "claude"));
+    assert!(!retries(&agents, "claude-direct"));
+    assert!(retries(&agents, "claude-auto"));
     assert!(!retries(&agents, "claude-manual"));
-    assert!(!retries(&agents, "codex"));
+    assert!(retries(&agents, "droid"));
+    assert!(retries(&agents, "droid-profile"));
     let error = format!("{:#}", parse("[ai.notes]\nretry = true\n").unwrap_err());
     assert!(error.contains("ai.notes.retry needs"), "{error}");
 }
