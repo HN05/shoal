@@ -676,8 +676,22 @@ fn work_rename_finishes_an_interrupted_rename() {
         if git_branch != "original" {
             git(path, &["branch", "-m", git_branch]);
         }
+        db.execute(
+            "INSERT INTO executions(id,workspace_id,state) VALUES ('leftover',?1,'unknown')",
+            [id],
+        )
+        .unwrap();
         fixture.restart();
         assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        // Another recorded execution keeps the rename unfinished.
+        let refused = fixture.run(&["work", "rename", id, requested]);
+        assert!(!refused.status.success());
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("other active or unknown executions")
+        );
+        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        db.execute("DELETE FROM executions WHERE id='leftover'", [])
+            .unwrap();
         // Running the rename again finishes or cancels the interrupted one,
         // then renames to the branch asked for.
         let renamed = fixture.ok(&["work", "rename", id, requested]);
@@ -11946,10 +11960,16 @@ fn work_setup_skip_accepts_a_failed_setup() {
         &script,
         "#!/bin/sh\nprintf partial > setup-result\nexit 17\n",
     );
+    let post_setup = fixture.root.path().join("post-setup.sh");
+    install_test_script(&post_setup, "#!/bin/sh\nprintf done > post-setup\n");
     let input = fixture.root.path().join("local.toml");
     fs::write(
         &input,
-        format!("setup_cmd = {:?}\n", script.to_str().unwrap()),
+        format!(
+            "setup_cmd = {:?}\npost_setup_cmd = {:?}\n",
+            script.to_str().unwrap(),
+            post_setup.to_str().unwrap()
+        ),
     )
     .unwrap();
     fixture.ok(&[
@@ -11974,11 +11994,13 @@ fn work_setup_skip_accepts_a_failed_setup() {
     let skipped = fixture.ok(&["work", "setup", "skipped", "--skip"]);
     assert_eq!(skipped["state"], "ready");
     let path = Path::new(skipped["path"].as_str().unwrap());
-    // Skipping keeps what setup left and does not run it again.
+    // Skipping keeps what setup left and does not run it again, but runs
+    // the post-setup hook as a ready workspace does.
     assert_eq!(
         fs::read_to_string(path.join("setup-result")).unwrap(),
         "partial"
     );
+    assert_eq!(fs::read_to_string(path.join("post-setup")).unwrap(), "done");
     let again = fixture.run(&["work", "setup", "skipped", "--skip"]);
     assert!(!again.status.success());
     assert!(String::from_utf8_lossy(&again.stderr).contains("only a failed setup can be skipped"));

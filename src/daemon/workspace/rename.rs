@@ -27,7 +27,9 @@ impl Manager {
                 },
             )
             .await?;
-        let workspace = self.finish_pending_rename(workspace).await?;
+        let workspace = self
+            .finish_pending_rename(workspace, caller_execution)
+            .await?;
         self.verify_rename_source(&workspace, &repo.path).await?;
         ensure!(
             self.pr_registration(&workspace.id).await?.is_none(),
@@ -147,11 +149,16 @@ impl Manager {
     /// Finish a rename an earlier attempt left unfinished before starting
     /// another. The caller holds the repository Git gate and the workspace's
     /// resource guard, so the lifecycle is reserved in the store directly.
-    async fn finish_pending_rename(&self, workspace: Workspace) -> Result<Workspace> {
+    async fn finish_pending_rename(
+        &self,
+        workspace: Workspace,
+        caller_execution: Option<&str>,
+    ) -> Result<Workspace> {
         if self.rename_intent(&workspace.id).await?.is_none() {
             return Ok(workspace);
         }
-        self.reserve_rename_repair(&workspace.id).await?;
+        self.reserve_rename_repair(&workspace.id, caller_execution)
+            .await?;
         let finished = self.finish_workspace_rename(&workspace, false).await;
         let (state, error) = match &finished {
             Ok(_) => (WorkspaceState::Ready, None),
@@ -165,13 +172,23 @@ impl Manager {
         self.workspace(&workspace.id).await
     }
 
-    /// Move a ready or failed workspace into reconciling for finishing its
-    /// pending rename, without the resource guard its caller already holds.
-    async fn reserve_rename_repair(&self, id: &str) -> Result<()> {
+    /// Move a ready or failed workspace without executions other than the
+    /// caller's into reconciling for finishing its pending rename, without
+    /// the resource guard its caller already holds.
+    async fn reserve_rename_repair(&self, id: &str, caller_execution: Option<&str>) -> Result<()> {
         let id = id.to_owned();
+        let caller_execution = caller_execution.map(str::to_owned);
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                ensure!(
+                    !store::exists(
+                        &tx,
+                        "SELECT 1 FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id!=?2)",
+                        params![id, caller_execution]
+                    )?,
+                    "workspace has other active or unknown executions; stop them before renaming"
+                );
                 let state: WorkspaceState =
                     tx.query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
                         row.get(0)

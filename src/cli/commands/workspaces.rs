@@ -1325,10 +1325,12 @@ pub(super) async fn skip_setup(ctx: &Context, workspace: Option<String>) -> Resu
         workspace.state
     );
     ignore_setup_failure(ctx, &workspace).await?;
+    let workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
+    run_post_setup(ctx, &workspace).await?;
     ctx.emit_styled(
         Style::Success,
         &format!("Skipped setup of {}", workspace.name),
-        client::inspect(&ctx.paths, workspace.id).await?.workspace,
+        &workspace,
     )?;
     Ok(0)
 }
