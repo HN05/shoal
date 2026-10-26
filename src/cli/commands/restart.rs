@@ -24,6 +24,10 @@ use crate::{
     state::AgentState,
 };
 
+/// How many agents restart at once, each holding one of the daemon's
+/// long-lived connections until its agent runs again.
+const PARALLEL_RESTARTS: usize = 16;
+
 /// How often `--wait` checks whether a turn ended.
 const TURN_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -274,8 +278,9 @@ async fn restart_in_turn(
     Ok(gone)
 }
 
-/// Restart `restarts` all at once, with `wait` each as soon as its turn
-/// ends, returning the JSON entries of agents that stopped running meanwhile.
+/// Restart `restarts` together, up to [`PARALLEL_RESTARTS`] at a time, and
+/// with `wait` each as soon as its turn ends, returning the JSON entries of
+/// agents that stopped running meanwhile.
 async fn restart_together(
     ctx: &Context,
     report: &mut ui::Report,
@@ -291,11 +296,10 @@ async fn restart_together(
         if wait {
             gone.extend(report_skipped(ctx, &refresh(ctx, &mut waiting).await?));
         }
-        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut waiting)
-            .into_iter()
-            .partition(|restart| !wait || restart.idle());
-        waiting = later;
-        for restart in due {
+        while running.len() < PARALLEL_RESTARTS
+            && let Some(index) = waiting.iter().position(|restart| !wait || restart.idle())
+        {
+            let restart = waiting.remove(index);
             running.push(async move {
                 let result = restart.run(ctx).await;
                 (restart, result)
@@ -304,16 +308,15 @@ async fn restart_together(
         if waiting.is_empty() && running.is_empty() {
             return Ok(gone);
         }
-        if !waiting.is_empty() && !told {
-            tell_waiting(ctx, &waiting);
-            told = true;
+        if wait && !told {
+            told = tell_waiting(ctx, &waiting);
         }
         tokio::select! {
             Some((restart, result)) = running.next() => {
                 finished += 1;
                 report_outcome(ctx, report, &restart, result, (finished, total));
             }
-            () = sleep(TURN_POLL_INTERVAL), if !waiting.is_empty() => {}
+            () = sleep(TURN_POLL_INTERVAL), if wait && !waiting.is_empty() => {}
         }
     }
 }
@@ -337,16 +340,17 @@ fn report_outcome(
     }
 }
 
-/// Say whose turns the restarts wait for.
-fn tell_waiting(ctx: &Context, restarts: &[Restart]) {
-    if ctx.json {
-        return;
-    }
+/// Say whose turns the restarts wait for, returning whether any.
+fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
     let names: Vec<_> = restarts
         .iter()
+        .filter(|restart| !restart.idle())
         .map(|restart| restart.workspace.name.as_str())
         .collect();
-    eprintln!("Waiting for the turns of {} to end", names.join(", "));
+    if !names.is_empty() && !ctx.json {
+        eprintln!("Waiting for the turns of {} to end", names.join(", "));
+    }
+    !names.is_empty()
 }
 
 /// Take the first of `restarts` whose turn ended, from states read now,
@@ -367,8 +371,7 @@ async fn next_idle(
             return Ok(Some(restarts.remove(index)));
         }
         if !told {
-            tell_waiting(ctx, restarts);
-            told = true;
+            told = tell_waiting(ctx, restarts);
         }
         sleep(TURN_POLL_INTERVAL).await;
     }
