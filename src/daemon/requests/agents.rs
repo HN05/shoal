@@ -52,6 +52,16 @@ pub(super) async fn handle(
                 .report_turn_failure(&workspace, failure, execution(caller).or(reported), session)
                 .await?,
         ),
+        AgentMethod::ReportUpstreamReset {
+            workspace,
+            execution,
+            resets_at,
+        } => {
+            manager
+                .report_upstream_reset(&workspace, execution, resets_at)
+                .await?;
+            Body::Ok
+        }
         AgentMethod::ReportProxyRetry {
             workspace,
             execution,
@@ -93,8 +103,8 @@ impl Scoped for AgentMethod {
                 execution: Some(_), ..
             } => bail!("workspace processes report a failed turn only for their own execution"),
             // Only the agent's wrapper, which runs its proxy, reports it.
-            AgentMethod::ReportProxyRetry { .. } => {
-                bail!("workspace processes cannot report a proxy's retries")
+            AgentMethod::ReportProxyRetry { .. } | AgentMethod::ReportUpstreamReset { .. } => {
+                bail!("workspace processes cannot report what a proxy learns")
             }
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.

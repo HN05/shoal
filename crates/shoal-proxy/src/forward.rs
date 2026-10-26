@@ -219,6 +219,7 @@ impl Forwarder {
         self.report(Event::Failed {
             failure: failed.failure,
             in_stream: failed.in_stream,
+            wait: failed.retry_after,
         });
         failed.response
     }
@@ -259,8 +260,15 @@ async fn failed_status(
         .ok()
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
-    let retry_after =
-        retry::retry_after(&parts.headers).or_else(|| error.as_ref().and_then(retry::error_wait));
+    let retry_after = retry::retry_after(&parts.headers)
+        .or_else(|| error.as_ref().and_then(retry::error_wait))
+        .or_else(|| {
+            // Anthropic names when every limit resets on each response, so
+            // only a refusal waits for it.
+            (failure == Failure::RateLimited)
+                .then(|| retry::limit_reset(&parts.headers))
+                .flatten()
+        });
     Attempt::Failed(Failed {
         failure,
         retry_after,

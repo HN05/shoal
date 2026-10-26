@@ -826,16 +826,18 @@ for overloaded APIs and server errors. Each wait varies randomly by ±20%.
 It then sends the idle agent a [message](#agent-messages) to continue its
 unfinished work, which reaches it in a new turn of the same conversation. A new
 turn before then cancels the retry, and the agent's exit, completion or the
-workspace's removal drops it. Attempts follow one another until a turn ends
-normally. Rate and usage limits have no attempt cap, so daily and weekly quotas
-can reset; the failure hook supplies no structured reset time. Overloaded APIs
-and server errors get eight attempts, about an hour in total; switching between
-these failures and usage limits starts a fresh attempt count. After exhaustion,
-or an error a retry does not fix, such as failed authentication, Shoal records
-a `turn_failed` notification, which a child workspace's coordinating agent
-receives instead. A pending retry outlasts a
-daemon restart; `status` shows it, and `--json` gives `turn_retry` with
-`failure`, `attempt`, `attempts` (`null` for no cap), `due_at` and `delivered`.
+workspace's removal drops it. Attempts follow one another, with no cap, until a
+turn ends normally, so an outage of any length or a daily or weekly usage limit
+passes and the agent carries on; switching between transient failures and usage
+limits starts the wait over. When the agent's proxy learns when the upstream
+refuses requests until, such as a usage limit's reset from its error or
+headers, the retry waits until half a minute past it instead. Claude Code's
+failure hook names no reset time, so without a proxy a usage limit is checked
+about hourly. An error a retry does not fix, such as failed authentication, gets
+no retry: Shoal records a `turn_failed` notification, which a child workspace's
+coordinating agent receives instead. A pending retry outlasts a daemon restart;
+`status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,
+`due_at` and `delivered`.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
@@ -866,8 +868,9 @@ runs with, `[env]`, secrets and the tool's `env` included; a variable that is
 not set fails the launch. The proxy retries what the agent would otherwise fail on:
 a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
 that reports one of those before any content, waiting from a second, doubling to
-half a minute, or as long as the upstream's `Retry-After`, or the reset time its
-error names, asks. Once an outage has lasted five minutes, or a reset falls past
+half a minute, or as long as the upstream's `Retry-After`, the reset time its
+error names, or, for a rate limit, Anthropic's `anthropic-ratelimit-unified-reset`,
+asks. Once an outage has lasted five minutes, or a reset falls past
 that, the agent gets the failure, and later requests get theirs at once until one
 succeeds; a failure a retry does not fix, or one after content arrived, reaches
 the agent unchanged. A Codex stream that gives up ends with a `response.failed`

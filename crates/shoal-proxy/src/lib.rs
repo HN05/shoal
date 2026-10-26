@@ -27,8 +27,14 @@ pub enum Event {
         wait: Duration,
     },
     /// The proxy gave up on a failure it retries, so the agent gets it;
-    /// `in_stream` when it arrives inside a response stream.
-    Failed { failure: Failure, in_stream: bool },
+    /// `in_stream` when it arrives inside a response stream, and `wait` when
+    /// the upstream said how long it would refuse, such as until a usage
+    /// limit resets.
+    Failed {
+        failure: Failure,
+        in_stream: bool,
+        wait: Option<Duration>,
+    },
     /// A request the proxy retried succeeded.
     Recovered,
 }

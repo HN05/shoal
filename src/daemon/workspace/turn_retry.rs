@@ -1,7 +1,9 @@
 //! Retrying a turn an API failure ended. An agent whose integration reports
 //! failed turns, with `retry` on, is asked to continue once the failure has
-//! had time to pass. The retry is persisted, so it outlasts a daemon
-//! restart, and knows no agent: any report of a failed turn schedules one.
+//! had time to pass, or once the reset its upstream named has passed, and
+//! again after each turn that still fails, until one succeeds. The retry is
+//! persisted, so it outlasts a daemon restart, and knows no agent: any
+//! report of a failed turn schedules one.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -15,9 +17,6 @@ use crate::{
     state::{AgentState, TurnFailure},
 };
 
-/// Attempts at a transient failure before Shoal gives up; with the delays
-/// below they span about an hour. Rate and usage limits have no attempt cap.
-pub(crate) const ATTEMPTS: u32 = 8;
 /// The wait before the first attempt, doubling for each later one.
 const FIRST_DELAY_SECS: u64 = 30;
 /// The longest wait before an attempt.
@@ -27,6 +26,9 @@ const RATE_LIMIT_MAX_DELAY_SECS: u64 = 60 * 60;
 /// How far each wait is spread, as a fraction either way, so agents that
 /// failed together do not all retry at once.
 const JITTER: f64 = 0.2;
+/// How long after a reset the upstream named the agent is asked, so the
+/// upstream has surely reset.
+const RESET_MARGIN_SECS: i64 = 30;
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
 
@@ -36,8 +38,6 @@ pub struct TurnRetry {
     pub failure: TurnFailure,
     /// The attempt the retry makes or made, from 1.
     pub attempt: u32,
-    /// The attempt cap; none for rate and usage limits.
-    pub attempts: Option<u32>,
     /// Unix seconds when the agent is asked to continue.
     pub due_at: i64,
     /// Whether the agent was asked and its turn has not ended yet.
@@ -51,11 +51,9 @@ pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<TurnRetr
              WHERE workspace_id=?1",
             [workspace_id],
             |row| {
-                let failure = row.get(0)?;
                 Ok(TurnRetry {
-                    failure,
+                    failure: row.get(0)?,
                     attempt: row.get(1)?,
-                    attempts: attempt_limit(failure),
                     due_at: row.get(2)?,
                     delivered: row.get(3)?,
                 })
@@ -79,11 +77,6 @@ pub(super) fn follow_state(db: &Connection, workspace_id: &str, state: AgentStat
     Ok(())
 }
 
-/// Usage limits must be allowed to reset, including weekly ones.
-fn attempt_limit(failure: TurnFailure) -> Option<u32> {
-    (failure != TurnFailure::RateLimited).then_some(ATTEMPTS)
-}
-
 /// The wait before `attempt` for `failure`, spread by `spread` in `[0, 1)`.
 fn delay(failure: TurnFailure, attempt: u32, spread: f64) -> i64 {
     let maximum = match failure {
@@ -100,27 +93,11 @@ fn spread() -> f64 {
     (uuid::Uuid::new_v4().as_u128() % 1_000_000) as f64 / 1_000_000.0
 }
 
-/// What reporting a failed turn did to its workspace's retry.
-#[derive(Debug, PartialEq, Eq)]
-enum Scheduled {
-    /// The retry waits for its attempt.
-    Waiting,
-    /// The turn failed on its last attempt; the retry is gone.
-    Exhausted,
-}
-
-/// Why Shoal stops retrying a turn.
-enum GiveUp {
-    /// A retry does not fix the failure.
-    Unfixable,
-    /// The turn failed on its last attempt.
-    Exhausted(TurnFailure),
-}
-
 /// Record the turn `failure` ended in `execution` as its workspace's
 /// retry: the next attempt after a delivered one, the first for a new
 /// execution or a change between usage limits and transient failures, and the
-/// same one when the failure is reported again before it is due.
+/// same one when the failure is reported again before it is due. An attempt
+/// waits past `reset`, when the upstream refuses requests until then.
 fn record_failure(
     db: &mut Connection,
     workspace_id: &str,
@@ -128,19 +105,28 @@ fn record_failure(
     failure: TurnFailure,
     now: i64,
     spread: f64,
-) -> Result<Scheduled> {
+    reset: Option<i64>,
+) -> Result<()> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let previous = previous_attempt(&tx, workspace_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
-    let scheduled = if attempt_limit(failure).is_some_and(|limit| attempt > limit) {
-        cancel(&tx, workspace_id)?;
-        Scheduled::Exhausted
-    } else {
-        save_retry(&tx, workspace_id, execution, failure, attempt, due_at)?;
-        Scheduled::Waiting
-    };
+    let due_at = reset.map_or(due_at, |reset| {
+        due_at.max(reset.saturating_add(RESET_MARGIN_SECS))
+    });
+    save_retry(&tx, workspace_id, execution, failure, attempt, due_at)?;
     tx.commit()?;
-    Ok(scheduled)
+    Ok(())
+}
+
+/// Hold the pending retry of `execution`'s turn until past `reset`, when its
+/// upstream refuses requests until then, whichever report arrived first.
+fn wait_for_reset(db: &Connection, execution: &str, reset: i64) -> Result<bool> {
+    let changed = db.execute(
+        "UPDATE workspace_turn_retries SET due_at=MAX(due_at,?2)
+         WHERE execution_id=?1 AND delivered=0",
+        params![execution, reset.saturating_add(RESET_MARGIN_SECS)],
+    )?;
+    Ok(changed > 0)
 }
 
 /// The persisted attempt whose execution and policy determine its successor.
@@ -180,8 +166,9 @@ fn next_attempt(
     now: i64,
     spread: f64,
 ) -> (u32, i64) {
+    let limited = |failure| failure == TurnFailure::RateLimited;
     let previous = previous.filter(|previous| {
-        previous.execution == execution && attempt_limit(previous.failure) == attempt_limit(failure)
+        previous.execution == execution && limited(previous.failure) == limited(failure)
     });
     match previous {
         Some(previous) if !previous.delivered => (previous.attempt, previous.due_at),
@@ -333,22 +320,17 @@ fn postpone(db: &Connection, workspace_id: &str, due_at: i64) -> Result<()> {
 
 /// The message that asks the agent to continue.
 fn continuation(failure: TurnFailure, attempt: u32) -> String {
-    let progress = match attempt_limit(failure) {
-        Some(limit) => format!("Retry {attempt} of {limit}."),
-        None => format!("Retry {attempt}."),
-    };
     format!(
         "Shoal: your last turn ended with an API error ({}). Continue the unfinished \
-         work from where you left off. ({progress})",
+         work from where you left off. (Retry {attempt}.)",
         failure.describe()
     )
 }
 
 impl Manager {
     /// Schedule the retry of the turn `failure` ended in `execution` when
-    /// its agent has `retry` on; a failure no retry fixes, or one on the
-    /// last attempt, notifies instead. Failures only log, since the report
-    /// still records the agent idle.
+    /// its agent has `retry` on; a failure no retry fixes notifies instead.
+    /// Failures only log, since the report still records the agent idle.
     pub(super) async fn retry_failed_turn(
         &self,
         selector: &str,
@@ -371,22 +353,27 @@ impl Manager {
         };
         let workspace = self.workspace(selector).await?;
         if !failure.retryable() {
-            return self
-                .give_up_turn(&workspace, &agent, GiveUp::Unfixable)
-                .await;
+            return self.give_up_turn(&workspace, &agent).await;
         }
+        let reset = self.upstream_reset(execution);
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
         let (now, spread) = (i64::try_from(crate::time::unix_seconds())?, spread());
-        let scheduled = self
-            .store
-            .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
+        self.store
+            .run(move |db| record_failure(db, &id, &execution, failure, now, spread, reset))
             .await?;
-        match scheduled {
-            Scheduled::Waiting => self.signals.wake_turn_retry(),
-            Scheduled::Exhausted => {
-                let reason = GiveUp::Exhausted(failure);
-                self.give_up_turn(&workspace, &agent, reason).await?;
-            }
+        self.signals.wake_turn_retry();
+        Ok(())
+    }
+
+    /// Hold `execution`'s pending turn retry until past `reset`, which its
+    /// proxy reports as when the upstream refuses requests until.
+    pub(super) async fn hold_turn_retry(&self, execution: String, reset: i64) -> Result<()> {
+        if self
+            .store
+            .run(move |db| wait_for_reset(db, &execution, reset))
+            .await?
+        {
+            self.signals.wake_turn_retry();
         }
         Ok(())
     }
@@ -405,19 +392,13 @@ impl Manager {
     }
 
     /// Drop the workspace's retry and tell whoever receives its agent's
-    /// events why Shoal stops retrying.
-    async fn give_up_turn(&self, workspace: &Workspace, agent: &str, reason: GiveUp) -> Result<()> {
+    /// events that a retry does not fix its failure.
+    async fn give_up_turn(&self, workspace: &Workspace, agent: &str) -> Result<()> {
         let id = workspace.id.clone();
         self.store.run(move |db| cancel(db, &id)).await?;
-        let message = match reason {
-            GiveUp::Unfixable => format!(
-                "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
-            ),
-            GiveUp::Exhausted(failure) => format!(
-                "{agent}'s turn still fails ({}) after {ATTEMPTS} attempts; Shoal stopped retrying it",
-                failure.describe()
-            ),
-        };
+        let message = format!(
+            "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
+        );
         self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
             .await;
         Ok(())

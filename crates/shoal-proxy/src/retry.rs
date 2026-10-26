@@ -170,12 +170,29 @@ pub(crate) fn error_wait(error: &serde_json::Value) -> Option<Duration> {
     if let Some(seconds) = error["resets_in_seconds"].as_u64() {
         return Some(Duration::from_secs(seconds));
     }
-    let resets_at = error["resets_at"].as_u64()?;
+    until(error["resets_at"].as_u64()?)
+}
+
+/// The wait until Anthropic's subscription usage limit resets, which its
+/// `anthropic-ratelimit-unified-reset` header gives in Unix seconds.
+pub(crate) fn limit_reset(headers: &HeaderMap) -> Option<Duration> {
+    let reset = headers
+        .get("anthropic-ratelimit-unified-reset")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    until(reset)
+}
+
+/// The wait until Unix second `at`.
+fn until(at: u64) -> Option<Duration> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
-    Some(Duration::from_secs(resets_at.saturating_sub(now)))
+    Some(Duration::from_secs(at.saturating_sub(now)))
 }
 
 /// The wait a `Retry-After` header in seconds asks for.

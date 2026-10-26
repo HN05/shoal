@@ -1,6 +1,8 @@
-//! The request a proxied agent's proxy is retrying, as its wrapper reports
-//! it. The daemon only keeps it in memory: the proxy lives and dies with the
-//! wrapper, so a restart that forgets it loses nothing that still runs.
+//! The request a proxied agent's proxy is retrying, and when its upstream
+//! said it refuses requests until, as its wrapper reports them. The daemon
+//! only keeps them in memory: the proxy lives and dies with the wrapper, so
+//! a restart that forgets them loses nothing that still runs, beyond a turn
+//! retry that checks before a reset.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -35,9 +37,33 @@ impl Manager {
         Ok(())
     }
 
+    /// Keep when the upstream of `execution`'s proxy refuses requests
+    /// until, Unix seconds such as a usage limit's reset, which a retry of
+    /// its agent's turn waits past.
+    pub async fn report_upstream_reset(
+        &self,
+        selector: &str,
+        execution: String,
+        resets_at: i64,
+    ) -> Result<()> {
+        self.workspace(selector).await?;
+        self.upstream_resets
+            .lock()
+            .unwrap()
+            .insert(execution.clone(), resets_at);
+        self.hold_turn_retry(execution, resets_at).await
+    }
+
+    /// When the upstream of `execution`'s proxy last said it refuses
+    /// requests until.
+    pub(super) fn upstream_reset(&self, execution: &str) -> Option<i64> {
+        self.upstream_resets.lock().unwrap().get(execution).copied()
+    }
+
     /// An execution that ended no longer retries anything.
     pub(super) fn forget_proxy_retry(&self, execution: &str) {
         self.proxy_retries.lock().unwrap().remove(execution);
+        self.upstream_resets.lock().unwrap().remove(execution);
     }
 
     /// The retry the proxy of one of `executions`, the workspace's running

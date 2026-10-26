@@ -34,6 +34,14 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
     },
+    /// The upstream of `execution`'s proxy refuses requests until Unix
+    /// second `resets_at`, such as a usage limit's reset, which its wrapper
+    /// reports so a retry of the agent's turn waits past it.
+    ReportUpstreamReset {
+        workspace: String,
+        execution: String,
+        resets_at: i64,
+    },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`.
     AwaitAgentWake {

@@ -11,7 +11,7 @@ use crate::{
 #[test]
 fn waits_double_from_half_a_minute_to_a_quarter_hour_spread_a_fifth() {
     let failure = TurnFailure::ServerError;
-    let waits: Vec<_> = (1..=ATTEMPTS)
+    let waits: Vec<_> = (1..=8)
         .map(|attempt| delay(failure, attempt, 0.5))
         .collect();
     assert_eq!(waits, [30, 60, 120, 240, 480, 900, 900, 900]);
@@ -30,7 +30,6 @@ fn usage_limits_back_off_to_hourly_attempts_without_a_cap() {
     assert_eq!(delay(failure, u32::MAX, 0.5), 3600);
     assert_eq!(delay(failure, 10, 0.0), 2880);
     assert_eq!(delay(failure, 10, 0.999_999), 4320);
-    assert_eq!(attempt_limit(failure), None);
 }
 
 /// A workspace whose connected `claude` agent runs in the returned
@@ -159,7 +158,7 @@ async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() 
     let asked = messages(&manager, &workspace).await;
     assert_eq!(asked.len(), 1);
     assert!(asked[0].contains("(API overloaded)"), "{asked:?}");
-    assert!(asked[0].contains("Retry 1 of 8"), "{asked:?}");
+    assert!(asked[0].contains("(Retry 1.)"), "{asked:?}");
     assert!(retry(&manager, &workspace).await.unwrap().delivered);
 
     // The turn it starts failing again counts the next attempt.
@@ -248,23 +247,56 @@ async fn retries_respect_opt_out_and_need_a_failure_a_retry_can_fix() {
 }
 
 #[tokio::test]
-async fn the_last_failed_attempt_gives_up_and_notifies() {
+async fn an_outage_is_retried_until_it_ends_without_a_cap() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
-    for _ in 0..ATTEMPTS {
+    for _ in 0..20 {
         fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
         deliver_now(&manager).await;
         report(&manager, &workspace, &execution, AgentState::Working).await;
     }
-    assert_eq!(retry(&manager, &workspace).await.unwrap().attempt, ATTEMPTS);
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
-    assert_eq!(retry(&manager, &workspace).await, None);
-    let notifications = manager.notifications(false, 10).await.unwrap();
-    assert_eq!(notifications.len(), 1);
-    assert!(
-        notifications[0].message.contains("after 8 attempts"),
-        "{}",
-        notifications[0].message
+    let pending = retry(&manager, &workspace).await.unwrap();
+    assert_eq!((pending.attempt, pending.delivered), (21, false));
+    assert!(pending.due_at - now() <= 900 * 6 / 5, "{pending:?}");
+    assert!(manager.notifications(false, 10).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_retry_waits_past_the_reset_the_upstream_named() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    let reset = now() + 2 * 60 * 60;
+    // The proxy's report arrives first, as it does for Codex.
+    manager
+        .report_upstream_reset(&workspace.name, execution.clone(), reset)
+        .await
+        .unwrap();
+    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    let pending = retry(&manager, &workspace).await.unwrap();
+    assert_eq!(pending.due_at, reset + RESET_MARGIN_SECS);
+    assert_eq!(deliver_now(&manager).await, None);
+
+    // The agent's own report arrives first, as Claude's may.
+    let (other, execution, _other_connection) = another_agent(&manager, "other").await;
+    fail(&manager, &other, &execution, TurnFailure::RateLimited).await;
+    let early = retry(&manager, &other).await.unwrap();
+    assert!(early.due_at < reset, "{early:?}");
+    manager
+        .report_upstream_reset(&other.name, execution.clone(), reset)
+        .await
+        .unwrap();
+    let held = retry(&manager, &other).await.unwrap();
+    assert_eq!(
+        (held.attempt, held.due_at),
+        (early.attempt, reset + RESET_MARGIN_SECS)
     );
+    // A reset that has passed holds nothing back.
+    manager
+        .report_upstream_reset(&other.name, execution.clone(), now() - 60)
+        .await
+        .unwrap();
+    assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
+    manager.forget_proxy_retry(&execution);
+    assert_eq!(manager.upstream_reset(&execution), None);
 }
 
 #[tokio::test]
@@ -280,22 +312,18 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
             let mut now = 1000;
             // Drive the scheduling clock, without sleeping through usage limits.
             while now < 1000 + 8 * 24 * 60 * 60 {
-                assert_eq!(
-                    record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?,
-                    Scheduled::Waiting
-                );
+                record_failure(db, &id, &scheduling_execution, failure, now, 0.5, None)?;
                 let pending = get(db, &id)?.context("pending usage-limit retry")?;
-                assert_eq!(pending.attempts, None);
                 assert!(pending.due_at > now);
                 assert!(deliver(db, &id, pending.due_at)?);
                 db.execute("DELETE FROM agent_messages WHERE workspace_id=?1", [&id])?;
                 now = pending.due_at;
             }
-            record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
+            record_failure(db, &id, &scheduling_execution, failure, now, 0.5, None)?;
             get(db, &id)?.context("retry after eight days")
         })
         .await?;
-    assert!(pending.attempt > ATTEMPTS);
+    assert!(pending.attempt > 8);
     let reopened = Connection::open(manager.paths.database())?;
     assert_eq!(get(&reopened, &workspace.id)?, Some(pending.clone()));
     drop(reopened);
@@ -306,17 +334,17 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
     );
     assert!(manager.notifications(false, 10).await?.is_empty());
 
-    // A transient failure after a long usage limit gets its own attempt budget.
+    // A transient failure after a long usage limit starts its own backoff.
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     let transient = retry(&manager, &workspace)
         .await
         .context("transient retry")?;
-    assert_eq!((transient.attempt, transient.attempts), (1, Some(ATTEMPTS)));
+    assert_eq!(transient.attempt, 1);
     deliver_now(&manager).await;
     fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
     let limited = retry(&manager, &workspace)
         .await
         .context("usage-limit retry")?;
-    assert_eq!((limited.attempt, limited.attempts), (1, None));
+    assert_eq!(limited.attempt, 1);
     Ok(())
 }

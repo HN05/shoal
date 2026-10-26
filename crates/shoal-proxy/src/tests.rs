@@ -315,7 +315,8 @@ async fn an_outage_past_its_budget_reaches_the_agent_at_once() {
         events.last(),
         Some(&Event::Failed {
             failure: Failure::Overloaded,
-            in_stream: false
+            in_stream: false,
+            wait: None,
         })
     );
     let waited: Duration = events
@@ -359,7 +360,8 @@ async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::Unreachable,
-            in_stream: false
+            in_stream: false,
+            wait: None,
         })
     );
 }
@@ -458,7 +460,8 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::Overloaded,
-            in_stream: true
+            in_stream: true,
+            wait: None,
         })
     );
 
@@ -477,7 +480,8 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::Overloaded,
-            in_stream: true
+            in_stream: true,
+            wait: None,
         })
     );
 
@@ -494,7 +498,8 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::Overloaded,
-            in_stream: false
+            in_stream: false,
+            wait: None,
         })
     );
 }
@@ -518,7 +523,8 @@ async fn a_retry_the_upstream_never_answers_gives_up_with_the_outage() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::Unreachable,
-            in_stream: false
+            in_stream: false,
+            wait: None,
         })
     );
 }
@@ -576,7 +582,8 @@ async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::ServerError,
-            in_stream: false
+            in_stream: false,
+            wait: None,
         })
     );
 
@@ -591,7 +598,8 @@ async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
         drain(&mut events).last(),
         Some(&Event::Failed {
             failure: Failure::ServerError,
-            in_stream: true
+            in_stream: true,
+            wait: None,
         })
     );
 }
@@ -616,7 +624,8 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
         drain(&mut events),
         [Event::Failed {
             failure: Failure::RateLimited,
-            in_stream: true
+            in_stream: true,
+            wait: Some(Duration::from_secs(7200)),
         }]
     );
 
@@ -632,11 +641,72 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
         response
     })
     .await;
-    let (addr, _) = proxy(upstream.url("")).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
     let (status, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
     assert_eq!(status.as_u16(), 429);
     assert!(body.contains("rate_limit_error"), "{body}");
     assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::RateLimited,
+            in_stream: false,
+            wait: Some(Duration::from_secs(7200)),
+        }]
+    );
+}
+
+#[tokio::test]
+async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let reset = (now + 7200).to_string();
+    let limited = reset.clone();
+    let upstream = FakeUpstream::start(move |_| {
+        let mut response = reply(
+            429,
+            r#"{"type":"error","error":{"type":"rate_limit_error"}}"#,
+        );
+        response.headers_mut().insert(
+            "anthropic-ratelimit-unified-reset",
+            limited.parse().unwrap(),
+        );
+        response
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, _) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(status.as_u16(), 429);
+    assert_eq!(upstream.requests().len(), 1);
+    let events = drain(&mut events);
+    let [
+        Event::Failed {
+            wait: Some(wait), ..
+        },
+    ] = events.as_slice()
+    else {
+        panic!("{events:?}");
+    };
+    // The test reads the clock a moment before the proxy does.
+    assert!((7100..=7200).contains(&wait.as_secs()), "{wait:?}");
+
+    // Every response names the reset, so an overload does not wait for it.
+    let upstream = FakeUpstream::start(move |received| {
+        let mut response = match received.len() {
+            1 => reply(529, "overloaded"),
+            _ => reply(200, "done"),
+        };
+        response
+            .headers_mut()
+            .insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+        response
+    })
+    .await;
+    let (addr, _) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
 }
 
 #[tokio::test]
@@ -656,7 +726,8 @@ async fn a_usage_limit_inside_the_stream_ends_the_turn_at_once() {
         drain(&mut events),
         [Event::Failed {
             failure: Failure::RateLimited,
-            in_stream: true
+            in_stream: true,
+            wait: Some(Duration::from_secs(7200)),
         }]
     );
 }

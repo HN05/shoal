@@ -117,6 +117,9 @@ pub struct Manager {
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
+    /// The Unix second until which each proxied execution's upstream last
+    /// said it refuses requests.
+    upstream_resets: std::sync::Mutex<std::collections::HashMap<String, i64>>,
 }
 
 impl Manager {
@@ -144,6 +147,7 @@ impl Manager {
             seeds: Default::default(),
             forge_memories: Default::default(),
             proxy_retries: Default::default(),
+            upstream_resets: Default::default(),
         }))
     }
 
