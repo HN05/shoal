@@ -554,6 +554,8 @@ async fn finish(
     } else {
         None
     };
+    // A restart whose stop the agent never took saved a handoff for nothing.
+    let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
     if agent.is_some() && result.is_ok() {
         manager.stop_exited_agent_processes(&execution_id).await;
     }
@@ -576,7 +578,7 @@ async fn finish(
             .end_agent_session(&workspace, agent, &execution_id, started && !stopped)
             .await;
     }
-    if overload_reason.is_some() && !handoff_claimed && complete {
+    if (overload_reason.is_some() || restarting) && !handoff_claimed && complete {
         execution_recovery::discard_handoff(manager, &workspace.id, &execution_id);
         overload_reason = None;
     }

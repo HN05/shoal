@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
+    execution::recovery,
     model::{RunningAgent, Workspace},
     state::AgentState,
     test_support::{manager, repository},
@@ -148,6 +149,8 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     let error = manager.restart_agent(&custom.plan.id).await.unwrap_err();
     assert!(format!("{error}").contains("[agent_resume]"), "{error}");
     assert!(!*custom.stop.borrow());
+    // A refused restart saves no handoff.
+    assert!(!recovery::record_path(&manager.paths, &workspace.id, &custom.plan.id).exists());
     let error = manager.restart_agent(&stopping.plan.id).await.unwrap_err();
     assert_eq!(format!("{error}"), "claude is already stopping");
     assert!(!manager.restart_requested(&stopping.plan.id).await);
@@ -177,6 +180,16 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     assert!(manager.restart_requested(&id).await);
+    // The handoff is saved before the stop reaches the wrapper.
+    let handoff =
+        recovery::Record::load(&recovery::record_path(&manager.paths, &workspace.id, &id))
+            .unwrap()
+            .unwrap();
+    assert_eq!(handoff.stage, Some(recovery::Stage::Stopping));
+    assert_eq!(
+        handoff.stop_reason.as_deref(),
+        Some("restarted by shoal restart")
+    );
     // A first start that registers only now is not the restarted agent, so
     // the wrapper still receives the restart's stop.
     manager.agent_started(&id).await;

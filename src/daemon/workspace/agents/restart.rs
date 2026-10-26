@@ -5,7 +5,10 @@ use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
 use super::Manager;
-use crate::{daemon::store, model::RunningAgent, state::AgentState};
+use crate::{
+    daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
+    state::AgentState,
+};
 
 /// A restart in progress, which answers its request.
 pub(super) struct Restart {
@@ -91,13 +94,35 @@ impl Manager {
             "{} is already stopping",
             agent.name
         );
+        // Save the handoff before the stop, so a wrapper that dies stopping
+        // the agent leaves it for `shoal resume`.
+        let handoff = recovery::save_record(
+            &self.paths,
+            &agent.workspace_id,
+            id,
+            &agent.name,
+            Some(&Protection::restart().reason),
+        )
+        .context("save the agent's recovery record")?;
         let (restart, answer) = Restart::new();
         agent.restart = Some(restart);
         if agent.stop.send(true).is_err() {
             agent.restart = None;
+            recovery::consume(&handoff)?;
             anyhow::bail!("{} disconnected", agent.name);
         }
         Ok(answer)
+    }
+
+    /// Whether a restart of `id` has not resumed its agent yet; after the
+    /// resume, a record left behind belongs to the wrapper.
+    pub(crate) async fn restart_before_resume(&self, id: &str) -> bool {
+        self.agents
+            .lock()
+            .await
+            .get(id)
+            .and_then(|agent| agent.restart.as_ref())
+            .is_some_and(|restart| !restart.resumed)
     }
 
     /// Keep the turn state the agent of `id` reported.
