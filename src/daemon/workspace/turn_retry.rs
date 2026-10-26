@@ -130,7 +130,8 @@ fn record_failure(
     spread: f64,
 ) -> Result<Scheduled> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (attempt, due_at) = next_attempt(&tx, workspace_id, execution, failure, now, spread)?;
+    let previous = previous_attempt(&tx, workspace_id)?;
+    let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
     let scheduled = if attempt_limit(failure).is_some_and(|limit| attempt > limit) {
         cancel(&tx, workspace_id)?;
         Scheduled::Exhausted
@@ -142,41 +143,54 @@ fn record_failure(
     Ok(scheduled)
 }
 
-/// Keep a pending attempt or advance a delivered one under the same policy.
-fn next_attempt(
-    db: &Connection,
-    workspace_id: &str,
-    execution: &str,
+/// The persisted attempt whose execution and policy determine its successor.
+struct PreviousAttempt {
+    execution: String,
     failure: TurnFailure,
-    now: i64,
-    spread: f64,
-) -> Result<(u32, i64)> {
-    let previous: Option<(String, TurnFailure, u32, i64, bool)> = db
+    attempt: u32,
+    due_at: i64,
+    delivered: bool,
+}
+
+/// Decode the workspace's most recent attempt, when one is recorded.
+fn previous_attempt(db: &Connection, workspace_id: &str) -> Result<Option<PreviousAttempt>> {
+    Ok(db
         .query_row(
             "SELECT execution_id,failure,attempt,due_at,delivered FROM workspace_turn_retries
              WHERE workspace_id=?1",
             [workspace_id],
             |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                ))
+                Ok(PreviousAttempt {
+                    execution: row.get(0)?,
+                    failure: row.get(1)?,
+                    attempt: row.get(2)?,
+                    due_at: row.get(3)?,
+                    delivered: row.get(4)?,
+                })
             },
         )
-        .optional()?;
-    let previous = previous
-        .filter(|(_, prior_failure, ..)| attempt_limit(*prior_failure) == attempt_limit(failure));
-    Ok(match previous {
-        Some((previous, _, attempt, due_at, false)) if previous == execution => (attempt, due_at),
-        Some((previous, _, attempt, _, true)) if previous == execution => {
-            let attempt = attempt.saturating_add(1);
+        .optional()?)
+}
+
+/// Keep a pending attempt or advance a delivered one under the same policy.
+fn next_attempt(
+    previous: Option<PreviousAttempt>,
+    execution: &str,
+    failure: TurnFailure,
+    now: i64,
+    spread: f64,
+) -> (u32, i64) {
+    let previous = previous.filter(|previous| {
+        previous.execution == execution && attempt_limit(previous.failure) == attempt_limit(failure)
+    });
+    match previous {
+        Some(previous) if !previous.delivered => (previous.attempt, previous.due_at),
+        Some(previous) => {
+            let attempt = previous.attempt.saturating_add(1);
             (attempt, now + delay(failure, attempt, spread))
         }
         _ => (1, now + delay(failure, 1, spread)),
-    })
+    }
 }
 
 /// Persist the next attempt, replacing a previous one for the workspace.
