@@ -94,34 +94,7 @@ pub fn critical_memory(_used_percent: u8) -> Result<bool> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn swap_requires_configured_space() {
-        assert!(linux_swap("MemTotal: 10 kB\nSwapTotal: 2048 kB\n"));
-        assert!(!linux_swap("SwapTotal: 0 kB\n"));
-        assert!(!linux_swap("SwapTotal: x kB\n"));
-        assert!(!linux_swap("MemTotal: 10 kB\n"));
-    }
-
-    #[test]
-    fn memory_uses_available_including_reclaimable_cache() {
-        let reading = "MemTotal: 10000 kB\nMemFree: 1 kB\nMemAvailable: 500 kB\n";
-        assert!(linux_memory(reading, 95).unwrap());
-        assert!(linux_memory(&reading.replace("500", "499"), 95).unwrap());
-        assert!(!linux_memory(&reading.replace("500", "501"), 95).unwrap());
-        for reading in [
-            "MemTotal: 0 kB\nMemAvailable: 0 kB",
-            "MemTotal: 10 kB\nMemAvailable: 11 kB",
-            "MemTotal: 10 kB",
-            "MemTotal: 10 MB\nMemAvailable: 0 kB",
-            "MemTotal: x kB\nMemAvailable: 0 kB",
-        ] {
-            assert!(linux_memory(reading, 95).is_err(), "{reading}");
-        }
-    }
-}
+mod tests;
 
 /// Cumulative CPU ticks across every core. I/O wait is idle; Linux guest ticks
 /// are already included in user/nice and must not be counted twice.
@@ -210,26 +183,7 @@ pub fn cpu_ticks() -> Result<CpuTicks> {
 }
 
 #[cfg(test)]
-mod cpu_tests {
-    use super::*;
-
-    #[test]
-    fn cpu_usage_measures_all_cores_without_guest_double_counting() {
-        let first = linux_cpu("cpu 100 0 100 800 0 0 0 0 100 0\ncpu0 1 2 3 4").unwrap();
-        let next = linux_cpu("cpu 180 0 110 805 5 0 0 0 180 0").unwrap();
-        assert_eq!(next.used_percent_since(first), Some(90.0));
-        assert_eq!(first.used_percent_since(first), None);
-        assert_eq!(first.used_percent_since(next), None);
-        for text in [
-            "cpu0 1 2 3 4",
-            "cpu 1 2 3",
-            "cpu x 2 3 4",
-            "cpu 18446744073709551615 1 0 0",
-        ] {
-            assert!(linux_cpu(text).is_err(), "{text}");
-        }
-    }
-}
+mod cpu_tests;
 
 /// Warnings start where recovery headroom ends: native warning pressure on macOS.
 pub fn memory_warning(used_percent: u8) -> Result<bool> {
