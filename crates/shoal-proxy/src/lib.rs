@@ -2,6 +2,7 @@
 //! CLIProxyAPI or a provider's own API. It forwards each request with the
 //! agent's own credentials. It depends on no other Shoal code: Shoal runs one
 //! per agent and decides what its reports mean.
+mod clock;
 mod forward;
 mod retry;
 mod stream;
@@ -40,18 +41,21 @@ impl Proxy {
     /// Listen on a free loopback port for requests to forward to `upstream`,
     /// telling `events` about retries.
     pub async fn bind(upstream: Upstream, events: UnboundedSender<Event>) -> std::io::Result<Self> {
-        Self::bind_with(upstream, events, retry::POLICY).await
+        let clock = Arc::new(clock::Tokio::new());
+        Self::bind_with(upstream, events, retry::POLICY, clock).await
     }
 
     async fn bind_with(
         upstream: Upstream,
         events: UnboundedSender<Event>,
         policy: retry::Policy,
+        clock: Arc<dyn clock::Clock>,
     ) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let forwarder = forward::Forwarder::new(upstream, events, policy, clock);
         Ok(Self {
             listener,
-            forwarder: Arc::new(forward::Forwarder::new(upstream, events, policy)),
+            forwarder: Arc::new(forwarder),
         })
     }
 

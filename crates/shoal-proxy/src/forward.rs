@@ -21,6 +21,7 @@ use tokio::{net::TcpStream, sync::mpsc::UnboundedSender};
 
 use crate::{
     Event, Upstream,
+    clock::Clock,
     retry::{self, Failure, Outage, Policy},
     stream::{self, Opening, Protocol},
 };
@@ -46,6 +47,7 @@ pub(crate) struct Forwarder {
     upstream: Upstream,
     client: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
     outage: Outage,
+    clock: Arc<dyn Clock>,
     events: UnboundedSender<Event>,
 }
 
@@ -66,7 +68,12 @@ struct Failed {
 }
 
 impl Forwarder {
-    pub(crate) fn new(upstream: Upstream, events: UnboundedSender<Event>, policy: Policy) -> Self {
+    pub(crate) fn new(
+        upstream: Upstream,
+        events: UnboundedSender<Event>,
+        policy: Policy,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_webpki_roots()
             .https_or_http()
@@ -75,7 +82,8 @@ impl Forwarder {
         Self {
             upstream,
             client: Client::builder(TokioExecutor::new()).build(connector),
-            outage: Outage::new(policy),
+            outage: Outage::new(policy, clock.clone()),
+            clock,
             events,
         }
     }
@@ -112,7 +120,7 @@ impl Forwarder {
                 Attempt::Failed(failed) => failed,
             };
             match self.wait_before_retry(&failed, attempt) {
-                Some(wait) => tokio::time::sleep(wait).await,
+                Some(wait) => self.clock.sleep(wait).await,
                 None => return self.give_up(failed, request),
             }
             attempt += 1;
@@ -126,9 +134,9 @@ impl Forwarder {
         let Some(remaining) = self.outage.remaining() else {
             return self.send(request).await;
         };
-        match tokio::time::timeout(remaining, self.send(request)).await {
-            Ok(attempt) => attempt,
-            Err(_) => Attempt::Failed(Failed {
+        tokio::select! {
+            attempt = self.send(request) => attempt,
+            () = self.clock.deadline(remaining) => Attempt::Failed(Failed {
                 failure: Failure::Unreachable,
                 retry_after: None,
                 in_stream: false,

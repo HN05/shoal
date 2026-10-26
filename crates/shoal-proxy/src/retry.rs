@@ -2,7 +2,9 @@
 use std::{sync::Mutex, time::Duration};
 
 use hyper::{HeaderMap, StatusCode};
-use tokio::time::Instant;
+use std::sync::Arc;
+
+use crate::clock::Clock;
 
 /// Why an upstream request failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +73,7 @@ impl Policy {
 /// out again.
 pub(crate) struct Outage {
     policy: Policy,
+    clock: Arc<dyn Clock>,
     state: Mutex<State>,
 }
 
@@ -80,15 +83,16 @@ enum State {
     #[default]
     Up,
     /// Requests have failed since this instant.
-    Down(Instant),
+    Down(Duration),
     /// A request gave up on the outage.
     GivenUp,
 }
 
 impl Outage {
-    pub(crate) fn new(policy: Policy) -> Self {
+    pub(crate) fn new(policy: Policy, clock: Arc<dyn Clock>) -> Self {
         Self {
             policy,
+            clock,
             state: Mutex::new(State::Up),
         }
     }
@@ -102,7 +106,7 @@ impl Outage {
         attempt: u32,
         retry_after: Option<Duration>,
     ) -> Option<Duration> {
-        let now = Instant::now();
+        let now = self.clock.now();
         let mut state = self.state.lock().unwrap();
         let started = match *state {
             State::Up => now,
@@ -128,7 +132,10 @@ impl Outage {
     /// as long as the upstream needs.
     pub(crate) fn remaining(&self) -> Option<Duration> {
         match *self.state.lock().unwrap() {
-            State::Down(started) => Some(self.policy.budget.saturating_sub(started.elapsed())),
+            State::Down(started) => {
+                let elapsed = self.clock.now().saturating_sub(started);
+                Some(self.policy.budget.saturating_sub(elapsed))
+            }
             State::Up | State::GivenUp => None,
         }
     }
@@ -184,7 +191,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn an_outage_is_retried_for_its_budget_until_a_request_succeeds() {
-        let outage = Outage::new(POLICY);
+        let outage = Outage::new(POLICY, Arc::new(crate::clock::Tokio::new()));
         assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
         // The upstream's own wait wins, but not past the budget.
         let asked = Some(Duration::from_secs(90));

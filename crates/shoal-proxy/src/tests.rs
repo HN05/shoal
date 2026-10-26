@@ -19,6 +19,7 @@ use hyper_util::{
 use tokio::{net::TcpListener, sync::mpsc::UnboundedReceiver};
 
 use super::*;
+use crate::clock;
 
 /// A request as the upstream received it.
 #[derive(Debug, Clone)]
@@ -46,6 +47,7 @@ impl From<Response<Full<Bytes>>> for Reply {
 pub(crate) struct FakeUpstream {
     pub addr: SocketAddr,
     pub received: Arc<Mutex<Vec<Received>>>,
+    arrived: Arc<tokio::sync::Notify>,
 }
 
 impl FakeUpstream {
@@ -57,12 +59,14 @@ impl FakeUpstream {
         let received = Arc::new(Mutex::new(Vec::new()));
         let reply = Arc::new(reply);
         let log = received.clone();
+        let arrived = Arc::new(tokio::sync::Notify::new());
+        let arriving = arrived.clone();
         tokio::spawn(async move {
             loop {
                 let (stream, _) = listener.accept().await.unwrap();
-                let (reply, log) = (reply.clone(), log.clone());
+                let (reply, log, arriving) = (reply.clone(), log.clone(), arriving.clone());
                 let service = service_fn(move |request: Request<Incoming>| {
-                    let (reply, log) = (reply.clone(), log.clone());
+                    let (reply, log, arriving) = (reply.clone(), log.clone(), arriving.clone());
                     async move {
                         let (parts, body) = request.into_parts();
                         let body = body.collect().await.unwrap().to_bytes();
@@ -75,6 +79,7 @@ impl FakeUpstream {
                             });
                             reply(&log).into()
                         };
+                        arriving.notify_waiters();
                         match answer {
                             Reply::Answer(response) => Ok::<_, Infallible>(response),
                             Reply::Stall => std::future::pending().await,
@@ -84,7 +89,22 @@ impl FakeUpstream {
                 tokio::spawn(http1::Builder::new().serve_connection(TokioIo::new(stream), service));
             }
         });
-        Self { addr, received }
+        Self {
+            addr,
+            received,
+            arrived,
+        }
+    }
+
+    /// Wait until the upstream has received `count` requests.
+    pub(crate) async fn received(&self, count: usize) {
+        loop {
+            let arrived = self.arrived.notified();
+            if self.requests().len() >= count {
+                return;
+            }
+            arrived.await;
+        }
     }
 
     pub(crate) fn url(&self, prefix: &str) -> Upstream {
@@ -103,27 +123,45 @@ const RETRYING: retry::Policy = retry::Policy {
     budget: Duration::from_secs(60),
 };
 
-/// The same waits with a budget that an upstream which never recovers
-/// exhausts.
-const GIVING_UP: retry::Policy = retry::Policy {
-    budget: Duration::from_millis(300),
-    ..RETRYING
-};
-
 /// A proxy for `upstream`, serving in the background, and its events.
 pub(crate) async fn proxy(upstream: Upstream) -> (SocketAddr, UnboundedReceiver<Event>) {
-    proxy_with(upstream, RETRYING).await
+    proxy_with(upstream, RETRYING, Arc::new(clock::Tokio::new())).await
 }
 
 async fn proxy_with(
     upstream: Upstream,
     policy: retry::Policy,
+    clock: Arc<dyn clock::Clock>,
 ) -> (SocketAddr, UnboundedReceiver<Event>) {
     let (events, received) = tokio::sync::mpsc::unbounded_channel();
-    let proxy = Proxy::bind_with(upstream, events, policy).await.unwrap();
+    let proxy = Proxy::bind_with(upstream, events, policy, clock)
+        .await
+        .unwrap();
     let addr = proxy.local_addr().unwrap();
     tokio::spawn(proxy.serve());
     (addr, received)
+}
+
+/// A proxy for `upstream` whose waits and budget pass only as the returned
+/// clock is advanced, for tests in which the proxy gives up.
+async fn proxy_on(
+    upstream: Upstream,
+) -> (SocketAddr, UnboundedReceiver<Event>, Arc<clock::Manual>) {
+    let clock = Arc::new(clock::Manual::default());
+    let (addr, events) = proxy_with(upstream, retry::POLICY, clock.clone()).await;
+    (addr, events, clock)
+}
+
+/// Advance `clock` whenever the proxy waits on it until `request` is
+/// answered.
+async fn drive<T>(clock: &clock::Manual, request: impl std::future::Future<Output = T>) -> T {
+    tokio::pin!(request);
+    loop {
+        tokio::select! {
+            answer = &mut request => return answer,
+            () = clock.advance() => {}
+        }
+    }
 }
 
 /// The events the proxy reported so far.
@@ -223,8 +261,8 @@ async fn transient_failures_are_retried_until_the_upstream_recovers() {
 #[tokio::test]
 async fn an_outage_past_its_budget_reaches_the_agent_at_once() {
     let upstream = FakeUpstream::start(|_| reply(503, "busy")).await;
-    let (addr, mut events) = proxy_with(upstream.url(""), GIVING_UP).await;
-    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let (status, _, body) = drive(&clock, send(addr, Request::post("/v1/messages"), "{}")).await;
     assert_eq!(
         (status, body.as_str()),
         (StatusCode::SERVICE_UNAVAILABLE, "busy")
@@ -244,10 +282,10 @@ async fn an_outage_past_its_budget_reaches_the_agent_at_once() {
             _ => None,
         })
         .sum();
-    assert!(waited <= GIVING_UP.budget, "{waited:?}");
+    assert!(waited <= retry::POLICY.budget, "{waited:?}");
     // The outage outlasted its budget, so the next request fails at once.
     let attempts = upstream.requests().len();
-    send(addr, Request::post("/v1/messages"), "{}").await;
+    drive(&clock, send(addr, Request::post("/v1/messages"), "{}")).await;
     assert_eq!(upstream.requests().len(), attempts + 1);
 }
 
@@ -270,8 +308,8 @@ async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
     let closed = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let url = format!("http://{}", closed.local_addr().unwrap());
     drop(closed);
-    let (addr, mut events) = proxy_with(Upstream::parse(&url).unwrap(), GIVING_UP).await;
-    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    let (addr, mut events, clock) = proxy_on(Upstream::parse(&url).unwrap()).await;
+    let (status, _, body) = drive(&clock, send(addr, Request::post("/v1/messages"), "{}")).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body.contains("reach the upstream"), "{body}");
     assert_eq!(
@@ -363,9 +401,12 @@ async fn a_failure_after_content_reaches_the_agent_as_it_came() {
 async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
     // An HTTP failure, which Codex would retry itself, arrives in the stream.
     let upstream = FakeUpstream::start(|_| reply(503, "busy")).await;
-    let (addr, mut events) = proxy_with(upstream.url(""), GIVING_UP).await;
-    let (status, headers, body) =
-        send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let (status, headers, body) = drive(
+        &clock,
+        send(addr, Request::post("/responses"), r#"{"stream":true}"#),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers["content-type"], "text/event-stream");
     assert!(body.starts_with("event: response.failed\n"), "{body}");
@@ -382,8 +423,12 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
     let opening = format!("{RESPONSE_CREATED}{RESPONSE_OVERLOADED}");
     let reply_with = opening.clone();
     let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
-    let (addr, mut events) = proxy_with(upstream.url(""), GIVING_UP).await;
-    let (_, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let (_, _, body) = drive(
+        &clock,
+        send(addr, Request::post("/responses"), r#"{"stream":true}"#),
+    )
+    .await;
     assert_eq!(body, opening);
     assert_eq!(
         drain(&mut events).last(),
@@ -395,8 +440,12 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
 
     // Claude Code handles an HTTP failure itself, so it keeps it.
     let upstream = FakeUpstream::start(|_| reply(529, "overloaded")).await;
-    let (addr, mut events) = proxy_with(upstream.url(""), GIVING_UP).await;
-    let (status, _, _) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let (status, _, _) = drive(
+        &clock,
+        send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#),
+    )
+    .await;
     assert_eq!(status.as_u16(), 529);
     assert_eq!(
         drain(&mut events).last(),
@@ -414,11 +463,14 @@ async fn a_retry_the_upstream_never_answers_gives_up_with_the_outage() {
         _ => Reply::Stall,
     })
     .await;
-    let (addr, mut events) = proxy_with(upstream.url(""), GIVING_UP).await;
-    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let request = tokio::spawn(send(addr, Request::post("/v1/messages"), "{}"));
+    // The first attempt fails, and the retry after its wait never answers.
+    drive(&clock, upstream.received(2)).await;
+    clock.expire().await;
+    let (status, _, body) = request.await.unwrap();
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body.contains("did not answer"), "{body}");
-    assert_eq!(upstream.requests().len(), 2);
     assert_eq!(
         drain(&mut events).last(),
         Some(&Event::Failed {
