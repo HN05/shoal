@@ -860,12 +860,14 @@ defines with the same login, whose upstream is then
 the agent's own credentials and retries what the agent would otherwise fail on:
 a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
 that reports one of those before any content, waiting from a second, doubling to
-half a minute, or as long as the upstream's `Retry-After` asks. Once an outage
-has lasted five minutes the agent gets the failure, and later requests get theirs
-at once until one succeeds; a failure a retry does not fix, or one after content
-arrived, reaches the agent unchanged. A Codex stream that gives up ends with a
-`response.failed` event, which ends its turn, instead of an HTTP failure Codex
-would retry itself, and the wrapper reports that turn for `retry`. `status`
+half a minute, or as long as the upstream's `Retry-After`, or the reset time its
+error names, asks. Once an outage has lasted five minutes, or a reset falls past
+that, the agent gets the failure, and later requests get theirs at once until one
+succeeds; a failure a retry does not fix, or one after content arrived, reaches
+the agent unchanged. A Codex stream that gives up ends with a `response.failed`
+event, carrying the upstream's own error such as a usage limit and its reset,
+which ends its turn, instead of an HTTP failure Codex would retry itself, and the
+wrapper reports that turn for `retry`, which waits out rate and usage limits. `status`
 shows a request the proxy waits to retry; `--json` gives `proxy_retry` with
 `failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed

@@ -164,6 +164,20 @@ impl Outage {
     }
 }
 
+/// The wait an upstream error's reset time asks for, as a usage limit
+/// gives it: `resets_in_seconds`, or `resets_at` in Unix seconds.
+pub(crate) fn error_wait(error: &serde_json::Value) -> Option<Duration> {
+    if let Some(seconds) = error["resets_in_seconds"].as_u64() {
+        return Some(Duration::from_secs(seconds));
+    }
+    let resets_at = error["resets_at"].as_u64()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(Duration::from_secs(resets_at.saturating_sub(now)))
+}
+
 /// The wait a `Retry-After` header in seconds asks for.
 pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
     let seconds = headers

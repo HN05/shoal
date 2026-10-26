@@ -99,7 +99,7 @@ fn events_end_at_a_blank_line() {
 #[test]
 fn openai_streams_report_the_failure_they_end_with() {
     let stream = Protocol::OpenAiResponses
-        .failure_stream(Failure::Overloaded)
+        .failure_stream(Failure::Overloaded, None)
         .unwrap();
     let (_, name, data) = next_event(&stream).unwrap();
     assert_eq!(name, "response.failed");
@@ -108,11 +108,34 @@ fn openai_streams_report_the_failure_they_end_with() {
         Kind::Failure(Failure::Overloaded)
     );
     assert_eq!(
-        Protocol::AnthropicMessages.failure_stream(Failure::Overloaded),
+        Protocol::AnthropicMessages.failure_stream(Failure::Overloaded, None),
         None
     );
     assert_eq!(
-        Protocol::OpenAiResponses.failure_stream(Failure::Other),
+        Protocol::OpenAiResponses.failure_stream(Failure::Other, None),
         None
     );
+}
+
+#[test]
+fn usage_limits_are_rate_limits_whose_own_error_reaches_codex() {
+    let failed = json!({"response": {"error": {"code": "usage_limit_reached"}}});
+    assert_eq!(
+        Protocol::OpenAiResponses.classify("response.failed", &failed),
+        Kind::Failure(Failure::RateLimited)
+    );
+    // The upstream's error, named by its type, keeps its message and reset.
+    let error = json!({
+        "type": "usage_limit_reached",
+        "message": "You've hit your usage limit.",
+        "resets_in_seconds": 7200,
+    });
+    let stream = Protocol::OpenAiResponses
+        .failure_stream(Failure::RateLimited, Some(&error))
+        .unwrap();
+    let (_, _, data) = next_event(&stream).unwrap();
+    let reported = &data["response"]["error"];
+    assert_eq!(reported["code"], "usage_limit_reached");
+    assert_eq!(reported["message"], "You've hit your usage limit.");
+    assert_eq!(reported["resets_in_seconds"], 7200);
 }

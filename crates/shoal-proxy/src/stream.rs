@@ -65,7 +65,10 @@ impl Protocol {
     /// A stream that reports `failure`, which ends the agent's turn at once
     /// where an HTTP failure would start the agent's own retries; `None`
     /// where the agent handles the HTTP failure itself.
-    pub(crate) fn failure_stream(self, failure: Failure) -> Option<Bytes> {
+    /// The upstream's own `error`, from an HTTP failure, is what the agent
+    /// hears when there is one, so it sees the upstream's message and reset
+    /// time rather than the proxy's.
+    pub(crate) fn failure_stream(self, failure: Failure, error: Option<&Value>) -> Option<Bytes> {
         let code = match failure {
             Failure::RateLimited => "rate_limit_exceeded",
             Failure::Overloaded | Failure::Unreachable => "server_is_overloaded",
@@ -75,16 +78,26 @@ impl Protocol {
         match self {
             Self::AnthropicMessages => None,
             Self::OpenAiResponses => {
+                let mut reported = match error {
+                    Some(Value::Object(error)) => error.clone(),
+                    _ => serde_json::Map::new(),
+                };
+                let code = reported
+                    .get("code")
+                    .or_else(|| reported.get("type"))
+                    .cloned()
+                    .unwrap_or_else(|| code.into());
+                reported.insert("code".into(), code.clone());
+                reported
+                    .entry("message")
+                    .or_insert_with(|| format!("shoal-proxy gave up retrying: {code}").into());
                 let data = json!({
                     "type": "response.failed",
                     "response": {
                         "id": "resp_shoal_proxy",
                         "object": "response",
                         "status": "failed",
-                        "error": {
-                            "code": code,
-                            "message": format!("shoal-proxy gave up retrying: {code}"),
-                        },
+                        "error": reported,
                     },
                 });
                 Some(Bytes::from(format!(
@@ -117,7 +130,9 @@ fn anthropic_failure(error: Option<&str>) -> Failure {
 fn openai_failure(code: Option<&str>) -> Failure {
     match code {
         Some("server_is_overloaded" | "slow_down") => Failure::Overloaded,
-        Some("rate_limit_exceeded") => Failure::RateLimited,
+        // A usage limit lasts until it resets, longer than the proxy waits,
+        // so the turn ends and Shoal retries it.
+        Some("rate_limit_exceeded" | "usage_limit_reached") => Failure::RateLimited,
         Some("server_error" | "internal_error") => Failure::ServerError,
         _ => Failure::Other,
     }

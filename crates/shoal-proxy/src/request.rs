@@ -57,12 +57,16 @@ impl Buffered {
 
     /// The stream that reports `failure` to an agent that streams this
     /// request, as its protocol does.
-    pub(crate) fn failure_stream(&self, failure: Failure) -> Option<Bytes> {
+    pub(crate) fn failure_stream(
+        &self,
+        failure: Failure,
+        error: Option<&serde_json::Value>,
+    ) -> Option<Bytes> {
         let request: serde_json::Value = serde_json::from_slice(&self.body).ok()?;
         if request["stream"] != true {
             return None;
         }
-        self.protocol?.failure_stream(failure)
+        self.protocol?.failure_stream(failure, error)
     }
 
     /// This request addressed to `upstream`, with its own headers but the

@@ -87,3 +87,19 @@ fn a_failure_read_before_the_outage_started_does_not_break_it() {
     assert_eq!(outage.next_wait(2, None), Some(POLICY.first_wait * 2));
     assert_eq!(outage.bound(), Bound::Within(POLICY.budget));
 }
+
+#[test]
+fn an_error_that_names_its_reset_says_how_long_to_wait() {
+    assert_eq!(
+        error_wait(&serde_json::json!({"resets_in_seconds": 7200})),
+        Some(Duration::from_secs(7200))
+    );
+    let tomorrow = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 86_400;
+    let wait = error_wait(&serde_json::json!({"resets_at": tomorrow})).unwrap();
+    assert!(wait > POLICY.budget, "{wait:?}");
+    assert_eq!(error_wait(&serde_json::json!({"message": "busy"})), None);
+}

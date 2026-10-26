@@ -552,3 +552,46 @@ async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
         })
     );
 }
+
+#[tokio::test]
+async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
+    // The limit resets in two hours, past the proxy's budget.
+    let upstream = FakeUpstream::start(|_| {
+        reply(
+            429,
+            r#"{"error":{"type":"usage_limit_reached","message":"You've hit your usage limit.","resets_in_seconds":7200}}"#,
+        )
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(r#""code":"usage_limit_reached""#), "{body}");
+    assert!(body.contains("You've hit your usage limit."), "{body}");
+    assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::RateLimited,
+            in_stream: true
+        }]
+    );
+
+    // Claude Code gets the 429 as it came, at once.
+    let upstream = FakeUpstream::start(|_| {
+        let mut response = reply(
+            429,
+            r#"{"type":"error","error":{"type":"rate_limit_error"}}"#,
+        );
+        response
+            .headers_mut()
+            .insert("retry-after", "7200".parse().unwrap());
+        response
+    })
+    .await;
+    let (addr, _) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(status.as_u16(), 429);
+    assert!(body.contains("rate_limit_error"), "{body}");
+    assert_eq!(upstream.requests().len(), 1);
+}

@@ -2,7 +2,7 @@
 use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use bytes::Bytes;
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, body::Incoming, header, server::conn::http1, service::service_fn};
 use hyper_rustls::HttpsConnector;
 use hyper_util::{
@@ -44,6 +44,9 @@ struct Failed {
     retry_after: Option<Duration>,
     /// Whether the failure arrived inside a response stream.
     in_stream: bool,
+    /// The error object of an HTTP failure's JSON body, which the agent
+    /// hears in a failure stream in place of the HTTP failure.
+    error: Option<serde_json::Value>,
     response: Response<Body>,
 }
 
@@ -127,6 +130,7 @@ impl Forwarder {
                 failure: Failure::Unreachable,
                 retry_after: None,
                 in_stream: false,
+                error: None,
                 response: bad_gateway(&anyhow::anyhow!(
                     "the proxy gave up on the upstream's outage"
                 )),
@@ -138,6 +142,7 @@ impl Forwarder {
                 failure: Failure::Unreachable,
                 retry_after: None,
                 in_stream: false,
+                error: None,
                 response: bad_gateway(&anyhow::anyhow!(
                     "the upstream did not answer before the proxy gave up on its outage"
                 )),
@@ -158,17 +163,13 @@ impl Forwarder {
                     failure: Failure::Unreachable,
                     retry_after: None,
                     in_stream: false,
+                    error: None,
                     response: bad_gateway(&error),
                 });
             }
         };
         match (Failure::of_status(response.status()), request.protocol) {
-            (Some(failure), _) => Attempt::Failed(Failed {
-                failure,
-                retry_after: retry::retry_after(response.headers()),
-                in_stream: false,
-                response: passthrough(response),
-            }),
+            (Some(failure), _) => failed_status(failure, response).await,
             (None, Some(protocol)) if is_event_stream(&response) => {
                 opened(protocol, response).await
             }
@@ -207,7 +208,7 @@ impl Forwarder {
         if !failed.failure.retryable() {
             return failed.response;
         }
-        let failed = match request.failure_stream(failed.failure) {
+        let failed = match request.failure_stream(failed.failure, failed.error.as_ref()) {
             Some(stream) if !failed.in_stream => Failed {
                 in_stream: true,
                 response: event_stream(stream),
@@ -228,6 +229,31 @@ impl Forwarder {
     }
 }
 
+/// An HTTP failure, read whole since it is small: its error may say when
+/// to try again, and is what the agent hears if the proxy gives up.
+async fn failed_status(failure: Failure, response: Response<Incoming>) -> Attempt {
+    let (mut parts, body) = response.into_parts();
+    strip_hop_by_hop(&mut parts.headers);
+    parts.headers.remove(header::CONTENT_LENGTH);
+    let body = match body.collect().await {
+        Ok(body) => body.to_bytes(),
+        Err(_) => Bytes::new(),
+    };
+    let error = serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .map(|body| body["error"].clone())
+        .filter(serde_json::Value::is_object);
+    let retry_after =
+        retry::retry_after(&parts.headers).or_else(|| error.as_ref().and_then(retry::error_wait));
+    Attempt::Failed(Failed {
+        failure,
+        retry_after,
+        in_stream: false,
+        error,
+        response: Response::from_parts(parts, full(body)),
+    })
+}
+
 /// The first events of `response`'s stream: a failure among them, or an end
 /// before any content, is an attempt that failed; content goes to the agent.
 async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
@@ -243,6 +269,7 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
             failure: Failure::ServerError,
             retry_after: None,
             in_stream: false,
+            error: None,
             response: bad_gateway(&anyhow::anyhow!(
                 "the upstream's stream ended before any content"
             )),
@@ -251,12 +278,14 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
             failure,
             retry_after: None,
             in_stream: true,
+            error: None,
             response: Response::from_parts(parts, full(read)),
         }),
         Err(error) => Attempt::Failed(Failed {
             failure: Failure::ServerError,
             retry_after: None,
             in_stream: false,
+            error: None,
             response: bad_gateway(&error),
         }),
     }
