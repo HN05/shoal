@@ -11939,6 +11939,52 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
 }
 
 #[test]
+fn work_setup_skip_accepts_a_failed_setup() {
+    let fixture = Fixture::new();
+    let script = fixture.root.path().join("setup.sh");
+    install_test_script(
+        &script,
+        "#!/bin/sh\nprintf partial > setup-result\nexit 17\n",
+    );
+    let input = fixture.root.path().join("local.toml");
+    fs::write(
+        &input,
+        format!("setup_cmd = {:?}\n", script.to_str().unwrap()),
+    )
+    .unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        input.to_str().unwrap(),
+    ]);
+    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "skipped"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("skip it with `shoal work setup skipped --skip`"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fixture.ok(&["status", "skipped"])["workspace"]["state"],
+        "failed"
+    );
+
+    let skipped = fixture.ok(&["work", "setup", "skipped", "--skip"]);
+    assert_eq!(skipped["state"], "ready");
+    let path = Path::new(skipped["path"].as_str().unwrap());
+    // Skipping keeps what setup left and does not run it again.
+    assert_eq!(
+        fs::read_to_string(path.join("setup-result")).unwrap(),
+        "partial"
+    );
+    let again = fixture.run(&["work", "setup", "skipped", "--skip"]);
+    assert!(!again.status.success());
+    assert!(String::from_utf8_lossy(&again.stderr).contains("only a failed setup can be skipped"));
+}
+
+#[test]
 fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "setup_cmd = 'must-not-run'\n");
@@ -12134,16 +12180,15 @@ Path('setup-result').write_text('complete')
         let inspection = fixture.ok(&["status", "survivor"]);
         let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
         let pid = fs::read_to_string(path.join("survivor-pid")).unwrap();
-        // Reap the test-owned survivor before making assertions about the output.
-        repaired_workspaces(
-            &fixture,
-            &[
-                "doctor",
-                "survivor",
-                "--repair",
-                "--stop",
-                "--acknowledge-stopped",
-            ],
+        // Reap the test-owned survivor before making assertions about the
+        // output, as the message says: stop, then skip the failed setup.
+        let stopped = fixture.run(&["stop", "survivor", "--yes"]);
+        let skipped = fixture.run(&["work", "setup", "survivor", "--skip"]);
+        assert!(stopped.status.success(), "{stopped:?}");
+        assert!(skipped.status.success(), "{skipped:?}");
+        assert_eq!(
+            fixture.ok(&["status", "survivor"])["workspace"]["state"],
+            "ready"
         );
         assert!(!output.status.success(), "{transcript}");
         assert_eq!(inspection["workspace"]["state"], "failed");
@@ -12161,8 +12206,9 @@ Path('setup-result').write_text('complete')
             transcript.contains(&format!("owned processes still running (PID {pid})")),
             "{transcript}"
         );
+        assert!(transcript.contains("shoal stop survivor"), "{transcript}");
         assert!(
-            transcript.contains("shoal doctor survivor --repair"),
+            transcript.contains("shoal work setup survivor --skip"),
             "{transcript}"
         );
         assert!(!transcript.contains("[i]gnore"), "{transcript}");

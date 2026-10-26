@@ -26,6 +26,13 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
             workspace,
             checkpoint,
         } => restore::run(ctx, workspace, checkpoint).await,
-        WorkCommand::Setup { workspace } => workspaces::setup(ctx, workspace).await,
+        WorkCommand::Setup {
+            workspace,
+            skip: false,
+        } => workspaces::setup(ctx, workspace).await,
+        WorkCommand::Setup {
+            workspace,
+            skip: true,
+        } => workspaces::skip_setup(ctx, workspace).await,
     }
 }

@@ -1671,11 +1671,12 @@ launching an agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. On failure, interactive mode asks whether to delete the
 new workspace and branch, ignore the failure and continue, or keep it for
 inspection (default). JSON/noninteractive mode returns nonzero, keeps the
-workspace, and sends setup output to stderr. Then choose explicitly:
+workspace, and sends setup output to stderr. Then choose explicitly; `--skip`
+leaves what setup did and is not available to workspace processes:
 
 ```sh
 shoal work setup fix-login                 # Rerun setup and the post-setup hook
-shoal doctor fix-login --repair             # Ignore the failure after ownership checks
+shoal work setup fix-login --skip          # Accept the failure after ownership checks
 shoal rm fix-login --yes                    # Delete this workspace
 ```
 

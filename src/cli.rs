@@ -1383,6 +1383,10 @@ impl Command {
             self,
             Command::Doctor { .. }
                 | Command::Contribute(_)
+                | Command::Work {
+                    command: Some(WorkCommand::Setup { skip: true, .. }),
+                    ..
+                }
                 | Command::Cleanup { .. }
                 | Command::Update
                 | Command::Config {
@@ -1605,6 +1609,9 @@ pub enum WorkCommand {
     Setup {
         /// Workspace to use; defaults to the current workspace or picker.
         workspace: Option<String>,
+        /// Accept a failed setup as it is and mark the verified workspace ready.
+        #[arg(long)]
+        skip: bool,
     },
 }
 
@@ -2355,7 +2362,7 @@ mod tests {
             assert!(matches!(
                 cli.command,
                 Some(Command::Work {
-                    command: Some(WorkCommand::Setup { workspace: target }),
+                    command: Some(WorkCommand::Setup { workspace: target, skip: false }),
                     ..
                 }) if target.as_deref() == workspace
             ));
@@ -2547,6 +2554,14 @@ mod tests {
         assert!(!show.command.unwrap().is_administrative());
         let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
         assert!(reset.command.unwrap().is_administrative());
+    }
+
+    #[test]
+    fn skipping_setup_is_administrative() {
+        let skip = Cli::try_parse_from(["shoal", "work", "setup", "--skip"]).unwrap();
+        assert!(skip.command.unwrap().is_administrative());
+        let retry = Cli::try_parse_from(["shoal", "work", "setup"]).unwrap();
+        assert!(!retry.command.unwrap().is_administrative());
     }
 
     #[test]

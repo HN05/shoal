@@ -693,7 +693,7 @@ async fn add_planned(
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
-                "setup of {name} did not complete; inspect it with `shoal doctor {name}`"
+                "setup of {name} did not complete; retry it with `shoal work setup {name}` or skip it with `shoal work setup {name} --skip`"
             );
             super::agent_queue::fail(ctx, entry, &error).await;
         }
@@ -1313,6 +1313,26 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
     Ok(0)
 }
 
+/// Accept a failed setup as it is: mark the workspace ready once its
+/// worktree verifies and no setup process remains.
+pub(super) async fn skip_setup(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    ensure!(
+        workspace.state == WorkspaceState::Failed,
+        "{} is {}; only a failed setup can be skipped",
+        workspace.name,
+        workspace.state
+    );
+    ignore_setup_failure(ctx, &workspace).await?;
+    ctx.emit_styled(
+        Style::Success,
+        &format!("Skipped setup of {}", workspace.name),
+        client::inspect(&ctx.paths, workspace.id).await?.workspace,
+    )?;
+    Ok(0)
+}
+
 /// The variables `[env]` adds to the workspace's tracked executions and hooks.
 pub(in crate::cli) async fn configured_environment(
     ctx: &Context,
@@ -1418,7 +1438,7 @@ pub(super) async fn setup_workspace(
         let name = &workspace.name;
         ensure!(
             ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes`"
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, skip it with `shoal work setup {name} --skip`, or delete with `shoal rm {name} --yes`"
         );
         eprintln!(
             "{} for {name}: {error}",
@@ -1456,7 +1476,7 @@ async fn report_setup_verification_failure(
         .as_deref()
         .unwrap_or("process state is unknown");
     let message = format!(
-        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Inspect with `shoal doctor {name}`; repair with `shoal doctor {name} --repair` after checking the reported processes. Use `--stop` to stop verified survivors.",
+        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {name}`, then retry setup with `shoal work setup {name}` or skip it with `shoal work setup {name} --skip`.",
         workspace.path.display()
     );
     ensure!(ctx.interactive(), "{message}");
@@ -1503,11 +1523,17 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
         },
     )
     .await?;
+    let issues: Vec<_> = reports
+        .iter()
+        .flat_map(|report| report.issues.iter().map(String::as_str))
+        .collect();
+    let name = &workspace.name;
     ensure!(
         reports
             .iter()
             .all(|r| r.workspace.state == WorkspaceState::Ready),
-        "workspace still has unresolved ownership or processes; inspect with shoal doctor"
+        "setup of {name} cannot be skipped: {}; stop its processes with `shoal stop {name}`, then retry",
+        issues.join("; ")
     );
     Ok(())
 }
