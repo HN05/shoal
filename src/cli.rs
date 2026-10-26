@@ -145,7 +145,7 @@ pub struct WorkspaceScope {
     pub all: bool,
 }
 
-/// The workspaces of a command that acts on several.
+// The workspaces of a command that acts on several.
 #[derive(Debug, Default, Args)]
 pub struct WorkspaceTargets {
     #[arg(value_name = "WORKSPACE")]
