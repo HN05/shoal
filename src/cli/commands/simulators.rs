@@ -5,7 +5,7 @@ use serde_json::json;
 use super::acquisition::{Acquisition, obtain};
 use crate::{
     cli::{
-        WorkspaceScope,
+        args::WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},

@@ -1,7 +1,7 @@
 //! Workspace maintenance commands beneath `shoal work`.
 use anyhow::Result;
 
-use crate::cli::{WorkCommand, context::Context};
+use crate::cli::{args::workspace::WorkCommand, context::Context};
 
 use super::{restore, workspaces};
 

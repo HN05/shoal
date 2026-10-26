@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        WorkspaceScope,
+        args::WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},

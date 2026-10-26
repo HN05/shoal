@@ -7,8 +7,15 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        AttachArgs, BodyArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
-        client, context::Context, ui,
+        args::{
+            BodyArgs,
+            changes::{
+                AttachArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
+            },
+        },
+        client,
+        context::Context,
+        ui,
     },
     daemon::links::proposals::{OpenOutcome, Proposed},
     forge::{

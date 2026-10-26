@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::EXIT_BUSY;
 use crate::{
     cli::{
-        ApprovalsArgs,
+        args::approvals::ApprovalsArgs,
         client::{self, request},
         context::Context,
         output::{Palette, Style},
@@ -38,7 +38,7 @@ pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
 fn decision_details(args: &ApprovalsArgs) -> Result<ProposalDecision> {
     Ok(ProposalDecision {
         title: args.title.clone(),
-        body: super::items::read_body(crate::cli::BodyArgs {
+        body: super::items::read_body(crate::cli::args::BodyArgs {
             body: args.body.body.clone(),
             body_file: args.body.body_file.clone(),
         })?,

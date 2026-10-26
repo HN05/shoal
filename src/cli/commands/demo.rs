@@ -8,7 +8,8 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        DemoCommand, client,
+        args::sessions::DemoCommand,
+        client,
         context::Context,
         internal::{Worker, internal_command},
         output::{Palette, Style},

@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        CleanupArgs, CleanupKind,
+        args::lifecycle::{CleanupArgs, CleanupKind},
         client::request,
         context::Context,
         output::{Palette, Style},

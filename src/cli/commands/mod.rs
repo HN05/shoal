@@ -70,9 +70,20 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        AlertsCommand, ApprovalsCommand, Cli, Command, ConfigCommand, ExportArgs, ForgeCommand,
-        HistoryKind, ImportArgs, InternalCommand, QuestionAskArgs, QuestionsCommand, ShellCommand,
-        WorkspaceScope, agents, client,
+        Cli, Command, agents,
+        args::{
+            WorkspaceScope,
+            approvals::ApprovalsCommand,
+            coordination::{QuestionAskArgs, QuestionsCommand},
+            diagnostics::AlertsCommand,
+            integration::ShellCommand,
+            internal::InternalCommand,
+            lifecycle::{ExportArgs, ImportArgs},
+            repository::ForgeCommand,
+            resources::HistoryKind,
+            service::ConfigCommand,
+        },
+        client,
         context::Context,
         output::{Palette, Style},
     },
@@ -224,7 +235,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         cli.command,
         Some(
             Command::Daemon {
-                command: crate::cli::DaemonCommand::Run { .. }
+                command: crate::cli::args::service::DaemonCommand::Run { .. }
             } | Command::Skill {
                 command: Some(_),
                 ..
@@ -265,7 +276,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     if !matches!(
         cli.command,
         Some(Command::Daemon {
-            command: crate::cli::DaemonCommand::Run { .. }
+            command: crate::cli::args::service::DaemonCommand::Run { .. }
         })
     ) {
         ctx.learn_pinned_forges();
@@ -517,7 +528,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => questions::run(&ctx, args).await,
         Command::Messages {
             command:
-                Some(crate::cli::MessagesCommand::Send {
+                Some(crate::cli::args::coordination::MessagesCommand::Send {
                     message,
                     body_file,
                     workspace,

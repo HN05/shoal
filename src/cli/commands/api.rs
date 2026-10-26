@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 use serde_json::Value;
 
 use crate::{
-    cli::{ApiArgs, client, context::Context, ui},
+    cli::{args::repository::ApiArgs, client, context::Context, ui},
     forge::raw::{HttpMethod, RawRequest},
 };
 

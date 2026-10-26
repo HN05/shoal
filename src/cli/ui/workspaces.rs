@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     cli::{
-        WorkspaceScope,
+        args::WorkspaceScope,
         availability::{Availability, Fit},
         client,
         context::Context,

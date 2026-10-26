@@ -14,7 +14,8 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        SkillCommand, SkillName, context,
+        args::integration::{SkillCommand, SkillName},
+        context,
         ui::{self, ModifiedSkillChoice},
     },
     paths::Paths,

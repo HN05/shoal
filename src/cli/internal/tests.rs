@@ -3,7 +3,7 @@ use std::os::unix::ffi::OsStringExt;
 use clap::Parser;
 
 use super::*;
-use crate::cli::{Cli, Command, InternalCommand};
+use crate::cli::{Cli, Command, args::internal::InternalCommand};
 
 #[test]
 fn shoal_argv_names_only_a_non_default_state_directory() {

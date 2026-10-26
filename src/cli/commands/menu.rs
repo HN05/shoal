@@ -16,7 +16,9 @@ use super::{
 };
 use crate::{
     cli::{
-        Command, ConfirmationArgs, ItemArgs, WorkspaceTargets, agents, client,
+        Command, agents,
+        args::{ConfirmationArgs, WorkspaceTargets, items::ItemArgs},
+        client,
         client::request,
         context::Context,
         internal::{Worker, internal_command},
@@ -605,7 +607,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
         Row::Question { id, .. } => Command::Questions {
             command: None,
-            args: crate::cli::QuestionsArgs {
+            args: crate::cli::args::coordination::QuestionsArgs {
                 id: Some(id),
                 ..Default::default()
             },

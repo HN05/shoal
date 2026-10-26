@@ -5,7 +5,8 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        RepoCommand, agents,
+        agents,
+        args::repository::RepoCommand,
         client::{self, request},
         context::Context,
         output::{Palette, Style},

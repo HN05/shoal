@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     cli::{
-        CatalogKind,
+        args::resources::CatalogKind,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},

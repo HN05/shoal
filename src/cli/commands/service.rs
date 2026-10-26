@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::{DaemonCommand, client, context::Context, output::Style, ui},
+    cli::{args::service::DaemonCommand, client, context::Context, output::Style, ui},
     daemon,
     paths::Paths,
     protocol::Method,

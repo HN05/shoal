@@ -6,7 +6,12 @@ use anyhow::{Context as _, Result, ensure};
 use super::workspaces::{self, AgentLaunch, Creation};
 use crate::{
     agent::Agent,
-    cli::{ItemArgs, RelationArgs, client, context::Context, ui},
+    cli::{
+        args::items::{ItemArgs, RelationArgs},
+        client,
+        context::Context,
+        ui,
+    },
     forge::{
         IssueInput, PullRequest,
         items::link::{ItemKind, Link, LinkTarget, Selection},

@@ -8,7 +8,11 @@ use serde_json::json;
 use super::{ports, resources, resources::Members, secrets, simulators, workspace_overviews};
 use crate::{
     cli::{
-        AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind, WorkspaceScope, client,
+        args::{
+            WorkspaceScope,
+            resources::{AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind},
+        },
+        client,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},

@@ -3,7 +3,12 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{ForgeCiCommand, RunArgs, RunTarget, client, context::Context, ui},
+    cli::{
+        args::repository::{ForgeCiCommand, RunArgs, RunTarget},
+        client,
+        context::Context,
+        ui,
+    },
     forge::ci::{
         CiAction, JobState,
         checks::CheckLog,

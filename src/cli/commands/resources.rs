@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     cli::{
-        WorkspaceScope,
+        args::WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},

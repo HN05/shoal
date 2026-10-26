@@ -3,7 +3,8 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        ItemArgs, client,
+        args::items::ItemArgs,
+        client,
         context::Context,
         forge_hosts::ForgeHosts,
         output::{Palette, Style},

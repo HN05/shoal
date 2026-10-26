@@ -3,7 +3,9 @@
 use anyhow::{Result, ensure};
 
 use crate::cli::{
-    Command, ConfirmationArgs, RepoCommand, client,
+    Command,
+    args::{ConfirmationArgs, repository::RepoCommand},
+    client,
     context::Context,
     ui::{self, KeyBindings},
 };

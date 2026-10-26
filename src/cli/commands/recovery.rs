@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        WorkspaceScope,
+        args::WorkspaceScope,
         client::{self, request},
         context::Context,
         output::{Palette, Style},

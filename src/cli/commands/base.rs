@@ -4,7 +4,8 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        BaseCommand, client,
+        args::workspace::BaseCommand,
+        client,
         context::Context,
         ui::{self, Fallback},
     },

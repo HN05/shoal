@@ -58,7 +58,7 @@ fn main() {
         && !matches!(
             cli.command,
             Some(cli::Command::Daemon {
-                command: cli::DaemonCommand::Run { managed: true }
+                command: cli::args::service::DaemonCommand::Run { managed: true }
             })
         )
     {

@@ -1,4 +1,7 @@
+use clap::ValueEnum;
+
 use super::*;
+use crate::model::Relation;
 
 /// Whether `args` resolve to JSON output under the `SHOAL_OUTPUT` `setting`.
 fn resolves_json(args: &[&str], setting: Option<&str>) -> anyhow::Result<bool> {

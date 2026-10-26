@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        QuestionsArgs,
+        args::coordination::QuestionsArgs,
         client::{self, request},
         context::Context,
         installed::{Executable, arguments, replace_option},

@@ -9,7 +9,10 @@ use super::{
 };
 use crate::{
     agent::Agent,
-    cli::{ContributeArgs, agents, client::request, context::Context, output::Palette, ui},
+    cli::{
+        agents, args::create::ContributeArgs, client::request, context::Context, output::Palette,
+        ui,
+    },
     config::{Config, repo::ConfigLayers},
     forge::items::link::Link,
     git,

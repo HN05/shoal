@@ -1,6 +1,6 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 use crate::{
-    cli::{WorkspaceTargets, client, context::Context, terminal, ui},
+    cli::{args::WorkspaceTargets, client, context::Context, terminal, ui},
     daemon::{
         recovery::{ReconcileOptions, Report},
         workspace::Discarded,
