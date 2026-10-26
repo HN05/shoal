@@ -355,8 +355,10 @@ their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
 new commands receive the renamed identity. Existing PR watches and acknowledgements
 block renaming because their recorded remote head remains the original branch.
-An interrupted rename requires `shoal doctor --repair` before reuse;
-confirmed-deleted worktrees can still be removed through normal cleanup.
+An interrupted rename leaves the workspace failed until `shoal work rename` runs
+again: it first finishes the interrupted rename when Git completed it, or cancels it
+when the branch is unchanged, then renames to the branch given. Confirmed-deleted
+worktrees can still be removed through normal cleanup.
 
 `shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `--repo` selects one explicitly and

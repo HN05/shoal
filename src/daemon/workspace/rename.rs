@@ -2,7 +2,7 @@
 mod intent;
 
 use super::Manager;
-use crate::{daemon::store, git, model::Workspace};
+use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
 use rusqlite::params;
@@ -27,7 +27,7 @@ impl Manager {
                 },
             )
             .await?;
-        self.ensure_no_pending_rename(&workspace.id).await?;
+        let workspace = self.finish_pending_rename(workspace).await?;
         self.verify_rename_source(&workspace, &repo.path).await?;
         ensure!(
             self.pr_registration(&workspace.id).await?.is_none(),
@@ -55,7 +55,7 @@ impl Manager {
                 &workspace.id,
                 crate::state::WorkspaceState::Failed,
                 Some(format!(
-                    "rename needs repair: {error:#}; run shoal doctor --repair"
+                    "rename needs repair: {error:#}; run shoal work rename again to finish it"
                 )),
             )
             .await?;
@@ -144,6 +144,46 @@ impl Manager {
             .await
     }
 
+    /// Finish a rename an earlier attempt left unfinished before starting
+    /// another. The caller holds the repository Git gate and the workspace's
+    /// resource guard, so the lifecycle is reserved in the store directly.
+    async fn finish_pending_rename(&self, workspace: Workspace) -> Result<Workspace> {
+        if self.rename_intent(&workspace.id).await?.is_none() {
+            return Ok(workspace);
+        }
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let state: WorkspaceState =
+                    tx.query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
+                        row.get(0)
+                    })?;
+                ensure!(
+                    matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
+                    "workspace is {state}; wait for that operation to finish before renaming"
+                );
+                tx.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1",
+                    params![id, WorkspaceState::Reconciling],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+        let finished = self.finish_workspace_rename(&workspace, false).await;
+        let (state, error) = match &finished {
+            Ok(_) => (WorkspaceState::Ready, None),
+            Err(error) => (
+                WorkspaceState::Failed,
+                Some(format!("rename needs repair: {error:#}")),
+            ),
+        };
+        self.set_state(&workspace.id, state, error).await?;
+        finished?;
+        self.workspace(&workspace.id).await
+    }
+
     pub(crate) async fn ensure_no_pending_rename(&self, id: &str) -> Result<()> {
         let id = id.to_owned();
         self.store
@@ -167,7 +207,7 @@ impl Manager {
             .filter(|actual| *actual == workspace.branch || *actual == intent.branch);
         let Some(actual) = actual else {
             bail!(
-                "unfinished rename expected branch {} or {}; restore one before repair",
+                "unfinished rename expected branch {} or {}; check out one of them, then retry",
                 workspace.branch,
                 intent.branch
             );

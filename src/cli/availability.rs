@@ -18,6 +18,8 @@ pub enum Need {
     Any,
     /// A ready workspace; changes and executions require one.
     Ready,
+    /// A ready workspace, or a failed one an interrupted operation left to finish.
+    Settled,
     /// A workspace that accepts issue and PR link changes.
     Links,
     /// A workspace setup can reserve: preparing, ready or failed, with no
@@ -50,7 +52,7 @@ impl Need {
             ["stop"] => Self::Running,
             ["repo", "labels"] | ["forge", "capabilities" | "api" | "ci", ..] => Self::Any,
             ["work", "setup"] => Self::Setup,
-            ["work", "rename"] => Self::Ready,
+            ["work", "rename"] => Self::Settled,
             ["work", "restore"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["work", "base", "clear"] => Self::Base,
@@ -105,9 +107,12 @@ impl Need {
             Self::Holds => "no workspace has holds",
             Self::Marks => "no workspace is marked ready",
             Self::Directory => "no workspace directory exists",
-            Self::Any | Self::Ready | Self::Links | Self::Setup | Self::Checkpoint => {
-                "no workspaces"
-            }
+            Self::Any
+            | Self::Ready
+            | Self::Settled
+            | Self::Links
+            | Self::Setup
+            | Self::Checkpoint => "no workspaces",
         }
     }
 }
@@ -166,10 +171,16 @@ impl Availability {
             Need::Base => workspace.base_workspace.is_none(),
             Need::Holds => workspace.holds.is_empty(),
             Need::Marks => workspace.review.is_empty(),
-            Need::Any | Need::Ready | Need::Links | Need::Setup | Need::Checkpoint => false,
+            Need::Any
+            | Need::Ready
+            | Need::Settled
+            | Need::Links
+            | Need::Setup
+            | Need::Checkpoint => false,
         };
         let settled = match self.need {
             Need::Ready | Need::Done => accepts(&[WorkspaceState::Ready]),
+            Need::Settled => accepts(&[WorkspaceState::Ready, WorkspaceState::Failed]),
             Need::Links => state.accepts_links(),
             Need::Setup => accepts(&[
                 WorkspaceState::Preparing,

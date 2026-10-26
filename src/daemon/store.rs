@@ -699,7 +699,7 @@ pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &str) -> Result<(
             "SELECT 1 FROM workspace_renames WHERE workspace_id=?1",
             [workspace_id]
         )?,
-        "workspace has an unfinished rename; run shoal doctor --repair first"
+        "workspace has an unfinished rename; run shoal work rename again to finish it"
     );
     Ok(())
 }

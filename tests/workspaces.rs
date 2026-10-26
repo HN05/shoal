@@ -609,7 +609,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             assert!(
                 report[0]["issues"]
                     .to_string()
-                    .contains("restore one before repair")
+                    .contains("check out one of them")
             );
             assert_eq!(
                 db.query_row("SELECT COUNT(*) FROM workspace_renames", [], |row| row
@@ -650,6 +650,39 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             fs::read_to_string(path.join("dirty")).unwrap(),
             "preserve\n"
         );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM workspace_renames", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+}
+
+#[test]
+fn work_rename_finishes_an_interrupted_rename() {
+    for (git_branch, requested) in [("original", "new/topic"), ("new/topic", "new/topic")] {
+        let mut fixture = Fixture::new();
+        let workspace = fixture.add("original");
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        let id = workspace["id"].as_str().unwrap();
+        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        db.execute("INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,'new-topic','new/topic')", [id]).unwrap();
+        db.execute(
+            "UPDATE workspaces SET state='reconciling' WHERE id=?1",
+            [id],
+        )
+        .unwrap();
+        if git_branch != "original" {
+            git(path, &["branch", "-m", git_branch]);
+        }
+        fixture.restart();
+        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        // Running the rename again finishes or cancels the interrupted one,
+        // then renames to the branch asked for.
+        let renamed = fixture.ok(&["work", "rename", id, requested]);
+        assert_eq!(renamed["branch"], "new/topic");
+        assert_eq!(renamed["state"], "ready");
         assert_eq!(
             db.query_row("SELECT COUNT(*) FROM workspace_renames", [], |row| row
                 .get::<_, i64>(0))
