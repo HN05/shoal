@@ -2,6 +2,11 @@
 //! on a terminal: an fzf list per view that Tab cycles, reloading its rows
 //! from `shoal internal menu-rows`. Each view binds only the keys that mean
 //! something there. A selection plus key becomes an ordinary [`Command`].
+use std::{
+    os::unix::ffi::{OsStrExt, OsStringExt},
+    path::{Path, PathBuf},
+};
+
 use anyhow::{Context as _, Result, ensure};
 use clap::ValueEnum;
 
@@ -228,7 +233,7 @@ enum Row {
         name: String,
     },
     /// A worktree no workspace owns, by its path.
-    Untracked(String),
+    Untracked(PathBuf),
     Workspace(String),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -258,9 +263,7 @@ impl Row {
                 workspace,
                 name: demo.launch.name.clone(),
             },
-            Item::Untracked { worktree } => {
-                Self::Untracked(worktree.path.to_string_lossy().into_owned())
-            }
+            Item::Untracked { worktree } => Self::Untracked(worktree.path.clone()),
         }
     }
 
@@ -280,7 +283,7 @@ impl Row {
                 format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
             }
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
-            Self::Untracked(path) => format!("untracked:{path}"),
+            Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -298,7 +301,7 @@ impl Row {
             return Ok(Self::Notification(rest.to_owned()));
         }
         if kind == "untracked" {
-            return Ok(Self::Untracked(rest.to_owned()));
+            return Ok(Self::Untracked(decode_path(rest)?));
         }
         let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let workspace = workspace.to_owned();
@@ -344,6 +347,29 @@ impl Row {
             Self::Untracked(_) | Self::Add => None,
         }
     }
+}
+
+/// A path as hex digits of its bytes, since a picker id must survive the
+/// tabs, newlines and surrounding spaces a path may hold.
+fn encode_path(path: &Path) -> String {
+    path.as_os_str()
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn decode_path(hex: &str) -> Result<PathBuf> {
+    let invalid = || anyhow::anyhow!("picker returned an invalid row");
+    let bytes = (0..hex.len())
+        .step_by(2)
+        .map(|at| {
+            hex.get(at..at + 2)
+                .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                .ok_or_else(invalid)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(PathBuf::from(std::ffi::OsString::from_vec(bytes)))
 }
 
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
@@ -623,7 +649,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         },
         Row::Untracked(path) => Command::Work {
             command: Some(crate::cli::WorkCommand::Adopt {
-                path: path.into(),
+                path,
                 repository: None,
                 copy: false,
             }),
