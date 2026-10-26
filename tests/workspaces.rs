@@ -9778,14 +9778,23 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
             .cloned()
             .collect()
     };
-    let listed = untracked(&fixture);
+    // A listing skips a repository whose Git gate a background task holds,
+    // so each read waits until the worktree is in it.
+    let mut listed = Vec::new();
+    wait_until("the untracked worktree in the inbox", || {
+        listed = untracked(&fixture);
+        !listed.is_empty()
+    });
     assert_eq!(listed.len(), 1, "{listed:?}");
     assert_eq!(
         Path::new(listed[0]["worktree"]["path"].as_str().unwrap()),
         fs::canonicalize(&stray).unwrap()
     );
-    let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
-    assert!(text.contains("untracked"), "{text}");
+    let mut text = String::new();
+    wait_until("the untracked worktree in the inbox text", || {
+        text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
+        text.contains("untracked")
+    });
     assert!(text.contains("adopt it with shoal work adopt"), "{text}");
     // Workspace processes see only their own tree.
     let scoped = fixture
