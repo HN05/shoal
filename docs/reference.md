@@ -274,9 +274,23 @@ of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking. Stopping several workspaces does not ask: without
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
-Run stop and resume outside scoped executions, except that a workspace process
-may discard the stopped work of a workspace below its own with
+Run stop, restart and resume outside scoped executions, except that a workspace
+process may discard the stopped work of a workspace below its own with
 `shoal resume <workspace> --discard`.
+
+`shoal restart [workspace...]` restarts running agents in place: the wrapper
+stops the agent and starts its saved session again in the same terminal with the
+continuation prompt, as an automatic restore does, so `shoal attach` keeps
+working. The restore command finds the agent through `PATH` again, so an updated
+agent binary runs; the wrapper keeps its Shoal binary. `--all` selects every
+workspace and `--agent <name>` only agents of that name. Agents restart one at a
+time, idle ones first, each once the previous one runs again and at least 10
+seconds after it started; with `--wait`, each only once its turn ends, where a
+permission prompt or an agent without turn reports counts as working. A
+restarted agent keeps its agent slot, and commands keep running. Agents without
+a command to resume their session and executions whose wrapper is gone are
+skipped, for `shoal stop` and `shoal resume`. An agent that does not start again
+stays stopped for `shoal resume`, and the exit status is 1.
 
 `shoal resume [workspace...]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace,

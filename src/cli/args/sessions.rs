@@ -3,7 +3,10 @@ use std::ffi::OsString;
 
 use clap::Subcommand;
 
-use crate::cli::args::WorkspaceTargets;
+use crate::{
+    agent::Agent,
+    cli::args::{AgentParser, WorkspaceTargets},
+};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -18,6 +21,20 @@ pub enum SessionsCommand {
         /// Forget the saved agents and commands instead of resuming them.
         #[arg(long)]
         discard: bool,
+    },
+    /// Restart running agents in their terminals, resuming their sessions.
+    ///
+    /// Agents restart one at a time, idle ones first, and run the agent's
+    /// current binary; commands keep running.
+    Restart {
+        #[command(flatten)]
+        targets: WorkspaceTargets,
+        /// Restart only agents of this name, such as claude.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Restart each agent once its turn ends.
+        #[arg(long)]
+        wait: bool,
     },
     /// Attach this terminal to a workspace's agent session; Ctrl-\ detaches.
     ///
