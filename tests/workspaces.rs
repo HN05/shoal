@@ -80,7 +80,7 @@ impl Fixture {
         );
         // Model a starting commit already present on a remote, without network I/O.
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        let daemon = DaemonGuard::start(root.path(), &mut cli(root.path()));
+        let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let fixture = Self { root, repo, daemon };
         fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
         fixture
@@ -136,7 +136,7 @@ impl Fixture {
 
     fn restart(&mut self) {
         self.daemon
-            .restart(self.root.path(), &mut cli(self.root.path()));
+            .restart(self.root.path(), &mut daemon_launch(self.root.path()));
     }
 
     fn command(&self) -> Command {
@@ -6560,7 +6560,6 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 
 #[test]
 fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
-    let fixture = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
     let environment = |fixture: &Fixture| -> Vec<String> {
         fixture
             .ok(&["alerts", "--all", "--keep-unread"])
@@ -6571,20 +6570,27 @@ fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
             .map(|event| event["message"].as_str().unwrap().to_owned())
             .collect()
     };
-    wait_until("the startup environment alert", || {
-        environment(&fixture)
+    let retired = |messages: Vec<String>| {
+        messages
             .iter()
             .any(|message| message.contains("now named worker_template"))
+    };
+    let started = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    wait_until("the startup environment alert", || {
+        retired(environment(&started))
     });
-    // Reloading checks again; the unread alert collapses rather than repeating.
+    // A setting added later is reported once the config is reloaded.
+    let fixture = Fixture::new();
+    assert!(!retired(environment(&fixture)));
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        "agent_template = 'Work carefully.'\n",
+    )
+    .unwrap();
     fixture.ok(&["daemon", "reload"]);
-    assert_eq!(
-        environment(&fixture)
-            .iter()
-            .filter(|message| message.contains("now named worker_template"))
-            .count(),
-        1
-    );
+    wait_until("the reload environment alert", || {
+        retired(environment(&fixture))
+    });
 }
 
 #[test]
@@ -10204,6 +10210,14 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
             .status
             .success()
     );
+}
+
+/// How fixtures start their daemon: as the CLI runs, with a `zmx` on the
+/// daemon's PATH when the runner has none.
+fn daemon_launch(root: &Path) -> Command {
+    let mut launch = cli(root);
+    daemon_fixture::provide_zmx(root, &mut launch);
+    launch
 }
 
 const OWNER_MARKER: &str = "shoal-workspace";

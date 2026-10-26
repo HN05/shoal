@@ -1,6 +1,7 @@
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{Read, Seek},
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::{Child, Command, Stdio},
 };
@@ -91,4 +92,31 @@ impl Drop for DaemonGuard {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// Give the daemon a `zmx`, last on its PATH, when the runner has none, so
+/// its startup check for required tools records no alert every test would
+/// count. A runner with zmx keeps its own, and the CLI's PATH is unchanged.
+#[allow(dead_code)]
+pub fn provide_zmx(root: &Path, launch: &mut Command) {
+    let path = launch
+        .get_envs()
+        .find(|(name, _)| *name == "PATH")
+        .and_then(|(_, value)| value.map(ToOwned::to_owned))
+        .or_else(|| std::env::var_os("PATH"))
+        .unwrap_or_default();
+    if std::env::split_paths(&path).any(|dir| dir.join("zmx").is_file()) {
+        return;
+    }
+    let dir = root.join("daemon-bin");
+    fs::create_dir_all(&dir).unwrap();
+    let zmx = dir.join("zmx");
+    fs::write(
+        &zmx,
+        "#!/bin/sh\necho 'zmx is not installed on this test runner' >&2\nexit 127\n",
+    )
+    .unwrap();
+    fs::set_permissions(&zmx, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(std::env::split_paths(&path).chain([dir])).unwrap();
+    launch.env("PATH", path);
 }

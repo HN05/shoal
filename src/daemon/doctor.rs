@@ -206,6 +206,18 @@ pub fn global_config_check(paths: &crate::paths::Paths) -> Check {
     }
 }
 
+/// Check the environment once the daemon has started and again after each
+/// config reload, outside any request so slow checks delay no reply.
+pub async fn watch_environment(manager: std::sync::Arc<Manager>) {
+    loop {
+        {
+            let _operation = manager.background_operations.read().await;
+            manager.report_environment().await;
+        }
+        manager.environment_recheck.notified().await;
+    }
+}
+
 impl Manager {
     /// Record an alert for each problem with the daemon's tools, `root_dir`,
     /// registered checkouts and the global config, as the daemon starts or
