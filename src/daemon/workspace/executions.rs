@@ -1021,18 +1021,18 @@ impl Manager {
             execution.id
         );
         ensure!(
+            after.launch_recorded || policy == StopPolicy::Acknowledged,
+            UnprovenStop {
+                execution: execution.id.clone(),
+            }
+        );
+        ensure!(
             after.unreadable.is_empty(),
             "Shoal cannot read the environment of processes that may belong to execution {}: {}; check them, then run shoal stop again",
             execution.id,
             pids(&after.unreadable)
         );
         if !after.launch_recorded {
-            ensure!(
-                policy == StopPolicy::Acknowledged,
-                UnprovenStop {
-                    execution: execution.id.clone(),
-                }
-            );
             self.ensure_directory_unused(&execution.workspace_id)
                 .await?;
         }

@@ -21798,11 +21798,17 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
 fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("legacy");
+    let execution = crashed_execution(&mut fixture, "legacy");
+    // A wrapper that died before launching its command recorded no group, so
+    // nothing proves it ended; its birth keeps older processes out.
     let insert = |fixture: &Fixture| {
         let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
         db.execute(
-            "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
-            [workspace["id"].as_str().unwrap()],
+            "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
+            rusqlite::params![
+                workspace["id"].as_str().unwrap(),
+                execution["wrapper"].to_string()
+            ],
         )
         .unwrap();
     };
@@ -21812,8 +21818,10 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
             .unwrap()
             .len()
     };
+    // The crashed execution has a full launch record, so stop proves it ended.
+    assert!(fixture.run(&["stop", "legacy"]).status.success());
+    assert_eq!(executions(&fixture), 0);
     insert(&fixture);
-    fixture.restart();
 
     let piped = fixture.run(&["stop", "legacy"]);
     assert!(!piped.status.success());
@@ -21832,7 +21840,6 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     assert_eq!(executions(&fixture), 0);
 
     insert(&fixture);
-    fixture.restart();
     assert!(fixture.run(&["stop", "legacy", "--yes"]).status.success());
     assert_eq!(executions(&fixture), 0);
 }

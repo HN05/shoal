@@ -600,13 +600,24 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
 #[tokio::test]
 async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     let (_root, manager, workspace) = fixture().await;
-    let id = workspace.id.clone();
+    // A wrapper that died before launching its command recorded no group.
+    // Born during the test, it keeps the runner's older processes with
+    // unreadable environments out of the evidence.
+    let mut wrapper = tokio::process::Command::new("sleep")
+        .arg("60")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let dead = identity::capture(wrapper.id().unwrap()).unwrap().unwrap();
+    wrapper.kill().await.unwrap();
+    wrapper.wait().await.unwrap();
+    let (id, dead) = (workspace.id.clone(), serde_json::to_string(&dead).unwrap());
     manager
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
-                [id],
+                "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('legacy',?1,'unknown',?2)",
+                rusqlite::params![id, dead],
             )?;
             Ok(())
         })
