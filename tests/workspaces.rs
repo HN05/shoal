@@ -11400,7 +11400,9 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(!path(0).exists() && !path(1).exists() && path(2).exists());
 
     let second = fixture.add("fourth");
-    let removed = fixture.ok(&["rm", "third", "fourth", "--yes"]);
+    // A workspace named by its name and its ID is removed once.
+    let third = workspaces[2]["id"].as_str().unwrap();
+    let removed = fixture.ok(&["rm", "third", third, "fourth", "--yes"]);
     let removed_names: Vec<&str> = removed["removed"]
         .as_array()
         .unwrap()

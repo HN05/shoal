@@ -72,13 +72,7 @@ pub async fn select_workspace(
 /// The workspaces a command that acts on several takes: those named, each
 /// once and in order, otherwise the current one, otherwise those picked.
 pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
-    let mut selected = Vec::new();
-    for name in names {
-        let workspace = explicit_workspace(ctx, name).await?;
-        if !selected.contains(&workspace) {
-            selected.push(workspace);
-        }
-    }
+    let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
         selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
             Resolution::Workspace(id) => vec![id],
@@ -87,6 +81,28 @@ pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<
     }
     for workspace in &selected {
         recent::record(ctx, workspace).await;
+    }
+    Ok(selected)
+}
+
+/// The workspace IDs `names` select, each once and in order, so a workspace
+/// named both by its name and by its ID is acted on once. A name no
+/// workspace has stays as given, for the daemon to refuse.
+async fn named_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let context = WorkspaceContext::from_directory(&workspaces, None);
+    let mut selected = Vec::new();
+    for name in names {
+        let selector = explicit_workspace(ctx, name).await?;
+        let workspace = context
+            .resolve(Some(&selector), false, ScopeOrder::AfterDirectory)
+            .map_or(selector, |workspace| workspace.id.clone());
+        if !selected.contains(&workspace) {
+            selected.push(workspace);
+        }
     }
     Ok(selected)
 }

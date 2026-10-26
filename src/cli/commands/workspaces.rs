@@ -1898,12 +1898,11 @@ async fn check_removals(
             checks.push(checked?);
             continue;
         }
-        let checked = checked.and_then(|check| {
-            ensure_batch_removable(ctx, &check, ("removal", "remove"))?;
-            Ok(check)
-        });
         match checked {
-            Ok(check) => checks.push(check),
+            Ok(check) => match ensure_batch_removable(ctx, &check, ("removal", "remove")) {
+                Ok(()) => checks.push(check),
+                Err(error) => refusals.push(format!("{}: {error:#}", check.workspace.name)),
+            },
             Err(error) => refusals.push(format!("{workspace}: {error:#}")),
         }
     }
