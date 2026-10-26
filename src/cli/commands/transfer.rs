@@ -18,7 +18,6 @@ use crate::{
     model::{RemovedWorkspace, RestoredWorkspace, Workspace},
     protocol::Method,
     removal::{RemovalCheck, UnsavedWork},
-    state::WorkspaceState,
     transfer::{ExportedWorkspace, Import, Manifest},
 };
 
@@ -576,10 +575,8 @@ async fn check_exports(
     Ok(planned)
 }
 
-/// Reserve the workspace's file in `directory` and check its removal,
-/// including the lifecycle state removal accepts, which the removal check
-/// leaves to the removal itself. The export goes on from this terminal after
-/// each removal, so it must not close with any of the workspaces.
+/// Reserve the workspace's file in `directory` and check its removal as a
+/// batch's.
 async fn plan_export(
     ctx: &Context,
     workspace: &Workspace,
@@ -587,15 +584,7 @@ async fn plan_export(
 ) -> Result<PlannedExport> {
     let output = Output::reserve(&directory.file(&workspace.name))?;
     let check = check_export(ctx, &workspace.id, &output).await?;
-    let state = check.workspace.state;
-    ensure!(
-        matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
-        "workspace is {state}; wait for that operation to finish"
-    );
-    ensure!(
-        !crate::cli::terminal::closes_with(&ctx.paths, &workspace.id),
-        "this tab closes when the export removes the workspace, ending the export of the others; export from another tab"
-    );
+    super::workspaces::ensure_batch_removable(ctx, &check, ("export", "export"))?;
     Ok(PlannedExport { check, output })
 }
 

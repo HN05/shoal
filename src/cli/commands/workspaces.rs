@@ -1893,9 +1893,17 @@ async fn check_removals(
             workspace: workspace.clone(),
             include_changes: ctx.interactive() && !yes,
         };
-        match request::<RemovalCheck>(&ctx.paths, method).await {
+        let checked = request::<RemovalCheck>(&ctx.paths, method).await;
+        if !several {
+            checks.push(checked?);
+            continue;
+        }
+        let checked = checked.and_then(|check| {
+            ensure_batch_removable(ctx, &check, ("removal", "remove"))?;
+            Ok(check)
+        });
+        match checked {
             Ok(check) => checks.push(check),
-            Err(error) if !several => return Err(error),
             Err(error) => refusals.push(format!("{workspace}: {error:#}")),
         }
     }
@@ -1905,6 +1913,27 @@ async fn check_removals(
         refusals.join("\n  ")
     );
     Ok(checks)
+}
+
+/// Refuse a workspace that a batch, named by its `(noun, verb)`, could not
+/// finish with: one in another lifecycle operation, which the removal check
+/// leaves to the removal itself, or one whose removal closes this terminal's
+/// tab, ending the batch before the others.
+pub(super) fn ensure_batch_removable(
+    ctx: &Context,
+    check: &RemovalCheck,
+    (noun, verb): (&str, &str),
+) -> Result<()> {
+    let state = check.workspace.state;
+    ensure!(
+        matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
+        "workspace is {state}; wait for that operation to finish"
+    );
+    ensure!(
+        !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
+        "this tab closes with the workspace, ending the {noun} of the others; {verb} from another tab"
+    );
+    Ok(())
 }
 
 async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {

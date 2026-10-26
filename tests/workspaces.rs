@@ -1103,7 +1103,8 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let refused = export("tab-7");
     assert!(!refused.status.success());
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
+        String::from_utf8_lossy(&refused.stderr)
+            .contains("closes when the export removes"),
         "{refused:?}"
     );
     assert!(refused.stdout.is_empty());
@@ -11329,6 +11330,47 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(stderr.contains("so none was removed"), "{stderr}");
     assert!(stderr.contains("missing:"), "{stderr}");
     assert!(path(0).exists());
+    // So does one in another lifecycle operation, which the check accepts.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let set_state = |state: &str| {
+        db.execute(
+            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            [state],
+        )
+        .unwrap();
+    };
+    set_state("preparing");
+    let refused = fixture.run(&["rm", "first", "second", "--yes"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("second: workspace is preparing"),
+        "{stderr}"
+    );
+    assert!(path(0).exists());
+    set_state("ready");
+    // And one whose removal closes this tab, ending the removal of the others.
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspaces[1]["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
+    let refused = fixture
+        .command()
+        .args(["rm", "first", "second", "--yes"])
+        .env("HERDR_TAB_ID", "tab-7")
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("tab closes with the workspace, ending the removal"),
+        "{stderr}"
+    );
+    assert!(path(0).exists());
+    fs::remove_file(state.join("closing-tab-tab-7")).unwrap();
 
     let (no, prompt) = fixture.interactive(&["rm", "first", "second", "third"], "n\n");
     let prompt = prompt.replace("\r\n", "\n");
