@@ -1,17 +1,9 @@
 //! Forwarding one agent request to the upstream and its response back.
 use std::{convert::Infallible, sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
 use bytes::Bytes;
-use futures_util::{StreamExt, TryStreamExt};
-use http_body_util::{BodyExt, BodyStream, Full, StreamBody, combinators::UnsyncBoxBody};
-use hyper::{
-    HeaderMap, Method, Request, Response, StatusCode,
-    body::{Frame, Incoming},
-    header::{self, HeaderName, HeaderValue},
-    server::conn::http1,
-    service::service_fn,
-};
+use http_body_util::Full;
+use hyper::{Request, Response, body::Incoming, header, server::conn::http1, service::service_fn};
 use hyper_rustls::HttpsConnector;
 use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
@@ -22,26 +14,14 @@ use tokio::{net::TcpStream, sync::mpsc::UnboundedSender};
 use crate::{
     Event, Upstream,
     clock::Clock,
+    request::Buffered,
+    response::{
+        Body, bad_gateway, event_stream, full, is_event_stream, passthrough, prefixed,
+        strip_hop_by_hop,
+    },
     retry::{self, Failure, Outage, Policy},
     stream::{self, Opening, Protocol},
 };
-
-pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
-/// What the proxy answers the agent with.
-pub(crate) type Body = UnsyncBoxBody<Bytes, BoxError>;
-
-/// Headers that describe one connection, not the request, so they are
-/// never forwarded.
-const HOP_BY_HOP: [&str; 8] = [
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "proxy-connection",
-    "te",
-    "trailer",
-    "upgrade",
-];
 
 pub(crate) struct Forwarder {
     upstream: Upstream,
@@ -262,124 +242,4 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
             response: bad_gateway(&error),
         }),
     }
-}
-
-fn is_event_stream(response: &Response<Incoming>) -> bool {
-    response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.starts_with("text/event-stream"))
-}
-
-/// An agent request read whole, so the proxy can send it again.
-pub(crate) struct Buffered {
-    method: Method,
-    path_and_query: String,
-    headers: HeaderMap,
-    body: Bytes,
-    /// The API it speaks, when the proxy reads its response stream.
-    protocol: Option<Protocol>,
-}
-
-impl Buffered {
-    pub(crate) async fn read(request: Request<Incoming>) -> Result<Self> {
-        let (parts, body) = request.into_parts();
-        let body = body
-            .collect()
-            .await
-            .context("read the agent's request")?
-            .to_bytes();
-        Ok(Self {
-            method: parts.method,
-            protocol: Protocol::of(parts.uri.path()),
-            path_and_query: parts
-                .uri
-                .path_and_query()
-                .map_or("/", |path| path.as_str())
-                .to_owned(),
-            headers: parts.headers,
-            body,
-        })
-    }
-
-    /// The stream that reports `failure` to an agent that streams this
-    /// request, as its protocol does.
-    fn failure_stream(&self, failure: Failure) -> Option<Bytes> {
-        let request: serde_json::Value = serde_json::from_slice(&self.body).ok()?;
-        if request["stream"] != true {
-            return None;
-        }
-        self.protocol?.failure_stream(failure)
-    }
-
-    /// This request addressed to `upstream`, with its own headers but the
-    /// upstream's `Host`.
-    pub(crate) fn to_upstream(&self, upstream: &Upstream) -> Result<Request<Full<Bytes>>> {
-        let mut request = Request::builder()
-            .method(self.method.clone())
-            .uri(upstream.join(&self.path_and_query)?)
-            .body(Full::new(self.body.clone()))?;
-        let headers = request.headers_mut();
-        for (name, value) in &self.headers {
-            if forwarded(name) && name != header::HOST && name != header::CONTENT_LENGTH {
-                headers.append(name, value.clone());
-            }
-        }
-        headers.insert(header::HOST, HeaderValue::from_str(upstream.authority())?);
-        // The proxy reads the stream, so it must arrive uncompressed.
-        if self.protocol.is_some() {
-            headers.insert(
-                header::ACCEPT_ENCODING,
-                HeaderValue::from_static("identity"),
-            );
-        }
-        Ok(request)
-    }
-}
-
-fn forwarded(name: &HeaderName) -> bool {
-    !HOP_BY_HOP.contains(&name.as_str())
-}
-
-/// The upstream's response as the agent receives it, streamed as it comes.
-pub(crate) fn passthrough(response: Response<Incoming>) -> Response<Body> {
-    let (parts, body) = response.into_parts();
-    let mut response = Response::from_parts(parts, body.map_err(BoxError::from).boxed_unsync());
-    strip_hop_by_hop(response.headers_mut());
-    response
-}
-
-pub(crate) fn strip_hop_by_hop(headers: &mut HeaderMap) {
-    for name in HOP_BY_HOP {
-        headers.remove(name);
-    }
-}
-
-fn full(bytes: Bytes) -> Body {
-    Full::new(bytes).map_err(BoxError::from).boxed_unsync()
-}
-
-/// The bytes already read from a stream, then the rest of it as it comes.
-fn prefixed(read: Bytes, rest: Incoming) -> Body {
-    let read = futures_util::stream::once(std::future::ready(Ok(Frame::data(read))));
-    let rest = TryStreamExt::map_err(BodyStream::new(rest), BoxError::from);
-    StreamBody::new(read.chain(rest)).boxed_unsync()
-}
-
-/// A successful response carrying `stream`'s events.
-fn event_stream(stream: Bytes) -> Response<Body> {
-    let mut response = Response::new(full(stream));
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("text/event-stream"),
-    );
-    response
-}
-
-/// The answer when the proxy could not reach the upstream at all.
-fn bad_gateway(error: &anyhow::Error) -> Response<Body> {
-    let mut response = Response::new(full(Bytes::from(format!("shoal-proxy: {error:#}\n"))));
-    *response.status_mut() = StatusCode::BAD_GATEWAY;
-    response
 }
