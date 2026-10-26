@@ -129,12 +129,7 @@ impl TrackedLaunch {
             }
             Outcome::Exited(code) => Ok(Some(code)),
             Outcome::Stopped { code, reason } => {
-                let stopped = if self.recovery.is_some() {
-                    "agent"
-                } else {
-                    "command"
-                };
-                eprintln!("shoal: {stopped} stopped: {reason}");
+                self.report_stopped(&reason);
                 Ok(Some(code))
             }
             // Only an agent's session is saved when its own session ends.
@@ -147,6 +142,16 @@ impl TrackedLaunch {
                 Ok((!restored).then_some(code))
             }
         }
+    }
+
+    /// Tell the user the daemon stopped the agent or command for `reason`.
+    fn report_stopped(&self, reason: &str) {
+        let stopped = if self.recovery.is_some() {
+            "agent"
+        } else {
+            "command"
+        };
+        eprintln!("shoal: {stopped} stopped: {reason}");
     }
 
     /// Wait `delay` before the demo's next run: `None` to run it again, or
