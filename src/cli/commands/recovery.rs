@@ -52,7 +52,7 @@ pub(super) async fn run(
     }
     report
         .checks
-        .push(crate::daemon::doctor::global_config_check(&ctx.paths));
+        .push(crate::daemon::environment::global_config_check(&ctx.paths));
     let shell_loaded =
         std::env::var_os(crate::env::SHELL_DIRECTIVE).is_some_and(|value| !value.is_empty());
     report.checks.push(Check::new(

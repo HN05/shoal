@@ -14,6 +14,7 @@ mod connections;
 pub(crate) mod cpu_usage;
 mod disk;
 pub mod doctor;
+pub mod environment;
 pub mod events;
 mod execution_connection;
 mod execution_recovery;
@@ -117,7 +118,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         &mut background,
         &manager,
         "environment check",
-        doctor::watch_environment,
+        environment::watch_environment,
     );
     spawn_supervised(
         &mut background,
