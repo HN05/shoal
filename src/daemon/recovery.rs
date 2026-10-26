@@ -3,9 +3,8 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
-use crate::daemon::log;
 use crate::{
-    daemon::workspace::{Manager, StopRequest, VerifiedWorktree},
+    daemon::workspace::{Manager, StopRequest},
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
@@ -80,34 +79,6 @@ impl Report {
 }
 
 impl Manager {
-    /// Startup audit never deletes work, releases leases, or assumes unknown
-    /// executions are dead. Invalid ready workspaces are quarantined as failed.
-    pub async fn audit_worktrees(&self) -> Result<()> {
-        for workspace in self.list_workspaces().await? {
-            if workspace.state != WorkspaceState::Ready {
-                continue;
-            }
-            match self.verify_and_record_worktree(&workspace, true).await {
-                Err(error) => {
-                    self.set_state(
-                        &workspace.id,
-                        WorkspaceState::Failed,
-                        Some(format!("startup ownership check failed: {error:#}")),
-                    )
-                    .await?;
-                }
-                Ok(VerifiedWorktree {
-                    identity: Err(error),
-                }) => log!(
-                    "worktree identity not recorded for {}: {error:#}",
-                    workspace.name
-                ),
-                Ok(_) => {}
-            }
-        }
-        Ok(())
-    }
-
     /// Reconcile one workspace, or all of them. A failure for one workspace
     /// becomes an issue in its report rather than aborting the rest.
     pub async fn reconcile_workspaces(

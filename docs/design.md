@@ -1629,7 +1629,11 @@ quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
 migrations available for retry. Startup audits but never deletes, kills or
 releases leases, and clears an unknown execution only when stopped-agent
-reconciliation proves it ended.
+reconciliation proves it ended. The cleanup sweep rechecks only the workspaces the
+audit failed and readies one once its ownership verifies, checking before it
+reserves the lifecycle so a workspace that still fails never leaves the failed
+state; automatic repair goes no further, since repair would also accept a failed
+setup the user has not seen.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. `shoal stop` asks for it, since an execution
 without a recorded launch identity cannot be proven ended even when nothing of it is visible. Recheck

@@ -46,7 +46,9 @@ instead of the PR delivery guidance below.
   after it still matches; missing proofs never establish ownership.
   Only an explicit reclaim (`work adopt` of the recorded path, or `doctor --repair --reclaim`) may
   re-establish ownership that failed verification, and only at the recorded path,
-  repository and branch. Any new
+  repository and branch. Automatic recovery only readies a workspace the startup
+  audit failed once its ownership verifies again; it never accepts another failure,
+  such as a failed setup. Any new
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker. Repository deletion confirms the resolved
   registration, source and checkout path, preserving that target across renames.

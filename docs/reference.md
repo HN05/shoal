@@ -3025,7 +3025,10 @@ When current checks find no issues, reports show the recorded failure and repair
 `doctor` is unavailable inside scoped executions. Before accepting requests or
 running cleanup, daemon startup atomically marks unfinished simulator cleans
 interrupted, transient lifecycle operations failed, and disconnected executions
-unknown until their wrappers reattach, then audits worktrees without deleting files or releasing leases. Repair restores verified
+unknown until their wrappers reattach, then audits worktrees without deleting files or releasing leases.
+A workspace the audit failed, such as one on a volume that mounted late, becomes
+ready again once the cleanup sweep finds its ownership verified; other failures,
+such as a failed setup, wait for you. Repair restores verified
 worktrees to ready and clears executions proven stopped; connected commands keep
 running unless `--stop`. Moved worktrees must return to their recorded path,
 and a deleted directory is forgotten by the next

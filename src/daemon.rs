@@ -37,6 +37,7 @@ mod restart_recovery;
 pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
+mod startup_audit;
 pub mod store;
 mod untracked;
 mod warnings;
