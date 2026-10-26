@@ -1,5 +1,5 @@
 //! Forwarding one agent request to the upstream and its response back.
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
@@ -16,9 +16,12 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::{TokioExecutor, TokioIo},
 };
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::mpsc::UnboundedSender};
 
-use crate::Upstream;
+use crate::{
+    Event, Upstream,
+    retry::{self, Failure, Outage},
+};
 
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// What the proxy answers the agent with.
@@ -40,10 +43,26 @@ const HOP_BY_HOP: [&str; 8] = [
 pub(crate) struct Forwarder {
     upstream: Upstream,
     client: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
+    outage: Outage,
+    events: UnboundedSender<Event>,
+}
+
+/// How one attempt at a request ended.
+enum Attempt {
+    /// The upstream answered, and the agent gets the answer as it is.
+    Answered(Response<Body>),
+    Failed(Failed),
+}
+
+/// A failed attempt, with the answer the agent gets if it is the last.
+struct Failed {
+    failure: Failure,
+    retry_after: Option<Duration>,
+    response: Response<Body>,
 }
 
 impl Forwarder {
-    pub(crate) fn new(upstream: Upstream) -> Self {
+    pub(crate) fn new(upstream: Upstream, events: UnboundedSender<Event>) -> Self {
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_webpki_roots()
             .https_or_http()
@@ -52,6 +71,8 @@ impl Forwarder {
         Self {
             upstream,
             client: Client::builder(TokioExecutor::new()).build(connector),
+            outage: Outage::default(),
+            events,
         }
     }
 
@@ -68,20 +89,91 @@ impl Forwarder {
     }
 
     async fn handle(&self, request: Request<Incoming>) -> Response<Body> {
-        match self.forward(request).await {
-            Ok(response) => response,
+        match Buffered::read(request).await {
+            Ok(request) => self.forward(&request).await,
             Err(error) => bad_gateway(&error),
         }
     }
 
-    async fn forward(&self, request: Request<Incoming>) -> Result<Response<Body>> {
-        let request = Buffered::read(request).await?;
-        let response = self
-            .client
-            .request(request.to_upstream(&self.upstream)?)
-            .await
-            .context("reach the upstream")?;
-        Ok(passthrough(response))
+    /// Send `request` until the upstream answers it or the outage outlasts
+    /// its budget, then give the agent the last answer.
+    async fn forward(&self, request: &Buffered) -> Response<Body> {
+        let mut attempt = 1;
+        loop {
+            let failed = match self.attempt(request).await {
+                Attempt::Answered(response) => {
+                    self.answered(attempt);
+                    return response;
+                }
+                Attempt::Failed(failed) => failed,
+            };
+            match self.wait_before_retry(&failed, attempt) {
+                Some(wait) => tokio::time::sleep(wait).await,
+                None => return failed.response,
+            }
+            attempt += 1;
+        }
+    }
+
+    async fn attempt(&self, request: &Buffered) -> Attempt {
+        let sent = match request.to_upstream(&self.upstream) {
+            Ok(sent) => self.client.request(sent).await,
+            Err(error) => return Attempt::Answered(bad_gateway(&error)),
+        };
+        let response = match sent {
+            Ok(response) => response,
+            Err(error) => {
+                let error = anyhow::Error::from(error).context("reach the upstream");
+                return Attempt::Failed(Failed {
+                    failure: Failure::Unreachable,
+                    retry_after: None,
+                    response: bad_gateway(&error),
+                });
+            }
+        };
+        match Failure::of_status(response.status()) {
+            None => Attempt::Answered(passthrough(response)),
+            Some(failure) => Attempt::Failed(Failed {
+                failure,
+                retry_after: retry::retry_after(response.headers()),
+                response: passthrough(response),
+            }),
+        }
+    }
+
+    /// An answer ends the outage; one that took retries is a recovery.
+    fn answered(&self, attempt: u32) {
+        self.outage.ended();
+        if attempt > 1 {
+            self.report(Event::Recovered);
+        }
+    }
+
+    /// The wait before trying again after `failed`, reported; `None` when
+    /// the agent gets the failure, which is reported when the proxy gave up
+    /// on it.
+    fn wait_before_retry(&self, failed: &Failed, attempt: u32) -> Option<Duration> {
+        if !failed.failure.retryable() {
+            return None;
+        }
+        let Some(wait) = self.outage.next_wait(attempt, failed.retry_after) else {
+            self.report(Event::Failed {
+                failure: failed.failure,
+                in_stream: false,
+            });
+            return None;
+        };
+        self.report(Event::Retrying {
+            failure: failed.failure,
+            attempt,
+            wait,
+        });
+        Some(wait)
+    }
+
+    /// Tell the proxy's owner, which may have stopped listening.
+    fn report(&self, event: Event) {
+        let _ = self.events.send(event);
     }
 }
 

@@ -3,6 +3,7 @@ use std::{
     convert::Infallible,
     net::SocketAddr,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use bytes::Bytes;
@@ -15,7 +16,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::{TokioExecutor, TokioIo},
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::mpsc::UnboundedReceiver};
 
 use super::*;
 
@@ -76,12 +77,18 @@ impl FakeUpstream {
     }
 }
 
-/// A proxy for `upstream`, serving in the background.
-pub(crate) async fn proxy(upstream: Upstream) -> SocketAddr {
-    let proxy = Proxy::bind(upstream).await.unwrap();
+/// A proxy for `upstream`, serving in the background, and its events.
+pub(crate) async fn proxy(upstream: Upstream) -> (SocketAddr, UnboundedReceiver<Event>) {
+    let (events, received) = tokio::sync::mpsc::unbounded_channel();
+    let proxy = Proxy::bind(upstream, events).await.unwrap();
     let addr = proxy.local_addr().unwrap();
     tokio::spawn(proxy.serve());
-    addr
+    (addr, received)
+}
+
+/// The events the proxy reported so far.
+pub(crate) fn drain(events: &mut UnboundedReceiver<Event>) -> Vec<Event> {
+    std::iter::from_fn(|| events.try_recv().ok()).collect()
 }
 
 /// What the agent receives for `request` sent to the proxy at `addr`.
@@ -123,7 +130,7 @@ async fn requests_reach_the_upstream_with_their_own_credentials() {
         response
     })
     .await;
-    let addr = proxy(upstream.url("/prefix")).await;
+    let (addr, mut events) = proxy(upstream.url("/prefix")).await;
     let (status, headers, body) = send(
         addr,
         Request::post("/v1/messages?beta=true")
@@ -140,16 +147,104 @@ async fn requests_reach_the_upstream_with_their_own_credentials() {
     assert_eq!(requests[0].headers["x-api-key"], "secret");
     assert_eq!(requests[0].headers["host"], upstream.addr.to_string());
     assert_eq!(requests[0].body, r#"{"model":"m"}"#);
+    assert!(drain(&mut events).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn transient_failures_are_retried_until_the_upstream_recovers() {
+    let upstream = FakeUpstream::start(|received| match received.len() {
+        1 => reply(529, "overloaded"),
+        2 => {
+            let mut response = reply(429, "slow down");
+            response
+                .headers_mut()
+                .insert("retry-after", "7".parse().unwrap());
+            response
+        }
+        _ => reply(200, "done"),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+    assert_eq!(upstream.requests().len(), 3);
+    assert_eq!(
+        drain(&mut events),
+        [
+            Event::Retrying {
+                failure: Failure::Overloaded,
+                attempt: 1,
+                wait: Duration::from_secs(1),
+            },
+            Event::Retrying {
+                failure: Failure::RateLimited,
+                attempt: 2,
+                wait: Duration::from_secs(7),
+            },
+            Event::Recovered,
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_outage_past_its_budget_reaches_the_agent_at_once() {
+    let upstream = FakeUpstream::start(|_| reply(503, "busy")).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "busy")
+    );
+    let events = drain(&mut events);
+    assert_eq!(
+        events.last(),
+        Some(&Event::Failed {
+            failure: Failure::Overloaded,
+            in_stream: false
+        })
+    );
+    let waited: Duration = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Retrying { wait, .. } => Some(*wait),
+            _ => None,
+        })
+        .sum();
+    assert!(waited <= retry::OUTAGE_BUDGET, "{waited:?}");
+    // The outage outlasted its budget, so the next request fails at once.
+    let attempts = upstream.requests().len();
+    send(addr, Request::post("/v1/messages"), "{}").await;
+    assert_eq!(upstream.requests().len(), attempts + 1);
 }
 
 #[tokio::test]
-async fn an_unreachable_upstream_answers_bad_gateway() {
+async fn failures_a_retry_cannot_fix_reach_the_agent_at_once() {
+    let upstream = FakeUpstream::start(|_| reply(401, "bad key")).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::UNAUTHORIZED, "bad key")
+    );
+    assert_eq!(upstream.requests().len(), 1);
+    assert!(drain(&mut events).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
     // A port nothing listens on any more.
     let closed = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let url = format!("http://{}", closed.local_addr().unwrap());
     drop(closed);
-    let addr = proxy(Upstream::parse(&url).unwrap()).await;
+    let (addr, mut events) = proxy(Upstream::parse(&url).unwrap()).await;
     let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body.contains("reach the upstream"), "{body}");
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::Unreachable,
+            in_stream: false
+        })
+    );
 }
