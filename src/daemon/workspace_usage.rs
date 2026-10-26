@@ -70,8 +70,9 @@ impl WorkspaceUsages {
 
 /// Each workspace's processes and memory in `current`, with the CPU they
 /// used since `previous`. A process that started since counts all its time.
-/// One that ended since was reaped into its parent's time when that parent
-/// is still in its workspace, which already counted the time it had before.
+/// One that ended since was reaped into the time of its nearest ancestor
+/// still in its workspace, directly or through ancestors that ended too, and
+/// that workspace already counted the time it had before.
 fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, WorkspaceUsage> {
     let mut usage: HashMap<String, WorkspaceUsage> = HashMap::new();
     let mut cpu: HashMap<&str, i128> = HashMap::new();
@@ -92,9 +93,17 @@ fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, Workspa
         .iter()
         .map(|(identity, (workspace, _))| (workspace.as_str(), identity.pid))
         .collect();
+    let ended: HashMap<(&str, u32), u32> = previous
+        .processes
+        .iter()
+        .filter(|(identity, _)| !current.processes.contains_key(identity))
+        .map(|(identity, (workspace, reading))| {
+            ((workspace.as_str(), identity.pid), reading.parent)
+        })
+        .collect();
     for (identity, (workspace, reading)) in &previous.processes {
-        if !current.processes.contains_key(identity)
-            && live.contains(&(workspace.as_str(), reading.parent))
+        if ended.contains_key(&(workspace.as_str(), identity.pid))
+            && reaped_within(&live, &ended, workspace, reading.parent)
             && let Some(used) = cpu.get_mut(workspace.as_str())
         {
             *used -= i128::from(reading.cpu);
@@ -110,6 +119,28 @@ fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, Workspa
         entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
     }
     usage
+}
+
+/// Whether an ended process of `workspace` whose parent was `parent` was
+/// reaped within the workspace: an ancestor of it there, reached through
+/// `ended` ancestors and their parents, is `live`.
+fn reaped_within(
+    live: &HashSet<(&str, u32)>,
+    ended: &HashMap<(&str, u32), u32>,
+    workspace: &str,
+    mut parent: u32,
+) -> bool {
+    // Each step reaches another ended process, unless a reused PID makes a cycle.
+    for _ in 0..=ended.len() {
+        if live.contains(&(workspace, parent)) {
+            return true;
+        }
+        match ended.get(&(workspace, parent)) {
+            Some(grandparent) => parent = *grandparent,
+            None => return false,
+        }
+    }
+    false
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
@@ -208,6 +239,26 @@ mod tests {
         assert_eq!(usage["a"].cpu_percent, Some(40.0));
         assert_eq!(usage["b"].cpu_percent, Some(0.0));
         assert_eq!(usage.len(), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn descendants_reaped_through_ended_parents_count_once() {
+        let start = Instant::now();
+        let first = sample(
+            start,
+            [
+                process(10, 1, "a", 0),
+                process(11, 10, "a", SECOND),
+                process(12, 11, "a", 2 * SECOND),
+            ],
+        );
+        // 12 used one more second before 11 reaped it, and 10 then reaped 11,
+        // which had used one more of its own.
+        let second = sample(
+            start + Duration::from_secs(10),
+            [process(10, 1, "a", 5 * SECOND)],
+        );
+        assert_eq!(usage(Some(&first), &second)["a"].cpu_percent, Some(20.0));
     }
 
     #[tokio::test(start_paused = true)]
