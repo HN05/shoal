@@ -3,10 +3,11 @@ use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use http_body_util::{BodyExt, Full, combinators::UnsyncBoxBody};
+use futures_util::{StreamExt, TryStreamExt};
+use http_body_util::{BodyExt, BodyStream, Full, StreamBody, combinators::UnsyncBoxBody};
 use hyper::{
     HeaderMap, Method, Request, Response, StatusCode,
-    body::Incoming,
+    body::{Frame, Incoming},
     header::{self, HeaderName, HeaderValue},
     server::conn::http1,
     service::service_fn,
@@ -21,6 +22,7 @@ use tokio::{net::TcpStream, sync::mpsc::UnboundedSender};
 use crate::{
     Event, Upstream,
     retry::{self, Failure, Outage},
+    stream::{self, Opening, Protocol},
 };
 
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -58,6 +60,8 @@ enum Attempt {
 struct Failed {
     failure: Failure,
     retry_after: Option<Duration>,
+    /// Whether the failure arrived inside a response stream.
+    in_stream: bool,
     response: Response<Body>,
 }
 
@@ -109,7 +113,7 @@ impl Forwarder {
             };
             match self.wait_before_retry(&failed, attempt) {
                 Some(wait) => tokio::time::sleep(wait).await,
-                None => return failed.response,
+                None => return self.give_up(failed, request),
             }
             attempt += 1;
         }
@@ -127,17 +131,22 @@ impl Forwarder {
                 return Attempt::Failed(Failed {
                     failure: Failure::Unreachable,
                     retry_after: None,
+                    in_stream: false,
                     response: bad_gateway(&error),
                 });
             }
         };
-        match Failure::of_status(response.status()) {
-            None => Attempt::Answered(passthrough(response)),
-            Some(failure) => Attempt::Failed(Failed {
+        match (Failure::of_status(response.status()), request.protocol) {
+            (Some(failure), _) => Attempt::Failed(Failed {
                 failure,
                 retry_after: retry::retry_after(response.headers()),
+                in_stream: false,
                 response: passthrough(response),
             }),
+            (None, Some(protocol)) if is_event_stream(&response) => {
+                opened(protocol, response).await
+            }
+            (None, _) => Attempt::Answered(passthrough(response)),
         }
     }
 
@@ -150,19 +159,12 @@ impl Forwarder {
     }
 
     /// The wait before trying again after `failed`, reported; `None` when
-    /// the agent gets the failure, which is reported when the proxy gave up
-    /// on it.
+    /// the agent gets the failure.
     fn wait_before_retry(&self, failed: &Failed, attempt: u32) -> Option<Duration> {
         if !failed.failure.retryable() {
             return None;
         }
-        let Some(wait) = self.outage.next_wait(attempt, failed.retry_after) else {
-            self.report(Event::Failed {
-                failure: failed.failure,
-                in_stream: false,
-            });
-            return None;
-        };
+        let wait = self.outage.next_wait(attempt, failed.retry_after)?;
         self.report(Event::Retrying {
             failure: failed.failure,
             attempt,
@@ -171,10 +173,67 @@ impl Forwarder {
         Some(wait)
     }
 
+    /// The answer the agent gets for the last `failed` attempt, reported
+    /// when the proxy retries such failures. A streaming request whose
+    /// protocol ends a turn on a failure inside the stream gets one in place
+    /// of an HTTP failure, which the agent would retry itself.
+    fn give_up(&self, failed: Failed, request: &Buffered) -> Response<Body> {
+        if !failed.failure.retryable() {
+            return failed.response;
+        }
+        let failed = match request.failure_stream(failed.failure) {
+            Some(stream) if !failed.in_stream => Failed {
+                in_stream: true,
+                response: event_stream(stream),
+                ..failed
+            },
+            _ => failed,
+        };
+        self.report(Event::Failed {
+            failure: failed.failure,
+            in_stream: failed.in_stream,
+        });
+        failed.response
+    }
+
     /// Tell the proxy's owner, which may have stopped listening.
     fn report(&self, event: Event) {
         let _ = self.events.send(event);
     }
+}
+
+/// The first events of `response`'s stream: a failure among them is an
+/// attempt that failed, anything else goes to the agent.
+async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
+    let (mut parts, mut body) = response.into_parts();
+    strip_hop_by_hop(&mut parts.headers);
+    parts.headers.remove(header::CONTENT_LENGTH);
+    match stream::open(protocol, &mut body).await {
+        Ok(Opening::Content(read)) => {
+            Attempt::Answered(Response::from_parts(parts, prefixed(read, body)))
+        }
+        Ok(Opening::Ended(read)) => Attempt::Answered(Response::from_parts(parts, full(read))),
+        Ok(Opening::Failure(failure, read)) => Attempt::Failed(Failed {
+            failure,
+            retry_after: None,
+            in_stream: true,
+            response: Response::from_parts(parts, full(read)),
+        }),
+        Err(error) => Attempt::Failed(Failed {
+            failure: Failure::ServerError,
+            retry_after: None,
+            in_stream: false,
+            response: bad_gateway(&error),
+        }),
+    }
+}
+
+fn is_event_stream(response: &Response<Incoming>) -> bool {
+    response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.starts_with("text/event-stream"))
 }
 
 /// An agent request read whole, so the proxy can send it again.
@@ -182,7 +241,9 @@ pub(crate) struct Buffered {
     method: Method,
     path_and_query: String,
     headers: HeaderMap,
-    pub(crate) body: Bytes,
+    body: Bytes,
+    /// The API it speaks, when the proxy reads its response stream.
+    protocol: Option<Protocol>,
 }
 
 impl Buffered {
@@ -195,6 +256,7 @@ impl Buffered {
             .to_bytes();
         Ok(Self {
             method: parts.method,
+            protocol: Protocol::of(parts.uri.path()),
             path_and_query: parts
                 .uri
                 .path_and_query()
@@ -203,6 +265,16 @@ impl Buffered {
             headers: parts.headers,
             body,
         })
+    }
+
+    /// The stream that reports `failure` to an agent that streams this
+    /// request, as its protocol does.
+    fn failure_stream(&self, failure: Failure) -> Option<Bytes> {
+        let request: serde_json::Value = serde_json::from_slice(&self.body).ok()?;
+        if request["stream"] != true {
+            return None;
+        }
+        self.protocol?.failure_stream(failure)
     }
 
     /// This request addressed to `upstream`, with its own headers but the
@@ -219,6 +291,13 @@ impl Buffered {
             }
         }
         headers.insert(header::HOST, HeaderValue::from_str(upstream.authority())?);
+        // The proxy reads the stream, so it must arrive uncompressed.
+        if self.protocol.is_some() {
+            headers.insert(
+                header::ACCEPT_ENCODING,
+                HeaderValue::from_static("identity"),
+            );
+        }
         Ok(request)
     }
 }
@@ -241,13 +320,30 @@ pub(crate) fn strip_hop_by_hop(headers: &mut HeaderMap) {
     }
 }
 
+fn full(bytes: Bytes) -> Body {
+    Full::new(bytes).map_err(BoxError::from).boxed_unsync()
+}
+
+/// The bytes already read from a stream, then the rest of it as it comes.
+fn prefixed(read: Bytes, rest: Incoming) -> Body {
+    let read = futures_util::stream::once(std::future::ready(Ok(Frame::data(read))));
+    let rest = TryStreamExt::map_err(BodyStream::new(rest), BoxError::from);
+    StreamBody::new(read.chain(rest)).boxed_unsync()
+}
+
+/// A successful response carrying `stream`'s events.
+fn event_stream(stream: Bytes) -> Response<Body> {
+    let mut response = Response::new(full(stream));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream"),
+    );
+    response
+}
+
 /// The answer when the proxy could not reach the upstream at all.
 fn bad_gateway(error: &anyhow::Error) -> Response<Body> {
-    let mut response = Response::new(
-        Full::new(Bytes::from(format!("shoal-proxy: {error:#}\n")))
-            .map_err(BoxError::from)
-            .boxed_unsync(),
-    );
+    let mut response = Response::new(full(Bytes::from(format!("shoal-proxy: {error:#}\n"))));
     *response.status_mut() = StatusCode::BAD_GATEWAY;
     response
 }

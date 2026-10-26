@@ -4,6 +4,7 @@
 //! per agent and decides what its reports mean.
 mod forward;
 mod retry;
+mod stream;
 mod upstream;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};

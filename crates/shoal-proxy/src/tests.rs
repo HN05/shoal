@@ -248,3 +248,127 @@ async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
         })
     );
 }
+
+/// A successful stream of `events`.
+fn sse(events: &str) -> Response<Full<Bytes>> {
+    let mut response = reply(200, events);
+    response
+        .headers_mut()
+        .insert("content-type", "text/event-stream".parse().unwrap());
+    response
+}
+
+const MESSAGE_START: &str = "event: message_start\ndata: {\"type\":\"message_start\"}\n\n\
+    event: ping\ndata: {\"type\":\"ping\"}\n\n";
+const ANTHROPIC_OVERLOADED: &str =
+    "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}\n\n";
+const ANTHROPIC_CONTENT: &str = "event: content_block_start\ndata: {\"type\":\"content_block_start\"}\n\n\
+    event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+const RESPONSE_CREATED: &str = "event: response.created\ndata: {\"type\":\"response.created\"}\n\n";
+const RESPONSE_OVERLOADED: &str = "event: response.failed\ndata: \
+    {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"server_is_overloaded\"}}}\n\n";
+const RESPONSE_CONTENT: &str = "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\"}\n\n\
+    event: response.completed\ndata: {\"type\":\"response.completed\"}\n\n";
+
+#[tokio::test(start_paused = true)]
+async fn an_overload_before_any_content_is_retried_unseen() {
+    let opening = format!("{MESSAGE_START}{ANTHROPIC_OVERLOADED}");
+    let recovered = format!("{MESSAGE_START}{ANTHROPIC_CONTENT}");
+    let reply_with = recovered.clone();
+    let upstream = FakeUpstream::start(move |received| match received.len() {
+        1 => sse(&opening),
+        _ => sse(&reply_with),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, headers, body) =
+        send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!((status, body), (StatusCode::OK, recovered));
+    assert_eq!(headers["content-type"], "text/event-stream");
+    let requests = upstream.requests();
+    assert_eq!(requests.len(), 2);
+    // The proxy reads the stream, so it asks for it uncompressed.
+    assert_eq!(requests[0].headers["accept-encoding"], "identity");
+    assert_eq!(
+        drain(&mut events),
+        [
+            Event::Retrying {
+                failure: Failure::Overloaded,
+                attempt: 1,
+                wait: Duration::from_secs(1),
+            },
+            Event::Recovered,
+        ]
+    );
+
+    let upstream = FakeUpstream::start(|received| match received.len() {
+        1 => sse(&format!("{RESPONSE_CREATED}{RESPONSE_OVERLOADED}")),
+        _ => sse(&format!("{RESPONSE_CREATED}{RESPONSE_CONTENT}")),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, format!("{RESPONSE_CREATED}{RESPONSE_CONTENT}"));
+    assert_eq!(drain(&mut events).last(), Some(&Event::Recovered));
+}
+
+#[tokio::test]
+async fn a_failure_after_content_reaches_the_agent_as_it_came() {
+    let stream = format!("{MESSAGE_START}{ANTHROPIC_CONTENT}{ANTHROPIC_OVERLOADED}");
+    let reply_with = stream.clone();
+    let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(body, stream);
+    assert_eq!(upstream.requests().len(), 1);
+    assert!(drain(&mut events).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
+    // An HTTP failure, which Codex would retry itself, arrives in the stream.
+    let upstream = FakeUpstream::start(|_| reply(503, "busy")).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, headers, body) =
+        send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["content-type"], "text/event-stream");
+    assert!(body.starts_with("event: response.failed\n"), "{body}");
+    assert!(body.contains(r#""code":"server_is_overloaded""#), "{body}");
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::Overloaded,
+            in_stream: true
+        })
+    );
+
+    // A failure that already arrived in the stream reaches it as it came.
+    let opening = format!("{RESPONSE_CREATED}{RESPONSE_OVERLOADED}");
+    let reply_with = opening.clone();
+    let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(body, opening);
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::Overloaded,
+            in_stream: true
+        })
+    );
+
+    // Claude Code handles an HTTP failure itself, so it keeps it.
+    let upstream = FakeUpstream::start(|_| reply(529, "overloaded")).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, _) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(status.as_u16(), 529);
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::Overloaded,
+            in_stream: false
+        })
+    );
+}
