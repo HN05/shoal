@@ -90,7 +90,7 @@ pub fn commands(agents: &Agents) -> impl Iterator<Item = (String, Vec<String>)> 
 pub fn agents(tools: &Tools) -> impl Iterator<Item = &str> {
     tools
         .values()
-        .filter(|tool| tool.launch.is_some())
+        .filter(|tool| tool.runs_as_agent)
         .map(|tool| tool.name.as_str())
 }
 

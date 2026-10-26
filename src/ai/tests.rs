@@ -14,7 +14,7 @@ fn parse(text: &str) -> Result<Tools> {
 
 /// The launch profile of `name`, which runs as an agent.
 fn launch<'a>(tools: &'a Tools, name: &str) -> &'a LaunchProfile {
-    tools[name].launch.as_ref().unwrap()
+    &tools[name].launch
 }
 
 fn arguments<'a>(tools: &'a Tools, name: &str) -> &'a Arguments {
@@ -96,6 +96,21 @@ fn configured_arguments_replace_built_in_ones_entry_by_entry() {
         let error = format!("{:#}", parse(config).unwrap_err());
         assert!(error.contains(message), "{config}: {error}");
     }
+}
+
+#[test]
+fn arguments_describe_a_launcher_defined_in_commands() {
+    let agents = parse(
+        "[ai.helper]\nresume_latest = ['--continue']\n\
+             [commands]\nhelper = ['helper']\n",
+    )
+    .unwrap();
+    // `[commands]` defines the launcher, so `[ai]` alone makes no agent of it.
+    assert!(!runs_as_agent(&agents, "helper"));
+    assert_eq!(
+        arguments(&agents, "helper").resume_args(None),
+        Some(vec![OsString::from("--continue")])
+    );
 }
 
 #[test]

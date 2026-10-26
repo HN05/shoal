@@ -184,10 +184,7 @@ impl Effective {
     /// arguments and changes nothing in its environment.
     pub fn launch(&self, name: &str) -> &crate::ai::LaunchProfile {
         static NONE: LazyLock<crate::ai::LaunchProfile> = LazyLock::new(Default::default);
-        self.tools
-            .get(name)
-            .and_then(|tool| tool.launch.as_ref())
-            .unwrap_or(&NONE)
+        self.tools.get(name).map_or(&NONE, |tool| &tool.launch)
     }
 
     /// The integration agent `name` runs with; none for an agent no AI tool

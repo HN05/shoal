@@ -22,9 +22,13 @@ pub type Tools = BTreeMap<String, Tool>;
 pub struct Tool {
     /// Identity: what `--agent`, `shoal <name>` and recovery records use.
     pub name: String,
-    /// How it launches; `None` for a tool with only a skill directory,
-    /// which does not run as an agent.
-    pub launch: Option<LaunchProfile>,
+    /// Whether it runs as an agent of its own, as `shoal <name>` does:
+    /// built in, or configured with a launcher or a base. A tool with only
+    /// a skill directory or argument templates is not one.
+    pub runs_as_agent: bool,
+    /// What its launcher takes, including that of a `[commands]` agent
+    /// whose `[ai]` entry only describes arguments.
+    pub launch: LaunchProfile,
     /// Which Shoal integration it runs with.
     pub integration: IntegrationKind,
     /// The tools it is a launch profile of, nearest first. A launcher is
@@ -70,11 +74,7 @@ impl Tool {
             None => Ok(None),
             Some(SkillDir::Configured(directory)) => skill_dir(directory, home).map(Some),
             Some(SkillDir::Builtin(directory)) => {
-                let environment = self
-                    .launch
-                    .as_ref()
-                    .map(|launch| launch.environment.values(home))
-                    .unwrap_or_default();
+                let environment = self.launch.environment.values(home);
                 directory.path(&environment, home).map(Some)
             }
         }
@@ -126,10 +126,10 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         .filter_map(|name| entries.get(*name))
         .collect();
     let builtin = lineage.last().and_then(|root| builtin::find(root));
-    let launch = runs_as_agent(entries, name).then(|| LaunchProfile {
+    let launch = LaunchProfile {
         arguments: arguments(&configured, builtin),
         environment: environment(&configured),
-    });
+    };
     let skill_dir = configured
         .iter()
         .find_map(|agent| agent.skill_dir.clone())
@@ -138,6 +138,7 @@ fn tool(entries: &Agents, name: &str) -> Tool {
     let integration = builtin.map_or(IntegrationKind::None, |provider| provider.integration);
     Tool {
         name: name.to_owned(),
+        runs_as_agent: runs_as_agent(entries, name),
         launch,
         integration,
         bases: lineage[1..].iter().map(|base| (*base).to_owned()).collect(),
