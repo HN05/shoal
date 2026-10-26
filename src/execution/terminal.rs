@@ -108,6 +108,17 @@ impl Terminal {
     }
 }
 
+/// Clear the screen and scrollback of the terminal a demo starts in, which
+/// shows how its host started the wrapper, so the user sees only the demo.
+pub(super) fn clear_terminal() {
+    let mut stdout = std::io::stdout();
+    if stdout.is_terminal() {
+        let _ = stdout
+            .write_all(b"\x1b[H\x1b[2J\x1b[3J")
+            .and_then(|()| stdout.flush());
+    }
+}
+
 /// Run `command` in this process's terminal as its foreground job, as an
 /// interactive hook runs, then restore the terminal's foreground group, OS
 /// settings and emulator input modes, whatever the command left.

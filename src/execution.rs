@@ -16,12 +16,7 @@ mod terminal;
 mod wake;
 
 use anyhow::{Context, Result, ensure};
-use std::{
-    ffi::OsString,
-    io::{IsTerminal, Write},
-    path::PathBuf,
-    time::Instant,
-};
+use std::{ffi::OsString, path::PathBuf, time::Instant};
 
 use crate::{
     cli::{
@@ -45,6 +40,7 @@ use pause::{AfterPause, Halt, pause_agent, record_stopped_command};
 use spawn::AgentLaunch;
 pub use supervise::exit_code;
 use supervise::{Outcome, supervise};
+use terminal::clear_terminal;
 pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
 
 /// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
@@ -134,17 +130,6 @@ pub async fn run_demo(
     run_tracked(paths, workspace, command, mode, None)
         .await
         .map(|_| 0)
-}
-
-/// Clear the screen and scrollback of the terminal a demo starts in, which
-/// shows how its host started the wrapper, so the user sees only the demo.
-fn clear_terminal() {
-    let mut stdout = std::io::stdout();
-    if stdout.is_terminal() {
-        let _ = stdout
-            .write_all(b"\x1b[H\x1b[2J\x1b[3J")
-            .and_then(|()| stdout.flush());
-    }
 }
 
 pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
