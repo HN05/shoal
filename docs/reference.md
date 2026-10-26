@@ -2100,8 +2100,9 @@ GitHub's `meta` with `gh`, GitLab's `version` with `glab`, and Forgejo's or
 Gitea's `version` with the login below, and records the answer; GitHub Enterprise
 Server and self-hosted GitLab need the CLI logged in to the host: asking sends
 only a login saved for that host, never a token such as `GH_ENTERPRISE_TOKEN` or
-`GITLAB_TOKEN` that the CLI would send to any host. `shoal doctor`
-asks recorded hosts again. A host that answers as none of them fails until you
+`GITLAB_TOKEN` that the CLI would send to any host. The daemon asks recorded hosts
+again when it starts or reloads its config, and records an alert when one now
+answers as another forge; `shoal doctor` asks them too. A host that answers as none of them fails until you
 set its type, which also stops Shoal asking it:
 
 ```toml

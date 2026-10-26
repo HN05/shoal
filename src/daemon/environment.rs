@@ -1,5 +1,6 @@
 //! The daemon's checks of its environment: the tools on its `PATH`,
-//! `root_dir`, registered checkouts and the global config. It reports the
+//! `root_dir`, registered checkouts, the global config and the forges
+//! recorded hosts serve. It reports the
 //! problems they find as alerts when it starts and when its config reloads.
 use std::{ffi::OsStr, path::PathBuf};
 
@@ -8,6 +9,7 @@ use anyhow::Result;
 use crate::{
     daemon::{
         doctor::{Check, CheckStatus},
+        forge_hosts::Recheck,
         log,
         notifications::NotificationKind,
         workspace::Manager,
@@ -118,9 +120,10 @@ pub async fn watch_environment(manager: std::sync::Arc<Manager>) {
 
 impl Manager {
     /// Record an alert for each problem with the daemon's tools, `root_dir`,
-    /// registered checkouts and the global config, as the daemon starts or
-    /// reloads its config. A missing optional tool only disables what needs
-    /// it, so it alerts nobody. Identical unread alerts collapse into one.
+    /// registered checkouts and the global config, and for each recorded host
+    /// that now serves another forge, as the daemon starts or reloads its
+    /// config. A missing optional tool only disables what needs it, so it
+    /// alerts nobody. Identical unread alerts collapse into one.
     pub async fn report_environment(&self) {
         let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref())
             .into_iter()
@@ -136,11 +139,24 @@ impl Manager {
             }
             Err(error) => log!("environment check skipped repositories: {error:#}"),
         }
-        for check in checks
+        let mut problems: Vec<String> = checks
             .into_iter()
             .filter(|check| check.status != CheckStatus::Ok)
-        {
-            self.notify(None, NotificationKind::EnvironmentProblem, check.message)
+            .map(|check| check.message)
+            .collect();
+        // Only a changed answer matters: a host Shoal cannot reach now keeps
+        // the forge it answered before, which a machine offline at boot needs.
+        match self.recheck_forge_hosts().await {
+            Ok(rechecks) => problems.extend(
+                rechecks
+                    .iter()
+                    .filter(|(_, recheck)| matches!(recheck, Recheck::Changed { .. }))
+                    .map(|(host, recheck)| recheck.change(host)),
+            ),
+            Err(error) => log!("environment check skipped forge hosts: {error:#}"),
+        }
+        for problem in problems {
+            self.notify(None, NotificationKind::EnvironmentProblem, problem)
                 .await;
         }
     }

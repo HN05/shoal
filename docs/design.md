@@ -1019,8 +1019,10 @@ version or metadata endpoint with the user's login for that host, since a name
 cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo.
 Asking leaves out the tokens gh and glab read from the environment for any
 host, so a host that may be another forge never receives them. The daemon records
-each answer in its state and asks recorded hosts again from `doctor`, which
-otherwise changes no state without `--repair`; a global `[forges."<host>"] type`
+each answer in its state and asks recorded hosts again when it starts or
+reloads its config, recording a changed answer with an alert, and from `doctor`,
+which otherwise changes no state without `--repair`. A host it cannot reach then
+keeps its answer and raises no alert, since a machine may start offline; a global `[forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
 parse the same way, and the CLI starts out knowing the pinned ones. A pasted
