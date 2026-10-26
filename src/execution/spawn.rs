@@ -20,9 +20,33 @@ pub(super) struct AgentLaunch {
     /// What the agent's `[ai]` entry changes in its environment, last.
     pub(super) environment: crate::ai::Environment,
     pub(super) home: PathBuf,
+    /// The proxy the agent's API requests go through, which runs as long as
+    /// this wrapper does.
+    pub(super) proxy: Option<crate::proxy::Running>,
 }
 
 impl AgentLaunch {
+    /// `command` with its proxy placeholders filled in, for an agent that
+    /// runs with the workspace's `environment` and its own.
+    fn route(
+        &self,
+        command: &[OsString],
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> Result<Vec<OsString>> {
+        let Some(proxy) = &self.proxy else {
+            return Ok(command.to_vec());
+        };
+        let mut configured = environment.clone();
+        self.environment.layer(&mut configured, &self.home);
+        crate::cli::agents::route_through_proxy(
+            self.integration.unwrap_or(crate::ai::IntegrationKind::None),
+            command.to_vec(),
+            &proxy.url,
+            &self.home,
+            &configured,
+        )
+    }
+
     fn apply(&self, command: &mut Command) {
         self.account.apply(command);
         self.secrets.apply(command);
@@ -38,6 +62,10 @@ pub(super) fn spawn(
     mode: &Mode,
     auth: Option<&AgentLaunch>,
 ) -> Result<Child> {
+    let command = match auth {
+        Some(auth) => auth.route(command, &plan.environment)?,
+        None => command.to_vec(),
+    };
     let mut process = Command::new(&command[0]);
     process
         .args(&command[1..])

@@ -215,7 +215,7 @@ fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
     })
 }
 
-fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
+pub(super) fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
     env::codex_home_with(environment.configured).map(|dir| {
         dir.unwrap_or_else(|| environment.home.join(".codex"))
             .join("config.toml")

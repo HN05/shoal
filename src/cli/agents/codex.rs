@@ -4,10 +4,11 @@
 //! Codex app.
 use std::ffi::OsString;
 
+use anyhow::Result;
 use serde_json::Value;
 
 use super::{
-    Integration, Options, Wake,
+    AgentEnvironment, Integration, Options, Wake,
     trust::{CODEX, TrustFile},
 };
 use crate::{
@@ -22,8 +23,29 @@ pub(super) const APP: &str = "codex";
 pub(super) struct Codex;
 
 impl Integration for Codex {
-    fn hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        config_overrides(true)
+    fn hook_args(&self, proxied: bool) -> std::io::Result<Vec<OsString>> {
+        let mut args = config_overrides(true)?;
+        if proxied {
+            args.push(PROVIDER.into());
+        }
+        Ok(args)
+    }
+
+    /// The provider placeholder becomes the overrides that send the
+    /// provider Codex uses to the proxy.
+    fn route_through_proxy(
+        &self,
+        args: &mut Vec<OsString>,
+        url: &str,
+        environment: &AgentEnvironment,
+    ) -> Result<()> {
+        let Some(at) = args.iter().position(|arg| arg == PROVIDER) else {
+            return Ok(());
+        };
+        let config = super::trust::codex_config(environment)?;
+        let overrides = proxy_overrides(active_provider(&config)?.as_deref(), url)?;
+        args.splice(at..=at, overrides);
+        Ok(())
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
@@ -90,6 +112,64 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
         ),
         ("Stop", hooks::state(shoal, None, AgentState::Idle)),
     ]
+}
+
+/// Where a proxied Codex launch's hook arguments name its provider, which
+/// [`Codex::route_through_proxy`] turns into overrides once the agent's
+/// environment says which provider its config uses.
+const PROVIDER: &str = "{shoal-proxy-codex-provider}";
+
+/// Codex's built-in providers, which its config cannot override.
+const BUILT_IN_PROVIDERS: [&str; 4] = ["openai", "oss", "ollama", "lmstudio"];
+
+/// The provider Shoal defines for a Codex on its built-in OpenAI provider,
+/// which uses the same login.
+const PROXY_PROVIDER: &str = "shoal-proxy";
+
+/// The overrides that send Codex's `provider`, `openai` when its config
+/// names none, to the proxy at `url`. A provider of the user's keeps its own
+/// settings, such as a token, and only changes its base URL; the built-in
+/// one, which Codex does not let config change, gives way to Shoal's provider
+/// with the same OpenAI login. The proxy forwards plain HTTP.
+fn proxy_overrides(provider: Option<&str>, url: &str) -> Result<Vec<OsString>> {
+    let url = toml::Value::String(url.to_owned());
+    let overrides = match provider.unwrap_or("openai") {
+        "openai" => vec![
+            format!("model_provider={PROXY_PROVIDER}"),
+            format!(
+                "model_providers.{PROXY_PROVIDER}={{name=\"Shoal proxy\",base_url={url},\
+                 wire_api=\"responses\",requires_openai_auth=true,supports_websockets=false}}"
+            ),
+        ],
+        id if BUILT_IN_PROVIDERS.contains(&id) => {
+            anyhow::bail!("Codex's built-in provider {id:?} cannot go through Shoal's proxy")
+        }
+        id => {
+            let key = toml_edit::Key::new(id);
+            vec![
+                format!("model_providers.{key}.base_url={url}"),
+                format!("model_providers.{key}.supports_websockets=false"),
+            ]
+        }
+    };
+    Ok(overrides
+        .into_iter()
+        .flat_map(|value| ["-c".into(), value.into()])
+        .collect())
+}
+
+/// The provider `config` names with `model_provider`, if any.
+fn active_provider(config: &std::path::Path) -> Result<Option<String>> {
+    let Some(text) = crate::fsutil::read_optional(config)? else {
+        return Ok(None);
+    };
+    let table: toml::Table = anyhow::Context::with_context(toml::from_str(&text), || {
+        format!("parse {}", config.display())
+    })?;
+    Ok(table
+        .get("model_provider")
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned))
 }
 
 #[cfg(test)]

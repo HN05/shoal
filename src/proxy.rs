@@ -1,12 +1,26 @@
 //! Shoal's retrying proxy between agents and their API upstream, from the
 //! global `[proxy.<name>]` tables an `[ai.<name>]` tool names. The
-//! `shoal-proxy` crate forwards and retries; Shoal configures it.
+//! `shoal-proxy` crate forwards and retries; Shoal configures and runs one
+//! per agent launch.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 
 pub type Proxies = BTreeMap<String, Proxy>;
+
+/// Where a proxied agent's launch arguments name the proxy's base URL,
+/// which the wrapper fills in once the proxy listens.
+pub const URL: &str = "{shoal-proxy-url}";
+
+/// Fill in [`URL`] in each of `args` with the proxy's `url`.
+pub fn fill_url(args: &mut [std::ffi::OsString], url: &str) {
+    for arg in args {
+        if let Some(text) = arg.to_str().filter(|text| text.contains(URL)) {
+            *arg = text.replace(URL, url).into();
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +51,43 @@ fn validate_upstream(url: &str) -> Result<()> {
         "upstream URL needs http:// or https://"
     );
     Ok(())
+}
+
+/// The proxy a tracked agent's wrapper runs while the agent does, at `url`.
+pub struct Running {
+    pub url: String,
+    #[cfg(feature = "proxy")]
+    serving: tokio::task::JoinHandle<std::io::Result<()>>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        #[cfg(feature = "proxy")]
+        self.serving.abort();
+    }
+}
+
+/// Start a proxy to `upstream` on a free loopback port, serving on this
+/// process's runtime.
+#[cfg(feature = "proxy")]
+pub async fn start(upstream: &str) -> Result<Running> {
+    let upstream = shoal_proxy::Upstream::parse(upstream)?;
+    let (events, _) = tokio::sync::mpsc::unbounded_channel();
+    let proxy = shoal_proxy::Proxy::bind(upstream, events)
+        .await
+        .context("start the agent's proxy")?;
+    let url = format!("http://{}", proxy.local_addr()?);
+    Ok(Running {
+        url,
+        serving: tokio::spawn(proxy.serve()),
+    })
+}
+
+#[cfg(not(feature = "proxy"))]
+pub async fn start(_upstream: &str) -> Result<Running> {
+    anyhow::bail!(
+        "this Shoal was built without the proxy feature, so it cannot start [proxy] tables"
+    )
 }
 
 /// `ai.<name>.proxy` names a defined proxy.
@@ -72,6 +123,21 @@ mod tests {
         validate(&config.proxy)?;
         validate_references(&config.ai.entries, &config.proxy)?;
         Ok(config)
+    }
+
+    #[test]
+    fn the_url_fills_in_wherever_launch_arguments_name_it() {
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "--settings".into(),
+            format!(r#"{{"env":{{"ANTHROPIC_BASE_URL":"{URL}"}}}}"#).into(),
+            "plain".into(),
+        ];
+        fill_url(&mut args, "http://127.0.0.1:4000");
+        assert_eq!(
+            args[1],
+            r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:4000"}}"#
+        );
+        assert_eq!(args[2], "plain");
     }
 
     #[test]

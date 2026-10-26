@@ -329,6 +329,10 @@ async fn prepare_agent_launch(
             .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),
         home: paths.home.clone(),
+        proxy: match agent.and_then(|agent| settings.proxy(agent)) {
+            Some(upstream) => Some(crate::proxy::start(upstream).await?),
+            None => None,
+        },
     }))
 }
 

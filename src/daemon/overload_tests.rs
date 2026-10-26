@@ -180,7 +180,7 @@ async fn built_in_restore_child() {
         let directory = workspace.path.parent().unwrap();
         let tools = crate::ai::Table::default().tools;
         let tool = &tools[agent];
-        let launch_args = crate::cli::agents::hook_args(tool.integration)
+        let launch_args = crate::cli::agents::hook_args(tool.integration, false)
             .unwrap()
             .into_iter()
             .chain(tool.launch.arguments.add_dir_args(directory));

@@ -836,6 +836,39 @@ receives instead. A pending retry outlasts a
 daemon restart; `status` shows it, and `--json` gives `turn_retry` with
 `failure`, `attempt`, `attempts` (`null` for no cap), `due_at` and `delivered`.
 
+`proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
+API requests through Shoal's retrying proxy to the `upstream` of a global
+`[proxy.<name>]`, the base URL the agent would otherwise use:
+
+```toml
+[proxy.cliproxy]
+upstream = "http://127.0.0.1:8317"   # CLIProxyAPI
+
+[ai.claude]
+proxy = "cliproxy"
+```
+
+The agent's wrapper runs one proxy on a loopback port for as long as the agent
+runs and points the agent at it: Claude Code through `ANTHROPIC_BASE_URL` in the
+settings Shoal passes, which win over its own settings and environment; Codex by
+moving the `base_url` of the provider its config names, keeping that provider's
+own credentials, or, on its built-in OpenAI provider, through a provider Shoal
+defines with the same login, whose upstream is then
+`https://chatgpt.com/backend-api/codex` for a ChatGPT login or
+`https://api.openai.com/v1` for an API key. The proxy forwards each request with
+the agent's own credentials and retries what the agent would otherwise fail on:
+a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
+that reports one of those before any content, waiting from a second, doubling to
+half a minute, or as long as the upstream's `Retry-After` asks. Once an outage
+has lasted five minutes the agent gets the failure, and later requests get theirs
+at once until one succeeds; a failure a retry does not fix, or one after content
+arrived, reaches the agent unchanged. A Codex stream that gives up ends with a
+`response.failed` event, which ends its turn, instead of an HTTP failure Codex
+would retry itself. Through the proxy, Claude Code on a claude.ai login treats
+its base URL as a gateway and leaves out Remote Control and remote managed
+settings. Chats and desktop apps run without it. Builds without the default
+`proxy` Cargo feature refuse to launch an agent that names one.
+
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).

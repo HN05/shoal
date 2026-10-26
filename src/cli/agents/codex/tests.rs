@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn config_overrides_deliver_messages_and_report_state() {
     let hooks: BTreeMap<_, _> = Codex
-        .hook_args()
+        .hook_args(false)
         .unwrap()
         .chunks(2)
         .map(|flag| {
@@ -54,5 +54,63 @@ fn config_overrides_deliver_messages_and_report_state() {
     assert!(
         chat.iter()
             .any(|arg| arg.to_str().unwrap().contains("messages --hook"))
+    );
+}
+
+#[test]
+fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
+    let home = tempfile::tempdir().unwrap();
+    let codex = home.path().join(".codex");
+    std::fs::create_dir_all(&codex).unwrap();
+    let routed = |config: Option<&str>| {
+        match config {
+            Some(config) => std::fs::write(codex.join("config.toml"), config).unwrap(),
+            None => drop(std::fs::remove_file(codex.join("config.toml"))),
+        }
+        let mut args = Codex.hook_args(true).unwrap();
+        assert_eq!(args.last().unwrap(), PROVIDER);
+        let configured = BTreeMap::from([("CODEX_HOME".to_owned(), codex.clone().into())]);
+        let environment = AgentEnvironment {
+            home: home.path(),
+            configured: &configured,
+        };
+        Codex
+            .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment)
+            .map(|()| args.split_off(args.len() - 4))
+    };
+    // A provider of the user's keeps its token and only moves.
+    let custom = routed(Some("model_provider = 'cliproxy'\n")).unwrap();
+    assert_eq!(
+        custom,
+        [
+            "-c",
+            "model_providers.cliproxy.base_url=\"http://127.0.0.1:4000\"",
+            "-c",
+            "model_providers.cliproxy.supports_websockets=false",
+        ]
+    );
+    // The built-in one gives way to Shoal's provider with its login.
+    for config in [None, Some("model_provider = 'openai'\n")] {
+        let builtin = routed(config).unwrap();
+        assert_eq!(builtin[1], "model_provider=shoal-proxy");
+        let provider = builtin[3].to_str().unwrap();
+        assert!(provider.contains("requires_openai_auth=true"), "{provider}");
+        assert!(
+            provider.contains(r#"base_url="http://127.0.0.1:4000""#),
+            "{provider}"
+        );
+    }
+    let error = format!(
+        "{:#}",
+        routed(Some("model_provider = 'oss'\n")).unwrap_err()
+    );
+    assert!(error.contains("built-in provider \"oss\""), "{error}");
+    // Without a proxy the hooks name no provider.
+    assert!(
+        !Codex
+            .hook_args(false)
+            .unwrap()
+            .iter()
+            .any(|arg| arg == PROVIDER)
     );
 }

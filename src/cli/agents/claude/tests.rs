@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
-    let args = Claude.hook_args().unwrap();
+    let args = Claude.hook_args(false).unwrap();
     assert_eq!(args[0], "--settings");
     let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
     for event in hooks::MESSAGE_EVENTS {
@@ -121,4 +121,30 @@ fn chat_settings_deliver_messages_and_wake_without_turn_state() {
     for event in hooks::MESSAGE_EVENTS {
         assert!(settings["hooks"][event][0]["hooks"][0]["command"].is_string());
     }
+}
+
+#[test]
+fn proxied_settings_send_api_requests_to_the_proxy() {
+    let env = |proxied| {
+        let args = Claude.hook_args(proxied).unwrap();
+        let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
+        settings["env"].clone()
+    };
+    assert_eq!(env(false), Value::Null);
+    assert_eq!(env(true), json!({"ANTHROPIC_BASE_URL": crate::proxy::URL}));
+    let mut args = Claude.hook_args(true).unwrap();
+    let home = std::path::Path::new("/home");
+    let environment = AgentEnvironment {
+        home,
+        configured: &Default::default(),
+    };
+    Claude
+        .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment)
+        .unwrap();
+    assert!(
+        args[1]
+            .to_str()
+            .unwrap()
+            .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#)
+    );
 }

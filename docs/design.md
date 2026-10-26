@@ -912,6 +912,12 @@ daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to
 the reporting execution and cancelled by any new turn, so it never competes with
 the user or with another delivery.
+The retrying proxy lives in `crates/shoal-proxy`, which knows the wire protocols
+but no Shoal code, like `shoal-forge`. Each tracked agent that names one gets its
+own, run by its wrapper, so a daemon restart never cuts a stream and the proxy
+ends with the agent; Shoal points the agent at it through the integration, which
+knows how that agent takes a base URL. All its requests share one outage budget,
+so the agent's own retries never multiply the proxy's.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings, plus permission for a workspace's

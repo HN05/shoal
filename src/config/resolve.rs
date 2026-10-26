@@ -199,6 +199,11 @@ impl Effective {
             .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
+    /// The upstream agent `name`'s tracked launches reach through a proxy.
+    pub fn proxy(&self, name: &str) -> Option<&str> {
+        self.proxies.get(name).map(String::as_str)
+    }
+
     fn from_merged(merged: RepoConfig) -> Result<Self> {
         fn built_in<T>(value: Option<T>, key: &str) -> Result<T> {
             value.with_context(|| format!("{key} has no built-in default"))

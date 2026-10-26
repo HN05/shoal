@@ -43,9 +43,23 @@ pub(super) use shortcuts::{codex, open_app};
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
 pub(in crate::cli) trait Integration: Sync {
-    /// Arguments that register Shoal's hooks for the agent's session.
-    fn hook_args(&self) -> std::io::Result<Vec<OsString>> {
+    /// Arguments that register Shoal's hooks for the agent's session and,
+    /// when `proxied`, send its API requests to Shoal's proxy, with
+    /// placeholders that [`Self::route_through_proxy`] fills in.
+    fn hook_args(&self, _proxied: bool) -> std::io::Result<Vec<OsString>> {
         Ok(Vec::new())
+    }
+
+    /// Fill in the proxy placeholders of `args` with the proxy's `url`, for
+    /// the agent running with `environment`.
+    fn route_through_proxy(
+        &self,
+        args: &mut Vec<OsString>,
+        url: &str,
+        _environment: &AgentEnvironment,
+    ) -> Result<()> {
+        crate::proxy::fill_url(args, url);
+        Ok(())
     }
 
     /// The hooks of a chat, which belongs to no workspace and so reports no
@@ -485,9 +499,24 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
 }
 
 /// Arguments that register Shoal's hooks for the session of an agent with
-/// integration `kind`.
-pub(crate) fn hook_args(kind: IntegrationKind) -> std::io::Result<Vec<OsString>> {
-    integration(kind).hook_args()
+/// integration `kind`, and when `proxied` route its API requests through
+/// Shoal's proxy.
+pub(crate) fn hook_args(kind: IntegrationKind, proxied: bool) -> std::io::Result<Vec<OsString>> {
+    integration(kind).hook_args(proxied)
+}
+
+/// `command` of an agent with integration `kind`, running with `configured`
+/// added to this process's environment, sent to the proxy at `url`.
+pub(crate) fn route_through_proxy(
+    kind: IntegrationKind,
+    mut command: Vec<OsString>,
+    url: &str,
+    home: &Path,
+    configured: &BTreeMap<String, OsString>,
+) -> Result<Vec<OsString>> {
+    let environment = AgentEnvironment { home, configured };
+    integration(kind).route_through_proxy(&mut command, url, &environment)?;
+    Ok(command)
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
@@ -500,7 +529,8 @@ pub(crate) async fn workspace_args(
     name: &str,
     workspace: &Workspace,
 ) -> Result<Vec<OsString>> {
-    let mut args = hook_args(settings.integration(name))?;
+    let proxied = settings.proxy(name).is_some();
+    let mut args = hook_args(settings.integration(name), proxied)?;
     if let Some(directory) = workspaces_dir(paths, workspace).await {
         args.extend(settings.launch(name).arguments.add_dir_args(&directory));
     }

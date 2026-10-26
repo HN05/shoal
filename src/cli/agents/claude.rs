@@ -5,6 +5,8 @@ use std::ffi::OsString;
 
 use serde_json::{Value, json};
 
+#[cfg(test)]
+use super::AgentEnvironment;
 use super::{
     Integration, Wake,
     trust::{CLAUDE_CODE, TrustFile},
@@ -18,12 +20,12 @@ use crate::{
 pub(super) struct Claude;
 
 impl Integration for Claude {
-    fn hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        settings(true)
+    fn hook_args(&self, proxied: bool) -> std::io::Result<Vec<OsString>> {
+        settings(true, proxied)
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        settings(false)
+        settings(false, false)
     }
 
     /// Its hooks deliver updates and start its next turn with them.
@@ -48,9 +50,12 @@ impl Integration for Claude {
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
-/// own settings. A `workspace` agent also reports its turn's state and may run
-/// the commands that finish its assignment.
-fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
+/// own settings, and a later `--settings` would replace it. A `workspace`
+/// agent also reports its turn's state and may run the commands that finish
+/// its assignment. A `proxied` one sends its API requests to Shoal's proxy:
+/// the base URL goes here because these settings win over the user's own
+/// `env`, which may set one, and over the inherited environment.
+fn settings(workspace: bool, proxied: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let (state, subagents, allow) = if workspace {
         (
@@ -68,6 +73,9 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     let mut settings = json!({"hooks": hooks::by_event(groups)});
     if !allow.is_empty() {
         settings["permissions"] = json!({"allow": allow});
+    }
+    if proxied {
+        settings["env"] = json!({"ANTHROPIC_BASE_URL": crate::proxy::URL});
     }
     Ok(vec!["--settings".into(), settings.to_string().into()])
 }

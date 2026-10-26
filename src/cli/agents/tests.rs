@@ -61,7 +61,7 @@ fn integrations_serve_only_the_names_they_list() {
     assert_eq!(integration(IntegrationKind::Claude).wakes(), Wake::Hook);
     let configured = integration(IntegrationKind::None);
     assert!(configured.trust_file().is_none());
-    assert!(configured.hook_args().unwrap().is_empty());
+    assert!(configured.hook_args(false).unwrap().is_empty());
     assert_eq!(
         builtin_names()[..2],
         ["codex".to_owned(), "claude".to_owned()]
