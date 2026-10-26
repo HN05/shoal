@@ -35,6 +35,10 @@ struct Sample {
 pub(crate) struct WorkspaceUsages {
     latest: Option<Sample>,
     usage: HashMap<String, WorkspaceUsage>,
+    /// CPU nanoseconds per workspace subtracted before the readings they
+    /// come back in: a parent read just before it reaped a child that was
+    /// gone by its own read includes the child's time only next sample.
+    owed: HashMap<String, i128>,
 }
 
 impl WorkspaceUsages {
@@ -47,7 +51,7 @@ impl WorkspaceUsages {
                     .latest
                     .take()
                     .filter(|previous| sample.time.duration_since(previous.time) <= STALE);
-                self.usage = usage(previous.as_ref(), &sample);
+                self.usage = usage(previous.as_ref(), &sample, &mut self.owed);
                 self.latest = Some(sample);
             }
             Err(error) => {
@@ -85,11 +89,16 @@ impl WorkspaceUsages {
 
 /// Each workspace's processes and memory in `current`, with the CPU they
 /// used since `previous`. A process that started since counts all its time,
-/// and one that exited counts until its parent reaps it.
-/// One that ended since was reaped into the time of its nearest ancestor
-/// still in its workspace, directly or through ancestors that ended too, and
-/// that workspace already counted the time it had before.
-fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, WorkspaceUsage> {
+/// and one that exited counts until its parent reaps it. One that is gone
+/// since was reaped into the time of its nearest ancestor still in its
+/// workspace, directly or through ancestors gone too, and that workspace
+/// already counted the time it had before. Time subtracted beyond what the
+/// readings show stays `owed` until a later reading includes it.
+fn usage(
+    previous: Option<&Sample>,
+    current: &Sample,
+    owed: &mut HashMap<String, i128>,
+) -> HashMap<String, WorkspaceUsage> {
     let mut usage: HashMap<String, WorkspaceUsage> = HashMap::new();
     let mut cpu: HashMap<&str, i128> = HashMap::new();
     for (identity, (workspace, reading)) in &current.processes {
@@ -104,6 +113,7 @@ fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, Workspa
         *cpu.entry(workspace).or_default() += i128::from(reading.cpu) - i128::from(before);
     }
     let Some(previous) = previous else {
+        owed.clear();
         return usage;
     };
     let live: HashSet<(&str, u32)> = current
@@ -128,14 +138,17 @@ fn usage(previous: Option<&Sample>, current: &Sample) -> HashMap<String, Workspa
         }
     }
     let elapsed = current.time.duration_since(previous.time).as_nanos() as f64;
+    let mut still_owed = HashMap::new();
     for (workspace, entry) in &mut usage {
-        let used = cpu
-            .get(workspace.as_str())
-            .copied()
-            .unwrap_or_default()
-            .max(0);
+        let used = cpu.get(workspace.as_str()).copied().unwrap_or_default()
+            + owed.get(workspace).copied().unwrap_or_default();
+        if used < 0 {
+            still_owed.insert(workspace.clone(), used);
+        }
+        let used = used.max(0);
         entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
     }
+    *owed = still_owed;
     usage
 }
 
@@ -282,7 +295,7 @@ mod tests {
                 process(20, 1, "b", SECOND),
             ],
         );
-        let alone = usage(None, &first);
+        let alone = usage(None, &first, &mut HashMap::new());
         assert_eq!(alone["a"].processes, 2);
         assert_eq!(alone["a"].memory_bytes, 2048);
         assert_eq!(alone["a"].cpu_percent, None);
@@ -296,7 +309,7 @@ mod tests {
                 process(20, 1, "b", SECOND),
             ],
         );
-        let usage = usage(Some(&first), &second);
+        let usage = usage(Some(&first), &second, &mut HashMap::new());
         assert_eq!(usage["a"].cpu_percent, Some(40.0));
         assert_eq!(usage["b"].cpu_percent, Some(0.0));
         assert_eq!(usage.len(), 2);
@@ -319,7 +332,10 @@ mod tests {
             start + Duration::from_secs(10),
             [process(10, 1, "a", 5 * SECOND)],
         );
-        assert_eq!(usage(Some(&first), &second)["a"].cpu_percent, Some(20.0));
+        assert_eq!(
+            usage(Some(&first), &second, &mut HashMap::new())["a"].cpu_percent,
+            Some(20.0)
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -335,7 +351,7 @@ mod tests {
             [process(10, 1, "a", 0), process(11, 10, "a", 3 * SECOND)],
         );
         second.unreaped.insert(process(11, 10, "a", 0).0);
-        let exited = usage(Some(&first), &second);
+        let exited = usage(Some(&first), &second, &mut HashMap::new());
         assert_eq!(exited["a"].cpu_percent, Some(10.0));
         assert_eq!(exited["a"].processes, 1);
         assert_eq!(exited["a"].memory_bytes, 1024);
@@ -343,7 +359,10 @@ mod tests {
             start + Duration::from_secs(20),
             [process(10, 1, "a", 3 * SECOND)],
         );
-        assert_eq!(usage(Some(&second), &third)["a"].cpu_percent, Some(0.0));
+        assert_eq!(
+            usage(Some(&second), &third, &mut HashMap::new())["a"].cpu_percent,
+            Some(0.0)
+        );
     }
 
     #[test]
@@ -378,11 +397,50 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn time_subtracted_before_the_reaping_parent_shows_it_is_owed() {
+        let start = Instant::now();
+        let mut owed = HashMap::new();
+        let first = sample(
+            start,
+            [process(10, 1, "a", 0), process(11, 10, "a", 5 * SECOND)],
+        );
+        usage(None, &first, &mut owed);
+        // 10 was read before it reaped 11, which used one more second and was
+        // gone by its own read; 10 used one second itself.
+        let second = sample(
+            start + Duration::from_secs(10),
+            [process(10, 1, "a", SECOND)],
+        );
+        assert_eq!(
+            usage(Some(&first), &second, &mut owed)["a"].cpu_percent,
+            Some(0.0)
+        );
+        assert_eq!(owed["a"], -4 * i128::from(SECOND));
+        // Now 10 shows 11's six seconds and one more of its own.
+        let third = sample(
+            start + Duration::from_secs(20),
+            [process(10, 1, "a", 8 * SECOND)],
+        );
+        assert_eq!(
+            usage(Some(&second), &third, &mut owed)["a"].cpu_percent,
+            Some(30.0)
+        );
+        assert!(owed.is_empty());
+        // A gap in sampling forgets what was owed with the readings.
+        let mut owed = HashMap::from([("a".to_owned(), -1)]);
+        usage(None, &third, &mut owed);
+        assert!(owed.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn processes_reaped_elsewhere_lower_no_usage() {
         let start = Instant::now();
         let first = sample(start, [process(10, 1, "a", 5 * SECOND)]);
         let second = sample(start + Duration::from_secs(10), [process(30, 1, "a", 0)]);
-        assert_eq!(usage(Some(&first), &second)["a"].cpu_percent, Some(0.0));
+        assert_eq!(
+            usage(Some(&first), &second, &mut HashMap::new())["a"].cpu_percent,
+            Some(0.0)
+        );
     }
 
     #[tokio::test]
