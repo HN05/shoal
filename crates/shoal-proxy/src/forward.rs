@@ -240,11 +240,14 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
         Ok(Opening::Content(read)) => {
             Attempt::Answered(Response::from_parts(parts, prefixed(read, body)))
         }
-        Ok(Opening::Ended(read)) => Attempt::Failed(Failed {
+        // An agent that gets it must not take it for a whole answer.
+        Ok(Opening::Ended(_)) => Attempt::Failed(Failed {
             failure: Failure::ServerError,
             retry_after: None,
             in_stream: false,
-            response: Response::from_parts(parts, full(read)),
+            response: bad_gateway(&anyhow::anyhow!(
+                "the upstream's stream ended before any content"
+            )),
         }),
         Ok(Opening::Failure(failure, read)) => Attempt::Failed(Failed {
             failure,

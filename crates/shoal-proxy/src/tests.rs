@@ -519,3 +519,36 @@ async fn a_comment_that_keeps_a_stream_alive_is_no_content() {
     assert_eq!(body, complete);
     assert_eq!(drain(&mut events).last(), Some(&Event::Recovered));
 }
+
+#[tokio::test]
+async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
+    let upstream = FakeUpstream::start(|_| sse(MESSAGE_START)).await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    // Claude Code gets an error, not an incomplete answer.
+    let request = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#);
+    let (status, _, body) = drive(&clock, request).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert!(body.contains("ended before any content"), "{body}");
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::ServerError,
+            in_stream: false
+        })
+    );
+
+    // A streaming Codex request ends its turn.
+    let upstream = FakeUpstream::start(|_| sse(RESPONSE_CREATED)).await;
+    let (addr, mut events, clock) = proxy_on(upstream.url("")).await;
+    let request = send(addr, Request::post("/responses"), r#"{"stream":true}"#);
+    let (status, _, body) = drive(&clock, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(r#""code":"server_error""#), "{body}");
+    assert_eq!(
+        drain(&mut events).last(),
+        Some(&Event::Failed {
+            failure: Failure::ServerError,
+            in_stream: true
+        })
+    );
+}
