@@ -22,12 +22,23 @@ async fn agent(config: &str) -> Running {
     let (temp, manager) = manager().await;
     manager.publish_config(global_config(config));
     let checkout = repository(temp.path(), "repo");
-    let repo = manager
+    manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let (workspace, execution, connection) = another_agent(&manager, "agent").await;
+    (temp, manager, workspace, execution, connection)
+}
+
+/// Another workspace `name` of the repository with a connected `claude`
+/// agent, its execution and the receiver keeping its connection open.
+async fn another_agent(
+    manager: &Manager,
+    name: &str,
+) -> (Workspace, String, tokio::sync::watch::Receiver<bool>) {
+    let repo = manager.repositories().await.unwrap().remove(0);
     let workspace = manager
-        .create_workspace(&repo.id, "agent".into(), None, None, None)
+        .create_workspace(&repo.id, name.into(), None, None, None)
         .await
         .unwrap();
     let started = manager
@@ -49,7 +60,7 @@ async fn agent(config: &str) -> Running {
             Duration::ZERO,
         )
         .await;
-    (temp, manager, workspace, started.plan.id, started.stop)
+    (workspace, started.plan.id, started.stop)
 }
 
 type Running = (
@@ -172,6 +183,30 @@ async fn a_finished_assignment_cancels_its_retry() {
     manager.undo_done(&workspace.name).await.unwrap();
     assert_eq!(deliver_now(&manager).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_full_message_queue_defers_only_its_own_retry() {
+    let (_temp, manager, full, full_execution, _full) = agent(RETRY_ON).await;
+    let (open, open_execution, _open) = another_agent(&manager, "open").await;
+    for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
+        manager
+            .send_agent_message(&full.name, format!("unread {n}"))
+            .await
+            .unwrap();
+    }
+    fail(&manager, &full, &full_execution, TurnFailure::Overloaded).await;
+    fail(&manager, &open, &open_execution, TurnFailure::Overloaded).await;
+    let at = now();
+    let next = manager.deliver_turn_retries_at(at + 3600).await.unwrap();
+    assert_eq!(messages(&manager, &open).await.len(), 1);
+    assert!(retry(&manager, &open).await.unwrap().delivered);
+    // The full queue's retry waits the first delay again rather than
+    // retrying at once.
+    let deferred = retry(&manager, &full).await.unwrap();
+    assert!(!deferred.delivered);
+    assert_eq!(deferred.due_at, at + 3600 + 30);
+    assert_eq!(next, Some(deferred.due_at));
 }
 
 #[tokio::test]

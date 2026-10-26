@@ -160,69 +160,114 @@ pub(super) fn cancel(db: &Connection, workspace_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// A retry whose attempt is due at `now`, with whether it may be delivered:
-/// the reporting execution still runs the idle agent and the assignment is
-/// not finished.
+/// A due retry, with whether it may be delivered: the reporting execution
+/// still runs the idle agent and the assignment is not finished.
 struct Due {
-    workspace_id: String,
     failure: TurnFailure,
     attempt: u32,
     deliverable: bool,
 }
 
-fn due(db: &Connection, now: i64) -> Result<Vec<Due>> {
+/// The workspaces whose retry is due at `now`.
+fn due_workspaces(db: &Connection, now: i64) -> Result<Vec<String>> {
     Ok(db
         .prepare(
-            "SELECT r.workspace_id,r.failure,r.attempt,
+            "SELECT workspace_id FROM workspace_turn_retries WHERE delivered=0 AND due_at<=?1",
+        )?
+        .query_map([now], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The workspace's retry when it is still due at `now`.
+fn due(db: &Connection, workspace_id: &str, now: i64) -> Result<Option<Due>> {
+    Ok(db
+        .query_row(
+            "SELECT r.failure,r.attempt,
                 s.state IS 'idle' AND s.execution_id IS r.execution_id
                 AND NOT EXISTS (SELECT 1 FROM workspace_completion c
                     WHERE c.workspace_id=r.workspace_id)
              FROM workspace_turn_retries r
              LEFT JOIN workspace_agent_state s ON s.workspace_id=r.workspace_id
-             WHERE r.delivered=0 AND r.due_at<=?1",
-        )?
-        .query_map([now], |row| {
-            Ok(Due {
-                workspace_id: row.get(0)?,
-                failure: row.get(1)?,
-                attempt: row.get(2)?,
-                deliverable: row.get(3)?,
-            })
-        })?
-        .collect::<rusqlite::Result<_>>()?)
+             WHERE r.workspace_id=?1 AND r.delivered=0 AND r.due_at<=?2",
+            params![workspace_id, now],
+            |row| {
+                Ok(Due {
+                    failure: row.get(0)?,
+                    attempt: row.get(1)?,
+                    deliverable: row.get(2)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
-/// Ask each agent whose retry is due at `now` and may be delivered to
-/// continue, queueing its message and marking the retry delivered together,
-/// and drop the other due ones. One transaction checks and delivers, so a
-/// turn that starts meanwhile never receives a cancelled retry. Whether a
-/// message was queued, and when the next retry is due.
-fn deliver_due(db: &mut Connection, now: i64) -> Result<(bool, Option<i64>)> {
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+/// What delivering the due retries did.
+struct Delivered {
+    /// Whether a message was queued.
+    queued: bool,
+    /// The workspaces whose retry could not be delivered, with why; each is
+    /// tried again after the first delay.
+    failed: Vec<(String, anyhow::Error)>,
+    /// When the next retry is due.
+    next: Option<i64>,
+}
+
+/// Deliver each retry due at `now`, each workspace's on its own, so one
+/// that cannot be delivered, such as to a full message queue, holds up no
+/// other and waits the first delay again.
+fn deliver_due(db: &mut Connection, now: i64) -> Result<Delivered> {
     let mut queued = false;
-    for due in due(&tx, now)? {
-        if !due.deliverable {
-            cancel(&tx, &due.workspace_id)?;
-            continue;
+    let mut failed = Vec::new();
+    for workspace_id in due_workspaces(db, now)? {
+        match deliver(db, &workspace_id, now) {
+            Ok(delivered) => queued |= delivered,
+            Err(error) => {
+                postpone(db, &workspace_id, now + FIRST_DELAY_SECS as i64)?;
+                failed.push((workspace_id, error));
+            }
         }
-        agent_messages::insert(
-            &tx,
-            &due.workspace_id,
-            &continuation(due.failure, due.attempt),
-        )?;
-        tx.execute(
-            "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
-            [&due.workspace_id],
-        )?;
-        queued = true;
     }
-    let next = tx.query_row(
+    let next = db.query_row(
         "SELECT MIN(due_at) FROM workspace_turn_retries WHERE delivered=0",
         [],
         |row| row.get(0),
     )?;
+    Ok(Delivered {
+        queued,
+        failed,
+        next,
+    })
+}
+
+/// Ask the agent to continue when the workspace's retry is still due at
+/// `now` and may be delivered, queueing the message and marking the retry
+/// delivered together, or drop a retry that may not be. One transaction
+/// checks and delivers, so a turn that starts meanwhile never receives a
+/// cancelled retry. Whether a message was queued.
+fn deliver(db: &mut Connection, workspace_id: &str, now: i64) -> Result<bool> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let Some(due) = due(&tx, workspace_id, now)? else {
+        return Ok(false);
+    };
+    if due.deliverable {
+        agent_messages::insert(&tx, workspace_id, &continuation(due.failure, due.attempt))?;
+        tx.execute(
+            "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
+            [workspace_id],
+        )?;
+    } else {
+        cancel(&tx, workspace_id)?;
+    }
     tx.commit()?;
-    Ok((queued, next))
+    Ok(due.deliverable)
+}
+
+fn postpone(db: &Connection, workspace_id: &str, due_at: i64) -> Result<()> {
+    db.execute(
+        "UPDATE workspace_turn_retries SET due_at=?2 WHERE workspace_id=?1 AND delivered=0",
+        params![workspace_id, due_at],
+    )?;
+    Ok(())
 }
 
 /// The message that asks the agent to continue.
@@ -315,11 +360,14 @@ impl Manager {
 
     /// Deliver the retries due at `now`, as [`deliver_due`] does.
     async fn deliver_turn_retries_at(&self, now: i64) -> Result<Option<i64>> {
-        let (queued, next) = self.store.run(move |db| deliver_due(db, now)).await?;
-        if queued {
+        let delivered = self.store.run(move |db| deliver_due(db, now)).await?;
+        for (workspace, error) in &delivered.failed {
+            log!("turn retry for {workspace} not delivered: {error:#}");
+        }
+        if delivered.queued {
             self.agent_messages_changed.send_modify(|count| *count += 1);
         }
-        Ok(next)
+        Ok(delivered.next)
     }
 }
 
