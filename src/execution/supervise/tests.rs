@@ -1,5 +1,10 @@
 use super::*;
-use crate::{model::Workspace, process::identity::Identity, protocol};
+use crate::{
+    execution::completion::report_completion,
+    model::Workspace,
+    process::identity::Identity,
+    protocol::{self, Reattach},
+};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -12,7 +17,7 @@ async fn adjacent_controls_survive_start_and_recovery_transitions() {
         Duration::from_secs(60),
         crate::test_support::isolated_test(
             root.path(),
-            "execution::tests::adjacent_controls_child",
+            "execution::supervise::tests::adjacent_controls_child",
         )
         .output(),
     )
@@ -128,8 +133,11 @@ async fn wrappers_reattach_report_late_exits_and_stop_when_refused() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let output = timeout(
         Duration::from_secs(120),
-        crate::test_support::isolated_test(root.path(), "execution::tests::reattachment_child")
-            .output(),
+        crate::test_support::isolated_test(
+            root.path(),
+            "execution::supervise::tests::reattachment_child",
+        )
+        .output(),
     )
     .await
     .expect("isolated reattachment test stalled")
@@ -368,8 +376,11 @@ async fn an_ended_session_saves_the_command_as_stopped() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let output = timeout(
         Duration::from_secs(60),
-        crate::test_support::isolated_test(root.path(), "execution::tests::ended_session_child")
-            .output(),
+        crate::test_support::isolated_test(
+            root.path(),
+            "execution::supervise::tests::ended_session_child",
+        )
+        .output(),
     )
     .await
     .expect("isolated ended session test stalled")
