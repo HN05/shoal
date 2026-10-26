@@ -111,8 +111,8 @@ pub struct ExportArgs {
     /// Repository whose workspaces --all exports.
     #[arg(long = "repo", requires = "all")]
     pub repository: Option<String>,
-    /// File to write, or with several workspaces or --all, the directory to write a file per
-    /// workspace in.
+    /// File to write, or a directory to write a file per workspace in, which several
+    /// workspaces and --all need.
     #[arg(short, long)]
     pub output: PathBuf,
     #[command(flatten)]
@@ -643,9 +643,9 @@ pub enum Command {
     ///
     /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
     /// default branch, and the workspace's base, links and stopped agents. A removed workspace
-    /// is exported without another removal. `-` writes to standard output. Several workspaces,
-    /// or with --all every workspace of the repository, go to a file each in the directory -o
-    /// names, once each one can be exported.
+    /// is exported without another removal. `-` writes to standard output. When -o names a
+    /// directory, several workspaces, or with --all every workspace of the repository, go to a
+    /// file each in it, once each one can be exported.
     Export(ExportArgs),
     /// Open workspaces shoal export wrote, in the repository with the same origin.
     ///

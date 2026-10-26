@@ -13,7 +13,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
-        ui,
+        ui::{self, Fallback},
     },
     model::{RemovedWorkspace, RestoredWorkspace, Workspace},
     protocol::Method,
@@ -27,8 +27,9 @@ use super::restore::Reopened;
 const STANDARD_STREAM: &str = "-";
 
 /// `shoal export`: remove the workspace, or take an already removed one, and
-/// write it to `file`; several go to a file each in the directory `file`
-/// names.
+/// write it to `file`. Several workspaces, or any written to a directory,
+/// go to a file each in it. The destination is checked before a picker
+/// opens.
 pub(super) async fn export(
     ctx: &Context,
     names: Vec<String>,
@@ -43,21 +44,22 @@ pub(super) async fn export(
         let exported = export_removed(ctx, selector, &output).await?;
         return output.report(ctx, &exported);
     }
-    let selected = ui::select_workspaces(ctx, names).await?;
-    if let [workspace] = selected.as_slice() {
-        let output = Output::reserve(&file)?;
-        let exported = export_workspace(ctx, workspace, yes, &output).await?;
-        return output.report(ctx, &exported);
+    if names.len() > 1 || file.is_dir() {
+        ensure!(
+            file != Path::new(STANDARD_STREAM),
+            "several workspaces export to a file each; name a directory with -o"
+        );
+        let mut workspaces = Vec::new();
+        for selector in ui::select_workspaces(ctx, names).await? {
+            workspaces.push(client::inspect(&ctx.paths, selector).await?.workspace);
+        }
+        return export_into(ctx, &workspaces, file, yes).await;
     }
-    ensure!(
-        file != Path::new(STANDARD_STREAM),
-        "several workspaces export to a file each; name a directory with -o"
-    );
-    let mut workspaces = Vec::new();
-    for selector in selected {
-        workspaces.push(client::inspect(&ctx.paths, selector).await?.workspace);
-    }
-    export_into(ctx, &workspaces, file, yes).await
+    let output = Output::reserve(&file)?;
+    let named = names.into_iter().next();
+    let workspace = ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?;
+    let exported = export_workspace(ctx, &workspace, yes, &output).await?;
+    output.report(ctx, &exported)
 }
 
 /// `shoal export --all`: export every workspace of `repository` to a file of

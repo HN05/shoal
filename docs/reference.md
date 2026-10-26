@@ -1935,7 +1935,8 @@ the default remote's default branch; a checkpoint that branch already has
 travels without one. Ignored files, leases, permits, approvals, grants and holds
 stay behind; setup rebuilds what the workspace needs.
 
-`shoal export <workspace>... -o <directory>`, for several workspaces, and
+`shoal export <workspace>... -o <directory>`, for several workspaces or those
+the picker selects when `-o` names an existing directory, and
 `shoal export --repo <repository> --all -o <directory>`, for every workspace of
 the repository, export each to `<workspace>.shoal` in the directory, creating it when
 missing. It checks every workspace as a single export does, that none is in the

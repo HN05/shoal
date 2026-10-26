@@ -1030,7 +1030,6 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     }
 }
 
-// A reader that goes away still lets the temporary archive be removed.
 #[test]
 fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
     let fixture = Fixture::new();
@@ -1057,8 +1056,24 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         assert!(directory.join(format!("{name}.shoal")).exists());
     }
     assert!(!paths[0].exists() && !paths[1].exists() && paths[2].exists());
+    // An existing file is refused before the picker opens.
+    let existing = fixture.root.path().join("existing.shoal");
+    fs::write(&existing, "").unwrap();
+    let (refused, rows) = fixture.pick(&["export", "-o", existing.to_str().unwrap()], "", "");
+    assert!(!refused.status.success(), "{refused:?}");
+    assert!(rows.is_empty(), "{rows}");
+    // An existing directory takes the workspaces the picker selects.
+    let third = fixture.ok(&["status", "third"])["workspace"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (picked, _) = fixture.pick(&["export", "-o", output, "--yes"], &third, "");
+    assert!(picked.status.success(), "{picked:?}");
+    assert!(directory.join("third.shoal").exists());
+    assert!(!paths[2].exists());
 }
 
+// A reader that goes away still lets the temporary archive be removed.
 #[test]
 fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
     let fixture = Fixture::new();
