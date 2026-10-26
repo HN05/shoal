@@ -10270,8 +10270,26 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("already owned by other"));
     fs::remove_file(&marker).unwrap();
+    // An explicit repository must be the recorded one.
+    let refused = fixture.run(&["work", "adopt", path_arg, "--repo", "missing"]);
+    assert!(!refused.status.success());
+    assert_eq!(
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        "failed"
+    );
 
-    let reclaimed = fixture.ok(&["work", "adopt", path_arg]);
+    // Reclaiming enters the worktree, as adoption does.
+    let directive = fixture.root.path().join("directive");
+    let output = fixture
+        .command()
+        .env("SHOAL_SHELL_DIRECTIVE", &directive)
+        .args(["work", "adopt", path_arg])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Reclaimed reclaimed"));
+    assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path_arg);
+    let reclaimed = fixture.ok(&["status", "reclaimed"])["workspace"].clone();
     assert_eq!(reclaimed["id"], workspace["id"]);
     assert_eq!(reclaimed["state"], "ready");
     assert_eq!(

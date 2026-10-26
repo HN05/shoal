@@ -1223,6 +1223,7 @@ pub(super) async fn adopt(
 ) -> Result<i32> {
     let path = super::repositories::absolute(ctx, path)?;
     if !copy && let Some(workspace) = unverified_workspace_at(ctx, &path).await? {
+        ensure_recorded_repository(ctx, &workspace, repository.as_deref()).await?;
         return reclaim(ctx, workspace).await;
     }
     let repository = match repository {
@@ -1274,6 +1275,26 @@ async fn unverified_workspace_at(ctx: &Context, path: &Path) -> Result<Option<Wo
         .then_some(workspace))
 }
 
+/// Refuse a `--repo` other than the repository `workspace` is recorded in.
+async fn ensure_recorded_repository(
+    ctx: &Context,
+    workspace: &Workspace,
+    repository: Option<&str>,
+) -> Result<()> {
+    let Some(selector) = repository else {
+        return Ok(());
+    };
+    let repositories = client::repositories(&ctx.paths).await?;
+    let selected =
+        repository::select(&repositories, ui::repository_selector(selector.to_owned())?).await?;
+    ensure!(
+        selected.id == workspace.repository_id,
+        "{} is recorded in another repository than {selector}",
+        workspace.name
+    );
+    Ok(())
+}
+
 /// Re-establish ownership of `workspace`'s worktree at its recorded path,
 /// which the user confirmed by adopting it, then repair it as doctor did.
 async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
@@ -1301,6 +1322,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
         ),
         client::inspect(&ctx.paths, workspace.id).await?.workspace,
     )?;
+    shell::navigate(&workspace.path, ctx.json)?;
     Ok(0)
 }
 
