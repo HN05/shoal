@@ -70,6 +70,24 @@ impl Manual {
         self.move_to(|sleeper| !sleeper.deadline).await;
     }
 
+    /// Wait until something waits, without moving.
+    pub(crate) async fn waiting(&self) {
+        loop {
+            let sleeping = self.sleeping.notified();
+            {
+                let state = self.state.lock().unwrap();
+                if state
+                    .sleepers
+                    .iter()
+                    .any(|s| !s.deadline && !s.wake.is_closed())
+                {
+                    return;
+                }
+            }
+            sleeping.await;
+        }
+    }
+
     /// [`Manual::advance`] to the earliest wait or deadline.
     pub(crate) async fn expire(&self) {
         self.move_to(|_| true).await;

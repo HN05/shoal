@@ -92,7 +92,7 @@ impl Forwarder {
     async fn forward(&self, request: &Buffered) -> Response<Body> {
         let mut attempt = 1;
         loop {
-            let failed = match self.attempt(request).await {
+            let failed = match self.attempt(request, attempt > 1).await {
                 Attempt::Answered(response) => {
                     self.answered(attempt);
                     return response;
@@ -103,17 +103,34 @@ impl Forwarder {
                 Some(wait) => self.clock.sleep(wait).await,
                 None => return self.give_up(failed, request),
             }
+            // Another request may have given up on the outage meanwhile.
+            if self.outage.given_up() {
+                return self.give_up(failed, request);
+            }
             attempt += 1;
         }
     }
 
     /// Send `request` once. While the upstream is down the attempt gets
-    /// only the outage's remaining budget, so a stalled upstream cannot keep
-    /// the proxy from giving up.
-    async fn attempt(&self, request: &Buffered) -> Attempt {
-        let Some(remaining) = self.outage.remaining() else {
-            return self.send(request).await;
+    /// only the outage's remaining budget, and a `retry` gets none once the
+    /// outage is given up, so a stalled upstream cannot keep the proxy from
+    /// giving up.
+    async fn attempt(&self, request: &Buffered, retry: bool) -> Attempt {
+        let remaining = match self.outage.remaining() {
+            Some(remaining) => remaining,
+            None if retry => Duration::ZERO,
+            None => return self.send(request).await,
         };
+        if remaining.is_zero() {
+            return Attempt::Failed(Failed {
+                failure: Failure::Unreachable,
+                retry_after: None,
+                in_stream: false,
+                response: bad_gateway(&anyhow::anyhow!(
+                    "the proxy gave up on the upstream's outage"
+                )),
+            });
+        }
         tokio::select! {
             attempt = self.send(request) => attempt,
             () = self.clock.deadline(remaining) => Attempt::Failed(Failed {
@@ -243,3 +260,6 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
         }),
     }
 }
+
+#[cfg(test)]
+mod tests;
