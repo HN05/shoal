@@ -6,12 +6,21 @@ use anyhow::{Context, Result, ensure};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub parent: u32,
-    /// CPU time in nanoseconds, including the children it has waited for, so
-    /// short-lived children count once they are reaped.
+    /// CPU time it used itself, in nanoseconds.
     pub cpu: u64,
+    /// CPU time of the children it has waited for and theirs, in
+    /// nanoseconds, so short-lived children count once they are reaped.
+    pub reaped: u64,
     /// Bytes of memory it holds: its resident size on Linux and its physical
     /// footprint on macOS, so pages shared with others count in each.
     pub memory: u64,
+}
+
+impl Reading {
+    /// All its CPU time, its own and its reaped children's.
+    pub fn total(&self) -> u64 {
+        self.cpu.saturating_add(self.reaped)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -42,14 +51,19 @@ fn linux_reading(stat: &str, ticks_per_second: u64, page_size: u64) -> Result<Re
     let number = |index: usize| -> Result<u64> {
         fields[index].parse().context("invalid process usage field")
     };
-    // User, system, and waited-for children's user and system time.
-    let ticks = (11..=14).try_fold(0_u64, |sum, index| {
-        sum.checked_add(number(index)?).context("CPU time overflow")
-    })?;
-    let cpu = u128::from(ticks) * 1_000_000_000 / u128::from(ticks_per_second);
+    // User and system time, then waited-for children's.
+    let nanoseconds = |user: usize| -> Result<u64> {
+        let ticks = number(user)?
+            .checked_add(number(user + 1)?)
+            .context("CPU time overflow")?;
+        (u128::from(ticks) * 1_000_000_000 / u128::from(ticks_per_second))
+            .try_into()
+            .context("CPU time overflow")
+    };
     Ok(Reading {
         parent: fields[1].parse().context("invalid parent process")?,
-        cpu: cpu.try_into().context("CPU time overflow")?,
+        cpu: nanoseconds(11)?,
+        reaped: nanoseconds(13)?,
         memory: number(21)?
             .checked_mul(page_size)
             .context("memory size overflow")?,
@@ -75,18 +89,13 @@ pub fn read(pid: u32) -> Result<Option<Reading>> {
     }
     // SAFETY: proc_pid_rusage filled the structure.
     let info = unsafe { info.assume_init() };
-    let ticks = [
-        info.ri_user_time,
-        info.ri_system_time,
-        info.ri_child_user_time,
-        info.ri_child_system_time,
-    ]
-    .into_iter()
-    .try_fold(0_u64, |sum, value| sum.checked_add(value))
-    .context("CPU time overflow")?;
+    let nanoseconds = |user: u64, system: u64| {
+        mach_nanoseconds(user.checked_add(system).context("CPU time overflow")?)
+    };
     Ok(Some(Reading {
         parent,
-        cpu: mach_nanoseconds(ticks)?,
+        cpu: nanoseconds(info.ri_user_time, info.ri_system_time)?,
+        reaped: nanoseconds(info.ri_child_user_time, info.ri_child_system_time)?,
         memory: info.ri_phys_footprint,
     }))
 }
@@ -127,7 +136,8 @@ mod tests {
             linux_reading(stat, 100, 4096).unwrap(),
             Reading {
                 parent: 7,
-                cpu: 2_000_000_000,
+                cpu: 1_500_000_000,
+                reaped: 500_000_000,
                 memory: 25 * 4096,
             }
         );

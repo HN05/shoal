@@ -35,10 +35,12 @@ struct Sample {
 pub(crate) struct WorkspaceUsages {
     latest: Option<Sample>,
     usage: HashMap<String, WorkspaceUsage>,
-    /// CPU nanoseconds per workspace subtracted before the readings they
-    /// come back in: a parent read just before it reaped a child that was
-    /// gone by its own read includes the child's time only next sample.
-    owed: HashMap<String, i128>,
+    /// Counted CPU nanoseconds of ended processes, per live ancestor that
+    /// may reap them, that its reaped time does not show yet: a parent read
+    /// just before it reaped a child gone by its own read shows the child's
+    /// time one sample later. Kept for that sample only, since a process
+    /// orphaned to init never reaches the ancestor.
+    pending: HashMap<Identity, u64>,
 }
 
 impl WorkspaceUsages {
@@ -51,7 +53,7 @@ impl WorkspaceUsages {
                     .latest
                     .take()
                     .filter(|previous| sample.time.duration_since(previous.time) <= STALE);
-                self.usage = usage(previous.as_ref(), &sample, &mut self.owed);
+                self.usage = usage(previous.as_ref(), &sample, &mut self.pending);
                 self.latest = Some(sample);
             }
             Err(error) => {
@@ -90,17 +92,17 @@ impl WorkspaceUsages {
 /// Each workspace's processes and memory in `current`, with the CPU they
 /// used since `previous`. A process that started since counts all its time,
 /// and one that exited counts until its parent reaps it. One that is gone
-/// since was reaped into the time of its nearest ancestor still in its
-/// workspace, directly or through ancestors gone too, and that workspace
-/// already counted the time it had before. Time subtracted beyond what the
-/// readings show stays `owed` until a later reading includes it.
+/// since counted its time already, which its nearest ancestor still in its
+/// workspace, reached through ancestors gone too, may have reaped: as much of
+/// it as that ancestor's reaped time grew by is not counted again, and the
+/// rest stays `pending` for one sample.
 fn usage(
     previous: Option<&Sample>,
     current: &Sample,
-    owed: &mut HashMap<String, i128>,
+    pending: &mut HashMap<Identity, u64>,
 ) -> HashMap<String, WorkspaceUsage> {
     let mut usage: HashMap<String, WorkspaceUsage> = HashMap::new();
-    let mut cpu: HashMap<&str, i128> = HashMap::new();
+    let mut used: HashMap<&str, u64> = HashMap::new();
     for (identity, (workspace, reading)) in &current.processes {
         let entry = usage.entry(workspace.clone()).or_default();
         if !current.unreaped.contains(identity) {
@@ -109,17 +111,52 @@ fn usage(
         }
         let before = previous
             .and_then(|previous| previous.processes.get(identity))
-            .map_or(0, |(_, before)| before.cpu);
-        *cpu.entry(workspace).or_default() += i128::from(reading.cpu) - i128::from(before);
+            .map_or(0, |(_, before)| before.total());
+        *used.entry(workspace).or_default() += reading.total().saturating_sub(before);
     }
     let Some(previous) = previous else {
-        owed.clear();
+        pending.clear();
         return usage;
     };
-    let live: HashSet<(&str, u32)> = current
+    let routed = routed_to_reapers(previous, current);
+    let mut still_pending = HashMap::new();
+    for (identity, (workspace, reading)) in &current.processes {
+        let carried = pending.get(identity).copied().unwrap_or_default();
+        let routed = routed.get(identity).copied().unwrap_or_default();
+        if carried == 0 && routed == 0 {
+            continue;
+        }
+        let before = previous
+            .processes
+            .get(identity)
+            .map_or(0, |(_, before)| before.reaped);
+        let shown = reading.reaped.saturating_sub(before);
+        let from_carried = carried.min(shown);
+        let from_routed = routed.min(shown - from_carried);
+        if let Some(used) = used.get_mut(workspace.as_str()) {
+            *used = used.saturating_sub(from_carried + from_routed);
+        }
+        if routed > from_routed {
+            still_pending.insert(identity.clone(), routed - from_routed);
+        }
+    }
+    *pending = still_pending;
+    let elapsed = current.time.duration_since(previous.time).as_nanos() as f64;
+    for (workspace, entry) in &mut usage {
+        let used = used.get(workspace.as_str()).copied().unwrap_or_default();
+        entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
+    }
+    usage
+}
+
+/// The counted time of the processes gone since `previous`, summed per live
+/// process in `current` that may have reaped them: the nearest ancestor in
+/// the same workspace, reached through ancestors gone too.
+fn routed_to_reapers<'a>(previous: &Sample, current: &'a Sample) -> HashMap<&'a Identity, u64> {
+    let live: HashMap<(&str, u32), &Identity> = current
         .processes
         .iter()
-        .map(|(identity, (workspace, _))| (workspace.as_str(), identity.pid))
+        .map(|(identity, (workspace, _))| ((workspace.as_str(), identity.pid), identity))
         .collect();
     let ended: HashMap<(&str, u32), u32> = previous
         .processes
@@ -129,49 +166,34 @@ fn usage(
             ((workspace.as_str(), identity.pid), reading.parent)
         })
         .collect();
+    let mut routed: HashMap<&Identity, u64> = HashMap::new();
     for (identity, (workspace, reading)) in &previous.processes {
         if ended.contains_key(&(workspace.as_str(), identity.pid))
-            && reaped_within(&live, &ended, workspace, reading.parent)
-            && let Some(used) = cpu.get_mut(workspace.as_str())
+            && let Some(reaper) = reaper(&live, &ended, workspace, reading.parent)
         {
-            *used -= i128::from(reading.cpu);
+            let total = routed.entry(reaper).or_default();
+            *total = total.saturating_add(reading.total());
         }
     }
-    let elapsed = current.time.duration_since(previous.time).as_nanos() as f64;
-    let mut still_owed = HashMap::new();
-    for (workspace, entry) in &mut usage {
-        let used = cpu.get(workspace.as_str()).copied().unwrap_or_default()
-            + owed.get(workspace).copied().unwrap_or_default();
-        if used < 0 {
-            still_owed.insert(workspace.clone(), used);
-        }
-        let used = used.max(0);
-        entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
-    }
-    *owed = still_owed;
-    usage
+    routed
 }
 
-/// Whether an ended process of `workspace` whose parent was `parent` was
-/// reaped within the workspace: an ancestor of it there, reached through
-/// `ended` ancestors and their parents, is `live`.
-fn reaped_within(
-    live: &HashSet<(&str, u32)>,
+/// The `live` ancestor in `workspace` of an ended process whose parent was
+/// `parent`, reached through `ended` ancestors and their parents.
+fn reaper<'a>(
+    live: &HashMap<(&str, u32), &'a Identity>,
     ended: &HashMap<(&str, u32), u32>,
     workspace: &str,
     mut parent: u32,
-) -> bool {
+) -> Option<&'a Identity> {
     // Each step reaches another ended process, unless a reused PID makes a cycle.
     for _ in 0..=ended.len() {
-        if live.contains(&(workspace, parent)) {
-            return true;
+        if let Some(identity) = live.get(&(workspace, parent)) {
+            return Some(identity);
         }
-        match ended.get(&(workspace, parent)) {
-            Some(grandparent) => parent = *grandparent,
-            None => return false,
-        }
+        parent = *ended.get(&(workspace, parent))?;
     }
-    false
+    None
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
@@ -256,6 +278,17 @@ mod tests {
     const SECOND: u64 = 1_000_000_000;
 
     fn process(pid: u32, parent: u32, workspace: &str, cpu: u64) -> (Identity, (String, Reading)) {
+        reaping(pid, parent, workspace, cpu, 0)
+    }
+
+    /// `process` with `reaped` nanoseconds of children it waited for.
+    fn reaping(
+        pid: u32,
+        parent: u32,
+        workspace: &str,
+        cpu: u64,
+        reaped: u64,
+    ) -> (Identity, (String, Reading)) {
         (
             Identity {
                 pid,
@@ -267,6 +300,7 @@ mod tests {
                 Reading {
                     parent,
                     cpu,
+                    reaped,
                     memory: 1024,
                 },
             ),
@@ -304,7 +338,7 @@ mod tests {
         let second = sample(
             start + Duration::from_secs(10),
             [
-                process(10, 1, "a", 9 * SECOND),
+                reaping(10, 1, "a", 6 * SECOND, 3 * SECOND),
                 process(12, 10, "a", 2 * SECOND),
                 process(20, 1, "b", SECOND),
             ],
@@ -330,7 +364,7 @@ mod tests {
         // which had used one more of its own.
         let second = sample(
             start + Duration::from_secs(10),
-            [process(10, 1, "a", 5 * SECOND)],
+            [reaping(10, 1, "a", 0, 5 * SECOND)],
         );
         assert_eq!(
             usage(Some(&first), &second, &mut HashMap::new())["a"].cpu_percent,
@@ -357,7 +391,7 @@ mod tests {
         assert_eq!(exited["a"].memory_bytes, 1024);
         let third = sample(
             start + Duration::from_secs(20),
-            [process(10, 1, "a", 3 * SECOND)],
+            [reaping(10, 1, "a", 0, 3 * SECOND)],
         );
         assert_eq!(
             usage(Some(&second), &third, &mut HashMap::new())["a"].cpu_percent,
@@ -397,14 +431,14 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn time_subtracted_before_the_reaping_parent_shows_it_is_owed() {
+    async fn time_a_reaper_shows_a_sample_late_counts_once() {
         let start = Instant::now();
-        let mut owed = HashMap::new();
+        let mut pending = HashMap::new();
         let first = sample(
             start,
             [process(10, 1, "a", 0), process(11, 10, "a", 5 * SECOND)],
         );
-        usage(None, &first, &mut owed);
+        usage(None, &first, &mut pending);
         // 10 was read before it reaped 11, which used one more second and was
         // gone by its own read; 10 used one second itself.
         let second = sample(
@@ -412,24 +446,59 @@ mod tests {
             [process(10, 1, "a", SECOND)],
         );
         assert_eq!(
-            usage(Some(&first), &second, &mut owed)["a"].cpu_percent,
-            Some(0.0)
+            usage(Some(&first), &second, &mut pending)["a"].cpu_percent,
+            Some(10.0)
         );
-        assert_eq!(owed["a"], -4 * i128::from(SECOND));
+        assert_eq!(pending.values().copied().collect::<Vec<_>>(), [5 * SECOND]);
         // Now 10 shows 11's six seconds and one more of its own.
         let third = sample(
             start + Duration::from_secs(20),
-            [process(10, 1, "a", 8 * SECOND)],
+            [reaping(10, 1, "a", 2 * SECOND, 6 * SECOND)],
         );
         assert_eq!(
-            usage(Some(&second), &third, &mut owed)["a"].cpu_percent,
-            Some(30.0)
+            usage(Some(&second), &third, &mut pending)["a"].cpu_percent,
+            Some(20.0)
         );
-        assert!(owed.is_empty());
-        // A gap in sampling forgets what was owed with the readings.
-        let mut owed = HashMap::from([("a".to_owned(), -1)]);
-        usage(None, &third, &mut owed);
-        assert!(owed.is_empty());
+        assert!(pending.is_empty());
+        // A gap in sampling forgets what was pending with the readings.
+        let mut pending = HashMap::from([(process(10, 1, "a", 0).0, SECOND)]);
+        usage(None, &third, &mut pending);
+        assert!(pending.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn orphans_reaped_outside_the_workspace_are_not_subtracted_again() {
+        let start = Instant::now();
+        let mut pending = HashMap::new();
+        let first = sample(
+            start,
+            [
+                process(10, 1, "a", 0),
+                process(11, 10, "a", SECOND),
+                process(12, 11, "a", 5 * SECOND),
+            ],
+        );
+        usage(None, &first, &mut pending);
+        // 11 used one more second and exited, and 10 reaped it; its child 12
+        // was orphaned to init, which reaped it.
+        let second = sample(
+            start + Duration::from_secs(10),
+            [reaping(10, 1, "a", 0, 2 * SECOND)],
+        );
+        assert_eq!(
+            usage(Some(&first), &second, &mut pending)["a"].cpu_percent,
+            Some(0.0)
+        );
+        // What 10 never reaps is dropped after one sample rather than owed.
+        let third = sample(
+            start + Duration::from_secs(20),
+            [reaping(10, 1, "a", SECOND, 2 * SECOND)],
+        );
+        assert_eq!(
+            usage(Some(&second), &third, &mut pending)["a"].cpu_percent,
+            Some(10.0)
+        );
+        assert!(pending.is_empty());
     }
 
     #[tokio::test(start_paused = true)]
