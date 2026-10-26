@@ -89,16 +89,34 @@ async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
     request_stop(true).await
 }
 
-/// The workspaces `selectors` name, refusing an unknown one before any stops.
+/// The workspaces `selectors` name, refusing them all before any stops when
+/// one is unknown or in another lifecycle operation, which stopping refuses.
 async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspace>> {
     let mut workspaces = Vec::new();
+    let mut refusals = Vec::new();
     for selector in selectors {
-        workspaces.push(
-            client::inspect(&ctx.paths, selector.clone())
-                .await?
-                .workspace,
-        );
+        let workspace = match client::inspect(&ctx.paths, selector.clone()).await {
+            Ok(inspection) => inspection.workspace,
+            Err(error) => {
+                refusals.push(format!("{selector}: {error:#}"));
+                continue;
+            }
+        };
+        let state = workspace.state;
+        if matches!(state, WorkspaceState::Ready | WorkspaceState::Failed) {
+            workspaces.push(workspace);
+        } else {
+            refusals.push(format!(
+                "{}: workspace is {state}; wait for that operation to finish",
+                workspace.name
+            ));
+        }
     }
+    ensure!(
+        refusals.is_empty(),
+        "cannot stop these workspaces, so none was stopped:\n  {}",
+        refusals.join("\n  ")
+    );
     Ok(workspaces)
 }
 

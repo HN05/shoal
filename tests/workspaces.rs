@@ -4969,6 +4969,31 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         names.sort();
         names
     };
+    // One in another lifecycle operation refuses them all, leaving the others running.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let set_state = |state: &str| {
+        db.execute(
+            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            [state],
+        )
+        .unwrap();
+    };
+    set_state("preparing");
+    let refused = fixture.run(&["stop", "first", "second"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("second: workspace is preparing"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fixture.ok(&["status", "first"])["executions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    set_state("ready");
     assert_eq!(
         stopped_names(&["stop", "first", "second"]),
         ["first", "second"]
