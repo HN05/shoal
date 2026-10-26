@@ -49,6 +49,59 @@ pub(super) enum Outcome {
     },
 }
 
+impl Outcome {
+    /// A command that ended by itself or by a signal, paused when `halt`
+    /// names the end of the session it ran in.
+    fn ended(status: ExitStatus, halt: Option<Halt>) -> Self {
+        let code = exit_code(status);
+        match halt {
+            Some(stop) => Self::Paused { code, stop },
+            None => Self::Exited(code),
+        }
+    }
+
+    /// A command stopped with `code` because the daemon sent `control`,
+    /// refused its reattachment or went away.
+    fn stopped_by(control: Result<Control>, code: i32) -> Result<Self> {
+        Ok(match control {
+            Ok(Control::OverloadStop {
+                recover,
+                reason,
+                resumes_when,
+            }) => Self::Paused {
+                code,
+                stop: Halt::Protection {
+                    recover,
+                    reason,
+                    resumes_when,
+                },
+            },
+            Ok(Control::Pause { reason, removed }) => Self::Paused {
+                code,
+                stop: Halt::Pause { reason, removed },
+            },
+            // A refused reattachment saves the session as a stop does.
+            Err(error) if error.is::<Refused>() => Self::Paused {
+                code,
+                stop: Halt::Pause {
+                    reason: Some(error.to_string()),
+                    removed: false,
+                },
+            },
+            Ok(Control::Stop {
+                reason: Some(reason),
+            }) => Self::Stopped { code, reason },
+            Ok(Control::Stop { reason: None }) => Self::Exited(code),
+            Ok(_) => bail!("unexpected execution control"),
+            Err(error) => {
+                return Err(error.context(
+                    "daemon disconnected; command stopped, execution requires reconciliation",
+                ));
+            }
+        })
+    }
+}
+
 /// Launch the command, register its process group, and wait for it to exit or
 /// for a stop request.
 pub(super) async fn supervise(
@@ -63,15 +116,10 @@ pub(super) async fn supervise(
     let signals = ExecutionSignals::new()?;
     let (mut child, group, _terminal, _scope) =
         register_child(link, paths, plan, command, mode, auth, recovery_record).await?;
-    let (status, recovery, stopped) = wait_for_child(link, &mut child, &group, signals).await?;
+    let outcome = wait_for_child(link, &mut child, &group, signals).await?;
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
-    let code = exit_code(status);
-    Ok(match (recovery, stopped) {
-        (Some(stop), _) => Outcome::Paused { code, stop },
-        (None, Some(reason)) => Outcome::Stopped { code, reason },
-        (None, None) => Outcome::Exited(code),
-    })
+    Ok(outcome)
 }
 
 /// Spawn a child, register its process group with the daemon, and hand over
@@ -178,7 +226,7 @@ async fn wait_for_child(
     child: &mut Child,
     group: &ProcessGroup,
     mut signals: ExecutionSignals,
-) -> Result<(ExitStatus, Option<Halt>, Option<String>)> {
+) -> Result<Outcome> {
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
     loop {
@@ -188,17 +236,17 @@ async fn wait_for_child(
             biased;
             _ = signals.hangup.recv() => {
                 let status = stop(child, group, libc::SIGHUP).await?;
-                return Ok((status, Halt::ended_by(libc::SIGHUP), None));
+                return Ok(Outcome::ended(status, Halt::ended_by(libc::SIGHUP)));
             }
             _ = signals.terminate.recv() => {
                 let status = stop(child, group, libc::SIGTERM).await?;
-                return Ok((status, Halt::ended_by(libc::SIGTERM), None));
+                return Ok(Outcome::ended(status, Halt::ended_by(libc::SIGTERM)));
             }
-            _ = signals.interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
-            _ = signals.quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
+            _ = signals.interrupt.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGINT).await?, None)),
+            _ = signals.quit.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGQUIT).await?, None)),
             status = child.wait() => {
                 let status = status?;
-                return Ok((status, status.signal().and_then(Halt::ended_by), None));
+                return Ok(Outcome::ended(status, status.signal().and_then(Halt::ended_by)));
             }
             received = link.recv() => {
                 let control = match received {
@@ -210,37 +258,7 @@ async fn wait_for_child(
                     eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
                 }
                 let status = stop(child, group, libc::SIGTERM).await?;
-                let (recovery, stopped) = match control {
-                    Ok(Control::OverloadStop {
-                        recover,
-                        reason,
-                        resumes_when,
-                    }) => (
-                        Some(Halt::Protection {
-                            recover,
-                            reason,
-                            resumes_when,
-                        }),
-                        None,
-                    ),
-                    Ok(Control::Pause { reason, removed }) => {
-                        (Some(Halt::Pause { reason, removed }), None)
-                    }
-                    // A refused reattachment saves the session as a stop does.
-                    Err(error) if error.is::<Refused>() => (
-                        Some(Halt::Pause {
-                            reason: Some(error.to_string()),
-                            removed: false,
-                        }),
-                        None,
-                    ),
-                    Ok(Control::Stop { reason }) => (None, reason),
-                    Ok(_) => bail!("unexpected execution control"),
-                    Err(error) => return Err(error.context(
-                        "daemon disconnected; command stopped, execution requires reconciliation",
-                    )),
-                };
-                return Ok((status, recovery, stopped));
+                return Outcome::stopped_by(control, exit_code(status));
             }
         }
     }
