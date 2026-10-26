@@ -104,11 +104,18 @@ pub fn read(pid: u32) -> Result<Option<Reading>> {
 /// Apple silicon.
 #[cfg(target_os = "macos")]
 fn mach_nanoseconds(ticks: u64) -> Result<u64> {
-    #[allow(deprecated)]
-    let mut timebase = libc::mach_timebase_info { numer: 0, denom: 0 };
+    // libc deprecates its Mach declarations in favor of the mach2 crate.
+    #[repr(C)]
+    struct Timebase {
+        numer: u32,
+        denom: u32,
+    }
+    unsafe extern "C" {
+        fn mach_timebase_info(info: *mut Timebase) -> libc::c_int;
+    }
+    let mut timebase = Timebase { numer: 0, denom: 0 };
     // SAFETY: the call fills the structure it is given.
-    #[allow(deprecated)]
-    let result = unsafe { libc::mach_timebase_info(&mut timebase) };
+    let result = unsafe { mach_timebase_info(&mut timebase) };
     ensure!(
         result == libc::KERN_SUCCESS && timebase.denom > 0,
         "read CPU timebase: Mach error {result}"
@@ -123,11 +130,10 @@ pub fn read(_pid: u32) -> Result<Option<Reading>> {
     anyhow::bail!("process usage is unsupported on this platform")
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn linux_readings_count_waited_children_and_resident_pages() {
         let stat = "42 (a (b) c) S 7 42 42 0 -1 4194560 1 2 3 4 \
