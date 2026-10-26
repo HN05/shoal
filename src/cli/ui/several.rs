@@ -14,9 +14,11 @@ use crate::cli::{
 /// shows above it; Shift-Tab moves back.
 const NEXT: &str = "tab:toggle+up,btab:toggle+down";
 
-/// Ctrl-A selects every listed entry, or clears the selection once all of
-/// them are selected.
-const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -lt \"$FZF_MATCH_COUNT\" ] && echo select-all || echo deselect-all";
+/// Ctrl-A selects every matching entry, or clears them once all of them
+/// are selected. fzf lists the selected entries, which may include some
+/// the search hides, in `{+f}` and the matching ones in `{*f}`; without a
+/// selection, `{+f}` holds the highlighted entry instead.
+const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -gt 0 ] && awk 'FNR == NR { selected[$0]; next } !($0 in selected) { missing = 1 } END { print missing ? \"select-all\" : \"deselect-all\" }' {+f} {*f} || echo select-all";
 
 /// Choose any number of entries, with Tab selecting each and Ctrl-A all,
 /// returning their ids in list order. Enter without a selection chooses the
@@ -24,6 +26,7 @@ const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -lt \"$FZF_MA
 pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
     let extra = [
         "--multi".to_owned(),
+        "--with-shell=sh -c".to_owned(),
         "--marker=✓ ".to_owned(),
         "--color=marker:green:bold".to_owned(),
         "--bind".to_owned(),
