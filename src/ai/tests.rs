@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::named_commands::Commands;
 
 fn parse(text: &str) -> Result<Agents> {
     let config: crate::config::Config = toml::from_str(text)?;
