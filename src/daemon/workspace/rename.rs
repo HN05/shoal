@@ -238,7 +238,9 @@ impl Manager {
         if let Err(error) = self.verify_worktree(workspace).await {
             ensure!(
                 reclaim,
-                "unfinished rename ownership cannot be verified: {error:#}; use doctor --repair --reclaim after checking the recorded worktree"
+                "unfinished rename ownership cannot be verified: {error:#}; check the worktree at {}, then reclaim it with shoal work adopt {}",
+                workspace.path.display(),
+                workspace.path.display()
             );
             let candidate = Workspace {
                 branch: actual.clone(),

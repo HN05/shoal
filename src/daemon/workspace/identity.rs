@@ -53,7 +53,7 @@ pub(super) fn verify_owner(
         ),
         None => {
             let identity = recorded.context(
-                "Git worktree ownership is unverified; run doctor --repair --reclaim after checking the recorded worktree",
+                "Git worktree ownership is unverified; check the worktree, then reclaim it with shoal work adopt <its path>",
             )?;
             verify_directory_identity(git_dir, identity)?;
         }
@@ -81,7 +81,7 @@ pub(super) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool
 fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
     ensure!(
         has_directory_identity(path, recorded)?,
-        "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified"
+        "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified. Check the worktree, then reclaim it with shoal work adopt <its path>"
     );
     Ok(())
 }

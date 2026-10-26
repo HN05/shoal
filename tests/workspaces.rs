@@ -10237,6 +10237,60 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
 }
 
 #[test]
+fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let workspace = fixture.add("reclaimed");
+    let other = fixture.add("other");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let path_arg = path.to_str().unwrap();
+    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    fs::write(path.join("dirty"), "preserve me").unwrap();
+    let lease = fixture.ok(&["acquire", "resource", "lock", "--workspace", "reclaimed"]);
+    // An unmarked record whose filesystem identity changed cannot be verified.
+    unmark_owner(&workspace);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE workspaces SET git_dir_id='0:0' WHERE name='reclaimed'",
+        [],
+    )
+    .unwrap();
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        "failed"
+    );
+    // Reclaiming still requires the recorded branch and metadata no one else owns.
+    git(path, &["switch", "-q", "-c", "elsewhere"]);
+    let refused = fixture.run(&["work", "adopt", path_arg]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("recorded branch"));
+    git(path, &["switch", "-q", "reclaimed"]);
+    fs::write(&marker, format!("{}\n", other["id"].as_str().unwrap())).unwrap();
+    let refused = fixture.run(&["work", "adopt", path_arg]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("already owned by other"));
+    fs::remove_file(&marker).unwrap();
+
+    let reclaimed = fixture.ok(&["work", "adopt", path_arg]);
+    assert_eq!(reclaimed["id"], workspace["id"]);
+    assert_eq!(reclaimed["state"], "ready");
+    assert_eq!(
+        fs::read_to_string(path.join("dirty")).unwrap(),
+        "preserve me"
+    );
+    assert_eq!(
+        fixture.ok(&["leases", "resource", "--workspace", "reclaimed"])["leases"][0],
+        lease
+    );
+    assert!(
+        fixture
+            .run(&["run", "--workspace", "reclaimed", "--", "true"])
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("reclaimed");
@@ -11991,6 +12045,19 @@ fn work_setup_skip_accepts_a_failed_setup() {
         "failed"
     );
 
+    // Adopting its path again reclaims ownership only; a verified worktree
+    // with a failed setup stays failed.
+    let path = fixture.ok(&["status", "skipped"])["workspace"]["path"].clone();
+    assert!(
+        !fixture
+            .run(&["work", "adopt", path.as_str().unwrap()])
+            .status
+            .success()
+    );
+    assert_eq!(
+        fixture.ok(&["status", "skipped"])["workspace"]["state"],
+        "failed"
+    );
     let skipped = fixture.ok(&["work", "setup", "skipped", "--skip"]);
     assert_eq!(skipped["state"], "ready");
     let path = Path::new(skipped["path"].as_str().unwrap());

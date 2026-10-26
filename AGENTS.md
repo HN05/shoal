@@ -144,7 +144,7 @@ when behavior changes, distinguishing decisions from proposals.
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live
   processes. Verify recorded Git metadata identity before exec/removal; moved or
   replaced worktrees are not adopted automatically, only reclaimed at their
-  recorded path on explicit `--reclaim`. Use the shared removal path
+  recorded path when a human adopts that path again (or `doctor --reclaim`). Use the shared removal path
   for deleted-worktree cleanup and retain its branch; never forget a moved one.
 - Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces there by default,
   explicit workspace paths must not overlap state, checkouts, or other ownership.

@@ -23,7 +23,7 @@ use crate::{
     daemon::{
         approvals::Undecided,
         links::pr::RegistrationKind,
-        recovery::{ReconcileOptions, Report},
+        recovery::{DirectoryState, ReconcileOptions, Report},
     },
     env, execution,
     forge::{IssueInput, items::link::Selection, review::status::PrStatus},
@@ -1222,6 +1222,9 @@ pub(super) async fn adopt(
     copy: bool,
 ) -> Result<i32> {
     let path = super::repositories::absolute(ctx, path)?;
+    if !copy && let Some(workspace) = unverified_workspace_at(ctx, &path).await? {
+        return reclaim(ctx, workspace).await;
+    }
     let repository = match repository {
         Some(repository) => ui::repository_selector(repository)?,
         None => worktree_repository(ctx, &path).await?.into(),
@@ -1251,6 +1254,69 @@ pub(super) async fn adopt(
     )?;
     shell::navigate(&workspace.path, ctx.json)?;
     Ok(0)
+}
+
+/// The workspace recorded at `path` whose worktree exists but whose ownership
+/// Shoal cannot verify, which adopting it again reclaims.
+async fn unverified_workspace_at(ctx: &Context, path: &Path) -> Result<Option<Workspace>> {
+    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+    let Some(workspace) = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.path == path)
+    else {
+        return Ok(None);
+    };
+    let reports = reconcile(ctx, &workspace, ReconcileOptions::default()).await?;
+    Ok(reports
+        .iter()
+        .any(|report| report.directory == DirectoryState::Unverified)
+        .then_some(workspace))
+}
+
+/// Re-establish ownership of `workspace`'s worktree at its recorded path,
+/// which the user confirmed by adopting it, then repair it as doctor did.
+async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
+    let options = ReconcileOptions {
+        repair: true,
+        reclaim: true,
+        ..Default::default()
+    };
+    let reports = reconcile(ctx, &workspace, options).await?;
+    let issues: Vec<_> = reports
+        .iter()
+        .flat_map(|report| report.issues.iter().map(String::as_str))
+        .collect();
+    ensure!(
+        issues.is_empty(),
+        "could not reclaim {}: {}",
+        workspace.name,
+        issues.join("; ")
+    );
+    ctx.emit(
+        &format!(
+            "Reclaimed {} at {}",
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+            workspace.path.display()
+        ),
+        client::inspect(&ctx.paths, workspace.id).await?.workspace,
+    )?;
+    Ok(0)
+}
+
+async fn reconcile(
+    ctx: &Context,
+    workspace: &Workspace,
+    options: ReconcileOptions,
+) -> Result<Vec<Report>> {
+    request(
+        &ctx.paths,
+        Method::Doctor {
+            workspace: Some(workspace.id.clone()),
+            options,
+        },
+    )
+    .await
 }
 
 /// The registered repository whose checkout owns the worktree at `path`,

@@ -1641,7 +1641,7 @@ incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is
 recoverable by explicit reclaim, which a human requests after checking the
-worktree: it re-marks a linked worktree of the recorded repository at the
+worktree by adopting its recorded path again: it re-marks a linked worktree of the recorded repository at the
 recorded path on the recorded branch that no other workspace owns, then
 repairs normally. It is never automatic, and scoped callers cannot run doctor. A deleted directory means
 the user removed the worktree: the cleanup sweep forgets it through the shared

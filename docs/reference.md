@@ -1231,6 +1231,11 @@ its `origin` remote, else one chosen interactively. Its local branch derives the
 name or ownership conflicts fail. Main checkouts, detached or locked worktrees,
 and paths overlapping protected locations are refused. Repeating adoption reopens
 a verified ready workspace; it cannot repair a moved or replaced managed worktree.
+At a workspace's recorded path, when its worktree exists but Shoal cannot verify
+it owns it, adoption reclaims it: check the worktree yourself first, since adopting
+it re-marks a linked worktree of the recorded repository on the recorded branch
+that no other workspace owns, then repairs as `doctor --repair` does. A failed
+setup is not an ownership failure; adoption refuses it.
 
 Adoption preserves commits, dirty files, and Git settings without fetching, setup,
 or post-setup hooks. It takes full Shoal ownership with normal cleanup, including
@@ -3012,9 +3017,8 @@ cleanup sweep or `shoal rm`, retaining the branch. Ownership is proven by a
 reboots, device renumbering and restores. Workspaces recorded before markers
 gain one once their recorded filesystem identity verifies at startup or with
 `doctor --repair`. When neither proof verifies ownership, check the worktree at
-the recorded path yourself and add `--reclaim`: it re-marks a linked worktree of
-the recorded repository on the recorded branch that no other workspace owns,
-then repairs as usual.
+the recorded path yourself and [adopt it](#adopting-a-worktree) again, or add
+`--reclaim`.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
