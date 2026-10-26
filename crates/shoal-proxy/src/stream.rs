@@ -143,8 +143,9 @@ fn openai_failure(code: Option<&str>) -> Failure {
 pub(crate) enum Opening {
     /// Content arrived; the rest of the stream follows.
     Content(Bytes),
-    /// A failure arrived before any content.
-    Failure(Failure, Bytes),
+    /// A failure arrived before any content, with the error its event
+    /// carries.
+    Failure(Failure, Option<Value>, Bytes),
     /// The stream ended without either, so it is incomplete.
     Ended(Bytes),
 }
@@ -159,7 +160,9 @@ pub(crate) async fn open(protocol: Protocol, body: &mut Incoming) -> Result<Open
             match protocol.classify(&name, &data) {
                 Kind::Preamble => {}
                 Kind::Content => return Ok(Opening::Content(read.freeze())),
-                Kind::Failure(failure) => return Ok(Opening::Failure(failure, read.freeze())),
+                Kind::Failure(failure) => {
+                    return Ok(Opening::Failure(failure, error_of(&data), read.freeze()));
+                }
             }
         }
         let Some(frame) = body.frame().await else {
@@ -170,6 +173,15 @@ pub(crate) async fn open(protocol: Protocol, body: &mut Incoming) -> Result<Open
             read.extend_from_slice(&data);
         }
     }
+}
+
+/// The error object a failure event carries: a failed response's, an error
+/// event's own, or its data's.
+fn error_of(data: &Value) -> Option<Value> {
+    [&data["response"]["error"], &data["error"], data]
+        .into_iter()
+        .find(|error| error.is_object())
+        .cloned()
 }
 
 /// The first complete event in `buffer`: where it ends, its name and its

@@ -595,3 +595,25 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
     assert!(body.contains("rate_limit_error"), "{body}");
     assert_eq!(upstream.requests().len(), 1);
 }
+
+#[tokio::test]
+async fn a_usage_limit_inside_the_stream_ends_the_turn_at_once() {
+    let opening = format!(
+        "{RESPONSE_CREATED}event: response.failed\ndata: {}\n\n",
+        r#"{"type":"response.failed","response":{"error":{"code":"usage_limit_reached","message":"You've hit your usage limit.","resets_in_seconds":7200}}}"#
+    );
+    let reply_with = opening.clone();
+    let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(body, opening);
+    // The reset is past the budget, so the proxy does not retry it.
+    assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::RateLimited,
+            in_stream: true
+        }]
+    );
+}

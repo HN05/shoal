@@ -274,11 +274,13 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
                 "the upstream's stream ended before any content"
             )),
         }),
-        Ok(Opening::Failure(failure, read)) => Attempt::Failed(Failed {
+        // A usage limit's reset in the event says how long to wait, as in
+        // an HTTP failure's body.
+        Ok(Opening::Failure(failure, error, read)) => Attempt::Failed(Failed {
             failure,
-            retry_after: None,
+            retry_after: error.as_ref().and_then(retry::error_wait),
             in_stream: true,
-            error: None,
+            error,
             response: Response::from_parts(parts, full(read)),
         }),
         Err(error) => Attempt::Failed(Failed {
