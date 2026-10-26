@@ -124,6 +124,7 @@ pub async fn authorize(
         | Method::CiAction { workspace, .. }
         | Method::CiRunAction { workspace, .. }
         | Method::ViewCiRun { workspace, .. }
+        | Method::CiRunJobs { workspace, .. }
         | Method::CiRunJobLog { workspace, .. }
         | Method::ListCiRuns { workspace, .. }
         | Method::DiffBase { workspace }

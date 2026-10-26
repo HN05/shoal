@@ -1639,8 +1639,11 @@ pub enum ForgeCiCommand {
         #[command(flatten)]
         target: RunTarget,
         /// Show only this job's log.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
         job: Option<String>,
+        /// Show only the log of the job with this ID, for jobs that share a name.
+        #[arg(long, value_name = "ID")]
+        job_id: Option<u64>,
     },
     /// List the newest workflow runs, on the workspace's branch by default.
     List {

@@ -427,6 +427,14 @@ async fn serve(
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return write_pages(stream, request.id, response, Body::ApiResponse).await;
         }
+        Method::CiRunJobs { workspace, run } => {
+            let listed = server.manager.ci_run_jobs(&workspace, run).await;
+            return write_pages(stream, request.id, listed, Body::CiRunJobs).await;
+        }
+        Method::ListCiRuns { workspace, filter } => {
+            let listed = server.manager.list_ci_runs(&workspace, filter).await;
+            return write_pages(stream, request.id, listed, Body::CiRuns).await;
+        }
         Method::RemovedWorkspaces => {
             let listed = server.manager.removed_workspaces().await;
             return write_pages(stream, request.id, listed, Body::RemovedWorkspaces).await;
@@ -488,6 +496,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::WaitChatMessages { .. }
         | Method::ListItems { .. }
         | Method::ForgeApi { .. }
+        | Method::CiRunJobs { .. }
+        | Method::ListCiRuns { .. }
         | Method::RemovedWorkspaces
         | Method::AgentEnvironments { .. } => {
             anyhow::bail!("unsupported operation")
@@ -745,16 +755,13 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?,
         ),
         Method::ViewCiRun { workspace, run } => {
-            Body::CiRunView(manager.view_ci_run(&workspace, run).await?)
+            Body::CiRun(manager.view_ci_run(&workspace, run).await?)
         }
         Method::CiRunJobLog {
             workspace,
             run,
             job,
         } => Body::CheckLog(manager.ci_run_job_log(&workspace, run, job).await?),
-        Method::ListCiRuns { workspace, filter } => {
-            Body::CiRuns(manager.list_ci_runs(&workspace, filter).await?)
-        }
         Method::StartCiRun {
             workspace,
             workflow,

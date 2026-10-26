@@ -14,7 +14,7 @@ use crate::{
             checks::CheckLog,
             run::{NewRun, StartedRun},
             run_action::{Run, RunActed, validate_run_reference},
-            run_view::{RunFilter, RunView, validate_filter},
+            run_view::{JobRef, RunFilter, RunJob, validate_filter},
         },
     },
     model::Workspace,
@@ -66,8 +66,8 @@ impl Manager {
             .with_context(|| format!("could not {action} {}", run.url))
     }
 
-    /// The run `input` names, with its jobs.
-    pub async fn view_ci_run(&self, selector: &str, input: String) -> Result<RunView> {
+    /// The run `input` names.
+    pub async fn view_ci_run(&self, selector: &str, input: String) -> Result<Run> {
         validate_run_reference(&input)?;
         let (_, forge, account) = self.run_forge(selector).await?;
         forge
@@ -76,19 +76,29 @@ impl Manager {
             .with_context(|| format!("could not read CI run {input}"))
     }
 
+    /// Every job of the run `input` names.
+    pub async fn ci_run_jobs(&self, selector: &str, input: String) -> Result<Vec<RunJob>> {
+        validate_run_reference(&input)?;
+        let (_, forge, account) = self.run_forge(selector).await?;
+        forge
+            .run_jobs(&account, &input)
+            .await
+            .with_context(|| format!("could not read the jobs of CI run {input}"))
+    }
+
     /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
         selector: &str,
         input: String,
-        job: String,
+        job: JobRef,
     ) -> Result<CheckLog> {
         validate_run_reference(&input)?;
         let (_, forge, account) = self.run_forge(selector).await?;
         forge
             .run_job_log(&account, &input, &job)
             .await
-            .with_context(|| format!("could not read the log of {job} in CI run {input}"))
+            .with_context(|| format!("could not read a job log of CI run {input}"))
     }
 
     /// The newest runs `filter` selects, on the workspace's branch unless it

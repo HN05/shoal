@@ -1,6 +1,6 @@
 //! Reading CI workflow runs: one run with its jobs and their logs, or the
 //! newest runs of a branch or workflow, as the workspace's agent account.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,13 +14,16 @@ use crate::{
 
 /// The most runs one list returns.
 pub const MAX_RUNS: usize = 100;
+/// The jobs one page of a run's jobs holds.
+pub(crate) const JOBS_PAGE: usize = 100;
+/// The most pages of a run's jobs Shoal reads.
+const MAX_JOB_PAGES: u32 = 10;
 
 /// A job of a run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunJob {
-    /// The ID its API reads the log by.
-    #[serde(skip)]
-    pub(crate) id: u64,
+    /// The ID its API reads the log by, which tells apart jobs of one name.
+    pub id: u64,
     pub name: String,
     pub state: JobState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -38,6 +41,14 @@ pub struct RunView {
     /// The logs that could not be read, and why.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
+}
+
+/// A job of a run, by its ID or by a name no other job of the run has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobRef {
+    Id(u64),
+    Name(String),
 }
 
 /// The runs a list selects.
@@ -63,43 +74,76 @@ pub fn validate_filter(filter: &RunFilter) -> Result<()> {
     Ok(())
 }
 
-impl ForgeRepo {
-    /// The run `input`, its web URL or the number in it, names, with its jobs.
-    pub async fn view_run(&self, account: &Account, input: &str) -> Result<RunView> {
-        self.require(Capability::ReadRuns)?;
-        let run = self.read_run(account, input).await?;
-        let read = Request::get(self.repo_endpoint(&self.kind.run_jobs_path(&run)));
-        let jobs = self
-            .kind
-            .run_jobs(&run, &self.send(account, &read).await?)?;
-        Ok(RunView {
-            run,
-            jobs,
-            logs: Vec::new(),
-            errors: Vec::new(),
+/// The job `job` selects among `run`'s `jobs`.
+fn find_job<'a>(run: &Run, jobs: &'a [RunJob], job: &JobRef) -> Result<&'a RunJob> {
+    let matching = jobs
+        .iter()
+        .filter(|candidate| match job {
+            JobRef::Id(id) => candidate.id == *id,
+            JobRef::Name(name) => candidate.name == *name,
         })
+        .collect::<Vec<_>>();
+    match (job, matching.as_slice()) {
+        (_, [found]) => Ok(found),
+        (JobRef::Name(name), []) => bail!("run {} has no job {name}", run.url),
+        (JobRef::Name(name), _) => bail!(
+            "several jobs of {} are named {name}; select one by its ID",
+            run.url
+        ),
+        (JobRef::Id(id), _) => bail!("run {} has no job with ID {id}", run.url),
+    }
+}
+
+impl ForgeRepo {
+    /// The run `input`, its web URL or the number in it, names.
+    pub async fn view_run(&self, account: &Account, input: &str) -> Result<Run> {
+        self.require(Capability::ReadRuns)?;
+        self.read_run(account, input).await
     }
 
-    /// The log of the job `name` of the run `input` names.
+    /// The jobs of the run `input` names.
+    pub async fn run_jobs(&self, account: &Account, input: &str) -> Result<Vec<RunJob>> {
+        let run = self.view_run(account, input).await?;
+        self.jobs_of(account, &run).await
+    }
+
+    /// The log of the job `job` of the run `input` names.
     pub async fn run_job_log(
         &self,
         account: &Account,
         input: &str,
-        name: &str,
+        job: &JobRef,
     ) -> Result<CheckLog> {
-        self.require_all([Capability::ReadRuns, Capability::ReadJobLogs])?;
-        let view = self.view_run(account, input).await?;
-        let job = view
-            .jobs
-            .iter()
-            .find(|job| job.name == name)
-            .with_context(|| format!("run {} has no job {name}", view.run.url))?;
-        let log = self.kind.run_job_log(self, account, &view.run, job).await?;
-        let log = CheckLog::from_text(&view.run.url, name, &log);
+        self.require(Capability::ReadJobLogs)?;
+        let run = self.view_run(account, input).await?;
+        let jobs = self.jobs_of(account, &run).await?;
+        let job = find_job(&run, &jobs, job)?;
+        let log = self.kind.run_job_log(self, account, &run, job).await?;
+        let log = CheckLog::from_text(&run.url, &job.name, &log);
         Ok(match &job.url {
             Some(url) => log.with_job(url.clone()),
             None => log,
         })
+    }
+
+    /// Every job of `run`, reading page after page while pages are full.
+    async fn jobs_of(&self, account: &Account, run: &Run) -> Result<Vec<RunJob>> {
+        let mut jobs = Vec::new();
+        for page in 1..=MAX_JOB_PAGES {
+            let Some(path) = self.kind.run_jobs_path(run, page) else {
+                break;
+            };
+            let value = self
+                .send(account, &Request::get(self.repo_endpoint(&path)))
+                .await?;
+            let batch = self.kind.run_jobs(run, jobs.len(), &value)?;
+            let full = batch.len() >= JOBS_PAGE;
+            jobs.extend(batch);
+            if !full {
+                break;
+            }
+        }
+        Ok(jobs)
     }
 
     /// The newest runs `filter` selects, newest first.
@@ -192,6 +236,7 @@ mod tests {
         };
         let jobs = github.kind.run_jobs(
             &run,
+            0,
             &json!({"jobs": [
                 {"id": 34, "name": "rust", "status": "completed", "conclusion": "failure",
                     "html_url": "https://github.com/team/repo/actions/runs/12/job/34"},
@@ -224,14 +269,42 @@ mod tests {
         };
         let jobs = forgejo.kind.run_jobs(
             &run,
+            100,
             &json!([{"id": 1, "name": "audit", "status": "success", "run_id": 9331},
                 {"id": 2, "name": "report", "status": "failure", "run_id": 9331}]),
         )?;
         assert_eq!(
             jobs[1].url.as_deref(),
-            Some("https://codeberg.org/team/repo/actions/runs/2765/jobs/1")
+            Some("https://codeberg.org/team/repo/actions/runs/2765/jobs/101")
         );
         assert_eq!(jobs[1].state, JobState::Failed);
+        Ok(())
+    }
+
+    #[test]
+    fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
+        let run = Run {
+            id: 12,
+            url: "https://github.com/team/repo/actions/runs/12".into(),
+            branch: None,
+            workflow: None,
+            state: JobState::Failed,
+        };
+        let job = |id, name: &str| RunJob {
+            id,
+            name: name.into(),
+            state: JobState::Failed,
+            url: None,
+        };
+        let jobs = [job(1, "test"), job(2, "test"), job(3, "lint")];
+        assert_eq!(find_job(&run, &jobs, &JobRef::Id(2))?.id, 2);
+        assert_eq!(find_job(&run, &jobs, &JobRef::Name("lint".into()))?.id, 3);
+        let error = find_job(&run, &jobs, &JobRef::Name("test".into())).unwrap_err();
+        assert!(
+            error.to_string().contains("select one by its ID"),
+            "{error}"
+        );
+        assert!(find_job(&run, &jobs, &JobRef::Id(4)).is_err());
         Ok(())
     }
 

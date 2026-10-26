@@ -1422,8 +1422,9 @@ lacks, while elsewhere only a run on the PR's head commit reports checks there.
 `forge ci` also reruns and cancels one run by its URL; `pr ci` stays the way to act
 on a PR's checks. Workspace processes act only on runs of their own branch, which
 the daemon reads from the run before acting, and read any run of their repository.
-Viewing a run sends its failed jobs' logs as one request each, like a PR's, so no
-response outgrows a protocol frame.
+Viewing a run reads every page of its jobs; the daemon sends them, and listed
+runs, in frame-sized pages, and each failed job's log, named by job ID, as one
+request, like a PR's, so no response outgrows a protocol frame.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run

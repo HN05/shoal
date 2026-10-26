@@ -543,11 +543,11 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::ReadRuns))
     }
 
-    fn run_jobs_path(&self, run: &Run) -> String {
-        format!("pipelines/{}/steps", run.id)
+    fn run_jobs_path(&self, _run: &Run, _page: u32) -> Option<String> {
+        None
     }
 
-    fn run_jobs(&self, _run: &Run, _value: &Value) -> Result<Vec<RunJob>> {
+    fn run_jobs(&self, _run: &Run, _offset: usize, _value: &Value) -> Result<Vec<RunJob>> {
         Err(capability::unsupported(self, Capability::ReadRuns))
     }
 

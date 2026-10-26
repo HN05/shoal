@@ -9,7 +9,7 @@ use crate::{
         checks::CheckLog,
         run::{StartedRun, validate_run},
         run_action::{Run, RunActed, validate_run_reference},
-        run_view::{RunFilter, RunView, validate_filter},
+        run_view::{JobRef, RunFilter, RunJob, RunView, validate_filter},
     },
     protocol::Method,
 };
@@ -19,7 +19,14 @@ pub(super) async fn ci(ctx: &Context, command: ForgeCiCommand) -> Result<i32> {
         ForgeCiCommand::Run(args) => run(ctx, args).await,
         ForgeCiCommand::Rerun { target, failed } => act(ctx, target, CiAction::Rerun, failed).await,
         ForgeCiCommand::Cancel { target } => act(ctx, target, CiAction::Cancel, false).await,
-        ForgeCiCommand::View { target, job } => view(ctx, target, job).await,
+        ForgeCiCommand::View {
+            target,
+            job,
+            job_id,
+        } => {
+            let job = job.map(JobRef::Name).or(job_id.map(JobRef::Id));
+            view(ctx, target, job).await
+        }
         ForgeCiCommand::List {
             workspace,
             branch,
@@ -84,30 +91,48 @@ fn acted_text(acted: &RunActed) -> String {
 
 /// Show the run with the log tails of its failed jobs, or only the log of
 /// `job`.
-async fn view(ctx: &Context, target: RunTarget, job: Option<String>) -> Result<i32> {
+async fn view(ctx: &Context, target: RunTarget, job: Option<JobRef>) -> Result<i32> {
     validate_run_reference(&target.run)?;
     let workspace =
         ui::select_workspace(ctx, target.workspace, ui::Fallback::CurrentDirectory).await?;
     if let Some(job) = job {
-        let log = job_log(ctx, &workspace, &target.run, &job).await?;
+        let log = job_log(ctx, &workspace, &target.run, job).await?;
         ctx.show(&log, super::view::render_log)?;
         return Ok(0);
     }
-    let mut view: RunView = ctx
-        .progress(
-            "Reading run",
-            client::request(
-                &ctx.paths,
-                Method::ViewCiRun {
-                    workspace: workspace.clone(),
-                    run: target.run.clone(),
-                },
-            ),
-        )
+    let mut view = ctx
+        .progress("Reading run", read_run(ctx, &workspace, &target.run))
         .await?;
     read_failed_logs(ctx, &workspace, &target.run, &mut view).await;
     ctx.show(&view, render_run)?;
     Ok(0)
+}
+
+/// The run with its jobs, which arrive in pages of their own.
+async fn read_run(ctx: &Context, workspace: &str, run: &str) -> Result<RunView> {
+    let (workspace, input) = (workspace.to_owned(), run.to_owned());
+    let run = client::request(
+        &ctx.paths,
+        Method::ViewCiRun {
+            workspace: workspace.clone(),
+            run: input.clone(),
+        },
+    )
+    .await?;
+    let jobs = client::pages::<RunJob>(
+        &ctx.paths,
+        Method::CiRunJobs {
+            workspace,
+            run: input,
+        },
+    )
+    .await?;
+    Ok(RunView {
+        run,
+        jobs,
+        logs: Vec::new(),
+        errors: Vec::new(),
+    })
 }
 
 /// Add the logs of the run's failed jobs, recording those it cannot read.
@@ -116,10 +141,10 @@ async fn read_failed_logs(ctx: &Context, workspace: &str, run: &str, view: &mut 
         .jobs
         .iter()
         .filter(|job| job.state == JobState::Failed)
-        .map(|job| job.name.clone())
+        .map(|job| (job.id, job.name.clone()))
         .collect::<Vec<_>>();
-    for name in failed {
-        match job_log(ctx, workspace, run, &name).await {
+    for (id, name) in failed {
+        match job_log(ctx, workspace, run, JobRef::Id(id)).await {
             Ok(log) => view.logs.push(log),
             Err(error) => view
                 .errors
@@ -128,13 +153,13 @@ async fn read_failed_logs(ctx: &Context, workspace: &str, run: &str, view: &mut 
     }
 }
 
-async fn job_log(ctx: &Context, workspace: &str, run: &str, job: &str) -> Result<CheckLog> {
+async fn job_log(ctx: &Context, workspace: &str, run: &str, job: JobRef) -> Result<CheckLog> {
     client::request(
         &ctx.paths,
         Method::CiRunJobLog {
             workspace: workspace.into(),
             run: run.into(),
-            job: job.into(),
+            job,
         },
     )
     .await
@@ -143,8 +168,7 @@ async fn job_log(ctx: &Context, workspace: &str, run: &str, job: &str) -> Result
 async fn list(ctx: &Context, workspace: Option<String>, filter: RunFilter) -> Result<i32> {
     validate_filter(&filter)?;
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let runs: Vec<Run> =
-        client::request(&ctx.paths, Method::ListCiRuns { workspace, filter }).await?;
+    let runs = client::pages::<Run>(&ctx.paths, Method::ListCiRuns { workspace, filter }).await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)
 }
@@ -161,8 +185,13 @@ fn render_run(view: &RunView) {
     outln!("Jobs:");
     for job in &view.jobs {
         match &job.url {
-            Some(url) => outln!("  {:<8}  {}  {url}", job.state.as_str(), job.name),
-            None => outln!("  {:<8}  {}", job.state.as_str(), job.name),
+            Some(url) => outln!(
+                "  {:<8}  {}  (ID {})  {url}",
+                job.state.as_str(),
+                job.name,
+                job.id
+            ),
+            None => outln!("  {:<8}  {}  (ID {})", job.state.as_str(), job.name, job.id),
         }
     }
     for log in &view.logs {

@@ -551,16 +551,18 @@ impl Backend for Forgejo {
         Ok(path)
     }
 
-    fn run_jobs_path(&self, run: &Run) -> String {
-        format!("actions/runs/{}/jobs", run.id)
+    /// Forgejo lists every job of a run at once.
+    fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String> {
+        (page == 1).then(|| format!("actions/runs/{}/jobs", run.id))
     }
 
     /// The web UI links a job by its index in the run.
-    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+    fn run_jobs(&self, run: &Run, offset: usize, value: &Value) -> Result<Vec<RunJob>> {
         let jobs = value.as_array().context("Actions jobs are not a list")?;
         jobs.iter()
             .enumerate()
             .map(|(index, job)| {
+                let index = offset + index;
                 Ok(RunJob {
                     id: job["id"].as_u64().context("Actions job has no ID")?,
                     name: text(&job["name"]).context("Actions job has no name")?,

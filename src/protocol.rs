@@ -486,8 +486,13 @@ pub enum Method {
         action: crate::forge::ci::CiAction,
         failed: bool,
     },
-    /// One CI workflow run with its jobs.
+    /// One CI workflow run.
     ViewCiRun {
+        workspace: String,
+        run: String,
+    },
+    /// A CI workflow run's jobs, sent in pages.
+    CiRunJobs {
         workspace: String,
         run: String,
     },
@@ -495,9 +500,10 @@ pub enum Method {
     CiRunJobLog {
         workspace: String,
         run: String,
-        job: String,
+        job: crate::forge::ci::run_view::JobRef,
     },
-    /// The newest CI workflow runs, on the workspace's branch by default.
+    /// The newest CI workflow runs, on the workspace's branch by default,
+    /// sent in pages.
     ListCiRuns {
         workspace: String,
         filter: crate::forge::ci::run_view::RunFilter,
@@ -1044,7 +1050,8 @@ response_bodies! {
     CiActed(crate::forge::ci::CiActed),
     CiRunStarted(crate::forge::ci::run::StartedRun),
     CiRunActed(crate::forge::ci::run_action::RunActed),
-    CiRunView(crate::forge::ci::run_view::RunView),
+    CiRun(crate::forge::ci::run_action::Run),
+    CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
     CiRuns(Vec<crate::forge::ci::run_action::Run>),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),

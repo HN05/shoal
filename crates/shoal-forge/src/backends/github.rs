@@ -23,7 +23,7 @@ use crate::{
         id,
         run::{NewRun, workflow_segment},
         run_action::Run,
-        run_view::{RunFilter, RunJob},
+        run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -610,11 +610,14 @@ impl Backend for GitHub {
         Ok(path)
     }
 
-    fn run_jobs_path(&self, run: &Run) -> String {
-        format!("actions/runs/{}/jobs?per_page=100", run.id)
+    fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String> {
+        Some(format!(
+            "actions/runs/{}/jobs?per_page={JOBS_PAGE}&page={page}",
+            run.id
+        ))
     }
 
-    fn run_jobs(&self, _run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+    fn run_jobs(&self, _run: &Run, _offset: usize, value: &Value) -> Result<Vec<RunJob>> {
         let jobs = value["jobs"]
             .as_array()
             .context("Actions jobs are not a list")?;

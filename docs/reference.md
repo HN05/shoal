@@ -2370,13 +2370,14 @@ acted on with `shoal pr ci`. `--json` returns the run's `url` and the
 
 `shoal forge ci view` shows a run's state (`running`, `failed` or `finished`),
 branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
-shows a PR's; `--job` shows only that job's log, in any state. `shoal forge ci
+shows a PR's; `--job` shows only that job's log, in any state, and `--job-id`
+the log of the job with that ID when several share a name. `shoal forge ci
 list` lists the newest runs, ten unless `--limit` says up to 100, on the
 workspace's branch or the one `--branch` names, and of one workflow file with
 `--workflow`, which GitLab does not take. Both read any run of the repository as
 the agent account, on every forge but Bitbucket. `--json` returns each run's
 `url`, `state`, `branch` and `workflow`, and for `view` its `jobs` with their
-`name`, `state` and `url`, the `logs` it read and the `errors` of those it could
+`id`, `name`, `state` and `url`, the `logs` it read and the `errors` of those it could
 not.
 
 #### Forge API requests

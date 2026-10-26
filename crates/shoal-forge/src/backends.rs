@@ -454,11 +454,15 @@ pub(crate) trait Backend {
         value["workflow_runs"].as_array().map(Vec::as_slice)
     }
 
-    /// The path under the repository that lists `run`'s jobs.
-    fn run_jobs_path(&self, run: &Run) -> String;
+    /// The path under the repository that lists page `page` of `run`'s
+    /// jobs, [`crate::ci::run_view::JOBS_PAGE`] to a page, or `None` past the
+    /// last page the forge
+    /// can return.
+    fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String>;
 
-    /// The jobs of `run` that a read of its jobs path returned as `value`.
-    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>>;
+    /// The jobs of `run` that a read of a page of its jobs returned as
+    /// `value`, after `offset` jobs on earlier pages.
+    fn run_jobs(&self, run: &Run, offset: usize, value: &Value) -> Result<Vec<RunJob>>;
 
     /// The log of `run`'s `job` as plain text.
     async fn run_job_log(
@@ -973,12 +977,12 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.listed_runs(value))
     }
 
-    fn run_jobs_path(&self, run: &Run) -> String {
-        dispatch!(self, backend => backend.run_jobs_path(run))
+    fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String> {
+        dispatch!(self, backend => backend.run_jobs_path(run, page))
     }
 
-    fn run_jobs(&self, run: &Run, value: &Value) -> Result<Vec<RunJob>> {
-        dispatch!(self, backend => backend.run_jobs(run, value))
+    fn run_jobs(&self, run: &Run, offset: usize, value: &Value) -> Result<Vec<RunJob>> {
+        dispatch!(self, backend => backend.run_jobs(run, offset, value))
     }
 
     async fn run_job_log(

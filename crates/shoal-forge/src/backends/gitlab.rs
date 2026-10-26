@@ -16,7 +16,7 @@ use crate::{
         id,
         run::NewRun,
         run_action::Run,
-        run_view::{RunFilter, RunJob},
+        run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     conventions::Lookup,
     items::{
@@ -621,11 +621,14 @@ impl Backend for GitLab {
         value.as_array().map(Vec::as_slice)
     }
 
-    fn run_jobs_path(&self, run: &Run) -> String {
-        format!("pipelines/{}/jobs?per_page=100", run.id)
+    fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String> {
+        Some(format!(
+            "pipelines/{}/jobs?per_page={JOBS_PAGE}&page={page}",
+            run.id
+        ))
     }
 
-    fn run_jobs(&self, _run: &Run, value: &Value) -> Result<Vec<RunJob>> {
+    fn run_jobs(&self, _run: &Run, _offset: usize, value: &Value) -> Result<Vec<RunJob>> {
         let jobs = value.as_array().context("pipeline jobs are not a list")?;
         jobs.iter()
             .map(|job| {
