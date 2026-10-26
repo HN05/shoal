@@ -34,6 +34,8 @@ pub(crate) enum Reply {
     Answer(Response<Full<Bytes>>),
     /// Never answer.
     Stall,
+    /// Answer with this status and a body that never ends.
+    StallBody(u16),
 }
 
 impl From<Response<Full<Bytes>>> for Reply {
@@ -81,8 +83,22 @@ impl FakeUpstream {
                         };
                         arriving.notify_waiters();
                         match answer {
-                            Reply::Answer(response) => Ok::<_, Infallible>(response),
+                            Reply::Answer(response) => {
+                                Ok::<_, Infallible>(response.map(|body| {
+                                    body.map_err(|never| match never {}).boxed_unsync()
+                                }))
+                            }
                             Reply::Stall => std::future::pending().await,
+                            Reply::StallBody(status) => {
+                                let never = futures_util::stream::pending::<
+                                    Result<hyper::body::Frame<Bytes>, Infallible>,
+                                >();
+                                let mut response = Response::new(
+                                    http_body_util::StreamBody::new(never).boxed_unsync(),
+                                );
+                                *response.status_mut() = StatusCode::from_u16(status).unwrap();
+                                Ok(response)
+                            }
                         }
                     }
                 });
@@ -616,4 +632,20 @@ async fn a_usage_limit_inside_the_stream_ends_the_turn_at_once() {
             in_stream: true
         }]
     );
+}
+
+#[tokio::test]
+async fn a_failure_whose_body_never_ends_is_retried_by_its_status() {
+    let upstream = FakeUpstream::start(|received| match received.len() {
+        1 => Reply::StallBody(503),
+        _ => Reply::from(reply(200, "done")),
+    })
+    .await;
+    let (addr, _events, clock) = proxy_on(upstream.url("")).await;
+    let request = tokio::spawn(send(addr, Request::post("/v1/messages"), "{}"));
+    upstream.received(1).await;
+    // The proxy stops waiting for the body, then retries the 503.
+    clock.expire().await;
+    let (status, _, body) = drive(&clock, async { request.await.unwrap() }).await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
 }

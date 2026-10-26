@@ -169,7 +169,7 @@ impl Forwarder {
             }
         };
         match (Failure::of_status(response.status()), request.protocol) {
-            (Some(failure), _) => failed_status(failure, response).await,
+            (Some(failure), _) => failed_status(failure, response, self.clock.as_ref()).await,
             (None, Some(protocol)) if is_event_stream(&response) => {
                 opened(protocol, response).await
             }
@@ -229,16 +229,32 @@ impl Forwarder {
     }
 }
 
+/// The most of an HTTP failure's body the proxy reads.
+const ERROR_BODY_LIMIT: usize = 1 << 20;
+/// How long the proxy waits for an HTTP failure's body.
+const ERROR_BODY_WAIT: Duration = Duration::from_secs(30);
+
+/// An HTTP failure's body, or none when it is larger than an error needs or
+/// does not arrive in time, which leaves the failure as its status says.
+async fn error_body(body: Incoming, clock: &dyn Clock) -> Bytes {
+    let read = http_body_util::Limited::new(body, ERROR_BODY_LIMIT).collect();
+    tokio::select! {
+        read = read => read.map(|body| body.to_bytes()).unwrap_or_default(),
+        () = clock.deadline(ERROR_BODY_WAIT) => Bytes::new(),
+    }
+}
+
 /// An HTTP failure, read whole since it is small: its error may say when
 /// to try again, and is what the agent hears if the proxy gives up.
-async fn failed_status(failure: Failure, response: Response<Incoming>) -> Attempt {
+async fn failed_status(
+    failure: Failure,
+    response: Response<Incoming>,
+    clock: &dyn Clock,
+) -> Attempt {
     let (mut parts, body) = response.into_parts();
     strip_hop_by_hop(&mut parts.headers);
     parts.headers.remove(header::CONTENT_LENGTH);
-    let body = match body.collect().await {
-        Ok(body) => body.to_bytes(),
-        Err(_) => Bytes::new(),
-    };
+    let body = error_body(body, clock).await;
     let error = serde_json::from_slice::<serde_json::Value>(&body)
         .ok()
         .map(|body| body["error"].clone())
