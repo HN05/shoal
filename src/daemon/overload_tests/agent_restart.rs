@@ -59,3 +59,31 @@ async fn a_restart_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
     );
     serving.abort();
 }
+
+#[tokio::test]
+async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = bounded(manager.restart_agent(&execution))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error}").contains("workspace is no longer ready for agent recovery"),
+        "{error}"
+    );
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!workspace.path.join("restored").exists());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}

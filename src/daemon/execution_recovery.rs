@@ -95,7 +95,7 @@ async fn restart(
         let reason = reason
             .clone()
             .unwrap_or_else(|| "the restart was cancelled".into());
-        manager.finish_restart(execution_id, Err(reason)).await;
+        manager.fail_restart(execution_id, reason).await;
     }
     action
 }
@@ -125,6 +125,7 @@ async fn restart_once_stopped(
     };
     let resume = async {
         ready?;
+        manager.verify_restore_workspace(workspace_id).await?;
         resume(manager, execution_id, workspace_id).await
     }
     .await;

@@ -1,7 +1,7 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
 use std::time::{Duration, Instant};
-use tokio::sync::{OwnedRwLockReadGuard, oneshot, watch};
+use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{GuardMode, Manager, capacity::Activity};
 pub(crate) use crate::protocol::Protection;
@@ -23,9 +23,8 @@ pub(super) struct Agent {
     /// Holds back a daemon update from the stop until the execution's
     /// connection takes over, so an update waits for the restore.
     update_hold: Option<OwnedRwLockReadGuard<()>>,
-    /// Set while `shoal restart` restarts the agent; answers its request
-    /// once the agent runs again, or why it does not.
-    restart: Option<oneshot::Sender<Result<(), String>>>,
+    /// Set while `shoal restart` restarts the agent.
+    restart: Option<restart::Restart>,
 }
 
 impl Agent {
@@ -347,7 +346,11 @@ impl Manager {
         let agent = agents
             .get_mut(id)
             .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
-        let restarting = agent.restart.is_some();
+        let restarting = agent
+            .restart
+            .as_mut()
+            .map(restart::Restart::resume)
+            .is_some();
         if agent.overload.is_none() && !restarting {
             return Ok(false);
         }
@@ -377,7 +380,7 @@ impl Manager {
     pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
         if let Some(agent) = self.agents.lock().await.get_mut(id) {
             if protection.is_restart() {
-                agent.restart = Some(oneshot::channel().0);
+                agent.restart = Some(restart::Restart::unanswered());
             } else {
                 agent.overload = Some(protection);
             }
@@ -463,6 +466,18 @@ impl Manager {
         }
     }
 
+    /// Check that a stopped agent's workspace is ready and still the
+    /// recorded worktree, so a replaced one never receives the agent.
+    pub(crate) async fn verify_restore_workspace(&self, workspace_id: &str) -> anyhow::Result<()> {
+        let workspace = self.workspace(workspace_id).await?;
+        self.verify_worktree(&workspace).await?;
+        anyhow::ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace is no longer ready for agent recovery"
+        );
+        Ok(())
+    }
+
     /// Check that an admitted restore's workspace is ready and verified. A
     /// stop or reload since its admission at `epoch` revokes it, since its
     /// healthy readings no longer hold, and returns it to its place.
@@ -472,12 +487,7 @@ impl Manager {
         workspace_id: &str,
         epoch: u64,
     ) -> anyhow::Result<bool> {
-        let workspace = self.workspace(workspace_id).await?;
-        self.verify_worktree(&workspace).await?;
-        anyhow::ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
-            "workspace is no longer ready for agent recovery"
-        );
+        self.verify_restore_workspace(workspace_id).await?;
         let current = self
             .recovery_epoch
             .load(std::sync::atomic::Ordering::Relaxed)

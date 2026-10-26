@@ -340,7 +340,7 @@ async fn relay(
                     .await?;
                 if agent.is_some() {
                     manager.forget_last_session(&workspace.id);
-                    manager.finish_restart(execution_id, Ok(())).await;
+                    manager.agent_started(execution_id).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
             }

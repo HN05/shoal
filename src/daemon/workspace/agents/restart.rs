@@ -7,6 +7,34 @@ use tokio::sync::oneshot;
 use super::Manager;
 use crate::{daemon::store, model::RunningAgent};
 
+/// A restart in progress, which answers its request.
+pub(super) struct Restart {
+    done: oneshot::Sender<Result<(), String>>,
+    /// The stopped agent was resumed, so its wrapper's next start is the
+    /// restarted agent rather than the first one.
+    resumed: bool,
+}
+
+impl Restart {
+    fn new() -> (Self, oneshot::Receiver<Result<(), String>>) {
+        let (done, answer) = oneshot::channel();
+        let restart = Self {
+            done,
+            resumed: false,
+        };
+        (restart, answer)
+    }
+
+    /// A restart whose request ended with the daemon that took it.
+    pub(super) fn unanswered() -> Self {
+        Self::new().0
+    }
+
+    pub(super) fn resume(&mut self) {
+        self.resumed = true;
+    }
+}
+
 impl Manager {
     /// Every connected agent, and every execution whose wrapper is gone,
     /// which may have run one; connected commands are left out.
@@ -62,13 +90,13 @@ impl Manager {
             "{} is already stopping",
             agent.name
         );
-        let (sender, receiver) = oneshot::channel();
-        agent.restart = Some(sender);
+        let (restart, answer) = Restart::new();
+        agent.restart = Some(restart);
         if agent.stop.send(true).is_err() {
             agent.restart = None;
             anyhow::bail!("{} disconnected", agent.name);
         }
-        Ok(receiver)
+        Ok(answer)
     }
 
     /// Whether `shoal restart` is restarting the agent of `id`.
@@ -80,17 +108,26 @@ impl Manager {
             .is_some_and(|agent| agent.restart.is_some())
     }
 
-    /// Answer the restart of `id`: `Ok` once the agent runs again.
-    pub(crate) async fn finish_restart(&self, id: &str, outcome: Result<(), String>) {
-        let done = self
-            .agents
-            .lock()
-            .await
-            .get_mut(id)
-            .and_then(|agent| agent.restart.take());
-        if let Some(done) = done {
+    /// The wrapper of `id` started its child: once a restart resumed the
+    /// agent, that child is the restarted agent.
+    pub(crate) async fn agent_started(&self, id: &str) {
+        self.answer_restart(id, true, Ok(())).await;
+    }
+
+    /// The restart of `id` ends without the agent running again.
+    pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
+        self.answer_restart(id, false, Err(reason)).await;
+    }
+
+    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<(), String>) {
+        let restart = self.agents.lock().await.get_mut(id).and_then(|agent| {
+            agent
+                .restart
+                .take_if(|restart| restart.resumed || !once_resumed)
+        });
+        if let Some(restart) = restart {
             // The request may have gone with its client.
-            let _ = done.send(outcome);
+            let _ = restart.done.send(outcome);
         }
     }
 }

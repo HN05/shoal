@@ -128,11 +128,15 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     assert!(manager.restart_requested(&id).await);
+    // A first start that registers only now is not the restarted agent, so
+    // the wrapper still receives the restart's stop.
+    manager.agent_started(&id).await;
+    assert!(manager.restart_requested(&id).await);
     // The restore resumes the agent without the queue, and its start answers.
     assert!(manager.resume_agent_execution(&id).await.unwrap());
     assert!(!*stop.borrow_and_update());
     assert!(manager.restart_requested(&id).await);
-    manager.finish_restart(&id, Ok(())).await;
+    manager.agent_started(&id).await;
     restarting.await.unwrap().unwrap();
     assert!(!manager.restart_requested(&id).await);
     assert!(manager.notifications(false, 10).await.unwrap().is_empty());
@@ -143,7 +147,7 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
         async move { manager.restart_agent(&id).await }
     });
     stop.wait_for(|stopping| *stopping).await.unwrap();
-    manager.finish_restart(&id, Err("cancelled".into())).await;
+    manager.fail_restart(&id, "cancelled".into()).await;
     let error = restarting.await.unwrap().unwrap_err();
     assert_eq!(format!("{error}"), "cancelled");
 }
