@@ -217,6 +217,10 @@ fn fzf_output(ctx: &Context, prompt: &str, entries: &Entries, extra: &[String]) 
             "--ansi",
             "--delimiter=\t",
             "--with-nth=2..",
+            // The count goes at the end of the prompt line, so the key
+            // hints sit directly above the prompt.
+            "--info=inline-right",
+            "--no-separator",
             "--prompt",
             prompt,
         ])
