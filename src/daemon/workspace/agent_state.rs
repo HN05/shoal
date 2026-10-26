@@ -65,6 +65,7 @@ impl Manager {
                          OR execution_id IS NOT excluded.execution_id",
                     params![id, state, execution, now],
                 )?;
+                super::turn_retry::follow_state(&tx, &id, state)?;
                 let status = get(&tx, &id)?.expect("agent state was just recorded");
                 tx.commit()?;
                 Ok((status, changed > 0))
@@ -77,14 +78,18 @@ impl Manager {
     }
 
     /// Record the turn `failure` ended as reported from `execution`, which
-    /// leaves the agent idle.
+    /// leaves the agent idle and may retry the turn. The retry is scheduled
+    /// first, since the agent going idle finishes a delivered one.
     pub async fn report_turn_failure(
         &self,
         selector: &str,
-        _failure: TurnFailure,
+        failure: TurnFailure,
         execution: Option<String>,
         session: Option<String>,
     ) -> Result<AgentStatus> {
+        if let Some(execution) = &execution {
+            self.retry_failed_turn(selector, failure, execution).await;
+        }
         self.set_agent_state(selector, AgentState::Idle, execution, session)
             .await
     }

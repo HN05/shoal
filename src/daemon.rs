@@ -123,6 +123,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
     spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "turn retries",
+        workspace::turn_retry::run,
+    );
     spawn_supervised(&mut background, &manager, "chats", chats::run);
     spawn_supervised(
         &mut background,

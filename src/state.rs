@@ -216,6 +216,23 @@ states!(TurnFailure {
     Other => "other",
 });
 
+impl TurnFailure {
+    /// Whether the same turn may succeed once the API recovers.
+    pub fn retryable(self) -> bool {
+        self != Self::Other
+    }
+
+    /// The failure as the user reads it.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::RateLimited => "rate limited",
+            Self::Overloaded => "API overloaded",
+            Self::ServerError => "API server error",
+            Self::Other => "API error",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

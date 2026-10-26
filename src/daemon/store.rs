@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 69;
+const SCHEMA_VERSION: i64 = 70;
 
 #[cfg(test)]
 mod benchmark;
@@ -405,6 +405,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         'shoal answer ', 'shoal questions ')
         WHERE kind='question_asked';", None),
     (69, DEMOS, None),
+    (70, include_str!("store/workspace_turn_retries.sql"), None),
 ];
 
 /// The demo each running execution runs; a demo ends with its execution.
@@ -1202,6 +1203,9 @@ mod tests {
         }
         if version >= 69 {
             db.execute_batch(DEMOS)?;
+        }
+        if version >= 70 {
+            db.execute_batch(include_str!("store/workspace_turn_retries.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

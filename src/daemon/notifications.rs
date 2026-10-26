@@ -62,6 +62,8 @@ states!(NotificationKind {
     KeepAwakeFailed => "keep_awake_failed",
     /// The daemon removed a contribution repository nothing was left of.
     RepositoryRemoved => "repository_removed",
+    /// An API failure ended an agent's turn and Shoal does not retry it.
+    TurnFailed => "turn_failed",
 });
 
 impl NotificationKind {
@@ -69,7 +71,7 @@ impl NotificationKind {
     /// receives this event instead of the user, and from whom.
     fn coordination(self) -> Option<Source> {
         match self {
-            Self::AgentExited | Self::AgentStopped => Some(Source::Daemon),
+            Self::AgentExited | Self::AgentStopped | Self::TurnFailed => Some(Source::Daemon),
             Self::AgentMessage
             | Self::QuestionAsked
             | Self::QuestionWithdrawn

@@ -503,6 +503,12 @@ impl Manager {
         Some(crate::daemon::links::proposals::Proposer { agent })
     }
 
+    /// The name of the connected agent that `execution` runs.
+    pub(crate) async fn agent_name(&self, execution: &str) -> Option<String> {
+        let agents = self.agents.lock().await;
+        agents.get(execution).map(|agent| agent.name.clone())
+    }
+
     /// Workspaces with a connected agent that is not being stopped.
     pub(crate) async fn running_agent_workspaces(&self) -> Vec<String> {
         let agents = self.agents.lock().await;

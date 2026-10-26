@@ -394,6 +394,9 @@ pub struct WorkspaceStatus {
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,
+    /// The retry of the agent's turn an API failure ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_retry: Option<crate::daemon::workspace::turn_retry::TurnRetry>,
 }
 
 /// The first condition that keeps a workspace from automatic cleanup, in the

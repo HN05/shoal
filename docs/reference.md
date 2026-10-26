@@ -752,6 +752,20 @@ set there, which must be absolute or start with `~/`, and cannot be removed.
 Unsetting a variable does not undo one the agent's own settings file sets, such as
 the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
+`retry = true` on a tool, which its launch profiles inherit, retries a turn an
+API error ended, for agents whose integration reports failed turns: Claude Code,
+through its `StopFailure` hook. After a rate limit, an overloaded API or a server
+error, Shoal waits half a minute, doubling for each later attempt up to a quarter
+hour, then sends the idle agent a [message](#agent-messages) to continue its
+unfinished work, which reaches it in a new turn of the same conversation. A new
+turn before then cancels the retry, and the agent's exit, completion or the
+workspace's removal drops it. Attempts follow one another until a turn ends
+normally; after eight, or after an error a retry does not fix, such as failed
+authentication, Shoal records a `turn_failed` notification, which a child
+workspace's coordinating agent receives instead. A pending retry outlasts a
+daemon restart; `status` shows it, and `--json` gives `turn_retry` with
+`failure`, `attempt`, `attempts`, `due_at` and `delivered`.
+
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).

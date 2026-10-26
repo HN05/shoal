@@ -49,9 +49,14 @@ impl Manager {
         let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
         let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();
-        let setup_finished = self
+        let (setup_finished, turn_retry) = self
             .store
-            .run(move |db| store::setup_finished(db, &workspace_id))
+            .run(move |db| {
+                Ok((
+                    store::setup_finished(db, &workspace_id)?,
+                    super::turn_retry::get(db, &workspace_id)?,
+                ))
+            })
             .await?;
         inspection.simulators.retain(|simulator| {
             simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
@@ -67,6 +72,7 @@ impl Manager {
             cleanup_at,
             prs,
             issue_status,
+            turn_retry,
         })
     }
 }

@@ -42,6 +42,9 @@ pub struct Agent {
     /// or set by `[env]`.
     #[serde(default)]
     pub env_remove: Vec<String>,
+    /// Whether Shoal retries a turn an API failure ended, for an agent whose
+    /// integration reports failed turns.
+    pub retry: Option<bool>,
 }
 
 /// What an AI tool's tracked launches change in the environment they would
@@ -214,6 +217,14 @@ fn lineage<'a>(agents: &'a Agents, name: &'a str) -> impl Iterator<Item = &'a st
 /// The tool whose integration `name` runs with: the end of its lineage.
 pub fn integration<'a>(agents: &'a Agents, name: &'a str) -> &'a str {
     lineage(agents, name).last().unwrap_or(name)
+}
+
+/// Whether Shoal retries `name`'s failed turns: the `retry` set nearest in
+/// its lineage, off without one.
+pub fn retries(agents: &Agents, name: &str) -> bool {
+    lineage(agents, name)
+        .find_map(|name| agents.get(name)?.retry)
+        .unwrap_or(false)
 }
 
 /// The tool each launch profile runs with the integration of.
@@ -432,6 +443,10 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
             validate_base(agents, name, base).with_context(|| format!("ai.{name}.base"))?;
         }
         validate_environment(agents, name, agent).with_context(|| format!("ai.{name}"))?;
+        ensure!(
+            agent.retry.is_none() || providers(agents).contains(name),
+            "ai.{name}.retry needs a command or base, or a built-in AI tool"
+        );
         for (key, argv, placeholders) in [
             (
                 "instructions",
@@ -737,6 +752,21 @@ mod tests {
         }
         // Built-in providers may replace their launcher here as in [commands].
         parse("[ai.codex]\ncommand = ['codex']\n").unwrap();
+    }
+
+    #[test]
+    fn retry_is_off_until_a_tool_or_its_base_turns_it_on() {
+        let agents = parse(
+            "[ai.claude]\nretry = true\n[ai.claude-direct]\nbase = 'claude'\n\
+             [ai.claude-manual]\nbase = 'claude'\nretry = false\n",
+        )
+        .unwrap();
+        assert!(retries(&agents, "claude"));
+        assert!(retries(&agents, "claude-direct"));
+        assert!(!retries(&agents, "claude-manual"));
+        assert!(!retries(&agents, "codex"));
+        let error = format!("{:#}", parse("[ai.notes]\nretry = true\n").unwrap_err());
+        assert!(error.contains("ai.notes.retry needs"), "{error}");
     }
 
     #[test]

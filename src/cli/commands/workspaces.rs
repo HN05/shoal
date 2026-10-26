@@ -1354,6 +1354,23 @@ pub(in crate::cli) async fn agent_environment(
         })
 }
 
+/// A pending retry of the agent's failed turn as `status` shows it.
+fn turn_retry_label(retry: &crate::daemon::workspace::turn_retry::TurnRetry) -> String {
+    let progress = format!("attempt {} of {}", retry.attempt, retry.attempts);
+    if retry.delivered {
+        format!(
+            "{} ({progress}), agent asked to continue",
+            retry.failure.describe()
+        )
+    } else {
+        format!(
+            "{} ({progress}) at {}",
+            retry.failure.describe(),
+            crate::time::local_minutes(retry.due_at)
+        )
+    }
+}
+
 /// Run the configured `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 pub(super) async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
@@ -1733,6 +1750,9 @@ fn render_status(view: &StatusView, json: bool) {
             .agent_state
             .map_or("none", |status| { ui::agent_state_label(status.state) })
     );
+    if let Some(retry) = &status.turn_retry {
+        outln!("Turn retry:    {}", turn_retry_label(retry));
+    }
     outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
 
     outln!("Ports:         {}", inspection.ports.len());

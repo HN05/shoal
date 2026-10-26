@@ -34,6 +34,7 @@ mod stack;
 mod status;
 mod stopped_work;
 mod tree;
+pub(crate) mod turn_retry;
 mod xcode;
 
 pub(crate) use agents::{Pause, Protection};
@@ -193,6 +194,8 @@ pub struct Manager {
     restore_waiters: std::sync::Mutex<HashMap<String, Option<u64>>>,
     /// Wakes the queue dispatcher when a slot may have freed.
     pub(crate) agent_queue_wake: tokio::sync::Notify,
+    /// Wakes turn retry delivery when a retry is scheduled.
+    pub(crate) turn_retry_wake: tokio::sync::Notify,
     /// Wakes stopped-agent reconciliation when an execution becomes unknown.
     pub(crate) execution_unknown: tokio::sync::Notify,
     /// Recent CPU readings for dynamic agent admission.
@@ -255,6 +258,7 @@ impl Manager {
             agent_queue_holds: Default::default(),
             restore_waiters: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),
+            turn_retry_wake: tokio::sync::Notify::new(),
             execution_unknown: tokio::sync::Notify::new(),
             cpu_usage: Default::default(),
             seed_failures: Default::default(),

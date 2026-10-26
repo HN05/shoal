@@ -242,5 +242,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "ALTER TABLE repositories DROP COLUMN contribution; DROP TABLE contribution_grace;",
     )?;
     db.execute_batch("DROP TABLE repository_moves;")?;
+    db.execute_batch("DROP TABLE workspace_turn_retries;")?;
     Ok(())
 }
