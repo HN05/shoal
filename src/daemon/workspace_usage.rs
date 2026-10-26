@@ -215,7 +215,7 @@ async fn sample(manager: &Manager, tracked: Vec<(String, Identity)>) -> Result<S
         .into_iter()
         .filter(|(_, identity)| !found.contains(identity))
         .collect();
-    tokio::task::spawn_blocking(move || read(running, missed, state))
+    tokio::task::spawn_blocking(move || read(running, missed, usage::read, state))
         .await
         .context("workspace usage worker failed")?
 }
@@ -237,24 +237,30 @@ fn state(identity: &Identity) -> Result<State> {
 }
 
 /// The readings of the processes the scan `found` and of those it `missed`,
-/// each kept by the `state` its process is in once read: one that exits after
-/// the scan is still followed until reaped. A missed process counts only
+/// each kept by the `state` its process is in once every reading is taken:
+/// a child reaped after its own reading may show in its parent's, so it
+/// counts as gone and its time as its reaper's. One that exits after the
+/// scan is still followed until reaped, but a missed process counts only
 /// while unreaped, since one still running no longer carries the identity.
 fn read(
     found: Vec<(String, Identity)>,
     missed: Vec<(String, Identity)>,
+    reading: impl Fn(u32) -> Result<Option<Reading>>,
     state: impl Fn(&Identity) -> Result<State>,
 ) -> Result<Sample> {
-    let mut processes = HashMap::new();
-    let mut unreaped = HashSet::new();
     let candidates = found
         .into_iter()
         .map(|candidate| (candidate, true))
         .chain(missed.into_iter().map(|candidate| (candidate, false)));
+    let mut readings = Vec::new();
     for ((workspace, identity), scanned) in candidates {
-        let Some(reading) = usage::read(identity.pid)? else {
-            continue;
-        };
+        if let Some(reading) = reading(identity.pid)? {
+            readings.push((workspace, identity, scanned, reading));
+        }
+    }
+    let mut processes = HashMap::new();
+    let mut unreaped = HashSet::new();
+    for (workspace, identity, scanned, reading) in readings {
         match state(&identity)? {
             State::Running if scanned => {}
             State::Unreaped => {
@@ -403,10 +409,13 @@ mod tests {
     fn processes_exiting_after_the_scan_are_followed_unreaped() {
         let own = own_process();
         let candidates = vec![("a".to_owned(), own.clone())];
-        let exited = read(candidates.clone(), Vec::new(), |_| Ok(State::Unreaped)).unwrap();
+        let exited = read(candidates.clone(), Vec::new(), usage::read, |_| {
+            Ok(State::Unreaped)
+        })
+        .unwrap();
         assert!(exited.processes.contains_key(&own));
         assert_eq!(exited.unreaped, HashSet::from([own.clone()]));
-        let gone = read(candidates, Vec::new(), |_| Ok(State::Gone)).unwrap();
+        let gone = read(candidates, Vec::new(), usage::read, |_| Ok(State::Gone)).unwrap();
         assert!(gone.processes.is_empty() && gone.unreaped.is_empty());
     }
 
@@ -415,10 +424,43 @@ mod tests {
         let own = own_process();
         let missed = || vec![("a".to_owned(), own.clone())];
         // Running without the identity, such as after an exec that dropped it.
-        let running = read(Vec::new(), missed(), |_| Ok(State::Running)).unwrap();
+        let running = read(Vec::new(), missed(), usage::read, |_| Ok(State::Running)).unwrap();
         assert!(running.processes.is_empty());
-        let exited = read(Vec::new(), missed(), |_| Ok(State::Unreaped)).unwrap();
+        let exited = read(Vec::new(), missed(), usage::read, |_| Ok(State::Unreaped)).unwrap();
         assert_eq!(exited.unreaped, HashSet::from([own.clone()]));
+    }
+
+    #[test]
+    fn every_process_is_read_before_any_is_kept() {
+        let child = process(11, 10, "a", 0);
+        let parent = process(10, 1, "a", 0);
+        let calls = std::cell::RefCell::new(Vec::new());
+        // The child was reaped after its reading, before the parent's.
+        let sample = read(
+            vec![child.clone(), parent.clone()]
+                .into_iter()
+                .map(|(identity, (workspace, _))| (workspace, identity))
+                .collect(),
+            Vec::new(),
+            |pid| {
+                calls.borrow_mut().push(format!("read {pid}"));
+                Ok(Some(child.1.1))
+            },
+            |identity| {
+                calls.borrow_mut().push(format!("state {}", identity.pid));
+                Ok(if identity.pid == 11 {
+                    State::Gone
+                } else {
+                    State::Running
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            *calls.borrow(),
+            ["read 11", "read 10", "state 11", "state 10"]
+        );
+        assert_eq!(sample.processes.keys().collect::<Vec<_>>(), [&parent.0]);
     }
 
     /// A process whose usage reads: this test's own.
@@ -532,7 +574,7 @@ mod tests {
         let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
             .await
             .unwrap();
-        let sample = read(processes, Vec::new(), state).unwrap();
+        let sample = read(processes, Vec::new(), usage::read, state).unwrap();
         assert!(sample.unreaped.is_empty());
         let [(identity, (workspace, reading))] =
             Vec::from_iter(sample.processes).try_into().unwrap();
