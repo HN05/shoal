@@ -62,7 +62,7 @@ pub fn workspace_rows(
             (status, status_cell(status))
         })
         .collect();
-    rows_with_status(workspaces, repositories, statuses, palette, width)
+    rows_with_status(workspaces, repositories, statuses, palette, width, true)
 }
 
 /// `workspace_rows` for workspaces and the running chats that opened some
@@ -195,12 +195,15 @@ pub fn chat_label(chat: &Chat, repositories: &[Repository]) -> String {
 
 /// `workspace_rows` with a status, which picks the marker, and a status cell
 /// per workspace.
+/// `with_markers` starts each row with its state marker, which multi-select
+/// pickers leave out beside their selection marks.
 pub(super) fn rows_with_status(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
     statuses: Vec<(ListStatus, Cell)>,
     palette: Palette,
     width: Option<usize>,
+    with_markers: bool,
 ) -> Vec<String> {
     let (markers, statuses): (Vec<_>, Vec<_>) = statuses
         .into_iter()
@@ -222,7 +225,13 @@ pub(super) fn rows_with_status(
     markers
         .into_iter()
         .zip(aligned_to(cells, palette, title_limit(width)))
-        .map(|(marker, row)| format!("{marker} {row}"))
+        .map(|(marker, row)| {
+            if with_markers {
+                format!("{marker} {row}")
+            } else {
+                row
+            }
+        })
         .collect()
 }
 

@@ -24,7 +24,8 @@ const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -lt \"$FZF_MA
 pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
     let extra = [
         "--multi".to_owned(),
-        "--marker=✓".to_owned(),
+        "--marker=✓ ".to_owned(),
+        "--color=marker:green:bold".to_owned(),
         "--bind".to_owned(),
         NEXT.to_owned(),
         "--bind".to_owned(),

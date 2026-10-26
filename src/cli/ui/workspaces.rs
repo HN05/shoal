@@ -167,6 +167,7 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> 
         statuses,
         Palette::stderr(ctx.json),
         picker_width(),
+        false,
     );
     Some(workspaces.into_iter().map(|w| w.id).zip(labels).collect())
 }
@@ -211,7 +212,7 @@ async fn pick_workspace_or_all(
     ctx: &Context,
     workspaces: Vec<Workspace>,
 ) -> Result<Option<String>> {
-    let mut entries = workspace_entries(ctx, workspaces).await;
+    let mut entries = workspace_entries(ctx, workspaces, true).await;
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     let id = pick(ctx, "Workspace> ", entries)?;
     Ok((id != ALL_ID).then_some(id))
@@ -277,20 +278,21 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 }
 
 pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
-    let entries = workspace_entries(ctx, workspaces).await;
+    let entries = workspace_entries(ctx, workspaces, true).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick(ctx, "Workspace> ", entries)
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
     require_interactive(ctx)?;
-    let entries = workspace_entries(ctx, workspaces).await;
+    let entries = workspace_entries(ctx, workspaces, false).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick_many(ctx, "Workspaces> ", entries)
 }
 
-/// The picker entries for `workspaces`, judged against what the command needs.
-async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
+/// The picker entries for `workspaces`, judged against what the command
+/// needs, starting with their state markers when `markers` says.
+async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>, markers: bool) -> Entries {
     let availability = Availability::load(ctx.need, &ctx.paths, &workspaces).await;
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
     availability_entries(
@@ -298,6 +300,7 @@ async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries
         &availability,
         &stopped,
         Palette::stderr(ctx.json),
+        markers,
     )
 }
 
@@ -309,6 +312,7 @@ fn availability_entries(
     availability: &Availability,
     stopped: &HashSet<String>,
     palette: Palette,
+    markers: bool,
 ) -> Entries {
     let mut rows = workspaces
         .into_iter()
@@ -330,7 +334,7 @@ fn availability_entries(
             ((status, cell), w)
         })
         .unzip();
-    let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width());
+    let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width(), markers);
     workspaces.into_iter().map(|w| w.id).zip(labels).collect()
 }
 
