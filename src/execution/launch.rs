@@ -1,6 +1,10 @@
 //! A tracked execution from its daemon record to its reported completion: the
 //! launch it prepares, the runs of its command, and what follows each run.
-use std::{ffi::OsString, time::Instant};
+use std::{
+    ffi::OsString,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result};
 
@@ -19,6 +23,7 @@ use crate::{
     cli::{
         client,
         internal::{Worker, internal_command},
+        terminal::PromptSession,
     },
     daemon::approvals::Undecided,
     env,
@@ -28,12 +33,16 @@ use crate::{
     protocol::{Body, Method, Reattach},
 };
 
+/// A tracked execution the daemon recorded, with the command it runs next and
+/// what that command receives.
 struct TrackedLaunch {
     link: Link,
     plan: ExecutionPlan,
     command: Vec<OsString>,
     auth: Option<AgentLaunch>,
     recovery: Option<recovery::Recovery>,
+    /// The saved record a restored agent consumes once it is registered.
+    record: Option<PathBuf>,
 }
 
 pub(super) async fn run_tracked(
@@ -43,111 +52,168 @@ pub(super) async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
-    let TrackedLaunch {
-        mut link,
-        mut plan,
-        command,
-        auth,
-        recovery,
-    } = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
-    let integration = auth.as_ref().and_then(|auth| auth.integration.as_deref());
-    let wake = wake::session(integration, &mode);
-    let mut next_command = command;
-    let mut recovery_record = None;
+    let mut launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
+    let wake = launch.wake_session(&mode);
     let mut restarts = demo::Restarts::default();
-    let mut result = loop {
+    let result = loop {
         let started = Instant::now();
-        let outcome = if mode.is_setup() && next_command.is_empty() {
-            Ok(Outcome::Exited(0))
-        } else {
-            // Prompts only while this child runs, which reports its state.
-            let _waker = wake
-                .clone()
-                .map(|session| wake::start(paths, &plan.workspace.id, session));
-            supervise(
-                &mut link,
-                paths,
-                &plan,
-                &next_command,
-                &mode,
-                auth.as_ref(),
-                recovery_record.as_deref(),
-            )
-            .await
-        };
-        if let Some(refusal) = link.refusal() {
+        let outcome = launch.run(paths, &mode, wake.clone()).await;
+        if let Some(refusal) = launch.link.refusal() {
             eprintln!("shoal: {refusal}; command stopped");
         }
         match outcome {
-            Ok(Outcome::Exited(code)) if matches!(mode, Mode::Demo { .. }) => {
-                let delay = restarts.after(started.elapsed());
-                eprintln!(
-                    "shoal: demo exited with status {code}; restarting in {}s",
-                    delay.as_secs()
-                );
-                match demo::next_run(&mut link, delay).await? {
-                    None => continue,
-                    Some(reason) => {
-                        eprintln!("shoal: demo stopped: {reason}");
-                        break Ok(code);
-                    }
+            Ok(outcome) => {
+                let ran = started.elapsed();
+                if let Some(code) = launch
+                    .after_run(paths, &mode, outcome, &mut restarts, ran)
+                    .await?
+                {
+                    break Ok(code);
                 }
             }
-            Ok(Outcome::Exited(code)) => break Ok(code),
-            Ok(Outcome::Stopped { code, reason }) => {
-                let stopped = if recovery.is_some() {
+            Err(error) => break Err(error),
+        }
+    };
+    let result = roll_back_failed_land(&launch.plan, result).await;
+    launch.finish(&mode, result).await
+}
+
+impl TrackedLaunch {
+    /// The terminal session to wake the agent in when it is idle.
+    fn wake_session(&self, mode: &Mode) -> Option<PromptSession> {
+        let integration = self
+            .auth
+            .as_ref()
+            .and_then(|auth| auth.integration.as_deref());
+        wake::session(integration, mode)
+    }
+
+    /// Run the command once; a setup without a configured command has
+    /// nothing to run.
+    async fn run(
+        &mut self,
+        paths: &Paths,
+        mode: &Mode,
+        wake: Option<PromptSession>,
+    ) -> Result<Outcome> {
+        if mode.is_setup() && self.command.is_empty() {
+            return Ok(Outcome::Exited(0));
+        }
+        // Prompts only while this child runs, which reports its state.
+        let _waker = wake.map(|session| wake::start(paths, &self.plan.workspace.id, session));
+        supervise(
+            &mut self.link,
+            paths,
+            &self.plan,
+            &self.command,
+            mode,
+            self.auth.as_ref(),
+            self.record.as_deref(),
+        )
+        .await
+    }
+
+    /// What follows a run, `ran` long, that ended with `outcome`: the exit
+    /// code to finish with, or `None` to run the command again.
+    async fn after_run(
+        &mut self,
+        paths: &Paths,
+        mode: &Mode,
+        outcome: Outcome,
+        restarts: &mut demo::Restarts,
+        ran: Duration,
+    ) -> Result<Option<i32>> {
+        match outcome {
+            Outcome::Exited(code) if matches!(mode, Mode::Demo { .. }) => {
+                self.restart_demo(code, restarts.after(ran)).await
+            }
+            Outcome::Exited(code) => Ok(Some(code)),
+            Outcome::Stopped { code, reason } => {
+                let stopped = if self.recovery.is_some() {
                     "agent"
                 } else {
                     "command"
                 };
                 eprintln!("shoal: {stopped} stopped: {reason}");
-                break Ok(code);
+                Ok(Some(code))
             }
             // Only an agent's session is saved when its own session ends.
-            Ok(Outcome::Paused {
+            Outcome::Paused {
                 code,
                 stop: Halt::Ended { .. },
-            }) if recovery.is_none() => break Ok(code),
-            Ok(Outcome::Paused { code, stop }) => {
-                if let Some(recovery) = &recovery {
-                    let after =
-                        pause_agent(&mut link, paths, &plan, &mode, recovery, &stop).await?;
-                    if let AfterPause::Restart {
-                        command,
-                        ports,
-                        record,
-                    } = after
-                    {
-                        plan.ports = ports;
-                        next_command = command;
-                        recovery_record = record;
-                        continue;
-                    }
-                } else if matches!(mode, Mode::Command { record: true }) {
-                    record_stopped_command(paths, &plan, &next_command, &stop);
-                }
-                break Ok(code);
+            } if self.recovery.is_none() => Ok(Some(code)),
+            Outcome::Paused { code, stop } => {
+                let restored = self.resolve_pause(paths, mode, &stop).await?;
+                Ok((!restored).then_some(code))
             }
-            Err(error) => break Err(error),
         }
-    };
+    }
+
+    /// Wait `delay` before the demo's next run: `None` to run it again, or
+    /// the exited run's `code` once the demo stopped.
+    async fn restart_demo(&mut self, code: i32, delay: Duration) -> Result<Option<i32>> {
+        eprintln!(
+            "shoal: demo exited with status {code}; restarting in {}s",
+            delay.as_secs()
+        );
+        let Some(reason) = demo::next_run(&mut self.link, delay).await? else {
+            return Ok(None);
+        };
+        eprintln!("shoal: demo stopped: {reason}");
+        Ok(Some(code))
+    }
+
+    /// Pause the agent, or keep a stopped command for `shoal resume`; true
+    /// when the daemon restored the agent to run again.
+    async fn resolve_pause(&mut self, paths: &Paths, mode: &Mode, stop: &Halt) -> Result<bool> {
+        let Some(recovery) = &self.recovery else {
+            if matches!(mode, Mode::Command { record: true }) {
+                record_stopped_command(paths, &self.plan, &self.command, stop);
+            }
+            return Ok(false);
+        };
+        match pause_agent(&mut self.link, paths, &self.plan, mode, recovery, stop).await? {
+            AfterPause::Finish => Ok(false),
+            AfterPause::Restart {
+                command,
+                ports,
+                record,
+            } => {
+                self.plan.ports = ports;
+                self.command = command;
+                self.record = record;
+                Ok(true)
+            }
+        }
+    }
+
+    /// Report the result's exit code unless the daemon refused the
+    /// execution; setup fails when the report does.
+    async fn finish(mut self, mode: &Mode, result: Result<i32>) -> Result<i32> {
+        if self.link.refusal().is_some() {
+            return result;
+        }
+        let code = result.as_ref().copied().unwrap_or(1);
+        // Report only after child/process-group cleanup. A lost connection never
+        // grants the daemon permission to assume processes stopped.
+        let report = report_completion(&mut self.link, code, mode).await;
+        if mode.is_setup() {
+            report?;
+        } else if let Err(error) = report {
+            eprintln!("warning: unable to report execution completion: {error:#}");
+        }
+        result
+    }
+}
+
+/// Undo the land of a command that failed; a failed rollback replaces the
+/// result.
+async fn roll_back_failed_land(plan: &ExecutionPlan, result: Result<i32>) -> Result<i32> {
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
         && let Err(error) = crate::git::repo::rollback_land(land).await
     {
-        result = Err(error);
-    }
-    let code = result.as_ref().copied().unwrap_or(1);
-    if link.refusal().is_some() {
-        return result;
-    }
-    // Report only after child/process-group cleanup. A lost connection never
-    // grants the daemon permission to assume processes stopped.
-    let report = report_completion(&mut link, code, &mode).await;
-    if mode.is_setup() {
-        report?;
-    } else if let Err(error) = report {
-        eprintln!("warning: unable to report execution completion: {error:#}");
+        return Err(error);
     }
     result
 }
@@ -174,6 +240,7 @@ async fn prepare_tracked_launch(
         command,
         auth,
         recovery,
+        record: None,
     })
 }
 
