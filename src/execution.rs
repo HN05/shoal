@@ -3,6 +3,7 @@
 //! completion. The daemon never touches terminal I/O. A detached launch runs
 //! the same wrapper in a background `shoal` process with a log file instead
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
+mod completion;
 mod demo;
 mod detached;
 mod link;
@@ -37,29 +38,13 @@ use crate::{
     process,
     protocol::{Body, Control, ExecutionEvent, Method, Protection, Reattach, timing},
 };
+pub use completion::SetupVerificationFailure;
+use completion::report_completion;
 #[cfg(feature = "happy")]
 pub use detached::launch_detached;
 use detached::{DetachedLaunch, report_launch};
 use link::{Link, Received, Refused};
 pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
-
-/// The command exited, but the daemon retained its unresolved execution.
-#[derive(Debug)]
-pub struct SetupVerificationFailure {
-    pub exit_code: i32,
-}
-
-impl std::fmt::Display for SetupVerificationFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "setup command exited with status {}, but Shoal could not verify that all processes stopped",
-            self.exit_code
-        )
-    }
-}
-
-impl std::error::Error for SetupVerificationFailure {}
 
 /// Exit status as a shell would report it: the code, or 128 + signal.
 pub fn exit_code(status: ExitStatus) -> i32 {
@@ -1067,65 +1052,6 @@ fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) 
             &plan.scope_token,
         ))
         .env(env::EXECUTION_ID, &plan.id);
-}
-
-/// Report the exit code, resending it to a reattached daemon when the
-/// previous one went away before acknowledging it.
-async fn report_completion(link: &mut Link, code: i32, mode: &Mode) -> Result<bool> {
-    loop {
-        if !link.is_attached() {
-            await_reattachment(link).await?;
-        }
-        link.send(&ExecutionEvent::Finished { exit_code: code })
-            .await?;
-        let exchange = async {
-            loop {
-                match link.recv().await? {
-                    Received::Control(Control::Finished { complete }) => {
-                        return Ok::<_, anyhow::Error>(Some(complete));
-                    }
-                    Received::Control(_) => {}
-                    Received::Detached | Received::Reattached => return Ok(None),
-                }
-            }
-        };
-        let acknowledged = timeout(timing::COMPLETION_ACK_TIMEOUT, exchange)
-            .await
-            .context("execution completion acknowledgement timed out")??;
-        let Some(complete) = acknowledged else {
-            continue;
-        };
-        if !complete {
-            if mode.is_setup() {
-                return Err(SetupVerificationFailure { exit_code: code }.into());
-            }
-            eprintln!(
-                "warning: execution has surviving or unverified processes; shoal stop stops them, naming any it cannot"
-            );
-        }
-        return Ok(complete);
-    }
-}
-
-/// Wait for a restarting daemon to take the execution back after its
-/// command exited. The terminal is the caller's again, so a signal ends it.
-async fn await_reattachment(link: &mut Link) -> Result<()> {
-    eprintln!("shoal: waiting for the daemon to restart to report the command's exit");
-    let mut terminate = signal(SignalKind::terminate())?;
-    let mut interrupt = signal(SignalKind::interrupt())?;
-    let mut quit = signal(SignalKind::quit())?;
-    let reattached = async {
-        while !matches!(link.recv().await?, Received::Reattached) {}
-        Ok::<_, anyhow::Error>(())
-    };
-    tokio::select! {
-        reattached = timeout(timing::REATTACH_EXIT_TIMEOUT, reattached) => {
-            reattached.context("the daemon did not restart")?
-        }
-        _ = terminate.recv() => bail!("interrupted while waiting for the daemon"),
-        _ = interrupt.recv() => bail!("interrupted while waiting for the daemon"),
-        _ = quit.recv() => bail!("interrupted while waiting for the daemon"),
-    }
 }
 
 /// The command's process group; killed when dropped.

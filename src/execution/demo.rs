@@ -58,7 +58,7 @@ async fn release_child(link: &mut Link) -> Result<Option<String>> {
     link.between_runs();
     loop {
         if !link.is_attached() {
-            super::await_reattachment(link).await?;
+            super::completion::await_reattachment(link).await?;
         }
         link.send(&ExecutionEvent::ChildExited).await?;
         let answer = async {
