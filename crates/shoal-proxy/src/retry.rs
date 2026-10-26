@@ -106,8 +106,10 @@ impl Outage {
         attempt: u32,
         retry_after: Option<Duration>,
     ) -> Option<Duration> {
-        let now = self.clock.now();
+        // Read under the lock, so concurrent failures see the outage start
+        // in the order they record it.
         let mut state = self.state.lock().unwrap();
+        let now = self.clock.now();
         let started = match *state {
             State::Up => now,
             State::Down(started) => started,
@@ -117,7 +119,7 @@ impl Outage {
         let fits = self
             .policy
             .budget
-            .checked_sub(now - started)
+            .checked_sub(now.saturating_sub(started))
             .is_some_and(|remaining| wait <= remaining);
         *state = if fits {
             State::Down(started)
@@ -220,5 +222,33 @@ mod tests {
             "Wed, 21 Oct 2026 07:28:00 GMT".parse().unwrap(),
         );
         assert_eq!(retry_after(&headers), None);
+    }
+
+    /// A clock that reads earlier each time, as a request that read the
+    /// time before another recorded the outage start would see it.
+    struct Backwards(Mutex<Duration>);
+
+    impl crate::clock::Clock for Backwards {
+        fn now(&self) -> Duration {
+            let mut now = self.0.lock().unwrap();
+            *now = now.saturating_sub(Duration::from_secs(1));
+            *now
+        }
+
+        fn sleep(&self, _: Duration) -> crate::clock::Sleep {
+            Box::pin(std::future::pending())
+        }
+    }
+
+    #[test]
+    fn a_failure_read_before_the_outage_started_does_not_break_it() {
+        let outage = Outage::new(
+            POLICY,
+            Arc::new(Backwards(Mutex::new(Duration::from_secs(60)))),
+        );
+        assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
+        // Earlier than the recorded start: the outage keeps its budget.
+        assert_eq!(outage.next_wait(2, None), Some(POLICY.first_wait * 2));
+        assert_eq!(outage.remaining(), Some(POLICY.budget));
     }
 }
