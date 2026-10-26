@@ -209,9 +209,13 @@ pub fn global_config_check(paths: &crate::paths::Paths) -> Check {
 impl Manager {
     /// Record an alert for each problem with the daemon's tools, `root_dir`,
     /// registered checkouts and the global config, as the daemon starts or
-    /// reloads its config. Identical unread alerts collapse into one.
+    /// reloads its config. A missing optional tool only disables what needs
+    /// it, so it alerts nobody. Identical unread alerts collapse into one.
     pub async fn report_environment(&self) {
-        let mut checks = dependencies(std::env::var_os("PATH").as_deref());
+        let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref())
+            .into_iter()
+            .filter(|check| check.status == CheckStatus::Error)
+            .collect();
         checks.push(root_dir(self.config().root_dir(&self.paths)).await);
         checks.push(global_config_check(&self.paths));
         match self.repositories().await {

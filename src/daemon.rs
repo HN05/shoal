@@ -413,6 +413,17 @@ async fn serve(
             managed: server.managed,
             unread_notifications: server.manager.unread_notifications().await?,
         }),
+        Method::ReloadConfig => match server.manager.reload_config().await {
+            Ok(()) => {
+                // The checks can outlast the reply's budget, so they run after it.
+                tokio::spawn({
+                    let manager = server.manager.clone();
+                    async move { manager.report_environment().await }
+                });
+                Body::Ok
+            }
+            Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
+        },
         Method::Shutdown if server.managed => Body::error(
             ErrorCode::ManagedService,
             "stop the daemon through the OS service manager",
@@ -501,6 +512,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
     Ok(match method {
         Method::Status
         | Method::Shutdown
+        | Method::ReloadConfig
         | Method::Execute { .. }
         | Method::Reattach(_)
         | Method::WatchNotifications { .. }
@@ -518,11 +530,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::RemovedWorkspaces
         | Method::AgentEnvironments { .. } => {
             anyhow::bail!("unsupported operation")
-        }
-        Method::ReloadConfig => {
-            manager.reload_config().await?;
-            manager.report_environment().await;
-            Body::Ok
         }
         Method::ListRepositories => {
             let mut repos = manager.repositories().await?;
