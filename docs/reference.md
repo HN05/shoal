@@ -818,8 +818,9 @@ the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoi
 `retry` defaults to `true` for Claude Code and its launch profiles, and `false`
 for other tools. Set `retry = false` under `[ai.claude]` to opt out; a tool's
 launch profiles inherit its setting unless they override it. Retries apply to a
-turn an API error ended, for agents whose integration reports failed turns:
-Claude Code, through its `StopFailure` hook. Shoal waits half a minute, doubling
+turn an API error ended, for agents whose failed turns Shoal learns of: Claude
+Code, through its `StopFailure` hook, and any agent whose turn its
+[proxy](#agents) ends, such as Codex. Shoal waits half a minute, doubling
 for each later attempt up to an hour for rate or usage limits, or a quarter hour
 for overloaded APIs and server errors. Each wait varies randomly by ±20%.
 It then sends the idle agent a [message](#agent-messages) to continue its
@@ -864,7 +865,7 @@ has lasted five minutes the agent gets the failure, and later requests get their
 at once until one succeeds; a failure a retry does not fix, or one after content
 arrived, reaches the agent unchanged. A Codex stream that gives up ends with a
 `response.failed` event, which ends its turn, instead of an HTTP failure Codex
-would retry itself. Through the proxy, Claude Code on a claude.ai login treats
+would retry itself, and the wrapper reports that turn for `retry`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
 settings. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.

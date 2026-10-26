@@ -227,7 +227,7 @@ async fn prepare_tracked_launch(
     mode: &Mode,
     agent: Option<String>,
 ) -> Result<TrackedLaunch> {
-    let auth = prepare_agent_launch(paths, &workspace, mode, agent.as_deref()).await?;
+    let mut auth = prepare_agent_launch(paths, &workspace, mode, agent.as_deref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
@@ -235,6 +235,9 @@ async fn prepare_tracked_launch(
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
     let (link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
+    if let Some(proxy) = auth.as_mut().and_then(|auth| auth.proxy.as_mut()) {
+        proxy.report_turns(paths, &plan.workspace.id, &plan.id);
+    }
     let command = execution_command(paths, &plan, command, mode)?;
     Ok(TrackedLaunch {
         link,

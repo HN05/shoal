@@ -1,7 +1,7 @@
 //! The daemon's answers to [`AgentMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use super::super::{
     answer::Answer,
@@ -46,9 +46,10 @@ pub(super) async fn handle(
             workspace,
             failure,
             session,
+            execution: reported,
         } => Body::AgentStatus(
             manager
-                .report_turn_failure(&workspace, failure, execution(caller), session)
+                .report_turn_failure(&workspace, failure, execution(caller).or(reported), session)
                 .await?,
         ),
         AgentMethod::SendAgentMessage { workspace, message } => {
@@ -78,6 +79,9 @@ impl Scoped for AgentMethod {
             | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
+            AgentMethod::ReportTurnFailure {
+                execution: Some(_), ..
+            } => bail!("workspace processes report a failed turn only for their own execution"),
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }

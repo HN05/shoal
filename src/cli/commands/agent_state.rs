@@ -57,6 +57,7 @@ pub(super) async fn turn_failed(
             workspace,
             failure,
             session: session_of(&event),
+            execution: None,
         },
     )
     .await?;

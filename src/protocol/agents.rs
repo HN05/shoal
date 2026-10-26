@@ -15,12 +15,16 @@ pub enum AgentMethod {
         session: Option<String>,
     },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
-    /// schedule a retry of the turn.
+    /// schedule a retry of the turn. An unscoped caller, such as the wrapper
+    /// whose proxy ended the turn, names the reporting `execution`; a scoped
+    /// one reports for its own.
     ReportTurnFailure {
         workspace: String,
         failure: crate::state::TurnFailure,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        execution: Option<String>,
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`.

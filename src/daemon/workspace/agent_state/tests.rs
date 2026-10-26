@@ -189,6 +189,22 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             allowed
         );
     }
+    // A failed turn is the agent's own; only an unscoped wrapper names the
+    // execution it reports for.
+    for (execution, allowed) in [(None, true), (Some("another".to_owned()), false)] {
+        let mut method = AgentMethod::ReportTurnFailure {
+            workspace: own.name.clone(),
+            failure: TurnFailure::Overloaded,
+            session: None,
+            execution,
+        };
+        assert_eq!(
+            scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_ok(),
+            allowed
+        );
+    }
     // The refused report leaves the child without an agent of its own, so
     // the coordinating agent still receives its activity.
     let delegated = manager.delegated_workspaces(&own.id).await.unwrap();
