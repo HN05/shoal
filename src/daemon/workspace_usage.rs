@@ -180,36 +180,54 @@ async fn sample(manager: &Manager, tracked: Vec<(String, Identity)>) -> Result<S
         .into_iter()
         .filter(|(_, identity)| !found.contains(identity))
         .collect();
-    tokio::task::spawn_blocking(move || {
-        let mut processes = read(running, identity::alive)?;
-        let unreaped = read(exited, identity::unreaped)?;
-        let unreaped_identities = unreaped.keys().cloned().collect();
-        processes.extend(unreaped);
-        Ok(Sample {
-            time: Instant::now(),
-            processes,
-            unreaped: unreaped_identities,
-        })
-    })
-    .await
-    .context("workspace usage worker failed")?
+    let candidates = running.into_iter().chain(exited).collect();
+    tokio::task::spawn_blocking(move || read(candidates, state))
+        .await
+        .context("workspace usage worker failed")?
 }
 
-/// Each process's reading, leaving out those `still` no longer holds for
-/// once read, such as ones that ended since the scan.
+enum State {
+    Running,
+    Unreaped,
+    Gone,
+}
+
+fn state(identity: &Identity) -> Result<State> {
+    Ok(if identity::alive(identity)? {
+        State::Running
+    } else if identity::unreaped(identity)? {
+        State::Unreaped
+    } else {
+        State::Gone
+    })
+}
+
+/// The candidates' readings, each kept by the `state` its process is in once
+/// read: one that exits after the scan is still followed until reaped.
 fn read(
-    processes: Vec<(String, Identity)>,
-    still: impl Fn(&Identity) -> Result<bool>,
-) -> Result<HashMap<Identity, (String, Reading)>> {
-    let mut readings = HashMap::new();
-    for (workspace, identity) in processes {
-        if let Some(reading) = usage::read(identity.pid)?
-            && still(&identity)?
-        {
-            readings.insert(identity, (workspace, reading));
+    candidates: Vec<(String, Identity)>,
+    state: impl Fn(&Identity) -> Result<State>,
+) -> Result<Sample> {
+    let mut processes = HashMap::new();
+    let mut unreaped = HashSet::new();
+    for (workspace, identity) in candidates {
+        let Some(reading) = usage::read(identity.pid)? else {
+            continue;
+        };
+        match state(&identity)? {
+            State::Running => {}
+            State::Unreaped => {
+                unreaped.insert(identity.clone());
+            }
+            State::Gone => continue,
         }
+        processes.insert(identity, (workspace, reading));
     }
-    Ok(readings)
+    Ok(Sample {
+        time: Instant::now(),
+        processes,
+        unreaped,
+    })
 }
 
 #[cfg(test)]
@@ -322,6 +340,26 @@ mod tests {
         assert_eq!(usage(Some(&second), &third)["a"].cpu_percent, Some(0.0));
     }
 
+    #[test]
+    fn processes_exiting_after_the_scan_are_followed_unreaped() {
+        let own = own_process();
+        let candidates = vec![("a".to_owned(), own.clone())];
+        let exited = read(candidates.clone(), |_| Ok(State::Unreaped)).unwrap();
+        assert!(exited.processes.contains_key(&own));
+        assert_eq!(exited.unreaped, HashSet::from([own.clone()]));
+        let gone = read(candidates, |_| Ok(State::Gone)).unwrap();
+        assert!(gone.processes.is_empty() && gone.unreaped.is_empty());
+    }
+
+    /// A process whose usage reads: this test's own.
+    fn own_process() -> Identity {
+        Identity {
+            pid: std::process::id(),
+            birth: "own".into(),
+            unique: None,
+        }
+    }
+
     #[tokio::test(start_paused = true)]
     async fn processes_reaped_elsewhere_lower_no_usage() {
         let start = Instant::now();
@@ -350,8 +388,10 @@ mod tests {
         let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
             .await
             .unwrap();
-        let readings = read(processes, identity::alive).unwrap();
-        let [(identity, (workspace, reading))] = Vec::from_iter(readings).try_into().unwrap();
+        let sample = read(processes, state).unwrap();
+        assert!(sample.unreaped.is_empty());
+        let [(identity, (workspace, reading))] =
+            Vec::from_iter(sample.processes).try_into().unwrap();
         assert_eq!(Some(identity.pid), child.id());
         assert_eq!(workspace, id);
         assert_eq!(reading.parent, std::process::id());
