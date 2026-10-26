@@ -222,8 +222,8 @@ impl Forwarder {
     }
 }
 
-/// The first events of `response`'s stream: a failure among them is an
-/// attempt that failed, anything else goes to the agent.
+/// The first events of `response`'s stream: a failure among them, or an end
+/// before any content, is an attempt that failed; content goes to the agent.
 async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
     let (mut parts, mut body) = response.into_parts();
     strip_hop_by_hop(&mut parts.headers);
@@ -232,7 +232,12 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
         Ok(Opening::Content(read)) => {
             Attempt::Answered(Response::from_parts(parts, prefixed(read, body)))
         }
-        Ok(Opening::Ended(read)) => Attempt::Answered(Response::from_parts(parts, full(read))),
+        Ok(Opening::Ended(read)) => Attempt::Failed(Failed {
+            failure: Failure::ServerError,
+            retry_after: None,
+            in_stream: false,
+            response: Response::from_parts(parts, full(read)),
+        }),
         Ok(Opening::Failure(failure, read)) => Attempt::Failed(Failed {
             failure,
             retry_after: None,

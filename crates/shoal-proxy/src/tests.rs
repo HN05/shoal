@@ -427,3 +427,27 @@ async fn a_retry_the_upstream_never_answers_gives_up_with_the_outage() {
         })
     );
 }
+
+#[tokio::test]
+async fn a_stream_that_ends_before_content_is_retried() {
+    let complete = format!("{MESSAGE_START}{ANTHROPIC_CONTENT}");
+    let reply_with = complete.clone();
+    let upstream = FakeUpstream::start(move |received| match received.len() {
+        1 => sse(""),
+        2 => sse(MESSAGE_START),
+        _ => sse(&reply_with),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(body, complete);
+    let events = drain(&mut events);
+    assert_eq!(events.len(), 3, "{events:?}");
+    assert!(matches!(
+        events[0],
+        Event::Retrying {
+            failure: Failure::ServerError,
+            ..
+        }
+    ));
+}

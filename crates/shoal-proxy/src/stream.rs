@@ -125,7 +125,7 @@ pub(crate) enum Opening {
     Content(Bytes),
     /// A failure arrived before any content.
     Failure(Failure, Bytes),
-    /// The stream ended without either.
+    /// The stream ended without either, so it is incomplete.
     Ended(Bytes),
 }
 
