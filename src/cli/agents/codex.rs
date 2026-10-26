@@ -9,19 +9,13 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 
 use super::{
-    Integration, Launch, desktop,
+    Integration, Launch, LaunchOptions, desktop,
     trust::{CODEX, TrustFile},
 };
 use crate::{
     agent::{CodexMode, hooks},
-    cli::{
-        client,
-        context::Context,
-        terminal,
-        ui::{self, Fallback},
-    },
+    cli::{context::Context, terminal},
     config::{Effective, templates::Delivery},
-    protocol::ConfigTarget,
     state::AgentState,
 };
 
@@ -67,7 +61,8 @@ impl Integration for Codex {
         launch: &'a mut Launch,
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async move {
-            if !self.launches_itself(&launch.settings, launch.prompt.is_some(), launch.tracked) {
+            let prompted = launch.prompt.is_some();
+            if !launch.app && !self.launches_itself(&launch.settings, prompted, launch.tracked) {
                 return Ok(None);
             }
             let args = std::mem::take(&mut launch.args);
@@ -85,29 +80,12 @@ pub(in crate::cli) async fn shortcut(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
-    // Explicit desktop handoffs do not consume prompt templates.
-    if mode == Some(CodexMode::App) {
-        return desktop::open_app(ctx, &workspace, "codex", Some(&CODEX), args).await;
-    }
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let mut launch = Launch {
-        name: "codex".into(),
-        workspace,
-        settings,
-        prompt: None,
-        args,
-        tracked: false,
-        replaces: Vec::new(),
+    let options = LaunchOptions {
+        tracked: mode == Some(CodexMode::Cli),
+        app: mode == Some(CodexMode::App),
+        ..Default::default()
     };
-    if mode.is_none()
-        && let Some(code) = Codex.launch(ctx, &mut launch).await?
-    {
-        return Ok(code);
-    }
-    super::launch::tracked(ctx, &Codex, launch).await
+    super::launch::shortcut(ctx, "codex".parse()?, workspace, None, args, options).await
 }
 
 /// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex

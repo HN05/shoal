@@ -25,13 +25,7 @@ use futures_util::future::BoxFuture;
 use crate::{
     agent::Agent,
     ai::IntegrationKind,
-    cli::{
-        client,
-        commands::configured,
-        context::Context,
-        terminal,
-        ui::{self, Fallback},
-    },
+    cli::{client, commands::configured, context::Context, terminal, ui},
     config::{Config, Effective, named_commands::Commands, templates::Delivery},
     fsutil,
     model::{RemovedWorkspace, Repository, Workspace},
@@ -174,6 +168,9 @@ pub(in crate::cli) struct Launch {
     /// Whether the agent must run tracked, never handed to a desktop app, as
     /// a detached start must.
     pub tracked: bool,
+    /// Whether the agent opens in its desktop app, whatever its settings
+    /// choose, where it has one.
+    pub app: bool,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -215,6 +212,8 @@ pub(in crate::cli) struct ChatLaunch {
 pub(in crate::cli) struct LaunchOptions {
     /// As [`Launch::tracked`].
     pub tracked: bool,
+    /// As [`Launch::app`].
+    pub app: bool,
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
 }
@@ -252,6 +251,7 @@ pub(super) async fn launch_agent(
         prompt,
         args,
         tracked: options.tracked,
+        app: options.app,
         replaces: options.replaces,
     };
     // A launch of its own returns once its agent has started.
@@ -277,9 +277,7 @@ pub(super) async fn run_named(
     if !runs_as_agent && added(name).is_none() {
         return configured::run(ctx, name, workspace, args).await;
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
-    launch_agent(
+    launch::shortcut(
         ctx,
         name.parse()?,
         workspace,

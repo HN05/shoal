@@ -13,16 +13,11 @@ use serde_json::json;
 use super::{ChatLaunch, Integration, Launch, trust::TrustFile};
 use crate::{
     ai::IntegrationKind,
-    cli::{
-        client,
-        context::Context,
-        ui::{self, Fallback},
-    },
+    cli::{client, context::Context},
     config::{Effective, templates},
     execution,
     happy::{self, Agent},
     model::{Chat, Repository, Workspace},
-    protocol::ConfigTarget,
 };
 
 /// `happy-<agent>`: the agent in a detached Happy session.
@@ -92,11 +87,9 @@ pub(in crate::cli) async fn shortcut(
     prompt: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    start(ctx, &Happy(agent), &workspace, &settings, prompt, args).await
+    let name = format!("happy-{}", agent.as_str()).parse()?;
+    let options = super::LaunchOptions::default();
+    super::launch::shortcut(ctx, name, workspace, prompt, args, options).await
 }
 
 /// The agents `shoal happy <agent>` can start: each `happy-<agent>` offered

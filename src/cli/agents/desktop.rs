@@ -4,15 +4,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{AgentEnvironment, trust::TrustFile};
-use crate::{
-    cli::{
-        client,
-        context::Context,
-        ui::{self, Fallback},
-    },
-    env, execution,
-    model::Workspace,
-};
+use crate::{cli::context::Context, env, execution, model::Workspace};
 
 /// `shoal t3` and other shortcuts that only open an app.
 pub(in crate::cli) async fn shortcut(
@@ -21,8 +13,7 @@ pub(in crate::cli) async fn shortcut(
     program: &str,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
     open_app(ctx, &workspace, program, None, args).await
 }
 

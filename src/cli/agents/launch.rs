@@ -4,12 +4,44 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{Integration, Launch, ensure_available};
+use super::{Integration, Launch, LaunchOptions, ensure_available};
 use crate::{
-    cli::{commands::configured, context::Context, terminal},
+    agent::Agent,
+    cli::{
+        client,
+        commands::configured,
+        context::Context,
+        terminal,
+        ui::{self, Fallback},
+    },
     config::{Effective, templates},
     execution,
+    model::Workspace,
 };
+
+/// The workspace a shortcut such as `shoal codex` names, else the current
+/// directory's or a picked one.
+pub(super) async fn shortcut_workspace(
+    ctx: &Context,
+    workspace: Option<String>,
+) -> Result<Workspace> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    Ok(client::inspect(&ctx.paths, workspace).await?.workspace)
+}
+
+/// Start `agent` in the workspace a shortcut names, as
+/// [`super::launch_agent`] starts it.
+pub(super) async fn shortcut(
+    ctx: &Context,
+    agent: Agent,
+    workspace: Option<String>,
+    prompt: Option<String>,
+    args: Vec<OsString>,
+    options: LaunchOptions,
+) -> Result<i32> {
+    let workspace = shortcut_workspace(ctx, workspace).await?;
+    super::launch_agent(ctx, agent, workspace, prompt, args, options).await
+}
 
 /// Run `launch` as a tracked agent in its workspace, in a session this
 /// terminal attaches to where the terminal keeps agents in sessions.
