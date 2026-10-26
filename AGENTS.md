@@ -16,6 +16,15 @@ when behavior changes, distinguishing decisions from proposals.
   function mixes those levels, extract a named operation before adding behavior;
   bots and reviewers must flag the violation even when tests pass. Judge the
   responsibility boundary, not the function's length or helper count.
+- Give each module one responsibility a reader can name. When a file comes to
+  cover several, or a match dispatches every command of a group, split it by
+  responsibility into a directory of modules before adding to it; judge the
+  responsibility, not the line count.
+- Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
+  the implementation file.
+- Integrations such as agent tools, terminal hosts and apps implement callbacks
+  for what they do differently; state, decisions and daemon calls stay in
+  Shoal's generic code, which passes each callback only what it reads.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named

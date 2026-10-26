@@ -22,6 +22,16 @@ instead of the PR delivery guidance below.
   operations while helpers own lower-level implementation details. Flag mixed
   levels before weighing style or test coverage, even when behavior is correct;
   judge responsibility boundaries rather than function length or helper count.
+- Raise these module guidelines as advisory findings, not blocking ones:
+  - Give each module one responsibility a reader can name. When a file comes to
+    cover several, or a match dispatches every command of a group, split it by
+    responsibility into a directory of modules before adding to it; judge the
+    responsibility, not the line count.
+  - Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
+    the implementation file.
+  - Integrations such as agent tools, terminal hosts and apps implement callbacks
+    for what they do differently; state, decisions and daemon calls stay in
+    Shoal's generic code, which passes each callback only what it reads.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
   every verified process carrying the workspace identity, and never signals a
