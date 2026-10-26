@@ -35,12 +35,11 @@ struct Sample {
 pub(crate) struct WorkspaceUsages {
     latest: Option<Sample>,
     usage: HashMap<String, WorkspaceUsage>,
-    /// Counted CPU nanoseconds of ended processes, per live ancestor that
-    /// may reap them, that its reaped time does not show yet: a parent read
-    /// just before it reaped a child gone by its own read shows the child's
-    /// time one sample later. Kept for that sample only, since a process
-    /// orphaned to init never reaches the ancestor.
-    pending: HashMap<Identity, u64>,
+    /// Counted time of ended processes, per live ancestor that may reap
+    /// them, that its reaped time does not show yet: a parent read just
+    /// before it reaped a child gone by its own read shows the child's time
+    /// one sample later.
+    pending: HashMap<Identity, Vec<Counted>>,
 }
 
 impl WorkspaceUsages {
@@ -89,17 +88,30 @@ impl WorkspaceUsages {
     }
 }
 
+/// CPU nanoseconds an ended process had counted, waiting to be found in
+/// the reaped time of an ancestor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Counted {
+    nanoseconds: u64,
+    /// Its parent is the ancestor, which therefore reaps it. A process that
+    /// reaches the ancestor only through parents that ended too may have
+    /// been orphaned to init instead.
+    direct: bool,
+    /// It waited a sample already; a reaping that late is not expected.
+    carried: bool,
+}
+
 /// Each workspace's processes and memory in `current`, with the CPU they
 /// used since `previous`. A process that started since counts all its time,
 /// and one that exited counts until its parent reaps it. One that is gone
 /// since counted its time already, which its nearest ancestor still in its
-/// workspace, reached through ancestors gone too, may have reaped: as much of
-/// it as that ancestor's reaped time grew by is not counted again, and the
-/// rest stays `pending` for one sample.
+/// workspace may have reaped: what that ancestor's reaped time shows of it
+/// is not counted again, and what it does not show yet stays `pending` for
+/// one sample.
 fn usage(
     previous: Option<&Sample>,
     current: &Sample,
-    pending: &mut HashMap<Identity, u64>,
+    pending: &mut HashMap<Identity, Vec<Counted>>,
 ) -> HashMap<String, WorkspaceUsage> {
     let mut usage: HashMap<String, WorkspaceUsage> = HashMap::new();
     let mut used: HashMap<&str, u64> = HashMap::new();
@@ -118,29 +130,29 @@ fn usage(
         pending.clear();
         return usage;
     };
-    let routed = routed_to_reapers(previous, current);
-    let mut still_pending = HashMap::new();
-    for (identity, (workspace, reading)) in &current.processes {
-        let carried = pending.get(identity).copied().unwrap_or_default();
-        let routed = routed.get(identity).copied().unwrap_or_default();
-        if carried == 0 && routed == 0 {
-            continue;
-        }
-        let before = previous
-            .processes
-            .get(identity)
-            .map_or(0, |(_, before)| before.reaped);
-        let shown = reading.reaped.saturating_sub(before);
-        let from_carried = carried.min(shown);
-        let from_routed = routed.min(shown - from_carried);
-        if let Some(used) = used.get_mut(workspace.as_str()) {
-            *used = used.saturating_sub(from_carried + from_routed);
-        }
-        if routed > from_routed {
-            still_pending.insert(identity.clone(), routed - from_routed);
+    let mut owed = routed_to_reapers(previous, current, pending);
+    // What waited for a live process is carried; an ended one passed it on.
+    for (identity, counted) in pending.drain() {
+        if current.processes.contains_key(&identity) {
+            owed.entry(identity).or_default().extend(counted);
         }
     }
-    *pending = still_pending;
+    for (identity, counted) in owed {
+        let Some((workspace, reading)) = current.processes.get(&identity) else {
+            continue;
+        };
+        let before = previous
+            .processes
+            .get(&identity)
+            .map_or(0, |(_, before)| before.reaped);
+        let (shown, waiting) = reconcile(reading.reaped.saturating_sub(before), counted);
+        if let Some(used) = used.get_mut(workspace.as_str()) {
+            *used = used.saturating_sub(shown);
+        }
+        if !waiting.is_empty() {
+            pending.insert(identity, waiting);
+        }
+    }
     let elapsed = current.time.duration_since(previous.time).as_nanos() as f64;
     for (workspace, entry) in &mut usage {
         let used = used.get(workspace.as_str()).copied().unwrap_or_default();
@@ -149,10 +161,42 @@ fn usage(
     usage
 }
 
-/// The counted time of the processes gone since `previous`, summed per live
-/// process in `current` that may have reaped them: the nearest ancestor in
-/// the same workspace, reached through ancestors gone too.
-fn routed_to_reapers<'a>(previous: &Sample, current: &'a Sample) -> HashMap<&'a Identity, u64> {
+/// How much of `counted` a reaper's reaped time, grown by `reaped`, shows,
+/// and what may still show next sample. A direct child is certainly in it,
+/// as far as it reaches; a deeper descendant only when it fits whole in
+/// what the direct children leave, since otherwise its ended parent did not
+/// reap it.
+fn reconcile(reaped: u64, mut counted: Vec<Counted>) -> (u64, Vec<Counted>) {
+    counted.sort_by_key(|counted| !counted.direct);
+    let mut left = reaped;
+    let mut waiting = Vec::new();
+    for counted in counted {
+        let shown = if counted.direct || counted.nanoseconds <= left {
+            counted.nanoseconds.min(left)
+        } else {
+            0
+        };
+        left -= shown;
+        if shown < counted.nanoseconds && !counted.carried {
+            waiting.push(Counted {
+                nanoseconds: counted.nanoseconds - shown,
+                carried: true,
+                ..counted
+            });
+        }
+    }
+    (reaped - left, waiting)
+}
+
+/// What each process gone since `previous` had counted, with what was
+/// `pending` for it, per live process in `current` that may have reaped
+/// it: its nearest ancestor in the same workspace, reached through
+/// ancestors gone too.
+fn routed_to_reapers(
+    previous: &Sample,
+    current: &Sample,
+    pending: &HashMap<Identity, Vec<Counted>>,
+) -> HashMap<Identity, Vec<Counted>> {
     let live: HashMap<(&str, u32), &Identity> = current
         .processes
         .iter()
@@ -166,30 +210,48 @@ fn routed_to_reapers<'a>(previous: &Sample, current: &'a Sample) -> HashMap<&'a 
             ((workspace.as_str(), identity.pid), reading.parent)
         })
         .collect();
-    let mut routed: HashMap<&Identity, u64> = HashMap::new();
+    let mut routed: HashMap<Identity, Vec<Counted>> = HashMap::new();
     for (identity, (workspace, reading)) in &previous.processes {
-        if ended.contains_key(&(workspace.as_str(), identity.pid))
-            && let Some(reaper) = reaper(&live, &ended, workspace, reading.parent)
-        {
-            let total = routed.entry(reaper).or_default();
-            *total = total.saturating_add(reading.total());
+        if !ended.contains_key(&(workspace.as_str(), identity.pid)) {
+            continue;
         }
+        let Some((reaper, direct)) = reaper(&live, &ended, workspace, reading.parent) else {
+            continue;
+        };
+        let counted = routed.entry(reaper.clone()).or_default();
+        counted.push(Counted {
+            nanoseconds: reading.total(),
+            direct,
+            carried: false,
+        });
+        // What it awaited from its own children reaches the reaper through it.
+        counted.extend(
+            pending
+                .get(identity)
+                .into_iter()
+                .flatten()
+                .map(|awaited| Counted {
+                    direct: false,
+                    ..*awaited
+                }),
+        );
     }
     routed
 }
 
 /// The `live` ancestor in `workspace` of an ended process whose parent was
-/// `parent`, reached through `ended` ancestors and their parents.
+/// `parent`, reached through `ended` ancestors and their parents, and
+/// whether it is the parent itself.
 fn reaper<'a>(
     live: &HashMap<(&str, u32), &'a Identity>,
     ended: &HashMap<(&str, u32), u32>,
     workspace: &str,
     mut parent: u32,
-) -> Option<&'a Identity> {
+) -> Option<(&'a Identity, bool)> {
     // Each step reaches another ended process, unless a reused PID makes a cycle.
-    for _ in 0..=ended.len() {
+    for step in 0..=ended.len() {
         if let Some(identity) = live.get(&(workspace, parent)) {
-            return Some(identity);
+            return Some((identity, step == 0));
         }
         parent = *ended.get(&(workspace, parent))?;
     }
@@ -491,7 +553,14 @@ mod tests {
             usage(Some(&first), &second, &mut pending)["a"].cpu_percent,
             Some(10.0)
         );
-        assert_eq!(pending.values().copied().collect::<Vec<_>>(), [5 * SECOND]);
+        assert_eq!(
+            pending
+                .values()
+                .flatten()
+                .map(|c| c.nanoseconds)
+                .collect::<Vec<_>>(),
+            [5 * SECOND]
+        );
         // Now 10 shows 11's six seconds and one more of its own.
         let third = sample(
             start + Duration::from_secs(20),
@@ -503,7 +572,12 @@ mod tests {
         );
         assert!(pending.is_empty());
         // A gap in sampling forgets what was pending with the readings.
-        let mut pending = HashMap::from([(process(10, 1, "a", 0).0, SECOND)]);
+        let waiting = Counted {
+            nanoseconds: SECOND,
+            direct: true,
+            carried: true,
+        };
+        let mut pending = HashMap::from([(process(10, 1, "a", 0).0, vec![waiting])]);
         usage(None, &third, &mut pending);
         assert!(pending.is_empty());
     }
@@ -529,7 +603,7 @@ mod tests {
         );
         assert_eq!(
             usage(Some(&first), &second, &mut pending)["a"].cpu_percent,
-            Some(0.0)
+            Some(10.0)
         );
         // What 10 never reaps is dropped after one sample rather than owed.
         let third = sample(
@@ -541,6 +615,73 @@ mod tests {
             Some(10.0)
         );
         assert!(pending.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn time_awaited_by_an_ended_parent_passes_to_its_reaper() {
+        let start = Instant::now();
+        let mut pending = HashMap::new();
+        let first = sample(
+            start,
+            [
+                process(20, 1, "a", 0),
+                process(10, 20, "a", 0),
+                process(11, 10, "a", 5 * SECOND),
+            ],
+        );
+        usage(None, &first, &mut pending);
+        // 10 was read before it reaped 11, which used one more second.
+        let second = sample(
+            start + Duration::from_secs(10),
+            [process(20, 1, "a", 0), process(10, 20, "a", 0)],
+        );
+        assert_eq!(
+            usage(Some(&first), &second, &mut pending)["a"].cpu_percent,
+            Some(0.0)
+        );
+        // 10 reaped 11 and exited, and 20 reaped it.
+        let third = sample(
+            start + Duration::from_secs(20),
+            [reaping(20, 1, "a", 0, 6 * SECOND)],
+        );
+        assert_eq!(
+            usage(Some(&second), &third, &mut pending)["a"].cpu_percent,
+            Some(10.0)
+        );
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn reaped_time_shows_direct_children_first_and_whole_descendants() {
+        let counted = |nanoseconds, direct| Counted {
+            nanoseconds,
+            direct,
+            carried: false,
+        };
+        // A deeper descendant too large for what is left was not reaped there.
+        let (shown, waiting) = reconcile(2, vec![counted(5, false), counted(1, true)]);
+        assert_eq!(shown, 1);
+        assert_eq!(
+            waiting,
+            [Counted {
+                carried: true,
+                ..counted(5, false)
+            }]
+        );
+        let (shown, waiting) = reconcile(6, vec![counted(5, false), counted(1, true)]);
+        assert_eq!((shown, waiting), (6, Vec::new()));
+        // A direct child waits for the rest of its time once.
+        let (shown, waiting) = reconcile(1, vec![counted(3, true)]);
+        assert_eq!(shown, 1);
+        assert_eq!(
+            waiting,
+            [Counted {
+                carried: true,
+                ..counted(2, true)
+            }]
+        );
+        let (shown, waiting) = reconcile(0, waiting);
+        assert_eq!((shown, waiting), (0, Vec::new()));
     }
 
     #[tokio::test(start_paused = true)]
