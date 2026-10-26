@@ -30,8 +30,13 @@ impl Protocol {
         }
     }
 
-    /// What `event` says, from its name or else its data's `type`.
+    /// What `event` says, from its name or else its data's `type`. A record
+    /// with neither, such as a comment that keeps the stream alive, opens
+    /// nothing.
     fn classify(self, name: &str, data: &Value) -> Kind {
+        if name.is_empty() && data.is_null() {
+            return Kind::Preamble;
+        }
         let name = if name.is_empty() {
             data["type"].as_str().unwrap_or_default()
         } else {

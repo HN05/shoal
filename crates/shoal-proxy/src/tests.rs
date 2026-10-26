@@ -451,3 +451,19 @@ async fn a_stream_that_ends_before_content_is_retried() {
         }
     ));
 }
+
+#[tokio::test]
+async fn a_comment_that_keeps_a_stream_alive_is_no_content() {
+    let opening = format!(": keep-alive\n\n{MESSAGE_START}{ANTHROPIC_OVERLOADED}");
+    let complete = format!("{MESSAGE_START}{ANTHROPIC_CONTENT}");
+    let reply_with = complete.clone();
+    let upstream = FakeUpstream::start(move |received| match received.len() {
+        1 => sse(&opening),
+        _ => sse(&reply_with),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert_eq!(body, complete);
+    assert_eq!(drain(&mut events).last(), Some(&Event::Recovered));
+}
