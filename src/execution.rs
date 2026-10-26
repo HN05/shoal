@@ -11,7 +11,6 @@ mod terminal;
 mod wake;
 
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
     io::{IsTerminal, Write},
@@ -40,17 +39,9 @@ use crate::{
 };
 #[cfg(feature = "happy")]
 pub use detached::launch_detached;
+use detached::{DetachedLaunch, report_launch};
 use link::{Link, Received, Refused};
 pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
-
-/// What a detached wrapper reports on stdout once the daemon has recorded the
-/// command's process group; the CLI that spawned it returns after reading it.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DetachedLaunch {
-    pub execution_id: String,
-    pub pid: u32,
-    pub log: PathBuf,
-}
 
 /// The command exited, but the daemon retained its unresolved execution.
 #[derive(Debug)]
@@ -1056,21 +1047,6 @@ fn spawn(
         .kill_on_drop(true)
         .spawn()
         .context("launch workspace command")
-}
-
-/// Tell the spawning CLI that the launch is recorded, then point stdout at the
-/// log (the wrapper's stderr) so nothing else ever writes to the closed pipe.
-fn report_launch(launch: &DetachedLaunch) -> Result<()> {
-    let mut stdout = std::io::stdout().lock();
-    serde_json::to_writer(&mut stdout, launch)?;
-    stdout.write_all(b"\n")?;
-    stdout.flush()?;
-    // SAFETY: duplicating one open descriptor onto another in this process.
-    ensure!(
-        unsafe { libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) } != -1,
-        "redirect wrapper output to the log"
-    );
-    Ok(())
 }
 
 /// Export the workspace's identity and `[env]`, dropping stale port variables

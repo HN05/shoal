@@ -10,13 +10,13 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::{Child, Command},
     time::timeout,
 };
 
-use super::DetachedLaunch;
 use crate::{
     cli::internal::{Worker, internal_command},
     env,
@@ -41,6 +41,30 @@ pub async fn launch_detached(
 ) -> Result<DetachedLaunch> {
     let launch = DetachedCommand::prepare(paths, workspace, log, command, clear, env, agent)?;
     launch.start().await
+}
+
+/// What a detached wrapper reports on stdout once the daemon has recorded the
+/// command's process group; the CLI that spawned it returns after reading it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DetachedLaunch {
+    pub execution_id: String,
+    pub pid: u32,
+    pub log: PathBuf,
+}
+
+/// Tell the spawning CLI that the launch is recorded, then point stdout at the
+/// log (the wrapper's stderr) so nothing else ever writes to the closed pipe.
+pub(super) fn report_launch(launch: &DetachedLaunch) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(&mut stdout, launch)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    // SAFETY: duplicating one open descriptor onto another in this process.
+    ensure!(
+        unsafe { libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) } != -1,
+        "redirect wrapper output to the log"
+    );
+    Ok(())
 }
 
 struct DetachedCommand {
