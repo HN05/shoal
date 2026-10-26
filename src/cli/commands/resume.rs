@@ -374,31 +374,18 @@ async fn run_all(
         return Ok(0);
     }
     if discard {
-        let mut ids = Vec::new();
-        for (workspace, saved) in &stopped {
-            // Each record by itself, leaving agents a wrapper waits to restore.
-            for execution in saved.execution_ids() {
-                let method = Method::DiscardStoppedWork {
-                    workspace: workspace.id.clone(),
-                    execution: Some(execution),
-                };
-                let discarded = client::request::<Discarded>(&ctx.paths, method).await?;
-                ids.extend(discarded.executions);
-            }
-        }
-        let names = stopped.iter().map(|(workspace, _)| workspace.name.as_str());
-        let names = names.collect::<Vec<_>>().join(", ");
-        ctx.show(&json!({"discarded": ids}), |_| {
-            outln!("Discarded stopped agents and commands for {names}")
-        })?;
-        return Ok(0);
+        return discard_each(ctx, &stopped).await;
     }
+    let mut failed = Vec::new();
     let mut commands = Vec::new();
     let mut sessions = Vec::new();
     for (workspace, mut saved) in stopped {
         if saved.agents.is_empty() {
             let _claims = claim_commands(&mut saved.commands);
-            commands.push(report_commands(ctx, &workspace, &saved.commands)?);
+            match report_commands(ctx, &workspace, &saved.commands) {
+                Ok(report) => commands.push(report),
+                Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
+            }
         } else {
             sessions.extend(
                 saved
@@ -410,48 +397,124 @@ async fn run_all(
     }
     let single = sessions.len() == 1 && ctx.interactive();
     let mut agents = Vec::new();
+    let mut listed = Vec::new();
     let mut place = None;
     for (workspace, id, record) in &sessions {
-        let settings =
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-        let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
-        let reused = terminal::rerun_where_stopped(ctx, &settings, record, &args).await?;
-        if single && reused.is_none() {
-            return run(ctx, workspace.id.clone(), Some(id.clone()), false).await;
-        }
-        let started = match reused {
-            Some(places) => Some(places),
-            None => terminal::run_in_background(ctx, &settings, workspace, &args).await?,
+        let (reused, started) = match start_session(ctx, workspace, id, record, single).await {
+            Ok(Started::Here) => {
+                return run(ctx, workspace.id.clone(), Some(id.clone()), false).await;
+            }
+            Ok(Started::Elsewhere { reused, place }) => (reused, place),
+            Err(error) => {
+                failed.push(ui::failure(ctx, "resume", &workspace.name, &error));
+                continue;
+            }
         };
         place = started.or(place);
-        let (background, reused) = (started.is_some(), reused.is_some());
+        if started.is_none() {
+            listed.push((workspace, id));
+        }
         agents.push(json!({
             "workspace": workspace.name,
             "execution": id,
-            "background": background,
+            "background": started.is_some(),
             "reused": reused,
         }));
     }
-    ctx.show(&json!({"commands": commands, "agents": agents}), |_| {
-        let listed = agents
-            .iter()
-            .filter(|agent| agent["background"] == false)
-            .count();
+    let output = json!({"commands": commands, "agents": agents, "failed": failed});
+    ctx.show(&output, |_| {
         if let Some(place) = place {
-            let started = sessions.len() - listed;
+            let started = agents.len() - listed.len();
             outln!("Resuming {started} agents in {place}");
         }
-        if listed > 0 {
+        if !listed.is_empty() {
             outln!("Resume each agent in its own terminal:");
         }
-        for ((workspace, id, _), agent) in sessions.iter().zip(&agents) {
-            if agent["background"] == false {
-                let words = ["shoal", "resume", &workspace.name, "--execution", id];
-                outln!("  {}", crate::shell::quote(&words));
-            }
+        for (workspace, id) in &listed {
+            let words = ["shoal", "resume", &workspace.name, "--execution", id];
+            outln!("  {}", crate::shell::quote(&words));
         }
     })?;
-    Ok(0)
+    Ok(if failed.is_empty() { 0 } else { 1 })
+}
+
+/// Where a stopped agent resumes.
+enum Started {
+    /// In this terminal, as the only agent to resume.
+    Here,
+    /// Where it stopped when `reused`, in the backend's background, or, when
+    /// `place` is `None`, in a terminal of the user's own.
+    Elsewhere {
+        reused: bool,
+        place: Option<&'static str>,
+    },
+}
+
+/// Start the stopped agent `id` of `workspace` where it stopped or in the
+/// background; `single` resumes the only one in this terminal instead.
+async fn start_session(
+    ctx: &Context,
+    workspace: &Workspace,
+    id: &str,
+    record: &Path,
+    single: bool,
+) -> Result<Started> {
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
+    let reused = terminal::rerun_where_stopped(ctx, &settings, record, &args).await?;
+    if single && reused.is_none() {
+        return Ok(Started::Here);
+    }
+    let place = match reused {
+        Some(places) => Some(places),
+        None => terminal::run_in_background(ctx, &settings, workspace, &args).await?,
+    };
+    Ok(Started::Elsewhere {
+        reused: reused.is_some(),
+        place,
+    })
+}
+
+/// Forget every workspace's stopped agents and commands, going on after one
+/// fails.
+async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i32> {
+    let mut ids = Vec::new();
+    let mut names = Vec::new();
+    let mut failed = Vec::new();
+    for (workspace, saved) in stopped {
+        match discard_saved(ctx, workspace, saved).await {
+            Ok(executions) => {
+                ids.extend(executions);
+                names.push(workspace.name.as_str());
+            }
+            Err(error) => failed.push(ui::failure(ctx, "discard", &workspace.name, &error)),
+        }
+    }
+    ctx.show(&json!({"discarded": ids, "failed": failed}), |_| {
+        if !names.is_empty() {
+            outln!(
+                "Discarded stopped agents and commands for {}",
+                names.join(", ")
+            );
+        }
+    })?;
+    Ok(if failed.is_empty() { 0 } else { 1 })
+}
+
+/// Forget `workspace`'s stopped records each by itself, leaving agents a
+/// wrapper waits to restore, and return the executions forgotten.
+async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> Result<Vec<String>> {
+    let mut ids = Vec::new();
+    for execution in saved.execution_ids() {
+        let method = Method::DiscardStoppedWork {
+            workspace: workspace.id.clone(),
+            execution: Some(execution),
+        };
+        let discarded = client::request::<Discarded>(&ctx.paths, method).await?;
+        ids.extend(discarded.executions);
+    }
+    Ok(ids)
 }
 
 /// The stopped work of the workspaces `selectors` name, refusing one with

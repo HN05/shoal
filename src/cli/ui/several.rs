@@ -76,6 +76,16 @@ fn losses_text(action: &str, losses: &[(String, Vec<String>)]) -> String {
     text
 }
 
+/// Print that the command, doing `verb`, failed on `workspace`, and return
+/// the failure as the JSON of a batch lists it.
+pub fn failure(ctx: &Context, verb: &str, workspace: &str, error: &anyhow::Error) -> Value {
+    eprintln!(
+        "{} cannot {verb} {workspace}: {error:#}",
+        Palette::stderr(ctx.json).paint(Style::Error, "error:")
+    );
+    json!({"workspace": workspace, "error": format!("{error:#}")})
+}
+
 /// What a command did to each of several items: a line per item as it goes,
 /// then a summary, or with `--json` one object naming the items under
 /// `done_key` and the failures under `failed`.
@@ -110,13 +120,7 @@ impl Report {
     /// Record a workspace the command failed on, which does not stop the
     /// others.
     pub fn failed(&mut self, ctx: &Context, workspace: &str, error: &anyhow::Error) {
-        eprintln!(
-            "{} cannot {} {workspace}: {error:#}",
-            Palette::stderr(ctx.json).paint(Style::Error, "error:"),
-            self.verb
-        );
-        self.failed
-            .push(json!({"workspace": workspace, "error": format!("{error:#}")}));
+        self.failed.push(failure(ctx, self.verb, workspace, error));
     }
 
     /// How many items the command acted on, and how many it failed on.

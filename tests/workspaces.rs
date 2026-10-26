@@ -5026,6 +5026,36 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
 }
 
 #[test]
+fn resuming_several_goes_on_after_one_fails() {
+    let fixture = Fixture::new();
+    for name in ["good", "broken"] {
+        let workspace = fixture.add(name);
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            r#"{"agent":"claude"}"#,
+        )
+        .unwrap();
+        if name == "broken" {
+            // Its settings cannot load, so its agent cannot start.
+            let path = Path::new(workspace["path"].as_str().unwrap());
+            fs::write(path.join(".shoal.toml"), "not toml [").unwrap();
+        }
+    }
+    let output = fixture.run(&["--json", "resume", "broken", "good"]);
+    assert!(!output.status.success(), "{output:?}");
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["agents"].as_array().unwrap().len(), 1, "{report}");
+    assert_eq!(report["agents"][0]["workspace"], "good", "{report}");
+    assert_eq!(report["failed"][0]["workspace"], "broken", "{report}");
+}
+
+#[test]
 fn a_parent_discards_only_the_stopped_work_of_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");

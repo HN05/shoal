@@ -29,5 +29,5 @@ mod workspaces;
 pub use picker::*;
 pub use prompt::*;
 pub use rows::*;
-pub use several::{Report, confirm_losses, pick_many};
+pub use several::{Report, confirm_losses, failure, pick_many};
 pub use workspaces::*;
