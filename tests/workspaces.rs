@@ -3845,31 +3845,49 @@ fn config_show_reports_effective_values_and_their_layers() {
 
 #[test]
 fn configured_port_range_exhaustion_and_release() {
+    // Another process on a shared runner can bind the port after the test
+    // releases it, so a taken port starts the check over on a fresh one.
+    for _ in 0..5 {
+        if port_range_exhaustion_and_release() {
+            return;
+        }
+    }
+    panic!("other processes took every released test port");
+}
+
+/// False when another process bound the configured port once the test
+/// stopped holding it.
+fn port_range_exhaustion_and_release() -> bool {
     let held = ports::hold();
     let number = held.port;
     let fixture = Fixture::with_config(Some(&format!("[ports]\nstart={number}\nend={number}\n")));
     fixture.add("limited");
-    assert!(
-        !fixture
-            .run(&["acquire", "port", "web", "--workspace", "limited"])
-            .status
-            .success()
-    );
+    let acquire =
+        |name: &str| fixture.run(&["--json", "acquire", "port", name, "--workspace", "limited"]);
+    assert!(!acquire("web").status.success());
     drop(held);
-    let lease = fixture.ok(&["acquire", "port", "web", "--workspace", "limited"]);
+    let Some(lease) = port_lease(acquire("web")) else {
+        return false;
+    };
     assert_eq!(lease["port"], number);
-    assert!(
-        !fixture
-            .run(&["acquire", "port", "api", "--workspace", "limited"])
-            .status
-            .success()
-    );
+    assert!(!acquire("api").status.success());
     fixture.ok(&["release", "port", "web", "--workspace", "limited"]);
-    assert_eq!(
-        fixture.ok(&["acquire", "port", "api", "--workspace", "limited"])["port"],
-        number
-    );
+    let Some(lease) = port_lease(acquire("api")) else {
+        return false;
+    };
+    assert_eq!(lease["port"], number);
     fixture.ok(&["rm", "limited"]);
+    true
+}
+
+/// The granted lease, or `None` when no port in the range was free to bind.
+fn port_lease(output: Output) -> Option<Value> {
+    if output.status.success() {
+        return Some(serde_json::from_slice(&output.stdout).unwrap());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no available TCP ports"), "{stderr}");
+    None
 }
 
 #[test]
