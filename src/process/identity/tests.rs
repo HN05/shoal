@@ -251,28 +251,45 @@ async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> 
 }
 
 #[test]
-fn exited_children_stay_unreaped_until_waited_for() {
+fn exited_children_stay_unreaped_until_waited_for() -> Result<()> {
     let mut child = std::process::Command::new("sh")
         .args(["-c", "read line"])
+        .env_clear()
         .stdin(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let identity = capture(child.id()).unwrap().unwrap();
-    assert!(!unreaped(&identity).unwrap());
+        .spawn()?;
+    let observed = observe_unreaped_child(&mut child);
+    // Close and reap even if an observation failed, without reaping during polling.
+    drop(child.stdin.take());
+    child.wait()?;
+    let identity = observed?;
+    assert!(!unreaped(&identity)?);
+    Ok(())
+}
+
+fn observe_unreaped_child(child: &mut std::process::Child) -> Result<Identity> {
+    let identity = capture(child.id())?.context("identify live child")?;
+    ensure!(!unreaped(&identity)?, "live child reported as unreaped");
     // Closing its input ends the shell; nothing waits for it yet.
     drop(child.stdin.take());
     // A hang guard well past any exit.
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    while !unreaped(&identity).unwrap() {
-        assert!(std::time::Instant::now() < deadline, "child never exited");
+    while !unreaped(&identity)? {
+        ensure!(std::time::Instant::now() < deadline, "child never exited");
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(!alive(&identity).unwrap());
+    ensure!(!alive(&identity)?, "exited child reported as alive");
+    let changed = Identity {
+        birth: "different-process".into(),
+        ..identity.clone()
+    };
+    ensure!(
+        !unreaped(&changed)?,
+        "mismatched identity reported as unreaped"
+    );
     // Workspace usage reads the time an exited child awaits its parent with.
     #[cfg(target_os = "linux")]
-    assert!(super::super::usage::read(identity.pid).unwrap().is_some());
-    child.wait().unwrap();
-    assert!(!unreaped(&identity).unwrap());
+    ensure!(super::super::usage::read(identity.pid)?.is_some());
+    Ok(identity)
 }
 
 #[test]

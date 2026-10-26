@@ -513,7 +513,7 @@ fn boot_session() -> Option<&'static String> {
 
 #[cfg(target_os = "macos")]
 fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
-    let Some(info) = bsd_info(pid)? else {
+    let Some(info) = bsd_info(pid, false)? else {
         return Ok(None);
     };
     let bsd = &info.bsd;
@@ -596,7 +596,7 @@ fn launchd_version() -> Option<u32> {
 fn platform_unreaped(identity: &Identity) -> Result<bool> {
     // SZOMB in sys/proc.h.
     const ZOMBIE: u32 = 5;
-    let Some(info) = bsd_info(identity.pid)? else {
+    let Some(info) = bsd_info(identity.pid, true)? else {
         return Ok(false);
     };
     let bsd = &info.bsd;
@@ -607,7 +607,10 @@ fn platform_unreaped(identity: &Identity) -> Result<bool> {
 
 #[cfg(target_os = "macos")]
 pub(super) fn parent(pid: u32) -> Option<u32> {
-    bsd_info(pid).ok().flatten().map(|info| info.bsd.pbi_ppid)
+    bsd_info(pid, false)
+        .ok()
+        .flatten()
+        .map(|info| info.bsd.pbi_ppid)
 }
 
 /// `proc_bsdinfowithuniqid` and `proc_uniqidentifierinfo` from XNU's private
@@ -638,14 +641,15 @@ const PROC_PIDUNIQIDENTIFIERINFO: i32 = 17;
 const PROC_PIDT_BSDINFOWITHUNIQID: i32 = 18;
 
 #[cfg(target_os = "macos")]
-fn bsd_info(pid: u32) -> Result<Option<BsdInfo>> {
+fn bsd_info(pid: u32, include_zombies: bool) -> Result<Option<BsdInfo>> {
     let mut info = std::mem::MaybeUninit::<BsdInfo>::zeroed();
     let size = std::mem::size_of::<BsdInfo>();
     let result = unsafe {
         libc::proc_pidinfo(
             pid as i32,
             PROC_PIDT_BSDINFOWITHUNIQID,
-            0,
+            // XNU only searches its zombie list when this argument is nonzero.
+            u64::from(include_zombies),
             info.as_mut_ptr().cast(),
             size as i32,
         )
