@@ -935,8 +935,9 @@ working agent accepts new context, except a subagent's tool call, whose context
 the agent never sees, and replaces a running watch so nothing is
 delivered twice. The hook never waits for cleanup or an item change, which can
 hold Shoal's item records for minutes: an agent discards the output of a hook
-that outlasts its timeout, so the activity waits for a later delivery. Claude Code also runs a background `Stop` hook that waits for
-the next update and wakes the idle agent with it through `asyncRewake`. The hook
+that outlasts its timeout, so the activity waits for a later delivery. Claude Code also runs a background hook, after a turn ends normally
+(`Stop`) or on an API error (`StopFailure`), that waits for the next update and
+wakes the idle agent with it through `asyncRewake`. The hook
 tries a failed wait again instead of exiting, because a hook that ends leaves the
 idle agent with no wait until its next turn; waits outlast a daemon restart,
 including the time before the next daemon listens and knows the agent's scope. Codex

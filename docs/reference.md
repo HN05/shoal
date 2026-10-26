@@ -2783,8 +2783,8 @@ an update, prints nothing and leaves the delivery to the next one. A subagent's
 tool call, which the hook input names as a subagent's, delivers nothing, since
 its context reaches the agent only through the subagent's report. Delivering through the hook replaces a running watch in
 the workspace, which ends with `superseded: true`. Claude Code launches also run
-`shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
-turn it waits up to a week for the next message or item activity, prints it and
+`shoal internal wake` as a background `Stop` and `StopFailure` hook with
+`asyncRewake`: after each turn, including one an API error ended, it waits up to a week for the next message or item activity, prints it and
 exits 2, so Claude Code starts the idle agent's next turn with it. The wait
 outlasts a daemon restart, including its handover to the installed release
 after an upgrade, until the agent's wrapper reattaches; a wait that fails

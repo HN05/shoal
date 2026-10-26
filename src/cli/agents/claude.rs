@@ -54,7 +54,7 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     let groups = hooks::messages(&shoal)
         .chain(state)
         .chain(subagents)
-        .chain([wake_hook(&shoal)]);
+        .chain(wake_hooks(&shoal));
     let mut settings = json!({"hooks": hooks::by_event(groups)});
     if !allow.is_empty() {
         settings["permissions"] = json!({"allow": allow});
@@ -162,19 +162,18 @@ fn subagent_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
 /// should hear about a review whenever it arrives.
 const WAKE_TIMEOUT_SECS: u64 = 7 * 24 * 60 * 60;
 
-/// The `Stop` group that waits in the background for the next update and
-/// wakes the idle agent with it. Claude Code runs the command in a shell it
-/// starts, whose parent is the agent.
-fn wake_hook(shoal: &str) -> (&'static str, Value) {
-    (
-        "Stop",
-        json!({"hooks": [{
-            "type": "command",
-            "command": format!("{shoal} internal wake --agent \"$PPID\""),
-            "asyncRewake": true,
-            "timeout": WAKE_TIMEOUT_SECS,
-        }]}),
-    )
+/// The groups that wait in the background for the next update and wake the
+/// idle agent with it, after a turn that ends normally and after one an API
+/// error ends, which fires `StopFailure` instead of `Stop`. Claude Code runs
+/// the command in a shell it starts, whose parent is the agent.
+fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
+    let group = json!({"hooks": [{
+        "type": "command",
+        "command": format!("{shoal} internal wake --agent \"$PPID\""),
+        "asyncRewake": true,
+        "timeout": WAKE_TIMEOUT_SECS,
+    }]});
+    [("Stop", group.clone()), ("StopFailure", group)]
 }
 
 #[cfg(test)]
@@ -220,17 +219,20 @@ mod tests {
                 expected("StopFailure", None, "idle"),
             ]
         );
-        // A second Stop group waits in the background to wake the idle agent.
-        let wake = &settings["hooks"]["Stop"][1]["hooks"][0];
-        assert!(
-            wake["command"]
-                .as_str()
-                .unwrap()
-                .ends_with(" internal wake --agent \"$PPID\""),
-            "{wake}"
-        );
-        assert_eq!(wake["asyncRewake"], true);
-        assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
+        // A second group waits in the background to wake the idle agent,
+        // after a failed turn as after one that ended normally.
+        for event in ["Stop", "StopFailure"] {
+            let wake = &settings["hooks"][event][1]["hooks"][0];
+            assert!(
+                wake["command"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with(" internal wake --agent \"$PPID\""),
+                "{event}: {wake}"
+            );
+            assert_eq!(wake["asyncRewake"], true);
+            assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
+        }
         // Worktrees Claude Code creates are child workspaces, and each
         // subagent learns which workspace it works in.
         for (event, command) in [
@@ -267,8 +269,10 @@ mod tests {
             settings["hooks"].get("WorktreeCreate").is_none(),
             "{settings}"
         );
-        let stop = &settings["hooks"]["Stop"][0]["hooks"][0]["command"];
-        assert!(stop.as_str().unwrap().contains(" internal wake "), "{stop}");
+        for event in ["Stop", "StopFailure"] {
+            let wake = &settings["hooks"][event][0]["hooks"][0]["command"];
+            assert!(wake.as_str().unwrap().contains(" internal wake "), "{wake}");
+        }
         for event in hooks::MESSAGE_EVENTS {
             assert!(settings["hooks"][event][0]["hooks"][0]["command"].is_string());
         }

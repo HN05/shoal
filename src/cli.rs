@@ -1780,8 +1780,9 @@ pub enum InternalCommand {
         workspace: Option<String>,
     },
     /// Wait for the next agent messages or item activity of the workspace or
-    /// chat, print them and exit 2; Shoal's Claude Code `Stop` hook runs it in the
-    /// background so the update starts the idle agent's next turn.
+    /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
+    /// hooks run it in the background so the update starts the idle agent's
+    /// next turn.
     Wake {
         /// The agent's process ID; the hook ends when that process exits.
         #[arg(long)]
