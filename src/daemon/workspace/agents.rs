@@ -25,6 +25,9 @@ pub(super) struct Agent {
     update_hold: Option<OwnedRwLockReadGuard<()>>,
     /// Set while `shoal restart` restarts the agent.
     restart: Option<restart::Restart>,
+    /// The turn state the agent reported last, which the workspace's state
+    /// keeps only while no other execution there reports.
+    turn: Option<crate::state::AgentState>,
 }
 
 impl Agent {
@@ -236,6 +239,7 @@ impl Manager {
                     overload: None,
                     update_hold: None,
                     restart: None,
+                    turn: None,
                 },
             );
         }
@@ -358,6 +362,8 @@ impl Manager {
         agent.overload = None;
         agent.update_hold = None;
         agent.started = Instant::now();
+        // The resumed agent reports its own turns.
+        agent.turn = None;
         let (name, workspace) = (agent.name.clone(), agent.workspace.clone());
         drop(agents);
         drop(connections);

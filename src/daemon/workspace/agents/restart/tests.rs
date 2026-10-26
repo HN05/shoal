@@ -91,6 +91,42 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
 }
 
 #[tokio::test]
+async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let mut ids = Vec::new();
+    for name in ["claude", "codex"] {
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap();
+        track(&manager, &workspace, &execution.plan.id, name, true).await;
+        ids.push(execution.plan.id);
+    }
+    // The workspace keeps only the later report; each agent keeps its own.
+    for (id, state) in ids.iter().zip([AgentState::Idle, AgentState::Working]) {
+        manager
+            .set_agent_state(&workspace.id, state, Some(id.clone()), None)
+            .await
+            .unwrap();
+    }
+    let states: std::collections::HashMap<_, _> = manager
+        .running_agents()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|agent| (agent.execution, agent.state))
+        .collect();
+    assert_eq!(states[&ids[0]], Some(AgentState::Idle));
+    assert_eq!(states[&ids[1]], Some(AgentState::Working));
+    let status = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(
+        status.workspace.agent_state.map(|status| status.state),
+        Some(AgentState::Working)
+    );
+}
+
+#[tokio::test]
 async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;

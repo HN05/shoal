@@ -4,8 +4,8 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
-use super::{super::agent_state, Manager};
-use crate::{daemon::store, model::RunningAgent};
+use super::Manager;
+use crate::{daemon::store, model::RunningAgent, state::AgentState};
 
 /// A restart in progress, which answers its request.
 pub(super) struct Restart {
@@ -39,27 +39,24 @@ impl Manager {
     /// Every connected agent, and every execution whose wrapper is gone,
     /// which may have run one; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
-        let (executions, mut states) = self
-            .store
-            .run(|db| Ok((store::all_executions(db)?, agent_state::by_execution(db)?)))
-            .await?;
+        let executions = self.store.run(|db| store::all_executions(db)).await?;
         let connections = self.connections.lock().await;
         let agents = self.agents.lock().await;
         Ok(executions
             .into_iter()
             .filter_map(|execution| {
-                let (agent, restorable) = match agents.get(&execution.id) {
-                    Some(agent) => (Some(agent.name.clone()), agent.recover),
+                let (agent, restorable, state) = match agents.get(&execution.id) {
+                    Some(agent) => (Some(agent.name.clone()), agent.recover, agent.turn),
                     None if connections
                         .get(&execution.id)
                         .is_some_and(|sender| !sender.is_closed()) =>
                     {
                         return None;
                     }
-                    None => (None, false),
+                    None => (None, false, None),
                 };
                 Some(RunningAgent {
-                    state: states.remove(&execution.id),
+                    state,
                     execution: execution.id,
                     workspace_id: execution.workspace_id,
                     agent,
@@ -101,6 +98,13 @@ impl Manager {
             anyhow::bail!("{} disconnected", agent.name);
         }
         Ok(answer)
+    }
+
+    /// Keep the turn state the agent of `id` reported.
+    pub(crate) async fn record_agent_turn(&self, id: &str, state: AgentState) {
+        if let Some(agent) = self.agents.lock().await.get_mut(id) {
+            agent.turn = Some(state);
+        }
     }
 
     /// Whether `shoal restart` is restarting the agent of `id`.

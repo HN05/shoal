@@ -33,18 +33,6 @@ pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The state each tracked execution reported last, by execution.
-pub(crate) fn by_execution(
-    db: &Connection,
-) -> Result<std::collections::HashMap<String, AgentState>> {
-    Ok(db
-        .prepare(
-            "SELECT execution_id,state FROM workspace_agent_state WHERE execution_id IS NOT NULL",
-        )?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
 impl Manager {
     /// Record the state reported from `execution`, which clears it when its
     /// record goes, and the agent `session` it reports for resuming it.
@@ -58,6 +46,9 @@ impl Manager {
         session: Option<String>,
     ) -> Result<AgentStatus> {
         let id = self.workspace(selector).await?.id;
+        if let Some(execution) = &execution {
+            self.record_agent_turn(execution, state).await;
+        }
         if let (Some(execution), Some(session)) = (&execution, &session) {
             ensure!(recovery::valid_session(session), "invalid agent session ID");
             recovery::save_session(&self.paths, &id, execution, session)?;
