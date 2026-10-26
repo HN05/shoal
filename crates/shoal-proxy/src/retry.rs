@@ -68,6 +68,17 @@ impl Policy {
     }
 }
 
+/// How long an attempt may take, by the state of the upstream's outage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Bound {
+    /// The last request succeeded, so the upstream may take its time.
+    Unbounded,
+    /// The upstream is down, with this much of the budget left.
+    Within(Duration),
+    /// A request gave up on the outage.
+    GivenUp,
+}
+
 /// The upstream's current outage, which every request shares: once a
 /// request gave up on it, requests fail at once instead of each waiting it
 /// out again.
@@ -129,16 +140,16 @@ impl Outage {
         fits.then_some(wait)
     }
 
-    /// How much of the budget is left while the upstream is down, which
-    /// bounds each attempt then; `None` otherwise, when an attempt may take
-    /// as long as the upstream needs.
-    pub(crate) fn remaining(&self) -> Option<Duration> {
+    /// How long an attempt may take now: as long as the upstream needs
+    /// while it answers, the budget that is left while it is down.
+    pub(crate) fn bound(&self) -> Bound {
         match *self.state.lock().unwrap() {
+            State::Up => Bound::Unbounded,
             State::Down(started) => {
                 let elapsed = self.clock.now().saturating_sub(started);
-                Some(self.policy.budget.saturating_sub(elapsed))
+                Bound::Within(self.policy.budget.saturating_sub(elapsed))
             }
-            State::Up | State::GivenUp => None,
+            State::GivenUp => Bound::GivenUp,
         }
     }
 

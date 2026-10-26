@@ -19,7 +19,7 @@ use crate::{
         Body, bad_gateway, event_stream, full, is_event_stream, passthrough, prefixed,
         strip_hop_by_hop,
     },
-    retry::{self, Failure, Outage, Policy},
+    retry::{self, Bound, Failure, Outage, Policy},
     stream::{self, Opening, Protocol},
 };
 
@@ -116,10 +116,11 @@ impl Forwarder {
     /// outage is given up, so a stalled upstream cannot keep the proxy from
     /// giving up.
     async fn attempt(&self, request: &Buffered, retry: bool) -> Attempt {
-        let remaining = match self.outage.remaining() {
-            Some(remaining) => remaining,
-            None if retry => Duration::ZERO,
-            None => return self.send(request).await,
+        let remaining = match self.outage.bound() {
+            Bound::Within(remaining) => remaining,
+            Bound::GivenUp if retry => Duration::ZERO,
+            // A recovered upstream takes a retry as any other request.
+            Bound::Unbounded | Bound::GivenUp => return self.send(request).await,
         };
         if remaining.is_zero() {
             return Attempt::Failed(Failed {

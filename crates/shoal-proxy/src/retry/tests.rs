@@ -34,16 +34,16 @@ async fn an_outage_is_retried_for_its_budget_until_a_request_succeeds() {
     // The upstream's own wait wins, but not past the budget.
     let asked = Some(Duration::from_secs(90));
     assert_eq!(outage.next_wait(2, asked), asked);
-    assert_eq!(outage.remaining(), Some(POLICY.budget));
+    assert_eq!(outage.bound(), Bound::Within(POLICY.budget));
     tokio::time::advance(POLICY.budget - Duration::from_secs(60)).await;
-    assert_eq!(outage.remaining(), Some(Duration::from_secs(60)));
+    assert_eq!(outage.bound(), Bound::Within(Duration::from_secs(60)));
     assert_eq!(outage.next_wait(3, None), Some(Duration::from_secs(4)));
     // A wait past the budget gives up, and later requests too.
     assert_eq!(outage.next_wait(4, asked), None);
     assert_eq!(outage.next_wait(1, None), None);
-    assert_eq!(outage.remaining(), None);
+    assert_eq!(outage.bound(), Bound::GivenUp);
     outage.ended();
-    assert_eq!(outage.remaining(), None);
+    assert_eq!(outage.bound(), Bound::Unbounded);
     assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
 }
 
@@ -85,5 +85,5 @@ fn a_failure_read_before_the_outage_started_does_not_break_it() {
     assert_eq!(outage.next_wait(1, None), Some(POLICY.first_wait));
     // Earlier than the recorded start: the outage keeps its budget.
     assert_eq!(outage.next_wait(2, None), Some(POLICY.first_wait * 2));
-    assert_eq!(outage.remaining(), Some(POLICY.budget));
+    assert_eq!(outage.bound(), Bound::Within(POLICY.budget));
 }
