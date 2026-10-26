@@ -1,0 +1,66 @@
+use anyhow::Result;
+
+use crate::{
+    agent::CodexMode,
+    cli::{
+        agents,
+        args::agents::AgentsCommand,
+        commands::{chat, plan},
+        context::Context,
+    },
+};
+
+pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) -> Result<i32> {
+    match command {
+        AgentsCommand::Claude { workspace, args } => {
+            agents::run_named(&ctx, "claude", workspace, args).await
+        }
+        AgentsCommand::Codex {
+            workspace,
+            cli,
+            app,
+            args,
+        } => {
+            let mode = if cli {
+                Some(CodexMode::Cli)
+            } else if app {
+                Some(CodexMode::App)
+            } else {
+                None
+            };
+            agents::codex(&ctx, mode, workspace, args).await
+        }
+        AgentsCommand::T3 { workspace, args } => {
+            agents::open_app(&ctx, workspace, "t3", args).await
+        }
+        #[cfg(feature = "happy")]
+        AgentsCommand::Happy {
+            agent,
+            workspace,
+            prompt,
+            args,
+        } => agents::happy(&ctx, agent, workspace, prompt, args).await,
+        AgentsCommand::Chat {
+            here,
+            repository,
+            agent,
+            args,
+        } => chat::start(&ctx, repository, agent, here, args).await,
+        AgentsCommand::Plan {
+            issue,
+            oldest,
+            newest,
+            repository,
+            here,
+            agent,
+            args,
+        } => {
+            let pick = match (oldest, newest) {
+                (true, _) => plan::Pick::Oldest,
+                (_, true) => plan::Pick::Newest,
+                _ => plan::Pick::Picker,
+            };
+            plan::start(&ctx, issue, repository, pick, agent, here, args).await
+        }
+    }
+}
