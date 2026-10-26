@@ -1466,7 +1466,10 @@ pub(in crate::cli) async fn agent_environment(
 
 /// A pending retry of the agent's failed turn as `status` shows it.
 fn turn_retry_label(retry: &crate::daemon::workspace::turn_retry::TurnRetry) -> String {
-    let progress = format!("attempt {} of {}", retry.attempt, retry.attempts);
+    let progress = match retry.attempts {
+        Some(limit) => format!("attempt {} of {limit}", retry.attempt),
+        None => format!("attempt {}", retry.attempt),
+    };
     if retry.delivered {
         format!(
             "{} ({progress}), agent asked to continue",

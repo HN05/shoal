@@ -763,17 +763,22 @@ the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoi
 for other tools. Set `retry = false` under `[ai.claude]` to opt out; a tool's
 launch profiles inherit its setting unless they override it. Retries apply to a
 turn an API error ended, for agents whose integration reports failed turns:
-Claude Code, through its `StopFailure` hook. After a rate limit, an overloaded
-API or a server error, Shoal waits half a minute, doubling for each later attempt up to a quarter
-hour, then sends the idle agent a [message](#agent-messages) to continue its
+Claude Code, through its `StopFailure` hook. Shoal waits half a minute, doubling
+for each later attempt up to an hour for rate or usage limits, or a quarter hour
+for overloaded APIs and server errors. Each wait varies randomly by ±20%.
+It then sends the idle agent a [message](#agent-messages) to continue its
 unfinished work, which reaches it in a new turn of the same conversation. A new
 turn before then cancels the retry, and the agent's exit, completion or the
 workspace's removal drops it. Attempts follow one another until a turn ends
-normally; after eight, or after an error a retry does not fix, such as failed
-authentication, Shoal records a `turn_failed` notification, which a child
-workspace's coordinating agent receives instead. A pending retry outlasts a
+normally. Rate and usage limits have no attempt cap, so daily and weekly quotas
+can reset; the failure hook supplies no structured reset time. Overloaded APIs
+and server errors get eight attempts, about an hour in total; switching between
+these failures and usage limits starts a fresh attempt count. After exhaustion,
+or an error a retry does not fix, such as failed authentication, Shoal records
+a `turn_failed` notification, which a child workspace's coordinating agent
+receives instead. A pending retry outlasts a
 daemon restart; `status` shows it, and `--json` gives `turn_retry` with
-`failure`, `attempt`, `attempts`, `due_at` and `delivered`.
+`failure`, `attempt`, `attempts` (`null` for no cap), `due_at` and `delivered`.
 
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;

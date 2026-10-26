@@ -820,9 +820,10 @@ environments, such as a second login, without losing that setup. Its `env` and
 keeps its config from them, so they can move that directory but not remove its
 variable.
 Turn retry defaults to on for Claude and its launch profiles, off for other
-tools, and is overridden per tool with `retry`; the backoff and attempt limit
-are built in. Retry scheduling knows no agent: an integration that
-can report why a turn failed maps the agent's error to Shoal's failure, and the
+tools, and is overridden per tool with `retry`. Backoff is built in; usage
+limits retry without a deadline to allow weekly quotas to reset, while transient
+API failures have a fixed attempt cap. Retry scheduling knows no agent: an
+integration that can report why a turn failed maps the agent's error to Shoal's failure, and the
 daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to
 the reporting execution and cancelled by any new turn, so it never competes with

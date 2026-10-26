@@ -15,13 +15,15 @@ use crate::{
     state::{AgentState, TurnFailure},
 };
 
-/// Attempts at one turn before Shoal gives up on it; with the delays below
-/// they span about an hour.
+/// Attempts at a transient failure before Shoal gives up; with the delays
+/// below they span about an hour. Rate and usage limits have no attempt cap.
 pub(crate) const ATTEMPTS: u32 = 8;
 /// The wait before the first attempt, doubling for each later one.
 const FIRST_DELAY_SECS: u64 = 30;
 /// The longest wait before an attempt.
 const MAX_DELAY_SECS: u64 = 15 * 60;
+/// Usage limits may last a week, so keep checking at roughly hourly intervals.
+const RATE_LIMIT_MAX_DELAY_SECS: u64 = 60 * 60;
 /// How far each wait is spread, as a fraction either way, so agents that
 /// failed together do not all retry at once.
 const JITTER: f64 = 0.2;
@@ -34,7 +36,8 @@ pub struct TurnRetry {
     pub failure: TurnFailure,
     /// The attempt the retry makes or made, from 1.
     pub attempt: u32,
-    pub attempts: u32,
+    /// The attempt cap; none for rate and usage limits.
+    pub attempts: Option<u32>,
     /// Unix seconds when the agent is asked to continue.
     pub due_at: i64,
     /// Whether the agent was asked and its turn has not ended yet.
@@ -48,10 +51,11 @@ pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<TurnRetr
              WHERE workspace_id=?1",
             [workspace_id],
             |row| {
+                let failure = row.get(0)?;
                 Ok(TurnRetry {
-                    failure: row.get(0)?,
+                    failure,
                     attempt: row.get(1)?,
-                    attempts: ATTEMPTS,
+                    attempts: attempt_limit(failure),
                     due_at: row.get(2)?,
                     delivered: row.get(3)?,
                 })
@@ -75,12 +79,19 @@ pub(super) fn follow_state(db: &Connection, workspace_id: &str, state: AgentStat
     Ok(())
 }
 
-/// The wait before `attempt`, spread by `spread` in `[0, 1)`.
-fn delay(attempt: u32, spread: f64) -> i64 {
+/// Usage limits must be allowed to reset, including weekly ones.
+fn attempt_limit(failure: TurnFailure) -> Option<u32> {
+    (failure != TurnFailure::RateLimited).then_some(ATTEMPTS)
+}
+
+/// The wait before `attempt` for `failure`, spread by `spread` in `[0, 1)`.
+fn delay(failure: TurnFailure, attempt: u32, spread: f64) -> i64 {
+    let maximum = match failure {
+        TurnFailure::RateLimited => RATE_LIMIT_MAX_DELAY_SECS,
+        _ => MAX_DELAY_SECS,
+    };
     let doublings = attempt.saturating_sub(1).min(16);
-    let base = FIRST_DELAY_SECS
-        .saturating_mul(1 << doublings)
-        .min(MAX_DELAY_SECS);
+    let base = FIRST_DELAY_SECS.saturating_mul(1 << doublings).min(maximum);
     (base as f64 * (1.0 - JITTER + 2.0 * JITTER * spread)).round() as i64
 }
 
@@ -108,8 +119,8 @@ enum GiveUp {
 
 /// Record the turn `failure` ended in `execution` as its workspace's
 /// retry: the next attempt after a delivered one, the first for a new
-/// execution, and the same one when the failure is reported again before it
-/// is due.
+/// execution or a change between usage limits and transient failures, and the
+/// same one when the failure is reported again before it is due.
 fn record_failure(
     db: &mut Connection,
     workspace_id: &str,
@@ -119,36 +130,72 @@ fn record_failure(
     spread: f64,
 ) -> Result<Scheduled> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let previous: Option<(String, u32, i64, bool)> = tx
-        .query_row(
-            "SELECT execution_id,attempt,due_at,delivered FROM workspace_turn_retries
-             WHERE workspace_id=?1",
-            [workspace_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )
-        .optional()?;
-    let (attempt, due_at) = match previous {
-        Some((previous, attempt, due_at, false)) if previous == execution => (attempt, due_at),
-        Some((previous, attempt, _, true)) if previous == execution => {
-            (attempt + 1, now + delay(attempt + 1, spread))
-        }
-        _ => (1, now + delay(1, spread)),
-    };
-    let scheduled = if attempt > ATTEMPTS {
+    let (attempt, due_at) = next_attempt(&tx, workspace_id, execution, failure, now, spread)?;
+    let scheduled = if attempt_limit(failure).is_some_and(|limit| attempt > limit) {
         cancel(&tx, workspace_id)?;
         Scheduled::Exhausted
     } else {
-        tx.execute(
-            "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
-             VALUES (?1,?2,?3,?4,?5,0)
-             ON CONFLICT(workspace_id) DO UPDATE SET execution_id=excluded.execution_id,
-                 failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
-            params![workspace_id, execution, failure, attempt, due_at],
-        )?;
+        save_retry(&tx, workspace_id, execution, failure, attempt, due_at)?;
         Scheduled::Waiting
     };
     tx.commit()?;
     Ok(scheduled)
+}
+
+/// Keep a pending attempt or advance a delivered one under the same policy.
+fn next_attempt(
+    db: &Connection,
+    workspace_id: &str,
+    execution: &str,
+    failure: TurnFailure,
+    now: i64,
+    spread: f64,
+) -> Result<(u32, i64)> {
+    let previous: Option<(String, TurnFailure, u32, i64, bool)> = db
+        .query_row(
+            "SELECT execution_id,failure,attempt,due_at,delivered FROM workspace_turn_retries
+             WHERE workspace_id=?1",
+            [workspace_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let previous = previous
+        .filter(|(_, prior_failure, ..)| attempt_limit(*prior_failure) == attempt_limit(failure));
+    Ok(match previous {
+        Some((previous, _, attempt, due_at, false)) if previous == execution => (attempt, due_at),
+        Some((previous, _, attempt, _, true)) if previous == execution => {
+            let attempt = attempt.saturating_add(1);
+            (attempt, now + delay(failure, attempt, spread))
+        }
+        _ => (1, now + delay(failure, 1, spread)),
+    })
+}
+
+/// Persist the next attempt, replacing a previous one for the workspace.
+fn save_retry(
+    db: &Connection,
+    workspace_id: &str,
+    execution: &str,
+    failure: TurnFailure,
+    attempt: u32,
+    due_at: i64,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
+             VALUES (?1,?2,?3,?4,?5,0)
+             ON CONFLICT(workspace_id) DO UPDATE SET execution_id=excluded.execution_id,
+                 failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
+        params![workspace_id, execution, failure, attempt, due_at],
+    )?;
+    Ok(())
 }
 
 /// Drop the workspace's retry.
@@ -272,9 +319,13 @@ fn postpone(db: &Connection, workspace_id: &str, due_at: i64) -> Result<()> {
 
 /// The message that asks the agent to continue.
 fn continuation(failure: TurnFailure, attempt: u32) -> String {
+    let progress = match attempt_limit(failure) {
+        Some(limit) => format!("Retry {attempt} of {limit}."),
+        None => format!("Retry {attempt}."),
+    };
     format!(
         "Shoal: your last turn ended with an API error ({}). Continue the unfinished \
-         work from where you left off. (Retry {attempt} of {ATTEMPTS}.)",
+         work from where you left off. ({progress})",
         failure.describe()
     )
 }

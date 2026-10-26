@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use anyhow::Context;
+
 use super::*;
 use crate::{
     model::Workspace,
@@ -8,11 +10,27 @@ use crate::{
 
 #[test]
 fn waits_double_from_half_a_minute_to_a_quarter_hour_spread_a_fifth() {
-    let waits: Vec<_> = (1..=ATTEMPTS).map(|attempt| delay(attempt, 0.5)).collect();
+    let failure = TurnFailure::ServerError;
+    let waits: Vec<_> = (1..=ATTEMPTS)
+        .map(|attempt| delay(failure, attempt, 0.5))
+        .collect();
     assert_eq!(waits, [30, 60, 120, 240, 480, 900, 900, 900]);
-    assert_eq!(delay(1, 0.0), 24);
-    assert_eq!(delay(1, 0.999_999), 36);
-    assert!(delay(u32::MAX, 0.5) == 900);
+    assert_eq!(delay(failure, 1, 0.0), 24);
+    assert_eq!(delay(failure, 1, 0.999_999), 36);
+    assert_eq!(delay(failure, u32::MAX, 0.5), 900);
+}
+
+#[test]
+fn usage_limits_back_off_to_hourly_attempts_without_a_cap() {
+    let failure = TurnFailure::RateLimited;
+    let waits: Vec<_> = (1..=10)
+        .map(|attempt| delay(failure, attempt, 0.5))
+        .collect();
+    assert_eq!(waits, [30, 60, 120, 240, 480, 960, 1920, 3600, 3600, 3600]);
+    assert_eq!(delay(failure, u32::MAX, 0.5), 3600);
+    assert_eq!(delay(failure, 10, 0.0), 2880);
+    assert_eq!(delay(failure, 10, 0.999_999), 4320);
+    assert_eq!(attempt_limit(failure), None);
 }
 
 /// A workspace whose connected `claude` agent runs in the returned
@@ -147,7 +165,7 @@ async fn a_failed_turn_retries_by_default_and_asks_the_idle_agent_to_continue() 
     // The turn it starts failing again counts the next attempt.
     report(&manager, &workspace, &execution, AgentState::Working).await;
     assert!(retry(&manager, &workspace).await.is_some());
-    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    fail(&manager, &workspace, &execution, TurnFailure::ServerError).await;
     let second = retry(&manager, &workspace).await.unwrap();
     assert_eq!((second.attempt, second.delivered), (2, false));
     deliver_now(&manager).await;
@@ -247,4 +265,58 @@ async fn the_last_failed_attempt_gives_up_and_notifies() {
         "{}",
         notifications[0].message
     );
+}
+
+#[tokio::test]
+async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result<()> {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    let id = workspace.id.clone();
+    let scheduling_execution = execution.clone();
+    let pending = manager
+        .store
+        .run(move |db| {
+            let failure = TurnFailure::RateLimited;
+            let mut now = 1000;
+            // Drive the scheduling clock, without sleeping through usage limits.
+            while now < 1000 + 8 * 24 * 60 * 60 {
+                assert_eq!(
+                    record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?,
+                    Scheduled::Waiting
+                );
+                let pending = get(db, &id)?.context("pending usage-limit retry")?;
+                assert_eq!(pending.attempts, None);
+                assert!(pending.due_at > now);
+                assert!(deliver(db, &id, pending.due_at)?);
+                db.execute("DELETE FROM agent_messages WHERE workspace_id=?1", [&id])?;
+                now = pending.due_at;
+            }
+            record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
+            get(db, &id)?.context("retry after eight days")
+        })
+        .await?;
+    assert!(pending.attempt > ATTEMPTS);
+    let reopened = Connection::open(manager.paths.database())?;
+    assert_eq!(get(&reopened, &workspace.id)?, Some(pending.clone()));
+    drop(reopened);
+    manager.deliver_turn_retries_at(pending.due_at).await?;
+    assert_eq!(
+        messages(&manager, &workspace).await,
+        [continuation(TurnFailure::RateLimited, pending.attempt)]
+    );
+    assert!(manager.notifications(false, 10).await?.is_empty());
+
+    // A transient failure after a long usage limit gets its own attempt budget.
+    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    let transient = retry(&manager, &workspace)
+        .await
+        .context("transient retry")?;
+    assert_eq!((transient.attempt, transient.attempts), (1, Some(ATTEMPTS)));
+    deliver_now(&manager).await;
+    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    let limited = retry(&manager, &workspace)
+        .await
+        .context("usage-limit retry")?;
+    assert_eq!((limited.attempt, limited.attempts), (1, None));
+    Ok(())
 }
