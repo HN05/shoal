@@ -49,7 +49,12 @@ impl Manager {
             .into_iter()
             .filter_map(|execution| {
                 let (agent, restorable, state) = match agents.get(&execution.id) {
-                    Some(agent) => (Some(agent.name.clone()), agent.recover, agent.turn),
+                    // Named as `--agent` and recovery records name it.
+                    Some(agent) => (
+                        Some(agent.name.replace(' ', "-")),
+                        agent.recover,
+                        agent.turn,
+                    ),
                     None if connections
                         .get(&execution.id)
                         .is_some_and(|sender| !sender.is_closed()) =>

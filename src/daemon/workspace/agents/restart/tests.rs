@@ -92,6 +92,27 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
 }
 
 #[tokio::test]
+async fn agents_are_listed_by_the_names_agent_selection_takes() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    // Happy records its agents as `happy codex`; `--agent` spells it `happy-codex`.
+    track(
+        &manager,
+        &workspace,
+        &execution.plan.id,
+        "happy codex",
+        true,
+    )
+    .await;
+    let agents = manager.running_agents().await.unwrap();
+    assert_eq!(agents[0].agent.as_deref(), Some("happy-codex"));
+}
+
+#[tokio::test]
 async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;

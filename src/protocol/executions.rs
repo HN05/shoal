@@ -41,7 +41,9 @@ impl ExecutionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Execute { .. } => Lifetime::Open,
-            Self::CheckLanding | Self::ListAgents | Self::RestartAgent { .. } => Lifetime::Reply,
+            // A restart waits for requests of the wrapper it restores.
+            Self::RestartAgent { .. } => Lifetime::Open,
+            Self::CheckLanding | Self::ListAgents => Lifetime::Reply,
         }
     }
 }

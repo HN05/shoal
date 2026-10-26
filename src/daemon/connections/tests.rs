@@ -151,6 +151,23 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
 }
 
 #[test]
+fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
+    let capacity = Capacity::new(1, 1);
+    let restart = capacity
+        .admit(
+            capacity.request_slot(),
+            &crate::protocol::ExecutionMethod::RestartAgent {
+                execution: "agent".into(),
+            }
+            .into(),
+        )
+        .unwrap();
+    // The restored wrapper's own requests still find a slot.
+    let _wrapper = capacity.request_slot();
+    drop(restart);
+}
+
+#[test]
 fn the_descriptor_limit_reaches_the_target_or_stays_higher() {
     let hard = descriptor_limit().unwrap().rlim_max;
     let limit = raise_descriptor_limit();
