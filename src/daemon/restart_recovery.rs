@@ -241,7 +241,7 @@ impl Manager {
             Some(&workspace.name),
             NotificationKind::RecoveryBlocked,
             format!(
-                "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or inspect it with shoal doctor {}; then run shoal resume {} --execution {}",
+                "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal resume {} --execution {}",
                 record.agent, execution.id, workspace.name, workspace.name, execution.id
             ),
         )
@@ -258,8 +258,8 @@ impl Manager {
             Some(&workspace.name),
             NotificationKind::RecoveryBlocked,
             format!(
-                "The recovery record of execution {execution} cannot be read: {error:#}; inspect it with shoal doctor {}",
-                workspace.name
+                "The recovery record of execution {execution} cannot be read: {error:#}; check or remove {}",
+                crate::execution::recovery::record_path(&self.paths, &workspace.id, execution).display()
             ),
         )
         .await;

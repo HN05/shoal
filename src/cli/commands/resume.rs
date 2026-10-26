@@ -347,7 +347,7 @@ async fn reconcile_stale_execution(
             .iter()
             .find(|execution| execution.id == selected)
             .is_some_and(|execution| execution.cleared),
-        "selected execution is still unresolved; inspect it with shoal doctor"
+        "selected execution is still unresolved; stop what remains of it with shoal stop, then resume again"
     );
     Ok(())
 }

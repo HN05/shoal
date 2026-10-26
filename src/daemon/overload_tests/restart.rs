@@ -226,7 +226,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         "{survivor}"
     );
     assert!(survivor.contains("after test memory pressure"));
-    assert!(survivor.contains("shoal doctor load"));
+    assert!(survivor.contains("shoal stop load"));
     assert!(survivor.contains("shoal resume load --execution survivor"));
     let unproven = messages.iter().find(|m| m.contains("unproven")).unwrap();
     assert!(
@@ -240,7 +240,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     );
     let unreadable = messages.iter().find(|m| m.contains("unreadable")).unwrap();
     assert!(unreadable.contains("cannot be read"), "{unreadable}");
-    assert!(unreadable.contains("shoal doctor load"), "{unreadable}");
+    assert!(unreadable.contains("; check or remove "), "{unreadable}");
     assert!(record(&reopened, &workspace, "survivor").is_some());
     reopened.store.shutdown().await;
     serving.abort();

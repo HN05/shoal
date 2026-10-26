@@ -66,7 +66,7 @@ impl Manager {
             let reconcile = if complete {
                 ""
             } else {
-                "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal doctor reconciles it"
+                "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal stop stops them"
             };
             format!(
                 "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; workspace and resource leases retained"
@@ -75,9 +75,13 @@ impl Manager {
             match exit_code {
                 Some(code) if complete => format!("{agent} exited with code {code}"),
                 Some(code) => format!(
-                    "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
+                    "{agent} exited with code {code}, leaving processes behind; stop them with shoal stop {}",
+                    workspace.name
                 ),
-                None => format!("{agent} disconnected without reporting; run shoal doctor"),
+                None => format!(
+                    "{agent} disconnected without reporting; stop what remains of it with shoal stop {}",
+                    workspace.name
+                ),
             }
         };
         self.notify(
@@ -615,7 +619,7 @@ impl Manager {
         self.notify(
             Some(workspace),
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal doctor if the wrapper exits" }),
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
         )
         .await;
     }

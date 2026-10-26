@@ -92,9 +92,7 @@ impl Manager {
                     self.set_state(
                         &workspace.id,
                         WorkspaceState::Failed,
-                        Some(format!(
-                            "startup ownership check failed: {error:#}; run shoal doctor"
-                        )),
+                        Some(format!("startup ownership check failed: {error:#}")),
                     )
                     .await?;
                 }

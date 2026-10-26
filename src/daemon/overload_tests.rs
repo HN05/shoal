@@ -1232,7 +1232,9 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
             .await
             .unwrap()
             .iter()
-            .all(|event| !event.message.contains("run shoal doctor"))
+            .all(|event| !event
+                .message
+                .contains("recovery handoff could not be saved"))
     );
     serving.abort();
 }

@@ -115,11 +115,15 @@ impl Health {
     fn problem(&self, now: Instant) -> Option<String> {
         if let Some(failure) = &self.failure {
             Some(format!(
-                "Automatic cleanup failing since {}; run shoal doctor",
-                local_seconds(failure.since as i64)
+                "Automatic cleanup failing since {}: {}",
+                local_seconds(failure.since as i64),
+                failure.error
             ))
         } else if self.stalled(now) {
-            Some(format!("{}; run shoal doctor", self.stalled_message()))
+            Some(format!(
+                "{}; the daemon log has details",
+                self.stalled_message()
+            ))
         } else {
             None
         }
@@ -930,7 +934,7 @@ mod tests {
             health
                 .problem(after(150))
                 .unwrap()
-                .contains("run shoal doctor")
+                .ends_with("completion cleanup: disk is full")
         );
 
         assert_eq!(health.record(moment(180, 3600), &Ok(())), None);

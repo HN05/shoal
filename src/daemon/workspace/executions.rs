@@ -650,7 +650,7 @@ impl Manager {
                     let error = (!(complete && code == 0)).then(|| {
                         let reason = issue.as_ref().map_or(String::new(), |issue| format!("; {issue}"));
                         if code == 0 {
-                            format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; inspect with shoal doctor")
+                            format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; stop its processes with shoal stop, then retry or skip setup")
                         } else {
                             format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal work setup")
                         }
@@ -1064,9 +1064,11 @@ impl Manager {
             return Ok(());
         }
         process::stop_verified(&survivors).await?;
+        let remaining = process::scan_workspace(id).await?;
         ensure!(
-            process::scan_workspace(id).await?.is_empty(),
-            "workspace processes survived stopping; retry after shoal doctor"
+            remaining.is_empty(),
+            "workspace processes survived stopping: {}; stop them yourself, then retry",
+            pids(&remaining)
         );
         Ok(())
     }

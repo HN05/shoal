@@ -141,7 +141,7 @@ impl Manager {
             Processes::inspect(execution, &scan)
                 .await?
                 .command_stopped(),
-            "process state remains uncertain; use shoal doctor to inspect it"
+            "process state of the demo remains uncertain; check its processes, then stop it again"
         );
         self.forget_execution(&execution.id).await
     }

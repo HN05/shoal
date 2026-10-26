@@ -1122,7 +1122,7 @@ async fn report_completion(link: &mut Link, code: i32, mode: &Mode) -> Result<bo
                 return Err(SetupVerificationFailure { exit_code: code }.into());
             }
             eprintln!(
-                "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
+                "warning: execution has surviving or unverified processes; shoal status shows them and shoal stop stops them"
             );
         }
         return Ok(complete);

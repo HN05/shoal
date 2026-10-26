@@ -121,7 +121,7 @@ setting, so stop, overload protection, exit notifications and
 `post_agent_exit_cmd` work as before. A command that exits while the daemon is
 away reports its exit code once reattached; after it exits the wrapper prints
 that it is waiting and gives up after a minute or on Ctrl-C, leaving the
-execution for `shoal doctor`. When the daemon refuses an execution, the wrapper
+execution for `shoal stop`. When the daemon refuses an execution, the wrapper
 stops the command and saves what `shoal stop` saves. Waiting executions stay
 active for cleanup and removal. Setup, landing and wrappers from releases before
 reattachment stop on shutdown as `shoal stop` does, and `shoal daemon restart`
@@ -310,8 +310,8 @@ Shoal could not prove, the daemon forgets it once its wrapper has exited and non
 of its processes remain, keeping the record for `shoal resume`, which repeats the
 check for the execution it selects. When processes survive or Shoal cannot prove
 that none do, the execution stays, a `recovery_blocked` notification names the
-problem, and the daemon checks again until they exit; inspect it with
-`shoal doctor`. An agent still running when its wrapper
+problem, and the daemon checks again until they exit, or `shoal stop` stops
+them. An agent still running when its wrapper
 reattaches drops a protection stop that never reached it. Unrelated executions may keep running.
 The command uses
 the current resume configuration; without one, built-in terminal agents continue
@@ -2767,7 +2767,7 @@ shoal alerts withdraw <number> [--workspace W]   # Take back an unread one send 
 The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
-exiting (with its code, or a note to run `doctor` when it left processes
+exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
