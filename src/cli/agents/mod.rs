@@ -168,9 +168,6 @@ pub(in crate::cli) struct Launch {
     /// Whether the agent must run tracked, never handed to a desktop app, as
     /// a detached start must.
     pub tracked: bool,
-    /// Whether the agent opens in its desktop app, whatever its settings
-    /// choose, where it has one.
-    pub app: bool,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -212,8 +209,6 @@ pub(in crate::cli) struct ChatLaunch {
 pub(in crate::cli) struct LaunchOptions {
     /// As [`Launch::tracked`].
     pub tracked: bool,
-    /// As [`Launch::app`].
-    pub app: bool,
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
 }
@@ -251,7 +246,6 @@ pub(super) async fn launch_agent(
         prompt,
         args,
         tracked: options.tracked,
-        app: options.app,
         replaces: options.replaces,
     };
     // A launch of its own returns once its agent has started.

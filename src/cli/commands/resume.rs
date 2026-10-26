@@ -195,7 +195,6 @@ async fn start_moved(
     let options = crate::cli::agents::LaunchOptions {
         tracked: true,
         replaces: records,
-        ..Default::default()
     };
     crate::cli::agents::launch_agent(
         ctx,

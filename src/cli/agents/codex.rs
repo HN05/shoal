@@ -61,8 +61,7 @@ impl Integration for Codex {
         launch: &'a mut Launch,
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async move {
-            let prompted = launch.prompt.is_some();
-            if !launch.app && !self.launches_itself(&launch.settings, prompted, launch.tracked) {
+            if !self.launches_itself(&launch.settings, launch.prompt.is_some(), launch.tracked) {
                 return Ok(None);
             }
             let args = std::mem::take(&mut launch.args);
@@ -80,9 +79,13 @@ pub(in crate::cli) async fn shortcut(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    // Explicit desktop handoffs read no settings, so no prompt template.
+    if mode == Some(CodexMode::App) {
+        let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
+        return desktop::open_app(ctx, &workspace, "codex", Some(&CODEX), args).await;
+    }
     let options = LaunchOptions {
         tracked: mode == Some(CodexMode::Cli),
-        app: mode == Some(CodexMode::App),
         ..Default::default()
     };
     super::launch::shortcut(ctx, "codex".parse()?, workspace, None, args, options).await
