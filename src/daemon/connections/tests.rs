@@ -8,7 +8,10 @@ use tokio::{
 use super::*;
 use crate::{
     daemon::{Server, questions::Ask, serve},
-    protocol::{self, Body, Request, Response},
+    protocol::{
+        self, Body, DaemonMethod, ExecutionMethod, NotificationMethod, QuestionMethod, Request,
+        Response,
+    },
     test_support::{manager, repository},
 };
 
@@ -19,12 +22,12 @@ async fn bounded<T>(future: impl Future<Output = T>) -> T {
         .expect("connection exchange timed out")
 }
 
-async fn send(socket: &std::path::Path, method: Method) -> BufReader<UnixStream> {
+async fn send(socket: &std::path::Path, method: impl Into<Method>) -> BufReader<UnixStream> {
     let mut stream = UnixStream::connect(socket).await.unwrap();
     let request = Request {
         protocol: protocol::VERSION,
         id: 1,
-        method,
+        method: method.into(),
         scope: None,
     };
     protocol::write(&mut stream, &request).await.unwrap();
@@ -77,7 +80,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
             tokio::spawn(serve(stream, server, slot, operation));
         }
     });
-    let await_answer = || Method::AwaitAnswer {
+    let await_answer = || QuestionMethod::AwaitAnswer {
         workspace: workspace.name.clone(),
         id: question.id,
         ask: ask.clone(),
@@ -87,7 +90,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
         .unwrap();
-    let execute = Method::Execute {
+    let execute = ExecutionMethod::Execute {
         workspace: workspace.name.clone(),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
@@ -97,17 +100,17 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         queue_entry: None,
         demo: None,
     };
-    let watch = Method::WatchNotifications {
+    let watch = NotificationMethod::WatchNotifications {
         keep_unread: false,
         after: 0,
     };
-    for refused in [execute, watch] {
+    for refused in [Method::from(execute), watch.into()] {
         let Body::Error { message, .. } = reply(&mut send(socket, refused).await).await else {
             panic!("expected a refusal");
         };
         assert!(message.contains("limit of 1 long-lived"), "{message}");
     }
-    let reattach = Method::Reattach(protocol::Reattach {
+    let reattach = Method::Reattach(protocol::Reattachment::Reattach(protocol::Reattach {
         execution: "running".into(),
         wrapper,
         child: None,
@@ -118,9 +121,9 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         running_ms: 0,
         awaiting_restore: None,
         between_runs: false,
-    });
+    }));
     // Clients that retry a connection closed unanswered keep waiting.
-    for retried in [await_answer(), reattach] {
+    for retried in [Method::from(await_answer()), reattach] {
         let mut unanswered = Vec::new();
         bounded(send(socket, retried).await.read_to_end(&mut unanswered))
             .await
@@ -131,9 +134,9 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
             String::from_utf8_lossy(&unanswered)
         );
     }
-    let status = reply(&mut send(socket, Method::Status).await).await;
+    let status = reply(&mut send(socket, DaemonMethod::Status).await).await;
     assert!(matches!(status, Body::Status(_)), "{status:?}");
-    let answer = Method::AnswerQuestion {
+    let answer = QuestionMethod::AnswerQuestion {
         id: question.id,
         answer: "SQLite".into(),
         shown: None,

@@ -1,5 +1,10 @@
 use super::*;
-use crate::{daemon::scope, protocol::Method, state::WorkspaceState, test_support};
+use crate::{
+    daemon::scope,
+    protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
+    state::WorkspaceState,
+    test_support,
+};
 
 #[tokio::test]
 async fn exported_scopes_are_persistent_independent_and_untracked() {
@@ -33,18 +38,20 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     assert_eq!(caller.workspace_id, workspace.id);
     assert!(caller.execution.is_none());
     for mut method in [
-        Method::WorkspaceEnv {
+        Operation::from(WorkspaceMethod::WorkspaceEnv {
             workspace: workspace.id.clone(),
-        },
-        Method::RevokeWorkspaceEnv {
+        }),
+        WorkspaceMethod::RevokeWorkspaceEnv {
             workspace: workspace.id.clone(),
             token: token.clone(),
-        },
-        Method::CheckLanding,
-        Method::ListNotifications {
+        }
+        .into(),
+        ExecutionMethod::CheckLanding.into(),
+        NotificationMethod::ListNotifications {
             unread_only: true,
             limit: 50,
-        },
+        }
+        .into(),
     ] {
         assert!(
             scope::authorize(&manager, Some(token), &mut method)

@@ -16,7 +16,7 @@ use crate::{
     },
     execution::recovery,
     model::AgentStatus,
-    protocol::Method,
+    protocol::AgentMethod,
     state::{AgentState, TurnFailure},
 };
 
@@ -29,7 +29,7 @@ pub(super) async fn run(
     let session = hook_event().as_ref().and_then(session_of);
     let status: AgentStatus = request(
         &ctx.paths,
-        Method::SetAgentState {
+        AgentMethod::SetAgentState {
             workspace,
             state,
             session,
@@ -53,7 +53,7 @@ pub(super) async fn turn_failed(
         crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
     let status: AgentStatus = request(
         &ctx.paths,
-        Method::ReportTurnFailure {
+        AgentMethod::ReportTurnFailure {
             workspace,
             failure,
             session: session_of(&event),

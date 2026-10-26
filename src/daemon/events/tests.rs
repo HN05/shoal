@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::{notifications::NotificationKind, workspace::ExecutionKind},
-    protocol::{self, Body, Method, Response},
+    protocol::{self, Body, Response, WorkspaceMethod},
     test_support::{git, manager, repository},
 };
 use std::{sync::Arc, time::Duration};
@@ -26,7 +26,7 @@ async fn connect(
     let (server, client) = UnixStream::pair().unwrap();
     let mut client = BufReader::new(client);
     let startup = manager.background_operations.clone().read_owned().await;
-    let task = tokio::spawn(crate::daemon::watch_workspace_events(
+    let task = tokio::spawn(crate::daemon::requests::workspaces::watch_workspace_events(
         server, 1, manager, since, follow, startup,
     ));
     assert!(matches!(receive(&mut client).await, Body::Ok));
@@ -129,7 +129,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .await
         .unwrap();
     for follow in [false, true] {
-        let mut method = Method::WatchWorkspaceEvents {
+        let mut method = WorkspaceMethod::WatchWorkspaceEvents {
             since: Some(0),
             follow,
         };

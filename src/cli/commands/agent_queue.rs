@@ -15,7 +15,7 @@ use crate::{
     },
     model::{Dependency, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
-    protocol::Method,
+    protocol::QueueMethod,
     state::{QueueKind, QueueState},
 };
 
@@ -65,7 +65,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         after: launch.after,
     };
     let admission =
-        client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
+        client::request::<QueueAdmission>(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
     Ok(match (admission.start, admission.entry) {
         (true, entry) => Admission::Start {
             base: entry.as_ref().and_then(|entry| entry.base.clone()),
@@ -117,7 +117,7 @@ pub(super) async fn queue_in(
         after: Vec::new(),
     };
     let admission =
-        client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
+        client::request::<QueueAdmission>(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
     admission
         .entry
         .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
@@ -127,7 +127,7 @@ pub(super) async fn queue_in(
 pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
     request::<()>(
         &ctx.paths,
-        Method::QueueAttach {
+        QueueMethod::QueueAttach {
             entry: entry.to_owned(),
             workspace: workspace.id.clone(),
         },
@@ -140,7 +140,7 @@ pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) ->
 pub(super) async fn fail(ctx: &Context, entry: &str, error: &anyhow::Error) {
     let failed = request::<()>(
         &ctx.paths,
-        Method::QueueFail {
+        QueueMethod::QueueFail {
             entry: entry.to_owned(),
             error: format!("{error:#}"),
         },
@@ -170,7 +170,7 @@ impl Hold {
 async fn keep(paths: Paths, entry: String, settled: oneshot::Sender<()>) {
     let mut settled = Some(settled);
     loop {
-        let method = Method::QueueHold {
+        let method = QueueMethod::QueueHold {
             entry: entry.clone(),
         };
         let opened = client::open(&paths, method).await;
@@ -200,7 +200,7 @@ impl Drop for Hold {
 async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
     let queued = request::<QueuedPlan>(
         &ctx.paths,
-        Method::QueuedPlan {
+        QueueMethod::QueuedPlan {
             entry: entry.to_owned(),
         },
     )
@@ -236,7 +236,7 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
-    request(&ctx.paths, Method::ListQueue).await
+    request(&ctx.paths, QueueMethod::ListQueue).await
 }
 
 /// The entries `shoal work` shows under `filter`.
@@ -296,7 +296,7 @@ pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>>
     }
     let entry = request::<QueueEntry>(
         &ctx.paths,
-        Method::QueueRemove {
+        QueueMethod::QueueRemove {
             entry: selector.to_owned(),
         },
     )

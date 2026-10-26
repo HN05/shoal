@@ -4,7 +4,7 @@ use crate::{
         events::{EventItem, EventKind},
         scope::{self, Caller},
     },
-    protocol::Method,
+    protocol::AgentMethod,
     test_support::{manager, repository},
 };
 
@@ -135,7 +135,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         (&other.name, false),
         (&child.name, false),
     ] {
-        let mut method = Method::SetAgentState {
+        let mut method = AgentMethod::SetAgentState {
             workspace: target.clone(),
             state: AgentState::Waiting,
             session: None,

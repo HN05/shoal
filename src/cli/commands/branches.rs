@@ -5,14 +5,14 @@ use anyhow::{Result, bail, ensure};
 use crate::{
     cli::{client::request, context::Context, ui},
     model::{BranchTarget, KeptBranch},
-    protocol::Method,
+    protocol::RepositoryMethod,
     time::local_seconds,
 };
 
 /// The kept branches, only those of the repository `repo` selects.
 pub(super) async fn kept(ctx: &Context, repo: Option<&str>) -> Result<Vec<KeptBranch>> {
     let repository = repo.map(str::to_owned);
-    request(&ctx.paths, Method::KeptBranches { repository }).await
+    request(&ctx.paths, RepositoryMethod::KeptBranches { repository }).await
 }
 
 /// The kept branches to delete: every one with `all`, the named ones, or
@@ -60,7 +60,11 @@ pub(super) async fn delete(ctx: &Context, selected: &[KeptBranch]) -> Result<Vec
             head: branch.head.clone(),
         })
         .collect();
-    request(&ctx.paths, Method::DeleteKeptBranches { branches: targets }).await
+    request(
+        &ctx.paths,
+        RepositoryMethod::DeleteKeptBranches { branches: targets },
+    )
+    .await
 }
 
 /// The kept branches `names` name, each in exactly one repository.

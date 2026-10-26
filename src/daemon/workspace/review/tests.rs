@@ -5,7 +5,7 @@ use crate::{
         scope::{self, Caller},
     },
     forge::ForgeRepo,
-    protocol::Method,
+    protocol::AssignmentMethod,
     test_support::{commit, git, manager, repository},
 };
 
@@ -260,11 +260,11 @@ async fn scoped_callers_mark_only_their_own_workspace() {
         .await;
     for (target, allowed) in [(&own.name, true), (&other.name, false)] {
         for mut method in [
-            Method::MarkReady {
+            AssignmentMethod::MarkReady {
                 workspace: target.clone(),
                 selection: Selection::default(),
             },
-            Method::ClearReady {
+            AssignmentMethod::ClearReady {
                 workspace: target.clone(),
                 selection: Selection::default(),
                 draft: None,

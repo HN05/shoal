@@ -8,7 +8,7 @@ use crate::{
     cli::{args::service::DaemonCommand, client, context::Context, output::Style, ui},
     daemon,
     paths::Paths,
-    protocol::Method,
+    protocol::DaemonMethod,
     service::{self, Platform},
     shell,
 };
@@ -246,7 +246,7 @@ async fn start(ctx: &Context) -> Result<()> {
 async fn stop(paths: &Paths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {
-            client::request::<()>(paths, Method::Shutdown).await?;
+            client::request::<()>(paths, DaemonMethod::Shutdown).await?;
         }
         Err(error) if !service::file(paths, Platform::current()?).exists() => {
             return Err(error);

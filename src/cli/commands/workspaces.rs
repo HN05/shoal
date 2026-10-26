@@ -33,7 +33,10 @@ use crate::{
         Chat, Completion, ConflictCheck, Dependency, DiffBase, OpenedWorkspace, Repository,
         Workspace, WorkspaceStatus, WorkspaceTarget,
     },
-    protocol::{Body, ConfigTarget, Method},
+    protocol::{
+        AgentMethod, AssignmentMethod, Body, ConfigTarget, DemoMethod, ExecutionMethod, ItemMethod,
+        RecoveryMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
+    },
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
     repository, shell,
     state::WorkspaceState,
@@ -46,7 +49,11 @@ pub(super) async fn environment(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {
-        request::<()>(&ctx.paths, Method::RevokeWorkspaceEnv { workspace, token }).await?;
+        request::<()>(
+            &ctx.paths,
+            WorkspaceMethod::RevokeWorkspaceEnv { workspace, token },
+        )
+        .await?;
         ctx.emit_styled(
             Style::Success,
             "Workspace environment revoked",
@@ -55,7 +62,7 @@ pub(super) async fn environment(
     } else {
         let values = request::<std::collections::BTreeMap<String, String>>(
             &ctx.paths,
-            Method::WorkspaceEnv { workspace },
+            WorkspaceMethod::WorkspaceEnv { workspace },
         )
         .await?;
         let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
@@ -99,8 +106,11 @@ pub(super) async fn rename(
     branch: String,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let renamed =
-        request::<Workspace>(&ctx.paths, Method::RenameWorkspace { workspace, branch }).await?;
+    let renamed = request::<Workspace>(
+        &ctx.paths,
+        WorkspaceMethod::RenameWorkspace { workspace, branch },
+    )
+    .await?;
     ctx.show(&renamed, |workspace| {
         outln!(
             "Renamed workspace to {} ({})",
@@ -113,7 +123,7 @@ pub(super) async fn rename(
 
 pub(super) async fn land_worker(ctx: &Context, plan: String, push: bool) -> Result<i32> {
     anyhow::ensure!(env::is_scoped(), "land worker requires a tracked execution");
-    request::<()>(&ctx.paths, Method::CheckLanding).await?;
+    request::<()>(&ctx.paths, ExecutionMethod::CheckLanding).await?;
     let plan: crate::model::LandPlan = serde_json::from_str(&plan)?;
     anyhow::ensure!(
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
@@ -176,7 +186,7 @@ fn become_setup(setup_cmd: &Path) -> anyhow::Error {
 
 pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let base = request::<DiffBase>(&ctx.paths, Method::DiffBase { workspace }).await?;
+    let base = request::<DiffBase>(&ctx.paths, WorkspaceMethod::DiffBase { workspace }).await?;
     execution::run(
         &ctx.paths,
         base.workspace_id,
@@ -193,7 +203,8 @@ pub(super) async fn conflicts(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let check =
-        request::<ConflictCheck>(&ctx.paths, Method::Conflicts { workspace, target }).await?;
+        request::<ConflictCheck>(&ctx.paths, WorkspaceMethod::Conflicts { workspace, target })
+            .await?;
     ctx.show(&check, |check| {
         if check.conflicts {
             outln!("Conflicts with {}:", check.target);
@@ -395,7 +406,7 @@ async fn after_dependencies(
     }
     request::<()>(
         &ctx.paths,
-        Method::CheckDependencies {
+        WorkspaceMethod::CheckDependencies {
             repository: target.selector.clone(),
             after: dependencies.clone(),
         },
@@ -661,7 +672,8 @@ async fn add_planned(
     let pr = creation.pr.clone();
     let opened = match workspace {
         Some(workspace) => {
-            request::<OpenedWorkspace>(&ctx.paths, Method::ReopenWorkspace { workspace }).await?
+            request::<OpenedWorkspace>(&ctx.paths, WorkspaceMethod::ReopenWorkspace { workspace })
+                .await?
         }
         None => open_add_workspace(ctx, &target, creation, chat).await?,
     };
@@ -680,7 +692,7 @@ async fn add_planned(
     if let Some(issue) = &issue {
         request::<()>(
             &ctx.paths,
-            Method::SetIssue {
+            ItemMethod::SetIssue {
                 workspace: opened.workspace.id.clone(),
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),
@@ -741,7 +753,7 @@ pub(super) async fn link_pull(
 ) -> Result<Workspace> {
     let linked = request::<()>(
         &ctx.paths,
-        Method::SetPr {
+        ItemMethod::SetPr {
             workspace: workspace.id.clone(),
             action: crate::daemon::links::pr::Action::Watch { url: url.clone() },
         },
@@ -824,7 +836,7 @@ async fn check_add_creation(ctx: &Context, target: &AddTarget, creation: &Creati
     }
     request::<()>(
         &ctx.paths,
-        Method::CheckCreation {
+        WorkspaceMethod::CheckCreation {
             repository: target.selector.clone(),
             branch: creation.branch.clone(),
             existing: creation.existing.clone(),
@@ -1086,7 +1098,7 @@ async fn open_add_workspace(
     if let Some(branch) = existing {
         request::<OpenedWorkspace>(
             &ctx.paths,
-            Method::OpenBranch {
+            WorkspaceMethod::OpenBranch {
                 path,
                 repository,
                 branch,
@@ -1100,7 +1112,7 @@ async fn open_add_workspace(
         let name = branch.context("a branch name is required")?;
         let workspace = request::<Workspace>(
             &ctx.paths,
-            Method::CreateWorkspace {
+            WorkspaceMethod::CreateWorkspace {
                 path,
                 repository,
                 name,
@@ -1120,7 +1132,7 @@ async fn open_add_workspace(
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
     let branches = request::<Vec<Branch>>(
         &ctx.paths,
-        Method::ListBranches {
+        RepositoryMethod::ListBranches {
             repository: target.selector.clone(),
         },
     )
@@ -1232,7 +1244,7 @@ pub(super) async fn adopt(
     };
     let workspace = request::<Workspace>(
         &ctx.paths,
-        Method::AdoptWorkspace {
+        WorkspaceMethod::AdoptWorkspace {
             repository,
             path,
             copy,
@@ -1333,7 +1345,7 @@ async fn reconcile(
 ) -> Result<Vec<Report>> {
     request(
         &ctx.paths,
-        Method::Doctor {
+        RecoveryMethod::Doctor {
             workspace: Some(workspace.id.clone()),
             options,
         },
@@ -1489,7 +1501,7 @@ fn turn_retry_label(retry: &crate::daemon::workspace::turn_retry::TurnRetry) -> 
 pub(super) async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let command = request::<Option<PathBuf>>(
         &ctx.paths,
-        Method::WorkspaceHook {
+        WorkspaceMethod::WorkspaceHook {
             workspace: workspace.id.clone(),
             kind: HookKind::PostSetup,
         },
@@ -1593,7 +1605,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
     if confirmed {
         request::<RemovalResult>(
             &ctx.paths,
-            Method::RemoveWorkspace {
+            RemovalMethod::RemoveWorkspace {
                 workspace: workspace.id.clone(),
                 unsaved: UnsavedWork::All,
             },
@@ -1607,7 +1619,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
 async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let reports = request::<Vec<Report>>(
         &ctx.paths,
-        Method::Doctor {
+        RecoveryMethod::Doctor {
             workspace: Some(workspace.id.clone()),
             options: ReconcileOptions {
                 repair: true,
@@ -1692,7 +1704,7 @@ pub(super) async fn status(
         return Ok(0);
     };
     let workspaces =
-        request::<Vec<Workspace>>(&ctx.paths, Method::FindWorkspaces { target }).await?;
+        request::<Vec<Workspace>>(&ctx.paths, WorkspaceMethod::FindWorkspaces { target }).await?;
     let mut statuses = Vec::new();
     for workspace in workspaces {
         statuses.push(StatusView::request(ctx, workspace.id).await?);
@@ -1727,7 +1739,8 @@ impl StatusView {
         // Listing chats first ends finished ones, returning their workspaces to the user.
         let chats = client::chats(&ctx.paths).await?;
         let status =
-            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
+            request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
+                .await?;
         let chat = chat_name(ctx, &chats, &status.inspection.workspace).await?;
         let (sessions, sessions_error) =
             match terminal::sessions(&status.inspection.workspace.id).await {
@@ -2038,7 +2051,7 @@ async fn check_removals(
     let mut refusals = Vec::new();
     let several = workspaces.len() > 1;
     for workspace in workspaces {
-        let method = Method::CheckRemoval {
+        let method = RemovalMethod::CheckRemoval {
             workspace: workspace.clone(),
             include_changes: ctx.interactive() && !yes,
         };
@@ -2122,7 +2135,7 @@ async fn remove_checked(
     workspace: String,
     check: &RemovalCheck,
 ) -> Result<RemovalResult> {
-    let method = Method::RemoveWorkspace {
+    let method = RemovalMethod::RemoveWorkspace {
         workspace,
         unsaved: UnsavedWork::confirming(check),
     };
@@ -2304,7 +2317,8 @@ fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
 
 pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let withdrawn: Completion = request(&ctx.paths, Method::WorkspaceUndone { workspace }).await?;
+    let withdrawn: Completion =
+        request(&ctx.paths, AssignmentMethod::WorkspaceUndone { workspace }).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         json!({ "withdrawn": withdrawn }),
@@ -2324,15 +2338,18 @@ pub(super) async fn done(
     if !keep_demos {
         request::<()>(
             &ctx.paths,
-            Method::StopDemos {
+            DemoMethod::StopDemos {
                 workspace: workspace.clone(),
                 name: None,
             },
         )
         .await?;
     }
-    let completion: Completion =
-        request(&ctx.paths, Method::WorkspaceDone { workspace, cleanup }).await?;
+    let completion: Completion = request(
+        &ctx.paths,
+        AssignmentMethod::WorkspaceDone { workspace, cleanup },
+    )
+    .await?;
     let message = if completion.cleanup {
         "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed."
     } else {
@@ -2381,7 +2398,7 @@ pub(super) async fn watch_items(
     }
     request::<()>(
         &ctx.paths,
-        Method::AcknowledgePrUpdates {
+        AgentMethod::AcknowledgePrUpdates {
             workspace,
             deliveries: updates
                 .updates
@@ -2406,7 +2423,7 @@ pub(super) async fn wait_for_items(
     deadline: Option<Instant>,
     restarted: bool,
 ) -> Result<Body> {
-    let method = || Method::WatchItems {
+    let method = || ItemMethod::WatchItems {
         workspace: workspace.to_owned(),
         selection: selection.clone(),
         timeout_secs: seconds_left(deadline),

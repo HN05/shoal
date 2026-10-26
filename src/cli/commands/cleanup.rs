@@ -16,7 +16,7 @@ use crate::{
         cleanup::{ManualCleanup, Pick, Selection},
     },
     model::KeptBranch,
-    protocol::Method,
+    protocol::RemovalMethod,
 };
 
 use super::branches;
@@ -74,7 +74,7 @@ fn selection(args: &CleanupArgs, workspaces: Pick, caches: Pick) -> Selection {
 async fn clean(ctx: &Context, dry_run: bool, selection: Selection) -> Result<ManualCleanup> {
     ctx.progress(
         "Cleaning up",
-        request::<ManualCleanup>(&ctx.paths, Method::Cleanup { dry_run, selection }),
+        request::<ManualCleanup>(&ctx.paths, RemovalMethod::Cleanup { dry_run, selection }),
     )
     .await
 }

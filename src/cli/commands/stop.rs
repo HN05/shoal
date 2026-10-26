@@ -13,7 +13,7 @@ use crate::{
     },
     execution::recovery,
     model::Workspace,
-    protocol::{ErrorCode, Method, RemoteError},
+    protocol::{ErrorCode, RemoteError, RemovalMethod},
     state::{ExecutionState, WorkspaceState},
 };
 
@@ -66,7 +66,7 @@ async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
     let request_stop = |acknowledge_unproven| {
         request::<()>(
             &ctx.paths,
-            Method::StopWorkspace {
+            RemovalMethod::StopWorkspace {
                 workspace: workspace.to_owned(),
                 acknowledge_unproven,
             },
@@ -159,7 +159,7 @@ async fn stop_each(
     let results = join_all(workspaces.iter().map(|workspace| {
         request::<()>(
             &ctx.paths,
-            Method::StopWorkspace {
+            RemovalMethod::StopWorkspace {
                 workspace: workspace.id.clone(),
                 acknowledge_unproven,
             },

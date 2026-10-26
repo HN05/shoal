@@ -17,7 +17,7 @@ use crate::{
     forge::items::link::Link,
     git,
     model::Repository,
-    protocol::Method,
+    protocol::RepositoryMethod,
 };
 
 /// Register the repository a repository URL, or an issue, PR or branch link
@@ -86,7 +86,7 @@ async fn register(ctx: &Context, source: String) -> Result<Repository> {
             "Registering contribution",
             request::<Repository>(
                 &ctx.paths,
-                Method::RegisterContribution { source, name: None },
+                RepositoryMethod::RegisterContribution { source, name: None },
             ),
         )
         .await?;

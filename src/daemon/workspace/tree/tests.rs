@@ -4,7 +4,9 @@ use crate::{
         scope::{Caller, ScopedExecution},
     },
     model::{CleanupReason, Workspace, WorkspaceRef},
-    protocol::Method,
+    protocol::{
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, WorkspaceMethod,
+    },
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
 };
@@ -132,7 +134,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
             },
         )
         .await;
-    let split = |workspace: &str| Method::SplitWorkspace {
+    let split = |workspace: &str| WorkspaceMethod::SplitWorkspace {
         workspace: workspace.into(),
         name: "grandchild".into(),
         base: None,
@@ -150,7 +152,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .split_workspace(&child.id, "grandchild".into(), None)
         .await
         .unwrap();
-    let mut done = Method::WorkspaceDone {
+    let mut done = AssignmentMethod::WorkspaceDone {
         workspace: grandchild.name.clone(),
         cleanup: false,
     };
@@ -159,7 +161,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .unwrap();
     // Targets resolve to the named workspace, not the caller's own.
     assert!(
-        matches!(&done, Method::WorkspaceDone { workspace, .. } if *workspace == grandchild.id)
+        matches!(&done, AssignmentMethod::WorkspaceDone { workspace, .. } if *workspace == grandchild.id)
     );
 }
 
@@ -496,7 +498,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         )
         .await;
     for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
-        let mut message = Method::SendAgentMessage {
+        let mut message = AgentMethod::SendAgentMessage {
             workspace: workspace.name.clone(),
             message: "Rebase onto main".into(),
         };
@@ -505,7 +507,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
     }
     for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
-        let mut answer = Method::AnswerQuestion {
+        let mut answer = QuestionMethod::AnswerQuestion {
             id: question.id,
             answer: "Yes".into(),
             shown: None,
@@ -608,7 +610,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
             },
         )
         .await;
-    let mut answer = Method::AnswerQuestion {
+    let mut answer = QuestionMethod::AnswerQuestion {
         id: asked.id,
         answer: "Yes".into(),
         shown: None,
@@ -616,7 +618,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer)
         .await
         .unwrap();
-    let Method::AnswerQuestion { id, answer, shown } = answer else {
+    let QuestionMethod::AnswerQuestion { id, answer, shown } = answer else {
         panic!("authorization keeps the method");
     };
     assert!(shown.is_some());
@@ -783,7 +785,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
             .await;
         let mut forged = routed.clone();
         forged.decider = Some(workspace.id.clone());
-        let mut decide = Method::DecideApproval {
+        let mut decide = ApprovalMethod::DecideApproval {
             details: Default::default(),
             id: requested.id,
             approve: true,
@@ -1045,7 +1047,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .await
             .unwrap()
             .unwrap();
-        let mut method = Method::DecideApproval {
+        let mut method = ApprovalMethod::DecideApproval {
             id: shown.id,
             approve: true,
             shown: displayed.then(|| Box::new(shown.clone())),
@@ -1082,11 +1084,14 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
                 .unwrap();
         }
         assert!(
-            matches!(&method, Method::DecideApproval {shown: Some(bound), ..} if bound.key == shown.key)
+            matches!(&method, ApprovalMethod::DecideApproval {shown: Some(bound), ..} if bound.key == shown.key)
         );
-        let error = crate::daemon::operation(&manager, method, Some(&caller))
-            .await
-            .unwrap_err();
+        let server = crate::daemon::tests::server(manager.clone());
+        let Err(error) =
+            crate::daemon::requests::handle(&server, method.into(), Some(&caller)).await
+        else {
+            panic!("a changed request must not be decided");
+        };
         assert!(format!("{error:#}").contains("changed since it was shown"));
         assert_eq!(
             manager
@@ -1166,11 +1171,11 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             .await
             .unwrap();
         for (id, approval_request) in [(approval.id, true), (question.id, false)] {
-            let read = || {
+            let read = || -> Operation {
                 if approval_request {
-                    Method::ShowApproval { id }
+                    ApprovalMethod::ShowApproval { id }.into()
                 } else {
-                    Method::ShowQuestion { id }
+                    QuestionMethod::ShowQuestion { id }.into()
                 }
             };
             let mut method = read();
@@ -1181,32 +1186,30 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 continue;
             }
             let caller = caller.unwrap();
+            let server = crate::daemon::tests::server(manager.clone());
             assert!(
-                crate::daemon::operation(&manager, read(), caller.as_ref())
+                crate::daemon::requests::handle(&server, read(), caller.as_ref())
                     .await
                     .is_ok()
             );
             // Model the number being reassigned to an outside record after authorization.
             let replacement_owner = other.id.clone();
-            let replacing = read();
             manager.store.run(move |db| {
-                match replacing {
-                    Method::ShowApproval { id } => {
-                        db.execute(
-                            "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.workspace_id',?1) WHERE number=?2",
-                            rusqlite::params![replacement_owner, id],
-                        )?;
-                    }
-                    Method::ShowQuestion { id } => {
-                        db.execute("UPDATE questions SET workspace_id=?1 WHERE number=?2", rusqlite::params![replacement_owner, id])?;
-                    }
-                    _ => unreachable!(),
+                if approval_request {
+                    db.execute(
+                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.workspace_id',?1) WHERE number=?2",
+                        rusqlite::params![replacement_owner, id],
+                    )?;
+                } else {
+                    db.execute("UPDATE questions SET workspace_id=?1 WHERE number=?2", rusqlite::params![replacement_owner, id])?;
                 }
                 Ok(())
             }).await.unwrap();
-            let error = crate::daemon::operation(&manager, read(), caller.as_ref())
-                .await
-                .unwrap_err();
+            let Err(error) =
+                crate::daemon::requests::handle(&server, read(), caller.as_ref()).await
+            else {
+                panic!("a record of another workspace must not be shown");
+            };
             assert!(
                 error.to_string().contains("in their workspace tree"),
                 "{error:#}"
@@ -1214,14 +1217,10 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager
                 .store
                 .run(move |db| {
-                    match method {
-                        Method::ShowApproval { id } => {
-                            db.execute("DELETE FROM access_requests WHERE number=?1", [id])?;
-                        }
-                        Method::ShowQuestion { id } => {
-                            db.execute("DELETE FROM questions WHERE number=?1", [id])?;
-                        }
-                        _ => unreachable!(),
+                    if approval_request {
+                        db.execute("DELETE FROM access_requests WHERE number=?1", [id])?;
+                    } else {
+                        db.execute("DELETE FROM questions WHERE number=?1", [id])?;
                     }
                     Ok(())
                 })

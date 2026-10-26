@@ -14,7 +14,7 @@ use crate::{
         doctor::{Check, CheckStatus},
         recovery::{ReconcileOptions, Report},
     },
-    protocol::Method,
+    protocol::RecoveryMethod,
 };
 
 pub(super) async fn run(
@@ -28,7 +28,7 @@ pub(super) async fn run(
         workspaces: vec![],
     };
     if available {
-        let checks = request::<Vec<Check>>(&ctx.paths, Method::Diagnose).await;
+        let checks = request::<Vec<Check>>(&ctx.paths, RecoveryMethod::Diagnose).await;
         match checks {
             Ok(checks) => report.checks.extend(checks),
             Err(error) => report.checks.push(Check::new(
@@ -107,7 +107,7 @@ async fn workspace_reports(
         return Ok(vec![]);
     }
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
-    request(&ctx.paths, Method::Doctor { workspace, options }).await
+    request(&ctx.paths, RecoveryMethod::Doctor { workspace, options }).await
 }
 
 async fn daemon_check(ctx: &Context) -> (Check, bool) {

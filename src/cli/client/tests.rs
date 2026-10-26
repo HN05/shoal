@@ -6,7 +6,10 @@ async fn reply<T>(response: Response) -> Result<T>
 where
     T: TryFrom<Body, Error = anyhow::Error>,
 {
-    reply_with(response, async |paths| request(paths, Method::Status).await).await
+    reply_with(response, async |paths| {
+        request(paths, DaemonMethod::Status).await
+    })
+    .await
 }
 
 async fn reply_with<T>(
@@ -36,7 +39,7 @@ async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
     let listener = UnixListener::bind(&paths.socket)?;
     let waiter = tokio::spawn({
         let paths = paths.clone();
-        async move { await_reply(&paths, || Method::Status, false).await }
+        async move { await_reply(&paths, || DaemonMethod::Status, false).await }
     });
     // The daemon goes away mid-wait and leaves no socket behind.
     let (stream, _) = listener.accept().await?;
@@ -66,7 +69,7 @@ async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
         protocol::write(&mut stream, &Response::new(request.id, body)).await?;
         anyhow::Ok(listener)
     });
-    let error = await_reply(&paths, || Method::Status, false)
+    let error = await_reply(&paths, || DaemonMethod::Status, false)
         .await
         .unwrap_err();
     assert!(scope_denied(&error), "{error:#}");
@@ -75,7 +78,7 @@ async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
     // A wait resumed after a restart retries the refusal at once.
     let resumed = tokio::spawn({
         let paths = paths.clone();
-        async move { await_reply(&paths, || Method::Status, true).await }
+        async move { await_reply(&paths, || DaemonMethod::Status, true).await }
     });
     let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
     for body in [refused, Body::Ok] {
@@ -90,12 +93,12 @@ async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
     drop(listener);
     std::fs::remove_file(&paths.socket)?;
     let started = Instant::now();
-    let error = await_reply(&paths, || Method::Status, false)
+    let error = await_reply(&paths, || DaemonMethod::Status, false)
         .await
         .unwrap_err();
     assert!(is_unreachable(&error), "{error:#}");
     assert!(started.elapsed() < timing::DAEMON_RESTART_TIMEOUT);
-    let error = await_reply(&paths, || Method::Status, true)
+    let error = await_reply(&paths, || DaemonMethod::Status, true)
         .await
         .unwrap_err();
     assert!(is_unreachable(&error), "{error:#}");

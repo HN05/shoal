@@ -33,7 +33,7 @@ use crate::{
     config::{Config, Effective, named_commands::Commands, templates::Delivery},
     fsutil,
     model::{RemovedWorkspace, Repository, Workspace},
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, RepositoryMethod},
     tools::Tool,
 };
 
@@ -623,7 +623,7 @@ async fn agent_environments(
 ) -> Option<Vec<BTreeMap<String, String>>> {
     client::pages(
         &ctx.paths,
-        Method::AgentEnvironments {
+        RepositoryMethod::AgentEnvironments {
             repository_id: repository.id.clone(),
         },
     )
@@ -641,7 +641,7 @@ async fn agent_environments(
 async fn forget_agent_environments(ctx: &Context, repository: &Repository) {
     let forgotten = client::call(
         &ctx.paths,
-        Method::ForgetAgentEnvironments {
+        RepositoryMethod::ForgetAgentEnvironments {
             repository_id: repository.id.clone(),
         },
     )

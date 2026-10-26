@@ -1,0 +1,66 @@
+use serde::{Deserialize, Serialize};
+
+use super::Lifetime;
+
+/// Requests between a workspace's agents and the daemon: their state, messages and updates.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentMethod {
+    /// The caller's execution, when scoped, is recorded as the reporter,
+    /// and `session` as the agent session it resumes.
+    SetAgentState {
+        workspace: String,
+        state: crate::state::AgentState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
+    /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
+    /// schedule a retry of the turn.
+    ReportTurnFailure {
+        workspace: String,
+        failure: crate::state::TurnFailure,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
+    /// Long-lived: answers once whether the workspace's agent is idle with
+    /// undelivered messages or queued item updates matches `due`.
+    AwaitAgentWake {
+        workspace: String,
+        due: bool,
+    },
+    /// A message from the user to a workspace's agents.
+    SendAgentMessage {
+        workspace: String,
+        message: String,
+    },
+    /// The workspace's undelivered agent messages, oldest first.
+    AgentMessages {
+        workspace: String,
+    },
+    MarkAgentMessagesDelivered {
+        workspace: String,
+        ids: Vec<i64>,
+    },
+    /// The workspace's undelivered agent messages and queued item updates,
+    /// without waiting or polling the forge; acknowledge them with
+    /// [`Self::AcknowledgePrUpdates`]. It replaces a running watch.
+    AgentUpdates {
+        workspace: String,
+    },
+    AcknowledgePrUpdates {
+        workspace: String,
+        deliveries: Vec<String>,
+        /// Agent messages the watch printed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        messages: Vec<i64>,
+    },
+}
+
+impl AgentMethod {
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::AwaitAgentWake { .. } => Lifetime::Resumed,
+            _ => Lifetime::Reply,
+        }
+    }
+}

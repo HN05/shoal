@@ -12,7 +12,7 @@ use crate::{
     },
     daemon::ports::PortRequest,
     model::{PortCatalog, PortOverview, PortReservation},
-    protocol::{Body, Method},
+    protocol::{Body, PortMethod},
 };
 
 use super::workspace_overviews;
@@ -26,7 +26,7 @@ pub(super) async fn acquire(
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let method = Method::PortAcquire {
+        let method = PortMethod::PortAcquire {
             workspace: workspace.clone(),
             name: name.clone(),
             request: request.clone(),
@@ -101,7 +101,7 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
             async |workspace| {
                 request::<PortOverview>(
                     &ctx.paths,
-                    Method::PortOverview {
+                    PortMethod::PortOverview {
                         workspace: workspace.id.clone(),
                     },
                 )
@@ -111,7 +111,8 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
         )
         .await;
     };
-    let overview = request::<PortOverview>(&ctx.paths, Method::PortOverview { workspace }).await?;
+    let overview =
+        request::<PortOverview>(&ctx.paths, PortMethod::PortOverview { workspace }).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;
@@ -149,7 +150,7 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<PortCatalog> {
-    let method = Method::PortCatalog {
+    let method = PortMethod::PortCatalog {
         workspace: workspace.to_owned(),
     };
     request::<PortCatalog>(&ctx.paths, method).await

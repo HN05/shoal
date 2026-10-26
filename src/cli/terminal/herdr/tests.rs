@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     model::{Completion, Execution, Inspection, Workspace},
     paths::Paths,
-    protocol::{self, Body, Method, Request, Response},
+    protocol::{self, Body, Method, Operation, Request, Response, WorkspaceMethod},
     state::{ExecutionState, WorkspaceState},
 };
 use tokio::{io::BufReader, net::UnixListener};
@@ -158,7 +158,7 @@ async fn inspect_with_records(
         let mut stream = BufReader::new(stream);
         let request: Request = protocol::read_buffered(&mut stream).await.unwrap();
         assert!(
-            matches!(request.method, Method::InspectWorkspace { workspace } if workspace == "workspace")
+            matches!(request.method, Method::Operation(Operation::Workspace(WorkspaceMethod::InspectWorkspace { workspace })) if workspace == "workspace")
         );
         let inspection = Inspection {
             workspace: Workspace::new_record(

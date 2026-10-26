@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     daemon::scope::{self, Caller},
     model::{CleanupReason, Workspace},
-    protocol::Method,
+    protocol::QuestionMethod,
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
 };
@@ -348,19 +348,19 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         .await;
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
-            Method::AskQuestion {
+            QuestionMethod::AskQuestion {
                 workspace: target.clone(),
                 ask: ask("Which database?", &[]),
             },
-            Method::AwaitAnswer {
+            QuestionMethod::AwaitAnswer {
                 workspace: target.clone(),
                 id: 1,
                 ask: ask("Which database?", &[]),
             },
-            Method::ListQuestions {
+            QuestionMethod::ListQuestions {
                 workspace: Some(target.clone()),
             },
-            Method::WithdrawQuestion {
+            QuestionMethod::WithdrawQuestion {
                 workspace: target.clone(),
                 id: 1,
                 shown: None,
@@ -374,21 +374,21 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             );
         }
     }
-    let mut listing = Method::ListQuestions { workspace: None };
+    let mut listing = QuestionMethod::ListQuestions { workspace: None };
     scope::authorize(&manager, Some("scope"), &mut listing)
         .await
         .unwrap();
     assert!(matches!(
         listing,
-        Method::ListQuestions { workspace: Some(owner) } if owner == workspace.id
+        QuestionMethod::ListQuestions { workspace: Some(owner) } if owner == workspace.id
     ));
     for mut method in [
-        Method::AnswerQuestion {
+        QuestionMethod::AnswerQuestion {
             id: 1,
             answer: "yes".into(),
             shown: None,
         },
-        Method::ShowQuestion { id: 1 },
+        QuestionMethod::ShowQuestion { id: 1 },
     ] {
         assert!(
             scope::authorize(&manager, Some("scope"), &mut method)

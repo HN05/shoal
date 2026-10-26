@@ -23,7 +23,10 @@ use crate::{
         resources::{LockMode, Overview, ResourceKind, ResourceRequest},
     },
     model::{Inspection, PortOverview, Workspace},
-    protocol::Method,
+    protocol::{
+        ApprovalMethod, Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod,
+        WorkspaceMethod,
+    },
     sim::{SimRequest, SimulatorOverview},
 };
 
@@ -200,7 +203,7 @@ async fn select_held(
     }
     let inspection = client::request::<Inspection>(
         &ctx.paths,
-        Method::InspectWorkspace {
+        WorkspaceMethod::InspectWorkspace {
             workspace: workspace.to_owned(),
         },
     )
@@ -229,7 +232,7 @@ async fn select_held(
     });
     let requests = client::request::<Vec<ApprovalRequest>>(
         &ctx.paths,
-        Method::ListApprovals {
+        ApprovalMethod::ListApprovals {
             workspace: Some(workspace.to_owned()),
         },
     )
@@ -303,24 +306,30 @@ fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
 
 async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> {
     let workspace = workspace.to_owned();
-    let method = match held {
-        Held::Port { name } => Method::PortRelease {
+    let method: Method = match held {
+        Held::Port { name } => PortMethod::PortRelease {
             workspace,
             name: name.clone(),
-        },
-        Held::Sim { name } => Method::SimRelease {
+        }
+        .into(),
+        Held::Sim { name } => SimulatorMethod::SimRelease {
             workspace,
             name: name.clone(),
-        },
-        Held::Resource { pool, name } | Held::Repo { pool, name } => Method::ResourceRelease {
+        }
+        .into(),
+        Held::Resource { pool, name } | Held::Repo { pool, name } => {
+            ResourceMethod::ResourceRelease {
+                workspace,
+                pool: pool.clone(),
+                name: name.clone(),
+            }
+            .into()
+        }
+        Held::Secret { name } => SecretMethod::SecretRelease {
             workspace,
-            pool: pool.clone(),
             name: name.clone(),
-        },
-        Held::Secret { name } => Method::SecretRelease {
-            workspace,
-            name: name.clone(),
-        },
+        }
+        .into(),
     };
     client::request::<()>(&ctx.paths, method).await
 }
@@ -366,14 +375,14 @@ pub(super) async fn show(
 async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
     let ports = client::request::<PortOverview>(
         &ctx.paths,
-        Method::PortOverview {
+        PortMethod::PortOverview {
             workspace: workspace.to_owned(),
         },
     )
     .await?;
     let simulators = client::request::<SimulatorOverview>(
         &ctx.paths,
-        Method::SimOverview {
+        SimulatorMethod::SimOverview {
             workspace: Some(workspace.to_owned()),
         },
     )

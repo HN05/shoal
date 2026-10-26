@@ -16,7 +16,10 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, Inspection, Repository, Workspace},
     paths::Paths,
-    protocol::{self, Body, DaemonStatus, Method, Request, Response, timing},
+    protocol::{
+        self, Body, ChatMethod, DaemonMethod, DaemonStatus, ItemMethod, Method, RepositoryMethod,
+        Request, Response, WorkspaceMethod, timing,
+    },
 };
 
 /// The daemon answered with another protocol `version`.
@@ -35,13 +38,16 @@ impl std::error::Error for ProtocolMismatch {}
 
 /// Send `method` and return the open stream with the daemon's first reply,
 /// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
-pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
+pub async fn open(paths: &Paths, method: impl Into<Method>) -> Result<(UnixStream, Body)> {
     let (reader, body) = open_buffered(paths, method).await?;
     Ok((reader.into_inner(), body))
 }
 
 /// Preserve frames read alongside the initial reply for long-lived streams.
-pub async fn open_buffered(paths: &Paths, method: Method) -> Result<(BufReader<UnixStream>, Body)> {
+pub async fn open_buffered(
+    paths: &Paths,
+    method: impl Into<Method>,
+) -> Result<(BufReader<UnixStream>, Body)> {
     let request = Request::new(method);
     let mut update = UpdateWait::default();
     loop {
@@ -59,7 +65,7 @@ pub async fn open_buffered(paths: &Paths, method: Method) -> Result<(BufReader<U
 /// half. `limit` bounds each reply, not a wait for an update.
 pub async fn open_split(
     paths: &Paths,
-    method: Method,
+    method: impl Into<Method>,
     limit: Duration,
 ) -> Result<(BufReader<OwnedReadHalf>, OwnedWriteHalf, Body)> {
     let request = Request::new(method);
@@ -144,7 +150,8 @@ async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> R
 }
 
 /// One request; daemon errors become `code: message` failures.
-pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
+pub async fn call(paths: &Paths, method: impl Into<Method>) -> Result<Body> {
+    let method = method.into();
     let duration = if method.controls_daemon() {
         timing::ADMIN_REQUEST_TIMEOUT
     } else {
@@ -158,7 +165,7 @@ pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
 }
 
 /// Send a request and extract its expected response payload.
-pub async fn request<T>(paths: &Paths, method: Method) -> Result<T>
+pub async fn request<T>(paths: &Paths, method: impl Into<Method>) -> Result<T>
 where
     T: TryFrom<Body, Error = anyhow::Error>,
 {
@@ -166,10 +173,11 @@ where
 }
 
 /// The items of every page the daemon sends for `method` before `ok`.
-pub async fn pages<T>(paths: &Paths, method: Method) -> Result<Vec<T>>
+pub async fn pages<T>(paths: &Paths, method: impl Into<Method>) -> Result<Vec<T>>
 where
     Vec<T>: TryFrom<Body, Error = anyhow::Error>,
 {
+    let method = method.into();
     let _span = crate::profile::span("call", || method.name());
     let (mut reader, body) = open_buffered(paths, method).await?;
     let mut items = Vec::<T>::try_from(body)?;
@@ -189,7 +197,7 @@ pub async fn forge_api(
     workspace: String,
     request: crate::forge::raw::RawRequest,
 ) -> Result<serde_json::Value> {
-    let pieces = pages::<String>(paths, Method::ForgeApi { workspace, request }).await?;
+    let pieces = pages::<String>(paths, ItemMethod::ForgeApi { workspace, request }).await?;
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
@@ -207,26 +215,27 @@ pub async fn configuration(
     paths: &Paths,
     target: crate::protocol::ConfigTarget,
 ) -> Result<(crate::config::Config, crate::config::Effective)> {
-    let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
+    let layers =
+        request::<Box<ConfigLayers>>(paths, WorkspaceMethod::LayeredConfig { target }).await?;
     let config = crate::config::Config::load_with_templates(paths)?;
     let settings = config.resolve(&layers)?;
     Ok((config, settings))
 }
 
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {
-    request(paths, Method::InspectWorkspace { workspace }).await
+    request(paths, WorkspaceMethod::InspectWorkspace { workspace }).await
 }
 
 /// Workspaces visible to this caller; the daemon filters scoped requests.
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
-    request(paths, Method::ListWorkspaces).await
+    request(paths, WorkspaceMethod::ListWorkspaces).await
 }
 
 /// Record a chat whose agent replaces this process.
 pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> Result<Chat> {
     request(
         paths,
-        Method::StartChat {
+        ChatMethod::StartChat {
             repository: repository.id.clone().into(),
             agent: agent.to_owned(),
             pid: std::process::id(),
@@ -240,7 +249,7 @@ pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> 
 pub async fn move_chat(paths: &Paths, chat: &Chat, pid: u32) -> Result<Chat> {
     request(
         paths,
-        Method::MoveChat {
+        ChatMethod::MoveChat {
             chat: chat.id.clone(),
             pid,
         },
@@ -250,11 +259,11 @@ pub async fn move_chat(paths: &Paths, chat: &Chat, pid: u32) -> Result<Chat> {
 
 /// Running chats; listing them ends those whose agent exited.
 pub async fn chats(paths: &Paths) -> Result<Vec<Chat>> {
-    request(paths, Method::ListChats).await
+    request(paths, ChatMethod::ListChats).await
 }
 
 pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
-    request(paths, Method::ListRepositories).await
+    request(paths, RepositoryMethod::ListRepositories).await
 }
 
 /// Keep where an agent of `workspace` keeps its configuration for the
@@ -266,7 +275,7 @@ pub async fn keep_agent_environment(
 ) -> Result<()> {
     call(
         paths,
-        Method::KeepAgentEnvironment {
+        WorkspaceMethod::KeepAgentEnvironment {
             workspace: workspace.to_owned(),
             environment,
         },
@@ -283,7 +292,7 @@ pub async fn keep_repository_agent_environment(
 ) -> Result<()> {
     call(
         paths,
-        Method::KeepRepositoryAgentEnvironment {
+        RepositoryMethod::KeepRepositoryAgentEnvironment {
             repository: repository.to_owned(),
             environment,
         },
@@ -294,7 +303,7 @@ pub async fn keep_repository_agent_environment(
 
 /// `None` when no daemon is listening on the socket.
 pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
-    match request(paths, Method::Status).await {
+    match request(paths, DaemonMethod::Status).await {
         Ok(status) => Ok(Some(status)),
         Err(error) if is_unreachable(&error) => Ok(None),
         Err(error) => Err(error),
@@ -304,7 +313,7 @@ pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
 /// Ask a running daemon to reread the global config; `false` when none is
 /// running, since a starting daemon reads it anyway.
 pub async fn reload_config(paths: &Paths) -> Result<bool> {
-    match call(paths, Method::ReloadConfig).await {
+    match call(paths, DaemonMethod::ReloadConfig).await {
         Ok(_) => Ok(true),
         Err(error) if is_unreachable(&error) => Ok(false),
         Err(error) => Err(error),
@@ -340,9 +349,9 @@ pub(crate) fn stream_closed(error: &anyhow::Error) -> bool {
 /// Only read-only followers reconnect; ordinary requests must never replay an
 /// operation whose response was lost. The normal daemon wait budget bounds a
 /// manually stopped or failed daemon while a managed update keeps its socket.
-pub(crate) async fn reconnect(
+pub(crate) async fn reconnect<M: Into<Method>>(
     paths: &Paths,
-    method: impl Fn() -> Method,
+    method: impl Fn() -> M,
 ) -> Result<(BufReader<UnixStream>, Body)> {
     timeout(timing::DAEMON_WAIT_TIMEOUT, async {
         loop {
@@ -366,9 +375,9 @@ pub(crate) async fn reconnect(
 /// the restart budget too, since a restarted daemon knows an execution's scope
 /// only once its wrapper reattaches; `restarted` says the daemon restarted
 /// before this wait began. Only for requests that are safe to repeat.
-pub(crate) async fn await_reply(
+pub(crate) async fn await_reply<M: Into<Method>>(
     paths: &Paths,
-    method: impl Fn() -> Method,
+    method: impl Fn() -> M,
     restarted: bool,
 ) -> Result<Body> {
     let mut outage = restarted.then(Outage::restart);

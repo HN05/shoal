@@ -3,7 +3,7 @@ use crate::{
         scope::{self, Caller},
         workspace::Manager,
     },
-    protocol::Method,
+    protocol::AgentMethod,
     test_support::{manager, repository},
 };
 
@@ -118,10 +118,10 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         .await;
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
-            Method::AgentMessages {
+            AgentMethod::AgentMessages {
                 workspace: target.clone(),
             },
-            Method::MarkAgentMessagesDelivered {
+            AgentMethod::MarkAgentMessagesDelivered {
                 workspace: target.clone(),
                 ids: Vec::new(),
             },
@@ -134,7 +134,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
             );
         }
     }
-    let mut method = Method::SendAgentMessage {
+    let mut method = AgentMethod::SendAgentMessage {
         workspace: workspace.name.clone(),
         message: "hello".into(),
     };

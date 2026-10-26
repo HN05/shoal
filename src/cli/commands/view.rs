@@ -18,7 +18,7 @@ use crate::{
         review::view::{Details, ItemView, PrDetails, Review},
     },
     model::Selected,
-    protocol::Method,
+    protocol::{CiMethod, ItemMethod},
     repository,
 };
 
@@ -36,7 +36,7 @@ pub(super) async fn view(
                 "Reading check log",
                 client::request(
                     &ctx.paths,
-                    Method::CheckLog {
+                    CiMethod::CheckLog {
                         workspace,
                         selection,
                         check,
@@ -49,7 +49,7 @@ pub(super) async fn view(
     }
     let selected: Selected = client::request(
         &ctx.paths,
-        Method::SelectItems {
+        ItemMethod::SelectItems {
             workspace: workspace.clone(),
             selection,
         },
@@ -121,7 +121,7 @@ async fn read_failed_logs(
             }
             let result = client::request::<CheckLog>(
                 &ctx.paths,
-                Method::CheckLog {
+                CiMethod::CheckLog {
                     workspace: workspace.into(),
                     selection: Selection {
                         kind: Some(ItemKind::Pr),

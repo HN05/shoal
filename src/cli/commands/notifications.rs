@@ -16,12 +16,12 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::notifications::{Cleared, Notification, Sent},
-    protocol::{self, Method, Response},
+    protocol::{self, NotificationMethod, Response},
 };
 
 pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
-    let method = Method::ListNotifications {
+    let method = NotificationMethod::ListNotifications {
         unread_only: !all,
         limit,
     };
@@ -39,7 +39,11 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     // Shown once: exactly what this listing printed does not come back as new.
     if !keep_unread && !notifications.is_empty() {
         let ids = notifications.iter().map(|n| n.id).collect();
-        request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
+        request::<()>(
+            &ctx.paths,
+            NotificationMethod::MarkNotificationsRead { ids },
+        )
+        .await?;
     }
     if !all && let Some(status) = client::status(&ctx.paths).await? {
         // A listing kept unread still counts what it printed.
@@ -57,7 +61,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
 
 pub(super) async fn clear(ctx: &Context) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
-    let cleared = request::<Cleared>(&ctx.paths, Method::ClearNotifications).await?;
+    let cleared = request::<Cleared>(&ctx.paths, NotificationMethod::ClearNotifications).await?;
     ctx.show(&cleared, |cleared| match cleared.cleared {
         0 => outln!("No notifications"),
         n => outln!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
@@ -77,8 +81,11 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let withdrawn =
-        request::<Notification>(&ctx.paths, Method::WithdrawMessage { workspace, id }).await?;
+    let withdrawn = request::<Notification>(
+        &ctx.paths,
+        NotificationMethod::WithdrawMessage { workspace, id },
+    )
+    .await?;
     ctx.emit(
         &format!("Withdrew notification {id}: {}", withdrawn.message),
         &withdrawn,
@@ -88,7 +95,11 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 
 pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let sent = request::<Sent>(&ctx.paths, Method::SendMessage { workspace, message }).await?;
+    let sent = request::<Sent>(
+        &ctx.paths,
+        NotificationMethod::SendMessage { workspace, message },
+    )
+    .await?;
     let text = match sent.notification {
         Some(id) => format!("Notification {id} sent."),
         None => "Sent to the coordinating agent.".to_owned(),
@@ -105,7 +116,7 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
     let mut delivered = after;
-    let watch = |after| Method::WatchNotifications { keep_unread, after };
+    let watch = |after| NotificationMethod::WatchNotifications { keep_unread, after };
     let (mut stream, body) = client::open_buffered(&ctx.paths, watch(delivered)).await?;
     <()>::try_from(body)?;
     let palette = Palette::stdout(ctx.json);

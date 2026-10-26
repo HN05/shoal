@@ -2,15 +2,10 @@
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
 use crate::{
-    daemon::{
-        approvals::ApprovalRequest,
-        questions::Question,
-        workspace::{ExecutionKind, Manager},
-    },
-    forge::items::action::Action,
-    protocol::{ConfigTarget, Method},
+    daemon::workspace::{ExecutionKind, Manager},
+    protocol::Operation,
 };
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 
 /// The workspace and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
@@ -28,10 +23,10 @@ pub struct ScopedExecution {
 /// Resolve `token` and confine `method` to the caller's own workspace and the
 /// workspaces split from it. Optional workspace filters default to the
 /// caller's own; other targets must name one of them.
-pub async fn authorize(
+pub(crate) async fn authorize(
     manager: &Manager,
     token: Option<&str>,
-    method: &mut Method,
+    method: &mut impl Scoped,
 ) -> Result<Option<Caller>> {
     let Some(token) = token else {
         return Ok(None);
@@ -40,248 +35,51 @@ pub async fn authorize(
         .caller(token)
         .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
-    let owner = &caller.workspace_id;
-    let target = match method {
-        Method::CheckLanding => {
-            ensure!(
-                caller.kind() == Some(ExecutionKind::Land),
-                "only an authorized landing execution may run the land worker"
-            );
-            None
-        }
-        Method::SyncRepository { repository } => {
-            let own = manager.workspace(owner).await?.repository_id;
-            ensure!(
-                manager.repository(&*repository).await?.id == own,
-                "workspace processes can only sync their own repository"
-            );
-            *repository = own.into();
-            None
-        }
-        Method::Status
-        | Method::ListWorkspaces
-        | Method::ListQueue
-        | Method::ListChats
-        | Method::FindWorkspaces { .. }
-        | Method::ListRepositories
-        | Method::ForgeType { .. } => None,
-        Method::HoldList { workspace }
-        | Method::StopDemos { workspace, .. }
-        | Method::DemoProgress { workspace, .. }
-        | Method::SetBaseWorkspace { workspace, .. }
-        | Method::RenameWorkspace { workspace, .. }
-        | Method::SplitWorkspace { workspace, .. }
-        | Method::WorkspaceUndone { workspace }
-        | Method::WorkspaceDone { workspace, .. }
-        | Method::SendMessage { workspace, .. }
-        | Method::WithdrawMessage { workspace, .. }
-        | Method::AgentMessages { workspace }
-        | Method::MarkAgentMessagesDelivered { workspace, .. }
-        | Method::AskQuestion { workspace, .. }
-        | Method::WithdrawQuestion { workspace, .. }
-        | Method::WithdrawApproval { workspace, .. }
-        | Method::AwaitAnswer { workspace, .. }
-        | Method::AgentUpdates { workspace }
-        | Method::AwaitAgentWake { workspace, .. }
-        | Method::MarkReady { workspace, .. }
-        | Method::ClearReady { workspace, .. }
-        | Method::SetPr { workspace, .. }
-        | Method::SetIssue { workspace, .. }
-        | Method::LinkItem { workspace, .. }
-        | Method::UnlinkItems { workspace, .. }
-        | Method::PrWait { workspace, .. }
-        | Method::WatchItems { workspace, .. }
-        | Method::AcknowledgePrUpdates { workspace, .. }
-        | Method::ResourceAcquire { workspace, .. }
-        | Method::ResourceRelease { workspace, .. }
-        | Method::ResourceOverview { workspace }
-        | Method::ResourceCatalog { workspace }
-        | Method::SimAcquire { workspace, .. }
-        | Method::SimRelease { workspace, .. }
-        | Method::InspectWorkspace { workspace }
-        | Method::OpenIssue { workspace, .. }
-        | Method::OpenPull { workspace, .. }
-        | Method::VerifyWorkspace { workspace, .. }
-        | Method::FastForwardWorkspace { workspace, .. }
-        | Method::ItemAction {
-            workspace,
-            action:
-                Action::Edit(_)
-                | Action::Comment { .. }
-                | Action::Thread(_)
-                | Action::Close
-                | Action::Reopen,
-            ..
-        }
-        | Method::WorkspaceStatus { workspace }
-        | Method::Checkpoint { workspace, .. }
-        | Method::Checkpoints { workspace, .. }
-        | Method::RestoreCheckpoint { workspace, .. }
-        | Method::ListItems { workspace, .. }
-        | Method::ForgeApi { workspace, .. }
-        | Method::SelectItems { workspace, .. }
-        | Method::CheckLog { workspace, .. }
-        | Method::CiAction { workspace, .. }
-        | Method::CiRunAction { workspace, .. }
-        | Method::ViewCiRun { workspace, .. }
-        | Method::CiRunJobs { workspace, .. }
-        | Method::CiRunJobLog { workspace, .. }
-        | Method::ListCiRuns { workspace, .. }
-        | Method::DiffBase { workspace }
-        | Method::Conflicts { workspace, .. }
-        | Method::Execute {
-            workspace,
-            kind: ExecutionKind::Command | ExecutionKind::Land,
-            ..
-        }
-        | Method::WorkspaceHook { workspace, .. }
-        | Method::KeepAgentEnvironment { workspace, .. }
-        | Method::PortAcquire { workspace, .. }
-        | Method::PortRelease { workspace, .. }
-        | Method::PortOverview { workspace }
-        | Method::PortCatalog { workspace }
-        | Method::SimCatalog { workspace }
-        | Method::SecretAcquire { workspace, .. }
-        | Method::SecretRelease { workspace, .. }
-        | Method::SecretCatalog { workspace }
-        | Method::LayeredConfig {
-            target: ConfigTarget::Workspace(workspace),
-        } => Some(workspace),
-        Method::ListApprovals { workspace }
-        | Method::ListDemos { workspace }
-        | Method::ListQuestions { workspace }
-        | Method::SimOverview { workspace }
-        | Method::SimList { workspace }
-        | Method::SimHistory { workspace, .. } => {
-            Some(workspace.get_or_insert_with(|| owner.clone()))
-        }
-        Method::Execute {
-            workspace,
-            kind: ExecutionKind::Setup,
-            ..
-        } => {
-            ensure!(
-                caller.kind() != Some(ExecutionKind::Setup),
-                "a setup command cannot recursively run setup"
-            );
-            Some(workspace)
-        }
-        Method::SetAgentState { workspace, .. } | Method::ReportTurnFailure { workspace, .. } => {
-            // A report claims the workspace for the reporting agent, which
-            // would keep a child's events from reaching its coordinator.
-            ensure!(
-                manager.workspace(workspace).await?.id == *owner,
-                "workspace processes report agent state only for their own workspace"
-            );
-            Some(workspace)
-        }
-        Method::SendAgentMessage { workspace, .. } => {
-            ensure!(
-                manager.workspace(workspace).await?.id != *owner,
-                "workspace processes send agent messages only to the workspaces below theirs"
-            );
-            Some(workspace)
-        }
-        Method::StartCiRun {
-            workspace, branch, ..
-        } => {
-            let own = manager.workspace(workspace).await?.branch;
-            ensure!(
-                branch.as_ref().is_none_or(|branch| *branch == own),
-                "workspace processes start CI runs only on their workspace's branch"
-            );
-            Some(workspace)
-        }
-        Method::DiscardStoppedWork { workspace, .. } => {
-            ensure!(
-                manager.workspace(workspace).await?.id != *owner,
-                "workspace processes discard stopped work only in the workspaces below theirs"
-            );
-            Some(workspace)
-        }
-        Method::ShowApproval { id } => {
-            show_approval(manager, Some(&caller), *id).await?;
-            None
-        }
-        Method::ShowQuestion { id } => {
-            show_question(manager, Some(&caller), *id).await?;
-            None
-        }
-        Method::DecideApproval { id, shown, .. } => {
-            // A coordinating agent decides the requests routed to it. Only the
-            // stored routing counts; the decision rechecks it with its grant.
-            let request = manager
-                .approval_request(*id)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?;
-            ensure!(
-                request.decider.as_deref() == Some(owner.as_str()),
-                "workspace processes decide only the approval requests routed to them; ask the user to run this command"
-            );
-            if shown.is_none() {
-                *shown = Some(Box::new(request));
-            }
-            None
-        }
-        Method::EscalateApproval { workspace, .. } => {
-            ensure!(
-                manager.workspace(workspace).await?.id == *owner,
-                "workspace processes pass up only the approval requests routed to their own workspace"
-            );
-            Some(workspace)
-        }
-        Method::QueueAdd { request } => {
-            let denied =
-                "workspace processes can start agents only in the workspaces split from theirs";
-            let Some(target) = request.workspace.as_mut() else {
-                bail!(denied);
-            };
-            ensure!(manager.workspace(target).await?.id != *owner, denied);
-            Some(target)
-        }
-        Method::HoldAcquire { .. } | Method::HoldRelease { .. } => {
-            bail!(
-                "holds belong to the user and host apps; workspace processes ask with shoal questions ask"
-            )
-        }
-        Method::AnswerQuestion { id, shown, .. }
-        | Method::AcceptQuestionRecommendation { id, shown } => {
-            // A coordinating agent answers the questions of the workspaces
-            // below its own. The answer binds to the question authorized
-            // here, which the answer refuses once a later question reuses
-            // its number.
-            let question = match shown.take() {
-                Some(shown) => shown,
-                None => manager.question(*id).await?,
-            };
-            ensure!(
-                question.id == *id
-                    && question.workspace_id != *owner
-                    && manager
-                        .within_subtree(owner, &question.workspace_id)
-                        .await?,
-                "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
-            );
-            *shown = Some(question);
-            None
-        }
-        Method::ItemAction {
-            action: Action::Merge { .. },
-            ..
-        } => bail!("merging is the user's decision; ask them with shoal alerts send"),
-        _ => bail!(
-            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
-        ),
-    };
-    if let Some(target) = target {
+    if let Some(target) = method.scope(manager, &caller).await? {
         let id = manager.workspace(target).await?.id;
         ensure!(
-            manager.within_subtree(owner, &id).await?,
+            manager.within_subtree(&caller.workspace_id, &id).await?,
             "workspace processes can only access their own workspace and those split from it"
         );
         *target = id;
     }
     Ok(Some(caller))
+}
+
+/// A request whose access a scoped caller's scope decides.
+pub(crate) trait Scoped {
+    /// Refuse what `caller`'s scope does not allow and narrow the rest to
+    /// it, returning the workspace the request targets, which must be the
+    /// caller's own or one split from it.
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>>;
+}
+
+impl Scoped for Operation {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+        match self {
+            Operation::Daemon(method) => method.scope(manager, caller).await,
+            Operation::Repository(method) => method.scope(manager, caller).await,
+            Operation::Workspace(method) => method.scope(manager, caller).await,
+            Operation::Removal(method) => method.scope(manager, caller).await,
+            Operation::Recovery(method) => method.scope(manager, caller).await,
+            Operation::Execution(method) => method.scope(manager, caller).await,
+            Operation::Assignment(method) => method.scope(manager, caller).await,
+            Operation::Agent(method) => method.scope(manager, caller).await,
+            Operation::Chat(method) => method.scope(manager, caller).await,
+            Operation::Queue(method) => method.scope(manager, caller).await,
+            Operation::Hold(method) => method.scope(manager, caller).await,
+            Operation::Demo(method) => method.scope(manager, caller).await,
+            Operation::Item(method) => method.scope(manager, caller).await,
+            Operation::Ci(method) => method.scope(manager, caller).await,
+            Operation::Notification(method) => method.scope(manager, caller).await,
+            Operation::Question(method) => method.scope(manager, caller).await,
+            Operation::Approval(method) => method.scope(manager, caller).await,
+            Operation::Port(method) => method.scope(manager, caller).await,
+            Operation::Secret(method) => method.scope(manager, caller).await,
+            Operation::Resource(method) => method.scope(manager, caller).await,
+            Operation::Simulator(method) => method.scope(manager, caller).await,
+        }
+    }
 }
 
 impl Caller {
@@ -296,28 +94,15 @@ impl Caller {
     }
 }
 
-/// Return the snapshot whose owner was checked, including after authorization.
-pub(super) async fn show_approval(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    id: i64,
-) -> Result<ApprovalRequest> {
-    let request = manager.show_approval(id).await?;
-    inspect_owner(manager, caller, &request.workspace_id, "approval requests").await?;
-    Ok(request)
+/// The refusal of a request no workspace process may send.
+pub(super) fn denied() -> anyhow::Error {
+    anyhow::anyhow!(
+        "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
+    )
 }
 
-pub(super) async fn show_question(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    id: i64,
-) -> Result<Question> {
-    let question = manager.question(id).await?;
-    inspect_owner(manager, caller, &question.workspace_id, "questions").await?;
-    Ok(question)
-}
-
-async fn inspect_owner(
+/// Refuse a scoped caller a record of a workspace outside its tree.
+pub(super) async fn inspect_owner(
     manager: &Manager,
     caller: Option<&Caller>,
     workspace: &str,

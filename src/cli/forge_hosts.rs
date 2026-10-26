@@ -8,7 +8,7 @@ use crate::{
     config::forges::Forges,
     forge::hosts::{HostType, HostTypes},
     paths::Paths,
-    protocol::Method,
+    protocol::ItemMethod,
 };
 
 pub struct ForgeHosts<'a> {
@@ -21,7 +21,7 @@ impl HostTypes for ForgeHosts<'_> {
         if let Some(kind) = self.forges.settled(host) {
             return Ok(HostType::Settled(kind));
         }
-        let method = Method::ForgeType {
+        let method = ItemMethod::ForgeType {
             host: host.into(),
             scheme: scheme.into(),
         };

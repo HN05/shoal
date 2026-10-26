@@ -19,7 +19,7 @@ use crate::{
     daemon::ports::PortRequest,
     demos::{Launch, Preset, Scheme},
     model::{PortReservation, Workspace},
-    protocol::{Body, Method},
+    protocol::{Body, PortMethod, SimulatorMethod},
     sim::{SimRequest, Simulator},
 };
 
@@ -119,7 +119,7 @@ async fn reserve_port(
     workspace: &Workspace,
     name: &str,
 ) -> Result<Declinable<PortReservation>> {
-    let method = Method::PortAcquire {
+    let method = PortMethod::PortAcquire {
         workspace: workspace.id.clone(),
         name: name.to_owned(),
         request: PortRequest {
@@ -153,7 +153,7 @@ async fn lease_simulator(
         queue,
     };
     let outcome = obtain(ctx, "a simulator", queue, async || {
-        let method = Method::SimAcquire {
+        let method = SimulatorMethod::SimAcquire {
             workspace: workspace.id.clone(),
             request: request.clone(),
         };

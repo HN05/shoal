@@ -250,11 +250,11 @@ fn exec_with(program: &Path, args: Vec<OsString>, values: Vec<(&String, OsString
 async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -> Result<()> {
     use crate::{
         daemon::{approvals::DecisionStatus, secrets::SecretRequest},
-        protocol::{Body, Method},
+        protocol::{Body, SecretMethod},
     };
     let workspace = std::env::var(env::WORKSPACE_ID)
         .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
-    let method = Method::SecretAcquire {
+    let method = SecretMethod::SecretAcquire {
         workspace,
         name: name.to_owned(),
         request: SecretRequest {

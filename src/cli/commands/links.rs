@@ -18,7 +18,7 @@ use crate::{
     },
     git,
     model::{Relation, Repository, ReviewMark, Selected, SelectedItem, Workspace},
-    protocol::Method,
+    protocol::{AssignmentMethod, ItemMethod},
 };
 
 /// The workspace and the items selected in it, with the kind of a bare number
@@ -58,7 +58,7 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
 async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<ItemKind>> {
     let mut linked: Selected = client::request(
         &ctx.paths,
-        Method::SelectItems {
+        ItemMethod::SelectItems {
             workspace: workspace.to_owned(),
             selection: Selection::default(),
         },
@@ -101,7 +101,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     };
     client::request::<()>(
         &ctx.paths,
-        Method::LinkItem {
+        ItemMethod::LinkItem {
             workspace,
             kind,
             url: input,
@@ -200,7 +200,7 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (workspace, selected) = select(ctx, items).await?;
     client::request::<()>(
         &ctx.paths,
-        Method::UnlinkItems {
+        ItemMethod::UnlinkItems {
             workspace,
             relation,
             kind: selected.kind,
@@ -226,7 +226,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
-        Method::MarkReady {
+        AssignmentMethod::MarkReady {
             workspace,
             selection,
         },
@@ -247,7 +247,7 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
     let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
-        Method::ClearReady {
+        AssignmentMethod::ClearReady {
             workspace,
             selection,
             draft,

@@ -16,7 +16,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{RemovedWorkspace, RestoredWorkspace, Workspace},
-    protocol::Method,
+    protocol::RemovalMethod,
     removal::{RemovalCheck, UnsavedWork},
     transfer::{ExportedWorkspace, Import, Manifest},
 };
@@ -141,7 +141,7 @@ async fn import_workspace(
         .clone()
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
-    let method = Method::ImportWorkspace {
+    let method = RemovalMethod::ImportWorkspace {
         repository: ui::repository_selector(repository)?,
         bundle: import
             .bundle
@@ -368,7 +368,7 @@ async fn export_removed(
     selector: &str,
     output: &Output,
 ) -> Result<ExportedWorkspace> {
-    let method = Method::ExportWorkspace {
+    let method = RemovalMethod::ExportWorkspace {
         workspace: selector.to_owned(),
         unsaved: UnsavedWork::default(),
         file: output.file(),
@@ -397,7 +397,7 @@ async fn export_checked(
     check: &RemovalCheck,
     output: &Output,
 ) -> Result<ExportedWorkspace> {
-    let method = Method::ExportWorkspace {
+    let method = RemovalMethod::ExportWorkspace {
         workspace: check.workspace.id.clone(),
         unsaved: UnsavedWork::confirming(check),
         file: output.file(),
@@ -430,7 +430,7 @@ async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
 async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result<RemovalCheck> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
-        Method::CheckRemoval {
+        RemovalMethod::CheckRemoval {
             workspace: workspace.to_owned(),
             include_changes: true,
         },

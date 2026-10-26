@@ -6,28 +6,32 @@ use crate::{
         installed::{Executable, arguments_with},
     },
     daemon::events::EventItem,
-    protocol::{self, Body, Method, Response},
+    protocol::{self, Body, Response, WorkspaceMethod},
 };
 use anyhow::{Context as _, Result};
 
 pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Result<i32> {
     let executable = Executable::current();
-    let (mut reader, body) =
-        client::open_buffered(&ctx.paths, Method::WatchWorkspaceEvents { since, follow }).await?;
+    let (mut reader, body) = client::open_buffered(
+        &ctx.paths,
+        WorkspaceMethod::WatchWorkspaceEvents { since, follow },
+    )
+    .await?;
     <()>::try_from(body)?;
     let mut cursor = since;
     loop {
         let response: Response = match protocol::read_buffered(&mut reader).await {
             Ok(response) => response,
             Err(error) if follow && client::stream_closed(&error) => {
-                let (next, body) = client::reconnect(&ctx.paths, || Method::WatchWorkspaceEvents {
-                    since: cursor,
-                    follow,
-                })
-                .await
-                .map_err(|error| {
-                    executable.resume_or(error, || arguments_with("--since", cursor))
-                })?;
+                let (next, body) =
+                    client::reconnect(&ctx.paths, || WorkspaceMethod::WatchWorkspaceEvents {
+                        since: cursor,
+                        follow,
+                    })
+                    .await
+                    .map_err(|error| {
+                        executable.resume_or(error, || arguments_with("--since", cursor))
+                    })?;
                 <()>::try_from(body)?;
                 reader = next;
                 continue;

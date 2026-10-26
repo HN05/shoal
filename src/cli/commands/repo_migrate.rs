@@ -13,7 +13,7 @@ use crate::{
     },
     config::{Config, edit::Change},
     model::{MovedRepository, Repository},
-    protocol::Method,
+    protocol::RepositoryMethod,
     repository,
 };
 
@@ -27,7 +27,7 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
             "Checking repositories",
             request::<Vec<Repository>>(
                 &ctx.paths,
-                Method::PlanRepositoryMoves { root: root.clone() },
+                RepositoryMethod::PlanRepositoryMoves { root: root.clone() },
             ),
         )
         .await?;
@@ -47,7 +47,7 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
     let moved = ctx
         .progress(
             "Moving repositories",
-            request::<Vec<MovedRepository>>(&ctx.paths, Method::MoveRepositories),
+            request::<Vec<MovedRepository>>(&ctx.paths, RepositoryMethod::MoveRepositories),
         )
         .await?;
     // Agents trust the new paths when they next start there.

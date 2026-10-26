@@ -88,7 +88,7 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
 async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace() {
     use crate::{
         daemon::scope::{self, Caller},
-        protocol::Method,
+        protocol::NotificationMethod,
         test_support::repository,
     };
     let (temp, manager) = manager().await;
@@ -136,11 +136,11 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
         .await;
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
-            Method::SendMessage {
+            NotificationMethod::SendMessage {
                 workspace: target.clone(),
                 message: "hello".into(),
             },
-            Method::WithdrawMessage {
+            NotificationMethod::WithdrawMessage {
                 workspace: target.clone(),
                 id: 1,
             },
@@ -154,11 +154,11 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
         }
     }
     for mut method in [
-        Method::ListNotifications {
+        NotificationMethod::ListNotifications {
             unread_only: true,
             limit: 50,
         },
-        Method::ClearNotifications,
+        NotificationMethod::ClearNotifications,
     ] {
         assert!(
             scope::authorize(&manager, Some("scope"), &mut method)

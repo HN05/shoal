@@ -33,7 +33,7 @@ use crate::{
     },
     git,
     model::{Selected, Workspace},
-    protocol::Method,
+    protocol::{CiMethod, ItemMethod, WorkspaceMethod},
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
@@ -140,7 +140,7 @@ pub(super) async fn ci(ctx: &Context, command: CiCommand) -> Result<i32> {
         ui::select_workspace(ctx, checks.item.workspace, ui::Fallback::CurrentDirectory).await?;
     let acted: CiActed = client::request(
         &ctx.paths,
-        Method::CiAction {
+        CiMethod::CiAction {
             workspace,
             item: checks.item.item,
             action,
@@ -205,7 +205,7 @@ async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
     search.check()?;
     let workspace =
         ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
-    let method = Method::ListItems {
+    let method = ItemMethod::ListItems {
         workspace,
         kind,
         search,
@@ -256,7 +256,7 @@ async fn act(
         ui::select_workspace(ctx, selector.workspace, ui::Fallback::CurrentDirectory).await?;
     let item: Item = client::request(
         &ctx.paths,
-        Method::ItemAction {
+        ItemMethod::ItemAction {
             workspace,
             kind,
             item: selector.item,
@@ -274,7 +274,7 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
     let workspace: Workspace = client::request(
         &ctx.paths,
-        Method::VerifyWorkspace {
+        WorkspaceMethod::VerifyWorkspace {
             workspace,
             on_branch: true,
         },
@@ -283,7 +283,7 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
     push(ctx, &workspace).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
-        Method::OpenPull {
+        ItemMethod::OpenPull {
             workspace: workspace.id,
             options,
         },
@@ -339,7 +339,7 @@ async fn open_issue(
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
-        Method::OpenIssue {
+        ItemMethod::OpenIssue {
             workspace,
             issue,
             repository,
@@ -427,7 +427,7 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
     };
     let selected: Selected = client::request(
         &ctx.paths,
-        Method::SelectItems {
+        ItemMethod::SelectItems {
             workspace,
             selection,
         },

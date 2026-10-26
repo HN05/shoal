@@ -976,7 +976,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         (Some(&sibling.name), false),
         (None, false),
     ] {
-        let mut method = crate::protocol::Method::QueueAdd {
+        let mut method = crate::protocol::QueueMethod::QueueAdd {
             request: QueueRequest {
                 workspace: workspace.cloned(),
                 ..request(&repo, "launch", false)

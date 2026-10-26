@@ -17,7 +17,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{QueueEntry, Workspace},
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, ItemMethod, WorkspaceMethod},
     shell,
     state::{QueueState, WorkspaceState},
 };
@@ -87,7 +87,7 @@ pub(super) async fn create_child(
 ) -> Result<Workspace> {
     let child: Workspace = request(
         &ctx.paths,
-        Method::SplitWorkspace {
+        WorkspaceMethod::SplitWorkspace {
             workspace: parent,
             name,
             base,
@@ -97,7 +97,7 @@ pub(super) async fn create_child(
     if let Some(issue) = issue {
         request::<()>(
             &ctx.paths,
-            Method::SetIssue {
+            ItemMethod::SetIssue {
                 workspace: child.id.clone(),
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),

@@ -1,5 +1,8 @@
 use super::*;
-use crate::{paths::Paths, protocol::Request};
+use crate::{
+    paths::Paths,
+    protocol::{Method, Operation, Request},
+};
 use tokio::net::UnixListener;
 
 #[tokio::test]
@@ -13,10 +16,12 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         let request: Request = protocol::read(&mut stream).await.unwrap();
         assert!(matches!(
             request.method,
-            Method::WatchWorkspaceEvents {
-                since: Some(9),
-                follow: true
-            }
+            Method::Operation(Operation::Workspace(
+                WorkspaceMethod::WatchWorkspaceEvents {
+                    since: Some(9),
+                    follow: true
+                }
+            ))
         ));
         protocol::write(&mut stream, &Response::new(request.id, Body::Ok))
             .await
@@ -39,10 +44,12 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         let request: Request = protocol::read(&mut stream).await.unwrap();
         assert!(matches!(
             request.method,
-            Method::WatchWorkspaceEvents {
-                since: Some(3),
-                follow: true
-            }
+            Method::Operation(Operation::Workspace(
+                WorkspaceMethod::WatchWorkspaceEvents {
+                    since: Some(3),
+                    follow: true
+                }
+            ))
         ));
         // Finish the infinite follower with an explicit terminal response.
         protocol::write(&mut stream, &Response::new(request.id, Body::Ok))

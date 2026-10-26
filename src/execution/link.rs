@@ -20,8 +20,8 @@ use crate::{
     paths::Paths,
     process::identity::Identity,
     protocol::{
-        self, Body, Control, ExecutionEvent, Method, Protection, Reattach, Request, Response,
-        timing,
+        self, Body, Control, ExecutionEvent, ExecutionMethod, Method, Protection, Reattach,
+        Request, Response, timing,
     },
 };
 
@@ -78,7 +78,7 @@ impl Link {
     /// `limit` bounds the daemon's reply.
     pub(super) async fn open(
         paths: &Paths,
-        method: Method,
+        method: ExecutionMethod,
         limit: Duration,
     ) -> Result<(Self, Body)> {
         let (reader, writer, body) = client::open_split(paths, method, limit).await?;
@@ -300,7 +300,7 @@ async fn attempt(paths: &Paths, request: &Reattach) -> Result<Option<Attached>, 
     let request = Request {
         protocol: protocol::VERSION,
         id: 1,
-        method: Method::Reattach(request.clone()),
+        method: Method::Reattach(protocol::Reattachment::Reattach(request.clone())),
         scope: None,
     };
     if protocol::write(&mut writer, &request).await.is_err() {

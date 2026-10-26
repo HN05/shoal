@@ -11,7 +11,7 @@ use crate::{
         ui,
     },
     model::WorkspaceHold,
-    protocol::Method,
+    protocol::HoldMethod,
 };
 
 pub(super) async fn acquire(
@@ -22,7 +22,7 @@ pub(super) async fn acquire(
 ) -> Result<i32> {
     let hold = client::request::<WorkspaceHold>(
         &ctx.paths,
-        Method::HoldAcquire {
+        HoldMethod::HoldAcquire {
             workspace,
             name,
             reason,
@@ -45,7 +45,7 @@ pub(super) async fn release(ctx: &Context, workspace: String, name: Option<Strin
         Some(name) => name,
         None => pick(ctx, &workspace).await?,
     };
-    client::request::<()>(&ctx.paths, Method::HoldRelease { workspace, name }).await?;
+    client::request::<()>(&ctx.paths, HoldMethod::HoldRelease { workspace, name }).await?;
     ctx.emit_styled(Style::Success, "Hold released", json!({"released": true}))?;
     Ok(0)
 }
@@ -65,7 +65,8 @@ pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         return Ok(0);
     };
     let holds =
-        client::request::<Vec<WorkspaceHold>>(&ctx.paths, Method::HoldList { workspace }).await?;
+        client::request::<Vec<WorkspaceHold>>(&ctx.paths, HoldMethod::HoldList { workspace })
+            .await?;
     ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
@@ -73,7 +74,7 @@ pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
 async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
     let holds = client::request::<Vec<WorkspaceHold>>(
         &ctx.paths,
-        Method::HoldList {
+        HoldMethod::HoldList {
             workspace: workspace.to_owned(),
         },
     )

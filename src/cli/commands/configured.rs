@@ -26,7 +26,7 @@ use crate::{
     execution,
     model::{DiffBase, Workspace},
     paths::Paths,
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -117,7 +117,7 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
 async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLayers> {
     Ok(*request::<Box<ConfigLayers>>(
         &ctx.paths,
-        Method::LayeredConfig {
+        WorkspaceMethod::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         },
     )
@@ -275,7 +275,7 @@ async fn diff_base(
     }
     let base = request::<DiffBase>(
         paths,
-        Method::DiffBase {
+        WorkspaceMethod::DiffBase {
             workspace: workspace.id.clone(),
         },
     )

@@ -1,13 +1,14 @@
 use super::*;
+use crate::daemon::workspace::ExecutionKind;
 use serde_json::json;
 
 #[test]
 fn method_names_are_their_protocol_tags() {
-    assert_eq!(Method::Status.name(), "status");
-    let watch = Method::WatchNotifications {
+    assert_eq!(Method::from(DaemonMethod::Status).name(), "status");
+    let watch = Method::from(NotificationMethod::WatchNotifications {
         keep_unread: false,
         after: 0,
-    };
+    });
     assert_eq!(watch.name(), "watch_notifications");
 }
 
@@ -125,8 +126,8 @@ fn pr_actions_preserve_existing_wire_fields() {
         (Action::Clear, None, true),
     ] {
         let wire = json!({"set_pr": {"workspace": "worker", "url": url, "clear": clear}});
-        let decoded: Method = serde_json::from_value(wire.clone()).unwrap();
-        let Method::SetPr {
+        let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
+        let ItemMethod::SetPr {
             workspace,
             action: decoded_action,
         } = &decoded
@@ -137,11 +138,11 @@ fn pr_actions_preserve_existing_wire_fields() {
         assert_eq!(decoded_action, &action);
         assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     }
-    let decoded: Method =
+    let decoded: ItemMethod =
         serde_json::from_value(json!({"set_pr": {"workspace": "worker", "clear": false}})).unwrap();
     assert!(matches!(
         decoded,
-        Method::SetPr {
+        ItemMethod::SetPr {
             action: Action::Acknowledge,
             ..
         }
@@ -152,7 +153,7 @@ fn pr_actions_preserve_existing_wire_fields() {
 fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
     let wire =
         json!({"set_pr": {"workspace": "worker", "url": null, "clear": false, "unwatch": "7"}});
-    let decoded: Method = serde_json::from_value(wire.clone()).unwrap();
+    let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     for action in [
         json!({"clear": true, "unwatch": "7"}),
@@ -164,7 +165,7 @@ fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
 
 #[test]
 fn pr_actions_reject_conflicting_wire_fields() {
-    let error = serde_json::from_value::<Method>(
+    let error = serde_json::from_value::<ItemMethod>(
         json!({"set_pr": {"workspace": "worker", "url": "7", "clear": true}}),
     )
     .unwrap_err();
@@ -173,8 +174,10 @@ fn pr_actions_reject_conflicting_wire_fields() {
         "{error}"
     );
     assert!(
-        serde_json::from_value::<Method>(json!({"set_pr": {"workspace": "worker", "url": "7"}}))
-            .is_err()
+        serde_json::from_value::<ItemMethod>(
+            json!({"set_pr": {"workspace": "worker", "url": "7"}})
+        )
+        .is_err()
     );
 }
 
@@ -184,7 +187,8 @@ fn reattachment_keeps_its_wire_spelling() {
         "execution": "execution", "wrapper": {"pid": 2, "birth": "wrapper"},
         "child": null, "group_id": 2, "scope_token": "token"
     }});
-    let Method::Reattach(request) = serde_json::from_value(wire).unwrap() else {
+    let Method::Reattach(Reattachment::Reattach(request)) = serde_json::from_value(wire).unwrap()
+    else {
         panic!("reattachment must keep its method name");
     };
     assert!(request.agent.is_none() && !request.recover);
@@ -245,7 +249,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         (ExecutionKind::Setup, "setup"),
         (ExecutionKind::Land, "land"),
     ] {
-        let method = Method::Execute {
+        let method = ExecutionMethod::Execute {
             workspace: "worker".into(),
             wrapper: wrapper.clone(),
             kind,
@@ -257,7 +261,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         };
         let encoded = serde_json::to_value(method).unwrap();
         assert_eq!(encoded["execute"]["kind"], spelling);
-        let Method::Execute {
+        let ExecutionMethod::Execute {
             kind: decoded,
             agent,
             ..
@@ -343,3 +347,5 @@ fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
         "unexpected daemon response; expected Ok, received Workspaces"
     );
 }
+
+mod requests;

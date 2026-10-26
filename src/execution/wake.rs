@@ -9,7 +9,7 @@ use anyhow::Result;
 use crate::{
     cli::{client, terminal::PromptSession},
     paths::Paths,
-    protocol::Method,
+    protocol::AgentMethod,
 };
 
 /// The prompt that starts the turn; the hook supplies the updates.
@@ -83,7 +83,7 @@ async fn await_wake(paths: &Paths, workspace: &str, due: bool) {
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
 async fn request(paths: &Paths, workspace: &str, due: bool) -> Result<()> {
-    let method = Method::AwaitAgentWake {
+    let method = AgentMethod::AwaitAgentWake {
         workspace: workspace.to_owned(),
         due,
     };

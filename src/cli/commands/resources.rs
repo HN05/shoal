@@ -17,7 +17,7 @@ use crate::{
     daemon::resources::{
         Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
-    protocol::Method,
+    protocol::ResourceMethod,
 };
 
 /// Exit 2 means no compatible capacity or a pending or denied approval; a
@@ -32,7 +32,7 @@ pub(super) async fn acquire(
         &format!("pool {}", request.pool),
         request.queue,
         async || {
-            let method = Method::ResourceAcquire {
+            let method = ResourceMethod::ResourceAcquire {
                 workspace: workspace.clone(),
                 request: request.clone(),
             };
@@ -135,7 +135,7 @@ pub(super) async fn fetch_overview(
     members: Members,
 ) -> Result<Overview> {
     let mut overview =
-        request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
+        request::<Overview>(&ctx.paths, ResourceMethod::ResourceOverview { workspace }).await?;
     members.retain(&mut overview);
     Ok(overview)
 }
@@ -145,7 +145,7 @@ pub(super) async fn fetch_catalog(
     workspace: &str,
     members: Members,
 ) -> Result<Catalog> {
-    let method = Method::ResourceCatalog {
+    let method = ResourceMethod::ResourceCatalog {
         workspace: workspace.to_owned(),
     };
     let mut catalog = request::<Catalog>(&ctx.paths, method).await?;

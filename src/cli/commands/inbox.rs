@@ -22,7 +22,7 @@ use crate::{
     },
     demos::Running,
     model::{ReviewMark, UntrackedWorktree, Workspace},
-    protocol::Method,
+    protocol::{ApprovalMethod, DemoMethod, QuestionMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
 
@@ -99,12 +99,17 @@ impl Inbox {
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
         let existing: HashSet<String> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
-        let questions = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace: None })
-            .await?
-            .questions;
-        let requests =
-            request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
-                .await?;
+        let questions = request::<Listing>(
+            &ctx.paths,
+            QuestionMethod::ListQuestions { workspace: None },
+        )
+        .await?
+        .questions;
+        let requests = request::<Vec<ApprovalRequest>>(
+            &ctx.paths,
+            ApprovalMethod::ListApprovals { workspace: None },
+        )
+        .await?;
         let detached = |request: &ApprovalRequest| {
             !existing.contains(&request.workspace_id)
                 && request
@@ -113,7 +118,7 @@ impl Inbox {
                     .is_some_and(|repository| filter.keeps_detached(repository))
         };
         let demos =
-            request::<Vec<Running>>(&ctx.paths, Method::ListDemos { workspace: None }).await?;
+            request::<Vec<Running>>(&ctx.paths, DemoMethod::ListDemos { workspace: None }).await?;
         let mut items = decision_items(questions, requests, &workspaces, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         items.extend(
@@ -125,7 +130,8 @@ impl Inbox {
         // Workspace processes see their own tree, which no untracked worktree is in.
         if !crate::env::is_scoped() {
             let untracked =
-                client::pages::<UntrackedWorktree>(&ctx.paths, Method::UntrackedWorktrees).await?;
+                client::pages::<UntrackedWorktree>(&ctx.paths, WorkspaceMethod::UntrackedWorktrees)
+                    .await?;
             items.extend(
                 untracked
                     .into_iter()

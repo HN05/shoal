@@ -6,7 +6,7 @@ use crate::{
     cli::{client, context::Context, ui},
     forge::{ForgeRepo, capability::Capabilities},
     model::Workspace,
-    protocol::Method,
+    protocol::WorkspaceMethod,
     repository,
 };
 
@@ -21,7 +21,7 @@ pub(super) async fn workspace_forge(ctx: &Context, workspace: Option<String>) ->
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
     let workspace: Workspace = client::request(
         &ctx.paths,
-        Method::VerifyWorkspace {
+        WorkspaceMethod::VerifyWorkspace {
             workspace,
             on_branch: false,
         },

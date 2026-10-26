@@ -11,7 +11,7 @@ use crate::{
         output::{Palette, Style},
     },
     daemon::secrets::{SecretCatalog, SecretGrant, SecretRequest},
-    protocol::Method,
+    protocol::SecretMethod,
 };
 
 /// Exit 2 means a pending or denied approval; a queued request returns only
@@ -24,7 +24,7 @@ pub(super) async fn acquire(
     queue: bool,
 ) -> Result<i32> {
     let outcome = obtain(ctx, &format!("secret {name}"), queue, async || {
-        let method = Method::SecretAcquire {
+        let method = SecretMethod::SecretAcquire {
             workspace: workspace.clone(),
             name: name.clone(),
             request: SecretRequest {
@@ -43,7 +43,7 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SecretCatalog> {
-    let method = Method::SecretCatalog {
+    let method = SecretMethod::SecretCatalog {
         workspace: workspace.to_owned(),
     };
     client::request::<SecretCatalog>(&ctx.paths, method).await

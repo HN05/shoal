@@ -15,7 +15,7 @@ use crate::{
         Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace,
         Workspace,
     },
-    protocol::Method,
+    protocol::{RecoveryMethod, RemovalMethod},
     shell,
     state::WorkspaceState,
     time::local_seconds,
@@ -31,7 +31,7 @@ pub(super) async fn checkpoint(
     let checkpoint: Checkpoint = ctx
         .progress(
             "Taking checkpoint",
-            request(&ctx.paths, Method::Checkpoint { workspace, name }),
+            request(&ctx.paths, RecoveryMethod::Checkpoint { workspace, name }),
         )
         .await?;
     let files = if checkpoint.files_omitted {
@@ -78,7 +78,8 @@ pub(super) async fn run(
 /// Reopen the removed workspace the user picks, or list the removed
 /// workspaces when there is no terminal or none to pick.
 async fn choose_removed(ctx: &Context) -> Result<i32> {
-    let removed = client::pages::<RemovedWorkspace>(&ctx.paths, Method::RemovedWorkspaces).await?;
+    let removed =
+        client::pages::<RemovedWorkspace>(&ctx.paths, RemovalMethod::RemovedWorkspaces).await?;
     if removed.is_empty() || !ctx.interactive() {
         ctx.show(&removed, |removed| print_removed(removed))?;
         return Ok(0);
@@ -122,7 +123,7 @@ async fn checkpoints(ctx: &Context, workspace: &str) -> Result<Option<Vec<Checkp
         let after = checkpoints
             .last()
             .map(|checkpoint: &Checkpoint| checkpoint.number);
-        let method = Method::Checkpoints {
+        let method = RecoveryMethod::Checkpoints {
             workspace: workspace.to_owned(),
             after,
         };
@@ -142,7 +143,7 @@ async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -
             "Restoring checkpoint",
             request(
                 &ctx.paths,
-                Method::RestoreCheckpoint {
+                RecoveryMethod::RestoreCheckpoint {
                     workspace,
                     checkpoint,
                 },
@@ -171,7 +172,7 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
     let restored = ctx
         .progress(
             "Restoring workspace",
-            request::<RestoredWorkspace>(&ctx.paths, Method::RestoreWorkspace { workspace }),
+            request::<RestoredWorkspace>(&ctx.paths, RemovalMethod::RestoreWorkspace { workspace }),
         )
         .await?;
     finish_reopen(ctx, restored, "Restored").await

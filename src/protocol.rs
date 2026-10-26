@@ -10,21 +10,62 @@ use crate::{
         allocation::Allocation,
         events::EventItem,
         notifications::Notification,
-        ports::PortRequest,
-        recovery::{ReconcileOptions, Report},
-        resources::{Overview, ResourceLease, ResourceRequest},
-        workspace::ExecutionKind,
+        recovery::Report,
+        resources::{Overview, ResourceLease},
     },
-    hooks::HookKind,
     model::{
         ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
         PortSuggestion, Repository, RepositoryRemoval, SyncedRepository, Workspace,
         WorkspaceStatus,
     },
     process::identity::Identity,
-    removal::{RemovalCheck, RemovalResult, UnsavedWork},
-    sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
+    removal::{RemovalCheck, RemovalResult},
+    sim::{Simulator, SimulatorCatalog, audit::AuditEntry},
 };
+
+mod agents;
+mod approvals;
+mod assignments;
+mod chats;
+mod ci;
+mod daemon;
+mod demos;
+mod executions;
+mod holds;
+mod items;
+mod notifications;
+mod ports;
+mod questions;
+mod queue;
+mod recovery;
+mod removal;
+mod repositories;
+mod resources;
+mod secrets;
+mod simulators;
+mod workspaces;
+
+pub use agents::AgentMethod;
+pub use approvals::ApprovalMethod;
+pub use assignments::AssignmentMethod;
+pub use chats::ChatMethod;
+pub use ci::CiMethod;
+pub use daemon::DaemonMethod;
+pub use demos::DemoMethod;
+pub use executions::ExecutionMethod;
+pub use holds::HoldMethod;
+pub use items::ItemMethod;
+pub use notifications::NotificationMethod;
+pub use ports::PortMethod;
+pub use questions::QuestionMethod;
+pub use queue::QueueMethod;
+pub use recovery::RecoveryMethod;
+pub use removal::RemovalMethod;
+pub use repositories::RepositoryMethod;
+pub use resources::ResourceMethod;
+pub use secrets::SecretMethod;
+pub use simulators::SimulatorMethod;
+pub use workspaces::WorkspaceMethod;
 
 pub const VERSION: u32 = 141;
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -129,763 +170,62 @@ pub struct Request {
 
 impl Request {
     /// A request from this process, carrying its workspace scope token if any.
-    pub fn new(method: Method) -> Self {
+    pub fn new(method: impl Into<Method>) -> Self {
         Self {
             protocol: VERSION,
             id: 1,
-            method,
+            method: method.into(),
             scope: crate::env::scope_token(),
         }
     }
 }
 
+/// Every request; each decodes from its own spelling.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Method {
+    /// Answered before the protocol check and authorization.
+    Reattach(Reattachment),
+    Operation(Operation),
+}
+
+/// A request that resumes a connection rather than asking a domain.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Method {
-    // Daemon administration.
-    Status,
-    Shutdown,
-    ReloadConfig,
-    // Repositories.
-    ListRepositories,
-    RegisterRepository {
-        source: crate::repository::Selector,
-        name: Option<String>,
-        path: Option<std::path::PathBuf>,
-    },
-    /// Clone a repository URL for `shoal contribute`.
-    RegisterContribution {
-        source: String,
-        name: Option<String>,
-    },
-    RenameRepository {
-        repository: crate::repository::Selector,
-        name: String,
-    },
-    RepositoryConfig {
-        repository: crate::repository::Selector,
-    },
-    SetRepositoryConfig {
-        repository: crate::repository::Selector,
-        toml: Option<String>,
-    },
-    EditRepositoryConfig {
-        repository: crate::repository::Selector,
-        changes: Vec<crate::config::edit::Change>,
-    },
-    RemoveRepository {
-        repository: crate::repository::Selector,
-    },
-    /// The repositories `MoveRepositories` would move into `root`, or the
-    /// configured `root_dir`, after the checks it runs before moving any.
-    PlanRepositoryMoves {
-        root: Option<std::path::PathBuf>,
-    },
-    /// Move every repository directory into the configured `root_dir`.
-    MoveRepositories,
-    /// Fetch the default branch's remote and fast-forward the local default branch.
-    SyncRepository {
-        repository: crate::repository::Selector,
-    },
-    // Workspaces.
-    ListBranches {
-        repository: crate::repository::Selector,
-    },
-    OpenBranch {
-        path: Option<std::path::PathBuf>,
-        repository: crate::repository::Selector,
-        branch: String,
-        git_profile: Option<String>,
-        base: Option<String>,
-        /// The chat opening the workspace; `None` gives it to the user.
-        chat: Option<String>,
-    },
-    CreateWorkspace {
-        path: Option<std::path::PathBuf>,
-        repository: crate::repository::Selector,
-        name: String,
-        base: Option<String>,
-        git_profile: Option<String>,
-        /// The chat opening the workspace; `None` gives it to the user.
-        chat: Option<String>,
-    },
-    /// Reopen the existing `workspace` for a launch in it, never creating one.
-    ReopenWorkspace {
-        workspace: String,
-    },
-    /// Create a workspace on a new branch in `workspace`'s repository, split
-    /// from it as its child.
-    SplitWorkspace {
-        workspace: String,
-        name: String,
-        base: Option<String>,
-    },
-    /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
-    /// request, without creating anything.
-    CheckCreation {
-        repository: crate::repository::Selector,
-        /// The new branch; `existing` names a branch to open instead.
-        branch: Option<String>,
-        existing: Option<String>,
-        base: Option<String>,
-        git_profile: Option<String>,
-        path: Option<std::path::PathBuf>,
-    },
-    /// Refuse the work `after` names that a queued launch in `repository`
-    /// could not wait for, without queuing anything.
-    CheckDependencies {
-        repository: crate::repository::Selector,
-        after: Vec<crate::model::Dependency>,
-    },
-    AdoptWorkspace {
-        repository: crate::repository::Selector,
-        path: std::path::PathBuf,
-        copy: bool,
-    },
-    RenameWorkspace {
-        workspace: String,
-        branch: String,
-    },
-    ListWorkspaces,
-    // Chats in registered checkouts.
-    /// Record a chat whose agent replaces process `pid`.
-    StartChat {
-        repository: crate::repository::Selector,
-        agent: String,
-        pid: u32,
-    },
-    /// Record that `chat`'s agent now runs as process `pid`, for an agent
-    /// started detached instead of in place of the recording process.
-    MoveChat {
-        chat: String,
-        pid: u32,
-    },
-    ListChats,
-    // The agent queue under `max_agents`.
-    QueueAdd {
-        request: crate::model::QueueRequest,
-    },
-    ListQueue,
-    /// The plan a queued start runs.
-    QueuedPlan {
-        entry: String,
-    },
-    /// Remove a waiting entry, named by ID or workspace name.
-    QueueRemove {
-        entry: String,
-    },
-    /// Keep a starting entry's slot while the connection stays open.
-    QueueHold {
-        entry: String,
-    },
-    /// Record the workspace a starting entry opened.
-    QueueAttach {
-        entry: String,
-        workspace: String,
-    },
-    /// End a starting entry that could not start its agent.
-    QueueFail {
-        entry: String,
-        error: String,
-    },
-    HoldAcquire {
-        workspace: String,
-        name: String,
-        reason: Option<String>,
-    },
-    HoldRelease {
-        workspace: String,
-        name: String,
-    },
-    HoldList {
-        workspace: String,
-    },
-    /// Running demos, of one workspace or, unscoped, of every workspace.
-    ListDemos {
-        workspace: Option<String>,
-    },
-    /// How far the start of one demo launch in a workspace got.
-    DemoProgress {
-        workspace: String,
-        launch: String,
-    },
-    /// Ask a workspace's demos to stop: the one named, or every one.
-    StopDemos {
-        workspace: String,
-        name: Option<String>,
-    },
-    /// Record or clear the workspace whose branch this one builds on.
-    SetBaseWorkspace {
-        workspace: String,
-        base: Option<String>,
-    },
-    WorkspaceUndone {
-        workspace: String,
-    },
-    /// Forget the workspace's stopped work, only `execution`'s when given,
-    /// or else its last session.
-    DiscardStoppedWork {
-        workspace: String,
-        execution: Option<String>,
-    },
-    /// `cleanup` requests cleanup even when `[done] cleanup` is false.
-    WorkspaceDone {
-        workspace: String,
-        cleanup: bool,
-    },
-    MarkReady {
-        workspace: String,
-        selection: crate::forge::items::link::Selection,
-    },
-    /// `draft` overrides `[unready] draft` when set.
-    ClearReady {
-        workspace: String,
-        selection: crate::forge::items::link::Selection,
-        draft: Option<bool>,
-    },
-    /// The caller's execution, when scoped, is recorded as the reporter,
-    /// and `session` as the agent session it resumes.
-    SetAgentState {
-        workspace: String,
-        state: crate::state::AgentState,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
-    },
-    /// [`Method::SetAgentState`] idle for a turn `failure` ended, which may
-    /// schedule a retry of the turn.
-    ReportTurnFailure {
-        workspace: String,
-        failure: crate::state::TurnFailure,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
-    },
-    SetIssue {
-        workspace: String,
-        url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-    },
-    /// Link an issue or PR by number or URL with a relation.
-    LinkItem {
-        workspace: String,
-        kind: crate::forge::items::link::ItemKind,
-        url: String,
-        relation: crate::model::Relation,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-    },
-    /// Unlink the relation's items, optionally only one kind or one item.
-    UnlinkItems {
-        workspace: String,
-        relation: crate::model::Relation,
-        kind: Option<crate::forge::items::link::ItemKind>,
-        url: Option<String>,
-    },
-    SetPr {
-        workspace: String,
-        #[serde(flatten)]
-        action: crate::daemon::links::pr::Action,
-    },
-    PrWait {
-        workspace: String,
-        timeout_secs: Option<u64>,
-    },
-    WatchItems {
-        workspace: String,
-        selection: crate::forge::items::link::Selection,
-        timeout_secs: Option<u64>,
-    },
-    /// Long-lived: answers once whether the workspace's agent is idle with
-    /// undelivered messages or queued item updates matches `due`.
-    AwaitAgentWake {
-        workspace: String,
-        due: bool,
-    },
-    AcknowledgePrUpdates {
-        workspace: String,
-        deliveries: Vec<String>,
-        /// Agent messages the watch printed.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        messages: Vec<i64>,
-    },
-    InspectWorkspace {
-        workspace: String,
-    },
-    /// The workspace record once its worktree identity is verified, and with
-    /// `on_branch` that it is on its recorded branch, before the CLI changes Git
-    /// state through it.
-    VerifyWorkspace {
-        workspace: String,
-        on_branch: bool,
-    },
-    /// Fast-forward the workspace recorded on `branch` to the fetched
-    /// `origin/<branch>`, refusing a worktree that is not the recorded one on it.
-    FastForwardWorkspace {
-        workspace: String,
-        branch: String,
-    },
-    /// Link the open PR of the workspace's branch, or open one and link it.
-    OpenPull {
-        workspace: String,
-        options: crate::forge::items::create::PullOptions,
-    },
-    /// Open an issue in the workspace's repository, or the one `repository`
-    /// names, linking it when `link` is set.
-    OpenIssue {
-        workspace: String,
-        issue: crate::forge::items::create::NewIssue,
-        repository: Option<String>,
-        link: bool,
-    },
-    /// Change an issue or PR of the workspace's repository: the one `item`
-    /// names, or the workspace's linked one of `kind`.
-    ItemAction {
-        workspace: String,
-        kind: crate::forge::items::link::ItemKind,
-        item: Option<String>,
-        action: crate::forge::items::action::Action,
-    },
-    WorkspaceEnv {
-        workspace: String,
-    },
-    RevokeWorkspaceEnv {
-        workspace: String,
-        token: String,
-    },
-    WorkspaceStatus {
-        workspace: String,
-    },
-    /// Issues or PRs of the workspace's repository that `search` matches,
-    /// answered in one or more `items` frames and then `ok`.
-    ListItems {
-        workspace: String,
-        kind: crate::forge::items::link::ItemKind,
-        search: crate::forge::items::list::Search,
-    },
-    /// A request to the workspace repository's forge API, answered with
-    /// the response's JSON text in one or more `api_response` frames and
-    /// then `ok`.
-    ForgeApi {
-        workspace: String,
-        request: crate::forge::raw::RawRequest,
-    },
-    /// Linked items, or an explicit one, for the CLI to look up.
-    SelectItems {
-        workspace: String,
-        selection: crate::forge::items::link::Selection,
-    },
-    CheckLog {
-        workspace: String,
-        selection: crate::forge::items::link::Selection,
-        check: String,
-    },
-    /// Rerun failed or cancel running checks on a PR's head; none named means all.
-    CiAction {
-        workspace: String,
-        item: Option<String>,
-        action: crate::forge::ci::CiAction,
-        checks: Vec<String>,
-    },
-    /// Rerun or cancel one CI workflow run, named by its web URL or the
-    /// number in it; `failed` reruns only its failed jobs.
-    CiRunAction {
-        workspace: String,
-        run: String,
-        action: crate::forge::ci::CiAction,
-        failed: bool,
-    },
-    /// One CI workflow run.
-    ViewCiRun {
-        workspace: String,
-        run: String,
-    },
-    /// A CI workflow run's jobs, sent in pages.
-    CiRunJobs {
-        workspace: String,
-        run: String,
-    },
-    /// The log of one job of a CI workflow run.
-    CiRunJobLog {
-        workspace: String,
-        run: String,
-        job: crate::forge::ci::run_view::JobRef,
-    },
-    /// The newest CI workflow runs, on the workspace's branch by default,
-    /// sent in pages.
-    ListCiRuns {
-        workspace: String,
-        filter: crate::forge::ci::run_view::RunFilter,
-    },
-    /// Start a CI workflow run on a branch, by default the workspace's.
-    StartCiRun {
-        workspace: String,
-        workflow: Option<String>,
-        branch: Option<String>,
-        inputs: std::collections::BTreeMap<String, String>,
-    },
-    /// Workspaces that link an item or hold a resource.
-    FindWorkspaces {
-        target: crate::model::WorkspaceTarget,
-    },
-    StopWorkspace {
-        workspace: String,
-        /// The user checked that executions Shoal cannot prove ended did.
-        #[serde(default)]
-        acknowledge_unproven: bool,
-    },
-    CheckRemoval {
-        workspace: String,
-        #[serde(default)]
-        include_changes: bool,
-    },
-    RemoveWorkspace {
-        workspace: String,
-        unsaved: UnsavedWork,
-    },
-    /// Remove idle and merged cleanup candidates without waiting for their
-    /// idle delay, and empty shared caches nothing is using.
-    Cleanup {
-        dry_run: bool,
-        #[serde(flatten)]
-        selection: crate::daemon::cleanup::Selection,
-    },
-    /// Removed workspaces that can still be restored.
-    RemovedWorkspaces,
-    /// Where the tracked agents of the repository with this ID kept their
-    /// configuration, also once it is removed; in pages.
-    AgentEnvironments {
-        repository_id: String,
-    },
-    /// Forget [`Method::AgentEnvironments`] once a removed repository's trust
-    /// entries there are clean.
-    ForgetAgentEnvironments {
-        repository_id: String,
-    },
-    /// Git worktrees under repositories' Shoal directories that no
-    /// workspace owns; in pages.
-    UntrackedWorktrees,
-    /// Branches removal kept because only they have some commits, only
-    /// those of one repository when a selector names it.
-    KeptBranches {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<String>,
-    },
-    /// Delete kept branches with the commits only they have; all or none.
-    DeleteKeptBranches {
-        branches: Vec<crate::model::BranchTarget>,
-    },
-    /// Open a removed workspace again from its removal record.
-    RestoreWorkspace {
-        workspace: String,
-    },
-    /// Remove a workspace, or take a removed one, and write it for another
-    /// Shoal to the new file `file`.
-    ExportWorkspace {
-        workspace: String,
-        unsaved: UnsavedWork,
-        file: std::path::PathBuf,
-    },
-    /// Record a workspace another Shoal exported as removed here, with its
-    /// checkpoint fetched from `bundle`, and open it again.
-    ImportWorkspace {
-        repository: crate::repository::Selector,
-        bundle: Option<std::path::PathBuf>,
-        prerequisite: Option<String>,
-        workspace: Box<crate::model::RemovedWorkspace>,
-    },
-    /// Keep the workspace's HEAD and unsaved files in a new checkpoint.
-    Checkpoint {
-        workspace: String,
-        name: Option<String>,
-    },
-    /// A page of an existing workspace's checkpoints numbered after `after`;
-    /// none when no workspace matches.
-    Checkpoints {
-        workspace: String,
-        after: Option<u64>,
-    },
-    /// Return a workspace to one of its checkpoints.
-    RestoreCheckpoint {
-        workspace: String,
-        checkpoint: u64,
-    },
-    Diagnose,
-    /// The forge `host` serves, asking it over `scheme` once when neither
-    /// the global config nor a recorded answer says.
-    ForgeType {
-        host: String,
-        scheme: String,
-    },
-    Doctor {
-        workspace: Option<String>,
-        options: ReconcileOptions,
-    },
-    /// Verify that this worker belongs to an unscoped caller's landing execution.
-    CheckLanding,
-    DiffBase {
-        workspace: String,
-    },
-    Conflicts {
-        workspace: String,
-        target: Option<String>,
-    },
-    /// Keep where an agent of the workspace keeps its configuration, before
-    /// Shoal trusts the workspace there, until the repository's removal.
-    KeepAgentEnvironment {
-        workspace: String,
-        environment: std::collections::BTreeMap<String, String>,
-    },
-    /// [`Method::KeepAgentEnvironment`] for a chat in the repository's
-    /// checkout, which belongs to no workspace.
-    KeepRepositoryAgentEnvironment {
-        repository: String,
-        environment: std::collections::BTreeMap<String, String>,
-    },
-    /// One effective hook, resolved against the directory where it runs.
-    WorkspaceHook {
-        workspace: String,
-        kind: HookKind,
-    },
-    /// The repository layer of the target's config, for the CLI to resolve
-    /// against the global config it reads at launch.
-    LayeredConfig {
-        target: ConfigTarget,
-    },
-    /// Long-lived: the connection stays open for the execution's lifetime.
-    /// `agent` names a Shoal agent shortcut whose exit the user is told about.
-    Execute {
-        workspace: String,
-        wrapper: Identity,
-        kind: ExecutionKind,
-        #[serde(default)]
-        agent: Option<String>,
-        #[serde(default)]
-        recover: bool,
-        /// The wrapper keeps its command running when the daemon goes away
-        /// and returns with [`Method::Reattach`].
-        #[serde(default)]
-        reattach: bool,
-        /// The agent queue entry whose slot this agent takes over.
-        #[serde(default)]
-        queue_entry: Option<String>,
-        /// The demo this command runs, recorded with its execution.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        demo: Option<Box<crate::demos::Launch>>,
-    },
+pub enum Reattachment {
     /// Long-lived: an execution connection resumed after a daemon restart.
     Reattach(Reattach),
-    // Notifications.
-    ListNotifications {
-        unread_only: bool,
-        limit: u32,
-    },
-    MarkNotificationsRead {
-        ids: Vec<i64>,
-    },
-    /// Deletes every notification, read or not; answers with how many.
-    ClearNotifications,
-    /// A message from a workspace process to the user.
-    SendMessage {
-        workspace: String,
-        message: String,
-    },
-    /// A message from the user to a workspace's agents.
-    SendAgentMessage {
-        workspace: String,
-        message: String,
-    },
-    /// The workspace's undelivered agent messages, oldest first.
-    AgentMessages {
-        workspace: String,
-    },
-    MarkAgentMessagesDelivered {
-        workspace: String,
-        ids: Vec<i64>,
-    },
-    /// A question from a workspace's agents to the user; asking an identical
-    /// question again returns it until its answer is delivered.
-    AskQuestion {
-        workspace: String,
-        ask: crate::daemon::questions::Ask,
-    },
-    /// Open questions, in every workspace unless one is named.
-    ListQuestions {
-        workspace: Option<String>,
-    },
-    /// One question by ID, for the user.
-    ShowQuestion {
-        id: i64,
-    },
-    /// Withdraw the workspace's pending approval request `id`, which its
-    /// agent no longer needs.
-    WithdrawApproval {
-        workspace: String,
-        id: i64,
-    },
-    /// Delete the unread message `id` the workspace sent the user.
-    WithdrawMessage {
-        workspace: String,
-        id: i64,
-    },
-    /// Close the workspace's open question `id`, which its agents no longer
-    /// need answered.
-    WithdrawQuestion {
-        workspace: String,
-        id: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<crate::daemon::questions::Question>,
-    },
-    /// The user's answer, queued for the asking workspace's agents.
-    /// `shown` is the question the user was shown, which a later question
-    /// reusing its number does not match.
-    AnswerQuestion {
-        id: i64,
-        answer: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<crate::daemon::questions::Question>,
-    },
-    /// Accept the stored recommendation literally, including numeric text.
-    AcceptQuestionRecommendation {
-        id: i64,
-        shown: Option<crate::daemon::questions::Question>,
-    },
-    /// Long-lived: the question once it is answered. What it asks tells it
-    /// from a later question reusing its number.
-    AwaitAnswer {
-        workspace: String,
-        id: i64,
-        ask: crate::daemon::questions::Ask,
-    },
-    /// The workspace's undelivered agent messages and queued item updates,
-    /// without waiting or polling the forge; acknowledge them with
-    /// [`Method::AcknowledgePrUpdates`]. It replaces a running watch.
-    AgentUpdates {
-        workspace: String,
-    },
-    /// The chat's undelivered messages about the workspaces it coordinates,
-    /// without waiting; acknowledge them with
-    /// [`Method::AcknowledgeChatMessages`]. It replaces a running wait.
-    ChatUpdates {
-        chat: String,
-    },
-    /// Long-lived: the chat's next messages, once it has any.
-    WaitChatMessages {
-        chat: String,
-    },
-    AcknowledgeChatMessages {
-        chat: String,
-        ids: Vec<i64>,
-    },
-    /// Long-lived: unread notifications after `after`, then new ones as they
-    /// are recorded, each as a [`Body::Notification`] response and marked
-    /// read on delivery unless `keep_unread`.
-    WatchNotifications {
-        keep_unread: bool,
-        after: i64,
-    },
-    WatchWorkspaceEvents {
-        since: Option<i64>,
-        follow: bool,
-    },
-    // Ports.
-    PortAcquire {
-        workspace: String,
-        name: String,
-        request: PortRequest,
-    },
-    PortRelease {
-        workspace: String,
-        name: String,
-    },
-    PortOverview {
-        workspace: String,
-    },
-    PortCatalog {
-        workspace: String,
-    },
-    ListApprovals {
-        workspace: Option<String>,
-    },
-    ShowApproval {
-        id: i64,
-    },
-    /// Confirm the caller may fetch a configured secret, requesting approval
-    /// when it is gated; the daemon never sees the value.
-    SecretAcquire {
-        workspace: String,
-        name: String,
-        request: crate::daemon::secrets::SecretRequest,
-    },
-    SecretRelease {
-        workspace: String,
-        name: String,
-    },
-    SecretCatalog {
-        workspace: String,
-    },
-    /// `shown` is the request the user was shown, which a later request
-    /// reusing its number does not match.
-    DecideApproval {
-        id: i64,
-        approve: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
-        /// Edits, a reason or a duplicate, for proposals only.
-        #[serde(default)]
-        details: crate::daemon::approvals::proposals::ProposalDecision,
-    },
-    /// Pass a request the coordinating agent of `workspace` decides on to the
-    /// next coordinating agent above it that holds a grant, or to the user.
-    EscalateApproval {
-        workspace: String,
-        id: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
-    },
-    // Cooperative resources.
-    ResourceAcquire {
-        workspace: String,
-        request: ResourceRequest,
-    },
-    ResourceRelease {
-        workspace: String,
-        pool: String,
-        name: String,
-    },
-    ResourceOverview {
-        workspace: String,
-    },
-    ResourceCatalog {
-        workspace: String,
-    },
-    // Simulators.
-    SimCatalog {
-        workspace: String,
-    },
-    SimOverview {
-        workspace: Option<String>,
-    },
-    /// Lease records for completion, without loading repository configuration.
-    SimList {
-        workspace: Option<String>,
-    },
-    SimAcquire {
-        workspace: String,
-        request: SimRequest,
-    },
-    SimRelease {
-        workspace: String,
-        name: String,
-    },
-    SimHistory {
-        workspace: Option<String>,
-        limit: u32,
-        before: Option<i64>,
-    },
+}
+
+/// A request one of the daemon's domains answers, by its domain.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Operation {
+    Daemon(DaemonMethod),
+    Repository(RepositoryMethod),
+    Workspace(WorkspaceMethod),
+    Removal(RemovalMethod),
+    Recovery(RecoveryMethod),
+    Execution(ExecutionMethod),
+    Assignment(AssignmentMethod),
+    Agent(AgentMethod),
+    Chat(ChatMethod),
+    Queue(QueueMethod),
+    Hold(HoldMethod),
+    Demo(DemoMethod),
+    Item(ItemMethod),
+    Ci(CiMethod),
+    Notification(NotificationMethod),
+    Question(QuestionMethod),
+    Approval(ApprovalMethod),
+    Port(PortMethod),
+    Secret(SecretMethod),
+    Resource(ResourceMethod),
+    Simulator(SimulatorMethod),
 }
 
 impl Method {
-    /// The variant's protocol name, for timing lines.
+    /// The request's protocol name, for timing lines.
     pub fn name(&self) -> String {
         match serde_json::to_value(self) {
             Ok(serde_json::Value::String(name)) => name,
@@ -900,41 +240,123 @@ impl Method {
 
     /// Daemon administration, which must reach a daemon of any release.
     pub fn controls_daemon(&self) -> bool {
-        matches!(self, Self::Status | Self::Shutdown | Self::ReloadConfig)
+        match self {
+            Self::Reattach(_) => false,
+            Self::Operation(operation) => operation.controls_daemon(),
+        }
+    }
+
+    /// How long the request keeps its connection.
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::Reattach(_) => Lifetime::Resumed,
+            Self::Operation(operation) => operation.lifetime(),
+        }
     }
 
     /// Executions, waits and streams, which keep the connection open after
     /// the request.
     pub fn holds_connection(&self) -> bool {
-        matches!(
-            self,
-            Self::Execute { .. }
-                | Self::Reattach(_)
-                | Self::WatchNotifications { .. }
-                | Self::QueueHold { .. }
-                | Self::WatchWorkspaceEvents { .. }
-                | Self::PrWait { .. }
-                | Self::AwaitAgentWake { .. }
-                | Self::AwaitAnswer { .. }
-                | Self::WatchItems { .. }
-                | Self::WaitChatMessages { .. }
-        )
+        self.lifetime() != Lifetime::Reply
     }
 
     /// Long-lived requests whose clients send them again when the daemon
     /// closes the connection unanswered, as across a restart.
     pub fn retries_when_closed(&self) -> bool {
-        matches!(
-            self,
-            Self::Reattach(_)
-                | Self::QueueHold { .. }
-                | Self::PrWait { .. }
-                | Self::AwaitAgentWake { .. }
-                | Self::AwaitAnswer { .. }
-                | Self::WatchItems { .. }
-                | Self::WaitChatMessages { .. }
-        )
+        self.lifetime() == Lifetime::Resumed
     }
+}
+
+impl Operation {
+    /// Daemon administration, which must reach a daemon of any release.
+    pub fn controls_daemon(&self) -> bool {
+        matches!(self, Self::Daemon(_))
+    }
+
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::Workspace(method) => method.lifetime(),
+            Self::Execution(method) => method.lifetime(),
+            Self::Agent(method) => method.lifetime(),
+            Self::Chat(method) => method.lifetime(),
+            Self::Queue(method) => method.lifetime(),
+            Self::Item(method) => method.lifetime(),
+            Self::Notification(method) => method.lifetime(),
+            Self::Question(method) => method.lifetime(),
+            Self::Daemon(_)
+            | Self::Repository(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Assignment(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::Ci(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_) => Lifetime::Reply,
+        }
+    }
+}
+
+impl From<Operation> for Method {
+    fn from(operation: Operation) -> Self {
+        Self::Operation(operation)
+    }
+}
+
+/// Each domain's requests convert into the operation and call carrying them.
+macro_rules! from_domains {
+    ($($variant:ident($method:ty)),+ $(,)?) => {$(
+        impl From<$method> for Operation {
+            fn from(method: $method) -> Self {
+                Self::$variant(method)
+            }
+        }
+
+        impl From<$method> for Method {
+            fn from(method: $method) -> Self {
+                Self::Operation(method.into())
+            }
+        }
+    )+};
+}
+
+from_domains!(
+    Daemon(DaemonMethod),
+    Repository(RepositoryMethod),
+    Workspace(WorkspaceMethod),
+    Removal(RemovalMethod),
+    Recovery(RecoveryMethod),
+    Execution(ExecutionMethod),
+    Assignment(AssignmentMethod),
+    Agent(AgentMethod),
+    Chat(ChatMethod),
+    Queue(QueueMethod),
+    Hold(HoldMethod),
+    Demo(DemoMethod),
+    Item(ItemMethod),
+    Ci(CiMethod),
+    Notification(NotificationMethod),
+    Question(QuestionMethod),
+    Approval(ApprovalMethod),
+    Port(PortMethod),
+    Secret(SecretMethod),
+    Resource(ResourceMethod),
+    Simulator(SimulatorMethod),
+);
+
+/// How long a request keeps its connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lifetime {
+    /// Until the reply.
+    Reply,
+    /// Until either side hangs up, as an execution or a stream does.
+    Open,
+    /// Until either side hangs up; the client sends it again when the daemon
+    /// closes the connection unanswered, as across a restart.
+    Resumed,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1230,7 +652,7 @@ impl Protection {
     }
 }
 
-/// Wrapper → daemon messages after an [`Method::Execute`] response.
+/// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {

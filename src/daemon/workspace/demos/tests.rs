@@ -7,7 +7,7 @@ use crate::{
         workspace::ExecutionKind,
     },
     model::Workspace,
-    protocol::Method,
+    protocol::DemoMethod,
     test_support::{manager, repository},
 };
 
@@ -178,12 +178,12 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
             },
         )
         .await;
-    let mut list = Method::ListDemos { workspace: None };
+    let mut list = DemoMethod::ListDemos { workspace: None };
     scope::authorize(&manager, Some("scope"), &mut list)
         .await
         .unwrap();
-    assert!(matches!(list, Method::ListDemos { workspace: Some(own) } if own == first.id));
-    let mut stop = Method::StopDemos {
+    assert!(matches!(list, DemoMethod::ListDemos { workspace: Some(own) } if own == first.id));
+    let mut stop = DemoMethod::StopDemos {
         workspace: first.name.clone(),
         name: None,
     };
@@ -191,10 +191,10 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .await
         .unwrap();
     for mut method in [
-        Method::ListDemos {
+        DemoMethod::ListDemos {
             workspace: Some(second.name.clone()),
         },
-        Method::StopDemos {
+        DemoMethod::StopDemos {
             workspace: second.name.clone(),
             name: None,
         },

@@ -15,7 +15,7 @@ use crate::{
         ApprovalRequest, DecisionStatus, Specification,
         proposals::{Duplicate, ProposalDecision},
     },
-    protocol::Method,
+    protocol::ApprovalMethod,
 };
 
 pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
@@ -52,7 +52,8 @@ fn decision_details(args: &ApprovalsArgs) -> Result<ProposalDecision> {
 }
 
 async fn show(ctx: &Context, id: i64) -> Result<i32> {
-    let request = request::<Box<ApprovalRequest>>(&ctx.paths, Method::ShowApproval { id }).await?;
+    let request =
+        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id }).await?;
     show_request(ctx, request).await
 }
 
@@ -226,16 +227,18 @@ pub(super) async fn decide(
 /// grants in view.
 pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let request =
-        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
-            .await?
-            .into_iter()
-            .find(|request| {
-                request.id == id
-                    && request.created_at == created_at
-                    && request.status == DecisionStatus::Pending
-            })
-            .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    let request = request::<Vec<ApprovalRequest>>(
+        &ctx.paths,
+        ApprovalMethod::ListApprovals { workspace: None },
+    )
+    .await?
+    .into_iter()
+    .find(|request| {
+        request.id == id
+            && request.created_at == created_at
+            && request.status == DecisionStatus::Pending
+    })
+    .with_context(|| format!("approval request {id} changed since it was listed"))?;
     prompt_decision(ctx, Box::new(request)).await
 }
 
@@ -249,7 +252,7 @@ async fn submit(
     shown: Option<Box<ApprovalRequest>>,
     details: ProposalDecision,
 ) -> Result<i32> {
-    let method = Method::DecideApproval {
+    let method = ApprovalMethod::DecideApproval {
         id,
         approve,
         shown,
@@ -274,7 +277,7 @@ async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -
     let workspace = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
     let request = request::<Box<ApprovalRequest>>(
         &ctx.paths,
-        Method::EscalateApproval {
+        ApprovalMethod::EscalateApproval {
             workspace,
             id,
             shown,
@@ -305,21 +308,24 @@ fn ensure_scope_token(ctx: &Context) -> Result<()> {
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
     let workspace = match workspace {
         Some(workspace) => workspace,
-        None => request::<Box<ApprovalRequest>>(&ctx.paths, Method::ShowApproval { id })
+        None => request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id })
             .await?
             .workspace_id
             .clone(),
     };
-    let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, Method::WithdrawApproval { workspace, id })
-            .await?;
+    let request = request::<Box<ApprovalRequest>>(
+        &ctx.paths,
+        ApprovalMethod::WithdrawApproval { workspace, id },
+    )
+    .await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests =
-        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
+        request::<Vec<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ListApprovals { workspace })
+            .await?;
     if ctx.interactive_output() && !requests.is_empty() {
         let (selected, decision) = pick_request(ctx, requests)?;
         return match decision {
@@ -369,9 +375,11 @@ fn pick_request(
 }
 
 async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
-    let requests =
-        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
-            .await?;
+    let requests = request::<Vec<ApprovalRequest>>(
+        &ctx.paths,
+        ApprovalMethod::ListApprovals { workspace: None },
+    )
+    .await?;
     let pending: Vec<_> = requests
         .into_iter()
         .filter(|request| request.status == DecisionStatus::Pending)

@@ -187,7 +187,8 @@ async fn accept_reattach(listener: &tokio::net::UnixListener) -> (Reattach, BufR
     let (stream, _) = listener.accept().await.unwrap();
     let mut stream = BufReader::new(stream);
     let request: protocol::Request = protocol::read_buffered(&mut stream).await.unwrap();
-    let protocol::Method::Reattach(reattach) = request.method else {
+    let protocol::Method::Reattach(protocol::Reattachment::Reattach(reattach)) = request.method
+    else {
         panic!("wrapper did not reattach");
     };
     assert!(request.scope.is_none());

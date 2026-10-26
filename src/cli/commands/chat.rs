@@ -21,7 +21,7 @@ use crate::{
     },
     config::{Effective, templates},
     model::{Chat, Repository, SyncedRepository},
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, RepositoryMethod},
     repository,
 };
 
@@ -130,7 +130,7 @@ async fn sync(ctx: &Context, repo: &Repository) {
             "Syncing the default branch",
             request::<SyncedRepository>(
                 &ctx.paths,
-                Method::SyncRepository {
+                RepositoryMethod::SyncRepository {
                     repository: repo.id.clone().into(),
                 },
             ),

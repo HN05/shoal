@@ -17,7 +17,7 @@ use crate::{
     },
     git,
     model::{Repository, Workspace},
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 /// The configured command a manual review runs.
@@ -305,7 +305,7 @@ async fn update_to_head(
     let tracking = fetch_pull_branch(repo, "head", head).await?;
     let updated: bool = client::request(
         &ctx.paths,
-        Method::FastForwardWorkspace {
+        WorkspaceMethod::FastForwardWorkspace {
             workspace: workspace.id.clone(),
             branch: head.to_owned(),
         },

@@ -16,7 +16,7 @@ use crate::{
         run_action::{Run, RunActed, validate_run_reference},
         run_view::{JobRef, RunFilter, RunJob, RunView, validate_filter},
     },
-    protocol::Method,
+    protocol::CiMethod,
 };
 
 pub(super) async fn ci(ctx: &Context, command: ForgeCiCommand) -> Result<i32> {
@@ -55,7 +55,7 @@ async fn run(ctx: &Context, args: RunArgs) -> Result<i32> {
         ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let started: StartedRun = client::request(
         &ctx.paths,
-        Method::StartCiRun {
+        CiMethod::StartCiRun {
             workspace,
             workflow: args.workflow,
             branch: args.branch,
@@ -73,7 +73,7 @@ async fn act(ctx: &Context, target: RunTarget, action: CiAction, failed: bool) -
         ui::select_workspace(ctx, target.workspace, ui::Fallback::CurrentDirectory).await?;
     let acted: RunActed = client::request(
         &ctx.paths,
-        Method::CiRunAction {
+        CiMethod::CiRunAction {
             workspace,
             run: target.run,
             action,
@@ -118,7 +118,7 @@ async fn read_run(ctx: &Context, workspace: &str, run: &str) -> Result<RunView> 
     let (workspace, input) = (workspace.to_owned(), run.to_owned());
     let run = client::request(
         &ctx.paths,
-        Method::ViewCiRun {
+        CiMethod::ViewCiRun {
             workspace: workspace.clone(),
             run: input.clone(),
         },
@@ -126,7 +126,7 @@ async fn read_run(ctx: &Context, workspace: &str, run: &str) -> Result<RunView> 
     .await?;
     let jobs = client::pages::<RunJob>(
         &ctx.paths,
-        Method::CiRunJobs {
+        CiMethod::CiRunJobs {
             workspace,
             run: input,
         },
@@ -161,7 +161,7 @@ async fn read_failed_logs(ctx: &Context, workspace: &str, run: &str, view: &mut 
 async fn job_log(ctx: &Context, workspace: &str, run: &str, job: JobRef) -> Result<CheckLog> {
     client::request(
         &ctx.paths,
-        Method::CiRunJobLog {
+        CiMethod::CiRunJobLog {
             workspace: workspace.into(),
             run: run.into(),
             job,
@@ -173,7 +173,7 @@ async fn job_log(ctx: &Context, workspace: &str, run: &str, job: JobRef) -> Resu
 async fn list(ctx: &Context, workspace: Option<String>, filter: RunFilter) -> Result<i32> {
     validate_filter(&filter)?;
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let runs = client::pages::<Run>(&ctx.paths, Method::ListCiRuns { workspace, filter }).await?;
+    let runs = client::pages::<Run>(&ctx.paths, CiMethod::ListCiRuns { workspace, filter }).await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)
 }

@@ -13,7 +13,7 @@ use crate::{
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     daemon::questions::{Ask, Listing, Question},
-    protocol::Method,
+    protocol::{AgentMethod, QuestionMethod},
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
@@ -23,7 +23,8 @@ pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
             answer(ctx, id, args.answer.unwrap_or_default(), None).await
         }
         Some(id) => {
-            let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
+            let question =
+                request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
             show(ctx, question).await
         }
         None => list(ctx, args.workspace).await,
@@ -49,7 +50,7 @@ pub(super) async fn ask(
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let question: Question = request(
         &ctx.paths,
-        Method::AskQuestion {
+        QuestionMethod::AskQuestion {
             workspace: workspace.clone(),
             ask,
         },
@@ -93,7 +94,7 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     };
     request::<()>(
         &ctx.paths,
-        Method::MarkAgentMessagesDelivered {
+        AgentMethod::MarkAgentMessagesDelivered {
             workspace,
             ids: vec![id],
         },
@@ -127,7 +128,7 @@ async fn await_answer(
 ) -> Result<Question> {
     let asked = asked.into();
     let executable = Executable::current();
-    let method = || Method::AwaitAnswer {
+    let method = || QuestionMethod::AwaitAnswer {
         workspace: workspace.to_owned(),
         id: asked.id,
         ask: asked.ask.clone(),
@@ -146,7 +147,8 @@ fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let listing = request::<Listing>(&ctx.paths, Method::ListQuestions { workspace }).await?;
+    let listing =
+        request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { workspace }).await?;
     if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;
@@ -200,7 +202,7 @@ fn picker_rows(questions: &[Question]) -> Entries {
 }
 
 pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let question = request::<Question>(&ctx.paths, Method::ShowQuestion { id }).await?;
+    let question = request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
     let workspace = workspace.unwrap_or_else(|| question.workspace_id.clone());
     withdraw_shown(ctx, workspace, question).await
 }
@@ -209,7 +211,7 @@ async fn withdraw_shown(ctx: &Context, workspace: String, shown: Question) -> Re
     let id = shown.id;
     let question = request::<Question>(
         &ctx.paths,
-        Method::WithdrawQuestion {
+        QuestionMethod::WithdrawQuestion {
             workspace,
             id,
             shown: Some(shown),
@@ -227,10 +229,10 @@ async fn withdraw_shown(ctx: &Context, workspace: String, shown: Question) -> Re
 }
 
 async fn answer(ctx: &Context, id: i64, answer: String, shown: Option<Question>) -> Result<i32> {
-    submit_answer(ctx, Method::AnswerQuestion { id, answer, shown }).await
+    submit_answer(ctx, QuestionMethod::AnswerQuestion { id, answer, shown }).await
 }
 
-async fn submit_answer(ctx: &Context, method: Method) -> Result<i32> {
+async fn submit_answer(ctx: &Context, method: QuestionMethod) -> Result<i32> {
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions without their scope token"
@@ -257,7 +259,7 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
         QuestionAction::Recommend => {
             submit_answer(
                 ctx,
-                Method::AcceptQuestionRecommendation {
+                QuestionMethod::AcceptQuestionRecommendation {
                     id: question.id,
                     shown: Some(question),
                 },

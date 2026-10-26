@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::scope::{self, Caller},
-    protocol::Method,
+    protocol::HoldMethod,
     state::WorkspaceState,
     test_support::{manager, repository},
 };
@@ -55,7 +55,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         .await;
     // Workspace processes may list their own holds but never change them.
     for target in [&workspace.name, &other.id] {
-        let mut list = Method::HoldList {
+        let mut list = HoldMethod::HoldList {
             workspace: target.clone(),
         };
         assert_eq!(
@@ -65,12 +65,12 @@ async fn holds_are_idempotent_persistent_and_scoped() {
             target == &workspace.name
         );
         for mut method in [
-            Method::HoldAcquire {
+            HoldMethod::HoldAcquire {
                 workspace: target.clone(),
                 name: "app".into(),
                 reason: None,
             },
-            Method::HoldRelease {
+            HoldMethod::HoldRelease {
                 workspace: target.clone(),
                 name: "app".into(),
             },

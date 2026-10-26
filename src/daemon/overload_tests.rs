@@ -1,6 +1,10 @@
 use super::notifications::NotificationKind;
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::{
+    daemon::workspace::{ExecutionKind, StopRequest},
+    protocol::RemovalMethod,
+    test_support::{manager, repository},
+};
 use std::{
     fs::{self, OpenOptions},
     future::Future,
@@ -550,7 +554,7 @@ async fn stop_child() {
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
     crate::cli::client::request::<()>(
         &paths,
-        Method::StopWorkspace {
+        RemovalMethod::StopWorkspace {
             workspace: id,
             acknowledge_unproven: false,
         },

@@ -10,7 +10,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Workspace, WorkspaceRef},
-    protocol::Method,
+    protocol::WorkspaceMethod,
 };
 
 pub(super) async fn run(
@@ -31,8 +31,11 @@ pub(super) async fn run(
                 Change::Set(None) => Some(pick(ctx, &workspace).await?),
                 Change::Clear => None,
             };
-            client::request::<Workspace>(&ctx.paths, Method::SetBaseWorkspace { workspace, base })
-                .await?
+            client::request::<Workspace>(
+                &ctx.paths,
+                WorkspaceMethod::SetBaseWorkspace { workspace, base },
+            )
+            .await?
         }
         None => find(&client::workspaces(&ctx.paths).await?, &workspace)?.clone(),
     };

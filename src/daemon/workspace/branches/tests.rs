@@ -6,7 +6,7 @@ use crate::{
         workspace::{ExecutionKind, Manager, NewWorktreeOptions},
     },
     paths::Paths,
-    protocol::Method,
+    protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},
     removal::InspectionPolicy,
     test_support::{commit, git, manager, repository},
 };
@@ -1276,14 +1276,18 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         assert_eq!(caller.workspace_id, workspace.id);
 
         for (mut method, allowed) in [
-            (Method::Status, true),
-            (Method::CheckLanding, kind == ExecutionKind::Land),
-            (Method::Shutdown, false),
+            (Operation::from(DaemonMethod::Status), true),
             (
-                Method::StopWorkspace {
+                ExecutionMethod::CheckLanding.into(),
+                kind == ExecutionKind::Land,
+            ),
+            (DaemonMethod::Shutdown.into(), false),
+            (
+                RemovalMethod::StopWorkspace {
                     workspace: workspace.id.clone(),
                     acknowledge_unproven: false,
-                },
+                }
+                .into(),
                 false,
             ),
         ] {
@@ -1296,7 +1300,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             ExecutionKind::Land,
         ] {
             for target in [&workspace, &other] {
-                let mut method = Method::Execute {
+                let mut method = ExecutionMethod::Execute {
                     workspace: target.name.clone(),
                     kind: requested,
                     agent: None,
@@ -1316,7 +1320,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
                 if allowed {
                     assert_eq!(result.unwrap().unwrap().kind(), Some(kind));
-                    let Method::Execute {
+                    let ExecutionMethod::Execute {
                         workspace: target, ..
                     } = method
                     else {
@@ -1332,7 +1336,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .unwrap();
         assert!(f.manager.caller(token).await.unwrap().is_none());
         assert!(
-            scope::authorize(&f.manager, Some(token), &mut Method::Status)
+            scope::authorize(&f.manager, Some(token), &mut DaemonMethod::Status)
                 .await
                 .unwrap_err()
                 .to_string()
@@ -1878,7 +1882,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     );
     assert!(restored.verify_worktree(&w).await.is_ok());
     assert!(f.manager.verify_worktree(&w).await.is_ok());
-    let mut method = Method::AdoptWorkspace {
+    let mut method = WorkspaceMethod::AdoptWorkspace {
         repository: f.repo_id.clone().into(),
         path,
         copy: false,

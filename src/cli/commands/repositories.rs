@@ -14,7 +14,7 @@ use crate::{
     },
     config::repo::LocalConfig,
     model::{Repository, RepositoryRemoval, SyncedRepository},
-    protocol::Method,
+    protocol::RepositoryMethod,
     repository,
 };
 
@@ -38,9 +38,9 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                             .with_context(|| format!("read {}", path.display()))
                     })
                     .transpose()?;
-                Method::SetRepositoryConfig { repository, toml }
+                RepositoryMethod::SetRepositoryConfig { repository, toml }
             } else {
-                Method::RepositoryConfig { repository }
+                RepositoryMethod::RepositoryConfig { repository }
             };
             let config = request::<LocalConfig>(&ctx.paths, method).await?;
             ctx.show(&config, |config| {
@@ -97,9 +97,11 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                     ui::input(ctx, "New name")?
                 }
             };
-            let repo =
-                request::<Repository>(&ctx.paths, Method::RenameRepository { repository, name })
-                    .await?;
+            let repo = request::<Repository>(
+                &ctx.paths,
+                RepositoryMethod::RenameRepository { repository, name },
+            )
+            .await?;
             ctx.emit(
                 &format!(
                     "Renamed {}",
@@ -148,7 +150,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                     "Removing repository",
                     request::<RepositoryRemoval>(
                         &ctx.paths,
-                        Method::RemoveRepository { repository },
+                        RepositoryMethod::RemoveRepository { repository },
                     ),
                 )
                 .await?;
@@ -195,7 +197,8 @@ pub(super) async fn sync(ctx: &Context, repository: Option<String>) -> Result<i3
         .into(),
     };
     let synced =
-        request::<SyncedRepository>(&ctx.paths, Method::SyncRepository { repository }).await?;
+        request::<SyncedRepository>(&ctx.paths, RepositoryMethod::SyncRepository { repository })
+            .await?;
     ctx.show(&synced, |synced| {
         if let Some(remote) = &synced.remote {
             outln!("Fetched {remote}");
@@ -225,7 +228,7 @@ async fn register(
         "Registering repository",
         request::<Repository>(
             &ctx.paths,
-            Method::RegisterRepository { source, name, path },
+            RepositoryMethod::RegisterRepository { source, name, path },
         ),
     )
     .await

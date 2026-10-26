@@ -37,7 +37,7 @@ use crate::{
     },
     daemon::notifications::Notification,
     env,
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, NotificationMethod},
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -500,7 +500,7 @@ async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
 /// Recent notifications, newest first; showing the unread ones marks them
 /// read, as `shoal alerts` does.
 async fn notification_rows(ctx: &Context) -> Result<Entries> {
-    let method = Method::ListNotifications {
+    let method = NotificationMethod::ListNotifications {
         unread_only: false,
         limit: NOTIFICATIONS_SHOWN,
     };
@@ -553,7 +553,11 @@ async fn mark_read(ctx: &Context, notifications: &[Notification]) -> Result<()> 
     if unread.is_empty() {
         return Ok(());
     }
-    request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids: unread }).await
+    request::<()>(
+        &ctx.paths,
+        NotificationMethod::MarkNotificationsRead { ids: unread },
+    )
+    .await
 }
 
 /// One row per item that needs the user.

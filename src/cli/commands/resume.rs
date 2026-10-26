@@ -9,7 +9,7 @@ use crate::{
         LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume,
     },
     model::{Inspection, Workspace},
-    protocol::{ConfigTarget, Method},
+    protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
     state::ExecutionState,
 };
 use anyhow::{Context as _, Result, ensure};
@@ -131,7 +131,7 @@ pub async fn run(
 async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
     let discarded = client::request::<Discarded>(
         &ctx.paths,
-        Method::DiscardStoppedWork {
+        AssignmentMethod::DiscardStoppedWork {
             workspace,
             execution,
         },
@@ -322,7 +322,7 @@ async fn reconcile_stale_execution(
     }
     let reports = client::request::<Vec<Report>>(
         &ctx.paths,
-        Method::Doctor {
+        RecoveryMethod::Doctor {
             workspace: Some(inspection.workspace.id.clone()),
             options: ReconcileOptions {
                 repair: true,
@@ -507,7 +507,7 @@ async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i
 async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> Result<Vec<String>> {
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
-        let method = Method::DiscardStoppedWork {
+        let method = AssignmentMethod::DiscardStoppedWork {
             workspace: workspace.id.clone(),
             execution: Some(execution),
         };

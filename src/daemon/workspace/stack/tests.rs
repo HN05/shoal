@@ -148,7 +148,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         )
         .await;
     for (target, allowed) in [(&upper.name, true), (&lower.name, false)] {
-        let mut method = crate::protocol::Method::SetBaseWorkspace {
+        let mut method = crate::protocol::WorkspaceMethod::SetBaseWorkspace {
             workspace: target.clone(),
             base: Some(lower.name.clone()),
         };

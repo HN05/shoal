@@ -14,7 +14,7 @@ use crate::{
     },
     daemon::agent_messages::AgentMessage,
     daemon::links::wait::Updates,
-    protocol::Method,
+    protocol::{AgentMethod, ChatMethod, Method},
 };
 
 pub(super) async fn send(
@@ -25,7 +25,11 @@ pub(super) async fn send(
 ) -> Result<i32> {
     let message = message_text(message, body_file)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    request::<()>(&ctx.paths, Method::SendAgentMessage { workspace, message }).await?;
+    request::<()>(
+        &ctx.paths,
+        AgentMethod::SendAgentMessage { workspace, message },
+    )
+    .await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;
     Ok(0)
 }
@@ -249,7 +253,7 @@ impl Inbox {
         match self {
             Self::Workspace(workspace) => {
                 let workspace = workspace.clone();
-                request(&ctx.paths, Method::AgentMessages { workspace }).await
+                request(&ctx.paths, AgentMethod::AgentMessages { workspace }).await
             }
             Self::Chat(chat) => Ok(chat_updates(ctx, chat).await?.messages),
         }
@@ -260,7 +264,7 @@ impl Inbox {
         match self {
             Self::Workspace(workspace) => {
                 let workspace = workspace.clone();
-                request(&ctx.paths, Method::AgentUpdates { workspace }).await
+                request(&ctx.paths, AgentMethod::AgentUpdates { workspace }).await
             }
             Self::Chat(chat) => chat_updates(ctx, chat).await,
         }
@@ -307,15 +311,17 @@ impl Inbox {
             return Ok(());
         }
         let ids = messages.iter().map(|message| message.id).collect();
-        let method = match self {
-            Self::Workspace(workspace) => Method::MarkAgentMessagesDelivered {
+        let method: Method = match self {
+            Self::Workspace(workspace) => AgentMethod::MarkAgentMessagesDelivered {
                 workspace: workspace.clone(),
                 ids,
-            },
-            Self::Chat(chat) => Method::AcknowledgeChatMessages {
+            }
+            .into(),
+            Self::Chat(chat) => ChatMethod::AcknowledgeChatMessages {
                 chat: chat.clone(),
                 ids,
-            },
+            }
+            .into(),
         };
         request::<()>(&ctx.paths, method).await
     }
@@ -324,12 +330,12 @@ impl Inbox {
 /// The chat's undelivered messages, without waiting.
 async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
     let chat = chat.to_owned();
-    request(&ctx.paths, Method::ChatUpdates { chat }).await
+    request(&ctx.paths, ChatMethod::ChatUpdates { chat }).await
 }
 
 /// The chat's next messages, waiting again when the daemon restarts.
 async fn wait_for_chat(ctx: &Context, chat: &str, restarted: bool) -> Result<Updates> {
-    let method = || Method::WaitChatMessages {
+    let method = || ChatMethod::WaitChatMessages {
         chat: chat.to_owned(),
     };
     Updates::try_from(client::await_reply(&ctx.paths, method, restarted).await?)
@@ -397,7 +403,7 @@ pub(super) fn hook_output(input: &str, context: &str) -> String {
 async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
     request::<()>(
         &ctx.paths,
-        Method::AcknowledgePrUpdates {
+        AgentMethod::AcknowledgePrUpdates {
             workspace,
             deliveries: updates
                 .updates

@@ -45,7 +45,7 @@ pub(super) async fn edit(
         let repository = crate::cli::ui::repository_selector(repository)?;
         let config = crate::cli::client::request::<LocalConfig>(
             &ctx.paths,
-            crate::protocol::Method::EditRepositoryConfig {
+            crate::protocol::RepositoryMethod::EditRepositoryConfig {
                 repository,
                 changes,
             },

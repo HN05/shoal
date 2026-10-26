@@ -18,7 +18,7 @@ use crate::{
     },
     demos::{Demo, Launch, Preset, Progress, Running},
     model::Workspace,
-    protocol::{ConfigTarget, Method},
+    protocol::{ConfigTarget, DemoMethod, NotificationMethod, WorkspaceMethod},
 };
 
 mod presets;
@@ -154,7 +154,7 @@ async fn start(
         let message = format!("Demo {} is running; open it with {opening}", chosen.name);
         client::call(
             &ctx.paths,
-            Method::SendMessage {
+            NotificationMethod::SendMessage {
                 workspace: workspace.id.clone(),
                 message,
             },
@@ -286,7 +286,7 @@ async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> 
     loop {
         let progress = client::request::<Progress>(
             &ctx.paths,
-            Method::DemoProgress {
+            DemoMethod::DemoProgress {
                 workspace: workspace.id.clone(),
                 launch: launch.id.clone(),
             },
@@ -353,7 +353,7 @@ async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()>
 async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {
     client::request::<()>(
         &ctx.paths,
-        Method::StopDemos {
+        DemoMethod::StopDemos {
             workspace: workspace.id.clone(),
             name,
         },
@@ -479,7 +479,7 @@ pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Resul
 async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()> {
     let workspace: Workspace = client::request(
         &ctx.paths,
-        Method::VerifyWorkspace {
+        WorkspaceMethod::VerifyWorkspace {
             workspace: demo.workspace_id.clone(),
             on_branch: false,
         },
@@ -564,7 +564,7 @@ async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Worksp
 async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Running>> {
     client::request(
         &ctx.paths,
-        Method::ListDemos {
+        DemoMethod::ListDemos {
             workspace: workspace.map(|workspace| workspace.id.clone()),
         },
     )

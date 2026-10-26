@@ -28,7 +28,10 @@ use crate::{
     env,
     model::{PortCatalog, PortOverview, Workspace},
     paths::Paths,
-    protocol::{ConfigTarget, Method},
+    protocol::{
+        ApprovalMethod, ConfigTarget, PortMethod, QuestionMethod, RemovalMethod, ResourceMethod,
+        SimulatorMethod, WorkspaceMethod,
+    },
     sim::Simulator,
 };
 
@@ -365,7 +368,7 @@ impl Typed {
                         .context("no current workspace")?;
                     client::request::<Box<ConfigLayers>>(
                         &paths,
-                        Method::LayeredConfig {
+                        WorkspaceMethod::LayeredConfig {
                             target: ConfigTarget::Workspace(workspace.id.clone()),
                         },
                     )
@@ -445,9 +448,11 @@ impl Typed {
             ));
         }
         if matches!(target, Target::RestorableWorkspaces) {
-            let removed =
-                client::pages::<crate::model::RemovedWorkspace>(&paths, Method::RemovedWorkspaces)
-                    .await?;
+            let removed = client::pages::<crate::model::RemovedWorkspace>(
+                &paths,
+                RemovalMethod::RemovedWorkspaces,
+            )
+            .await?;
             let existing = client::workspaces(&paths).await?;
             return Ok(removed
                 .into_iter()
@@ -459,7 +464,7 @@ impl Typed {
         if matches!(target, Target::ApprovalRequests) {
             let requests = client::request::<Vec<ApprovalRequest>>(
                 &paths,
-                Method::ListApprovals { workspace: None },
+                ApprovalMethod::ListApprovals { workspace: None },
             )
             .await?;
             return Ok(requests
@@ -472,7 +477,7 @@ impl Typed {
                 .collect());
         }
         if matches!(target, Target::Questions) {
-            let method = Method::ListQuestions { workspace: None };
+            let method = QuestionMethod::ListQuestions { workspace: None };
             let questions = client::request::<Listing>(&paths, method).await?.questions;
             return Ok(questions
                 .iter()
@@ -515,9 +520,11 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                let overview =
-                    client::request::<Overview>(&paths, Method::ResourceOverview { workspace })
-                        .await?;
+                let overview = client::request::<Overview>(
+                    &paths,
+                    ResourceMethod::ResourceOverview { workspace },
+                )
+                .await?;
                 match target {
                     Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
                     Target::Members => names.extend(
@@ -538,19 +545,19 @@ impl Typed {
             }
             Target::Ports | Target::ReservedPorts => {
                 if matches!(target, Target::Ports) {
-                    let method = Method::PortCatalog {
+                    let method = PortMethod::PortCatalog {
                         workspace: workspace.clone(),
                     };
                     let catalog = client::request::<PortCatalog>(&paths, method).await?;
                     names.extend(catalog.configured.into_keys());
                 }
                 let overview =
-                    client::request::<PortOverview>(&paths, Method::PortOverview { workspace })
+                    client::request::<PortOverview>(&paths, PortMethod::PortOverview { workspace })
                         .await?;
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {
-                let method = Method::SimList {
+                let method = SimulatorMethod::SimList {
                     workspace: Some(workspace),
                 };
                 let simulators = client::request::<Vec<Simulator>>(&paths, method).await?;

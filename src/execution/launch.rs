@@ -30,7 +30,7 @@ use crate::{
     model::ExecutionPlan,
     paths::Paths,
     process,
-    protocol::{Body, Method, Reattach},
+    protocol::{Body, ExecutionMethod, Reattach},
 };
 
 /// A tracked execution the daemon recorded, with the command it runs next and
@@ -258,7 +258,7 @@ async fn open_execution(
 ) -> Result<(Link, ExecutionPlan)> {
     let wrapper = process::identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
-    let method = Method::Execute {
+    let method = ExecutionMethod::Execute {
         workspace,
         wrapper: wrapper.clone(),
         kind: mode.kind(),

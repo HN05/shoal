@@ -59,7 +59,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         cli::context::Context,
         daemon::links::wait::Updates,
         paths::Paths,
-        protocol::{self, Body, ErrorCode, Method, Request, Response},
+        protocol::{self, Body, ErrorCode, ItemMethod, Method, Operation, Request, Response},
     };
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let paths = Paths::for_test(root.path());
@@ -72,10 +72,10 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         let request: Request = protocol::read(&mut stream).await.unwrap();
         assert!(matches!(
             request.method,
-            Method::WatchItems {
+            Method::Operation(Operation::Item(ItemMethod::WatchItems {
                 timeout_secs: Some(600),
                 ..
-            }
+            }))
         ));
         drop(stream);
         // Its socket goes with it, and the next daemon listens a moment later.
@@ -92,11 +92,11 @@ async fn item_wait_continues_on_the_replacement_daemon() {
             .unwrap();
         let (mut stream, _) = listener.accept().await.unwrap();
         let request: Request = protocol::read(&mut stream).await.unwrap();
-        let Method::WatchItems {
+        let Method::Operation(Operation::Item(ItemMethod::WatchItems {
             workspace,
             timeout_secs,
             ..
-        } = request.method
+        })) = request.method
         else {
             panic!("expected an item wait");
         };
@@ -133,7 +133,7 @@ async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
         cli::context::Context,
         daemon::links::wait::Updates,
         paths::Paths,
-        protocol::{self, Method, Request},
+        protocol::{self, ItemMethod, Method, Operation, Request},
     };
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let paths = Paths::for_test(root.path());
@@ -157,9 +157,9 @@ async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
     let (request, _listener) = server.await.unwrap().unwrap();
     assert!(matches!(
         request.method,
-        Method::WatchItems {
+        Method::Operation(Operation::Item(ItemMethod::WatchItems {
             timeout_secs: Some(600),
             ..
-        }
+        }))
     ));
 }
