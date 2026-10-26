@@ -163,6 +163,7 @@ shoal stop fix-login          # Stop agents and commands; save them for shoal re
 shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
+shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false

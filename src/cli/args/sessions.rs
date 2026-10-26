@@ -24,8 +24,8 @@ pub enum SessionsCommand {
     },
     /// Restart running agents in their terminals, resuming their sessions.
     ///
-    /// Agents restart one at a time, idle ones first, and run the agent's
-    /// current binary; commands keep running.
+    /// Agents restart together and run the agent's current binary; commands
+    /// keep running.
     Restart {
         #[command(flatten)]
         targets: WorkspaceTargets,
@@ -35,6 +35,9 @@ pub enum SessionsCommand {
         /// Restart each agent once its turn ends.
         #[arg(long)]
         wait: bool,
+        /// Restart one agent at a time, idle ones first, 10 seconds apart.
+        #[arg(long)]
+        sequential: bool,
     },
     /// Attach this terminal to a workspace's agent session; Ctrl-\ detaches.
     ///

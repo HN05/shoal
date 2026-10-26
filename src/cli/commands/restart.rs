@@ -2,6 +2,8 @@
 //! current binary in the terminal it already has.
 use std::{collections::HashMap, time::Duration};
 
+use futures_util::{StreamExt, stream::FuturesUnordered};
+
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 use tokio::time::{Instant, sleep, sleep_until};
@@ -30,6 +32,7 @@ pub(super) async fn run(
     targets: WorkspaceTargets,
     agent: Option<Agent>,
     wait: bool,
+    sequential: bool,
 ) -> Result<i32> {
     // A process that cleared its scope token is still the workspace's.
     ensure!(
@@ -51,7 +54,12 @@ pub(super) async fn run(
     }
     let mut report = ui::Report::new("restarted", "restart");
     let mut skipped = report_skipped(ctx, &plan.skipped);
-    skipped.extend(restart_in_turn(ctx, &mut report, plan.restarts, wait).await?);
+    let gone = if sequential {
+        restart_in_turn(ctx, &mut report, plan.restarts, wait).await?
+    } else {
+        restart_together(ctx, &mut report, plan.restarts, wait).await?
+    };
+    skipped.extend(gone);
     report.field("skipped", skipped.into());
     report.finish(ctx, "")
 }
@@ -230,8 +238,9 @@ impl Restart {
     }
 }
 
-/// Restart `restarts` one at a time, each at least the admission stagger
-/// after the previous start, and with `wait` only once its turn ended,
+/// Restart `restarts` one at a time, idle ones first, each at least the
+/// admission stagger after the previous start, and with `wait` only once its
+/// turn ended,
 /// returning the JSON entries of agents that stopped running meanwhile.
 async fn restart_in_turn(
     ctx: &Context,
@@ -256,20 +265,88 @@ async fn restart_in_turn(
             restarts.remove(0)
         };
         position += 1;
-        let name = &restart.workspace.name;
-        match restart.run(ctx).await {
-            Ok(()) => {
-                previous = Some(Instant::now());
-                report.done(
-                    ctx,
-                    &format!("Restarted {name} ({position}/{total})"),
-                    json!({"workspace": name, "agent": restart.agent.agent}),
-                );
-            }
-            Err(error) => report.failed(ctx, name, &error),
+        let result = restart.run(ctx).await;
+        if result.is_ok() {
+            previous = Some(Instant::now());
         }
+        report_outcome(ctx, report, &restart, result, (position, total));
     }
     Ok(gone)
+}
+
+/// Restart `restarts` all at once, with `wait` each as soon as its turn
+/// ends, returning the JSON entries of agents that stopped running meanwhile.
+async fn restart_together(
+    ctx: &Context,
+    report: &mut ui::Report,
+    mut waiting: Vec<Restart>,
+    wait: bool,
+) -> Result<Vec<Value>> {
+    let total = waiting.len();
+    let mut finished = 0;
+    let mut gone = Vec::new();
+    let mut running = FuturesUnordered::new();
+    let mut told = false;
+    loop {
+        if wait {
+            gone.extend(report_skipped(ctx, &refresh(ctx, &mut waiting).await?));
+        }
+        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut waiting)
+            .into_iter()
+            .partition(|restart| !wait || restart.idle());
+        waiting = later;
+        for restart in due {
+            running.push(async move {
+                let result = restart.run(ctx).await;
+                (restart, result)
+            });
+        }
+        if waiting.is_empty() && running.is_empty() {
+            return Ok(gone);
+        }
+        if !waiting.is_empty() && !told {
+            tell_waiting(ctx, &waiting);
+            told = true;
+        }
+        tokio::select! {
+            Some((restart, result)) = running.next() => {
+                finished += 1;
+                report_outcome(ctx, report, &restart, result, (finished, total));
+            }
+            () = sleep(TURN_POLL_INTERVAL), if !waiting.is_empty() => {}
+        }
+    }
+}
+
+/// Report how `restart` ended, as the `position`th of `total`.
+fn report_outcome(
+    ctx: &Context,
+    report: &mut ui::Report,
+    restart: &Restart,
+    result: Result<()>,
+    (position, total): (usize, usize),
+) {
+    let name = &restart.workspace.name;
+    match result {
+        Ok(()) => report.done(
+            ctx,
+            &format!("Restarted {name} ({position}/{total})"),
+            json!({"workspace": name, "agent": restart.agent.agent}),
+        ),
+        Err(error) => report.failed(ctx, name, &error),
+    }
+}
+
+/// Say whose turns the restarts wait for.
+fn tell_waiting(ctx: &Context, restarts: &[Restart]) {
+    if ctx.json {
+        return;
+    }
+    let names: Vec<_> = restarts
+        .iter()
+        .map(|restart| restart.workspace.name.as_str())
+        .collect();
+    eprintln!("Waiting for the turns of {} to end", names.join(", "));
 }
 
 /// Take the first of `restarts` whose turn ended, from states read now,
@@ -289,12 +366,8 @@ async fn next_idle(
         if let Some(index) = restarts.iter().position(Restart::idle) {
             return Ok(Some(restarts.remove(index)));
         }
-        if !told && !ctx.json {
-            let names: Vec<_> = restarts
-                .iter()
-                .map(|restart| restart.workspace.name.as_str())
-                .collect();
-            eprintln!("Waiting for the turns of {} to end", names.join(", "));
+        if !told {
+            tell_waiting(ctx, restarts);
             told = true;
         }
         sleep(TURN_POLL_INTERVAL).await;

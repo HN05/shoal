@@ -25,6 +25,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             targets,
             agent,
             wait,
-        } => restart::run(&ctx, targets, agent, wait).await,
+            sequential,
+        } => restart::run(&ctx, targets, agent, wait, sequential).await,
     }
 }
