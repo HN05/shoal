@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
     model::{RunningAgent, Workspace},
+    state::AgentState,
     test_support::{manager, repository},
 };
 
@@ -49,6 +50,16 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
         .unwrap();
     track(&manager, &workspace, &agent.plan.id, "claude", true).await;
     manager.detach_execution(&gone.plan.id).await;
+    // A report from the agent is its own state, unlike one from a command.
+    manager
+        .set_agent_state(
+            &workspace.id,
+            AgentState::Idle,
+            Some(agent.plan.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
 
     let mut agents = manager.running_agents().await.unwrap();
     agents.sort_by_key(|agent| agent.agent.is_none());
@@ -60,12 +71,14 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 workspace_id: workspace.id.clone(),
                 agent: Some("claude".into()),
                 restorable: true,
+                state: Some(AgentState::Idle),
             },
             RunningAgent {
                 execution: gone.plan.id.clone(),
                 workspace_id: workspace.id.clone(),
                 agent: None,
                 restorable: false,
+                state: None,
             },
         ]
     );

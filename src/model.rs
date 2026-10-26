@@ -685,6 +685,10 @@ pub struct RunningAgent {
     pub agent: Option<String>,
     /// Whether its wrapper can start its session again.
     pub restorable: bool,
+    /// The turn state the agent reported last, when it is the workspace's
+    /// latest report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<crate::state::AgentState>,
 }
 
 /// An agent launch or restore waiting for, or starting in, a `max_agents` slot.

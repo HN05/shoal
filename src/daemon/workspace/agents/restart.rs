@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
-use super::Manager;
+use super::{super::agent_state, Manager};
 use crate::{daemon::store, model::RunningAgent};
 
 /// A restart in progress, which answers its request.
@@ -39,7 +39,10 @@ impl Manager {
     /// Every connected agent, and every execution whose wrapper is gone,
     /// which may have run one; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
-        let executions = self.store.run(|db| store::all_executions(db)).await?;
+        let (executions, mut states) = self
+            .store
+            .run(|db| Ok((store::all_executions(db)?, agent_state::by_execution(db)?)))
+            .await?;
         let connections = self.connections.lock().await;
         let agents = self.agents.lock().await;
         Ok(executions
@@ -56,6 +59,7 @@ impl Manager {
                     None => (None, false),
                 };
                 Some(RunningAgent {
+                    state: states.remove(&execution.id),
                     execution: execution.id,
                     workspace_id: execution.workspace_id,
                     agent,

@@ -204,11 +204,10 @@ fn report_skipped(ctx: &Context, skipped: &[Skipped]) -> Vec<Value> {
 }
 
 impl Restart {
+    /// Whether the agent itself reported that its turn ended; another
+    /// agent's report in the same workspace does not count.
     fn idle(&self) -> bool {
-        self.workspace
-            .agent_state
-            .as_ref()
-            .is_some_and(|status| status.state == AgentState::Idle)
+        self.agent.state == Some(AgentState::Idle)
     }
 
     async fn run(&self, ctx: &Context) -> Result<()> {
@@ -302,34 +301,32 @@ async fn next_idle(
     }
 }
 
-/// Read each workspace's agent state again, and drop the agents that no
-/// longer run, returning them.
+/// Read each agent's turn state again, and drop the agents that no longer
+/// run or whose wrapper is gone, returning them.
 async fn refresh(ctx: &Context, restarts: &mut Vec<Restart>) -> Result<Vec<Skipped>> {
-    let states: HashMap<_, _> = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .map(|workspace| (workspace.id, workspace.agent_state))
-        .collect();
     let running: Vec<RunningAgent> = request(&ctx.paths, ExecutionMethod::ListAgents).await?;
-    let (live, ended) = std::mem::take(restarts).into_iter().partition(|restart| {
-        running
+    let mut ended = Vec::new();
+    for mut restart in std::mem::take(restarts) {
+        let current = running
             .iter()
-            .any(|agent| agent.execution == restart.agent.execution)
-    });
-    *restarts = live;
-    for restart in restarts.iter_mut() {
-        if let Some(state) = states.get(&restart.workspace.id) {
-            restart.workspace.agent_state = *state;
+            .find(|agent| agent.execution == restart.agent.execution);
+        let reason = match current {
+            None => Some("the agent no longer runs".into()),
+            Some(current) => skip_reason(&restart.workspace, current),
+        };
+        match reason {
+            Some(reason) => ended.push(Skipped {
+                workspace: restart.workspace.name,
+                agent: restart.agent.agent,
+                reason,
+            }),
+            None => {
+                restart.agent.state = current.and_then(|agent| agent.state);
+                restarts.push(restart);
+            }
         }
     }
-    Ok(ended
-        .into_iter()
-        .map(|restart: Restart| Skipped {
-            workspace: restart.workspace.name,
-            agent: restart.agent.agent,
-            reason: "the agent no longer runs".into(),
-        })
-        .collect())
+    Ok(ended)
 }
 
 #[cfg(test)]
