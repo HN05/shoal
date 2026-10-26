@@ -1,5 +1,6 @@
 //! Clap definitions of the commands' arguments, one module per command
 //! group, and the argument types several groups share.
+pub mod agents;
 pub mod approvals;
 pub mod changes;
 pub mod coordination;
@@ -19,7 +20,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use crate::{agent::Agent, cli::agents, forge::IssueInput};
+use crate::{agent::Agent, forge::IssueInput};
 
 #[derive(Debug, Default, Args)]
 pub struct ConfirmationArgs {
@@ -95,7 +96,7 @@ impl clap::builder::TypedValueParser for AgentParser {
             );
             error.insert(
                 clap::error::ContextKind::ValidValue,
-                clap::error::ContextValue::Strings(agents::builtin_names()),
+                clap::error::ContextValue::Strings(crate::cli::agents::builtin_names()),
             );
             error
         })
@@ -105,7 +106,7 @@ impl clap::builder::TypedValueParser for AgentParser {
         &self,
     ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
         Some(Box::new(
-            agents::builtin_names()
+            crate::cli::agents::builtin_names()
                 .into_iter()
                 .map(clap::builder::PossibleValue::new),
         ))

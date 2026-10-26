@@ -1,6 +1,24 @@
+//! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
 use std::path::PathBuf;
 
 use clap::Subcommand;
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ServiceCommand {
+    /// Show and change Shoal configuration.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+    /// Replace a downloaded shoal with the latest GitHub release.
+    Update,
+    /// Inspect and control the local daemon.
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommand,
+    },
+}
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

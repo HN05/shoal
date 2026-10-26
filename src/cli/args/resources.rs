@@ -1,4 +1,48 @@
+//! Arguments of commands for leases and shared resources.
 use clap::{Args, Subcommand, ValueEnum};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ResourcesCommand {
+    /// Acquire a port, simulator, resource permit, or related repository.
+    Acquire {
+        #[command(subcommand)]
+        kind: AcquireKind,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long, global = true)]
+        workspace: Option<String>,
+    },
+    /// Release every lease, every lease of one kind, or a selected lease.
+    Release {
+        #[command(subcommand)]
+        kind: Option<ReleaseKind>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long, global = true)]
+        workspace: Option<String>,
+    },
+    /// Show leases and usage for every kind, or one.
+    Leases {
+        kind: Option<LeaseKind>,
+        /// Workspace to show; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+    },
+    /// Show configuration and available inventory for every kind, or one.
+    Catalog {
+        kind: Option<CatalogKind>,
+        /// Workspace whose configuration to show; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Show recorded requests for a kind.
+    History {
+        #[command(subcommand)]
+        kind: HistoryKind,
+    },
+}
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum CatalogKind {

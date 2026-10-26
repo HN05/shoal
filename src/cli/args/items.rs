@@ -1,6 +1,63 @@
-use clap::{Args, ValueEnum};
+//! Arguments of commands for the issues and PRs linked to a workspace.
+use clap::{Args, Subcommand, ValueEnum};
 
 use crate::{cli::args::item_reference, model::Relation};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ItemsCommand {
+    /// Link an issue or PR with a relation: `link 42 assigned`, `link pr 43 related`.
+    ///
+    /// Assigned items drive completion and cleanup; opened and related items
+    /// are recorded only.
+    Link {
+        #[command(flatten)]
+        items: RelationArgs,
+    },
+    /// Unlink a relation's items, one kind, or a selected issue or PR:
+    /// `unlink assigned`, `unlink pr 43 related`.
+    Unlink {
+        #[command(flatten)]
+        items: RelationArgs,
+    },
+    /// Wait for activity on linked items, one kind, or an explicit item.
+    Watch {
+        #[command(flatten)]
+        items: ItemArgs,
+        /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=3600))]
+        timeout: Option<u64>,
+        /// Continue a wait across a daemon restart, as the installed release
+        /// does after an upgrade restarted the daemon.
+        #[arg(long, hide = true, requires = "workspace")]
+        resume: bool,
+    },
+    /// Show linked items, one kind, or a selected issue or PR with status and discussion.
+    View {
+        #[command(flatten)]
+        items: ItemArgs,
+        /// Leave out comments and reviews.
+        #[arg(long)]
+        no_comments: bool,
+        /// Show only this failed check's log, where the forge reads job logs.
+        #[arg(long, value_name = "NAME")]
+        check: Option<String>,
+    },
+    /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
+    Ready {
+        #[command(flatten)]
+        items: ItemArgs,
+        /// Withdraw ready-for-review marks from the selected items.
+        #[arg(long)]
+        undo: bool,
+        /// Return the PRs whose marks are withdrawn to draft, overriding [unready] draft.
+        #[arg(long, requires = "undo", overrides_with = "no_draft")]
+        draft: bool,
+        /// Leave the PRs' draft state unchanged, overriding [unready] draft.
+        #[arg(long, requires = "undo", overrides_with = "draft")]
+        no_draft: bool,
+    },
+}
 
 // An optional item selection followed by its relation.
 #[derive(Debug, Args)]

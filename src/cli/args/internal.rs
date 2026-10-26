@@ -1,3 +1,4 @@
+//! Arguments of commands Shoal, its agent hooks and integrations run.
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;

@@ -4,7 +4,11 @@ use anyhow::{Result, ensure};
 
 use crate::cli::{
     Command,
-    args::{ConfirmationArgs, repository::RepoCommand},
+    args::{
+        ConfirmationArgs,
+        create::CreateCommand,
+        repository::{RepoCommand, RepositoryCommand},
+    },
     client,
     context::Context,
     ui::{self, KeyBindings},
@@ -42,7 +46,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             name: None,
             path: None,
         }),
-        RepoMenuAction::AddWorkspace => Command::Add {
+        RepoMenuAction::AddWorkspace => Command::Create(CreateCommand::Add {
             here: false,
             focus: false,
             path: None,
@@ -57,7 +61,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             now: false,
             after: vec![],
             args: vec![],
-        },
+        }),
         RepoMenuAction::Rename => repo(RepoCommand::Rename {
             repository: Some(picked.id),
             name: Some(ui::input(ctx, "New name")?),
@@ -95,9 +99,9 @@ fn resolve_action(action: RepoMenuAction, id: &str) -> Result<RepoMenuAction> {
 }
 
 fn repo(command: RepoCommand) -> Command {
-    Command::Repo {
+    Command::Repository(RepositoryCommand::Repo {
         command: Some(command),
-    }
+    })
 }
 
 #[cfg(test)]

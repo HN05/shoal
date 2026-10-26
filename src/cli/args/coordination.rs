@@ -1,6 +1,44 @@
+//! Arguments of commands agents and the user coordinate with: messages, questions and completion.
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum CoordinationCommand {
+    /// Read new messages or send one to a workspace's agents.
+    #[command(args_conflicts_with_subcommands = true)]
+    Messages {
+        #[command(subcommand)]
+        command: Option<MessagesCommand>,
+        workspace: Option<String>,
+        /// Run as an agent hook: read the hook event on stdin, print new
+        /// messages as additional context, and never fail the agent.
+        #[arg(long, conflicts_with = "workspace")]
+        hook: bool,
+    },
+    /// Review and answer questions from workspace agents.
+    #[command(args_conflicts_with_subcommands = true)]
+    Questions {
+        #[command(subcommand)]
+        command: Option<QuestionsCommand>,
+        #[command(flatten)]
+        args: QuestionsArgs,
+    },
+    /// Mark the assignment finished; by default stop tracked commands and clean up safely.
+    Done {
+        workspace: Option<String>,
+        /// Request cleanup even when [done] cleanup is false; preserve dirty or unpushed work.
+        #[arg(long, conflicts_with = "undo")]
+        cleanup: bool,
+        /// Withdraw a recorded completion without keeping the workspace.
+        #[arg(long)]
+        undo: bool,
+        /// Leave the workspace's demos running until cleanup removes it.
+        #[arg(long, conflicts_with = "undo")]
+        keep_demos: bool,
+    },
+}
 
 #[derive(Debug, Default, Args)]
 pub struct QuestionsArgs {

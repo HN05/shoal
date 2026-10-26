@@ -1,6 +1,79 @@
+//! Arguments of commands for a workspace's changes, its PRs and issues, and landing it.
+use std::ffi::OsString;
+
 use clap::{Args, Subcommand};
 
-use crate::cli::args::{BodyArgs, ConfirmationArgs, item_reference};
+use crate::{
+    agent::Agent,
+    cli::args::{AgentParser, BodyArgs, ConfirmationArgs, item_reference},
+};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ChangesCommand {
+    /// Show changes since the branch's fork point.
+    Diff { workspace: Option<String> },
+    /// Check whether the branch merges cleanly into another branch.
+    ///
+    /// Compares committed HEAD with the target: by default the base workspace's
+    /// branch, otherwise the default branch. Exits 1 on conflicts.
+    Conflicts {
+        /// Branch or commit to merge into.
+        target: Option<String>,
+        /// Workspace to check; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Review workspace or PR changes, or refine an issue, with a review tool or agent.
+    Review {
+        /// Workspace to review, or a PR or issue URL.
+        workspace: Option<String>,
+        /// Review this PR in the workspace that owns its head branch, opening one when none does.
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
+        pr: Option<String>,
+        /// Have an agent refine this issue before implementation, in the workspace that works on it.
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with_all = ["workspace", "pr", "manual"], value_parser = item_reference)]
+        issue: Option<String>,
+        /// Registered repository of the PR or issue; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Have the agent post its findings on the PR or issue, overriding [review] post.
+        #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
+        post: bool,
+        /// Keep the agent's findings local, overriding [review] post.
+        #[arg(long, overrides_with = "post", conflicts_with = "manual")]
+        no_post: bool,
+        /// Run the configured `review` command without asking.
+        #[arg(long, conflicts_with = "agent")]
+        manual: bool,
+        /// Start this agent with a review prompt without asking.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the review command or agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+    /// Open the workspace's PR, or change, comment on, close, reopen or merge a PR.
+    Pr {
+        #[command(subcommand)]
+        command: PrCommand,
+    },
+    /// Open, change, comment on, close or reopen an issue of the workspace's repository.
+    Issue {
+        #[command(subcommand)]
+        command: IssueCommand,
+    },
+    /// Merge this workspace into the default branch, then optionally push it.
+    Land {
+        workspace: Option<String>,
+        /// Push the default branch to its upstream after landing, overriding [land] push.
+        #[arg(long, overrides_with = "no_push")]
+        push: bool,
+        /// Keep the landing local, overriding [land] push.
+        #[arg(long, overrides_with = "push")]
+        no_push: bool,
+    },
+}
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

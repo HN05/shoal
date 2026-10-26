@@ -73,15 +73,23 @@ use crate::{
         Cli, Command, agents,
         args::{
             WorkspaceScope,
+            agents::AgentsCommand,
             approvals::ApprovalsCommand,
-            coordination::{QuestionAskArgs, QuestionsCommand},
-            diagnostics::AlertsCommand,
-            integration::ShellCommand,
+            changes::ChangesCommand,
+            coordination::{
+                CoordinationCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
+            },
+            create::CreateCommand,
+            diagnostics::{AlertsCommand, DiagnosticsCommand},
+            integration::{IntegrationCommand, ShellCommand},
             internal::InternalCommand,
-            lifecycle::{ExportArgs, ImportArgs},
-            repository::ForgeCommand,
-            resources::HistoryKind,
-            service::ConfigCommand,
+            items::ItemsCommand,
+            lifecycle::{ExportArgs, ImportArgs, LifecycleCommand},
+            repository::{ForgeCommand, RepositoryCommand},
+            resources::{HistoryKind, ResourcesCommand},
+            service::{ConfigCommand, DaemonCommand, ServiceCommand},
+            sessions::SessionsCommand,
+            workspace::WorkspaceCommand,
         },
         client,
         context::Context,
@@ -183,20 +191,20 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
     match command {
         None => Some(None),
         // Workspace processes, who cannot act on it, get the inbox printed.
-        Some(Command::Inbox {
+        Some(Command::Workspace(WorkspaceCommand::Inbox {
             repository: None,
             print: false,
-        }) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
+        })) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
             Some(Some(menu::View::Inbox))
         }
-        Some(Command::Work {
+        Some(Command::Workspace(WorkspaceCommand::Work {
             command: None,
             queue: false,
             chats: false,
             repository: None,
             status,
             print: false,
-        }) if status.is_empty() && lists_interactively(ctx) => Some(Some(menu::View::Work)),
+        })) if status.is_empty() && lists_interactively(ctx) => Some(Some(menu::View::Work)),
         _ => None,
     }
 }
@@ -210,7 +218,7 @@ fn lists_interactively(ctx: &Context) -> bool {
 fn menu_path(command: Option<&Command>) -> Option<&'static [&'static str]> {
     match command {
         None => Some(&[]),
-        Some(Command::Repo { command: None }) => Some(&["repo"]),
+        Some(Command::Repository(RepositoryCommand::Repo { command: None })) => Some(&["repo"]),
         Some(_) => None,
     }
 }
@@ -234,25 +242,25 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     if !matches!(
         cli.command,
         Some(
-            Command::Daemon {
-                command: crate::cli::args::service::DaemonCommand::Run { .. }
-            } | Command::Skill {
+            Command::Service(ServiceCommand::Daemon {
+                command: DaemonCommand::Run { .. }
+            }) | Command::Integration(IntegrationCommand::Skill {
                 command: Some(_),
                 ..
-            }
+            })
         )
     ) && let Ok(state) = Paths::state_dir(cli.state_dir.clone())
     {
         skill::refresh_installed(&state, cli.json);
     }
     // Skill delivery is independent of daemon state and socket-path limits.
-    if let Some(Command::Skill { name, command }) = &cli.command {
+    if let Some(Command::Integration(IntegrationCommand::Skill { name, command })) = &cli.command {
         return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
     }
     // Shell recovery must also work after cleanup, without daemon configuration.
-    if let Some(Command::Shell {
+    if let Some(Command::Integration(IntegrationCommand::Shell {
         command: ShellCommand::Recover { path },
-    }) = &cli.command
+    })) = &cli.command
     {
         let state = crate::paths::Paths::state_dir(cli.state_dir.clone())?;
         let destination = shell::recovery_directory(path, &state)?;
@@ -275,9 +283,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     // reload that fails, which a loader reading the file later would not.
     if !matches!(
         cli.command,
-        Some(Command::Daemon {
-            command: crate::cli::args::service::DaemonCommand::Run { .. }
-        })
+        Some(Command::Service(ServiceCommand::Daemon {
+            command: DaemonCommand::Run { .. }
+        }))
     ) {
         ctx.learn_pinned_forges();
     }
@@ -287,7 +295,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             menu::Choice::Done(code) => return Ok(code),
         },
         None => match cli.command {
-            Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
+            Some(Command::Repository(RepositoryCommand::Repo { command: None })) => {
+                repo_menu::choose(&ctx).await?
+            }
             Some(command) => command,
             None => unreachable!("bare shoal opens the picker"),
         },
@@ -298,13 +308,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         "workspace processes cannot administer Shoal; ask the user to run this command"
     );
     match command {
-        Command::Forge { command } => match command {
-            ForgeCommand::Capabilities(repository) => {
-                capabilities::capabilities(&ctx, repository.workspace).await
-            }
-            ForgeCommand::Api(args) => api::api(&ctx, args).await,
-            ForgeCommand::Ci { command } => workflows::ci(&ctx, command).await,
-        },
         Command::Run {
             name,
             workspace,
@@ -318,370 +321,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             Some((name, workspace, args)) => agents::run_named(&ctx, &name, workspace, args).await,
             None => Ok(0),
         },
-        Command::Skill { name, command } => skill::run(
-            name,
-            command.as_ref(),
-            ctx.json,
-            Some(ctx.paths.state.clone()),
-        ),
-        Command::Shell {
-            command: ShellCommand::Completions { shell },
-        } => {
-            let script = shell::completions(shell)?;
-            ctx.emit(&script, json!({"script": script}))?;
-            Ok(0)
-        }
-        Command::Shell {
-            command: ShellCommand::Init,
-        } => {
-            ctx.emit(shell::INIT, json!({"script": shell::INIT}))?;
-            Ok(0)
-        }
-        Command::Shell {
-            command: ShellCommand::Recover { .. },
-        } => unreachable!("shell recovery is handled before loading paths"),
-        Command::Repo {
-            command: Some(command),
-        } => repositories::run(&ctx, command).await,
-        Command::Repo { command: None } => unreachable!("the repository menu returns a command"),
-        Command::Add {
-            here,
-            focus,
-            path,
-            repository,
-            repository_override,
-            branch,
-            existing,
-            issue,
-            base,
-            git_profile,
-            agent,
-            now,
-            after,
-            args,
-        } => {
-            links::add(
-                &ctx,
-                links::AddInput {
-                    positional: repository,
-                    repository: repository_override,
-                    issue,
-                },
-                workspaces::Creation {
-                    path,
-                    branch,
-                    existing,
-                    base,
-                    git_profile,
-                    pr: None,
-                },
-                agent,
-                args,
-                workspaces::AddOptions {
-                    here,
-                    focus,
-                    now,
-                    after,
-                },
-            )
-            .await
-        }
-        Command::Contribute(args) => contribute::contribute(&ctx, args).await,
-        Command::Pr { command } => items::pr(&ctx, command).await,
-        Command::Issue { command } => items::issue(&ctx, command).await,
-        Command::Link { items } => links::link(&ctx, items).await,
-        Command::Unlink { items } => links::unlink(&ctx, items).await,
-        Command::View {
-            items,
-            no_comments,
-            check,
-        } => view::view(&ctx, items, no_comments, check).await,
-        Command::Watch {
-            items,
-            timeout,
-            resume,
-        } => links::watch(&ctx, items, timeout, resume).await,
-        Command::Ready {
-            items,
-            undo,
-            draft,
-            no_draft,
-        } => {
-            if undo {
-                links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await
-            } else {
-                links::ready(&ctx, items).await
-            }
-        }
-        Command::Split {
-            branch,
-            issue,
-            base,
-            workspace,
-            agent,
-            args,
-        } => {
-            let split = split::Split {
-                branch,
-                issue,
-                base,
-                agent,
-                args,
-            };
-            split::run(&ctx, workspace, split).await
-        }
         Command::Internal { command } => internal(ctx, command).await,
-        Command::Inbox {
-            repository,
-            print: _,
-        } => {
-            let filter = listing::ListFilter::resolve(&ctx, repository, vec![]).await?;
-            inbox::list(&ctx, &filter).await
-        }
-        Command::Work {
-            command: Some(command),
-            ..
-        } => work::run(&ctx, command).await,
-        Command::Work {
-            command: None,
-            queue,
-            chats,
-            repository,
-            status,
-            print: _,
-        } => {
-            let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
-            if chats {
-                return chat::list(&ctx, &filter).await;
-            }
-            workspaces::list(&ctx, queue, &filter).await
-        }
-        Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,
-        Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
-        Command::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
-        Command::Attach { workspace, session } => sessions::attach(&ctx, workspace, session).await,
-        Command::Demo {
-            command,
-            name,
-            workspace,
-        } => demo::run(&ctx, command, name, workspace).await,
-        Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
-        Command::Conflicts { target, workspace } => {
-            workspaces::conflicts(&ctx, workspace, target).await
-        }
-        Command::Review {
-            workspace,
-            pr,
-            issue,
-            repository,
-            post,
-            no_post,
-            manual,
-            agent,
-            args,
-        } => {
-            let item = pr
-                .map(|pr| (ItemKind::Pr, pr))
-                .or(issue.map(|issue| (ItemKind::Issue, issue)));
-            let post = (post || no_post).then_some(post);
-            let target = review::Target::new(workspace, item, repository, post)?;
-            let reviewer = review::Reviewer::new(manual, agent);
-            review::start(&ctx, target, reviewer, args).await
-        }
-        Command::Land {
-            workspace,
-            push,
-            no_push,
-        } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::Questions {
-            command: Some(QuestionsCommand::Ask(args)),
-            ..
-        } => {
-            let QuestionAskArgs {
-                question,
-                recommend,
-                reason,
-                choices,
-                wait,
-                workspace,
-                resume,
-            } = args;
-            let ask = crate::daemon::questions::Ask {
-                question,
-                recommendation: recommend,
-                reason,
-                choices,
-            };
-            // Clap requires --workspace with --resume.
-            match (workspace, resume) {
-                (Some(workspace), Some(id)) => questions::resume(&ctx, workspace, id, ask).await,
-                (workspace, _) => questions::ask(&ctx, workspace, ask, wait).await,
-            }
-        }
-        Command::Questions {
-            command: Some(QuestionsCommand::Withdraw { id, workspace }),
-            ..
-        } => questions::withdraw(&ctx, workspace, id).await,
-        Command::Questions {
-            command: None,
-            args,
-        } => questions::run(&ctx, args).await,
-        Command::Messages {
-            command:
-                Some(crate::cli::args::coordination::MessagesCommand::Send {
-                    message,
-                    body_file,
-                    workspace,
-                }),
-            ..
-        } => messages::send(&ctx, workspace, message, body_file).await,
-        Command::Messages {
-            command: None,
-            workspace,
-            hook,
-        } => {
-            if hook {
-                messages::hook(&ctx).await
-            } else {
-                messages::show(&ctx, workspace).await
-            }
-        }
-        Command::Done {
-            workspace,
-            cleanup,
-            undo,
-            keep_demos,
-        } => {
-            if undo {
-                workspaces::undone(&ctx, workspace).await
-            } else {
-                workspaces::done(&ctx, workspace, cleanup, keep_demos).await
-            }
-        }
-        Command::Alerts {
-            command: Some(AlertsCommand::Send { message, workspace }),
-            ..
-        } => notifications::send(&ctx, workspace, message).await,
-        Command::Alerts {
-            command: Some(AlertsCommand::Clear),
-            ..
-        } => notifications::clear(&ctx).await,
-        Command::Alerts {
-            command: Some(AlertsCommand::Withdraw { id, workspace }),
-            ..
-        } => notifications::withdraw(&ctx, workspace, id).await,
-        Command::Alerts {
-            command: None,
-            follow: true,
-            keep_unread,
-            resume,
-            ..
-        } => notifications::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
-        Command::Alerts {
-            command: None,
-            all,
-            keep_unread,
-            limit,
-            ..
-        } => notifications::list(&ctx, all, keep_unread, limit).await,
-        Command::Resume {
-            targets,
-            execution,
-            discard,
-        } => resume::select(&ctx, targets, execution, discard).await,
-        Command::Stop { targets, yes } => stop::run(&ctx, targets, yes).await,
-        Command::Rm {
-            workspace,
-            confirmation,
-        } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
-        Command::Cleanup { kind, args } => cleanup::run(&ctx, kind, args).await,
-        Command::Export(ExportArgs {
-            repository: Some(repository),
-            output,
-            confirmation,
-            ..
-        }) => transfer::export_all(&ctx, repository, output, confirmation.yes).await,
-        Command::Export(ExportArgs {
-            workspace,
-            repository: None,
-            output,
-            confirmation,
-            ..
-        }) => transfer::export(&ctx, workspace, output, confirmation.yes).await,
-        Command::Import(ImportArgs {
-            files,
-            repository,
-            keep_sessions,
-            new_sessions,
-        }) => {
-            let sessions = if keep_sessions {
-                Some(true)
-            } else if new_sessions {
-                Some(false)
-            } else {
-                None
-            };
-            let options = transfer::ImportOptions {
-                repository,
-                sessions,
-            };
-            transfer::import(&ctx, files, options).await
-        }
-        Command::Claude { workspace, args } => {
-            agents::run_named(&ctx, "claude", workspace, args).await
-        }
-        Command::Codex {
-            workspace,
-            cli,
-            app,
-            args,
-        } => {
-            let mode = if cli {
-                Some(CodexMode::Cli)
-            } else if app {
-                Some(CodexMode::App)
-            } else {
-                None
-            };
-            agents::codex(&ctx, mode, workspace, args).await
-        }
-        Command::T3 { workspace, args } => agents::open_app(&ctx, workspace, "t3", args).await,
-        #[cfg(feature = "happy")]
-        Command::Happy {
-            agent,
-            workspace,
-            prompt,
-            args,
-        } => agents::happy(&ctx, agent, workspace, prompt, args).await,
-        Command::Chat {
-            here,
-            repository,
-            agent,
-            args,
-        } => chat::start(&ctx, repository, agent, here, args).await,
-        Command::Plan {
-            issue,
-            oldest,
-            newest,
-            repository,
-            here,
-            agent,
-            args,
-        } => {
-            let pick = match (oldest, newest) {
-                (true, _) => plan::Pick::Oldest,
-                (_, true) => plan::Pick::Newest,
-                _ => plan::Pick::Picker,
-            };
-            plan::start(&ctx, issue, repository, pick, agent, here, args).await
-        }
-        Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
-        Command::Release { kind, workspace } => leases::release(&ctx, kind, workspace).await,
-        Command::Leases {
-            kind,
-            workspace,
-            all,
-        } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Approvals {
             command: Some(ApprovalsCommand::Withdraw { id, workspace }),
             ..
@@ -690,47 +330,466 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             command: None,
             args,
         } => approvals::run(&ctx, args).await,
-        Command::Catalog { kind, workspace } => catalog::show(&ctx, kind, workspace).await,
-        Command::History { kind } => match kind {
-            HistoryKind::Sim {
+        Command::Integration(command) => match command {
+            IntegrationCommand::Skill { name, command } => skill::run(
+                name,
+                command.as_ref(),
+                ctx.json,
+                Some(ctx.paths.state.clone()),
+            ),
+            IntegrationCommand::Shell {
+                command: ShellCommand::Completions { shell },
+            } => {
+                let script = shell::completions(shell)?;
+                ctx.emit(&script, json!({"script": script}))?;
+                Ok(0)
+            }
+            IntegrationCommand::Shell {
+                command: ShellCommand::Init,
+            } => {
+                ctx.emit(shell::INIT, json!({"script": shell::INIT}))?;
+                Ok(0)
+            }
+            IntegrationCommand::Shell {
+                command: ShellCommand::Recover { .. },
+            } => unreachable!("shell recovery is handled before loading paths"),
+        },
+        Command::Repository(command) => match command {
+            RepositoryCommand::Forge { command } => match command {
+                ForgeCommand::Capabilities(repository) => {
+                    capabilities::capabilities(&ctx, repository.workspace).await
+                }
+                ForgeCommand::Api(args) => api::api(&ctx, args).await,
+                ForgeCommand::Ci { command } => workflows::ci(&ctx, command).await,
+            },
+            RepositoryCommand::Repo {
+                command: Some(command),
+            } => repositories::run(&ctx, command).await,
+            RepositoryCommand::Repo { command: None } => {
+                unreachable!("the repository menu returns a command")
+            }
+        },
+        Command::Create(command) => match command {
+            CreateCommand::Add {
+                here,
+                focus,
+                path,
+                repository,
+                repository_override,
+                branch,
+                existing,
+                issue,
+                base,
+                git_profile,
+                agent,
+                now,
+                after,
+                args,
+            } => {
+                links::add(
+                    &ctx,
+                    links::AddInput {
+                        positional: repository,
+                        repository: repository_override,
+                        issue,
+                    },
+                    workspaces::Creation {
+                        path,
+                        branch,
+                        existing,
+                        base,
+                        git_profile,
+                        pr: None,
+                    },
+                    agent,
+                    args,
+                    workspaces::AddOptions {
+                        here,
+                        focus,
+                        now,
+                        after,
+                    },
+                )
+                .await
+            }
+            CreateCommand::Contribute(args) => contribute::contribute(&ctx, args).await,
+            CreateCommand::Split {
+                branch,
+                issue,
+                base,
+                workspace,
+                agent,
+                args,
+            } => {
+                let split = split::Split {
+                    branch,
+                    issue,
+                    base,
+                    agent,
+                    args,
+                };
+                split::run(&ctx, workspace, split).await
+            }
+        },
+        Command::Items(command) => match command {
+            ItemsCommand::Link { items } => links::link(&ctx, items).await,
+            ItemsCommand::Unlink { items } => links::unlink(&ctx, items).await,
+            ItemsCommand::View {
+                items,
+                no_comments,
+                check,
+            } => view::view(&ctx, items, no_comments, check).await,
+            ItemsCommand::Watch {
+                items,
+                timeout,
+                resume,
+            } => links::watch(&ctx, items, timeout, resume).await,
+            ItemsCommand::Ready {
+                items,
+                undo,
+                draft,
+                no_draft,
+            } => {
+                if undo {
+                    links::unready(&ctx, items, (draft || no_draft).then_some(draft)).await
+                } else {
+                    links::ready(&ctx, items).await
+                }
+            }
+        },
+        Command::Sessions(command) => match command {
+            SessionsCommand::Attach { workspace, session } => {
+                sessions::attach(&ctx, workspace, session).await
+            }
+            SessionsCommand::Demo {
+                command,
+                name,
+                workspace,
+            } => demo::run(&ctx, command, name, workspace).await,
+            SessionsCommand::Resume {
+                targets,
+                execution,
+                discard,
+            } => resume::select(&ctx, targets, execution, discard).await,
+        },
+        Command::Coordination(command) => match command {
+            CoordinationCommand::Questions {
+                command: Some(QuestionsCommand::Ask(args)),
+                ..
+            } => {
+                let QuestionAskArgs {
+                    question,
+                    recommend,
+                    reason,
+                    choices,
+                    wait,
+                    workspace,
+                    resume,
+                } = args;
+                let ask = crate::daemon::questions::Ask {
+                    question,
+                    recommendation: recommend,
+                    reason,
+                    choices,
+                };
+                // Clap requires --workspace with --resume.
+                match (workspace, resume) {
+                    (Some(workspace), Some(id)) => {
+                        questions::resume(&ctx, workspace, id, ask).await
+                    }
+                    (workspace, _) => questions::ask(&ctx, workspace, ask, wait).await,
+                }
+            }
+            CoordinationCommand::Questions {
+                command: Some(QuestionsCommand::Withdraw { id, workspace }),
+                ..
+            } => questions::withdraw(&ctx, workspace, id).await,
+            CoordinationCommand::Questions {
+                command: None,
+                args,
+            } => questions::run(&ctx, args).await,
+            CoordinationCommand::Messages {
+                command:
+                    Some(MessagesCommand::Send {
+                        message,
+                        body_file,
+                        workspace,
+                    }),
+                ..
+            } => messages::send(&ctx, workspace, message, body_file).await,
+            CoordinationCommand::Messages {
+                command: None,
+                workspace,
+                hook,
+            } => {
+                if hook {
+                    messages::hook(&ctx).await
+                } else {
+                    messages::show(&ctx, workspace).await
+                }
+            }
+            CoordinationCommand::Done {
+                workspace,
+                cleanup,
+                undo,
+                keep_demos,
+            } => {
+                if undo {
+                    workspaces::undone(&ctx, workspace).await
+                } else {
+                    workspaces::done(&ctx, workspace, cleanup, keep_demos).await
+                }
+            }
+        },
+        Command::Workspace(command) => match command {
+            WorkspaceCommand::Inbox {
+                repository,
+                print: _,
+            } => {
+                let filter = listing::ListFilter::resolve(&ctx, repository, vec![]).await?;
+                inbox::list(&ctx, &filter).await
+            }
+            WorkspaceCommand::Work {
+                command: Some(command),
+                ..
+            } => work::run(&ctx, command).await,
+            WorkspaceCommand::Work {
+                command: None,
+                queue,
+                chats,
+                repository,
+                status,
+                print: _,
+            } => {
+                let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
+                if chats {
+                    return chat::list(&ctx, &filter).await;
+                }
+                workspaces::list(&ctx, queue, &filter).await
+            }
+            WorkspaceCommand::Status { workspace, item } => {
+                workspaces::status(&ctx, workspace, item).await
+            }
+            WorkspaceCommand::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
+            WorkspaceCommand::Edit { workspace, args } => {
+                workspaces::edit(&ctx, workspace, args).await
+            }
+        },
+        Command::Changes(command) => match command {
+            ChangesCommand::Pr { command } => items::pr(&ctx, command).await,
+            ChangesCommand::Issue { command } => items::issue(&ctx, command).await,
+            ChangesCommand::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
+            ChangesCommand::Conflicts { target, workspace } => {
+                workspaces::conflicts(&ctx, workspace, target).await
+            }
+            ChangesCommand::Review {
+                workspace,
+                pr,
+                issue,
+                repository,
+                post,
+                no_post,
+                manual,
+                agent,
+                args,
+            } => {
+                let item = pr
+                    .map(|pr| (ItemKind::Pr, pr))
+                    .or(issue.map(|issue| (ItemKind::Issue, issue)));
+                let post = (post || no_post).then_some(post);
+                let target = review::Target::new(workspace, item, repository, post)?;
+                let reviewer = review::Reviewer::new(manual, agent);
+                review::start(&ctx, target, reviewer, args).await
+            }
+            ChangesCommand::Land {
+                workspace,
+                push,
+                no_push,
+            } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
+        },
+        Command::Resources(command) => match command {
+            ResourcesCommand::Acquire { kind, workspace } => {
+                leases::acquire(&ctx, kind, workspace).await
+            }
+            ResourcesCommand::Release { kind, workspace } => {
+                leases::release(&ctx, kind, workspace).await
+            }
+            ResourcesCommand::Leases {
+                kind,
                 workspace,
                 all,
-                limit,
-                before,
-            } => simulators::history(&ctx, WorkspaceScope { workspace, all }, limit, before).await,
+            } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
+            ResourcesCommand::Catalog { kind, workspace } => {
+                catalog::show(&ctx, kind, workspace).await
+            }
+            ResourcesCommand::History { kind } => match kind {
+                HistoryKind::Sim {
+                    workspace,
+                    all,
+                    limit,
+                    before,
+                } => {
+                    simulators::history(&ctx, WorkspaceScope { workspace, all }, limit, before)
+                        .await
+                }
+            },
         },
-        Command::Doctor {
-            scope,
-            repair,
-            stop,
-            acknowledge_stopped,
-            reclaim,
-        } => {
-            let options = crate::daemon::recovery::ReconcileOptions {
+        Command::Diagnostics(command) => match command {
+            DiagnosticsCommand::Alerts {
+                command: Some(AlertsCommand::Send { message, workspace }),
+                ..
+            } => notifications::send(&ctx, workspace, message).await,
+            DiagnosticsCommand::Alerts {
+                command: Some(AlertsCommand::Clear),
+                ..
+            } => notifications::clear(&ctx).await,
+            DiagnosticsCommand::Alerts {
+                command: Some(AlertsCommand::Withdraw { id, workspace }),
+                ..
+            } => notifications::withdraw(&ctx, workspace, id).await,
+            DiagnosticsCommand::Alerts {
+                command: None,
+                follow: true,
+                keep_unread,
+                resume,
+                ..
+            } => notifications::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
+            DiagnosticsCommand::Alerts {
+                command: None,
+                all,
+                keep_unread,
+                limit,
+                ..
+            } => notifications::list(&ctx, all, keep_unread, limit).await,
+            DiagnosticsCommand::Doctor {
+                scope,
                 repair,
                 stop,
                 acknowledge_stopped,
                 reclaim,
-            };
-            recovery::run(&ctx, scope, options).await
-        }
-        Command::Config { command } => match command {
-            ConfigCommand::Set {
-                assignments,
-                repository,
-            } => configuration::edit(&ctx, configuration::sets(assignments)?, repository).await,
-            ConfigCommand::Unset { keys, repository } => {
-                configuration::edit(&ctx, configuration::unsets(keys), repository).await
-            }
-            ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
-            ConfigCommand::Reset => service::install_config(&ctx, None).await,
-            ConfigCommand::Install { name } => {
-                let name = service::packaged_config(&ctx, name)?;
-                service::install_config(&ctx, Some(name)).await
+            } => {
+                let options = crate::daemon::recovery::ReconcileOptions {
+                    repair,
+                    stop,
+                    acknowledge_stopped,
+                    reclaim,
+                };
+                recovery::run(&ctx, scope, options).await
             }
         },
-        Command::Update => update::run(&ctx).await,
-        Command::Daemon { command } => service::run(ctx, command, cli.daemon_handoff).await,
+        Command::Lifecycle(command) => match command {
+            LifecycleCommand::Stop { targets, yes } => stop::run(&ctx, targets, yes).await,
+            LifecycleCommand::Rm {
+                workspace,
+                confirmation,
+            } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
+            LifecycleCommand::Cleanup { kind, args } => cleanup::run(&ctx, kind, args).await,
+            LifecycleCommand::Export(ExportArgs {
+                repository: Some(repository),
+                output,
+                confirmation,
+                ..
+            }) => transfer::export_all(&ctx, repository, output, confirmation.yes).await,
+            LifecycleCommand::Export(ExportArgs {
+                workspace,
+                repository: None,
+                output,
+                confirmation,
+                ..
+            }) => transfer::export(&ctx, workspace, output, confirmation.yes).await,
+            LifecycleCommand::Import(ImportArgs {
+                files,
+                repository,
+                keep_sessions,
+                new_sessions,
+            }) => {
+                let sessions = if keep_sessions {
+                    Some(true)
+                } else if new_sessions {
+                    Some(false)
+                } else {
+                    None
+                };
+                let options = transfer::ImportOptions {
+                    repository,
+                    sessions,
+                };
+                transfer::import(&ctx, files, options).await
+            }
+        },
+        Command::Agents(command) => match command {
+            AgentsCommand::Claude { workspace, args } => {
+                agents::run_named(&ctx, "claude", workspace, args).await
+            }
+            AgentsCommand::Codex {
+                workspace,
+                cli,
+                app,
+                args,
+            } => {
+                let mode = if cli {
+                    Some(CodexMode::Cli)
+                } else if app {
+                    Some(CodexMode::App)
+                } else {
+                    None
+                };
+                agents::codex(&ctx, mode, workspace, args).await
+            }
+            AgentsCommand::T3 { workspace, args } => {
+                agents::open_app(&ctx, workspace, "t3", args).await
+            }
+            #[cfg(feature = "happy")]
+            AgentsCommand::Happy {
+                agent,
+                workspace,
+                prompt,
+                args,
+            } => agents::happy(&ctx, agent, workspace, prompt, args).await,
+            AgentsCommand::Chat {
+                here,
+                repository,
+                agent,
+                args,
+            } => chat::start(&ctx, repository, agent, here, args).await,
+            AgentsCommand::Plan {
+                issue,
+                oldest,
+                newest,
+                repository,
+                here,
+                agent,
+                args,
+            } => {
+                let pick = match (oldest, newest) {
+                    (true, _) => plan::Pick::Oldest,
+                    (_, true) => plan::Pick::Newest,
+                    _ => plan::Pick::Picker,
+                };
+                plan::start(&ctx, issue, repository, pick, agent, here, args).await
+            }
+        },
+        Command::Service(command) => match command {
+            ServiceCommand::Config { command } => match command {
+                ConfigCommand::Set {
+                    assignments,
+                    repository,
+                } => configuration::edit(&ctx, configuration::sets(assignments)?, repository).await,
+                ConfigCommand::Unset { keys, repository } => {
+                    configuration::edit(&ctx, configuration::unsets(keys), repository).await
+                }
+                ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
+                ConfigCommand::Reset => service::install_config(&ctx, None).await,
+                ConfigCommand::Install { name } => {
+                    let name = service::packaged_config(&ctx, name)?;
+                    service::install_config(&ctx, Some(name)).await
+                }
+            },
+            ServiceCommand::Update => update::run(&ctx).await,
+            ServiceCommand::Daemon { command } => {
+                service::run(ctx, command, cli.daemon_handoff).await
+            }
+        },
     }
 }
 

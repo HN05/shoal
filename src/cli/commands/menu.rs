@@ -17,7 +17,17 @@ use super::{
 use crate::{
     cli::{
         Command, agents,
-        args::{ConfirmationArgs, WorkspaceTargets, items::ItemArgs},
+        args::{
+            ConfirmationArgs, WorkspaceTargets,
+            agents::AgentsCommand,
+            changes::ChangesCommand,
+            coordination::{CoordinationCommand, QuestionsArgs},
+            create::CreateCommand,
+            items::{ItemArgs, ItemsCommand},
+            lifecycle::LifecycleCommand,
+            sessions::SessionsCommand,
+            workspace::{WorkCommand, WorkspaceCommand},
+        },
         client,
         client::request,
         context::Context,
@@ -605,30 +615,30 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
 /// or enter a workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
-        Row::Question { id, .. } => Command::Questions {
+        Row::Question { id, .. } => Command::Coordination(CoordinationCommand::Questions {
             command: None,
-            args: crate::cli::args::coordination::QuestionsArgs {
+            args: QuestionsArgs {
                 id: Some(id),
                 ..Default::default()
             },
-        },
+        }),
         Row::Approval { id, created_at, .. } => {
             return Ok(Choice::Done(
                 super::approvals::decide_listed(ctx, id, created_at).await?,
             ));
         }
-        Row::NeedsInput(workspace) => Command::Attach {
+        Row::NeedsInput(workspace) => Command::Sessions(SessionsCommand::Attach {
             workspace: Some(workspace),
             session: None,
-        },
-        Row::Failed(workspace) => Command::Status {
+        }),
+        Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
             workspace: Some(workspace),
             item: None,
-        },
+        }),
         Row::Ready {
             workspace,
             url: Some(url),
-        } => Command::View {
+        } => Command::Items(ItemsCommand::View {
             items: ItemArgs {
                 kind_or_url: Some(url),
                 item: None,
@@ -636,21 +646,21 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             },
             no_comments: false,
             check: None,
-        },
+        }),
         Row::Ready {
             workspace,
             url: None,
-        } => Command::Status {
+        } => Command::Workspace(WorkspaceCommand::Status {
             workspace: Some(workspace),
             item: None,
-        },
-        Row::Demo { workspace, name } => Command::Demo {
+        }),
+        Row::Demo { workspace, name } => Command::Sessions(SessionsCommand::Demo {
             command: None,
             name: Some(name),
             workspace: Some(workspace),
-        },
-        Row::Untracked(path) => Command::Work {
-            command: Some(crate::cli::WorkCommand::Adopt {
+        }),
+        Row::Untracked(path) => Command::Workspace(WorkspaceCommand::Work {
+            command: Some(WorkCommand::Adopt {
                 path,
                 repository: None,
                 copy: false,
@@ -660,22 +670,22 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             repository: None,
             status: Vec::new(),
             print: false,
-        },
-        Row::Workspace(workspace) => Command::Cd {
+        }),
+        Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
             workspace: Some(workspace),
-        },
+        }),
         Row::Notification(name) => {
             ensure!(!name.is_empty(), "the notification names no workspace");
-            Command::Cd {
+            Command::Workspace(WorkspaceCommand::Cd {
                 workspace: Some(name),
-            }
+            })
         }
         Row::Add => add(),
     })))
 }
 
 fn add() -> Command {
-    Command::Add {
+    Command::Create(CreateCommand::Add {
         here: false,
         focus: false,
         path: None,
@@ -690,33 +700,33 @@ fn add() -> Command {
         now: false,
         after: vec![],
         args: vec![],
-    }
+    })
 }
 
 /// What `key` does to `workspace`.
 async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -> Result<Command> {
     Ok(match key {
-        Key::Enter => Command::Cd { workspace },
-        Key::Delete => Command::Rm {
+        Key::Enter => Command::Workspace(WorkspaceCommand::Cd { workspace }),
+        Key::Delete => Command::Lifecycle(LifecycleCommand::Rm {
             workspace: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
-        },
-        Key::Status => Command::Status {
+        }),
+        Key::Status => Command::Workspace(WorkspaceCommand::Status {
             workspace,
             item: None,
-        },
-        Key::Stop => Command::Stop {
+        }),
+        Key::Stop => Command::Lifecycle(LifecycleCommand::Stop {
             targets: WorkspaceTargets {
                 workspace: workspace.into_iter().collect(),
                 all: false,
             },
             yes: false,
-        },
-        Key::Attach => Command::Attach {
+        }),
+        Key::Attach => Command::Sessions(SessionsCommand::Attach {
             workspace,
             session: None,
-        },
-        Key::Diff => Command::Diff { workspace },
+        }),
+        Key::Diff => Command::Changes(ChangesCommand::Diff { workspace }),
         Key::Execute => execute_command(ctx, workspace).await?,
         Key::Add => add(),
     })
@@ -763,16 +773,16 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             workspace,
             args: vec![],
         },
-        ExecuteChoice::App("codex") => Command::Codex {
+        ExecuteChoice::App("codex") => Command::Agents(AgentsCommand::Codex {
             workspace,
             cli: false,
             app: true,
             args: vec![],
-        },
-        ExecuteChoice::App(_) => Command::T3 {
+        }),
+        ExecuteChoice::App(_) => Command::Agents(AgentsCommand::T3 {
             workspace,
             args: vec![],
-        },
+        }),
         ExecuteChoice::Shell => Command::Run {
             name: None,
             workspace,

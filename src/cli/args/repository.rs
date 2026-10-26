@@ -1,3 +1,4 @@
+//! Arguments of `shoal repo` and `shoal forge`.
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -6,6 +7,21 @@ use crate::{
     agent::Agent,
     cli::args::{AgentParser, ConfirmationArgs},
 };
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum RepositoryCommand {
+    /// Register and manage repositories; omit the subcommand for a menu.
+    Repo {
+        #[command(subcommand)]
+        command: Option<RepoCommand>,
+    },
+    /// Inspect and access the current repository's forge.
+    Forge {
+        #[command(subcommand)]
+        command: ForgeCommand,
+    },
+}
 
 // Arguments of `shoal repo labels` and `shoal forge capabilities`.
 #[derive(Debug, Args)]

@@ -1,6 +1,50 @@
+//! Arguments of commands for agent sessions and demos.
 use std::ffi::OsString;
 
 use clap::Subcommand;
+
+use crate::cli::args::WorkspaceTargets;
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum SessionsCommand {
+    /// Restore stopped agent sessions and list interrupted commands.
+    Resume {
+        #[command(flatten)]
+        targets: WorkspaceTargets,
+        /// Select a stopped execution when the workspace has several records.
+        #[arg(long, conflicts_with = "all")]
+        execution: Option<String>,
+        /// Forget the saved agents and commands instead of resuming them.
+        #[arg(long)]
+        discard: bool,
+    },
+    /// Attach this terminal to a workspace's agent session; Ctrl-\ detaches.
+    ///
+    /// Terminal agents run in zmx sessions that keep running after their
+    /// terminal closes or detaches.
+    Attach {
+        workspace: Option<String>,
+        /// Session to attach when the workspace has several.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Open a demo an agent started, or start, list and stop demos.
+    ///
+    /// A demo is a command Shoal keeps running in a workspace for you to try:
+    /// a terminal app, a web server or a simulator app.
+    #[command(args_conflicts_with_subcommands = true)]
+    Demo {
+        #[command(subcommand)]
+        command: Option<DemoCommand>,
+        /// Demo to open; without one, pick from the running demos.
+        name: Option<String>,
+        /// Workspace whose demos to offer; defaults to the current workspace,
+        /// otherwise every workspace.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+}
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

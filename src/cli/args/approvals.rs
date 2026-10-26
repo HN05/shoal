@@ -1,3 +1,4 @@
+//! Arguments of `shoal approvals`.
 use clap::{Args, Subcommand};
 
 use crate::cli::args::BodyArgs;

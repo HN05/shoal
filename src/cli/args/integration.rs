@@ -1,6 +1,26 @@
+//! Arguments of `shoal skill` and `shoal shell`.
 use std::path::PathBuf;
 
 use clap::{Subcommand, ValueEnum};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum IntegrationCommand {
+    /// Show or install Shoal instructions for agents.
+    #[command(args_conflicts_with_subcommands = true)]
+    Skill {
+        /// Skill to show: worker for agents in a workspace, orchestrator for console agents.
+        #[arg(value_enum, default_value_t = SkillName::Worker)]
+        name: SkillName,
+        #[command(subcommand)]
+        command: Option<SkillCommand>,
+    },
+    /// Print shell integration for Bash or Zsh.
+    Shell {
+        #[command(subcommand)]
+        command: ShellCommand,
+    },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum SkillName {

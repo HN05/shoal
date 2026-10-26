@@ -1,7 +1,22 @@
 use clap::ValueEnum;
 
 use super::*;
-use crate::model::Relation;
+use crate::{
+    agent::Agent,
+    cli::args::{
+        AgentParser, ConfirmationArgs,
+        agents::AgentsCommand,
+        changes::ChangesCommand,
+        coordination::CoordinationCommand,
+        create::CreateCommand,
+        items::ItemsCommand,
+        lifecycle::LifecycleCommand,
+        repository::{RepoCommand, RepositoryCommand},
+        service::{ConfigCommand, ServiceCommand},
+        workspace::WorkspaceCommand,
+    },
+    model::Relation,
+};
 
 /// Whether `args` resolve to JSON output under the `SHOAL_OUTPUT` `setting`.
 fn resolves_json(args: &[&str], setting: Option<&str>) -> anyhow::Result<bool> {
@@ -70,7 +85,7 @@ fn agent_cli_and_config_spellings_remain_compatible() {
         let expected: Agent = spelling.parse().unwrap();
         assert_eq!(expected.name(), spelling);
         let parsed = Cli::try_parse_from(["shoal", "add", "--agent", spelling]).unwrap();
-        let Some(Command::Add { agent, .. }) = parsed.command else {
+        let Some(Command::Create(CreateCommand::Add { agent, .. })) = parsed.command else {
             panic!("wrong command")
         };
         assert_eq!(agent, Some(expected.clone()));
@@ -98,7 +113,7 @@ fn agent_cli_and_config_spellings_remain_compatible() {
 fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
     let items = |args: &[&str]| {
         let parsed = Cli::try_parse_from(args).unwrap();
-        let Some(Command::Link { items }) = parsed.command else {
+        let Some(Command::Items(ItemsCommand::Link { items })) = parsed.command else {
             panic!("wrong command")
         };
         let (items, relation) = items.split().unwrap();
@@ -129,9 +144,10 @@ fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
     }
     assert!(Cli::try_parse_from(["shoal", "link"]).is_err());
     assert!(Cli::try_parse_from(["shoal", "link", "pr", "1", "2", "assigned"]).is_err());
-    let Some(Command::Unlink { items }) = Cli::try_parse_from(["shoal", "unlink", "42"])
-        .unwrap()
-        .command
+    let Some(Command::Items(ItemsCommand::Unlink { items })) =
+        Cli::try_parse_from(["shoal", "unlink", "42"])
+            .unwrap()
+            .command
     else {
         panic!("wrong command")
     };
@@ -164,7 +180,9 @@ fn happy_takes_the_agents_happy_runs() {
         ("codex", crate::happy::Agent::Codex),
     ] {
         let parsed = Cli::try_parse_from(["shoal", "happy", name]).unwrap();
-        assert!(matches!(parsed.command, Some(Command::Happy { agent, .. }) if agent == expected));
+        assert!(
+            matches!(parsed.command, Some(Command::Agents(AgentsCommand::Happy { agent, .. })) if agent == expected)
+        );
     }
     for invalid in ["Claude", "Codex", "happy-codex", "custom"] {
         assert!(Cli::try_parse_from(["shoal", "happy", invalid]).is_err());
@@ -189,21 +207,21 @@ fn removal_commands_share_confirmation_flags() {
         let workspace = Cli::try_parse_from(["shoal", "rm", "workspace", flag]).unwrap();
         assert!(matches!(
             workspace.command,
-            Some(Command::Rm {
+            Some(Command::Lifecycle(LifecycleCommand::Rm {
                 confirmation: ConfirmationArgs { yes: true },
                 ..
-            })
+            }))
         ));
 
         let repository = Cli::try_parse_from(["shoal", "repo", "rm", "repository", flag]).unwrap();
         assert!(matches!(
             repository.command,
-            Some(Command::Repo {
+            Some(Command::Repository(RepositoryCommand::Repo {
                 command: Some(RepoCommand::Rm {
                     confirmation: ConfirmationArgs { yes: true },
                     ..
                 })
-            })
+            }))
         ));
     }
 }
@@ -216,10 +234,10 @@ fn work_setup_accepts_a_workspace_without_listing_filters() {
         let cli = Cli::try_parse_from(args).unwrap();
         assert!(matches!(
             cli.command,
-            Some(Command::Work {
+            Some(Command::Workspace(WorkspaceCommand::Work {
                 command: Some(WorkCommand::Setup { workspace: target, skip: false }),
                 ..
-            }) if target.as_deref() == workspace
+            })) if target.as_deref() == workspace
         ));
     }
     for filters in [
@@ -244,13 +262,13 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
     .unwrap();
     assert!(matches!(
         cli.command,
-        Some(Command::Repo {
+        Some(Command::Repository(RepositoryCommand::Repo {
             command: Some(RepoCommand::Setup {
                 repository: Some(repository),
                 agent: Some(agent),
                 args,
             })
-        }) if repository == "project" && agent.name() == "codex" && args == ["--model", "fast"]
+        })) if repository == "project" && agent.name() == "codex" && args == ["--model", "fast"]
     ));
 }
 
@@ -261,12 +279,12 @@ fn codex_mode_flags_do_not_reserve_workspace_names() {
         (["shoal", "codex", "--cli", "app"], "app", true, false),
     ] {
         let parsed = Cli::try_parse_from(args).unwrap();
-        let Some(Command::Codex {
+        let Some(Command::Agents(AgentsCommand::Codex {
             workspace,
             cli,
             app,
             ..
-        }) = parsed.command
+        })) = parsed.command
         else {
             panic!("wrong command")
         };
@@ -284,12 +302,12 @@ fn add_uses_a_positional_new_branch_and_existing_branch_flag() {
     let new = Cli::try_parse_from(["shoal", "add", "repo", "feature/topic"]).unwrap();
     assert!(matches!(
         new.command,
-        Some(Command::Add {
+        Some(Command::Create(CreateCommand::Add {
             repository,
             branch,
             existing: None,
             ..
-        }) if repository.as_deref() == Some("repo")
+        })) if repository.as_deref() == Some("repo")
             && branch.as_deref() == Some("feature/topic")
     ));
 
@@ -297,12 +315,12 @@ fn add_uses_a_positional_new_branch_and_existing_branch_flag() {
         Cli::try_parse_from(["shoal", "add", "repo", "--existing", "origin/topic"]).unwrap();
     assert!(matches!(
         existing.command,
-        Some(Command::Add {
+        Some(Command::Create(CreateCommand::Add {
             repository,
             branch: None,
             existing,
             ..
-        }) if repository.as_deref() == Some("repo")
+        })) if repository.as_deref() == Some("repo")
             && existing.as_deref() == Some("origin/topic")
     ));
 }
@@ -326,7 +344,7 @@ fn creation_accepts_base_refs() {
         let expected = *args.last().unwrap();
         let parsed = Cli::try_parse_from(args).unwrap();
         let base = match parsed.command.unwrap() {
-            Command::Add { base, .. } => base,
+            Command::Create(CreateCommand::Add { base, .. }) => base,
             _ => panic!("wrong command"),
         };
         assert_eq!(base.as_deref(), Some(expected));
@@ -341,12 +359,12 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
     ] {
         let command = Cli::try_parse_from(args).unwrap().command.unwrap();
         assert!(!command.is_administrative());
-        let Command::Done {
+        let Command::Coordination(CoordinationCommand::Done {
             cleanup,
             workspace,
             undo,
             keep_demos,
-        } = command
+        }) = command
         else {
             panic!("wrong command");
         };
@@ -361,16 +379,19 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
         Cli::try_parse_from(["shoal", "done", "--keep-demos"])
             .unwrap()
             .command,
-        Some(Command::Done {
+        Some(Command::Coordination(CoordinationCommand::Done {
             keep_demos: true,
             ..
-        })
+        }))
     ));
     assert!(matches!(
         Cli::try_parse_from(["shoal", "done", "--undo"])
             .unwrap()
             .command,
-        Some(Command::Done { undo: true, .. })
+        Some(Command::Coordination(CoordinationCommand::Done {
+            undo: true,
+            ..
+        }))
     ));
     for flag in ["--draft", "--no-draft"] {
         assert!(Cli::try_parse_from(["shoal", "ready", flag]).is_err());
@@ -378,7 +399,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
     }
     assert!(
         matches!(Cli::try_parse_from(["shoal", "done", "review", "--cleanup"]).unwrap().command,
-            Some(Command::Done { workspace: Some(name), cleanup: true, undo: false, .. }) if name == "review")
+            Some(Command::Coordination(CoordinationCommand::Done { workspace: Some(name), cleanup: true, undo: false, .. })) if name == "review")
     );
 }
 
@@ -386,7 +407,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
 fn review_selects_a_workspace_or_a_pr() {
     let review = Cli::try_parse_from(["shoal", "review", "--pr", "7", "--agent", "claude"]);
     assert!(matches!(review.unwrap().command,
-            Some(Command::Review { workspace: None, pr: Some(pr), agent: Some(agent), .. }) if pr == "7" && agent.name() == "claude"));
+            Some(Command::Changes(ChangesCommand::Review { workspace: None, pr: Some(pr), agent: Some(agent), .. })) if pr == "7" && agent.name() == "claude"));
     for args in [
         vec![
             "shoal", "review", "--pr", "7", "--manual", "--agent", "claude",
@@ -402,9 +423,9 @@ fn config_show_is_available_to_workspace_processes() {
     let show = Cli::try_parse_from(["shoal", "config", "show", "workspace"]).unwrap();
     assert!(matches!(
         &show.command,
-        Some(Command::Config {
+        Some(Command::Service(ServiceCommand::Config {
             command: ConfigCommand::Show { workspace }
-        }) if workspace.as_deref() == Some("workspace")
+        })) if workspace.as_deref() == Some("workspace")
     ));
     assert!(!show.command.unwrap().is_administrative());
     let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();

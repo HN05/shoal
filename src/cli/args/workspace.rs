@@ -1,6 +1,70 @@
-use std::path::PathBuf;
+//! Arguments of commands that list, enter, inspect and manage workspaces.
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
+
+use crate::cli::{args::item_reference, list_status};
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum WorkspaceCommand {
+    /// List what needs you: questions, approvals, agents needing input, failures and ready work.
+    Inbox {
+        /// List only this registered repository's items.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Print the list instead of opening the picker, as filters and JSON do.
+        #[arg(long)]
+        print: bool,
+    },
+    /// List ongoing work, or manage a workspace.
+    #[command(args_conflicts_with_subcommands = true)]
+    Work {
+        #[command(subcommand)]
+        command: Option<WorkCommand>,
+        /// List only the agents waiting for a slot under max_agents.
+        #[arg(long, conflicts_with = "chats")]
+        queue: bool,
+        /// List only the running chats.
+        #[arg(long)]
+        chats: bool,
+        /// List only this registered repository's workspaces, chats and agents.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// List only workspaces, chats and agents with this status; repeat or separate with commas.
+        #[arg(long, value_delimiter = ',')]
+        status: Vec<list_status::ListStatus>,
+        /// Print the list instead of opening the picker, as filters and JSON do.
+        #[arg(long)]
+        print: bool,
+    },
+    /// Show workspace activity, changes, resources, and issue and PR state.
+    ///
+    /// Name a workspace, or find the workspaces that link an issue or PR or
+    /// hold a resource: `status pr 12`, `status <issue-or-PR-URL>`, `status
+    /// resource <pool-or-member>`.
+    Status {
+        /// Workspace, issue or PR URL, or pr, issue or resource.
+        #[arg(value_name = "TARGET")]
+        workspace: Option<String>,
+        /// Number, URL, or resource name after pr, issue or resource.
+        #[arg(value_parser = item_reference)]
+        item: Option<String>,
+    },
+    /// Enter a workspace, or use - for the one you were in before.
+    ///
+    /// Omit the workspace to open the picker, even inside a workspace.
+    Cd { workspace: Option<String> },
+    /// Open a workspace in an editor.
+    ///
+    /// Runs the configured `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path.
+    Edit {
+        workspace: Option<String>,
+        /// Arguments forwarded to the editor.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+}
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

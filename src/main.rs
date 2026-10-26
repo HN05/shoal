@@ -57,9 +57,11 @@ fn main() {
     if cli.daemon_handoff.is_some()
         && !matches!(
             cli.command,
-            Some(cli::Command::Daemon {
-                command: cli::args::service::DaemonCommand::Run { managed: true }
-            })
+            Some(cli::Command::Service(
+                cli::args::service::ServiceCommand::Daemon {
+                    command: cli::args::service::DaemonCommand::Run { managed: true }
+                }
+            ))
         )
     {
         eprintln!("error: daemon handoff requires managed daemon run");
