@@ -1103,8 +1103,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let refused = export("tab-7");
     assert!(!refused.status.success());
     assert!(
-        String::from_utf8_lossy(&refused.stderr)
-            .contains("closes when the export removes"),
+        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
         "{refused:?}"
     );
     assert!(refused.stdout.is_empty());
