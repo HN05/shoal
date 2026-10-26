@@ -21989,6 +21989,23 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     insert(&fixture);
     assert!(fixture.run(&["stop", "legacy", "--yes"]).status.success());
     assert_eq!(executions(&fixture), 0);
+
+    // Stopping several does not ask: the unproven one fails unless --yes.
+    fixture.add("other");
+    insert(&fixture);
+    let several = fixture.run(&["--json", "stop", "legacy", "other"]);
+    assert!(!several.status.success());
+    let report: Value = serde_json::from_slice(&several.stdout).unwrap();
+    assert_eq!(report["stopped"], serde_json::json!(["other"]), "{report}");
+    assert_eq!(report["failed"][0]["workspace"], "legacy", "{report}");
+    assert_eq!(executions(&fixture), 1);
+    assert!(
+        fixture
+            .run(&["stop", "legacy", "other", "--yes"])
+            .status
+            .success()
+    );
+    assert_eq!(executions(&fixture), 0);
 }
 
 #[test]
