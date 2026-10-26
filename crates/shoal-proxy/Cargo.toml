@@ -1,0 +1,22 @@
+[package]
+name = "shoal-proxy"
+version = "0.1.0"
+description = "Forward an AI agent's API requests to one upstream and retry transient failures"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bytes = "1"
+futures-util.workspace = true
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1", "server"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12", "webpki-roots"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }
