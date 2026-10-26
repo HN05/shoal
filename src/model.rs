@@ -428,6 +428,9 @@ pub struct WorkspaceStatus {
     /// The retry of the agent's turn an API failure ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_retry: Option<crate::daemon::workspace::turn_retry::TurnRetry>,
+    /// The request the agent's proxy waits to retry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
 }
 
 /// The first condition that keeps a workspace from automatic cleanup, in the

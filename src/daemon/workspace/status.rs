@@ -59,6 +59,7 @@ impl Manager {
             })
             .await?;
         inspection.workspace.usage = self.workspace_usage(&inspection.workspace.id);
+        let proxy_retry = self.proxy_retry(&inspection.executions);
         inspection.simulators.retain(|simulator| {
             simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
         });
@@ -74,6 +75,7 @@ impl Manager {
             prs,
             issue_status,
             turn_retry,
+            proxy_retry,
         })
     }
 }

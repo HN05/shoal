@@ -107,26 +107,63 @@ struct Reporter {
 #[cfg(feature = "proxy")]
 impl Reporter {
     async fn run(self, mut events: tokio::sync::mpsc::UnboundedReceiver<shoal_proxy::Event>) {
+        use shoal_proxy::Event;
         while let Some(event) = events.recv().await {
-            if let shoal_proxy::Event::Failed {
-                failure,
-                in_stream: true,
-            } = event
-            {
-                self.report(turn_failure(failure)).await;
+            match event {
+                Event::Retrying {
+                    failure,
+                    attempt,
+                    wait,
+                } => self.retrying(turn_failure(failure), attempt, wait).await,
+                Event::Failed { failure, in_stream } => {
+                    self.retried(None).await;
+                    if in_stream {
+                        self.turn_failed(turn_failure(failure)).await;
+                    }
+                }
+                Event::Recovered => self.retried(None).await,
             }
         }
     }
 
-    /// The wrapper writes nothing, since its terminal is the agent's: a
-    /// report that fails leaves the turn to the user.
-    async fn report(&self, failure: crate::state::TurnFailure) {
-        let report = crate::protocol::AgentMethod::ReportTurnFailure {
+    /// Show the retry the proxy waits `wait` to make in the agent's status.
+    async fn retrying(
+        &self,
+        failure: crate::state::TurnFailure,
+        attempt: u32,
+        wait: std::time::Duration,
+    ) {
+        let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+        let retry = crate::daemon::workspace::proxy_retries::ProxyRetry {
+            failure,
+            attempt,
+            next_at: now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX)),
+        };
+        self.retried(Some(retry)).await;
+    }
+
+    async fn retried(&self, retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>) {
+        self.send(crate::protocol::AgentMethod::ReportProxyRetry {
+            workspace: self.workspace.clone(),
+            execution: self.execution.clone(),
+            retry,
+        })
+        .await;
+    }
+
+    async fn turn_failed(&self, failure: crate::state::TurnFailure) {
+        self.send(crate::protocol::AgentMethod::ReportTurnFailure {
             workspace: self.workspace.clone(),
             failure,
             session: None,
             execution: Some(self.execution.clone()),
-        };
+        })
+        .await;
+    }
+
+    /// The wrapper writes nothing, since its terminal is the agent's: a
+    /// report that fails leaves the retry or turn to the user.
+    async fn send(&self, report: crate::protocol::AgentMethod) {
         let _ = crate::cli::client::call(&self.paths, report).await;
     }
 }

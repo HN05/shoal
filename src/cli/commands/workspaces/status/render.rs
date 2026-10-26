@@ -118,6 +118,9 @@ fn render_activity(view: &StatusView, palette: Palette) {
             .agent_state
             .map_or("none", |status| { ui::agent_state_label(status.state) })
     );
+    if let Some(retry) = &status.proxy_retry {
+        outln!("API retry:     {}", proxy_retry_label(retry));
+    }
     if let Some(retry) = &status.turn_retry {
         outln!("Turn retry:    {}", turn_retry_label(retry));
     }
@@ -268,6 +271,17 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
     for error in &pr.errors {
         outln!("  {}", palette.paint(Style::Warning, error));
     }
+}
+
+/// A request the agent's proxy waits to retry as `status` shows it.
+fn proxy_retry_label(retry: &crate::daemon::workspace::proxy_retries::ProxyRetry) -> String {
+    let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+    format!(
+        "{} (attempt {} failed), next attempt in {}s",
+        retry.failure.describe(),
+        retry.attempt,
+        retry.next_at.saturating_sub(now).max(0)
+    )
 }
 
 /// A pending retry of the agent's failed turn as `status` shows it.

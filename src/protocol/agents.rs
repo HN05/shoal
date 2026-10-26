@@ -26,6 +26,14 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         execution: Option<String>,
     },
+    /// The retry the proxy of `execution` waits to make, which its wrapper
+    /// reports; `None` once the proxy succeeded or gave up.
+    ReportProxyRetry {
+        workspace: String,
+        execution: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
+    },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`.
     AwaitAgentWake {

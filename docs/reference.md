@@ -865,7 +865,9 @@ has lasted five minutes the agent gets the failure, and later requests get their
 at once until one succeeds; a failure a retry does not fix, or one after content
 arrived, reaches the agent unchanged. A Codex stream that gives up ends with a
 `response.failed` event, which ends its turn, instead of an HTTP failure Codex
-would retry itself, and the wrapper reports that turn for `retry`. Through the proxy, Claude Code on a claude.ai login treats
+would retry itself, and the wrapper reports that turn for `retry`. `status`
+shows a request the proxy waits to retry; `--json` gives `proxy_retry` with
+`failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
 settings. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
