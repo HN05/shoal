@@ -13,14 +13,24 @@ use serde_json::{Map, Value};
 /// the agent runs.
 pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Result<()> {
     let found = occurrences(args);
-    let Some(first) = found.first().map(|found| found.at.start) else {
+    if found.is_empty() {
         return Ok(());
-    };
+    }
     let mut merged = Value::Object(Map::new());
     for found in &found {
         merge_into(&mut merged, read(&found.value, directory)?);
     }
     merged["env"]["ANTHROPIC_BASE_URL"] = Value::String(url.to_owned());
+    replace(args, &found, &merged);
+    Ok(())
+}
+
+/// Put `merged` as one `--settings` in the place of the first of `found`,
+/// and drop the rest.
+fn replace(args: &mut Vec<OsString>, found: &[Occurrence], merged: &Value) {
+    let Some(first) = found.first().map(|found| found.at.start) else {
+        return;
+    };
     for found in found.iter().rev() {
         args.drain(found.at.clone());
     }
@@ -28,7 +38,6 @@ pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Re
         first..first,
         ["--settings".into(), merged.to_string().into()],
     );
-    Ok(())
 }
 
 /// A `--settings` among the arguments, at the ones it takes up.
