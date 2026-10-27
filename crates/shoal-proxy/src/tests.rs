@@ -703,6 +703,30 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
 }
 
 #[tokio::test]
+async fn the_first_answer_after_giving_up_is_a_recovery() {
+    let upstream = FakeUpstream::start(|received| match received.len() {
+        1 => reply(
+            429,
+            r#"{"error":{"type":"usage_limit_reached","resets_in_seconds":7200}}"#,
+        ),
+        _ => reply(200, "done"),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, _) = send(addr, Request::post("/responses"), "{}").await;
+    assert_eq!(status.as_u16(), 429);
+    assert!(matches!(drain(&mut events)[..], [Event::Failed { .. }]));
+    // A request that succeeds at once still ends the outage the proxy gave
+    // up on, so its owner forgets the reset.
+    let (status, _, body) = send(addr, Request::post("/responses"), "{}").await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+    assert_eq!(drain(&mut events), [Event::Recovered]);
+    // Later answers, with no outage, are not.
+    send(addr, Request::post("/responses"), "{}").await;
+    assert!(drain(&mut events).is_empty());
+}
+
+#[tokio::test]
 async fn a_usage_limit_inside_the_stream_ends_the_turn_at_once() {
     let opening = format!(
         "{RESPONSE_CREATED}event: response.failed\ndata: {}\n\n",

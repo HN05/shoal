@@ -40,7 +40,8 @@ pub enum AgentMethod {
     ReportUpstreamReset {
         workspace: String,
         execution: String,
-        resets_at: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resets_at: Option<i64>,
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`.

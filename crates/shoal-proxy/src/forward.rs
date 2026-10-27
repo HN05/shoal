@@ -177,10 +177,10 @@ impl Forwarder {
         }
     }
 
-    /// An answer ends the outage; one that took retries is a recovery.
+    /// An answer ends the outage; one that took retries, or the first after
+    /// a request gave up on the outage, is a recovery.
     fn answered(&self, attempt: u32) {
-        self.outage.ended();
-        if attempt > 1 {
+        if self.outage.ended() || attempt > 1 {
             self.report(Event::Recovered);
         }
     }

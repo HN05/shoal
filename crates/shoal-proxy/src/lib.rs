@@ -35,7 +35,8 @@ pub enum Event {
         in_stream: bool,
         wait: Option<Duration>,
     },
-    /// A request the proxy retried succeeded.
+    /// The upstream answered again: a request the proxy retried succeeded,
+    /// or the first one after it gave up on an outage.
     Recovered,
 }
 

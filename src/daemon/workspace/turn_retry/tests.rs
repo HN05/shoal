@@ -269,7 +269,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let reset = 4_000_000_000_000;
     // The proxy's report arrives first, as it does for Codex.
     manager
-        .report_upstream_reset(&workspace.name, execution.clone(), reset)
+        .report_upstream_reset(&workspace.name, execution.clone(), Some(reset))
         .await
         .unwrap();
     fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
@@ -283,7 +283,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let early = retry(&manager, &other).await.unwrap();
     assert!(early.due_at < reset, "{early:?}");
     manager
-        .report_upstream_reset(&other.name, execution.clone(), reset)
+        .report_upstream_reset(&other.name, execution.clone(), Some(reset))
         .await
         .unwrap();
     let held = retry(&manager, &other).await.unwrap();
@@ -293,10 +293,24 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     );
     // A reset that has passed holds nothing back.
     manager
-        .report_upstream_reset(&other.name, execution.clone(), 0)
+        .report_upstream_reset(&other.name, execution.clone(), Some(0))
         .await
         .unwrap();
     assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
+    // Once the upstream answers again, a later failure backs off as its own.
+    manager
+        .report_upstream_reset(&other.name, execution.clone(), None)
+        .await
+        .unwrap();
+    assert_eq!(manager.upstream_reset(&execution), None);
+    report(&manager, &other, &execution, AgentState::Working).await;
+    fail(&manager, &other, &execution, TurnFailure::Overloaded).await;
+    let transient = retry(&manager, &other).await.unwrap();
+    assert!(transient.due_at < reset, "{transient:?}");
+    manager
+        .report_upstream_reset(&other.name, execution.clone(), Some(reset))
+        .await
+        .unwrap();
     manager.forget_proxy_retry(&execution);
     assert_eq!(manager.upstream_reset(&execution), None);
 }

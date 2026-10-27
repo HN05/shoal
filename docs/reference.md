@@ -831,7 +831,8 @@ turn ends normally, so an outage of any length or a daily or weekly usage limit
 passes and the agent carries on; switching between transient failures and usage
 limits starts the wait over. When the agent's proxy learns when the upstream
 refuses requests until, such as a usage limit's reset from its error or
-headers, the retry waits until half a minute past it instead. Claude Code's
+headers, the retry waits until half a minute past it instead, until the
+upstream answers again. Claude Code's
 failure hook names no reset time, so without a proxy a usage limit is checked
 about hourly. An error a retry does not fix, such as failed authentication, gets
 no retry: Shoal records a `turn_failed` notification, which a child workspace's
@@ -860,9 +861,14 @@ has, Shoal's and those forwarded or in a configured resume command, JSON or a
 file relative to the workspace, into one: objects key by key, lists such as an
 event's hooks one after another, and the proxy's URL as `ANTHROPIC_BASE_URL`;
 Codex by
-moving the `base_url` of the provider the launch selects, from its config, the
-profile `--profile` or the config's `profile` names, and the `-c` overrides it
-is launched with, keeping that provider's own credentials, or, on its built-in
+moving the `base_url` of the provider the launch selects, keeping that
+provider's own credentials. Shoal reads the selection as Codex does: the user's
+`config.toml`, the `<name>.config.toml` of the profile `--profile` or its
+`profile` names (or a legacy `[profiles.<name>]` table), each `.codex/config.toml`
+of a trusted project from its root (by `project_root_markers`, `.git` by
+default) down to the working directory, which `-C` may move, then the `-c`
+overrides it is launched with. Shoal's own overrides come after the launch's, so
+they win. On its built-in
 OpenAI provider, through a provider Shoal defines with the same login, whose
 upstream is then
 `https://chatgpt.com/backend-api/codex` for a ChatGPT login or

@@ -87,13 +87,17 @@ impl Reporter {
                 } => {
                     self.retried(None).await;
                     if let Some(wait) = wait {
-                        self.resets_after(wait).await;
+                        self.reset(Some(wait)).await;
                     }
                     if in_stream {
                         self.turn_failed(turn_failure(failure)).await;
                     }
                 }
-                Event::Recovered => self.retried(None).await,
+                // An upstream that answers again refuses nothing until.
+                Event::Recovered => {
+                    self.retried(None).await;
+                    self.reset(None).await;
+                }
             }
         }
     }
@@ -125,13 +129,15 @@ impl Reporter {
 
     /// Tell the daemon the upstream refuses requests for `wait`, so a
     /// retry of the agent's turn, which the agent itself may report, waits
-    /// past it.
-    async fn resets_after(&self, wait: std::time::Duration) {
+    /// past it; `None` once it answers again.
+    async fn reset(&self, wait: Option<std::time::Duration>) {
         let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+        let resets_at =
+            wait.map(|wait| now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX)));
         self.send(crate::protocol::AgentMethod::ReportUpstreamReset {
             workspace: self.workspace.clone(),
             execution: self.execution.clone(),
-            resets_at: now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX)),
+            resets_at,
         })
         .await;
     }

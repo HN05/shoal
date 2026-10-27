@@ -39,14 +39,19 @@ impl Manager {
 
     /// Keep when the upstream of `execution`'s proxy refuses requests
     /// until, Unix seconds such as a usage limit's reset, which a retry of
-    /// its agent's turn waits past.
+    /// its agent's turn waits past; `None`, once it answers again, forgets
+    /// it, so a later failure backs off as its own.
     pub async fn report_upstream_reset(
         &self,
         selector: &str,
         execution: String,
-        resets_at: i64,
+        resets_at: Option<i64>,
     ) -> Result<()> {
         self.workspace(selector).await?;
+        let Some(resets_at) = resets_at else {
+            self.upstream_resets.lock().unwrap().remove(&execution);
+            return Ok(());
+        };
         self.upstream_resets
             .lock()
             .unwrap()
