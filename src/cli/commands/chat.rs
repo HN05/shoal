@@ -31,6 +31,7 @@ pub(super) async fn start(
     options: Options,
 ) -> Result<i32> {
     ensure_unscoped(ctx)?;
+    options.check_name(ctx).await?;
     let repo = chosen(ctx, repository).await?;
     let settings = settings(ctx, &repo).await?;
     let topic = Topic::repository(&repo);
@@ -47,6 +48,16 @@ pub(super) struct Options {
     pub name: Option<String>,
     /// Arguments forwarded to the agent.
     pub args: Vec<OsString>,
+}
+
+impl Options {
+    /// Refuse a `--name` the daemon would refuse, before any picker opens.
+    pub async fn check_name(&self, ctx: &Context) -> Result<()> {
+        match &self.name {
+            Some(name) => client::check_chat_name(&ctx.paths, name).await,
+            None => Ok(()),
+        }
+    }
 }
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
@@ -154,14 +165,11 @@ pub(super) async fn begin(
     )
 }
 
-/// `--name` once the daemon accepts it, else the topic's name or its lowest
-/// free variant.
+/// `--name`, which [`Options::check_name`] checked, else the topic's name
+/// or its lowest free variant.
 async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -> Result<String> {
     match requested {
-        Some(name) => {
-            client::check_chat_name(&ctx.paths, &name).await?;
-            Ok(name)
-        }
+        Some(name) => Ok(name),
         None => client::free_chat_name(&ctx.paths, topic.name.clone()).await,
     }
 }

@@ -30,6 +30,7 @@ pub(super) async fn start(
     mut options: chat::Options,
 ) -> Result<i32> {
     chat::ensure_unscoped(ctx)?;
+    options.check_name(ctx).await?;
     let repo = issues::item_repository(
         ctx,
         ItemKind::Issue,
