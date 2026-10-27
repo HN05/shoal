@@ -89,23 +89,11 @@ pub enum Worker<'a> {
     MenuNext,
 }
 
-/// This executable for a command a terminal runs as typed. The terminal
-/// inherits HOME, so only a non-default state directory needs naming. Like
-/// [`session_argv`], it shows text to the person at that terminal whatever
-/// `SHOAL_OUTPUT` the terminal has.
+/// This executable for a command a terminal or session runs as typed,
+/// naming the state directory even when it is the default, so a
+/// `SHOAL_STATE_DIR` in the place's environment cannot redirect it. It shows
+/// text to the person at that terminal whatever `SHOAL_OUTPUT` it has.
 pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
-    let mut argv = vec![crate::fsutil::invoked_executable()?.into_os_string()];
-    if !paths.is_default_state() {
-        argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
-    }
-    argv.push("--text".into());
-    Ok(argv)
-}
-
-/// This executable for a command a session runs in the caller's environment,
-/// naming the state directory even when it is the default, so an inherited
-/// `SHOAL_STATE_DIR` cannot redirect it.
-pub fn session_argv(paths: &Paths) -> Result<Vec<OsString>> {
     Ok(vec![
         crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),

@@ -260,7 +260,7 @@ async fn run_chat(
 ) -> Result<String> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let session = free_name(name, &taken);
-    let mut argv = internal::session_argv(&ctx.paths)?;
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     let status = Command::new(Tool::Zmx.program())
         .arg("attach")

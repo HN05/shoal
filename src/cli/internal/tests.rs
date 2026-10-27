@@ -6,27 +6,13 @@ use super::*;
 use crate::cli::{Cli, Command, args::internal::InternalCommand};
 
 #[test]
-fn shoal_argv_names_only_a_non_default_state_directory() {
-    let custom = Paths::for_test("/home");
-    let default = Paths {
-        state: "/home/.local/state/shoal".into(),
-        ..custom.clone()
-    };
-    assert_eq!(shoal_argv(&default).unwrap()[1..], ["--text"]);
-    assert_eq!(
-        shoal_argv(&custom).unwrap()[1..],
-        ["--state-dir", "/home/state", "--text"]
-    );
-}
-
-#[test]
-fn session_argv_names_even_the_default_state_directory() {
+fn shoal_argv_names_even_the_default_state_directory() {
     let default = Paths {
         state: "/home/.local/state/shoal".into(),
         ..Paths::for_test("/home")
     };
     assert_eq!(
-        session_argv(&default).unwrap()[1..],
+        shoal_argv(&default).unwrap()[1..],
         ["--state-dir", "/home/.local/state/shoal", "--text"]
     );
 }
