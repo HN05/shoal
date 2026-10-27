@@ -218,13 +218,18 @@ impl Manager {
         execution: &str,
         record: recovery::Record,
     ) -> Result<()> {
+        // A resume restoring the agent now holds its record and consumes it.
+        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let Ok(_claim) = recovery::claim(&path) else {
+            return Ok(());
+        };
         let env = record.restore_request.unwrap_or_default();
         let restore = Restore::new(workspace.clone(), execution, &record.agent, &env)?;
         if let Err(error) = self.store.run(move |db| insert(db, &restore)).await {
             crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
             return Ok(());
         }
-        recovery::clear_restore_request(&self.paths, &workspace.id, execution)
+        recovery::clear_restore_request(&path)
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
@@ -253,10 +258,14 @@ impl Manager {
             .await
     }
 
-    /// Clear the restore requests of `workspace_id`'s stopped agents.
+    /// Clear the restore requests of `workspace_id`'s stopped agents, except
+    /// one a resume restoring the agent holds and consumes.
     fn clear_restore_requests(&self, workspace_id: &str) -> Result<()> {
         for (execution, _) in recovery::restore_requests(&self.paths, workspace_id)? {
-            recovery::clear_restore_request(&self.paths, workspace_id, &execution)?;
+            let path = recovery::record_path(&self.paths, workspace_id, &execution);
+            if let Ok(_claim) = recovery::claim(&path) {
+                recovery::clear_restore_request(&path)?;
+            }
         }
         Ok(())
     }

@@ -179,12 +179,12 @@ fn a_restore_request_stays_until_the_daemon_clears_it() {
     assert_eq!(requests[0].0, "execution");
     assert_eq!(requests[0].1.restore_request.as_ref(), Some(&env));
 
-    clear_restore_request(&paths, "workspace", "execution").unwrap();
+    clear_restore_request(&record_path(&paths, "workspace", "execution")).unwrap();
     assert!(restore_requests(&paths, "workspace").unwrap().is_empty());
     let record = Record::load(&record_path(&paths, "workspace", "execution"))
         .unwrap()
         .expect("the record stays for shoal resume");
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
     // A record already resumed has nothing to clear.
-    clear_restore_request(&paths, "workspace", "gone").unwrap();
+    clear_restore_request(&record_path(&paths, "workspace", "gone")).unwrap();
 }

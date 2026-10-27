@@ -248,3 +248,28 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
     // Its worker finds the entry gone and restores nothing.
     assert!(queue(&manager).await.is_empty());
 }
+
+#[tokio::test]
+async fn a_request_waits_while_a_resume_holds_its_record() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("max_agents = 'none'"));
+    let workspace = create(&manager, &repo, "work").await;
+    stop(&manager, &workspace, "agent", SIGNALLED);
+    let path = record_path(&manager.paths, &workspace.id, "agent");
+    let claim = crate::execution::recovery::claim(&path).unwrap();
+    manager.dispatch_queue().await.unwrap();
+    manager
+        .cancel_stopped_restores(&workspace.id)
+        .await
+        .unwrap();
+    assert!(queue(&manager).await.is_empty());
+    // Neither replaced the record the resume holds.
+    assert_eq!(
+        Record::load(&path).unwrap().unwrap().restore_request,
+        Some(herdr())
+    );
+    drop(claim);
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await.len(), 1);
+}

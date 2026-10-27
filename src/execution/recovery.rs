@@ -388,15 +388,15 @@ pub(crate) fn restore_requests(paths: &Paths, workspace_id: &str) -> Result<Vec<
     Ok(requests)
 }
 
-/// Clear the restore request of `id`'s record once its restore is queued,
-/// unless the record is already gone.
-pub(crate) fn clear_restore_request(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
-    let path = record_path(paths, workspace_id, id);
-    let Some(record) = Record::load(&path)? else {
+/// Clear the restore request of the record at `path`, unless it is already
+/// gone. The caller holds its claim: the record is replaced, so a claim taken
+/// on it meanwhile would lock a file no longer there.
+pub(crate) fn clear_restore_request(path: &Path) -> Result<()> {
+    let Some(record) = Record::load(path)? else {
         return Ok(());
     };
     replace_record(
-        &path,
+        path,
         &Record {
             restore_request: None,
             ..record
