@@ -10,8 +10,7 @@ use futures_util::future::BoxFuture;
 use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
 
 mod demo;
-use crate::cli::{context::Context, internal};
-use crate::{config, env, execution::recovery::Record, state::AgentState, subprocess::Run};
+use crate::{config, state::AgentState, subprocess::Run};
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place.
@@ -48,13 +47,14 @@ impl Host for Herdr {
         Box::pin(open_tab(start))
     }
 
-    fn rerun_where_stopped<'a>(
+    /// A pane back at its shell prompt, as it is after the wrapper exits.
+    fn run_in_place<'a>(
         &'a self,
-        ctx: &'a Context,
-        record: &'a Path,
-        args: &'a [OsString],
+        place: &'a str,
+        argv: &'a [OsString],
+        env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(rerun_in_recorded_pane(ctx, record, args))
+        Box::pin(run_at_prompt(place, argv, env))
     }
 
     fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
@@ -144,32 +144,19 @@ fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
 }
 
-/// Run Shoal with `args` in the pane the agent of `record` stopped in, once
-/// that pane is back at its shell prompt, as it is after the wrapper exits.
-/// This terminal's own pane is never reused. Returns whether it ran.
-async fn rerun_in_recorded_pane(ctx: &Context, record: &Path, args: &[OsString]) -> Result<bool> {
-    let pane = std::fs::read(record)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
-        .and_then(|record| record.place)
-        .filter(|pane| current_pane().as_ref() != Some(pane));
-    match pane {
-        Some(pane) => run_at_prompt(ctx, &pane, args).await,
-        None => Ok(false),
-    }
-}
-
-async fn run_at_prompt(ctx: &Context, pane: &str, args: &[OsString]) -> Result<bool> {
+/// Run `argv` in `pane` once it is back at its shell prompt. The pane's shell
+/// keeps its own environment, so `env` goes along on the command.
+async fn run_at_prompt(pane: &str, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
     if !at_prompt(pane).await {
         return Ok(false);
     }
-    // The pane's shell keeps its own environment, so the caller's output
-    // setting goes along for the agent this starts.
-    let (name, value) = env::output_setting();
-    let mut argv = vec!["env".into(), format!("{name}={value}").into()];
-    argv.extend(internal::shoal_argv(&ctx.paths)?);
-    argv.extend_from_slice(args);
-    run_in_pane(pane, &argv).await?;
+    let mut command = vec!["env".into()];
+    command.extend(
+        env.iter()
+            .map(|(name, value)| format!("{name}={value}").into()),
+    );
+    command.extend_from_slice(argv);
+    run_in_pane(pane, &command).await?;
     Ok(true)
 }
 

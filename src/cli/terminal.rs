@@ -30,6 +30,7 @@ use crate::{
     config::Effective,
     demos::Launch,
     env,
+    execution::recovery::Record,
     model::{Repository, Workspace},
 };
 
@@ -176,13 +177,13 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
     }
 
-    /// Run Shoal with `args` where the agent of `record` stopped, when that
-    /// place is another one still open and idle. Returns whether it ran.
-    fn rerun_where_stopped<'a>(
+    /// Run `argv` with `env` in `place`, an earlier place of this host, when
+    /// it is idle. Returns whether it ran.
+    fn run_in_place<'a>(
         &'a self,
-        _ctx: &'a Context,
-        _record: &'a Path,
-        _args: &'a [OsString],
+        _place: &'a str,
+        _argv: &'a [OsString],
+        _env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
@@ -678,8 +679,22 @@ pub(in crate::cli) async fn rerun_where_stopped(
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings).host;
-    let reused = host.rerun_where_stopped(ctx, record, args).await?;
+    let Some(place) = stopped_place(host, record) else {
+        return Ok(None);
+    };
+    let argv = shoal_command(ctx, args)?;
+    let reused = host.run_in_place(&place, &argv, &place_env(ctx)?).await?;
     Ok(reused.then(|| host.background_places()))
+}
+
+/// Where the agent of `record` stopped, unless that is where this process
+/// runs, which is never reused.
+fn stopped_place(host: &dyn Host, record: &Path) -> Option<String> {
+    std::fs::read(record)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
+        .and_then(|record| record.place)
+        .filter(|place| host.current_place().as_ref() != Some(place))
 }
 
 /// Run Shoal with `args` for `workspace` in the background, returning what
