@@ -1,5 +1,6 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     path::{Path, PathBuf},
 };
@@ -58,6 +59,12 @@ pub struct Record {
     /// The wrapper that restores the agent automatically while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting: Option<Identity>,
+    /// Asks the daemon to queue the agent's restore, which it starts with
+    /// these variables of the agent's terminal host once the execution has
+    /// ended, then clears. A hangup or terminate signal saves it, since the
+    /// agent's session ended without the agent or the user choosing it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restore_request: Option<BTreeMap<String, String>>,
     /// The session the agent's hooks last reported, which built-in agents
     /// resume by ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -198,7 +205,7 @@ impl Recovery {
         }
     }
 
-    /// `waiting` names this wrapper when it restores the agent automatically.
+    /// `restorer` brings the agent back besides `shoal resume`.
     pub(super) fn save(
         &self,
         paths: &Paths,
@@ -206,12 +213,28 @@ impl Recovery {
         id: &str,
         reason: Option<&str>,
         place: Option<String>,
-        waiting: Option<Identity>,
+        restorer: Restorer,
     ) -> Result<PathBuf> {
         let mut record = Record::new(&self.agent, reason, Stage::Stopped, place);
-        record.waiting = waiting;
+        match restorer {
+            Restorer::User => {}
+            Restorer::Wrapper(wrapper) => record.waiting = Some(wrapper),
+            Restorer::Queue(env) => record.restore_request = Some(env),
+        }
         write_record(paths, workspace_id, id, record)
     }
+}
+
+/// What brings a stopped agent back besides `shoal resume`.
+#[derive(Debug)]
+pub(crate) enum Restorer {
+    /// Nothing: it stays stopped until the user resumes it.
+    User,
+    /// This waiting wrapper, once protection lets it.
+    Wrapper(Identity),
+    /// The agent queue, from which the daemon starts it with these variables
+    /// of its terminal host.
+    Queue(BTreeMap<String, String>),
 }
 
 impl Record {
@@ -222,6 +245,7 @@ impl Record {
             stage: Some(stage),
             place,
             waiting: None,
+            restore_request: None,
             session: None,
             moved: false,
             turn: None,
@@ -244,12 +268,13 @@ impl Record {
         }
     }
 
-    /// This record on another machine, where its place does not exist and no
-    /// wrapper waits to restore it, but its session may.
+    /// This record on another machine, where its place does not exist and
+    /// nothing restores it on its own, but its session may.
     pub(crate) fn elsewhere(self) -> Self {
         Self {
             place: None,
             waiting: None,
+            restore_request: None,
             ..self
         }
     }
@@ -324,21 +349,59 @@ fn write_record(
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
         record.place = record.place.or(saved.place);
         record.waiting = record.waiting.or(saved.waiting);
+        record.restore_request = record.restore_request.or(saved.restore_request);
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
     }
+    replace_record(&path, &record)?;
+    Ok(path)
+}
+
+fn replace_record(path: &Path, record: &Record) -> Result<()> {
     crate::fsutil::replace_atomically(
-        &path,
-        &serde_json::to_vec(&record)?,
+        path,
+        &serde_json::to_vec(record)?,
         ReplaceOptions {
             permissions: Permissions::Temporary,
             sync: true,
         },
     )?;
-    Ok(path)
+    Ok(())
+}
+
+/// The workspace's stopped agents whose record asks the daemon to queue
+/// their restore, by execution ID. An unreadable record asks for nothing;
+/// `shoal resume` reports it.
+pub(crate) fn restore_requests(paths: &Paths, workspace_id: &str) -> Result<Vec<(String, Record)>> {
+    let mut requests = Vec::new();
+    for execution in agent_records(paths, workspace_id)? {
+        let record = Record::load(&record_path(paths, workspace_id, &execution))
+            .ok()
+            .flatten();
+        if let Some(record) = record.filter(|record| record.restore_request.is_some()) {
+            requests.push((execution, record));
+        }
+    }
+    Ok(requests)
+}
+
+/// Clear the restore request of `id`'s record once its restore is queued,
+/// unless the record is already gone.
+pub(crate) fn clear_restore_request(paths: &Paths, workspace_id: &str, id: &str) -> Result<()> {
+    let path = record_path(paths, workspace_id, id);
+    let Some(record) = Record::load(&path)? else {
+        return Ok(());
+    };
+    replace_record(
+        &path,
+        &Record {
+            restore_request: None,
+            ..record
+        },
+    )
 }
 
 /// An agent stopped in a removed workspace, which `shoal work restore` saves
@@ -353,12 +416,14 @@ pub struct StoppedAgent {
 }
 
 /// The workspace's stopped agents, for its removal record. Their wrappers have
-/// exited, so none waits to restore them.
+/// exited, so none waits to restore them, and the restored workspace waits
+/// for `shoal resume` to restore them.
 pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<StoppedAgent>> {
     let mut agents = Vec::new();
     for (execution, path) in Saved::load(paths, workspace_id)?.agents {
         if let Some(mut record) = Record::load(&path)? {
             record.waiting = None;
+            record.restore_request = None;
             let stopped_at = std::fs::metadata(&path)?
                 .modified()?
                 .duration_since(std::time::UNIX_EPOCH)?

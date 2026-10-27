@@ -406,12 +406,14 @@ impl Manager {
     }
 
     /// End abandoned starts and restores and those resolved another way,
-    /// then start the waiting entries that fit.
+    /// queue the restores stopped agents request, then start the waiting
+    /// entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue_gate.lock().await;
         self.expire_starting_entries().await?;
         self.expire_orphaned_restores().await?;
         self.forget_resolved_restores().await?;
+        self.queue_requested_restores().await?;
         self.admit_waiting(None).await?;
         Ok(())
     }

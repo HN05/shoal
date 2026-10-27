@@ -39,3 +39,33 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
     };
     assert_eq!(pause.stated_reason(), "");
 }
+
+#[test]
+fn only_a_signal_stop_of_an_agent_that_restores_unattended_queues_its_restore() {
+    let recovery = |automatic| recovery::Recovery {
+        agent: "claude".into(),
+        command: vec![],
+        automatic,
+        handoff_delivered: false,
+    };
+    let closed = Halt::Ended {
+        reason: "its terminal closed",
+    };
+    assert!(matches!(
+        restorer(&recovery(true), &closed, false),
+        Restorer::Queue(env) if env.contains_key(crate::env::OUTPUT)
+    ));
+    // A restore that needs the user's choice waits for `shoal resume`.
+    assert!(matches!(
+        restorer(&recovery(false), &closed, false),
+        Restorer::User
+    ));
+    let stop = Halt::Pause {
+        reason: Some("stopped by shoal stop".into()),
+        removed: false,
+    };
+    assert!(matches!(
+        restorer(&recovery(true), &stop, false),
+        Restorer::User
+    ));
+}

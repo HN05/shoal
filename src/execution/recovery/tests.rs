@@ -43,7 +43,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
             "execution",
             None,
             Some("w1:p2".into()),
-            None,
+            Restorer::User,
         )
         .unwrap();
     save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
@@ -84,10 +84,18 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
         automatic: true,
         handoff_delivered: false,
     };
-    let wrapper = identity::capture(std::process::id()).unwrap();
-    assert!(wrapper.is_some());
+    let wrapper = identity::capture(std::process::id())
+        .unwrap()
+        .expect("this process has an identity");
     recovery
-        .save(&paths, "removed", "execution", None, None, wrapper)
+        .save(
+            &paths,
+            "removed",
+            "execution",
+            None,
+            None,
+            Restorer::Wrapper(wrapper),
+        )
         .unwrap();
     save_command(&paths, "removed", "command", &[OsString::from("true")]).unwrap();
 
@@ -136,9 +144,47 @@ fn the_first_saved_turn_stays_through_later_saves() {
         handoff_delivered: false,
     };
     let path = recovery
-        .save(&paths, "workspace", "execution", None, None, None)
+        .save(&paths, "workspace", "execution", None, None, Restorer::User)
         .unwrap();
     let record = Record::load(&path).unwrap().unwrap();
     assert_eq!(record.turn, Some(AgentState::Working));
     assert_eq!(record.stage, Some(Stage::Stopped));
+}
+
+#[test]
+fn a_restore_request_stays_until_the_daemon_clears_it() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let recovery = Recovery {
+        agent: "claude".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: false,
+    };
+    let env = BTreeMap::from([("HERDR_ENV".to_owned(), "1".to_owned())]);
+    recovery
+        .save(
+            &paths,
+            "workspace",
+            "execution",
+            Some("its terminal closed"),
+            None,
+            Restorer::Queue(env.clone()),
+        )
+        .unwrap();
+    // The daemon's later save of the turn keeps the request.
+    save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
+    let requests = restore_requests(&paths, "workspace").unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].0, "execution");
+    assert_eq!(requests[0].1.restore_request.as_ref(), Some(&env));
+
+    clear_restore_request(&paths, "workspace", "execution").unwrap();
+    assert!(restore_requests(&paths, "workspace").unwrap().is_empty());
+    let record = Record::load(&record_path(&paths, "workspace", "execution"))
+        .unwrap()
+        .expect("the record stays for shoal resume");
+    assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
+    // A record already resumed has nothing to clear.
+    clear_restore_request(&paths, "workspace", "gone").unwrap();
 }

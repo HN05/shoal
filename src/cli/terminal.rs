@@ -483,10 +483,13 @@ pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
     queued(settings)?.ensure_installed()
 }
 
-/// The variables a later start needs to reach this terminal's host, such
-/// as a queued start the daemon runs without a terminal.
-pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
-    HOSTS.iter().flat_map(|host| host.environment()).collect()
+/// What a start the daemon runs later for this process needs, without a
+/// terminal: the variables that reach this terminal's host and the output
+/// setting.
+pub(crate) fn start_environment() -> BTreeMap<String, String> {
+    let mut env: BTreeMap<_, _> = HOSTS.iter().flat_map(|host| host.environment()).collect();
+    env.extend([env::output_setting()]);
+    env
 }
 
 /// Whether the place this process runs in closes once `workspace` is
