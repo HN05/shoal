@@ -893,7 +893,7 @@ wrapper reports that turn for `retry`, which waits out rate and usage limits. `s
 shows a request the proxy waits to retry; `--json` gives `proxy_retry` with
 `failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
-settings. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. Chats and desktop apps run without it. Builds without the default
+settings. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
 
 `instructions` passes the rendered agent guidance apart from the first message,

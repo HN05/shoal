@@ -178,9 +178,17 @@ impl TrackedLaunch {
             AfterPause::Finish => Ok(false),
             AfterPause::Restart {
                 command,
+                proxy,
                 ports,
                 record,
             } => {
+                // The restore command may name another proxy, or none.
+                if let Some(auth) = self.auth.as_mut()
+                    && auth.restart_proxy(proxy, &self.plan.environment).await?
+                    && let Some(proxy) = auth.proxy.as_mut()
+                {
+                    proxy.report_turns(paths, &self.plan.workspace.id, &self.plan.id);
+                }
                 self.plan.ports = ports;
                 self.command = command;
                 self.record = record;

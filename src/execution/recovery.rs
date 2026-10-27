@@ -29,6 +29,9 @@ pub(crate) struct Recovery {
     pub automatic: bool,
     /// Whether `command` carries the handoff message as the agent's prompt.
     pub handoff_delivered: bool,
+    /// The proxy `command` was resolved to go through, from the same
+    /// settings.
+    pub proxy: Option<crate::proxy::Proxy>,
 }
 
 states!(
@@ -103,6 +106,7 @@ impl Recovery {
                 command: vec![],
                 automatic: false,
                 handoff_delivered: false,
+                proxy: None,
             }
         })
     }
@@ -169,34 +173,38 @@ impl Recovery {
         } else {
             (vec![], false)
         };
+        let proxy = crate::cli::agents::launch_proxy(&settings, &name)?.cloned();
         Ok(Self {
             agent: name,
             command,
             automatic,
             handoff_delivered: handoff_delivered && handoff.is_some(),
+            proxy,
         })
     }
 
-    /// The command restoring the agent stopped with `record`: the session it
-    /// saved, otherwise the restore command resolved at launch.
+    /// The command restoring the agent stopped with `record`, with the
+    /// proxy it was resolved to go through: the session it saved, otherwise
+    /// the restore command resolved at launch.
     pub(super) async fn restore_command(
         &self,
         paths: &Paths,
         workspace: &Workspace,
         record: Option<&Path>,
-    ) -> Vec<OsString> {
+    ) -> (Vec<OsString>, Option<crate::proxy::Proxy>) {
+        let launched = || (self.command.clone(), self.proxy.clone());
         let session = record
             .and_then(|path| Record::load(path).ok().flatten())
             .and_then(|record| record.session);
         let Some(session) = session else {
-            return self.command.clone();
+            return launched();
         };
         match Self::resolve(paths, workspace, &self.agent, None, Some(&session)).await {
-            Ok(recovery) if !recovery.command.is_empty() => recovery.command,
-            Ok(_) => self.command.clone(),
+            Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
+            Ok(_) => launched(),
             Err(error) => {
                 eprintln!("warning: cannot resume session {session}: {error:#}");
-                self.command.clone()
+                launched()
             }
         }
     }

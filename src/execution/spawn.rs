@@ -42,6 +42,24 @@ impl AgentLaunch {
         Ok(())
     }
 
+    /// Run the restored agent, with the workspace's `environment`, through
+    /// `proxy`, which its restore command was resolved with: the one running
+    /// when it is the same, otherwise a new one, or none. Whether a new one
+    /// started, which then needs its turns reported.
+    pub(super) async fn restart_proxy(
+        &mut self,
+        proxy: Option<crate::proxy::Proxy>,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> Result<bool> {
+        if self.routed == proxy {
+            return Ok(false);
+        }
+        self.routed = proxy;
+        self.proxy = None;
+        self.start_proxy(environment).await?;
+        Ok(self.proxy.is_some())
+    }
+
     /// What the agent's launch adds to this process's environment: the
     /// workspace's `environment`, the secrets, then the agent's own.
     fn configured_environment(
@@ -176,3 +194,6 @@ fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) 
         ))
         .env(env::EXECUTION_ID, &plan.id);
 }
+
+#[cfg(test)]
+mod tests;

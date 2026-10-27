@@ -20,10 +20,12 @@ use crate::{
 pub(super) enum AfterPause {
     /// Report the stopped agent's exit code.
     Finish,
-    /// The daemon resumed the agent: run `command` with `ports`, consuming
-    /// `record` once the restored child is registered.
+    /// The daemon resumed the agent: run `command` through `proxy`, from
+    /// the same settings, with `ports`, consuming `record` once the restored
+    /// child is registered.
     Restart {
         command: Vec<OsString>,
+        proxy: Option<crate::proxy::Proxy>,
         ports: Vec<PortReservation>,
         record: Option<PathBuf>,
     },
@@ -88,12 +90,13 @@ async fn await_restore(
     match recovery::wait(link).await? {
         recovery::Waited::Resume(ports) => {
             let record = record.ok();
-            let command = recovery
+            let (command, proxy) = recovery
                 .restore_command(paths, &plan.workspace, record.as_deref())
                 .await;
             eprintln!("shoal: restoring agent session");
             Ok(AfterPause::Restart {
                 command,
+                proxy,
                 ports,
                 record,
             })

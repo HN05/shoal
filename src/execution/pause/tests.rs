@@ -47,6 +47,7 @@ fn only_a_signal_stop_of_an_agent_that_restores_unattended_queues_its_restore() 
         command: vec![],
         automatic,
         handoff_delivered: false,
+        proxy: None,
     };
     let closed = Halt::Ended {
         reason: "its terminal closed",

@@ -35,6 +35,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
         command: vec![],
         automatic: false,
         handoff_delivered: false,
+        proxy: None,
     };
     recovery
         .save(
@@ -83,6 +84,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
         command: vec![],
         automatic: true,
         handoff_delivered: false,
+        proxy: None,
     };
     let wrapper = identity::capture(std::process::id())
         .unwrap()
@@ -142,6 +144,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
         command: vec![],
         automatic: false,
         handoff_delivered: false,
+        proxy: None,
     };
     let path = recovery
         .save(&paths, "workspace", "execution", None, None, Restorer::User)
@@ -160,6 +163,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
         command: vec![],
         automatic: true,
         handoff_delivered: false,
+        proxy: None,
     };
     let env = BTreeMap::from([("HERDR_ENV".to_owned(), "1".to_owned())]);
     let record = recovery
