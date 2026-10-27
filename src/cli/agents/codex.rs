@@ -32,8 +32,8 @@ impl Integration for Codex {
 
     /// Its wrapper starts an idle Codex's next turn only in a session it can
     /// type into.
-    fn delivery(&self, ctx: &Context, settings: &Effective) -> Delivery {
-        if terminal::agents_can_be_prompted(ctx, settings) {
+    fn delivery(&self, settings: &Effective) -> Delivery {
+        if terminal::agents_can_be_prompted(settings) {
             Delivery::Pushed
         } else {
             Delivery::Watched

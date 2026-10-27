@@ -7,12 +7,12 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, DemoWorker, Host, PlaceState, Placement, Watched};
+use super::{ChatStart, DemoWorker, Host, Options, PlaceState, Placement, Watched};
 
 mod demo;
 use crate::cli::{commands::workspaces::AddPlan, context::Context, internal};
 use crate::{
-    config::{Config, Effective},
+    config::{self, Config},
     env,
     execution::recovery::Record,
     model::{Repository, Workspace},
@@ -29,32 +29,30 @@ impl Host for Herdr {
         "herdr"
     }
 
-    /// A Herdr pane, unless `herdr.enabled` turns the integration off.
-    fn serves(&self, _ctx: &Context, settings: &Effective) -> bool {
-        in_herdr() && settings.herdr.enabled
+    /// A Herdr pane.
+    fn serves(&self) -> bool {
+        in_herdr()
     }
 
-    /// A tab where Herdr may open one, from the Herdr variables the daemon
-    /// gave the worker.
-    fn takes_queued(&self, settings: &Effective) -> bool {
-        in_herdr() && settings.herdr.enabled && settings.herdr.new_tab
+    /// A tab, from the Herdr variables the daemon gave the worker.
+    fn takes_queued(&self) -> bool {
+        in_herdr()
     }
 
     fn start_add<'a>(
         &'a self,
         ctx: &'a Context,
-        settings: &'a Effective,
         plan: &'a AddPlan,
         _name: &'a str,
         placement: Placement,
         worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(start_add(ctx, settings, plan, placement, worker))
+        Box::pin(start_add(ctx, plan, placement, worker))
     }
 
-    /// A background tab, unless `herdr.new_tab` is off.
-    fn runs_in_background(&self, settings: &Effective) -> bool {
-        settings.herdr.new_tab
+    /// A background tab.
+    fn runs_in_background(&self) -> bool {
+        true
     }
 
     fn run_in_background<'a>(
@@ -79,15 +77,11 @@ impl Host for Herdr {
     fn start_chat<'a>(
         &'a self,
         ctx: &'a Context,
-        settings: &'a Effective,
         repository: &'a Repository,
         name: &'a str,
         args: &'a [OsString],
     ) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
-            if !settings.herdr.new_tab {
-                return Ok(ChatStart::Here);
-            }
             run_in_tab(ctx, &repository.path, name, args, true).await?;
             Ok(ChatStart::Tab)
         })
@@ -121,20 +115,8 @@ impl Host for Herdr {
         Box::pin(tab_state(&place.id))
     }
 
-    /// `herdr.close_when_done` overrides the top-level option.
-    fn closes_when_done(&self, settings: &Effective) -> bool {
-        settings
-            .herdr
-            .close_when_done
-            .unwrap_or(settings.close_when_done)
-    }
-
     fn names_places(&self) -> bool {
         true
-    }
-
-    fn name_template(&self, settings: &Effective) -> Option<String> {
-        settings.herdr.tab_name.clone()
     }
 
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
@@ -164,6 +146,18 @@ impl Host for Herdr {
     }
 }
 
+/// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
+/// (`herdr.new_tab`), their names (`herdr.tab_name`), and
+/// `herdr.close_when_done`, which overrides the top-level option.
+pub(super) fn options(config: &config::Herdr) -> Options {
+    Options {
+        enabled: config.enabled,
+        opens_places: config.new_tab,
+        name_template: config.tab_name.clone(),
+        close_when_done: config.close_when_done,
+    }
+}
+
 /// Herdr's variables, so a later start opens its tab in the same Herdr
 /// workspace; the launching pane and tab are left out.
 fn environment() -> BTreeMap<String, String> {
@@ -179,18 +173,13 @@ fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
 }
 
-/// Run `plan` in a new tab with `worker`, taking focus as `placement` asks,
-/// unless `herdr.new_tab` is off.
+/// Run `plan` in a new tab with `worker`, taking focus as `placement` asks.
 async fn start_add(
     ctx: &Context,
-    settings: &Effective,
     plan: &AddPlan,
     placement: Placement,
     worker: &[OsString],
 ) -> Result<bool> {
-    if !settings.herdr.new_tab {
-        return Ok(false);
-    }
     let directive = TabDirective::create()?;
     let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
     run_in_pane(&created.root_pane.pane_id, worker).await?;

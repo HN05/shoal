@@ -56,7 +56,7 @@ pub(in crate::cli) trait Integration: Sync {
     }
 
     /// How updates reach the agent launched under `settings`.
-    fn delivery(&self, _ctx: &Context, _settings: &Effective) -> Delivery {
+    fn delivery(&self, _settings: &Effective) -> Delivery {
         Delivery::Watched
     }
 
@@ -230,14 +230,13 @@ pub(in crate::cli) struct LaunchOptions {
 /// Whether a launch of `agent` under `settings` runs in a session this
 /// terminal attaches to, rather than in place or the agent's own way.
 pub(in crate::cli) fn runs_in_session(
-    ctx: &Context,
     agent: &Agent,
     settings: &Effective,
     prompted: bool,
     tracked: bool,
 ) -> bool {
     !agent_integration(settings, agent.name()).launches_itself(settings, prompted, tracked)
-        && terminal::keeps_agents_in_sessions(ctx, settings)
+        && terminal::keeps_agents_in_sessions(settings)
 }
 
 /// Start an agent in a ready workspace, giving it the prompt the way it

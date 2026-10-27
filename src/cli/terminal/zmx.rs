@@ -19,7 +19,6 @@ use super::{
 };
 use crate::{
     cli::{agents::ensure_program, commands::workspaces::AddPlan, context::Context, internal},
-    config::Effective,
     env,
     model::{Repository, Workspace},
     subprocess::Run,
@@ -45,7 +44,7 @@ impl Host for Zmx {
         NAME
     }
 
-    fn serves(&self, _ctx: &Context, _settings: &Effective) -> bool {
+    fn serves(&self) -> bool {
         on_terminal()
     }
 
@@ -54,7 +53,7 @@ impl Host for Zmx {
     }
 
     /// A detached session needs no terminal, so it takes any queued start.
-    fn takes_queued(&self, _settings: &Effective) -> bool {
+    fn takes_queued(&self) -> bool {
         true
     }
 
@@ -63,7 +62,6 @@ impl Host for Zmx {
     fn start_add<'a>(
         &'a self,
         _ctx: &'a Context,
-        _settings: &'a Effective,
         plan: &'a AddPlan,
         name: &'a str,
         placement: Placement,
@@ -78,7 +76,7 @@ impl Host for Zmx {
         })
     }
 
-    fn runs_in_background(&self, _settings: &Effective) -> bool {
+    fn runs_in_background(&self) -> bool {
         true
     }
 
@@ -104,7 +102,6 @@ impl Host for Zmx {
     fn start_chat<'a>(
         &'a self,
         ctx: &'a Context,
-        _settings: &'a Effective,
         repository: &'a Repository,
         name: &'a str,
         args: &'a [OsString],

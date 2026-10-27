@@ -92,7 +92,7 @@ async fn command(
     let instructions = templates::instructions(
         settings.worker_template.as_deref(),
         workspace,
-        integration.delivery(ctx, settings),
+        integration.delivery(settings),
     );
     let (args, prompt) = input(
         settings,

@@ -8,7 +8,7 @@ use std::{future::Future, path::PathBuf, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result};
 
-use super::{HOSTS, Host};
+use super::{Host, hosts};
 use crate::{
     cli::{client, context::Context, installed, internal},
     env,
@@ -236,7 +236,7 @@ impl Drop for Marker {
 /// Whether this process runs in a place that closes once `workspace` is
 /// removed.
 pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
-    HOSTS.iter().any(|host| {
+    hosts().any(|host| {
         host.this_place().is_some_and(|place| {
             [
                 Marker::path(paths, host.name(), workspace, &place),

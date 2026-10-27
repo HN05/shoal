@@ -15,7 +15,6 @@ use crate::{
         },
         context::Context,
     },
-    config::Effective,
     model::{Repository, Workspace},
 };
 
@@ -75,16 +74,15 @@ pub(in crate::cli) fn issue_label(repo: &str, number: u64) -> String {
     format!("{repo}#{number}")
 }
 
-/// Give `plan`'s place the name template `host` takes from `settings`, if
-/// any. Without `issue`, a plan that names one only by URL looks it up.
+/// Give `plan`'s place the host's name `template`, if any. Without `issue`,
+/// a plan that names one only by URL looks it up.
 pub(super) async fn name_plan(
     ctx: &Context,
-    settings: &Effective,
-    host: &dyn Host,
+    template: Option<String>,
     plan: &mut AddPlan,
     issue: Option<&Issue>,
 ) -> Result<()> {
-    let Some(template) = host.name_template(settings) else {
+    let Some(template) = template else {
         return Ok(());
     };
     if let Some(name) = &mut plan.place_name {
@@ -106,12 +104,12 @@ pub(super) async fn name_plan(
     Ok(())
 }
 
-/// The label of the place `host` opens for `workspace` under `settings`,
-/// or its branch when the host shows no names. A failed lookup falls back
-/// to the branch.
+/// The label of the place `host` opens for `workspace`, from its name
+/// `template`, or its branch when the host shows no names. A failed lookup
+/// falls back to the branch.
 pub(super) async fn workspace_label(
     ctx: &Context,
-    settings: &Effective,
+    template: Option<String>,
     host: &dyn Host,
     workspace: &Workspace,
 ) -> String {
@@ -128,7 +126,7 @@ pub(super) async fn workspace_label(
             Some(url) => Some(issues::load(ctx, repo, url).await?),
             None => None,
         };
-        let name = PlaceName::new(host.name_template(settings), repo, issue.as_ref());
+        let name = PlaceName::new(template, repo, issue.as_ref());
         anyhow::Ok(name.render(&workspace.branch))
     };
     labelled.await.unwrap_or_else(|error| {

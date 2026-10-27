@@ -123,7 +123,7 @@ impl Host for FakeHost {
         "fake"
     }
 
-    fn serves(&self, _ctx: &Context, _settings: &crate::config::Effective) -> bool {
+    fn serves(&self) -> bool {
         false
     }
 

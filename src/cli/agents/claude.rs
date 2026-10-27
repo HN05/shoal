@@ -12,7 +12,6 @@ use super::{
 use crate::{
     agent::hooks,
     ai::IntegrationKind,
-    cli::context::Context,
     config::{Effective, templates::Delivery},
     state::{AgentState, TurnFailure},
 };
@@ -29,7 +28,7 @@ impl Integration for Claude {
     }
 
     /// Its hooks deliver updates and start its next turn with them.
-    fn delivery(&self, _ctx: &Context, _settings: &Effective) -> Delivery {
+    fn delivery(&self, _settings: &Effective) -> Delivery {
         Delivery::Pushed
     }
 

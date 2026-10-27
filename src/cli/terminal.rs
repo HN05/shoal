@@ -36,9 +36,101 @@ use crate::{
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 
-/// Hosts in the order they claim a terminal; a terminal none of them serves
-/// runs everything in place.
-const HOSTS: &[&dyn Host] = &[&herdr::Herdr, &zmx::Zmx];
+/// Hosts in the order they claim a terminal, each with the options its own
+/// config section gives; a terminal none of them serves runs everything in
+/// place.
+const HOSTS: &[Registered] = &[
+    Registered {
+        host: &herdr::Herdr,
+        options: |settings| herdr::options(&settings.herdr),
+    },
+    Registered {
+        host: &zmx::Zmx,
+        options: |_| Options::DEFAULT,
+    },
+];
+
+/// A host with the options `settings` give it.
+struct Registered {
+    host: &'static dyn Host,
+    options: fn(&Effective) -> Options,
+}
+
+/// Every host, for what it does whatever config says.
+fn hosts() -> impl Iterator<Item = &'static dyn Host> {
+    HOSTS.iter().map(|registered| registered.host)
+}
+
+/// What config sets for a host, from the section of its own it may have.
+pub(in crate::cli) struct Options {
+    /// Whether the host serves the terminals it runs in.
+    pub enabled: bool,
+    /// Whether it opens places, such as tabs, beside the caller.
+    pub opens_places: bool,
+    /// The template for the names of the places it opens, in place of the
+    /// default.
+    pub name_template: Option<String>,
+    /// Whether the places it opens for a workspace close once it is done,
+    /// over the top-level `close_when_done`.
+    pub close_when_done: Option<bool>,
+}
+
+impl Options {
+    /// A host without a section: config only sets what all hosts share.
+    const DEFAULT: Self = Self {
+        enabled: true,
+        opens_places: true,
+        name_template: None,
+        close_when_done: None,
+    };
+}
+
+/// A host as `settings` set it up.
+struct Configured {
+    host: &'static dyn Host,
+    options: Options,
+    /// Whether the places it opens for a workspace close once it is done.
+    closes_when_done: bool,
+}
+
+impl Configured {
+    fn new(host: &'static dyn Host, options: Options, settings: &Effective) -> Self {
+        let closes_when_done = options.close_when_done.unwrap_or(settings.close_when_done);
+        Self {
+            host,
+            options,
+            closes_when_done,
+        }
+    }
+
+    /// Every host as `settings` set it up, in the order they claim a terminal.
+    fn all(settings: &Effective) -> impl Iterator<Item = Self> + '_ {
+        HOSTS
+            .iter()
+            .map(|registered| Self::new(registered.host, (registered.options)(settings), settings))
+    }
+
+    /// The plain terminal, which every terminal falls back to.
+    fn plain(settings: &Effective) -> Self {
+        Self::new(&Plain, Options::DEFAULT, settings)
+    }
+
+    /// Whether the host serves the terminal this process runs in.
+    fn serves(&self) -> bool {
+        self.options.enabled && self.host.serves()
+    }
+
+    /// Whether a queued start runs here, judged from the environment the
+    /// daemon gave its worker, which has no terminal.
+    fn takes_queued(&self) -> bool {
+        self.options.enabled && self.options.opens_places && self.host.takes_queued()
+    }
+
+    /// Whether the host runs Shoal for a workspace in the background.
+    fn runs_in_background(&self) -> bool {
+        self.options.opens_places && self.host.runs_in_background()
+    }
+}
 
 /// A terminal host: a multiplexer or terminal app that runs Shoal work beside
 /// the caller. A capability a host lacks keeps that work in this process.
@@ -46,12 +138,14 @@ pub(in crate::cli) trait Host: Sync {
     /// The name sessions and messages use.
     fn name(&self) -> &'static str;
 
-    /// Whether this host serves the terminal this process runs in.
-    fn serves(&self, ctx: &Context, settings: &Effective) -> bool;
+    /// Whether this host serves the terminal this process runs in, where
+    /// config enables it.
+    fn serves(&self) -> bool;
 
-    /// Whether a queued start runs here, judged from the environment the
-    /// daemon gave its worker, which has no terminal.
-    fn takes_queued(&self, _settings: &Effective) -> bool {
+    /// Whether a queued start runs here, where config lets it open places,
+    /// judged from the environment the daemon gave its worker, which has no
+    /// terminal.
+    fn takes_queued(&self) -> bool {
         false
     }
 
@@ -62,11 +156,11 @@ pub(in crate::cli) trait Host: Sync {
 
     /// Start `plan` as `placement` asks by running `worker` in a new place,
     /// returning whether it left this process. `name` is the planned
-    /// workspace name.
+    /// workspace name. Generic code calls it only where config lets the
+    /// host open places.
     fn start_add<'a>(
         &'a self,
         _ctx: &'a Context,
-        _settings: &'a Effective,
         _plan: &'a AddPlan,
         _name: &'a str,
         _placement: Placement,
@@ -75,9 +169,9 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(false) })
     }
 
-    /// Whether this host runs Shoal for a workspace in the background under
-    /// `settings`.
-    fn runs_in_background(&self, _settings: &Effective) -> bool {
+    /// Whether this host runs Shoal for a workspace in the background, where
+    /// config lets it open places.
+    fn runs_in_background(&self) -> bool {
         false
     }
 
@@ -116,11 +210,10 @@ pub(in crate::cli) trait Host: Sync {
     }
 
     /// Run Shoal with `args` for the chat `name` at the repository's
-    /// checkout beside this terminal.
+    /// checkout beside this terminal, where config lets the host open places.
     fn start_chat<'a>(
         &'a self,
         _ctx: &'a Context,
-        _settings: &'a Effective,
         _repository: &'a Repository,
         _name: &'a str,
         _args: &'a [OsString],
@@ -170,21 +263,9 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
     }
 
-    /// Whether the places this host opens for a workspace close once it is
-    /// done, under `settings`.
-    fn closes_when_done(&self, settings: &Effective) -> bool {
-        settings.close_when_done
-    }
-
     /// Whether the places this host opens show a name.
     fn names_places(&self) -> bool {
         false
-    }
-
-    /// The template `settings` give the names of places this host opens,
-    /// in place of the default.
-    fn name_template(&self, _settings: &Effective) -> Option<String> {
-        None
     }
 
     /// Show `label` as the name of `place`, one this host opened.
@@ -293,7 +374,7 @@ impl Host for Plain {
         "terminal"
     }
 
-    fn serves(&self, _ctx: &Context, _settings: &Effective) -> bool {
+    fn serves(&self) -> bool {
         true
     }
 
@@ -335,21 +416,19 @@ impl Host for Plain {
 }
 
 /// The host serving this terminal under `settings`.
-fn current(ctx: &Context, settings: &Effective) -> &'static dyn Host {
-    HOSTS
-        .iter()
-        .copied()
-        .find(|host| host.serves(ctx, settings))
-        .unwrap_or(&Plain)
+fn current(settings: &Effective) -> Configured {
+    Configured::all(settings)
+        .find(Configured::serves)
+        .unwrap_or_else(|| Configured::plain(settings))
 }
 
 /// The host that starts work beside this terminal. A place a host opened for
 /// this process, or a terminal without a user, keeps work in place.
-fn beside(ctx: &Context, settings: &Effective) -> &'static dyn Host {
+fn beside(ctx: &Context, settings: &Effective) -> Configured {
     if ctx.place.is_none() && ctx.interactive() {
-        current(ctx, settings)
+        current(settings)
     } else {
-        &Plain
+        Configured::plain(settings)
     }
 }
 
@@ -441,13 +520,15 @@ pub(in crate::cli) async fn start_add(
     let host = beside(ctx, settings);
     let focus = focus.then_some(true).or(settings.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
-    naming::name_plan(ctx, settings, host, plan, issue).await?;
-    let worker = add_worker_argv(ctx, settings, host)?;
-    let started = host
-        .start_add(ctx, settings, plan, name, placement, &worker)
-        .await?;
+    naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
+    let worker = add_worker_argv(ctx, &host)?;
+    let started = host.options.opens_places
+        && host
+            .host
+            .start_add(ctx, plan, name, placement, &worker)
+            .await?;
     if started && placement == Placement::Background {
-        outln!("{}", host.background_note(name));
+        outln!("{}", host.host.background_note(name));
     }
     Ok(started)
 }
@@ -461,32 +542,31 @@ pub(in crate::cli) async fn start_queued(
     name: &str,
 ) -> Result<()> {
     let host = queued(settings)?;
-    naming::name_plan(ctx, settings, host, plan, None).await?;
-    let worker = add_worker_argv(ctx, settings, host)?;
-    host.start_add(ctx, settings, plan, name, Placement::Background, &worker)
+    naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
+    let worker = add_worker_argv(ctx, &host)?;
+    host.host
+        .start_add(ctx, plan, name, Placement::Background, &worker)
         .await?;
     Ok(())
 }
 
 /// The host that runs a queued start from this terminal under `settings`.
-fn queued(settings: &Effective) -> Result<&'static dyn Host> {
-    HOSTS
-        .iter()
-        .copied()
-        .find(|host| host.takes_queued(settings))
+fn queued(settings: &Effective) -> Result<Configured> {
+    Configured::all(settings)
+        .find(Configured::takes_queued)
         .context("no terminal host can start queued agents")
 }
 
 /// Refuse a background start that the daemon's worker could not run from
 /// this terminal under `settings`, such as one whose host is not installed.
 pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
-    queued(settings)?.ensure_installed()
+    queued(settings)?.host.ensure_installed()
 }
 
 /// The variables a later start needs to reach this terminal's host, such
 /// as a queued start the daemon runs without a terminal.
 pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
-    HOSTS.iter().flat_map(|host| host.environment()).collect()
+    hosts().flat_map(|host| host.environment()).collect()
 }
 
 /// Whether the place this process runs in closes once `workspace` is
@@ -498,7 +578,7 @@ pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) 
 /// Where an agent running in this process sits, as its host names it, so
 /// a later resume can restore it there.
 pub(crate) fn current_place() -> Option<String> {
-    HOSTS.iter().find_map(|host| host.current_place())
+    hosts().find_map(|host| host.current_place())
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that
@@ -510,7 +590,7 @@ pub(in crate::cli) async fn rerun_where_stopped(
     record: &Path,
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
-    let host = beside(ctx, settings);
+    let host = beside(ctx, settings).host;
     let reused = host.rerun_where_stopped(ctx, record, args).await?;
     Ok(reused.then(|| host.background_places()))
 }
@@ -524,12 +604,15 @@ pub(in crate::cli) async fn run_in_background(
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings);
-    if !host.runs_in_background(settings) {
+    if !host.runs_in_background() {
         return Ok(None);
     }
-    let label = naming::workspace_label(ctx, settings, host, workspace).await;
-    host.run_in_background(ctx, workspace, &label, args).await?;
-    Ok(Some(host.background_places()))
+    let template = host.options.name_template.clone();
+    let label = naming::workspace_label(ctx, template, host.host, workspace).await;
+    host.host
+        .run_in_background(ctx, workspace, &label, args)
+        .await?;
+    Ok(Some(host.host.background_places()))
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal
@@ -544,7 +627,11 @@ pub(in crate::cli) async fn run_agent(
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Option<i32>> {
-    let host = current(ctx, settings);
+    let Configured {
+        host,
+        closes_when_done,
+        ..
+    } = current(settings);
     let worker = crate::cli::internal::internal_command(
         &ctx.paths,
         false,
@@ -553,7 +640,7 @@ pub(in crate::cli) async fn run_agent(
             agent,
             records,
             command,
-            close_in: host.closes_when_done(settings).then(|| host.name()),
+            close_in: closes_when_done.then(|| host.name()),
         },
     )?;
     host.run_agent(workspace, agent, &worker).await
@@ -587,9 +674,11 @@ pub(in crate::cli) async fn start_chat(
     name: &str,
     args: &[OsString],
 ) -> Result<bool> {
-    let started = beside(ctx, settings)
-        .start_chat(ctx, settings, repository, name, args)
-        .await?;
+    let host = beside(ctx, settings);
+    if !host.options.opens_places {
+        return Ok(false);
+    }
+    let started = host.host.start_chat(ctx, repository, name, args).await?;
     match started {
         ChatStart::Here => Ok(false),
         ChatStart::Tab => Ok(true),
@@ -606,7 +695,7 @@ pub(in crate::cli) async fn start_chat(
 /// Every host's running agent sessions for `owner`.
 pub(in crate::cli) async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
-    for host in HOSTS {
+    for host in hosts() {
         sessions.extend(host.sessions(owner).await?);
     }
     Ok(sessions)
@@ -615,7 +704,7 @@ pub(in crate::cli) async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
 /// The IDs of the owners of `kind` with at least one agent session in any host.
 pub(in crate::cli) async fn session_owners(kind: OwnerKind) -> Result<HashSet<String>> {
     let mut owners = HashSet::new();
-    for host in HOSTS {
+    for host in hosts() {
         owners.extend(host.session_owners(kind).await?);
     }
     Ok(owners)
@@ -654,10 +743,9 @@ pub(in crate::cli) async fn start_demo(
     name: &str,
     worker: &(dyn Fn(&str, &str) -> Result<Vec<OsString>> + Send + Sync),
 ) -> Result<(&'static str, String)> {
-    let hosts = HOSTS
-        .iter()
-        .copied()
-        .filter(|host| host.takes_queued(settings) && host.ensure_installed().is_ok())
+    let hosts = Configured::all(settings)
+        .filter(|host| host.takes_queued() && host.host.ensure_installed().is_ok())
+        .map(|host| host.host)
         .chain([&Plain as &dyn Host]);
     for host in hosts {
         let worker = |place: &str| worker(host.name(), place);
@@ -691,9 +779,7 @@ fn demo_host(name: &str) -> Result<&'static dyn Host> {
 
 /// The host, or the plain terminal, that goes by `name`.
 fn named(name: &str) -> Option<&'static dyn Host> {
-    HOSTS
-        .iter()
-        .copied()
+    hosts()
         .chain([&Plain as &dyn Host])
         .find(|host| host.name() == name)
 }
@@ -708,15 +794,15 @@ pub(in crate::cli) struct Place {
 }
 
 /// The worker that adds the workspace `plan` describes in the place `host`
-/// opened for it, closing the place with the workspace when `settings` say
-/// so. The plan reaches it in the place's environment.
-fn add_worker_argv(ctx: &Context, settings: &Effective, host: &dyn Host) -> Result<Vec<OsString>> {
+/// opened for it, closing the place with the workspace when config says so.
+/// The plan reaches it in the place's environment.
+fn add_worker_argv(ctx: &Context, host: &Configured) -> Result<Vec<OsString>> {
     crate::cli::internal::internal_command(
         &ctx.paths,
         false,
         crate::cli::internal::Worker::Add {
-            host: host.name(),
-            close_when_done: host.closes_when_done(settings),
+            host: host.host.name(),
+            close_when_done: host.closes_when_done,
         },
     )
 }
@@ -785,8 +871,8 @@ pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
 
 /// Whether an agent launched here runs in a session this terminal attaches
 /// to, leaving the caller's shell where it was once the terminal detaches.
-pub(in crate::cli) fn keeps_agents_in_sessions(ctx: &Context, settings: &Effective) -> bool {
-    current(ctx, settings).keeps_agents_in_sessions()
+pub(in crate::cli) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
+    current(settings).host.keeps_agents_in_sessions()
 }
 
 /// Give a workspace added without an agent a shell at `cwd` in the place
@@ -812,7 +898,7 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
 /// Label the session this process runs in, when it runs in one, so
 /// `shoal attach` finds `owner`'s agent there.
 pub(in crate::cli) async fn label_current(owner: Owner<'_>, agent: &str) -> Result<()> {
-    for host in HOSTS {
+    for host in hosts() {
         host.label_current(owner, agent).await?;
     }
     Ok(())
@@ -820,7 +906,7 @@ pub(in crate::cli) async fn label_current(owner: Owner<'_>, agent: &str) -> Resu
 
 /// The program an agent launch here needs besides the agent's own.
 pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
-    HOSTS.iter().find_map(|host| host.launcher_program())
+    hosts().find_map(|host| host.launcher_program())
 }
 
 /// The session this process runs in, where an agent's wrapper can type a
@@ -833,9 +919,7 @@ pub(crate) struct PromptSession {
 
 impl PromptSession {
     pub(crate) fn current() -> Option<Self> {
-        HOSTS
-            .iter()
-            .find_map(|host| host.prompt_session().map(|name| Self { host: *host, name }))
+        hosts().find_map(|host| host.prompt_session().map(|name| Self { host, name }))
     }
 
     /// Submit `text` as a prompt in the session.
@@ -846,8 +930,8 @@ impl PromptSession {
 
 /// Whether an agent launched here runs in a session its wrapper can type a
 /// prompt into: a new one, or the session this process already runs in.
-pub(in crate::cli) fn agents_can_be_prompted(ctx: &Context, settings: &Effective) -> bool {
-    keeps_agents_in_sessions(ctx, settings) || PromptSession::current().is_some()
+pub(in crate::cli) fn agents_can_be_prompted(settings: &Effective) -> bool {
+    keeps_agents_in_sessions(settings) || PromptSession::current().is_some()
 }
 
 /// Whether a launch takes the caller's terminal or runs in the background.

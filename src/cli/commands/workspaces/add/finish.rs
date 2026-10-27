@@ -133,7 +133,6 @@ async fn enters_added(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     Ok(!agents::runs_in_session(
-        ctx,
         chosen,
         &settings,
         prompted,
