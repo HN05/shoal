@@ -5,6 +5,7 @@ use super::{
     agent::ResolvedAddAgent,
     plan::{AddPlan, Creation},
     queue::failing_entry,
+    source::load_add_issue,
     target::AddTarget,
 };
 use crate::{
@@ -30,12 +31,7 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         selector: plan.repository.clone(),
         repositories: tokio::sync::OnceCell::new(),
     };
-    let issue = match &plan.issue {
-        Some(url) => async { issues::load(ctx, target.repository(ctx).await?, url).await }
-            .await
-            .map(Some),
-        None => Ok(None),
-    };
+    let issue = load_add_issue(ctx, &target, plan.issue.clone()).await;
     // A queued start reports a failed lookup as it reports any other failure.
     let issue = failing_entry(ctx, plan.queue_entry.as_deref(), issue).await?;
     execute_add_with_target(ctx, plan, target, issue).await
