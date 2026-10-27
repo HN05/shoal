@@ -2563,7 +2563,8 @@ branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths; with nothing linked, it waits for that alone.
 A new [agent message](#agent-messages) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
-Each update includes its item URL, kind and message; `--json` returns an `updates`
+Each update includes its item URL, kind and message; a comment update counts the
+new, edited and deleted comments and reviews by kind and author. `--json` returns an `updates`
 array, and a `messages` array when agent messages arrived. The first watch
 reports existing activity; subsequent watches share a
 cursor per workspace and item across restarts. Pending updates replay until the

@@ -132,6 +132,52 @@ fn deleting_one_of_several_comments_is_reported() {
 }
 
 #[test]
+fn comment_updates_count_changes_by_kind_and_author() {
+    let entry = |text: &str, author: &str| Entry::new(text.into(), author.into());
+    let mut previous = Snapshot::default();
+    previous.record_comments(
+        DISCUSSION,
+        Ok(vec![
+            ("1".into(), entry("typo", "alice")),
+            ("2".into(), entry("old", "bob")),
+        ]),
+    );
+    previous.record_comments("reviews", Ok(vec![("3".into(), entry("finding", "bot"))]));
+    let mut next = Snapshot::default();
+    next.record_comments(
+        DISCUSSION,
+        Ok(vec![
+            ("1".into(), entry("fixed", "alice")),
+            ("4".into(), entry("rebase", "alice")),
+            ("5".into(), entry("and docs", "alice")),
+        ]),
+    );
+    next.record_comments(
+        "reviews",
+        Ok(vec![
+            ("3".into(), entry("finding", "bot")),
+            ("6".into(), entry("blocker", "bot")),
+        ]),
+    );
+    next.comments.insert("inline:7".into(), entry("nit", "bot"));
+    let updates = previous.changes(&next, "pr");
+    assert_eq!(updates.len(), 1);
+    assert_eq!(
+        updates[0].message,
+        "2 new comments from alice, 1 new inline comment from bot, 1 new review from bot, \
+         1 edited comment from alice, 1 deleted comment from bob; read them with shoal view pr"
+    );
+    let mut answered = next.clone();
+    answered
+        .comments
+        .insert("reviews:6".into(), entry("blocker, 1 reply", "bot"));
+    assert_eq!(
+        next.changes(&answered, "pr")[0].message,
+        "1 updated review from bot; read them with shoal view pr"
+    );
+}
+
+#[test]
 fn comments_saved_without_authors_match_the_same_comments_with_them() {
     let saved: Snapshot = serde_json::from_value(json!({
         "comments": {"discussion:1": "hi", "discussion:2": "bye"},
@@ -145,7 +191,7 @@ fn comments_saved_without_authors_match_the_same_comments_with_them() {
     );
     assert_eq!(
         saved.changes(&next, "pr")[0].message,
-        "Comments or reviews changed; read them with shoal view pr"
+        "1 deleted comment; read them with shoal view pr"
     );
     let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
     assert_eq!(stored.comments, next.comments);

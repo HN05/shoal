@@ -14456,7 +14456,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     fs::write(&response, pull.to_string()).unwrap();
     fs::write(
         fixture.root.path().join("inline.json"),
-        "[[{\"id\":1,\"body\":\"review finding\"}]]",
+        "[[{\"id\":1,\"body\":\"review finding\",\"user\":{\"login\":\"bot\"}}]]",
     )
     .unwrap();
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
@@ -14481,7 +14481,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     assert_eq!(kinds, ["comment", "ci_completed"]);
     assert_eq!(
         first["updates"][0]["message"],
-        "Comments or reviews changed; read them with shoal view https://github.com/team/project/pull/7"
+        "1 new inline comment from bot; read them with shoal view https://github.com/team/project/pull/7"
     );
     assert_eq!(first["updates"][1]["message"], "review: SUCCESS");
     assert_eq!(

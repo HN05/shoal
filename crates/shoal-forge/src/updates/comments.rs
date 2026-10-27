@@ -1,4 +1,5 @@
-//! The comments and reviews a snapshot records, and whether they changed.
+//! The comments and reviews a snapshot records, and the summary of what
+//! changed among them.
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -71,20 +72,92 @@ impl Entry {
     }
 }
 
-/// Whether `next` adds, edits or deletes a comment or review since
-/// `previous`.
-pub(crate) fn changed(previous: &BTreeMap<String, Entry>, next: &BTreeMap<String, Entry>) -> bool {
-    let added_or_edited = next
-        .iter()
-        .filter(|(_, entry)| entry.recorded())
-        .any(|(key, entry)| {
-            recorded(previous, key).map(|seen| &seen.fingerprint) != Some(&entry.fingerprint)
-        });
-    let deleted = previous
-        .iter()
-        .filter(|(_, entry)| entry.recorded())
-        .any(|(key, _)| recorded(next, key).is_none());
-    added_or_edited || deleted
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Change {
+    New,
+    Edited,
+    Deleted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    Comment,
+    InlineComment,
+    Review,
+}
+
+impl Kind {
+    /// The kind of the entry under `key`, named after its source.
+    fn of(key: &str) -> Self {
+        match key.split_once(':').map(|(source, _)| source) {
+            Some("reviews") => Self::Review,
+            Some("inline") => Self::InlineComment,
+            _ => Self::Comment,
+        }
+    }
+
+    fn noun(self, count: usize) -> &'static str {
+        match (self, count) {
+            (Self::Comment, 1) => "comment",
+            (Self::Comment, _) => "comments",
+            (Self::InlineComment, 1) => "inline comment",
+            (Self::InlineComment, _) => "inline comments",
+            (Self::Review, 1) => "review",
+            (Self::Review, _) => "reviews",
+        }
+    }
+
+    /// The word for `change` to an entry of this kind. A review also
+    /// changes through replies, dismissal or new commits, not only edits.
+    fn change(self, change: Change) -> &'static str {
+        match (change, self) {
+            (Change::New, _) => "new",
+            (Change::Edited, Self::Review) => "updated",
+            (Change::Edited, _) => "edited",
+            (Change::Deleted, _) => "deleted",
+        }
+    }
+}
+
+/// The comments and reviews `next` adds, edits or deletes since
+/// `previous`, counted by change, kind and author, such as `2 new comments
+/// from alice, 1 updated review from bot`; `None` when nothing changed.
+pub(crate) fn summary(
+    previous: &BTreeMap<String, Entry>,
+    next: &BTreeMap<String, Entry>,
+) -> Option<String> {
+    let mut counts = BTreeMap::<(Change, Kind, &str), usize>::new();
+    for (key, entry) in next.iter().filter(|(_, entry)| entry.recorded()) {
+        let change = match recorded(previous, key) {
+            None => Change::New,
+            Some(seen) if seen.fingerprint != entry.fingerprint => Change::Edited,
+            Some(_) => continue,
+        };
+        *counts
+            .entry((change, Kind::of(key), &entry.author))
+            .or_default() += 1;
+    }
+    for (key, entry) in previous.iter().filter(|(_, entry)| entry.recorded()) {
+        if recorded(next, key).is_none() {
+            *counts
+                .entry((Change::Deleted, Kind::of(key), &entry.author))
+                .or_default() += 1;
+        }
+    }
+    (!counts.is_empty()).then(|| {
+        counts
+            .into_iter()
+            .map(|((change, kind, author), count)| {
+                let words = format!("{count} {} {}", kind.change(change), kind.noun(count));
+                if author.is_empty() {
+                    words
+                } else {
+                    format!("{words} from {author}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    })
 }
 
 /// The entry under `key`, unless it records nothing.

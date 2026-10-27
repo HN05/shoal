@@ -149,10 +149,10 @@ impl Snapshot {
                 workspace: None,
             })
         };
-        if comments::changed(&self.comments, &next.comments) {
+        if let Some(summary) = comments::summary(&self.comments, &next.comments) {
             emit(
                 UpdateKind::Comment,
-                format!("Comments or reviews changed; read them with shoal view {url}"),
+                format!("{summary}; read them with shoal view {url}"),
                 None,
             );
         }
