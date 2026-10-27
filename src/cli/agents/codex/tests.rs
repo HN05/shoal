@@ -75,7 +75,12 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
             configured: &configured,
         };
         Codex
-            .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment)
+            .route_through_proxy(
+                &mut args,
+                "http://127.0.0.1:4000",
+                &environment,
+                home.path(),
+            )
             .map(|()| args.split_off(args.len() - 4))
     };
     // A provider of the user's keeps its token and only moves.

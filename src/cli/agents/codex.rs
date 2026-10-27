@@ -38,6 +38,7 @@ impl Integration for Codex {
         args: &mut Vec<OsString>,
         url: &str,
         environment: &AgentEnvironment,
+        _directory: &std::path::Path,
     ) -> Result<()> {
         if !args.iter().any(|arg| arg == PROVIDER) {
             return Ok(());

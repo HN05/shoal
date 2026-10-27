@@ -74,6 +74,7 @@ impl AgentLaunch {
         &self,
         command: &[OsString],
         environment: &std::collections::BTreeMap<String, OsString>,
+        directory: &std::path::Path,
     ) -> Result<Vec<OsString>> {
         let Some(proxy) = &self.proxy else {
             return Ok(command.to_vec());
@@ -86,6 +87,7 @@ impl AgentLaunch {
             &proxy.url,
             &self.home,
             &configured,
+            directory,
         )
     }
 
@@ -105,7 +107,7 @@ pub(super) fn spawn(
     auth: Option<&AgentLaunch>,
 ) -> Result<Child> {
     let command = match auth {
-        Some(auth) => auth.route(command, &plan.environment)?,
+        Some(auth) => auth.route(command, &plan.environment, &plan.workspace.path)?,
         None => command.to_vec(),
     };
     let mut process = Command::new(&command[0]);

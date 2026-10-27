@@ -104,6 +104,7 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
         "http://127.0.0.1:4000",
         home.path(),
         &BTreeMap::new(),
+        home.path(),
     )
     .unwrap();
     assert!(
@@ -113,6 +114,24 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
             .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#),
         "{routed:?}"
     );
+    // A resume command's own settings stay, joined with the proxy's.
+    let own = with(
+        "claude",
+        &["claude", "--settings", r#"{"model":"opus"}"#, "--continue"],
+    );
+    let routed = route_through_proxy(
+        IntegrationKind::Claude,
+        own,
+        "http://127.0.0.1:4000",
+        home.path(),
+        &BTreeMap::new(),
+        home.path(),
+    )
+    .unwrap();
+    assert_eq!(routed.iter().filter(|arg| *arg == "--settings").count(), 1);
+    let joined: serde_json::Value = serde_json::from_str(routed[2].to_str().unwrap()).unwrap();
+    assert_eq!(joined["model"], "opus", "{joined}");
+    assert_eq!(joined["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4000");
     // An agent without a proxy runs its command as configured.
     let plain: crate::config::Config = toml::from_str("").unwrap();
     let plain = plain.resolve(&Default::default()).unwrap();

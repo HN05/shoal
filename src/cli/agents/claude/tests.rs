@@ -139,7 +139,7 @@ fn proxied_settings_send_api_requests_to_the_proxy() {
         configured: &Default::default(),
     };
     Claude
-        .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment)
+        .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment, home)
         .unwrap();
     assert!(
         args[1]

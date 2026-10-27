@@ -5,10 +5,8 @@ use std::ffi::OsString;
 
 use serde_json::{Value, json};
 
-#[cfg(test)]
-use super::AgentEnvironment;
 use super::{
-    Integration, Wake,
+    AgentEnvironment, Integration, Wake,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
@@ -26,6 +24,19 @@ impl Integration for Claude {
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
         settings(false, false)
+    }
+
+    /// Every `--settings` becomes one with the proxy's URL, since Claude
+    /// Code takes only the last.
+    fn route_through_proxy(
+        &self,
+        args: &mut Vec<OsString>,
+        url: &str,
+        _environment: &AgentEnvironment,
+        directory: &std::path::Path,
+    ) -> anyhow::Result<()> {
+        crate::proxy::fill_url(args, url);
+        settings::merge(args, url, directory)
     }
 
     fn proxy_args(&self) -> Vec<OsString> {
@@ -206,6 +217,8 @@ fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
     }]});
     [("Stop", group.clone()), ("StopFailure", group)]
 }
+
+mod settings;
 
 #[cfg(test)]
 mod tests;

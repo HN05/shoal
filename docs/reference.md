@@ -854,7 +854,12 @@ proxy = "cliproxy"
 
 The agent's wrapper runs one proxy on a loopback port for as long as the agent
 runs and points the agent at it: Claude Code through `ANTHROPIC_BASE_URL` in the
-settings Shoal passes, which win over its own settings and environment; Codex by
+settings Shoal passes, which win over its own settings and environment. Claude
+Code takes only its last `--settings`, so the wrapper merges every one the launch
+has, Shoal's and those forwarded or in a configured resume command, JSON or a
+file relative to the workspace, into one: objects key by key, lists such as an
+event's hooks one after another, and the proxy's URL as `ANTHROPIC_BASE_URL`;
+Codex by
 moving the `base_url` of the provider the launch selects, from its config, the
 profile `--profile` or the config's `profile` names, and the `-c` overrides it
 is launched with, keeping that provider's own credentials, or, on its built-in

@@ -64,12 +64,13 @@ pub(in crate::cli) trait Integration: Sync {
     }
 
     /// Fill in the proxy placeholders of `args` with the proxy's `url`, for
-    /// the agent running with `environment`.
+    /// the agent running with `environment` in `directory`.
     fn route_through_proxy(
         &self,
         args: &mut Vec<OsString>,
         url: &str,
         _environment: &AgentEnvironment,
+        _directory: &Path,
     ) -> Result<()> {
         crate::proxy::fill_url(args, url);
         Ok(())
@@ -529,17 +530,19 @@ pub(crate) fn routes_through_proxy(kind: IntegrationKind) -> bool {
     integration(kind).routes_through_proxy()
 }
 
-/// `command` of an agent with integration `kind`, running with `configured`
-/// added to this process's environment, sent to the proxy at `url`.
+/// `command` of an agent with integration `kind`, running in `directory`
+/// with `configured` added to this process's environment, sent to the proxy
+/// at `url`.
 pub(crate) fn route_through_proxy(
     kind: IntegrationKind,
     mut command: Vec<OsString>,
     url: &str,
     home: &Path,
     configured: &BTreeMap<String, OsString>,
+    directory: &Path,
 ) -> Result<Vec<OsString>> {
     let environment = AgentEnvironment { home, configured };
-    integration(kind).route_through_proxy(&mut command, url, &environment)?;
+    integration(kind).route_through_proxy(&mut command, url, &environment, directory)?;
     Ok(command)
 }
 
