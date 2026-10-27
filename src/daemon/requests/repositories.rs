@@ -1,7 +1,7 @@
 //! The daemon's answers to [`RepositoryMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -21,12 +21,7 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::AgentEnvironments));
         }
         RepositoryMethod::ListRepositories => {
-            let mut repos = manager.repositories().await?;
-            if let Some(caller) = caller {
-                let owner = manager.workspace(&caller.workspace_id).await?;
-                repos.retain(|r| r.id == owner.repository_id);
-            }
-            Body::Repositories(repos)
+            Body::Repositories(manager.visible_repositories(caller).await?)
         }
         RepositoryMethod::RegisterRepository { source, name, path } => {
             Body::Repository(manager.register_repository(source, name, path).await?)
@@ -93,12 +88,7 @@ impl Scoped for RepositoryMethod {
         Ok(match self {
             RepositoryMethod::ListRepositories => None,
             RepositoryMethod::SyncRepository { repository } => {
-                let own = manager.workspace(&caller.workspace_id).await?.repository_id;
-                ensure!(
-                    manager.repository(&*repository).await?.id == own,
-                    "workspace processes can only sync their own repository"
-                );
-                *repository = own.into();
+                *repository = manager.own_repository(caller, repository).await?;
                 None
             }
             RepositoryMethod::RegisterRepository { .. }
