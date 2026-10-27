@@ -171,12 +171,10 @@ async fn pull_request(
         None => {
             let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
             let creation = super::workspaces::Creation {
-                path: None,
-                branch: None,
                 existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
-                git_profile: None,
                 pr: Some(pull.url.clone()),
+                ..Default::default()
             };
             let code = super::workspaces::add(
                 ctx,
@@ -228,14 +226,7 @@ async fn issue(
     let workspace = match issue_workspace(ctx, repo, &issue).await? {
         Some(workspace) => workspace,
         None => {
-            let creation = super::workspaces::Creation {
-                path: None,
-                branch: None,
-                existing: None,
-                base: None,
-                git_profile: None,
-                pr: None,
-            };
+            let creation = super::workspaces::Creation::default();
             let code = super::workspaces::add(
                 ctx,
                 Some(repo.id.clone()),

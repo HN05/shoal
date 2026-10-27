@@ -75,12 +75,9 @@ async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
     let exists =
         git::ref_exists(&repo.path, &git::local_ref(BRANCH), git::isolated_command).await?;
     let creation = super::workspaces::Creation {
-        path: None,
         branch: (!exists).then(|| BRANCH.to_owned()),
         existing: exists.then(|| BRANCH.to_owned()),
-        base: None,
-        git_profile: None,
-        pr: None,
+        ..Default::default()
     };
     super::workspaces::add(
         ctx,

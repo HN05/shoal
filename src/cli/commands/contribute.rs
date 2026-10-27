@@ -58,12 +58,8 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         },
     };
     let creation = Creation {
-        path: None,
         branch,
-        existing: None,
-        base: None,
-        git_profile: None,
-        pr: None,
+        ..Default::default()
     };
     links::add(ctx, input, creation, agent, args, options).await
 }

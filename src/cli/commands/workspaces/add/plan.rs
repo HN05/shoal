@@ -17,7 +17,7 @@ use crate::{
     protocol::WorkspaceMethod,
 };
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 pub(in crate::cli) struct Creation {
     pub path: Option<PathBuf>,
     pub branch: Option<String>,
@@ -137,12 +137,8 @@ impl AddPlan {
         Self {
             repository: workspace.repository_id.as_str().into(),
             creation: Creation {
-                path: None,
-                branch: None,
                 existing: Some(workspace.branch.clone()),
-                base: None,
-                git_profile: None,
-                pr: None,
+                ..Default::default()
             },
             place_name: None,
             issue: issue.map(|issue| issue.url.clone()),
