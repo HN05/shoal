@@ -79,6 +79,8 @@ const REQUESTS: &[&str] = &[
     r#"{"clear_ready":{"workspace":"fix","selection":{"kind":null,"input":null},"draft":true}}"#,
     r#"{"set_agent_state":{"workspace":"fix","state":"idle","session":"s1"}}"#,
     r#"{"report_turn_failure":{"workspace":"fix","failure":"rate_limited"}}"#,
+    r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
+    r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true}}"#,
     // Executions.
     r#"{"execute":{"workspace":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
