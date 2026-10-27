@@ -394,12 +394,17 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 
     // Each reload asks the host again, also when it cannot answer, which
     // keeps the forge it answered before.
-    let asked = |fixture: &Fixture| keys(fixture).contains(&json!("GET meta"));
+    // Reading the log deletes it, so it is cleared once before each reload and
+    // then only read until the request appears.
+    let log = fixture.root.path().join("forge/requests.jsonl");
+    let asked = || fs::read_to_string(&log).is_ok_and(|text| text.contains("GET meta"));
+    keys(&fixture);
     fixture.ok(&["daemon", "reload"]);
-    support::wait::wait_until("the host asked again", || asked(&fixture));
+    support::wait::wait_until("the host asked again", asked);
     fixture.respond(json!({}));
+    keys(&fixture);
     fixture.ok(&["daemon", "reload"]);
-    support::wait::wait_until("the host asked again", || asked(&fixture));
+    support::wait::wait_until("the host asked again", asked);
 }
 
 #[test]
