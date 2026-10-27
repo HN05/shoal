@@ -123,11 +123,15 @@ impl TrackedAgents {
 }
 
 /// SQL true when the workspace in `column` has an agent: one reporting its
-/// turn state, or one in the tracked agents bound as parameter `?2`.
+/// turn state, one whose restore is queued, which receives what arrived once
+/// it starts, or one in the tracked agents bound as parameter `?2`.
 fn has_agent(column: &str) -> String {
     format!(
         "(EXISTS (SELECT 1 FROM workspace_agent_state WHERE workspace_agent_state.workspace_id={column})
-            OR {column} IN (SELECT value FROM json_each(?2)))"
+            OR EXISTS (SELECT 1 FROM agent_queue
+                WHERE agent_queue.workspace_id={column} AND agent_queue.kind='{}')
+            OR {column} IN (SELECT value FROM json_each(?2)))",
+        crate::state::QueueKind::Restore
     )
 }
 

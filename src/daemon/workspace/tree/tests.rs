@@ -576,6 +576,54 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
 }
 
 #[tokio::test]
+async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let started = manager
+        .begin_execution(&child.id, None, super::super::ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    // An agent without turn reports, which protection stops.
+    manager
+        .track_agent(
+            &started.plan.id,
+            "droid",
+            &child.id,
+            &child.name,
+            true,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    let delegated = manager.delegated_workspaces(&parent.id).await.unwrap();
+    assert_eq!(delegated.len(), 1, "a stopped agent receives nothing");
+    manager.queue_agent_restore(&started.plan.id).await.unwrap();
+    assert!(
+        manager
+            .delegated_workspaces(&parent.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     use crate::daemon::questions::Ask;
     let (temp, manager) = manager().await;

@@ -377,7 +377,8 @@ children without an agent of their own, and theirs in turn, each update naming
 its workspace, through the same cursors, deliveries and acknowledgements as its
 own; a child's own agent, which reports its turn state or which Shoal tracks
 there, as it tracks custom and Happy agents that report none, takes over its
-subtree. A parent stays until its children are removed, through every unattended
+subtree, and so does one whose restore is queued, since it receives what
+arrived once it starts. A parent stays until its children are removed, through every unattended
 removal like a hold, so one `done` at the top leaves the tree until its PRs
 merge; each child completes on its own. Removing a parent moves its children up
 to its own parent and journals the change. `work` lists children below their
