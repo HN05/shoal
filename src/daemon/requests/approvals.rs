@@ -52,7 +52,7 @@ impl Scoped for ApprovalMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             ApprovalMethod::ListApprovals { workspace } => {
-                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
+                Some(caller.own_by_default(workspace))
             }
             ApprovalMethod::ShowApproval { id } => {
                 show_approval(manager, Some(caller), *id).await?;

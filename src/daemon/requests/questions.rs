@@ -53,9 +53,7 @@ impl Scoped for QuestionMethod {
             QuestionMethod::AskQuestion { workspace, .. }
             | QuestionMethod::WithdrawQuestion { workspace, .. }
             | QuestionMethod::AwaitAnswer { workspace, .. } => Some(workspace),
-            QuestionMethod::ListQuestions { workspace } => {
-                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
-            }
+            QuestionMethod::ListQuestions { workspace } => Some(caller.own_by_default(workspace)),
             QuestionMethod::ShowQuestion { id } => {
                 show_question(manager, Some(caller), *id).await?;
                 None

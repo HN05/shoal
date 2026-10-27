@@ -94,6 +94,12 @@ impl Caller {
     pub fn kind(&self) -> Option<ExecutionKind> {
         self.execution.as_ref().map(|execution| execution.kind)
     }
+
+    /// The workspace an optional filter names, which defaults to the caller's
+    /// own.
+    pub(super) fn own_by_default<'a>(&self, workspace: &'a mut Option<String>) -> &'a mut String {
+        workspace.get_or_insert_with(|| self.workspace_id.clone())
+    }
 }
 
 /// The refusal of a request no workspace process may send.

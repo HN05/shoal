@@ -28,9 +28,7 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: DemoMethod) -> Result
 impl Scoped for DemoMethod {
     async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            DemoMethod::ListDemos { workspace } => {
-                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
-            }
+            DemoMethod::ListDemos { workspace } => Some(caller.own_by_default(workspace)),
             DemoMethod::DemoProgress { workspace, .. }
             | DemoMethod::StopDemos { workspace, .. } => Some(workspace),
         })

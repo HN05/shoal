@@ -54,7 +54,7 @@ impl Scoped for SimulatorMethod {
             SimulatorMethod::SimOverview { workspace }
             | SimulatorMethod::SimList { workspace }
             | SimulatorMethod::SimHistory { workspace, .. } => {
-                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
+                Some(caller.own_by_default(workspace))
             }
         })
     }
