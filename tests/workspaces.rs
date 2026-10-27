@@ -23294,9 +23294,12 @@ done
         .arg(started["chat"]["pid"].to_string())
         .status()
         .unwrap();
+    assert!(stopped.success());
+    wait_until("the daemon to record the chat ended", || {
+        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+    });
     fs::write(fixture.root.path().join("setup-release"), "").unwrap();
     let output = setup.wait_with_output().unwrap();
-    assert!(stopped.success());
     assert!(output.status.success(), "{output:?}");
     let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(workspace["state"], "ready");
