@@ -52,11 +52,23 @@ impl Limits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Work {
     Launch,
-    /// A stopped agent's restore, whose slot `occupied` still counts.
-    /// `waiting` says its agent waits for it with every process stopped.
+    /// A stopped agent's restore. `waiting` says its agent waits for it with
+    /// every process stopped.
     Restore {
         waiting: bool,
+        wake: Wake,
     },
+}
+
+/// What a queued restore waits for besides a slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Wake {
+    /// Sustained healthy readings, for an agent stopped mid-turn, whose slot
+    /// `occupied` still counts.
+    Recovery,
+    /// An update for an agent stopped between turns, which holds no slot
+    /// meanwhile; `due` once one waits.
+    Update { due: bool },
 }
 
 /// A queued entry and the repository it starts an agent in.
@@ -67,12 +79,12 @@ pub(crate) struct Waiting {
 }
 
 /// The waiting entries that fit, in queue order. `occupied` holds one
-/// repository ID per used slot. Under fixed limits a launch needs a free slot
-/// and a restore takes back its own; under dynamic admission each needs room
-/// for its load. Restores start only on sustained healthy readings
-/// (`recovered`), one per healthy interval, and nothing queued behind a
-/// restore starts before it. An entry that does not fit is passed over; once
-/// nothing more can start the pass ends.
+/// repository ID per used slot. Under fixed limits a launch, like a restore
+/// an update woke, needs a free slot and another restore takes back its own;
+/// under dynamic admission each needs room for its load. Those other restores
+/// start only on sustained healthy readings (`recovered`), one per healthy
+/// interval, and nothing queued behind one starts before it. An entry that
+/// does not fit is passed over; once nothing more can start the pass ends.
 pub(crate) fn admit(
     occupied: &[String],
     waiting: &[Waiting],
@@ -92,9 +104,16 @@ pub(crate) fn admit(
         }
         let own = match entry.work {
             Work::Launch => 0,
+            Work::Restore {
+                waiting,
+                wake: Wake::Update { due },
+            } => match waiting && due {
+                true => 0,
+                false => continue,
+            },
             Work::Restore { .. } if !recovered => break,
-            Work::Restore { waiting: false } => continue,
-            Work::Restore { waiting: true } => 1,
+            Work::Restore { waiting: false, .. } => continue,
+            Work::Restore { waiting: true, .. } => 1,
         };
         let used = used.entry(&entry.repository).or_default();
         let full = |count: usize, limit: u32| count.saturating_sub(own) >= limit as usize;
@@ -115,6 +134,15 @@ pub(crate) fn admit(
         admitted.push(entry.id.clone());
     }
     admitted
+}
+
+/// A waiting row of the queue.
+struct QueuedRow {
+    id: String,
+    repository: String,
+    kind: QueueKind,
+    execution: Option<String>,
+    workspace: Option<String>,
 }
 
 /// A launch to record in the queue.
@@ -342,53 +370,82 @@ impl Manager {
             .iter()
             .map(|entry| entry.repository.clone())
             .collect();
-        let slots = self.occupied_slots().await?;
+        let dormant = restores
+            .values()
+            .filter(|(_, wake)| matches!(wake, Wake::Update { .. }))
+            .map(|(execution, _)| execution.clone())
+            .collect();
+        let slots = self.occupied_slots(&dormant).await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
         let published = self.published_recovery();
         let admitted = admit(&occupied, &waiting, &limits, published.is_some());
-        let restored: Vec<&String> = admitted.iter().filter_map(|id| restores.get(id)).collect();
-        if !restored.is_empty() {
+        let (woken, recovered): (Vec<_>, Vec<_>) = admitted
+            .iter()
+            .filter_map(|id| restores.get(id))
+            .partition(|(_, wake)| matches!(wake, Wake::Update { .. }));
+        if !recovered.is_empty() {
             // A stop, reload or unsafe reading since the check withdrew the
             // readings; the pass it wakes decides again.
             let Some(epoch) = published.and_then(|epoch| self.consume_recovery(epoch)) else {
                 return Ok(false);
             };
-            self.grant_restores(&restored, epoch);
+            self.grant_restores(&recovered, Grant::Recovery(epoch));
         }
+        self.grant_restores(&woken, Grant::Update);
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
     }
 
     /// The queued entries in order, each restore with whether its agent
-    /// waits, and each restore's execution by entry ID.
-    async fn waiting_work(&self) -> Result<(Vec<Waiting>, HashMap<String, String>)> {
+    /// waits and what for, and each restore's execution and wake by entry ID.
+    async fn waiting_work(&self) -> Result<(Vec<Waiting>, HashMap<String, (String, Wake)>)> {
         let queued = self
             .store
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,repository_id,kind,execution_id FROM agent_queue
+                        "SELECT id,repository_id,kind,execution_id,workspace_id FROM agent_queue
                          WHERE state=?1 ORDER BY seq",
                     )?
                     .query_map([QueueState::Queued], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                        Ok(QueuedRow {
+                            id: row.get(0)?,
+                            repository: row.get(1)?,
+                            kind: row.get(2)?,
+                            execution: row.get(3)?,
+                            workspace: row.get(4)?,
+                        })
                     })?
-                    .collect::<rusqlite::Result<Vec<(String, String, QueueKind, Option<String>)>>>(
-                    )?)
+                    .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await?;
-        let waiters = self.restore_waiters.lock().unwrap();
+        let waiters: HashSet<String> = self
+            .restore_waiters
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
         let mut restores = HashMap::new();
         let mut waiting = Vec::new();
-        for (id, repository, kind, execution) in queued {
-            let work = match (kind, execution) {
-                (QueueKind::Restore, Some(execution)) => {
-                    let work = Work::Restore {
-                        waiting: waiters.contains_key(&execution),
-                    };
-                    restores.insert(id.clone(), execution);
-                    work
+        for QueuedRow {
+            id,
+            repository,
+            kind,
+            execution,
+            workspace,
+        } in queued
+        {
+            let work = match (kind, execution, workspace) {
+                (QueueKind::Restore, Some(execution), Some(workspace)) => {
+                    let waits = waiters.contains(&execution);
+                    let wake = self.restore_wake(&workspace, &execution, waits).await?;
+                    restores.insert(id.clone(), (execution, wake));
+                    Work::Restore {
+                        waiting: waits,
+                        wake,
+                    }
                 }
                 _ => Work::Launch,
             };
@@ -401,13 +458,12 @@ impl Manager {
         Ok((waiting, restores))
     }
 
-    /// Bind the admitted restores of `executions` to `epoch`, which a stop,
-    /// reload or unsafe reading before their agents start advances.
-    fn grant_restores(&self, executions: &[&String], epoch: u64) {
+    /// Grant the admitted restores of `restores`, by execution.
+    fn grant_restores(&self, restores: &[&(String, Wake)], grant: Grant) {
         let mut waiters = self.restore_waiters.lock().unwrap();
-        for execution in executions {
-            if let Some(granted) = waiters.get_mut(*execution) {
-                *granted = Some(epoch);
+        for (execution, _) in restores {
+            if let Some(granted) = waiters.get_mut(execution) {
+                *granted = Some(grant);
             }
         }
     }
@@ -576,9 +632,10 @@ impl Manager {
 
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
-    /// its execution; so does each starting launch until its agent registers.
-    /// An admitted restore starts in its agent's slot.
-    async fn occupied_slots(&self) -> Result<Vec<Slot>> {
+    /// its execution, except the `dormant` ones whose restore waits for an
+    /// update; so does each starting launch until its agent registers. An
+    /// admitted restore starts in its agent's slot.
+    async fn occupied_slots(&self, dormant: &HashSet<String>) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
         let PersistedSlots {
             open,
@@ -601,6 +658,7 @@ impl Manager {
                     .or_insert_with(|| stopped(workspace.clone()));
             }
         }
+        agents.retain(|execution, _| !dormant.contains(execution));
         let mut launches = Vec::new();
         for entry in starting {
             match &entry.execution {
@@ -998,9 +1056,8 @@ impl Manager {
     }
 
     /// Wait until admission starts the queued restore of `execution`, whose
-    /// agent waits with every process stopped, and return the recovery epoch
-    /// the admission holds while it lasts.
-    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<u64> {
+    /// agent waits with every process stopped, and return what admitted it.
+    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<Grant> {
         let mut changed = self.store.watch_changes();
         let _waiter = RestoreWaiter::register(self, execution);
         self.agent_queue_wake.notify_one();
@@ -1162,6 +1219,9 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
 }
 
 mod dependencies;
+mod wake;
+
+pub(crate) use wake::Grant;
 
 #[cfg(test)]
 mod tests;

@@ -24,7 +24,10 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             id: id.to_string(),
             repository: repository.to_string(),
             work: if id.starts_with('r') {
-                Work::Restore { waiting: true }
+                Work::Restore {
+                    waiting: true,
+                    wake: Wake::Recovery,
+                }
             } else {
                 Work::Launch
             },
@@ -106,7 +109,10 @@ fn restores_wait_for_healthy_readings_and_hold_back_later_entries() {
     // Each healthy interval restores one agent; the rest keep their place.
     assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "ra"]);
     // A restore whose agent is not waiting yet is passed over.
-    queue[1].work = Work::Restore { waiting: false };
+    queue[1].work = Work::Restore {
+        waiting: false,
+        wake: Wake::Recovery,
+    };
     assert_eq!(
         admit(&occupied, &queue, &unlimited, true),
         ["a1", "rb", "b1"]
@@ -118,6 +124,31 @@ fn restores_wait_for_healthy_readings_and_hold_back_later_entries() {
     };
     assert_eq!(admit(&occupied, &queue[1..], &starts(1), true), ["rb"]);
     assert!(admit(&occupied, &queue[1..], &starts(0), true).is_empty());
+}
+
+#[test]
+fn restores_between_turns_wait_only_for_an_update_and_a_free_slot() {
+    let mut queue = waiting(&[("ra", "a"), ("a1", "a"), ("rb", "b")]);
+    let update = |waiting, due| Work::Restore {
+        waiting,
+        wake: Wake::Update { due },
+    };
+    queue[0].work = update(true, false);
+    let occupied = vec!["b".to_owned()];
+    let unlimited = Limits::default();
+    // Without an update the restore holds back nothing behind it.
+    assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "rb"]);
+    // An update starts it without healthy readings, which the restore after
+    // it still waits for.
+    queue[0].work = update(true, true);
+    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["ra", "a1"]);
+    // Its agent holds no slot, so it needs a free one as a launch does.
+    let full = limits(Some(2), &[]);
+    assert_eq!(admit(&occupied, &queue, &full, false), ["ra"]);
+    assert!(admit(&vec!["b".to_owned(); 2], &queue, &full, false).is_empty());
+    // An agent not yet proven stopped is passed over.
+    queue[0].work = update(false, true);
+    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1"]);
 }
 
 pub(super) async fn register(
@@ -417,7 +448,10 @@ async fn each_agent_execution_uses_its_own_slot() {
     let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, "first");
     std::fs::create_dir_all(record.parent().unwrap()).unwrap();
     std::fs::write(&record, "{\"agent\":\"claude\"}").unwrap();
-    assert_eq!(manager.occupied_slots().await.unwrap().len(), 2);
+    assert_eq!(
+        manager.occupied_slots(&HashSet::new()).await.unwrap().len(),
+        2
+    );
     assert!(!add(&manager, &repo, "waiting").await.start);
 }
 
@@ -499,7 +533,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         slots.into_iter().map(|slot| slot.activity).collect()
     };
     assert!(matches!(
-        activities(manager.occupied_slots().await.unwrap())[..],
+        activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
         [Activity::Running(_)]
     ));
     assert!(
@@ -509,13 +543,13 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     );
     // Until its processes are proven stopped the agent's load may still show.
     assert!(matches!(
-        activities(manager.occupied_slots().await.unwrap())[..],
+        activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
         [Activity::Running(_)]
     ));
     manager.queue_agent_restore(&agent.0).await.unwrap();
     let _restoring = await_restore(&manager, &agent.0).await;
     assert_eq!(
-        activities(manager.occupied_slots().await.unwrap()),
+        activities(manager.occupied_slots(&HashSet::new()).await.unwrap()),
         [Activity::Stopped]
     );
 }
@@ -563,7 +597,7 @@ async fn stopped_agents(
 async fn await_restore(
     manager: &std::sync::Arc<Manager>,
     execution: &str,
-) -> tokio::task::JoinHandle<Result<u64>> {
+) -> tokio::task::JoinHandle<Result<Grant>> {
     let waiting = {
         let (manager, execution) = (manager.clone(), execution.to_owned());
         tokio::spawn(async move { manager.await_restore_admission(&execution).await })
@@ -1050,5 +1084,58 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
                 && notification.message.contains(&entry.name)
         }),
         "{notifications:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .set_agent_state(
+            &idle.name,
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    // Healthy readings do not restore it, and its slot is free for a launch.
+    publish_recovery(&manager);
+    let launch = add(&manager, &repo, "later").await;
+    assert!(launch.start);
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.published_recovery().is_some());
+    assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
+
+    // An update makes it due; it waits for the launch's slot like a launch.
+    manager
+        .send_agent_message(&idle.name, "Review requested".into())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
+    let launched = launch.entry.unwrap().id;
+    manager.fail_queue_entry(&launched, "test").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+    assert_eq!(queue(&manager).await, [("idle".into(), Restore, Starting)]);
+    // The update's admission holds through later stops.
+    manager.reset_overload_recovery();
+    assert!(
+        manager
+            .confirm_restore(&execution, &idle.id, Grant::Update)
+            .await
+            .unwrap()
     );
 }

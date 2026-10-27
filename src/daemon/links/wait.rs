@@ -350,6 +350,24 @@ impl Manager {
         Ok(())
     }
 
+    /// Whether messages or queued updates wait for the workspace's agent.
+    /// While cleanup or an item change holds the PR gates of the workspaces
+    /// whose activity it receives, only messages count, as in a hook delivery.
+    pub(crate) async fn updates_waiting(&self, selector: &str) -> Result<bool> {
+        let workspace = self.workspace(selector).await?;
+        if !self.agent_messages(&workspace.id).await?.is_empty() {
+            return Ok(true);
+        }
+        let children = self.delegated_workspaces(&workspace.id).await?;
+        let Some(_gate) = self.pr_gates.try_lock(receiving(&workspace.id, &children)) else {
+            return Ok(false);
+        };
+        Ok(!self
+            .gated_agent_updates(workspace, &children, 0)
+            .await?
+            .is_empty())
+    }
+
     async fn agent_wake_due(&self, workspace: &Workspace) -> Result<bool> {
         let id = workspace.id.clone();
         let state = self

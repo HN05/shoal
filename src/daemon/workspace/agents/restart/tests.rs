@@ -216,7 +216,7 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     manager.agent_started(&id).await;
     assert!(manager.restart_requested(&id).await);
     // The restore resumes the agent without the queue, and its start answers.
-    assert!(manager.resume_agent_execution(&id).await.unwrap());
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     assert!(!*stop.borrow_and_update());
     assert!(manager.restart_requested(&id).await);
     manager.agent_started(&id).await;

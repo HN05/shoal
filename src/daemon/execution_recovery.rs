@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 
-use super::workspace::{Manager, Pause};
+use super::workspace::{Grant, Manager, Pause};
 use crate::daemon::log;
 use crate::{
     execution::recovery,
@@ -70,12 +70,12 @@ pub(super) async fn pause(
         } => ready,
     };
     let resume = async {
-        ready?;
+        let grant = ready?;
         ensure!(
             manager.config().overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
-        prepare_resume(manager, execution_id, workspace_id).await
+        prepare_resume(manager, execution_id, workspace_id, grant).await
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
@@ -126,7 +126,7 @@ async fn restart_once_stopped(
     let resume = async {
         ready?;
         manager.verify_restore_workspace(workspace_id).await?;
-        resume(manager, execution_id, workspace_id).await
+        resume(manager, execution_id, workspace_id, None).await
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
@@ -245,18 +245,24 @@ async fn prepare_resume(
     manager: &Manager,
     execution_id: &str,
     workspace_id: &str,
+    grant: Grant,
 ) -> Result<Action> {
     if assignment_done(manager, workspace_id).await? {
         return Ok(done_cancels_restore());
     }
-    resume(manager, execution_id, workspace_id).await
+    resume(manager, execution_id, workspace_id, Some(grant)).await
 }
 
 /// Resume the stopped agent with the workspace's ports, unless a stop
-/// cancelled its restore.
-async fn resume(manager: &Manager, execution_id: &str, workspace_id: &str) -> Result<Action> {
+/// cancelled its restore. `grant` is what admitted an automatic restore.
+async fn resume(
+    manager: &Manager,
+    execution_id: &str,
+    workspace_id: &str,
+    grant: Option<Grant>,
+) -> Result<Action> {
     let ports = manager.list_ports(Some(workspace_id)).await?;
-    if manager.resume_agent_execution(execution_id).await? {
+    if manager.resume_agent_execution(execution_id, grant).await? {
         Ok(Action::Resume(ports))
     } else {
         Ok(Action::Stop(requested_reason(manager, execution_id).await))

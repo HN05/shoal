@@ -228,6 +228,12 @@ impl Record {
         }
     }
 
+    /// Whether the agent stopped between turns, with no work in flight. One
+    /// whose turn is unknown counts as interrupted mid-turn.
+    pub(crate) fn between_turns(&self) -> bool {
+        self.turn == Some(AgentState::Idle)
+    }
+
     /// This record where neither its session nor its place exists, such as
     /// on another machine, and no wrapper waits to restore it.
     pub(crate) fn moved(self) -> Self {

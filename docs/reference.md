@@ -248,7 +248,10 @@ the agent identity and pressure reason before signaling the wrapper, so a wrappe
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
 once healthy readings persist for the recovery interval and the
-[agent queue](#agent-queue) admits the restore. Recovery requires
+[agent queue](#agent-queue) admits the restore. An agent stopped while idle
+restores instead once an update arrives for it, such as an agent message or
+activity on its workspace's issues and PRs, which it receives as it starts.
+Recovery from load requires
 headroom below each enabled signal’s recovery threshold, whose thresholds must be
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
@@ -1044,7 +1047,11 @@ and frees the slot. Deleting the workspace during setup frees it without one.
 user waits for a focused launch.
 
 An agent's automatic restore after a protection stop waits in the same queue,
-in order with launches, from when its processes stop. It keeps the agent's slot,
+in order with launches, from when its processes stop. A restore of an agent
+stopped while idle holds no slot and holds back nothing behind it until an
+update arrives for the agent; then it needs a free slot, or room for its load,
+as a launch does, without waiting for healthy readings. Any other restore keeps
+the agent's slot,
 so a fixed limit lets it take that slot back on a full machine, while `dynamic`
 still needs room for its load; a lowered limit holds it until other agents
 leave. It starts only after the recovery interval's healthy readings, one

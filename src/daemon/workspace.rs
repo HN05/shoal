@@ -38,6 +38,7 @@ mod tree;
 pub(crate) mod turn_retry;
 mod xcode;
 
+pub(crate) use agent_queue::Grant;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub use executions::{ExecutionKind, Save, StopRequest, UnprovenStop};
@@ -193,8 +194,8 @@ pub struct Manager {
     /// Open holds per starting queue entry.
     agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
     /// Executions whose stopped agent waits for its queued restore with
-    /// every process stopped, with the recovery epoch its admission holds.
-    restore_waiters: std::sync::Mutex<HashMap<String, Option<u64>>>,
+    /// every process stopped, with what admitted it once admission did.
+    restore_waiters: std::sync::Mutex<HashMap<String, Option<agent_queue::Grant>>>,
     /// Wakes the queue dispatcher when a slot may have freed.
     pub(crate) agent_queue_wake: tokio::sync::Notify,
     /// Wakes turn retry delivery when a retry is scheduled.

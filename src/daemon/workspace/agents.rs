@@ -6,7 +6,7 @@ use std::{
 };
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
-use super::{GuardMode, Manager, agent_turns::Turn, capacity::Activity};
+use super::{GuardMode, Manager, agent_queue::Grant, agent_turns::Turn, capacity::Activity};
 pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
@@ -348,7 +348,13 @@ impl Manager {
         .await;
     }
 
-    pub(crate) async fn resume_agent_execution(&self, id: &str) -> anyhow::Result<bool> {
+    /// Resume the stopped agent `id`, which `grant` admitted when its
+    /// automatic restore did.
+    pub(crate) async fn resume_agent_execution(
+        &self,
+        id: &str,
+        grant: Option<Grant>,
+    ) -> anyhow::Result<bool> {
         let connections = self.connections.lock().await;
         let stop = connections
             .get(id)
@@ -378,10 +384,14 @@ impl Manager {
         if restarting {
             return Ok(true);
         }
+        let cause = match grant {
+            Some(Grant::Update) => "for an update",
+            _ => "after sustained healthy readings",
+        };
         self.notify(
             Some(&workspace),
             NotificationKind::AgentResumed,
-            format!("Restoring {name} after sustained healthy readings"),
+            format!("Restoring {name} {cause}"),
         )
         .await;
         Ok(true)
@@ -470,11 +480,11 @@ impl Manager {
         &self,
         id: &str,
         workspace_id: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Grant> {
         loop {
-            let epoch = self.await_restore_admission(id).await?;
-            if self.confirm_restore(id, workspace_id, epoch).await? {
-                return Ok(());
+            let grant = self.await_restore_admission(id).await?;
+            if self.confirm_restore(id, workspace_id, grant).await? {
+                return Ok(grant);
             }
         }
     }
@@ -492,19 +502,24 @@ impl Manager {
     }
 
     /// Check that an admitted restore's workspace is ready and verified. A
-    /// stop or reload since its admission at `epoch` revokes it, since its
-    /// healthy readings no longer hold, and returns it to its place.
+    /// stop or reload since healthy readings admitted it revokes it, since
+    /// they no longer hold, and returns it to its place; an update's admission
+    /// holds.
     pub(super) async fn confirm_restore(
         &self,
         id: &str,
         workspace_id: &str,
-        epoch: u64,
+        grant: Grant,
     ) -> anyhow::Result<bool> {
         self.verify_restore_workspace(workspace_id).await?;
-        let current = self
-            .recovery_epoch
-            .load(std::sync::atomic::Ordering::Relaxed)
-            == epoch;
+        let current = match grant {
+            Grant::Update => true,
+            Grant::Recovery(epoch) => {
+                self.recovery_epoch
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    == epoch
+            }
+        };
         if !current {
             self.requeue_restore(id).await?;
         }
@@ -612,7 +627,7 @@ impl Manager {
             self.reset_overload_recovery();
         }
         for agent in &stopped {
-            self.notify_protection_stop(agent, protection).await;
+            self.notify_protection_stop(agent).await;
         }
         stopped
     }
@@ -637,6 +652,7 @@ impl Manager {
         if let Err(error) = &handoff {
             log!("overload recovery handoff not saved: {error:#}");
         }
+        let protection = restored_after(protection, turn);
         agent.overload = Some(protection.clone());
         // The monitor holds an operation, so no update can take the lock.
         agent.update_hold = self.background_operations.clone().try_read_owned().ok();
@@ -647,14 +663,16 @@ impl Manager {
             workspace: agent.workspace.clone(),
             recover: agent.recover,
             handoff_saved: handoff.is_ok(),
+            protection,
         })
     }
 
-    async fn notify_protection_stop(&self, agent: &StoppedAgent, protection: &Protection) {
+    async fn notify_protection_stop(&self, agent: &StoppedAgent) {
         let StoppedAgent {
             id,
             name,
             workspace,
+            protection,
             ..
         } = agent;
         let recovery = if !agent.recover {
@@ -707,6 +725,20 @@ pub(crate) struct StoppedAgent {
     pub workspace: String,
     recover: bool,
     handoff_saved: bool,
+    /// What its automatic restore waits for.
+    protection: Protection,
+}
+
+/// The `protection` an agent stopped in `turn` restores after: one stopped
+/// between turns has nothing to do until an update arrives for it.
+fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protection {
+    match turn {
+        Some(AgentState::Idle) => Protection {
+            reason: protection.reason.clone(),
+            resumes_when: "an update arrives for it".into(),
+        },
+        _ => protection.clone(),
+    }
 }
 
 /// What a paused agent's process check concluded.
