@@ -4,6 +4,7 @@
 //! primitives. Commands never name a host; adding one means implementing
 //! [`Host`] and listing it in [`HOSTS`].
 mod background;
+mod closing;
 mod herdr;
 mod zmx;
 
@@ -28,7 +29,8 @@ use crate::{
     model::{Repository, Workspace},
 };
 
-pub(in crate::cli) use herdr::{watch as watch_herdr_tab, worker as herdr_worker};
+pub(in crate::cli) use closing::watch as watch_herdr_tab;
+pub(in crate::cli) use herdr::worker as herdr_worker;
 pub(in crate::cli) use zmx::worker as session_worker;
 
 /// Hosts in the order they claim a terminal; a terminal none of them serves
