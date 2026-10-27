@@ -1,4 +1,5 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
+//! It queues restores unless asked to start them now.
 use crate::{
     cli::{args::WorkspaceTargets, client, context::Context, terminal, ui},
     daemon::{
@@ -20,12 +21,13 @@ use std::{
 };
 
 /// `shoal resume`: the selected workspaces, or every one for `--all` or when
-/// no workspace has stopped work.
+/// no workspace has stopped work. Their restores queue unless `now`.
 pub async fn select(
     ctx: &Context,
     targets: WorkspaceTargets,
     execution: Option<String>,
     discard: bool,
+    now: bool,
 ) -> Result<i32> {
     // The daemon checks that the workspace is below the caller's, which
     // needs the scope token: a process that cleared it stays refused.
@@ -39,6 +41,9 @@ pub async fn select(
     } else {
         ui::select_stopped_workspaces(ctx, targets.workspace).await?
     };
+    if !(discard || now) {
+        return queue_selected(ctx, selected, execution).await;
+    }
     match selected.as_deref() {
         None => run_all(ctx, None, discard).await,
         Some([workspace]) => run(ctx, workspace.clone(), execution, discard).await,
@@ -51,6 +56,52 @@ pub async fn select(
             run_all(ctx, Some(workspaces), discard).await
         }
     }
+}
+
+/// Queue the restores of the `selected` workspaces' stopped agents, of
+/// every workspace's for `None`.
+async fn queue_selected(
+    ctx: &Context,
+    selected: Option<Vec<String>>,
+    execution: Option<String>,
+) -> Result<i32> {
+    match selected.as_deref() {
+        None => queue::queue_all(ctx, stopped_work(ctx, false).await?).await,
+        Some([workspace]) => queue_workspace(ctx, workspace.clone(), execution).await,
+        Some(workspaces) => {
+            ensure!(
+                execution.is_none(),
+                "--execution selects a stopped execution of one workspace"
+            );
+            queue::queue_all(ctx, stopped_in(ctx, workspaces).await?).await
+        }
+    }
+}
+
+/// Queue the restores of `workspace`'s stopped agents, only `execution`'s
+/// when given. With nothing stopped, its last session continues at once,
+/// since only a stopped agent's restore can wait in the queue.
+async fn queue_workspace(
+    ctx: &Context,
+    workspace: String,
+    execution: Option<String>,
+) -> Result<i32> {
+    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    if let Some(execution) = &execution {
+        saved.retain_execution(execution, true);
+    }
+    if saved.is_empty()
+        && execution.is_none()
+        && let Some(last) = LastSession::load(&ctx.paths, &workspace.id)?
+    {
+        return continue_last_session(ctx, &workspace, last).await;
+    }
+    ensure!(
+        !saved.is_empty(),
+        "no stopped agents or commands for this workspace"
+    );
+    queue::queue_all(ctx, vec![(workspace, saved)]).await
 }
 
 /// Restore the stopped agent `execution` of the one workspace `targets`
@@ -96,6 +147,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
         &workspace.id,
         "--execution",
         execution,
+        "--now",
         "--queue-entry",
         &entry.id,
     ]
@@ -485,7 +537,14 @@ async fn run_all(
             outln!("Resume each agent in its own terminal:");
         }
         for (workspace, id) in &listed {
-            let words = ["shoal", "resume", &workspace.name, "--execution", id];
+            let words = [
+                "shoal",
+                "resume",
+                &workspace.name,
+                "--execution",
+                id,
+                "--now",
+            ];
             outln!("  {}", crate::shell::quote(&words));
         }
     })?;
@@ -515,7 +574,7 @@ async fn start_session(
 ) -> Result<Started> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
+    let args = ["resume", &workspace.id, "--execution", id, "--now"].map(OsString::from);
     let reused = terminal::rerun_where_stopped(ctx, &settings, record, &args).await?;
     if single && reused.is_none() {
         return Ok(Started::Here);
@@ -665,6 +724,8 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
     text.push_str("\nRerun the ones that are still needed.");
     Some(text)
 }
+
+mod queue;
 
 #[cfg(test)]
 mod tests;

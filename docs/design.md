@@ -195,7 +195,10 @@ prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers cannot stop executions. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
-without the agent choosing to quit, and the daemon may already be gone. An
+without the agent choosing to quit, and the daemon may already be gone. Unlike a
+manual stop, the agent then comes back on its own through the agent queue: its
+record asks for the restore, which the daemon queues once the execution has
+ended, so agents a reboot interrupted return without a command. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.
@@ -701,6 +704,14 @@ agent when its restored process registers. The entry is keyed by execution, so a
 place and a restart cannot restore it twice; an entry without its wrapper for the
 start grace period is dropped, and cancellation or failure leaves the recovery
 record.
+`shoal resume` queues restores instead of starting every stopped agent at once,
+which overloaded the machine; `--now` starts them at once, as `add --now` does.
+No wrapper waits for such a restore, so the daemon starts it through the queue
+start worker as it starts a launch in an existing workspace, and admits it like
+a launch: its stopped agent holds no slot while it waits, so stopped agents past
+a limit cannot keep each other from restoring. Its entry names the execution
+without referencing its row, which ended with the agent, and leaves the queue
+once the recovery record is gone.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

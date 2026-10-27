@@ -1414,7 +1414,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
         .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
         .collect::<Vec<_>>();
     assert_eq!(saved, [format!("{execution}.recovery.json")]);
-    let resumed = fixture.run(&["resume", "removed"]);
+    let resumed = fixture.run(&["resume", "removed", "--now"]);
     assert!(resumed.status.success(), "{resumed:?}");
     assert!(path.join("resumed").exists());
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
@@ -5100,7 +5100,7 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
         .unwrap();
     }
     fixture.ok(&["done", "finished"]);
-    let all = fixture.ok(&["resume", "--all"]);
+    let all = fixture.ok(&["resume", "--all", "--now"]);
     let agents = all["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{all}");
     assert_eq!(agents[0]["workspace"], "active", "{all}");
@@ -5371,18 +5371,18 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .count();
     assert_eq!(commands, 1);
     // Several agents without a terminal are listed for separate resumes.
-    let all = fixture.ok(&["resume", "--all"]);
+    let all = fixture.ok(&["resume", "--all", "--now"]);
     let agents = all["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 2, "{all}");
     assert!(agents.iter().all(|agent| agent["background"] == false));
     assert!(all["commands"].as_array().unwrap().is_empty());
-    let output = fixture.run(&["resume", "stopped"]);
+    let output = fixture.run(&["resume", "stopped", "--now"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("--execution"));
     for id in &ids {
         assert!(
             fixture
-                .run(&["resume", "stopped", "--execution", id])
+                .run(&["resume", "stopped", "--execution", id, "--now"])
                 .status
                 .success()
         );
@@ -5578,7 +5578,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     )
     .unwrap();
 
-    let output = fixture.run(&["resume", "quarantined", "--execution", execution]);
+    let output = fixture.run(&["resume", "quarantined", "--execution", execution, "--now"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         fs::read_to_string(path.join("restored")).unwrap(),
@@ -21538,7 +21538,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["resume", "--all"])
+            .args(["resume", "--all", "--now"])
             .env("HERDR_ENV", "1")
             .env("HERDR_WORKSPACE_ID", "w1")
             .env("HERDR_TAB_ID", "w1:t1")
@@ -21556,8 +21556,14 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     let resumed = |run: &[String], (_, id, execution): &(String, String, String)| {
         let worker = run[3].split(' ').collect::<Vec<_>>();
         assert_eq!(
-            worker[worker.len() - 4..],
-            ["resume", id.as_str(), "--execution", execution.as_str()]
+            worker[worker.len() - 5..],
+            [
+                "resume",
+                id.as_str(),
+                "--execution",
+                execution.as_str(),
+                "--now"
+            ]
         );
     };
     assert_eq!(calls[0][..4], ["pane", "process-info", "--pane", "w1:p5"]);
@@ -21602,7 +21608,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         .unwrap();
     }
     // Without new tabs, an idle recorded pane is still reused.
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
     assert!(output.status.success(), "{output:?} {transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -21622,7 +21628,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         "[herdr]\nenabled = false\n",
     )
     .unwrap();
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
     assert!(output.status.success(), "{output:?} {transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("Herdr tabs"), "{stdout}");
@@ -23702,7 +23708,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fixture
             .command()
             .env("SHELL", &shell)
-            .args(["resume", "--all"]),
+            .args(["resume", "--all", "--now"]),
         "",
         true,
     );
@@ -23729,7 +23735,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .unwrap();
         assert!(
             send[2].ends_with(&format!(
-                " resume {id} --execution {execution} && exit; exec \"$SHELL\" -l\r"
+                " resume {id} --execution {execution} --now && exit; exec \"$SHELL\" -l\r"
             )),
             "{send:?}"
         );
@@ -24251,6 +24257,62 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
         !fs::read_to_string(&recorded).unwrap().is_empty()
     });
     assert_eq!(fs::read_to_string(&recorded).unwrap(), "text");
+    fixture.ok(&["stop", "second"]);
+}
+
+/// `shoal resume` queues restores, which the daemon starts in detached
+/// sessions as `max_agents` allows, leaving out done workspaces.
+#[test]
+fn resume_queues_restores_that_start_as_agent_slots_free() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'exit 0']\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let mut paths = Vec::new();
+    for name in ["first", "second", "finished"] {
+        let workspace = fixture.add(name);
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            r#"{"agent":"waiter"}"#,
+        )
+        .unwrap();
+        paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
+    }
+    fixture.ok(&["done", "finished"]);
+
+    let queued = fixture.ok(&["resume", "--all"]);
+    let names: Vec<_> = queued["queued"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["first", "second"], "{queued}");
+    wait_until("the first restore", || paths[0].join("restored").exists());
+    // The restored agent takes the only slot, so the second waits.
+    let waiting = fixture.ok(&["work", "--queue"]);
+    assert_eq!(waiting.as_array().unwrap().len(), 1, "{waiting}");
+    assert_eq!(waiting[0]["name"], "second", "{waiting}");
+    assert_eq!(waiting[0]["state"], "queued", "{waiting}");
+    let sent = zmx_calls(&fixture)
+        .into_iter()
+        .find(|call| call.starts_with(&["send".into(), "first".into()]))
+        .unwrap();
+    assert!(
+        sent[2].contains(" --execution first-agent --now --queue-entry "),
+        "{sent:?}"
+    );
+
+    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["rm", "first", "--yes"]);
+    wait_until("the second restore", || paths[1].join("restored").exists());
+    assert!(!paths[2].join("restored").exists());
     fixture.ok(&["stop", "second"]);
 }
 

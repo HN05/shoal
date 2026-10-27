@@ -20,8 +20,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             targets,
             execution,
             discard,
+            now,
             queue_entry: None,
-        } => resume::select(&ctx, targets, execution, discard).await,
+        } => resume::select(&ctx, targets, execution, discard, now).await,
         SessionsCommand::Resume {
             targets,
             execution,
