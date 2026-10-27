@@ -12745,8 +12745,9 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     }
 }
 
-#[test]
-fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
+/// A workspace `proxied` whose Claude goes through a proxy with its key in
+/// `CLIPROXY_TEST_KEY`, and a `claude` that records its arguments.
+fn proxied_claude() -> Fixture {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     let config = home.join(".config/shoal/config.toml");
@@ -12771,6 +12772,35 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         home.join("bin/claude"),
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\n",
     );
+    fixture
+}
+
+#[test]
+#[cfg(not(feature = "proxy"))]
+fn a_build_without_the_proxy_refuses_a_proxied_agent_and_ends_its_execution() {
+    let fixture = proxied_claude();
+    let output = fixture
+        .command()
+        .args(["claude", "proxied"])
+        .env("CLIPROXY_TEST_KEY", "sk-test")
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("built without the proxy feature"),
+        "{stderr}"
+    );
+    assert!(!fixture.root.path().join("claude-args").exists());
+    let status = fixture.ok(&["status", "proxied"]);
+    assert_eq!(status["executions"], serde_json::json!([]), "{status}");
+}
+
+#[test]
+#[cfg(feature = "proxy")]
+fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
+    let fixture = proxied_claude();
+    let home = fixture.root.path();
 
     // Without its key the agent never starts, and its execution ends.
     let output = fixture

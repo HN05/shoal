@@ -28,8 +28,7 @@ pub(super) struct AgentLaunch {
 
 impl AgentLaunch {
     /// Start the agent's proxy, which may take its key from the environment
-    /// the agent runs with: the workspace's `environment` with the agent's
-    /// own over it, else this process's.
+    /// the agent runs with.
     pub(super) async fn start_proxy(
         &mut self,
         environment: &std::collections::BTreeMap<String, OsString>,
@@ -37,17 +36,36 @@ impl AgentLaunch {
         let Some(routed) = &self.routed else {
             return Ok(());
         };
-        let mut configured = environment.clone();
-        configured.extend(self.secrets.environment());
-        let removed = |name: &str| self.environment.remove.contains(name);
-        self.environment.layer(&mut configured, &self.home);
-        let variable = |name: &str| match configured.get(name) {
-            Some(value) => Some(value.clone()),
-            None if removed(name) => None,
-            None => std::env::var_os(name),
-        };
+        let configured = self.configured_environment(environment);
+        let variable = |name: &str| self.variable(&configured, name);
         self.proxy = Some(crate::proxy::start(routed, variable).await?);
         Ok(())
+    }
+
+    /// What the agent's launch adds to this process's environment: the
+    /// workspace's `environment`, the secrets, then the agent's own.
+    fn configured_environment(
+        &self,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> std::collections::BTreeMap<String, OsString> {
+        let mut configured = environment.clone();
+        configured.extend(self.secrets.environment());
+        self.environment.layer(&mut configured, &self.home);
+        configured
+    }
+
+    /// Variable `name` as the agent sees it: as `configured` sets it, else
+    /// as this process has it unless the agent's own environment removes it.
+    fn variable(
+        &self,
+        configured: &std::collections::BTreeMap<String, OsString>,
+        name: &str,
+    ) -> Option<OsString> {
+        match configured.get(name) {
+            Some(value) => Some(value.clone()),
+            None if self.environment.remove.contains(name) => None,
+            None => std::env::var_os(name),
+        }
     }
 
     /// `command` with its proxy placeholders filled in, for an agent that
