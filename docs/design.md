@@ -675,7 +675,11 @@ for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal.
 Automatic restores are typed queue entries ordered with launches, queued when
-the stopped agent's processes are proven stopped. A waiting restore keeps the
+the stopped agent's processes are proven stopped. A restore of an agent stopped
+between turns waits for an update instead, holding no slot and holding back
+nothing, since that agent has nothing to do until one arrives; woken, it is
+admitted like a launch once free disk space has recovered, and an update's
+admission holds through later stops. Any other waiting restore keeps the
 agent's slot, so fixed limits let it take that slot back rather than counting it
 twice, which would deadlock a full machine of stopped agents, while dynamic
 admission measures its load like a new start. Restores also need the recovery

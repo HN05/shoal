@@ -356,7 +356,8 @@ instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
-  agent at a time through its wrapper, newest first, with configurable thresholds
+  agent at a time through its wrapper, the one idle longest first and otherwise
+  the newest, with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
@@ -365,7 +366,10 @@ instead of the PR delivery guidance below.
   and workspace per repeat interval; warnings never stop, clean up or notify.
   Automatic recovery uses built-in Codex and Claude session restore commands or a
 configured command for another agent, plus proven child
-  termination, verified ready workspace ownership and sustained healthy headroom.
+  termination, verified ready workspace ownership and sustained healthy headroom;
+  an agent stopped between turns restores on its next update instead, with free
+  disk space, holding no slot meanwhile once its processes are proven stopped.
+  Unknown turns count as mid-turn.
   The protection stop, and an agent's reported exit, also stop the agent's
   identity-verified processes outside its process group; a wrapper whose stop
   cannot be proven keeps waiting.
