@@ -1,7 +1,7 @@
 //! The daemon's answers to [`QueueMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, bail, ensure};
+use anyhow::Result;
 
 use super::super::{
     agent_queue,
@@ -26,11 +26,7 @@ pub(super) async fn handle(
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add(request).await?)
         }
-        QueueMethod::ListQueue => Body::QueueEntries(if caller.is_some() {
-            Vec::new()
-        } else {
-            manager.queue_entries().await?
-        }),
+        QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue(caller).await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
         QueueMethod::QueueRemove { entry } => Body::QueueEntry(manager.queue_remove(&entry).await?),
         QueueMethod::QueueAttach { entry, workspace } => {
@@ -48,18 +44,7 @@ impl Scoped for QueueMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             QueueMethod::ListQueue => None,
-            QueueMethod::QueueAdd { request } => {
-                let denied =
-                    "workspace processes can start agents only in the workspaces split from theirs";
-                let Some(target) = request.workspace.as_mut() else {
-                    bail!(denied);
-                };
-                ensure!(
-                    manager.workspace(target).await?.id != caller.workspace_id,
-                    denied
-                );
-                Some(target)
-            }
+            QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
             QueueMethod::QueuedPlan { .. }
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueHold { .. }

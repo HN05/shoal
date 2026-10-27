@@ -1,11 +1,11 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 
 use super::Caller;
 use crate::{
     daemon::{approvals::ApprovalRequest, workspace::Manager},
-    model::{Chat, Repository, Workspace, WorkspaceTarget},
+    model::{Chat, QueueEntry, QueueRequest, Repository, Workspace, WorkspaceTarget},
     repository::Selector,
 };
 
@@ -96,6 +96,30 @@ impl Manager {
             Some(_) => Ok(Vec::new()),
             None => self.chats().await,
         }
+    }
+
+    /// The agent queue `caller` may see: none for a workspace process.
+    pub(in crate::daemon) async fn visible_queue(
+        &self,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<QueueEntry>> {
+        match caller {
+            Some(_) => Ok(Vec::new()),
+            None => self.queue_entries().await,
+        }
+    }
+
+    /// The workspace `request` starts an agent in, which must be one below
+    /// the caller's.
+    pub(in crate::daemon) async fn queue_target<'a>(
+        &self,
+        caller: &Caller,
+        request: &'a mut QueueRequest,
+    ) -> Result<&'a mut String> {
+        const REFUSAL: &str =
+            "workspace processes can start agents only in the workspaces split from theirs";
+        let target = request.workspace.as_mut().context(REFUSAL)?;
+        self.workspace_below(caller, target, REFUSAL).await
     }
 
     /// The caller's own repository, which `repository` must select.
