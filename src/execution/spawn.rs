@@ -44,8 +44,8 @@ impl AgentLaunch {
 
     /// Run the restored agent, with the workspace's `environment`, through
     /// `proxy`, which its restore command was resolved with: the one running
-    /// when it is the same, otherwise a new one, or none. Whether a new one
-    /// started, which then needs its turns reported.
+    /// when it is the same, otherwise a new one, or none. Whether it changed,
+    /// so what the old one reported no longer holds.
     pub(super) async fn restart_proxy(
         &mut self,
         proxy: Option<crate::proxy::Proxy>,
@@ -57,7 +57,7 @@ impl AgentLaunch {
         self.routed = proxy;
         self.proxy = None;
         self.start_proxy(environment).await?;
-        Ok(self.proxy.is_some())
+        Ok(true)
     }
 
     /// What the agent's launch adds to this process's environment: the
@@ -195,5 +195,6 @@ fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) 
         .env(env::EXECUTION_ID, &plan.id);
 }
 
-#[cfg(test)]
+// Its tests run the proxy, which only that feature builds.
+#[cfg(all(test, feature = "proxy"))]
 mod tests;

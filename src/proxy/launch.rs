@@ -60,6 +60,29 @@ impl Running {
     }
 }
 
+/// Tell the daemon to forget what the proxy of `execution` in `workspace`
+/// reported once another replaces it or none runs: the retry it waited to
+/// make and its upstream's reset. A report that fails leaves them to the
+/// execution's end.
+pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execution: &str) {
+    use crate::protocol::AgentMethod;
+    let reports = [
+        AgentMethod::ReportProxyRetry {
+            workspace: workspace.to_owned(),
+            execution: execution.to_owned(),
+            retry: None,
+        },
+        AgentMethod::ReportUpstreamReset {
+            workspace: workspace.to_owned(),
+            execution: execution.to_owned(),
+            resets_at: None,
+        },
+    ];
+    for report in reports {
+        let _ = crate::cli::client::call(paths, report).await;
+    }
+}
+
 /// Reports a proxied agent's ended turns to the daemon.
 #[cfg(feature = "proxy")]
 struct Reporter {

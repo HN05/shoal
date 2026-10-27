@@ -25,7 +25,6 @@ fn launch(home: &std::path::Path) -> AgentLaunch {
 }
 
 #[tokio::test]
-#[cfg(feature = "proxy")]
 async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
@@ -66,7 +65,8 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
         format!("{error:#}").contains("MISSING_PROXY_KEY"),
         "{error:#}"
     );
-    // Removing it stops it.
-    assert!(!launch.restart_proxy(None, &environment).await.unwrap());
+    // Removing it stops it, which changes it too.
+    assert!(launch.restart_proxy(None, &environment).await.unwrap());
     assert!(launch.proxy.is_none());
+    assert!(!launch.restart_proxy(None, &environment).await.unwrap());
 }
