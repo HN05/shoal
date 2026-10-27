@@ -4,6 +4,7 @@ use anyhow::{Context as _, Result};
 use super::{
     agent::ResolvedAddAgent,
     plan::{AddPlan, Creation},
+    queue::failing_entry,
     target::AddTarget,
 };
 use crate::{
@@ -36,13 +37,7 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         None => Ok(None),
     };
     // A queued start reports a failed lookup as it reports any other failure.
-    let issue = match (issue, &plan.queue_entry) {
-        (Err(error), Some(entry)) => {
-            agent_queue::fail(ctx, entry, &error).await;
-            return Err(error);
-        }
-        (issue, _) => issue?,
-    };
+    let issue = failing_entry(ctx, plan.queue_entry.as_deref(), issue).await?;
     execute_add_with_target(ctx, plan, target, issue).await
 }
 
@@ -57,10 +52,7 @@ pub(super) async fn execute_add_with_target(
     };
     let _hold = agent_queue::Hold::start(&ctx.paths, &entry).await;
     let result = add_planned(ctx, plan, target, issue).await;
-    if let Err(error) = &result {
-        agent_queue::fail(ctx, &entry, error).await;
-    }
-    result
+    failing_entry(ctx, Some(&entry), result).await
 }
 
 async fn add_planned(

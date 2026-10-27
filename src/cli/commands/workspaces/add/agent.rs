@@ -48,12 +48,20 @@ impl From<StoredAddAgent> for ResolvedAddAgent {
 
 /// The repository's effective settings, loaded on first use.
 pub(super) struct AddSettings<'a> {
-    pub(super) ctx: &'a Context,
-    pub(super) repository: &'a crate::repository::Selector,
-    pub(super) effective: tokio::sync::OnceCell<crate::config::Effective>,
+    ctx: &'a Context,
+    repository: &'a crate::repository::Selector,
+    effective: tokio::sync::OnceCell<crate::config::Effective>,
 }
 
-impl AddSettings<'_> {
+impl<'a> AddSettings<'a> {
+    pub(super) fn new(ctx: &'a Context, repository: &'a crate::repository::Selector) -> Self {
+        Self {
+            ctx,
+            repository,
+            effective: tokio::sync::OnceCell::new(),
+        }
+    }
+
     async fn get(&self) -> Result<&crate::config::Effective> {
         self.effective
             .get_or_try_init(|| {
@@ -98,6 +106,20 @@ pub(super) async fn choose_add_agent(
         agents::ensure_available(agent.name(), settings.get().await?)?;
     }
     Ok(AgentChoice::Chosen(agent))
+}
+
+/// A picked issue defaults its agent as `--issue` does.
+pub(super) async fn choose_for_picked_issue(
+    settings: &AddSettings<'_>,
+    agent: AgentChoice,
+    picked: bool,
+) -> Result<AgentChoice> {
+    match agent {
+        AgentChoice::PickerIfInteractive if picked => {
+            choose_add_agent(settings, AgentLaunch::IssueDefault(None)).await
+        }
+        agent => Ok(agent),
+    }
 }
 
 pub(super) async fn resolve_add_agent(

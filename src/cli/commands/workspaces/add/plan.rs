@@ -6,8 +6,13 @@ use anyhow::Result;
 use super::{agent::ResolvedAddAgent, target::AddTarget};
 use crate::{
     agent::Agent,
-    cli::{client::request, commands::issues, context::Context, terminal::PlaceName},
-    git,
+    cli::{
+        client::request,
+        commands::{issues, repositories},
+        context::Context,
+        terminal::PlaceName,
+    },
+    env, git,
     model::Workspace,
     protocol::WorkspaceMethod,
 };
@@ -25,6 +30,15 @@ pub(in crate::cli) struct Creation {
 }
 
 impl Creation {
+    /// The creation with its path resolved against the current directory.
+    pub(super) fn absolute(mut self, ctx: &Context) -> Result<Self> {
+        self.path = self
+            .path
+            .map(|path| repositories::absolute(ctx, path))
+            .transpose()?;
+        Ok(self)
+    }
+
     /// Build a new branch on `base`, the branch of a done dependency, unless
     /// the addition names its own base or opens an existing branch.
     pub(in crate::cli::commands) fn build_on(&mut self, base: Option<String>) {
@@ -32,6 +46,37 @@ impl Creation {
             self.base = base;
         }
     }
+}
+
+/// The plan to add `creation` in the chat this runs in, if any, starting
+/// `agent` with the found `issue` or with `args`.
+pub(super) async fn plan_addition(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: Creation,
+    issue: Option<&issues::Issue>,
+    agent: ResolvedAddAgent,
+    args: Vec<OsString>,
+) -> Result<AddPlan> {
+    let place_name = match issue {
+        Some(issue) => Some(PlaceName::new(
+            None,
+            target.repository(ctx).await?,
+            Some(issue),
+        )),
+        None => None,
+    };
+    Ok(AddPlan {
+        repository: target.selector.clone(),
+        creation,
+        place_name,
+        issue: issue.map(|issue| issue.url.clone()),
+        agent,
+        args,
+        queue_entry: None,
+        chat: env::chat(),
+        workspace: None,
+    })
 }
 
 /// The workspace name `creation` will derive. An existing branch opens under

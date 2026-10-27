@@ -69,6 +69,21 @@ pub(super) async fn pick_add_source(
     Ok(None)
 }
 
+/// Look the addition's issue up before any other picker or handoff, so its
+/// failures end there.
+pub(super) async fn load_add_issue(
+    ctx: &Context,
+    target: &AddTarget,
+    input: Option<String>,
+) -> Result<Option<issues::Issue>> {
+    match input {
+        Some(input) => Ok(Some(
+            issues::load(ctx, target.repository(ctx).await?, &input).await?,
+        )),
+        None => Ok(None),
+    }
+}
+
 pub(super) async fn select_add_creation(
     ctx: &Context,
     target: &AddTarget,
