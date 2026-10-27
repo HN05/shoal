@@ -424,10 +424,12 @@ impl Session {
 /// otherwise in the background, unless the `focus` setting says otherwise.
 /// Returns whether it left this process; a focused launch without a new tab
 /// stays here, where its agent runs in a session this terminal attaches to.
-/// `name` is the planned workspace name.
+/// `name` is the planned workspace name; `focus` focuses the start whatever
+/// the `focus` setting says.
 pub(in crate::cli) async fn start_add(
     ctx: &Context,
     settings: &Effective,
+    focus: bool,
     plan: &mut AddPlan,
     issue: Option<&Issue>,
     name: &str,
@@ -437,7 +439,8 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let placement = Placement::choose(settings.focus, !plan.runs_unattended());
+    let focus = focus.then_some(true).or(settings.focus);
+    let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, settings, host, plan, issue).await?;
     let worker = add_worker_argv(ctx, settings, host)?;
     let started = host

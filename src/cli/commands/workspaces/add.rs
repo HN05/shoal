@@ -80,7 +80,7 @@ pub(in crate::cli::commands) async fn add(
     if let Some(queued) = admit(ctx, &target, &mut plan, issue.as_ref(), &options, after).await? {
         return Ok(queued);
     }
-    let handoff = start_beside(ctx, &target, &mut plan, issue.as_ref(), options).await;
+    let handoff = start_beside(ctx, &target, &settings, &mut plan, issue.as_ref(), options).await;
     if failing_entry(ctx, plan.queue_entry.as_deref(), handoff).await? {
         return Ok(0);
     }

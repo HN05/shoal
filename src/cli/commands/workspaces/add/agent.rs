@@ -62,7 +62,7 @@ impl<'a> AddSettings<'a> {
         }
     }
 
-    async fn get(&self) -> Result<&crate::config::Effective> {
+    pub(super) async fn get(&self) -> Result<&crate::config::Effective> {
         self.effective
             .get_or_try_init(|| {
                 client::settings(

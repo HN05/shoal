@@ -3,6 +3,7 @@ use anyhow::Result;
 
 use super::{
     AddOptions,
+    agent::AddSettings,
     plan::{AddPlan, planned_workspace_name},
     target::AddTarget,
 };
@@ -16,6 +17,7 @@ use crate::{
 pub(super) async fn start_beside(
     ctx: &Context,
     target: &AddTarget,
+    settings: &AddSettings<'_>,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
     options: AddOptions,
@@ -23,16 +25,9 @@ pub(super) async fn start_beside(
     if options.here || !ctx.interactive() {
         return Ok(false);
     }
-    let mut settings = client::settings(
-        &ctx.paths,
-        ConfigTarget::Repository(plan.repository.clone()),
-    )
-    .await?;
-    if options.focus {
-        settings.focus = Some(true);
-    }
+    let settings = settings.get().await?;
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;
-    terminal::start_add(ctx, &settings, plan, issue, &name).await
+    terminal::start_add(ctx, settings, options.focus, plan, issue, &name).await
 }
 
 /// Start an admitted queue entry's plan in the background where `shoal add`
