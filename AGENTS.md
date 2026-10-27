@@ -146,15 +146,16 @@ when behavior changes, distinguishing decisions from proposals.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.
-- `doctor` reports by default; repair preserves work and resource leases.
-  Startup audits ownership and never deletes work, and the cleanup sweep readies a
+- Problems show where the user looks (`inbox`, `alerts`, `status`, the failing
+  command's error) and name the command that fixes them; repair preserves work
+  and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
   workspace the audit failed once its ownership verifies; the daemon clears an unknown
   execution only when a saved agent stop and a process scan prove it ended.
   Verify native PID birth identity before signaling survivors; unknown ownership
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live
   processes. Verify recorded Git metadata identity before exec/removal; moved or
   replaced worktrees are not adopted automatically, only reclaimed at their
-  recorded path when a human adopts that path again (or `doctor --reclaim`). Use the shared removal path
+  recorded path when a human adopts that path again. Use the shared removal path
   for deleted-worktree cleanup and retain its branch; never forget a moved one.
 - Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces there by default,
   explicit workspace paths must not overlap state, checkouts, or other ownership.

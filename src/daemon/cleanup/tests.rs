@@ -63,10 +63,8 @@ fn health_reports_failing_and_stalled_cleanup() {
         at: after(seconds),
         unix: unix + seconds + slept,
     };
-    assert_eq!(health.check(start).status, CheckStatus::Ok);
     assert_eq!(health.problem(start), None);
     let stalled = start + STALLED_AFTER;
-    assert_eq!(health.check(stalled).status, CheckStatus::Error);
     assert!(
         health
             .problem(stalled)
@@ -76,7 +74,7 @@ fn health_reports_failing_and_stalled_cleanup() {
 
     assert_eq!(health.record(moment(30, 0), &Ok(())), None);
     assert_eq!(health.record(moment(60, 3600), &Ok(())), None);
-    assert_eq!(health.check(after(90)).status, CheckStatus::Ok);
+    assert_eq!(health.problem(after(90)), None);
 
     let failed = Err(anyhow::anyhow!("completion cleanup: disk is full"));
     assert_eq!(
@@ -90,28 +88,13 @@ fn health_reports_failing_and_stalled_cleanup() {
     );
     health.failure.as_mut().unwrap().notified = true;
     assert_eq!(health.record(moment(150, 3600), &failed), None);
-    let check = health.check(after(150));
-    assert_eq!(check.status, CheckStatus::Error);
-    assert!(
-        check.message.contains("failed 3 consecutive passes"),
-        "{}",
-        check.message
-    );
-    assert!(check.message.ends_with("completion cleanup: disk is full"));
-    assert!(
-        health
-            .problem(after(150))
-            .unwrap()
-            .ends_with("completion cleanup: disk is full")
-    );
+    let problem = health.problem(after(150)).unwrap();
+    assert!(problem.contains("failed 3 consecutive passes"), "{problem}");
+    assert!(problem.ends_with("completion cleanup: disk is full"));
 
     assert_eq!(health.record(moment(180, 3600), &Ok(())), None);
-    assert_eq!(health.check(after(180)).status, CheckStatus::Ok);
     assert_eq!(health.problem(after(180)), None);
-    assert_eq!(
-        health.check(after(180) + STALLED_AFTER).status,
-        CheckStatus::Error
-    );
+    assert!(health.problem(after(180) + STALLED_AFTER).is_some());
 }
 
 #[tokio::test]
@@ -140,12 +123,15 @@ async fn failing_passes_notify_once_and_show_in_status() {
         notifications[0].message,
         "automatic cleanup failed: completion cleanup: disk is full"
     );
-    assert_eq!(manager.cleanup_check().status, CheckStatus::Error);
     let status = manager.workspace_status(&workspace.id).await.unwrap();
-    assert!(status.cleanup_error.unwrap().contains("failing since"));
+    assert!(
+        status
+            .cleanup_error
+            .unwrap()
+            .contains("failed 2 consecutive passes since")
+    );
 
     manager.record_sweep(Ok(())).await;
-    assert_eq!(manager.cleanup_check().status, CheckStatus::Ok);
     let status = manager.workspace_status(&workspace.id).await.unwrap();
     assert_eq!(status.cleanup_error, None);
 }

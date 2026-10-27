@@ -1,9 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
-use super::Recheck;
+use super::Change;
 use crate::{
     config::Config,
-    daemon::doctor::CheckStatus,
     forge::{ForgeRepo, backends::ForgeKind, hosts::HostType},
 };
 
@@ -72,25 +71,13 @@ async fn reloaded_pins_reach_link_parsing_and_removed_ones_leave_it() {
 }
 
 #[test]
-fn only_a_changed_answer_reads_as_a_change() {
-    let changed = Recheck::Changed {
+fn a_change_names_the_host_and_both_forges() {
+    let change = Change {
         from: ForgeKind::GitHub,
         to: ForgeKind::GitLab,
     };
     assert_eq!(
-        changed.change("ghe.example"),
+        change.message("ghe.example"),
         "ghe.example now answers as gitlab instead of github; Shoal uses gitlab from now on"
-    );
-    assert_eq!(changed.check("ghe.example").status, CheckStatus::Warning);
-    // A host Shoal cannot reach keeps its answer: a doctor warning, no change.
-    let failed = Recheck::Failed {
-        recorded: ForgeKind::GitHub,
-        error: "offline".into(),
-    };
-    assert_eq!(failed.check("ghe.example").status, CheckStatus::Warning);
-    assert!(failed.change("ghe.example").is_empty());
-    assert_eq!(
-        Recheck::Same(ForgeKind::GitHub).check("ghe.example").status,
-        CheckStatus::Ok
     );
 }

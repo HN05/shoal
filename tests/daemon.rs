@@ -14,10 +14,7 @@ mod support;
 use std::{
     fs,
     io::Write,
-    os::unix::{
-        fs::PermissionsExt,
-        net::{UnixListener, UnixStream},
-    },
+    os::unix::{fs::PermissionsExt, net::UnixStream},
     path::Path,
     process::{Output, Stdio},
     sync::{
@@ -817,105 +814,6 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     run(&["daemon", "stop"]);
     run(&["daemon", "start"]);
     run(&["daemon", "stop"]);
-}
-
-fn doctor_report(root: &Path) -> Value {
-    let output = command(root)
-        .args(["--json", "doctor", "--all", "--repair"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(2), "{output:?}");
-    serde_json::from_slice(&output.stdout).unwrap()
-}
-
-#[test]
-fn doctor_reports_a_stopped_daemon_without_creating_state() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let report = doctor_report(root.path());
-    assert!(
-        report["checks"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("stopped or unreachable")
-    );
-    let skipped: Vec<_> = report["checks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|check| check["status"] == "skipped")
-        .map(|check| check["name"].as_str().unwrap())
-        .collect();
-    assert_eq!(
-        skipped,
-        [
-            "dependency:git",
-            "dependency:wt",
-            "dependency:lsof",
-            "dependency:zmx",
-            "dependency:fzf",
-            "cleanup",
-            "root_dir",
-            "checkout:*",
-            "forge:*",
-            "worktrees:*",
-            "workspaces"
-        ]
-    );
-    assert_eq!(report["checks"][1]["status"], "skipped");
-    assert_eq!(report["workspaces"], json!([]));
-    assert!(!root.path().join("state").exists());
-}
-
-#[test]
-fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
-    for malformed in [false, true] {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
-        let _daemon = IncompatibleDaemon::listen(root.path(), malformed);
-        let report = doctor_report(root.path());
-        assert_eq!(report["checks"][0]["status"], "error");
-        assert_eq!(report["checks"][1]["status"], "skipped");
-    }
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let _daemon = IncompatibleDaemon::with_version(root.path(), false, true);
-    let report = doctor_report(root.path());
-    assert!(
-        report["checks"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Daemon version 0.0.0 differs")
-    );
-    assert_eq!(report["checks"][1]["status"], "skipped");
-
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    fs::create_dir(root.path().join("state")).unwrap();
-    let _listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
-    let report = doctor_report(root.path());
-    assert!(
-        report["checks"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("timed out")
-    );
-}
-
-#[test]
-fn doctor_checks_the_daemon_path_even_when_the_cli_has_dependencies() {
-    let empty = tempfile::tempdir().unwrap();
-    let daemon = Daemon::with_path(Some(empty.path()));
-    let report = doctor_report(daemon.root.path());
-    assert_eq!(report["checks"][0]["status"], "ok");
-    for name in ["git", "wt", "lsof", "zmx", "fzf"] {
-        let check = report["checks"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|c| c["name"] == format!("dependency:{name}"))
-            .unwrap();
-        assert_eq!(
-            check["status"],
-            if name == "fzf" { "warning" } else { "error" }
-        );
-    }
 }
 
 #[test]

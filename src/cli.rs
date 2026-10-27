@@ -223,8 +223,7 @@ impl Command {
     pub fn is_administrative(&self) -> bool {
         matches!(
             self,
-            Command::Diagnostics(DiagnosticsCommand::Doctor { .. })
-                | Command::Create(CreateCommand::Contribute(_))
+            Command::Create(CreateCommand::Contribute(_))
                 | Command::Workspace(WorkspaceCommand::Work {
                     command: Some(WorkCommand::Setup { skip: true, .. }),
                     ..

@@ -190,15 +190,11 @@ fn happy_takes_the_agents_happy_runs() {
 }
 
 #[test]
-fn doctor_replaces_reconcile_without_an_alias() {
+fn doctor_is_gone_without_an_alias() {
     use clap::CommandFactory;
     let command = Cli::command();
-    assert!(command.find_subcommand("doctor").is_some());
+    assert!(command.find_subcommand("doctor").is_none());
     assert!(command.find_subcommand("reconcile").is_none());
-    for flag in ["--stop", "--acknowledge-stopped", "--reclaim"] {
-        assert!(Cli::try_parse_from(["shoal", "doctor", flag]).is_err());
-        assert!(Cli::try_parse_from(["shoal", "doctor", "--repair", flag]).is_ok());
-    }
 }
 
 #[test]

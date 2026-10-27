@@ -136,7 +136,7 @@ stopped child's identity only after verifying the stop. Live wrappers are
 rechecked when they exit; one that reattaches with its command running discards
 a `stopping` record, whose stop never arrived. Survivors and incomplete evidence
 keep the execution, are rechecked periodically so it clears once they exit, and
-are the only outcome that notifies; `shoal doctor` inspects them, and
+are the only outcome that notifies; `shoal stop` names them, and
 `shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 `shoal restart` restarts agents in place through the same wrapper path, so the
@@ -1034,8 +1034,7 @@ cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo.
 Asking leaves out the tokens gh and glab read from the environment for any
 host, so a host that may be another forge never receives them. The daemon records
 each answer in its state and asks recorded hosts again when it starts or
-reloads its config, recording a changed answer with an alert, and from `doctor`,
-which otherwise changes no state without `--repair`. A host it cannot reach then
+reloads its config, recording a changed answer with an alert. A host it cannot reach then
 keeps its answer and raises no alert, since a machine may start offline; a global `[forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
@@ -1262,7 +1261,8 @@ for the rest: a seeded issue template froze the default for whoever had a copy,
 and instructions for issue work belong in the worker template. That template was
 the agent template, a name that read as one per AI tool although it applies to
 every workspace agent. A retired or renamed setting still loads; `config show`
-warns about it in every layer and `doctor` in the global config.
+warns about it in every layer, and the daemon alerts about one in the global
+config when it starts or reloads its config.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
@@ -1626,20 +1626,21 @@ registered workspaces are excluded from idle cleanup until cleared or removed.
 An invalid record retains its workspace without blocking cleanup of others.
 A failed sweep step does not skip the others.
 Background loops restart after a panic, and a failed daemon log write never stops them.
-Failing or stalled cleanup shows in `doctor` and workspace status and notifies once
-per run of failed passes.
+Failing or stalled cleanup shows in workspace status and notifies once per run of
+failed passes.
 
-`doctor` reports current issues by default, falling back to the recorded
-failure and repair guidance; repair restores verified worktrees and clears
-executions proven stopped while preserving work and leases. Added
-environment and untracked-worktree checks are diagnosis only; the inbox lists
-untracked worktrees too, skipping a repository whose Git gate is busy. The daemon
-checks its own PATH using the shared executable catalog and Git worktree
-registrations under owned repository roots, and records an alert for each
-environment problem when it starts or reloads its config, so the user learns of
-one without running a diagnostic;
-the CLI diagnoses daemon health before requesting workspace checks and checks
-shell integration locally, including when the daemon is unavailable. Opening
+There is no diagnostic command: each problem shows where the user looks and names
+the command that resolves it. A failing command's error says what to run, `inbox`
+lists failed workspaces and untracked worktrees (skipping a repository whose Git
+gate is busy), and the daemon checks its PATH with the shared executable catalog,
+`root_dir`, checkouts, the global config and recorded forge hosts when it starts
+or reloads its config, recording an alert for each problem. Repair is a request
+the commands that need it send: `work adopt` reclaims, `work setup --skip`
+accepts a failed setup, and both restore verified worktrees and clear executions
+proven stopped while preserving work and leases; `stop` stops survivors and asks
+before forgetting an execution it cannot prove ended. Every other command reports
+an unreachable or mismatched daemon itself, and `shoal cd` says when shell
+integration is not loaded. Opening
 persistence only migrates schema. Under the daemon lock, startup then atomically
 quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
@@ -1674,7 +1675,7 @@ worktrees stay unresolved until restored. Any other ownership failure is
 recoverable by explicit reclaim, which a human requests after checking the
 worktree by adopting its recorded path again: it re-marks a linked worktree of the recorded repository at the
 recorded path on the recorded branch that no other workspace owns, then
-repairs normally. It is never automatic, and scoped callers cannot run doctor. A deleted directory means
+repairs normally. It is never automatic, and scoped callers cannot request it. A deleted directory means
 the user removed the worktree: the cleanup sweep forgets it through the shared
 removal path, releasing its leases and retaining its branch, unless it has
 commands Shoal cannot verify stopped.

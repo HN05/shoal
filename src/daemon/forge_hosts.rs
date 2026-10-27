@@ -9,10 +9,7 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     config::forges::{self, Forges},
-    daemon::{
-        doctor::{Check, CheckStatus},
-        workspace::Manager,
-    },
+    daemon::{log, workspace::Manager},
     forge::{
         ForgeRepo,
         backends::ForgeKind,
@@ -36,51 +33,17 @@ impl HostTypes for ForgeHosts<'_> {
 /// A recorded answer: the host, its forge, and the scheme it was asked over.
 type Recorded = (String, ForgeKind, String);
 
-/// What asking a recorded host again found.
-pub(crate) enum Recheck {
-    /// The global config pins the host, so it was not asked.
-    Pinned(ForgeKind),
-    Same(ForgeKind),
-    /// The host now serves another forge, which Shoal uses from now on.
-    Changed {
-        from: ForgeKind,
-        to: ForgeKind,
-    },
-    /// The host could not be asked, so Shoal keeps the recorded forge.
-    Failed {
-        recorded: ForgeKind,
-        error: String,
-    },
+/// A recorded host that now serves another forge, which Shoal uses from now on.
+pub(crate) struct Change {
+    from: ForgeKind,
+    to: ForgeKind,
 }
 
-impl Recheck {
-    /// What it means for the user, as a doctor check of `host`.
-    fn check(&self, host: &str) -> Check {
-        let name = forge_check_name(host);
-        match self {
-            Self::Pinned(kind) => Check::new(
-                name,
-                CheckStatus::Ok,
-                format!("Pinned to {kind} by the global config"),
-            ),
-            Self::Same(kind) => Check::new(name, CheckStatus::Ok, format!("Answers as {kind}")),
-            Self::Changed { .. } => Check::new(name, CheckStatus::Warning, self.change(host)),
-            Self::Failed { recorded, error } => Check::new(
-                name,
-                CheckStatus::Warning,
-                format!("Could not ask it again, so Shoal keeps using {recorded}: {error}"),
-            ),
-        }
-    }
-
-    /// How the host's forge changed, naming it.
-    pub(crate) fn change(&self, host: &str) -> String {
-        match self {
-            Self::Changed { from, to } => {
-                format!("{host} now answers as {to} instead of {from}; Shoal uses {to} from now on")
-            }
-            _ => String::new(),
-        }
+impl Change {
+    /// What changed for `host`, for the user.
+    pub(crate) fn message(&self, host: &str) -> String {
+        let Self { from, to } = self;
+        format!("{host} now answers as {to} instead of {from}; Shoal uses {to} from now on")
     }
 }
 
@@ -214,45 +177,42 @@ impl Manager {
             .await
     }
 
-    /// Ask every recorded host again as doctor checks.
-    pub(crate) async fn forge_host_checks(&self) -> Result<Vec<Check>> {
-        Ok(self
-            .recheck_forge_hosts()
-            .await?
-            .iter()
-            .map(|(host, recheck)| recheck.check(host))
-            .collect())
-    }
-
-    /// Ask every recorded host again, recording each new answer; a pinned
-    /// host is not asked.
-    pub(crate) async fn recheck_forge_hosts(&self) -> Result<Vec<(String, Recheck)>> {
+    /// Ask every recorded host again, recording each new answer, and return
+    /// the hosts whose forge changed; a pinned host is not asked.
+    pub(crate) async fn recheck_forge_hosts(&self) -> Result<Vec<(String, Change)>> {
         let recorded = self.recorded_forge_hosts().await?;
-        Ok(futures_util::future::join_all(recorded.into_iter().map(
+        let rechecked = futures_util::future::join_all(recorded.into_iter().map(
             |(host, kind, scheme)| async move {
-                let recheck = self.recheck_forge_host(&host, kind, &scheme).await;
-                (host, recheck)
+                let change = self.recheck_forge_host(&host, kind, &scheme).await;
+                change.map(|change| (host, change))
             },
         ))
-        .await)
+        .await;
+        Ok(rechecked.into_iter().flatten().collect())
     }
 
-    async fn recheck_forge_host(&self, host: &str, recorded: ForgeKind, scheme: &str) -> Recheck {
-        if let Some(kind) = self.config().forges.pinned(host) {
-            return Recheck::Pinned(kind);
+    /// A host Shoal cannot reach keeps the forge it answered before.
+    async fn recheck_forge_host(
+        &self,
+        host: &str,
+        recorded: ForgeKind,
+        scheme: &str,
+    ) -> Option<Change> {
+        if self.config().forges.pinned(host).is_some() {
+            return None;
         }
         let scheme = if scheme == "http" { "http" } else { "https" };
         let _gate = self.lock_forge_host(host).await;
         match self.ask_forge_type(host, scheme).await {
-            Ok(kind) if kind == recorded => Recheck::Same(kind),
-            Ok(kind) => Recheck::Changed {
+            Ok(kind) if kind != recorded => Some(Change {
                 from: recorded,
                 to: kind,
-            },
-            Err(error) => Recheck::Failed {
-                recorded,
-                error: format!("{error:#}"),
-            },
+            }),
+            Ok(_) => None,
+            Err(error) => {
+                log!("{host} not asked again; keeping {recorded}: {error:#}");
+                None
+            }
         }
     }
 }
@@ -264,10 +224,6 @@ pub(super) fn learn_forge_pins(previous: &Forges, pins: &Forges) {
     if pins != previous {
         hosts::pin(pins.pins());
     }
-}
-
-pub fn forge_check_name(host: &str) -> String {
-    format!("forge:{host}")
 }
 
 #[cfg(test)]

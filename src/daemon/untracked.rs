@@ -39,27 +39,6 @@ impl OwnedWorktrees {
             })
             .map(|tree| tree.path.as_path())
     }
-
-    /// Warnings for the seed path when Shoal did not create it and for each
-    /// untracked Git worktree under `root`.
-    pub(super) fn problems(
-        &self,
-        checkout: &Path,
-        root: &Path,
-        trees: &[git::Worktree],
-    ) -> Vec<String> {
-        let seed_path = self.seed.worktree();
-        let foreign_seed = (seed_path.symlink_metadata().is_ok() && !self.verified_seed).then(|| {
-            format!(
-                "Seed path is not Shoal's seed worktree; Shoal will neither rebuild nor remove it: {}",
-                seed_path.display()
-            )
-        });
-        let untracked = self
-            .untracked(checkout, root, trees)
-            .map(|path| format!("Git worktree is not tracked by Shoal: {}", path.display()));
-        foreign_seed.into_iter().chain(untracked).collect()
-    }
 }
 
 impl Manager {

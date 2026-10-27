@@ -30,8 +30,7 @@ pub(super) async fn handle(
                 .restore_checkpoint(&workspace, checkpoint, caller)
                 .await?,
         ),
-        RecoveryMethod::Diagnose => Body::Diagnostics(manager.diagnose().await?),
-        RecoveryMethod::Doctor { workspace, options } => Body::Doctor(
+        RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
                 .reconcile_workspaces(workspace.as_deref(), options)
                 .await?,
@@ -45,7 +44,7 @@ impl Scoped for RecoveryMethod {
             RecoveryMethod::Checkpoint { workspace, .. }
             | RecoveryMethod::Checkpoints { workspace, .. }
             | RecoveryMethod::RestoreCheckpoint { workspace, .. } => Some(workspace),
-            RecoveryMethod::Diagnose | RecoveryMethod::Doctor { .. } => return Err(denied()),
+            RecoveryMethod::Reconcile { .. } => return Err(denied()),
         })
     }
 }

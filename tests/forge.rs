@@ -392,34 +392,14 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     assert_eq!(linked["registered"], true, "{linked}");
     keys(&fixture);
 
-    // Doctor asks the host again and keeps its answer when it cannot.
-    let forge_check = |fixture: &Fixture| {
-        let output = fixture.run(&["--json", "doctor"]);
-        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
-        report["checks"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|check| check["name"] == "forge:ghe.invalid")
-            .cloned()
-            .unwrap()
-    };
-    let check = forge_check(&fixture);
-    assert_eq!(
-        (&check["status"], &check["message"]),
-        (&json!("ok"), &json!("Answers as github"))
-    );
-    assert_eq!(keys(&fixture), ["GET meta"]);
+    // Each reload asks the host again, also when it cannot answer, which
+    // keeps the forge it answered before.
+    let asked = |fixture: &Fixture| keys(fixture).contains(&json!("GET meta"));
+    fixture.ok(&["daemon", "reload"]);
+    support::wait::wait_until("the host asked again", || asked(&fixture));
     fixture.respond(json!({}));
-    let check = forge_check(&fixture);
-    assert_eq!(check["status"], "warning");
-    assert!(
-        check["message"]
-            .as_str()
-            .unwrap()
-            .starts_with("Could not ask it again, so Shoal keeps using github"),
-        "{check}"
-    );
+    fixture.ok(&["daemon", "reload"]);
+    support::wait::wait_until("the host asked again", || asked(&fixture));
 }
 
 #[test]

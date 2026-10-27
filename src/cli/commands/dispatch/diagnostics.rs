@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::diagnostics::{AlertsCommand, DiagnosticsCommand},
-    commands::{notifications, recovery},
+    commands::notifications,
     context::Context,
 };
 
@@ -37,20 +37,5 @@ pub(in crate::cli::commands) async fn run(
             limit,
             ..
         } => notifications::list(&ctx, all, keep_unread, limit).await,
-        DiagnosticsCommand::Doctor {
-            scope,
-            repair,
-            stop,
-            acknowledge_stopped,
-            reclaim,
-        } => {
-            let options = crate::daemon::recovery::ReconcileOptions {
-                repair,
-                stop,
-                acknowledge_stopped,
-                reclaim,
-            };
-            recovery::run(&ctx, scope, options).await
-        }
     }
 }

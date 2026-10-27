@@ -54,8 +54,4 @@ impl Tool {
             .copied()
             .filter_map(|tool| tool.dependency().map(|dependency| (tool, dependency)))
     }
-
-    pub fn check_name(self) -> String {
-        format!("dependency:{}", self.program())
-    }
 }

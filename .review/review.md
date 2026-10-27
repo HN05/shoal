@@ -44,7 +44,7 @@ instead of the PR delivery guidance below.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
   after it still matches; missing proofs never establish ownership.
-  Only an explicit reclaim (`work adopt` of the recorded path, or `doctor --repair --reclaim`) may
+  Only an explicit reclaim (`work adopt` of the recorded path) may
   re-establish ownership that failed verification, and only at the recorded path,
   repository and branch. Automatic recovery only readies a workspace the startup
   audit failed once its ownership verifies again; it never accepts another failure,
@@ -63,9 +63,8 @@ instead of the PR delivery guidance below.
   removing one with any of them is a blocker.
   Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted
-  entries. Doctor environment and untracked-worktree
-  checks diagnose only, including when repair is requested; dependency checks use
-  the shared executable catalog.
+  entries. Environment checks and the untracked-worktree listing only report,
+  as alerts and inbox items; dependency checks use the shared executable catalog.
 - `[env]` layers per variable from saved repository config, worktree, global,
   then default. Tracked executions, hooks and workspace exports substitute known
   workspace and reserved-port fields once without shell or recursive expansion;
@@ -88,8 +87,9 @@ instead of the PR delivery guidance below.
   lifecycle and permit changes and is not replayed on restart. Agent-exit hooks
   expose tracked agent exits while ready, including disconnects, without changing
   the exit result or marking completion; removal uses its own hooks.
-- Doctor reports current issues before falling back to the recorded
-  failure and repair guidance; repair remains an explicit choice.
+- Every problem names the command that resolves it; repairing a workspace
+  remains an explicit choice except readying one the startup audit failed once
+  its ownership verifies.
 - Scope: tracked executions and externally launched processes with exported
   environments carry a scope token and get access to their own worktree and the
   child workspaces split from it, recursively, only (CLI refusals also follow ancestry
@@ -207,8 +207,8 @@ instead of the PR delivery guidance below.
   by a pinned `[forges."<host>"] type`, a well-known host name, or else the
   host's own answer to each forge's version or metadata endpoint, asked with
   only the logins saved for that host and never gh's or glab's environment
-  tokens, which the daemon records so the host is asked once and `doctor` asks
-  again; a pasted link of a host not yet resolved is classified by its pin,
+  tokens, which the daemon records so the host is asked once and asks again
+  when it starts or reloads its config; a pasted link of a host not yet resolved is classified by its pin,
   else by the forge its routes name.
   A request needing a capability the forge's backend does not declare is
   refused with the typed `Unsupported` error before anything is sent; per-forge

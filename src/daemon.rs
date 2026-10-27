@@ -14,7 +14,6 @@ pub mod cleanup;
 mod connections;
 pub(crate) mod cpu_usage;
 mod disk;
-pub mod doctor;
 pub mod environment;
 pub mod events;
 mod execution_connection;

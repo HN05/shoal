@@ -1,7 +1,5 @@
-//! Arguments of `shoal alerts` and `shoal doctor`.
+//! Arguments of `shoal alerts`.
 use clap::Subcommand;
-
-use crate::cli::args::WorkspaceScope;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -26,23 +24,6 @@ pub enum DiagnosticsCommand {
         resume: Option<i64>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
         limit: u32,
-    },
-    /// Diagnose Shoal and its workspaces; optionally repair verified state.
-    Doctor {
-        #[command(flatten)]
-        scope: WorkspaceScope,
-        /// Apply safe state repairs; preserve files, branches, and resource leases.
-        #[arg(long)]
-        repair: bool,
-        /// Stop connected commands and identity-verified surviving processes.
-        #[arg(long, requires = "repair")]
-        stop: bool,
-        /// Confirm untracked/legacy processes have stopped; visible survivors still block repair.
-        #[arg(long, requires = "repair")]
-        acknowledge_stopped: bool,
-        /// Confirm the worktree at the recorded path is this workspace's; re-establish its ownership.
-        #[arg(long, requires = "repair")]
-        reclaim: bool,
     },
 }
 

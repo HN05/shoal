@@ -322,7 +322,7 @@ async fn reconcile_stale_execution(
     }
     let reports = client::request::<Vec<Report>>(
         &ctx.paths,
-        RecoveryMethod::Doctor {
+        RecoveryMethod::Reconcile {
             workspace: Some(inspection.workspace.id.clone()),
             options: ReconcileOptions {
                 repair: true,

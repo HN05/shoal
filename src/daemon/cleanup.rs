@@ -16,11 +16,7 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     daemon::{
-        caches::Emptying,
-        doctor::{Check, CheckStatus},
-        events::EventCause,
-        log,
-        notifications::NotificationKind,
+        caches::Emptying, events::EventCause, log, notifications::NotificationKind,
         workspace::Manager,
     },
     model::{CleanupReason, Workspace},
@@ -37,7 +33,7 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// loop is stuck or has stopped.
 const STALLED_AFTER: Duration = Duration::from_secs(10 * 60);
 
-/// The outcome of recent passes, reported by doctor and workspace status.
+/// The outcome of recent passes, which workspace status reports.
 pub struct Health {
     started: Moment,
     finished: Option<Moment>,
@@ -81,41 +77,12 @@ impl Default for Health {
 }
 
 impl Health {
-    fn check(&self, now: Instant) -> Check {
-        let (status, message) = if let Some(failure) = &self.failure {
-            (
-                CheckStatus::Error,
-                format!(
-                    "Automatic cleanup failed {} consecutive passes since {}: {}",
-                    failure.passes,
-                    local_seconds(failure.since as i64),
-                    failure.error
-                ),
-            )
-        } else if self.stalled(now) {
-            (CheckStatus::Error, self.stalled_message())
-        } else if let Some(finished) = self.finished {
-            (
-                CheckStatus::Ok,
-                format!(
-                    "Automatic cleanup last finished a pass at {}",
-                    local_seconds(finished.unix as i64)
-                ),
-            )
-        } else {
-            (
-                CheckStatus::Ok,
-                "Automatic cleanup has not finished its first pass yet".to_owned(),
-            )
-        };
-        Check::new("cleanup", status, message)
-    }
-
     /// A short description of a failing or stalled loop for workspace status.
     fn problem(&self, now: Instant) -> Option<String> {
         if let Some(failure) = &self.failure {
             Some(format!(
-                "Automatic cleanup failing since {}: {}",
+                "Automatic cleanup failed {} consecutive passes since {}: {}",
+                failure.passes,
                 local_seconds(failure.since as i64),
                 failure.error
             ))
@@ -171,10 +138,6 @@ impl Manager {
         self.cleanup_health
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-    }
-
-    pub fn cleanup_check(&self) -> Check {
-        self.cleanup_health().check(Instant::now())
     }
 
     /// Why automatic cleanup is not working, if it is not.

@@ -532,7 +532,7 @@ conflicts, each CI check's result, and a review state from each reviewer's lates
 approval or change request. A failed lookup reports its error on that item
 without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
-status says so in `cleanup_error` and `doctor` reports the error. Status also
+status says so in `cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
 open questions, a pending PR proposal, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
@@ -1209,7 +1209,8 @@ names `agent_template` and `agent-template.md` still work; one level setting
 both names fails. `config show` warns for each layer that holds instructions of
 yours in a retired template, uses a former name, or has a worker template
 repeating the opening of Shoal's guidance, as a copy of an earlier default
-does; `doctor` gives these warnings for the global config only.
+does; the daemon alerts about these in the global config when it starts or
+reloads its config.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
 followed by the worker template, which holds only your additions and cannot
@@ -1264,7 +1265,7 @@ a verified ready workspace; it cannot repair a moved managed worktree.
 At a workspace's recorded path, when its worktree exists but Shoal cannot verify
 it owns it, adoption reclaims it: check the worktree yourself first, since adopting
 it re-marks a linked worktree of the recorded repository on the recorded branch
-that no other workspace owns, then repairs as `doctor --repair` does. A failed
+that no other workspace owns, then restores the verified worktree to ready. A failed
 setup is not an ownership failure; adoption refuses it.
 
 Adoption preserves commits, dirty files, and Git settings without fetching, setup,
@@ -1829,8 +1830,7 @@ the workspace starts without the seed.
 Removing the repository or its `[seed]` stops a running build and deletes the
 seed worktree, snapshot and log, keeping anything else in `.seed`. Shoal marks
 `.seed` and the seed worktree's Git metadata with the repository, and neither
-builds in nor deletes a seed whose marks are missing; `doctor` reports such a
-`.seed/worktree`. Point outputs a tool keeps
+builds in nor deletes a seed whose marks are missing. Point outputs a tool keeps
 outside the worktree at a path inside it, such as
 `xcodebuild -derivedDataPath build/DerivedData`, so workspace removal deletes them
 too.
@@ -2117,7 +2117,7 @@ Server and self-hosted GitLab need the CLI logged in to the host: asking sends
 only a login saved for that host, never a token such as `GH_ENTERPRISE_TOKEN` or
 `GITLAB_TOKEN` that the CLI would send to any host. The daemon asks recorded hosts
 again when it starts or reloads its config, and records an alert when one now
-answers as another forge; `shoal doctor` asks them too. A host that answers as none of them fails until you
+answers as another forge. A host that answers as none of them fails until you
 set its type, which also stops Shoal asking it:
 
 ```toml
@@ -3015,46 +3015,42 @@ Bash, Zsh, Fish, PowerShell, and Elvish.
 ### Recovery
 
 ```sh
-shoal doctor fix-login                  # Report only
-shoal --json doctor --all
-shoal doctor fix-login --repair         # Repair verified state, retain work and leases
-shoal doctor fix-login --repair --stop  # Also stop verified surviving commands
-shoal doctor fix-login --repair --reclaim  # Re-establish ownership after checking the worktree
+shoal inbox                         # Failed workspaces and untracked worktrees, with their fix
+shoal alerts                        # Problems the daemon found when it started or reloaded
+shoal stop fix-login                # Stop survivors; asks before forgetting an unprovable execution
+shoal work setup fix-login --skip   # Accept a failed setup
+shoal work rename fix-login topic   # Finish an interrupted rename, then rename
+shoal work adopt <path>             # Reclaim a worktree at its recorded path after checking it
 ```
 
-Exit 2 while findings or incomplete checks remain, 0 when clear. JSON contains
-`checks` and `workspaces`. Environment checks cover daemon reachability and
-version, executable `git`, `wt`, `lsof`, `zmx`, and `fzf` (for interactive pickers) on
-the daemon's PATH, whether the daemon can create a file in `root_dir`,
-registered checkouts whose Git config sets `core.bare`
-although they have a working tree, Git worktrees under registered repository
-roots that Shoal does not track, and shell integration in the calling shell.
-Each forge host the daemon recorded is asked again which API it serves
-(`forge:<host>`): a new answer replaces the recorded one, and a host that
-cannot be asked keeps it with a warning; a host whose type is set in
-`[forges]` is not asked. They run regardless of the workspace selection and
-otherwise only diagnose, even with `--repair`. An unavailable or mismatched
-daemon leaves its checks marked as skipped (`dependency:<tool>`, `checkout:*`,
-`forge:*` and `worktrees:*` when repository names are unavailable); doctor
-never starts or restarts it.
-When current checks find no issues, reports show the recorded failure and repair guidance.
-`doctor` is unavailable inside scoped executions. Before accepting requests or
+Each problem shows where you look and names the command that resolves it. When
+the daemon starts and when `daemon reload` rereads its config, it checks that
+`git`, `wt`, `lsof` and `zmx` are executable on its PATH, that it can create a
+file in `root_dir`, which registered checkouts set `core.bare` although they have
+a working tree, which retired settings the global config has, and which forge each
+recorded host serves, asking it again unless `[forges]` sets its type. Each
+problem becomes an `environment_problem` alert; a missing optional tool such as
+`fzf` raises none, and a host that cannot be asked keeps its answer. The inbox lists
+Git worktrees under registered repository roots that Shoal does not track. A
+command that cannot reach a matching daemon says so itself, and `shoal cd` says
+when shell integration is not loaded.
+
+Before accepting requests or
 running cleanup, daemon startup atomically marks unfinished simulator cleans
 interrupted, transient lifecycle operations failed, and disconnected executions
 unknown until their wrappers reattach, then audits worktrees without deleting files or releasing leases.
 A workspace the audit failed, such as one on a volume that mounted late, becomes
 ready again once the cleanup sweep finds its ownership verified; other failures,
-such as a failed setup, wait for you. Repair restores verified
-worktrees to ready and clears executions proven stopped; connected commands keep
-running unless `--stop`. Moved worktrees must return to their recorded path,
-and a deleted directory is forgotten by the next
+such as a failed setup, wait for you. Repair, as `work adopt` and
+`work setup --skip` request it, restores verified worktrees to ready and clears
+executions proven stopped, preserving work and leases. Moved worktrees must return
+to their recorded path, and a deleted directory is forgotten by the next
 cleanup sweep or `shoal rm`, retaining the branch. Ownership is proven by a
 `shoal-workspace` marker in the worktree's Git admin directory, so it survives
 reboots, device renumbering and restores. Workspaces recorded before markers
-gain one once their recorded filesystem identity verifies at startup or with
-`doctor --repair`. When neither proof verifies ownership, check the worktree at
-the recorded path yourself and [adopt it](#adopting-a-worktree) again, or add
-`--reclaim`.
+gain one once their recorded filesystem identity verifies at startup or on
+repair. When neither proof verifies ownership, check the worktree at the
+recorded path yourself and [adopt it](#adopting-a-worktree) again.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
@@ -3074,9 +3070,9 @@ binaries, such as shells, which then count as their nearest ancestor with a
 readable environment does, or as unreadable when launchd adopted them after
 their parent exited. Setup verification failures retain the workspace
 and report the command's exit status, blocking PIDs or inspection error, and
-recovery commands. `doctor` identifies unreadable PIDs without exposing their
-arguments or environments. After checking
-yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
+recovery commands. `shoal stop` names unreadable PIDs without exposing their
+arguments or environments, and asks you to confirm that an execution without a
+launch record ended; visible live processes still block.
 
 ### Scoped workspace commands
 

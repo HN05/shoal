@@ -31,7 +31,6 @@ mod notifications;
 mod plan;
 mod ports;
 mod questions;
-mod recovery;
 mod repo_menu;
 mod repo_migrate;
 mod repo_setup;

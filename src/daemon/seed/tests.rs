@@ -96,13 +96,9 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         fs::read_to_string(seed.join("tracked")).unwrap(),
         "initial\nedit\n"
     );
-    let checks = manager.diagnose().await.unwrap();
-    assert!(
-        !checks
-            .iter()
-            .any(|check| check.message.contains("not tracked by Shoal")),
-        "{checks:?}"
-    );
+    // Shoal's own seed worktree is never listed as untracked.
+    let untracked = manager.untracked_worktrees().await.unwrap();
+    assert!(untracked.is_empty(), "{untracked:?}");
 
     manager.remove_repository(&repo.id).await.unwrap();
     assert!(!layout.root().exists());
@@ -318,13 +314,6 @@ async fn removal_keeps_a_seed_worktree_shoal_did_not_create() {
     let layout = Layout::of(&repo).unwrap();
     fs::create_dir_all(layout.worktree()).unwrap();
     fs::write(layout.worktree().join("keep"), "user data").unwrap();
-    let checks = manager.diagnose().await.unwrap();
-    assert!(
-        checks.iter().any(|check| check
-            .message
-            .contains("Seed path is not Shoal's seed worktree")),
-        "{checks:?}"
-    );
     let error = manager.remove_repository(&repo.id).await.unwrap_err();
     assert!(
         format!("{error:#}").contains("not the seed worktree"),

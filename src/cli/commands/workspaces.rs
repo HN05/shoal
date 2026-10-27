@@ -1345,7 +1345,7 @@ async fn reconcile(
 ) -> Result<Vec<Report>> {
     request(
         &ctx.paths,
-        RecoveryMethod::Doctor {
+        RecoveryMethod::Reconcile {
             workspace: Some(workspace.id.clone()),
             options,
         },
@@ -1619,7 +1619,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
 async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let reports = request::<Vec<Report>>(
         &ctx.paths,
-        RecoveryMethod::Doctor {
+        RecoveryMethod::Reconcile {
             workspace: Some(workspace.id.clone()),
             options: ReconcileOptions {
                 repair: true,

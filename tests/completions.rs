@@ -65,7 +65,7 @@ COMP_WORDS=(shoal codex --c); COMP_CWORD=2; COMP_LINE='shoal codex --c'; COMP_PO
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal codex --a); COMP_CWORD=2; COMP_LINE='shoal codex --a'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal doctor --re); COMP_CWORD=2; COMP_LINE='shoal doctor --re'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal resume --di); COMP_CWORD=2; COMP_LINE='shoal resume --di'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 "#, "completion-test"])
         .arg(&script).output().unwrap();
@@ -75,7 +75,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
         String::from_utf8_lossy(&output.stderr)
     );
     let output = String::from_utf8(output.stdout).unwrap();
-    for expected in ["codex", "--cli", "--app", "--repair"] {
+    for expected in ["codex", "--cli", "--app", "--discard"] {
         assert!(
             output.lines().any(|line| line == expected),
             "missing {expected}: {output}"
@@ -356,47 +356,6 @@ _clap_dynamic_completer_shoal
         text.lines().any(|line| line.starts_with("--yes:")),
         "{text}"
     );
-}
-
-#[test]
-fn doctor_detects_integration_in_the_calling_shell_without_a_daemon() {
-    let home = tempfile::tempdir_in("/tmp").unwrap();
-    let script = home.path().join("init.sh");
-    fs::write(&script, generate(home.path(), &["shell", "init"])).unwrap();
-    let bin = Path::new(env!("CARGO_BIN_EXE_shoal")).parent().unwrap();
-    for shell in ["bash", "zsh"] {
-        for loaded in [false, true] {
-            let command = if loaded {
-                r#"source "$1"; shoal --json doctor --all"#
-            } else {
-                "shoal --json doctor --all"
-            };
-            let output = support::isolated(home.path(), shell)
-                .args(["-f", "-c", command, "doctor-test"])
-                .arg(&script)
-                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
-                .output()
-                .unwrap();
-            assert_eq!(output.status.code(), Some(2), "{shell}: {output:?}");
-            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-            let check = report["checks"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|c| c["name"] == "shell_integration")
-                .unwrap();
-            assert_eq!(check["status"], if loaded { "ok" } else { "warning" });
-            if !loaded {
-                assert!(
-                    check["message"]
-                        .as_str()
-                        .unwrap()
-                        .contains("source <(shoal shell init)")
-                );
-            }
-        }
-    }
-    assert!(!home.path().join("state").exists());
 }
 
 #[test]

@@ -42,7 +42,6 @@ fn migrated_enums_preserve_spellings_and_defaults() {
         config::repo::ConflictPolicy,
         daemon::{
             approvals::{DecisionStatus, Lifetime},
-            doctor::CheckStatus,
             recovery::DirectoryState,
             resources::{LockMode, ResourceKind},
             workspace::ExecutionKind,
@@ -78,12 +77,6 @@ fn migrated_enums_preserve_spellings_and_defaults() {
         (DirectoryState::Missing, "missing"),
         (DirectoryState::Moved, "moved"),
         (DirectoryState::Unverified, "unverified"),
-    ]);
-    assert_spellings(&[
-        (CheckStatus::Ok, "ok"),
-        (CheckStatus::Warning, "warning"),
-        (CheckStatus::Error, "error"),
-        (CheckStatus::Skipped, "skipped"),
     ]);
     assert_spellings(&[(CodexMode::Cli, "cli"), (CodexMode::App, "app")]);
     assert_spellings(&[

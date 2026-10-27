@@ -128,9 +128,8 @@ const REQUESTS: &[&str] = &[
     r#"{"ci_run_job_log":{"workspace":"fix","run":"12","job":{"name":"rust"}}}"#,
     r#"{"list_ci_runs":{"workspace":"fix","filter":{"branch":null,"workflow":"ci.yml","limit":10}}}"#,
     r#"{"start_ci_run":{"workspace":"fix","workflow":null,"branch":null,"inputs":{"level":"high"}}}"#,
-    // Diagnostics.
-    r#""diagnose""#,
-    r#"{"doctor":{"workspace":null,"options":{"repair":true,"stop":false,"acknowledge_stopped":false,"reclaim":false}}}"#,
+    // Reconciliation.
+    r#"{"reconcile":{"workspace":null,"options":{"repair":true,"stop":false,"acknowledge_stopped":false,"reclaim":false}}}"#,
     // Notifications and messages.
     r#"{"list_notifications":{"unread_only":true,"limit":20}}"#,
     r#"{"mark_notifications_read":{"ids":[1,2]}}"#,

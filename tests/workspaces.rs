@@ -598,14 +598,14 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
         assert!(
             String::from_utf8_lossy(&rejected.stderr).contains("reserved by an unfinished rename")
         );
-        let report = recovery_report(&fixture, &["doctor", id]);
+        let report = recovery_report(&fixture, &[id]);
         assert!(
             report[0]["issues"]
                 .to_string()
                 .contains("unfinished rename")
         );
         if branch == "unrelated" {
-            let report = recovery_report(&fixture, &["doctor", id, "--repair"]);
+            let report = recovery_report(&fixture, &[id, "--repair"]);
             assert!(
                 report[0]["issues"]
                     .to_string()
@@ -620,9 +620,9 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             git(path, &["branch", "-m", "original"]);
         }
         let repair_args = if branch == "new/topic" {
-            vec!["doctor", id, "--repair", "--reclaim"]
+            vec![id, "--repair", "--reclaim"]
         } else {
-            vec!["doctor", id, "--repair"]
+            vec![id, "--repair"]
         };
         repaired_workspaces(&fixture, &repair_args);
         let inspection = fixture.ok(&["status", id]);
@@ -1779,7 +1779,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .all(|(i, _)| i > target)
     );
     // `--all` comes once, before a scope's workspaces, until it is typed.
-    let choices = complete(&["doctor", ""], fixture.root.path());
+    let choices = complete(&["resume", ""], fixture.root.path());
     assert_eq!(choices[0], "--all", "{choices:?}");
     assert!(choices.contains(&"first".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
@@ -2955,7 +2955,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
             "main",
         ],
     );
-    let report = recovery_report(&fixture, &["doctor", "reserved", "--repair"]);
+    let report = recovery_report(&fixture, &["reserved", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
     assert!(report[0]["issues"].to_string().contains("ownership"));
     let removal = fixture.run(&["rm", "reserved", "--yes"]);
@@ -5798,7 +5798,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     use std::{ffi::CString, os::unix::process::CommandExt};
 
     let fixture = Fixture::new();
-    let workspace = fixture.add("available");
+    fixture.add("available");
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
     let picked = fixture.root.path().join("picked");
@@ -5806,13 +5806,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     // Bash reports getcwd failures at startup if the picker inherits a deleted cwd.
     install_test_script(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n");
 
-    for (args, interactive, expect_report) in [
-        (vec!["doctor"], true, true),
-        (vec!["--json", "doctor"], false, false),
-        (vec!["--json", "doctor", "available"], false, true),
-        (vec!["--json", "doctor", "--all"], false, true),
-        (vec!["rm", "--yes"], true, true),
-    ] {
+    for args in [vec!["status"], vec!["rm", "--yes"]] {
         let deleted = fixture.root.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
         let path = CString::new(deleted.as_os_str().as_encoded_bytes()).unwrap();
@@ -5829,52 +5823,27 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
             });
         }
         let (mut master, slave) = pty::open();
-        if interactive {
-            command
-                .stdin(slave.try_clone().unwrap())
-                .stderr(slave.try_clone().unwrap());
-        }
+        command
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave.try_clone().unwrap());
         let output = command.output().unwrap();
         drop(command);
         drop(slave);
-        assert!(matches!(output.status.code(), Some(0 | 2)), "{output:?}");
+        assert!(output.status.success(), "{output:?}");
         assert!(output.stderr.is_empty(), "{output:?}");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        if interactive {
-            use std::io::Read;
-            let mut transcript = String::new();
-            let _ = master.read_to_string(&mut transcript);
-            assert!(transcript.is_empty(), "{transcript}");
-            if args[0] == "doctor" {
-                assert!(stdout.contains("available: ready"), "{stdout}");
-            } else {
-                assert!(stdout.contains("Workspace removed"), "{stdout}");
-                assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
-            }
-            assert!(!stdout.contains("Could not check workspaces"), "{stdout}");
-            assert_eq!(fs::read_to_string(&picked).unwrap().trim(), "/");
-            fs::remove_file(&picked).unwrap();
+        use std::io::Read;
+        let mut transcript = String::new();
+        let _ = master.read_to_string(&mut transcript);
+        assert!(transcript.is_empty(), "{transcript}");
+        if args[0] == "status" {
+            assert!(stdout.starts_with("available "), "{stdout}");
         } else {
-            let report: Value = serde_json::from_str(&stdout).unwrap();
-            assert!(!picked.exists());
-            if expect_report {
-                assert_eq!(report["workspaces"][0]["workspace"]["id"], workspace["id"]);
-            } else {
-                assert_eq!(report["workspaces"], serde_json::json!([]));
-                let check = report["checks"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|check| check["name"] == "workspaces")
-                    .unwrap();
-                assert!(
-                    check["message"]
-                        .as_str()
-                        .unwrap()
-                        .contains("explicit target")
-                );
-            }
+            assert!(stdout.contains("Workspace removed"), "{stdout}");
+            assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
         }
+        assert_eq!(fs::read_to_string(&picked).unwrap().trim(), "/");
+        fs::remove_file(&picked).unwrap();
     }
 }
 
@@ -10014,32 +9983,30 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
 }
 
 #[test]
-fn doctor_daemon_reports_a_bare_flag_on_a_checkout_with_a_working_tree() {
+fn the_daemon_alerts_about_a_bare_flag_on_a_checkout_with_a_working_tree() {
     let fixture = Fixture::new();
     fixture.add("owned");
-    let checkout_findings = || {
-        let response = fixture.request_with_id(2, serde_json::json!("diagnose"));
-        response["data"]
+    git(&fixture.repo, &["config", "core.bare", "true"]);
+    fixture.ok(&["daemon", "reload"]);
+    let mut message = String::new();
+    wait_until("the core.bare alert", || {
+        let alerts = fixture.ok(&["alerts", "--all", "--keep-unread"]);
+        message = alerts
             .as_array()
             .unwrap()
             .iter()
-            .filter(|c| c["name"].as_str().unwrap().starts_with("checkout:"))
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(checkout_findings()[0]["status"], "ok");
-
-    git(&fixture.repo, &["config", "core.bare", "true"]);
-    let findings = checkout_findings();
-    assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0]["status"], "warning");
-    let message = findings[0]["message"].as_str().unwrap();
-    assert!(message.contains("core.bare=true"), "{message}");
+            .filter(|event| event["kind"] == "environment_problem")
+            .filter_map(|event| event["message"].as_str())
+            .find(|message| message.contains("core.bare=true"))
+            .unwrap_or_default()
+            .to_owned();
+        !message.is_empty()
+    });
     assert!(message.contains("config core.bare false"), "{message}");
 }
 
 #[test]
-fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
+fn the_inbox_lists_untracked_worktrees_under_shoal_directories_only() {
     let fixture = Fixture::new();
     let owned = fixture.add("owned");
     let owned_path = Path::new(owned["path"].as_str().unwrap());
@@ -10052,21 +10019,22 @@ fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
         );
     }
     fs::write(orphan.join("dirty"), "keep me").unwrap();
-    let response = fixture.request_with_id(2, serde_json::json!("diagnose"));
-    assert_eq!(response["type"], "diagnostics");
-    let findings: Vec<_> = response["data"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|c| c["name"].as_str().unwrap().starts_with("worktrees:"))
-        .collect();
-    assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0]["status"], "warning");
-    assert!(
-        findings[0]["message"]
-            .as_str()
+    // A listing skips a repository whose Git gate a background task holds.
+    let mut paths = Vec::new();
+    wait_until("the untracked worktree in the inbox", || {
+        paths = fixture
+            .ok(&["inbox"])
+            .as_array()
             .unwrap()
-            .contains(orphan.to_str().unwrap())
+            .iter()
+            .filter(|item| item["kind"] == "untracked")
+            .map(|item| item["worktree"]["path"].as_str().unwrap().to_owned())
+            .collect();
+        !paths.is_empty()
+    });
+    assert_eq!(
+        paths,
+        [fs::canonicalize(&orphan).unwrap().to_str().unwrap()]
     );
     assert_eq!(fs::read_to_string(orphan.join("dirty")).unwrap(), "keep me");
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
@@ -10085,14 +10053,34 @@ fn repaired_workspaces(fixture: &Fixture, args: &[&str]) -> Value {
     reports
 }
 
+/// The daemon's reconciliation reports, as `work adopt` and `work setup --skip`
+/// request them: `args` name the workspace, or none for all, and the options
+/// as flags (`--repair`, `--stop`, `--acknowledge-stopped`, `--reclaim`).
 fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
-    let output = fixture.command().arg("--json").args(args).output().unwrap();
-    assert!(
-        matches!(output.status.code(), Some(0 | 2)),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice::<Value>(&output.stdout).unwrap()["workspaces"].take()
+    let mut workspace = None;
+    let mut options = serde_json::json!({
+        "repair": false, "stop": false, "acknowledge_stopped": false, "reclaim": false
+    });
+    for arg in args {
+        match *arg {
+            "--repair" => options["repair"] = true.into(),
+            "--stop" => options["stop"] = true.into(),
+            "--acknowledge-stopped" => options["acknowledge_stopped"] = true.into(),
+            "--reclaim" => options["reclaim"] = true.into(),
+            // Every workspace, as when none is named.
+            "--all" => {}
+            name => workspace = Some(name),
+        }
+    }
+    let root = fixture.root.path();
+    let request = serde_json::json!({
+        "protocol": support::daemon_client::protocol(root),
+        "id": 1,
+        "method": {"reconcile": {"workspace": workspace, "options": options}},
+    });
+    let response = support::daemon_client::exchange(root, &request);
+    assert_eq!(response["type"], "reconciled", "{response}");
+    response["data"].clone()
 }
 
 #[test]
@@ -10204,7 +10192,7 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
 }
 
 #[test]
-fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
+fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("interrupted");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -10222,10 +10210,8 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
         fixture.ok(&["status", "interrupted"])["workspace"]["state"],
         "failed"
     );
-    let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
+    let preview = recovery_report(&fixture, &["interrupted"]);
     assert_eq!(preview[0]["directory"], "valid");
-    let human = fixture.run(&["doctor", "interrupted"]);
-    assert!(String::from_utf8_lossy(&human.stdout).contains("interrupted: failed (valid)"));
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
     assert!(issue.contains("--repair"));
@@ -10238,14 +10224,14 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
         [],
     )
     .unwrap();
-    let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
+    let preview = recovery_report(&fixture, &["interrupted"]);
     assert!(
         preview[0]["issues"][0]
             .as_str()
             .unwrap()
             .contains("--repair")
     );
-    let repaired = repaired_workspaces(&fixture, &["doctor", "interrupted", "--repair"]);
+    let repaired = repaired_workspaces(&fixture, &["interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
     assert_eq!(
         fs::read_to_string(path.join("uncommitted")).unwrap(),
@@ -10260,25 +10246,10 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
         resource
     );
     assert!(
-        repaired_workspaces(&fixture, &["doctor", "interrupted", "--repair"])[0]["changes"]
+        repaired_workspaces(&fixture, &["interrupted", "--repair"])[0]["changes"]
             .as_array()
             .unwrap()
             .is_empty()
-    );
-    assert!(
-        !fixture
-            .run(&[
-                "run",
-                "--workspace",
-                "interrupted",
-                "--",
-                env!("CARGO_BIN_EXE_shoal"),
-                "doctor",
-                "--all",
-                "--repair"
-            ])
-            .status
-            .success()
     );
 }
 
@@ -10330,7 +10301,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     );
     // A marker naming another workspace is never accepted.
     fs::write(&marker, "another-workspace\n").unwrap();
-    let report = recovery_report(&fixture, &["doctor", "marked", "--repair"]);
+    let report = recovery_report(&fixture, &["marked", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
     assert!(
         report[0]["issues"]
@@ -10422,7 +10393,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
 }
 
 #[test]
-fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
+fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("reclaimed");
     let other = fixture.add("other");
@@ -10443,48 +10414,25 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
         fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
-    let preview = recovery_report(&fixture, &["doctor", "reclaimed"]);
+    let preview = recovery_report(&fixture, &["reclaimed"]);
     assert!(preview[0]["issues"].to_string().contains("--reclaim"));
-    let report = recovery_report(&fixture, &["doctor", "reclaimed", "--repair"]);
+    let report = recovery_report(&fixture, &["reclaimed", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
-    assert!(
-        !fixture
-            .run(&["doctor", "reclaimed", "--reclaim"])
-            .status
-            .success()
-    );
     // Reclaim still requires the recorded branch and metadata no one else owns.
     git(path, &["switch", "-q", "-c", "elsewhere"]);
-    let refused = recovery_report(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    let refused = recovery_report(&fixture, &["reclaimed", "--repair", "--reclaim"]);
     assert!(refused[0]["issues"].to_string().contains("recorded branch"));
     assert_eq!(refused[0]["workspace"]["state"], "failed");
     git(path, &["switch", "-q", "reclaimed"]);
     fs::write(&marker, format!("{}\n", other["id"].as_str().unwrap())).unwrap();
-    let refused = recovery_report(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    let refused = recovery_report(&fixture, &["reclaimed", "--repair", "--reclaim"]);
     assert!(
         refused[0]["issues"]
             .to_string()
             .contains("already owned by other")
     );
     fs::remove_file(&marker).unwrap();
-    assert!(
-        !fixture
-            .run(&[
-                "run",
-                "--workspace",
-                "other",
-                "--",
-                env!("CARGO_BIN_EXE_shoal"),
-                "doctor",
-                "reclaimed",
-                "--repair",
-                "--reclaim"
-            ])
-            .status
-            .success()
-    );
-    let reclaimed =
-        repaired_workspaces(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    let reclaimed = repaired_workspaces(&fixture, &["reclaimed", "--repair", "--reclaim"]);
     assert_eq!(reclaimed[0]["workspace"]["state"], "ready");
     assert!(reclaimed[0]["changes"].to_string().contains("Reclaimed"));
     assert_eq!(
@@ -10543,7 +10491,7 @@ fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
             elsewhere.to_str().unwrap(),
         ],
     );
-    let report = recovery_report(&fixture, &["doctor", "moved", "--repair"]);
+    let report = recovery_report(&fixture, &["moved", "--repair"]);
     assert!(
         report[0]["issues"]
             .to_string()
@@ -10602,9 +10550,9 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(saved["state"], "failed");
             assert_eq!(saved["git_dir_id"], legacy);
         }
-        recovery_report(&fixture, &["doctor", name]);
+        recovery_report(&fixture, &[name]);
         assert_eq!(fixture.ok(&["status", name])["workspace"], saved);
-        let report = recovery_report(&fixture, &["doctor", name, "--repair"]);
+        let report = recovery_report(&fixture, &[name, "--repair"]);
         if name == "renumbered" {
             assert_eq!(report[0]["directory"], "unverified");
             assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
@@ -10628,7 +10576,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
                     .status
                     .success()
             );
-            let repeated = recovery_report(&fixture, &["doctor", name, "--repair"]);
+            let repeated = recovery_report(&fixture, &[name, "--repair"]);
             assert!(repeated[0]["changes"].as_array().unwrap().is_empty());
         }
         assert_eq!(
@@ -10665,14 +10613,14 @@ fn legacy_identity_still_detects_missing_worktrees_that_moved() {
             moved.to_str().unwrap(),
         ],
     );
-    let report = recovery_report(&fixture, &["doctor", "legacy", "--repair"]);
+    let report = recovery_report(&fixture, &["legacy", "--repair"]);
     assert_eq!(report[0]["directory"], "moved");
     assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
     assert!(moved.join("tracked").exists());
 }
 
 #[test]
-fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
+fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
     let fixture = Fixture::new();
     let workspace = fixture.add("original");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -10687,11 +10635,9 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
             moved.to_str().unwrap(),
         ],
     );
-    let report = recovery_report(&fixture, &["doctor", "original", "--repair"]);
+    let report = recovery_report(&fixture, &["original", "--repair"]);
     assert_eq!(report[0]["directory"], "moved");
-    let human = fixture.run(&["doctor", "original"]);
-    assert!(String::from_utf8_lossy(&human.stdout).contains("original: failed (moved)"));
-    let preview = recovery_report(&fixture, &["doctor", "original"]);
+    let preview = recovery_report(&fixture, &["original"]);
     assert_eq!(preview[0]["issues"], report[0]["issues"]);
     assert_eq!(preview[0]["issues"].as_array().unwrap().len(), 1);
     assert!(!fixture.run(&["rm", "original"]).status.success());
@@ -10705,7 +10651,7 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
             path.to_str().unwrap(),
         ],
     );
-    repaired_workspaces(&fixture, &["doctor", "original", "--repair"]);
+    repaired_workspaces(&fixture, &["original", "--repair"]);
     // Replace the admin directory at its SAME path, proving pathname checks alone
     // are insufficient. Git re-creates it without Shoal's owner marker.
     let admin = Path::new(workspace["git_dir"].as_str().unwrap());
@@ -10718,7 +10664,7 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
             fs::copy(entry.path(), admin.join(entry.file_name())).unwrap();
         }
     }
-    let report = recovery_report(&fixture, &["doctor", "original", "--repair"]);
+    let report = recovery_report(&fixture, &["original", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
     assert!(
         report[0]["issues"]
@@ -10866,7 +10812,7 @@ fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
 }
 
 #[test]
-fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
+fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
     let fixture = Fixture::new();
     fixture.add("orphan");
     let mut wrapper = fixture
@@ -10882,7 +10828,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     wait_until("orphan execution to become unknown", || {
         fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
     });
-    let report = recovery_report(&fixture, &["doctor", "orphan", "--repair"]);
+    let report = recovery_report(&fixture, &["orphan", "--repair"]);
     assert!(
         report[0]["executions"][0]["processes"]
             .as_array()
@@ -10899,13 +10845,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     );
     repaired_workspaces(
         &fixture,
-        &[
-            "doctor",
-            "orphan",
-            "--repair",
-            "--stop",
-            "--acknowledge-stopped",
-        ],
+        &["orphan", "--repair", "--stop", "--acknowledge-stopped"],
     );
     assert_eq!(
         fixture.ok(&["status", "orphan"])["executions"],
@@ -10942,17 +10882,14 @@ fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value {
 }
 
 #[test]
-fn doctor_recovers_daemon_crash_and_requires_acknowledgement_without_launch_identity() {
+fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_identity() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("crash");
     let port = fixture.ok(&["acquire", "port", "web", "--workspace", "crash"]);
     let execution = crashed_execution(&mut fixture, "crash");
-    let report = recovery_report(&fixture, &["doctor", "crash"]);
+    let report = recovery_report(&fixture, &["crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
-    repaired_workspaces(
-        &fixture,
-        &["doctor", "crash", "--repair", "--acknowledge-stopped"],
-    );
+    repaired_workspaces(&fixture, &["crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
         fixture.ok(&["leases", "port", "--workspace", "crash"])["reserved"][0],
         port
@@ -10968,12 +10905,9 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_without_launch_iden
         ],
     )
     .unwrap();
-    let report = recovery_report(&fixture, &["doctor", "crash", "--repair"]);
+    let report = recovery_report(&fixture, &["crash", "--repair"]);
     assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
-    repaired_workspaces(
-        &fixture,
-        &["doctor", "crash", "--repair", "--acknowledge-stopped"],
-    );
+    repaired_workspaces(&fixture, &["crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
         fixture.ok(&["status", "crash"])["executions"],
         serde_json::json!([])
@@ -10981,7 +10915,7 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_without_launch_iden
 }
 
 #[test]
-fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
+fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
     let fixture = Fixture::new();
     fixture.add("detached");
     let script = "import os, subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)";
@@ -11000,7 +10934,7 @@ fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(String::from_utf8_lossy(&output.stderr).contains("surviving or unverified"));
-    let report = recovery_report(&fixture, &["doctor", "detached"]);
+    let report = recovery_report(&fixture, &["detached"]);
     assert!(
         !report[0]["executions"][0]["processes"]
             .as_array()
@@ -11009,13 +10943,7 @@ fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
     );
     repaired_workspaces(
         &fixture,
-        &[
-            "doctor",
-            "detached",
-            "--repair",
-            "--stop",
-            "--acknowledge-stopped",
-        ],
+        &["detached", "--repair", "--stop", "--acknowledge-stopped"],
     );
     assert_eq!(
         fixture.ok(&["status", "detached"])["executions"],
@@ -11059,12 +10987,12 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
 }
 
 #[test]
-fn doctor_all_reports_each_workspace_independently() {
+fn reconcile_all_reports_each_workspace_independently() {
     let fixture = Fixture::new();
     fixture.add("healthy");
     let missing = fixture.add("missing");
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
-    let reports = recovery_report(&fixture, &["doctor", "--all", "--repair"]);
+    let reports = recovery_report(&fixture, &["--all", "--repair"]);
     assert_eq!(reports.as_array().unwrap().len(), 2);
     assert_eq!(reports[0]["workspace"]["name"], "healthy");
     assert_eq!(reports[0]["workspace"]["state"], "ready");
@@ -11072,7 +11000,7 @@ fn doctor_all_reports_each_workspace_independently() {
 }
 
 #[test]
-fn doctor_preserves_connected_commands_until_stop_is_explicit() {
+fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     let fixture = Fixture::new();
     fixture.add("connected");
     let port = fixture.ok(&["acquire", "port", "web", "--workspace", "connected"]);
@@ -11084,11 +11012,11 @@ fn doctor_preserves_connected_commands_until_stop_is_explicit() {
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "connected");
-    let report = repaired_workspaces(&fixture, &["doctor", "connected", "--repair"]);
+    let report = repaired_workspaces(&fixture, &["connected", "--repair"]);
     assert_eq!(report[0]["executions"][0]["connected"], true);
     assert_eq!(report[0]["executions"][0]["cleared"], false);
     assert!(wrapper.try_wait().unwrap().is_none());
-    repaired_workspaces(&fixture, &["doctor", "connected", "--repair", "--stop"]);
+    repaired_workspaces(&fixture, &["connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
         fixture.ok(&["status", "connected"])["executions"],
@@ -12244,7 +12172,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let failed = fixture.ok(&["status", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
-    let report = recovery_report(&fixture, &["doctor", "failed-setup"]);
+    let report = recovery_report(&fixture, &["failed-setup"]);
     assert_eq!(report[0]["directory"], "valid");
     let issues = report[0]["issues"].as_array().unwrap();
     assert_eq!(issues.len(), 1);
@@ -12252,9 +12180,6 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert!(issue.contains("setup failed (exit 17"));
     assert!(issue.contains("retry with shoal work setup"));
     assert!(issue.contains("alternatively, use --repair"));
-    let output = fixture.run(&["doctor", "failed-setup"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stdout).contains(issue));
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["workspace"],
         failed["workspace"]

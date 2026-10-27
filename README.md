@@ -398,9 +398,10 @@ Configure idle cleanup in a repository's `.shoal.toml`, or for every repository 
 enabled = false
 ```
 
-When something looks wrong, run `shoal doctor --all` for diagnostics or
-`shoal doctor <name>` for a workspace; see
-[cleanup](docs/reference.md#automatic-cleanup) and [recovery](docs/reference.md#recovery) for details.
+When something looks wrong, `shoal inbox` and `shoal alerts` show what Shoal
+found and the command that fixes it, and `shoal status <name>` shows one
+workspace; see [cleanup](docs/reference.md#automatic-cleanup) and
+[recovery](docs/reference.md#recovery) for details.
 
 ## Update
 

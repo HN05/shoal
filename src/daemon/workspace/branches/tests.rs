@@ -1413,7 +1413,6 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
         .await
         .unwrap();
     assert!(report.issues.is_empty(), "{:?}", report.issues);
-    f.manager.diagnose().await.unwrap();
 }
 
 #[tokio::test]

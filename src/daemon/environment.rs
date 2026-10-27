@@ -7,17 +7,33 @@ use std::{ffi::OsStr, path::PathBuf};
 use anyhow::Result;
 
 use crate::{
-    daemon::{
-        doctor::{Check, CheckStatus},
-        forge_hosts::Recheck,
-        log,
-        notifications::NotificationKind,
-        workspace::Manager,
-    },
+    daemon::{log, notifications::NotificationKind, workspace::Manager},
     tools::{Dependency, Tool},
 };
 
-pub(super) fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CheckStatus {
+    Ok,
+    Warning,
+    Error,
+}
+
+/// One finding of a check: whether and why it failed.
+pub(super) struct Check {
+    pub(super) status: CheckStatus,
+    pub(super) message: String,
+}
+
+impl Check {
+    pub(super) fn new(status: CheckStatus, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: message.into(),
+        }
+    }
+}
+
+fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, dependency)| {
             let program = tool.program();
@@ -32,38 +48,29 @@ pub(super) fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
                     ),
                 ),
             };
-            Check::new(tool.check_name(), status, message)
+            Check::new(status, message)
         })
         .collect()
 }
 
-pub(super) fn checkout_check_name(repository: &str) -> String {
-    format!("checkout:{repository}")
-}
-
 /// Whether Git can use the working tree of a registered checkout.
-pub(super) async fn checkout(repo: &crate::model::Repository) -> Check {
-    let name = checkout_check_name(crate::repository::name(repo));
+async fn checkout(repo: &crate::model::Repository) -> Check {
     match crate::repository::bare_flag_problem(&repo.path).await {
-        Ok(None) => Check::new(name, CheckStatus::Ok, "Git config does not set core.bare"),
+        Ok(None) => Check::new(CheckStatus::Ok, "Git config does not set core.bare"),
         Ok(Some(problem)) => Check::new(
-            name,
             CheckStatus::Warning,
             format!("{problem}, then check git status: the index may lag behind HEAD"),
         ),
         Err(error) => Check::new(
-            name,
             CheckStatus::Error,
             format!("Could not check {}: {error:#}", repo.path.display()),
         ),
     }
 }
 
-pub(super) const ROOT_DIR_CHECK: &str = "root_dir";
-
 /// Whether the daemon can create files in `root_dir`, where new repositories
 /// and their workspaces go, resolved as registration resolves it.
-pub(super) async fn root_dir(root: Result<PathBuf>) -> Check {
+async fn root_dir(root: Result<PathBuf>) -> Check {
     let root =
         root.and_then(|root| crate::daemon::workspace::paths::canonical_with_missing_tail(&root));
     let checked = match root {
@@ -74,12 +81,10 @@ pub(super) async fn root_dir(root: Result<PathBuf>) -> Check {
     };
     match checked {
         Ok(root) => Check::new(
-            ROOT_DIR_CHECK,
             CheckStatus::Ok,
             format!("The daemon can write to {}", root.display()),
         ),
         Err(error) => Check::new(
-            ROOT_DIR_CHECK,
             CheckStatus::Error,
             format!("Cannot use root_dir: {error:#}"),
         ),
@@ -88,18 +93,16 @@ pub(super) async fn root_dir(root: Result<PathBuf>) -> Check {
 
 /// Whether the global config sets something Shoal no longer reads or already
 /// says; `config show` reports the repository layers too.
-pub fn global_config_check(paths: &crate::paths::Paths) -> Check {
+fn global_config_check(paths: &crate::paths::Paths) -> Check {
     let retired = crate::config::Config::load_with_templates(paths)
         .map(|config| config.repository_layer().normalize());
     match retired {
         Ok(retired) if retired.is_empty() => Check::new(
-            "global_config",
             CheckStatus::Ok,
             "The global config sets no retired or redundant settings".to_owned(),
         ),
-        Ok(retired) => Check::new("global_config", CheckStatus::Warning, retired.join("; ")),
+        Ok(retired) => Check::new(CheckStatus::Warning, retired.join("; ")),
         Err(error) => Check::new(
-            "global_config",
             CheckStatus::Error,
             format!("Could not read the global config: {error:#}"),
         ),
@@ -147,12 +150,9 @@ impl Manager {
         // Only a changed answer matters: a host Shoal cannot reach now keeps
         // the forge it answered before, which a machine offline at boot needs.
         match self.recheck_forge_hosts().await {
-            Ok(rechecks) => problems.extend(
-                rechecks
-                    .iter()
-                    .filter(|(_, recheck)| matches!(recheck, Recheck::Changed { .. }))
-                    .map(|(host, recheck)| recheck.change(host)),
-            ),
+            Ok(rechecks) => {
+                problems.extend(rechecks.iter().map(|(host, change)| change.message(host)))
+            }
             Err(error) => log!("environment check skipped forge hosts: {error:#}"),
         }
         for problem in problems {
