@@ -171,11 +171,18 @@ struct Marker(Option<PathBuf>);
 
 impl Marker {
     fn path(paths: &Paths, host: &str, workspace: &str, place: &str) -> Option<PathBuf> {
-        (!place.is_empty() && !place.contains('/')).then(|| {
-            paths
-                .workspace_state(workspace)
-                .join(format!("closing-{host}-{place}"))
-        })
+        Self::named(paths, workspace, place, &format!("closing-{host}-{place}"))
+    }
+
+    /// The marker a Herdr tab watcher of an earlier release keeps until an
+    /// upgrade hands it to this one.
+    fn earlier_path(paths: &Paths, workspace: &str, place: &str) -> Option<PathBuf> {
+        Self::named(paths, workspace, place, &format!("closing-tab-{place}"))
+    }
+
+    fn named(paths: &Paths, workspace: &str, place: &str, name: &str) -> Option<PathBuf> {
+        (!place.is_empty() && !place.contains('/'))
+            .then(|| paths.workspace_state(workspace).join(name))
     }
 
     /// Best effort: without the record, commands in the place cannot tell.
@@ -201,9 +208,15 @@ impl Drop for Marker {
 /// removed.
 pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
     HOSTS.iter().any(|host| {
-        host.this_place()
-            .and_then(|place| Marker::path(paths, host.name(), workspace, &place))
-            .is_some_and(|path| path.exists())
+        host.this_place().is_some_and(|place| {
+            [
+                Marker::path(paths, host.name(), workspace, &place),
+                Marker::earlier_path(paths, workspace, &place),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|path| path.exists())
+        })
     })
 }
 

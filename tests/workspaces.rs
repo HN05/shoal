@@ -1146,14 +1146,15 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("tabbed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    // The tab's watcher records that the tab closes with the workspace.
+    // The tab's watcher records that the tab closes with the workspace,
+    // here under the name a watcher of an earlier release keeps.
     let state = fixture
         .root
         .path()
         .join("state/workspaces")
         .join(workspace["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
-    fs::write(state.join("closing-herdr-tab-7"), "").unwrap();
+    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
     let export = |tab: &str| {
         fixture
             .command()
