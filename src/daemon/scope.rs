@@ -125,6 +125,37 @@ impl Manager {
         self.find_workspaces(target, within).await
     }
 
+    /// `workspace`, which must be the caller's own; `refusal` says why
+    /// another is refused.
+    pub(super) async fn own_workspace<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut String,
+        refusal: &str,
+    ) -> Result<&'a mut String> {
+        ensure!(
+            self.workspace(workspace).await?.id == caller.workspace_id,
+            "{refusal}"
+        );
+        Ok(workspace)
+    }
+
+    /// `workspace`, which must not be the caller's own; [`authorize`] confines
+    /// it to the workspaces below. `refusal` says why the caller's own is
+    /// refused.
+    pub(super) async fn workspace_below<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut String,
+        refusal: &str,
+    ) -> Result<&'a mut String> {
+        ensure!(
+            self.workspace(workspace).await?.id != caller.workspace_id,
+            "{refusal}"
+        );
+        Ok(workspace)
+    }
+
     /// The caller's own repository, which `repository` must select.
     pub(super) async fn own_repository(
         &self,

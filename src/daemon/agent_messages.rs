@@ -115,6 +115,19 @@ impl Manager {
             .await
     }
 
+    /// Acknowledge the item updates and messages an agent received.
+    pub async fn acknowledge_agent_delivery(
+        &self,
+        selector: &str,
+        deliveries: Vec<String>,
+        messages: Vec<i64>,
+    ) -> Result<()> {
+        // Item updates first: a failure then leaves both to be delivered
+        // again, while deleted messages could not be.
+        self.acknowledge_pr_updates(selector, deliveries).await?;
+        self.mark_agent_messages_delivered(selector, messages).await
+    }
+
     /// Delete exactly these messages once an agent has received them, with
     /// the questions whose answers they carried.
     pub async fn mark_agent_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {
