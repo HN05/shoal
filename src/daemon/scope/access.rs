@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use super::Caller;
 use crate::{
     daemon::{approvals::ApprovalRequest, workspace::Manager},
-    model::{Repository, Workspace, WorkspaceTarget},
+    model::{Chat, Repository, Workspace, WorkspaceTarget},
     repository::Selector,
 };
 
@@ -85,6 +85,17 @@ impl Manager {
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"
         );
         Ok(request)
+    }
+
+    /// The chats `caller` may see: none for a workspace process.
+    pub(in crate::daemon) async fn visible_chats(
+        &self,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<Chat>> {
+        match caller {
+            Some(_) => Ok(Vec::new()),
+            None => self.chats().await,
+        }
     }
 
     /// The caller's own repository, which `repository` must select.
