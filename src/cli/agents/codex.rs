@@ -38,12 +38,14 @@ impl Integration for Codex {
         args: &mut Vec<OsString>,
         url: &str,
         environment: &AgentEnvironment,
-        _directory: &std::path::Path,
+        directory: &std::path::Path,
     ) -> Result<()> {
         if !args.iter().any(|arg| arg == PROVIDER) {
             return Ok(());
         }
-        provider::route(args, url, &super::trust::codex_config(environment)?)
+        let config = super::trust::codex_config(environment)?;
+        let codex_home = config.parent().unwrap_or(directory);
+        provider::route(args, url, codex_home, directory)
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
@@ -120,6 +122,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     ]
 }
 
+mod layers;
 mod provider;
 
 use provider::PROVIDER;

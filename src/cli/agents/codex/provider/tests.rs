@@ -6,11 +6,16 @@ const URL: &str = "http://127.0.0.1:4000";
 /// the Codex `config`.
 fn routed(config: &str, user: &[&str]) -> Result<Vec<String>> {
     let home = tempfile::tempdir().unwrap();
-    let path = home.path().join("config.toml");
-    std::fs::write(&path, config).unwrap();
+    std::fs::write(home.path().join("config.toml"), config).unwrap();
+    routed_in(home.path(), home.path(), user)
+}
+
+/// `codex` with Shoal's placeholder and then `user`'s arguments, routed by
+/// the Codex config in `codex_home` for a launch in `directory`.
+fn routed_in(codex_home: &Path, directory: &Path, user: &[&str]) -> Result<Vec<String>> {
     let mut args: Vec<OsString> = ["codex", PROVIDER].into_iter().map(Into::into).collect();
     args.extend(user.iter().map(Into::into));
-    route(&mut args, URL, &path)?;
+    route(&mut args, URL, codex_home, directory)?;
     Ok(args
         .into_iter()
         .map(|arg| arg.into_string().unwrap())
@@ -161,4 +166,64 @@ fn a_built_in_provider_the_proxy_cannot_take_is_refused() {
             "{user:?}: {error}"
         );
     }
+}
+
+#[test]
+fn a_trusted_projects_provider_and_the_working_directory_select_what_moves() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("codex");
+    let project = root.path().join("project");
+    let nested = project.join("nested");
+    std::fs::create_dir_all(nested.join(".codex")).unwrap();
+    std::fs::create_dir_all(project.join(".git")).unwrap();
+    std::fs::create_dir_all(project.join(".codex")).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(
+        project.join(".codex/config.toml"),
+        "model_provider = 'project'\n",
+    )
+    .unwrap();
+    std::fs::write(
+        nested.join(".codex/config.toml"),
+        "model_provider = 'nested'\n",
+    )
+    .unwrap();
+    let user = |trusted: bool| {
+        let trust = if trusted {
+            format!(
+                "[projects.{:?}]\ntrust_level = 'trusted'\n",
+                project.to_str().unwrap()
+            )
+        } else {
+            String::new()
+        };
+        std::fs::write(
+            home.join("config.toml"),
+            format!("model_provider = 'user'\n{trust}"),
+        )
+        .unwrap();
+    };
+    user(true);
+    let moved_in = |directory: &Path, args: &[&str]| {
+        moved(&routed_in(&home, directory, args).unwrap()).map(str::to_owned)
+    };
+    assert_eq!(moved_in(&project, &[]).as_deref(), Some("project"));
+    assert_eq!(moved_in(&nested, &[]).as_deref(), Some("nested"));
+    // `-C` moves the working directory, relative to the launch's.
+    assert_eq!(
+        moved_in(&project, &["-C", "nested"]).as_deref(),
+        Some("nested")
+    );
+    assert_eq!(
+        moved_in(root.path(), &["--cd", project.to_str().unwrap()]).as_deref(),
+        Some("project")
+    );
+    // An override still wins over every layer.
+    assert_eq!(
+        moved_in(&nested, &["-c", "model_provider=forwarded"]).as_deref(),
+        Some("forwarded")
+    );
+    // An untrusted project's config does not apply.
+    user(false);
+    assert_eq!(moved_in(&nested, &[]).as_deref(), Some("user"));
 }

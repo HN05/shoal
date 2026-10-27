@@ -2,7 +2,7 @@
 //! runs with, and the overrides that send that provider to Shoal's proxy.
 use std::{ffi::OsString, ops::Range, path::Path};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 /// Where a proxied Codex launch's hook arguments name its provider, which
 /// [`route`] turns into overrides once the agent's environment says where
@@ -17,14 +17,25 @@ const BUILT_IN_PROVIDERS: [&str; 4] = ["openai", "oss", "ollama", "lmstudio"];
 const PROXY_PROVIDER: &str = "shoal-proxy";
 
 /// Turn the [`PROVIDER`] placeholder in `args` into the overrides that send
-/// the provider the launch uses, by the Codex config at `config` and the
-/// arguments themselves, to the proxy at `url`.
-pub(super) fn route(args: &mut Vec<OsString>, url: &str, config: &Path) -> Result<()> {
+/// the provider the launch uses, by the Codex config in `codex_home` and the
+/// projects of the working directory, `directory` or the one `-C` names
+/// from it, and the arguments themselves, to the proxy at `url`.
+pub(super) fn route(
+    args: &mut Vec<OsString>,
+    url: &str,
+    codex_home: &Path,
+    directory: &Path,
+) -> Result<()> {
     let Some(at) = args.iter().position(|arg| arg == PROVIDER) else {
         return Ok(());
     };
     let flags = Flags::of(args);
-    let selected = Selected::of(read(config)?, &flags)?;
+    let directory = match &flags.cd {
+        Some(cd) => directory.join(cd),
+        None => directory.to_owned(),
+    };
+    let config = super::layers::effective(codex_home, flags.profile().as_deref(), &directory)?;
+    let selected = Selected::of(config, &flags)?;
     let overrides = overrides(&selected, url)?;
     place_last(args, at, &flags, overrides);
     Ok(())
@@ -134,6 +145,8 @@ struct Flags {
     overrides: Vec<Override>,
     /// The profile `--profile`/`-p` selects.
     profile: Option<String>,
+    /// The working directory `--cd`/`-C` names.
+    cd: Option<String>,
     /// Whether `--oss` selects the local open-source provider.
     oss: bool,
 }
@@ -147,6 +160,19 @@ struct Override {
 }
 
 impl Flags {
+    /// The profile the launch selects: `--profile`, else the last `-c
+    /// profile=` override.
+    fn profile(&self) -> Option<String> {
+        self.profile.clone().or_else(|| {
+            let profile = self
+                .overrides
+                .iter()
+                .rev()
+                .find(|config| config.key == ["profile"])?;
+            profile.value.as_str().map(str::to_owned)
+        })
+    }
+
     fn of(args: &[OsString]) -> Self {
         let mut flags = Self::default();
         let mut at = 0;
@@ -173,6 +199,9 @@ impl Flags {
                 at += taken;
             } else if let Some((value, taken)) = option(args, at, "-p", "--profile") {
                 flags.profile = value.map(str::to_owned).or(flags.profile);
+                at += taken;
+            } else if let Some((value, taken)) = option(args, at, "-C", "--cd") {
+                flags.cd = value.map(str::to_owned).or(flags.cd);
                 at += taken;
             } else {
                 at += 1;
@@ -245,14 +274,6 @@ fn dotted(key: &[String]) -> String {
         .map(|part| toml_edit::Key::new(part.as_str()).to_string())
         .collect::<Vec<_>>()
         .join(".")
-}
-
-/// The Codex config at `path`, empty when there is none.
-fn read(path: &Path) -> Result<toml::Table> {
-    let Some(text) = crate::fsutil::read_optional(path)? else {
-        return Ok(toml::Table::new());
-    };
-    toml::from_str(&text).with_context(|| format!("parse {}", path.display()))
 }
 
 #[cfg(test)]
