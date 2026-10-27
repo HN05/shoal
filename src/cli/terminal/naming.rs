@@ -105,8 +105,8 @@ pub(super) async fn name_plan(
 }
 
 /// The label of the place `host` opens for `workspace`, from its name
-/// `template`, or its branch when the host shows no names. A failed lookup
-/// falls back to the branch.
+/// `template`, or the workspace's name when the host shows no names and
+/// names its places after it. A failed lookup falls back to the branch.
 pub(super) async fn workspace_label(
     ctx: &Context,
     template: Option<String>,
@@ -114,7 +114,7 @@ pub(super) async fn workspace_label(
     workspace: &Workspace,
 ) -> String {
     if !host.names_places() {
-        return workspace.branch.clone();
+        return workspace.name.clone();
     }
     let labelled = async {
         let repositories = client::repositories(&ctx.paths).await?;

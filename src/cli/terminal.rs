@@ -112,7 +112,11 @@ impl Configured {
 
     /// The plain terminal, which every terminal falls back to.
     fn plain(settings: &Effective) -> Self {
-        Self::new(&Plain, Options::DEFAULT, settings)
+        let options = Options {
+            opens_places: false,
+            ..Options::DEFAULT
+        };
+        Self::new(&Plain, options, settings)
     }
 
     /// Whether the host serves the terminal this process runs in.
@@ -154,18 +158,10 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
-    /// Start `plan` as `placement` asks by running `worker` in a new place,
-    /// returning whether it left this process. `name` is the planned
-    /// workspace name. Generic code calls it only where config lets the
-    /// host open places.
-    fn start_add<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _plan: &'a AddPlan,
-        _name: &'a str,
-        _placement: Placement,
-        _worker: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
+    /// Run `start`, a workspace addition, in a new place, returning whether
+    /// it left this process. Generic code calls it only where config lets
+    /// the host open places.
+    fn start_add<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
 
@@ -175,15 +171,8 @@ pub(in crate::cli) trait Host: Sync {
         false
     }
 
-    /// Run Shoal with `args` for `workspace` in a background place named
-    /// `label`.
-    fn run_in_background<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _workspace: &'a Workspace,
-        _label: &'a str,
-        _args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<()>> {
+    /// Run `start` in a new background place.
+    fn run_in_background<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
     }
 
@@ -198,26 +187,21 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(false) })
     }
 
-    /// Run `worker`, a tracked agent of `workspace`, in a new session and
-    /// attach this terminal to it. `None` means the agent runs in place.
+    /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
+    /// attach this terminal to it, returning the session once the terminal
+    /// left it. `None` means the agent runs in place.
     fn run_agent<'a>(
         &'a self,
-        _workspace: &'a Workspace,
+        _start: &'a Start<'a>,
+        _owner: Owner<'a>,
         _agent: &'a str,
-        _worker: &'a [OsString],
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
+    ) -> BoxFuture<'a, Result<Option<String>>> {
         Box::pin(async { Ok(None) })
     }
 
-    /// Run Shoal with `args` for the chat `name` at the repository's
-    /// checkout beside this terminal, where config lets the host open places.
-    fn start_chat<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _repository: &'a Repository,
-        _name: &'a str,
-        _args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<ChatStart>> {
+    /// Run `start`, a chat, beside this terminal, where config lets the host
+    /// open places.
+    fn start_chat<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async { Ok(ChatStart::Here) })
     }
 
@@ -330,16 +314,9 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
 
-    /// Start a demo of `workspace` in a new place of this host named after
-    /// `name`, running the demo worker `worker` gives for the place's handle.
-    /// Returns the handle, or `None` when this host keeps no demos.
-    fn start_demo<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _workspace: &'a Workspace,
-        _name: &'a str,
-        _worker: &'a DemoWorker<'a>,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
+    /// Start `demo` in a new background place of this host. Returns the
+    /// place's handle, or `None` when this host keeps no demos.
+    fn start_demo<'a>(&'a self, _demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
         Box::pin(async { Ok(None) })
     }
 
@@ -366,6 +343,31 @@ const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
 /// The demo worker's argv for the handle of the place it runs in.
 pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&str) -> Result<Vec<OsString>> + Send + Sync + 'a;
 
+/// Work a host starts in a new place, which generic code describes in full,
+/// so the host only carries it out.
+pub(in crate::cli) struct Start<'a> {
+    /// The directory the place opens at.
+    pub cwd: &'a Path,
+    /// What the place is called: a tab's label, a session's name.
+    pub label: &'a str,
+    /// Whether the place takes the caller's terminal.
+    pub focus: bool,
+    /// The command the place runs.
+    pub argv: &'a [OsString],
+    /// Variables the command needs from this process, since the place may
+    /// start in an environment of its own.
+    pub env: &'a [(&'a str, String)],
+}
+
+/// A demo a host starts in a new background place, as [`Start`] describes
+/// other work; its command depends on the place's handle.
+pub(in crate::cli) struct Demo<'a> {
+    pub cwd: &'a Path,
+    pub label: &'a str,
+    pub env: &'a [(&'a str, String)],
+    pub worker: &'a DemoWorker<'a>,
+}
+
 /// A terminal no host serves: everything runs in place.
 struct Plain;
 
@@ -384,18 +386,6 @@ impl Host for Plain {
 
     fn background_note(&self, name: &str) -> String {
         format!("Started {name} in the background")
-    }
-
-    fn start_demo<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        name: &'a str,
-        worker: &'a DemoWorker<'a>,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(
-            async move { background::start_demo(&ctx.paths, workspace, name, worker).map(Some) },
-        )
     }
 
     fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
@@ -521,12 +511,7 @@ pub(in crate::cli) async fn start_add(
     let focus = focus.then_some(true).or(settings.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
-    let worker = add_worker_argv(ctx, &host)?;
-    let started = host.options.opens_places
-        && host
-            .host
-            .start_add(ctx, plan, name, placement, &worker)
-            .await?;
+    let started = host.options.opens_places && run_add(ctx, &host, plan, name, placement).await?;
     if started && placement == Placement::Background {
         outln!("{}", host.host.background_note(name));
     }
@@ -543,11 +528,113 @@ pub(in crate::cli) async fn start_queued(
 ) -> Result<()> {
     let host = queued(settings)?;
     naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
-    let worker = add_worker_argv(ctx, &host)?;
-    host.host
-        .start_add(ctx, plan, name, Placement::Background, &worker)
-        .await?;
+    run_add(ctx, &host, plan, name, Placement::Background).await?;
     Ok(())
+}
+
+/// Have `host` run the add worker for `plan`, the planned workspace `name`,
+/// in a new place as `placement` asks, returning whether it left this
+/// process. The worker reads the plan from the place's environment, and a
+/// place that keeps a shell gets the directive through which the worker has
+/// it enter the workspace.
+async fn run_add(
+    ctx: &Context,
+    host: &Configured,
+    plan: &AddPlan,
+    name: &str,
+    placement: Placement,
+) -> Result<bool> {
+    let worker = add_worker_argv(ctx, host)?;
+    let directive = host
+        .host
+        .places_keep_shells()
+        .then(ShellDirective::create)
+        .transpose()?;
+    let start = Start {
+        cwd: &std::env::current_dir()?,
+        label: &add_label(host.host, plan, name),
+        focus: placement == Placement::Focus,
+        argv: &worker,
+        env: &add_env(ctx, plan, directive.as_ref())?,
+    };
+    let started = host.host.start_add(&start).await?;
+    if let (true, Some(directive)) = (started, directive) {
+        directive.hand_over()?;
+    }
+    Ok(started)
+}
+
+/// What the place `host` opens for `plan` is called: the plan's label where
+/// the host shows names, otherwise the planned workspace `name`.
+fn add_label(host: &dyn Host, plan: &AddPlan, name: &str) -> String {
+    if host.names_places() {
+        plan.label()
+    } else {
+        name.to_owned()
+    }
+}
+
+/// The variables of the place that adds `plan`: a new place's, the plan,
+/// and the `directive` of a place that keeps a shell.
+fn add_env(
+    ctx: &Context,
+    plan: &AddPlan,
+    directive: Option<&ShellDirective>,
+) -> Result<Vec<(&'static str, String)>> {
+    let mut env = place_env(ctx)?;
+    env.push((env::ADD_PLAN, serde_json::to_string(plan)?));
+    if let Some(directive) = directive {
+        env.push((env::SHELL_DIRECTIVE, directive.path()));
+    }
+    Ok(env)
+}
+
+/// The file in which the add worker leaves the workspace for the shell of
+/// its place to enter. Shoal removes it until the place runs its worker;
+/// then the shell removes it at its next prompt, or the watcher when it
+/// closes the place.
+struct ShellDirective(tempfile::TempPath);
+
+impl ShellDirective {
+    fn create() -> Result<Self> {
+        let file = tempfile::Builder::new()
+            .prefix("shoal-cd.")
+            .tempfile()
+            .context("create the place's shell directive")?;
+        Ok(Self(file.into_temp_path()))
+    }
+
+    fn path(&self) -> String {
+        self.0.display().to_string()
+    }
+
+    fn hand_over(self) -> Result<()> {
+        self.0.keep().context("keep the place's shell directive")?;
+        Ok(())
+    }
+}
+
+/// The variables a command in a new place needs from this process: its
+/// output setting, which agents there inherit, and its home and config
+/// location, whatever the environment the host starts places in.
+fn place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
+    let config = crate::config::Config::path(&ctx.paths);
+    let config_home = config
+        .parent()
+        .and_then(Path::parent)
+        .context("config has no parent")?;
+    Ok(vec![
+        (env::OUTPUT, env::output_setting().1),
+        ("HOME", ctx.paths.home.display().to_string()),
+        ("XDG_CONFIG_HOME", config_home.display().to_string()),
+    ])
+}
+
+/// This executable with `args`, as a place runs it.
+fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
+    let mut argv = crate::cli::internal::shoal_argv(&ctx.paths)?;
+    argv.extend_from_slice(args);
+    Ok(argv)
 }
 
 /// The host that runs a queued start from this terminal under `settings`.
@@ -609,9 +696,14 @@ pub(in crate::cli) async fn run_in_background(
     }
     let template = host.options.name_template.clone();
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
-    host.host
-        .run_in_background(ctx, workspace, &label, args)
-        .await?;
+    let start = Start {
+        cwd: &workspace.path,
+        label: &label,
+        focus: false,
+        argv: &shoal_command(ctx, args)?,
+        env: &place_env(ctx)?,
+    };
+    host.host.run_in_background(&start).await?;
     Ok(Some(host.host.background_places()))
 }
 
@@ -643,7 +735,23 @@ pub(in crate::cli) async fn run_agent(
             close_in: closes_when_done.then(|| host.name()),
         },
     )?;
-    host.run_agent(workspace, agent, &worker).await
+    let mut env = place_env(ctx)?;
+    if let Some(entry) = env::queue_entry() {
+        env.push((env::QUEUE_ENTRY, entry.to_owned()));
+    }
+    let start = Start {
+        cwd: &workspace.path,
+        label: &workspace.name,
+        focus: true,
+        argv: &worker,
+        env: &env,
+    };
+    let owner = Owner::Workspace(&workspace.id);
+    let Some(session) = host.run_agent(&start, owner, agent).await? else {
+        return Ok(None);
+    };
+    report_detach(owner, &workspace.name, &session).await?;
+    Ok(Some(0))
 }
 
 /// Close the place of the host named `host` that this process runs in once
@@ -678,7 +786,14 @@ pub(in crate::cli) async fn start_chat(
     if !host.options.opens_places {
         return Ok(false);
     }
-    let started = host.host.start_chat(ctx, repository, name, args).await?;
+    let start = Start {
+        cwd: &repository.path,
+        label: name,
+        focus: true,
+        argv: &shoal_command(ctx, args)?,
+        env: &place_env(ctx)?,
+    };
+    let started = host.host.start_chat(&start).await?;
     match started {
         ChatStart::Here => Ok(false),
         ChatStart::Tab => Ok(true),
@@ -745,15 +860,32 @@ pub(in crate::cli) async fn start_demo(
 ) -> Result<(&'static str, String)> {
     let hosts = Configured::all(settings)
         .filter(|host| host.takes_queued() && host.host.ensure_installed().is_ok())
-        .map(|host| host.host)
-        .chain([&Plain as &dyn Host]);
+        .map(|host| host.host);
+    let env = place_env(ctx)?;
     for host in hosts {
-        let worker = |place: &str| worker(host.name(), place);
-        if let Some(place) = host.start_demo(ctx, workspace, name, &worker).await? {
+        let demo = Demo {
+            cwd: &workspace.path,
+            label: &demo_label(host, workspace, name),
+            env: &env,
+            worker: &|place: &str| worker(host.name(), place),
+        };
+        if let Some(place) = host.start_demo(&demo).await? {
             return Ok((host.name(), place));
         }
     }
-    unreachable!("the plain host keeps demos")
+    let worker = |place: &str| worker(Plain.name(), place);
+    let place = background::start_demo(&ctx.paths, workspace, name, &worker)?;
+    Ok((Plain.name(), place))
+}
+
+/// What the place `host` opens for demo `name` of `workspace` is called:
+/// readable where the host shows names, otherwise an identifier.
+fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
+    if host.names_places() {
+        format!("{} demo {name}", workspace.name)
+    } else {
+        format!("{}-{name}", workspace.name)
+    }
 }
 
 /// Show the demo `launch` describes in this terminal.

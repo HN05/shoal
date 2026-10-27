@@ -23682,8 +23682,11 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
 fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
     let fixture = Fixture::new();
     let mut expected = Vec::new();
-    for name in ["first", "second"] {
-        let workspace = fixture.add(name);
+    // Sessions are named after their workspaces, not their branches.
+    for branch in ["team/first", "team/second"] {
+        let workspace = fixture.add(branch);
+        let name = workspace["name"].as_str().unwrap().to_owned();
+        assert_ne!(name, branch);
         let id = workspace["id"].as_str().unwrap().to_owned();
         let state = fixture.root.path().join("state/workspaces").join(&id);
         fs::create_dir_all(&state).unwrap();
@@ -23692,7 +23695,8 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             r#"{"agent":"claude"}"#,
         )
         .unwrap();
-        expected.push((name, id, format!("{name}-agent")));
+        let execution = format!("{name}-agent");
+        expected.push((name, id, execution));
     }
     // The sessions cannot resume without a configured restore command; the
     // test observes what each was asked to run.

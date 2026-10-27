@@ -7,6 +7,7 @@ use std::{
     collections::HashSet,
     ffi::{OsStr, OsString},
     io::IsTerminal,
+    path::Path,
     process::ExitStatus,
 };
 
@@ -14,16 +15,8 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{
-    ChatStart, DemoWorker, Host, Owner, OwnerKind, PlaceState, Placement, Session, Watched,
-};
-use crate::{
-    cli::{agents::ensure_program, commands::workspaces::AddPlan, context::Context, internal},
-    env,
-    model::{Repository, Workspace},
-    subprocess::Run,
-    tools::Tool,
-};
+use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched};
+use crate::{cli::agents::ensure_program, env, subprocess::Run, tools::Tool};
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
@@ -59,19 +52,12 @@ impl Host for Zmx {
 
     /// A focused start stays here, where its agent runs in a session this
     /// terminal attaches to.
-    fn start_add<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        plan: &'a AddPlan,
-        name: &'a str,
-        placement: Placement,
-        worker: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
+    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
-            if placement == Placement::Focus {
+            if start.focus {
                 return Ok(false);
             }
-            start_add(plan, name, worker).await?;
+            start_detached(start).await?;
             Ok(true)
         })
     }
@@ -80,37 +66,21 @@ impl Host for Zmx {
         true
     }
 
-    fn run_in_background<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        _label: &'a str,
-        args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(run_in_background(ctx, workspace, args))
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(start_detached(start))
     }
 
     fn run_agent<'a>(
         &'a self,
-        workspace: &'a Workspace,
+        start: &'a Start<'a>,
+        owner: Owner<'a>,
         agent: &'a str,
-        worker: &'a [OsString],
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async move { run(workspace, agent, worker).await.map(Some) })
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { run(start, owner, agent).await.map(Some) })
     }
 
-    fn start_chat<'a>(
-        &'a self,
-        ctx: &'a Context,
-        repository: &'a Repository,
-        name: &'a str,
-        args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<ChatStart>> {
-        Box::pin(async move {
-            run_chat(ctx, repository, name, args)
-                .await
-                .map(ChatStart::Session)
-        })
+    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
+        Box::pin(async move { run_chat(start).await.map(ChatStart::Session) })
     }
 
     fn background_places(&self) -> &'static str {
@@ -193,14 +163,8 @@ impl Host for Zmx {
         Box::pin(attach(session))
     }
 
-    fn start_demo<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        workspace: &'a Workspace,
-        name: &'a str,
-        worker: &'a DemoWorker<'a>,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move { start_demo(workspace, name, worker).await.map(Some) })
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { start_demo(demo).await.map(Some) })
     }
 
     fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
@@ -223,104 +187,82 @@ fn on_terminal() -> bool {
         && std::env::var_os(SESSION_VAR).is_none()
 }
 
-/// Start `worker`, `agent`'s tracked execution, in a new session and attach
-/// this terminal to it. zmx does not report the agent's exit status, so a
-/// session that ends or detaches returns 0; the daemon still records the exit.
-async fn run(workspace: &Workspace, agent: &str, worker: &[OsString]) -> Result<i32> {
+/// Start `start`, `agent`'s tracked execution for `owner`, in a new session
+/// and attach this terminal to it, returning the session. zmx does not
+/// report the agent's exit status; the daemon still records the exit.
+async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String> {
     // Launches check zmx before any work; resumed agents reach it here.
     ensure_program(agent, Tool::Zmx.program())?;
-    let taken = list().await?.into_iter().map(|session| session.0).collect();
-    let name = free_name(&workspace.name, &taken);
+    let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
-    zmx.arg("attach")
-        .arg("--labels")
-        .arg(labels(Owner::Workspace(&workspace.id), agent))
-        .arg(&name)
-        .args(worker)
+    zmx.arg("attach").arg("--labels").arg(labels(owner, agent));
+    attach_new(&mut zmx, &name, start);
+    ended(zmx.status().await.context("run zmx")?)?;
+    Ok(name)
+}
+
+/// Run `start`, a chat, in a new session and attach this terminal to it.
+/// The session's Shoal records the chat, labels the session with it and
+/// becomes its agent, as it would in place. Returns the session's name.
+async fn run_chat(start: &Start<'_>) -> Result<String> {
+    let name = unused_name(start.label).await?;
+    let mut zmx = Command::new(Tool::Zmx.program());
+    zmx.arg("attach");
+    attach_new(&mut zmx, &name, start);
+    ended(zmx.status().await.context("run zmx")?)?;
+    Ok(name)
+}
+
+/// Have `zmx attach` create the session `name` running `start`'s command.
+fn attach_new(zmx: &mut Command, name: &str, start: &Start<'_>) {
+    zmx.arg(name)
+        .args(start.argv)
+        .current_dir(start.cwd)
+        .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
-    if let Some(entry) = env::queue_entry() {
-        zmx.env(env::QUEUE_ENTRY, entry);
-    }
-    let status = zmx.status().await.context("run zmx")?;
-    finish(workspace, &name, status).await
 }
 
-/// Run Shoal with `args` for the chat `name` in a new session named after
-/// it at the repository's checkout, and attach this terminal to it. The
-/// session's Shoal records the chat, labels the session with it and becomes
-/// its agent, as it would in place. Returns the session's name.
-async fn run_chat(
-    ctx: &Context,
-    repository: &Repository,
-    name: &str,
-    args: &[OsString],
-) -> Result<String> {
+/// A name for a new session called `label` that no session zmx keeps has.
+async fn unused_name(label: &str) -> Result<String> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
-    let session = free_name(name, &taken);
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
-    argv.extend_from_slice(args);
-    let status = Command::new(Tool::Zmx.program())
-        .arg("attach")
-        .arg(&session)
-        .args(&argv)
-        .current_dir(&repository.path)
-        .env_remove(env::SHELL_DIRECTIVE)
-        .status()
-        .await
-        .context("run zmx")?;
-    ended(status)?;
-    Ok(session)
+    Ok(free_name(label, &taken))
 }
 
-/// Run `plan` with `worker` in a new detached session named after its
-/// planned workspace `name`. The worker reads the plan from its environment,
-/// as a Herdr tab's does.
-async fn start_add(plan: &AddPlan, name: &str, worker: &[OsString]) -> Result<()> {
-    let plan = serde_json::to_string(plan)?;
-    start_detached(name, worker, &[(env::ADD_PLAN, &plan)]).await
-}
-
-/// Run Shoal with `args` for `workspace` in a new detached session named
-/// after it.
-async fn run_in_background(ctx: &Context, workspace: &Workspace, args: &[OsString]) -> Result<()> {
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
-    argv.extend_from_slice(args);
-    start_detached(&workspace.name, &argv, &[]).await
-}
-
-/// Run `argv` in a new detached session named after `name`, as if typed at
-/// its shell, since zmx gives commands it runs itself no terminal input. That
-/// shell is zmx's bash, so the session ends once `argv` succeeds, which it does
-/// once its agent or workspace shell has run, and otherwise becomes the user's
-/// login shell to show why it failed. `env` reaches that shell, inert there.
-async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
+/// Run `start` in a new detached session, as if typed at its shell, since
+/// zmx gives commands it runs itself no terminal input. That shell is zmx's
+/// bash, so the session ends once the command succeeds, which it does once
+/// its agent or workspace shell has run, and otherwise becomes the user's
+/// login shell to show why it failed. `start`'s variables reach that shell,
+/// inert there.
+async fn start_detached(start: &Start<'_>) -> Result<()> {
     ensure_program("background launch", Tool::Zmx.program())?;
-    let taken = list().await?.into_iter().map(|session| session.0).collect();
-    run_in_new_session(&free_name(name, &taken), argv, env, &[]).await
+    let name = unused_name(start.label).await?;
+    run_in_new_session(&name, start.cwd, start.argv, start.env, &[]).await
 }
 
-/// Start a demo in a new detached session named after the workspace and the
-/// demo, whose worker ends the session once the demo stops.
-async fn start_demo(workspace: &Workspace, name: &str, worker: &DemoWorker<'_>) -> Result<String> {
+/// Start `demo` in a new detached session, whose worker ends the session
+/// once the demo stops.
+async fn start_demo(demo: &Demo<'_>) -> Result<String> {
     ensure_program("demo", Tool::Zmx.program())?;
-    let taken = list().await?.into_iter().map(|session| session.0).collect();
-    let session = free_name(&format!("{}-{name}", workspace.name), &taken);
+    let session = unused_name(demo.label).await?;
     run_in_new_session(
         &session,
-        &worker(&session)?,
-        &[],
+        demo.cwd,
+        &(demo.worker)(&session)?,
+        demo.env,
         super::NOT_INHERITED_BY_DEMOS,
     )
     .await?;
     Ok(session)
 }
 
-/// Create the session `name` and run `argv` there as `start_detached`
-/// describes, without the variables `clear` names.
+/// Create the session `name` at `cwd` and run `argv` there as
+/// `start_detached` describes, without the variables `clear` names.
 async fn run_in_new_session(
     name: &str,
+    cwd: &Path,
     argv: &[OsString],
-    env: &[(&str, &str)],
+    env: &[(&str, String)],
     clear: &[&str],
 ) -> Result<()> {
     let words = argv
@@ -330,7 +272,8 @@ async fn run_in_new_session(
     let mut create = Command::new(Tool::Zmx.program());
     create
         .args(["run", name, "-d", "true"])
-        .envs(env.iter().copied())
+        .current_dir(cwd)
+        .envs(env.iter().map(|(name, value)| (name, value)))
         .stdin(std::process::Stdio::null());
     for name in clear {
         create.env_remove(name);
@@ -458,12 +401,6 @@ fn ended(status: ExitStatus) -> Result<()> {
         bail!("zmx exited with {status}");
     }
     Ok(())
-}
-
-async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result<i32> {
-    ended(status)?;
-    super::report_detach(Owner::Workspace(&workspace.id), &workspace.name, name).await?;
-    Ok(0)
 }
 
 /// `owner`'s running sessions, oldest name first.

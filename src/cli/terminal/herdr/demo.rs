@@ -5,31 +5,23 @@ use serde::Deserialize;
 use tokio::process::Command;
 
 use super::{created, shell_command, tab_command};
-use crate::{
-    cli::{context::Context, terminal::DemoWorker},
-    model::Workspace,
-    subprocess::Run,
-};
+use crate::{cli::terminal::Demo, subprocess::Run};
 
 /// Lines of recent output a screen read returns.
 const SCREEN_LINES: &str = "500";
 
 /// Open a background tab for the demo and run its worker in the tab's pane,
 /// returning the pane.
-pub(super) async fn start(
-    ctx: &Context,
-    workspace: &Workspace,
-    name: &str,
-    worker: &DemoWorker<'_>,
-) -> Result<String> {
-    let label = format!("{} demo {name}", workspace.name);
-    let pane = created(tab_command(ctx, &workspace.path, &label, false)?)
+pub(super) async fn start(demo: &Demo<'_>) -> Result<String> {
+    let pane = created(tab_command(demo.cwd, demo.label, false, demo.env)?)
         .await?
         .root_pane
         .pane_id;
     let mut run = Command::new("herdr");
-    run.args(["pane", "run", &pane])
-        .arg(format!("{} && exit", shell_command(&worker(&pane)?)?));
+    run.args(["pane", "run", &pane]).arg(format!(
+        "{} && exit",
+        shell_command(&(demo.worker)(&pane)?)?
+    ));
     Run::new(run)
         .checked()
         .await

@@ -7,18 +7,11 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, DemoWorker, Host, Options, PlaceState, Placement, Watched};
+use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
 
 mod demo;
-use crate::cli::{commands::workspaces::AddPlan, context::Context, internal};
-use crate::{
-    config::{self, Config},
-    env,
-    execution::recovery::Record,
-    model::{Repository, Workspace},
-    state::AgentState,
-    subprocess::Run,
-};
+use crate::cli::{context::Context, internal};
+use crate::{config, env, execution::recovery::Record, state::AgentState, subprocess::Run};
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place.
@@ -39,15 +32,11 @@ impl Host for Herdr {
         in_herdr()
     }
 
-    fn start_add<'a>(
-        &'a self,
-        ctx: &'a Context,
-        plan: &'a AddPlan,
-        _name: &'a str,
-        placement: Placement,
-        worker: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(start_add(ctx, plan, placement, worker))
+    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            open_tab(start).await?;
+            Ok(true)
+        })
     }
 
     /// A background tab.
@@ -55,14 +44,8 @@ impl Host for Herdr {
         true
     }
 
-    fn run_in_background<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        label: &'a str,
-        args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(run_in_tab(ctx, &workspace.path, label, args, false))
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(open_tab(start))
     }
 
     fn rerun_where_stopped<'a>(
@@ -74,15 +57,9 @@ impl Host for Herdr {
         Box::pin(rerun_in_recorded_pane(ctx, record, args))
     }
 
-    fn start_chat<'a>(
-        &'a self,
-        ctx: &'a Context,
-        repository: &'a Repository,
-        name: &'a str,
-        args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<ChatStart>> {
+    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
-            run_in_tab(ctx, &repository.path, name, args, true).await?;
+            open_tab(start).await?;
             Ok(ChatStart::Tab)
         })
     }
@@ -123,14 +100,8 @@ impl Host for Herdr {
         Box::pin(rename_tab(place, label))
     }
 
-    fn start_demo<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        name: &'a str,
-        worker: &'a DemoWorker<'a>,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move { demo::start(ctx, workspace, name, worker).await.map(Some) })
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { demo::start(demo).await.map(Some) })
     }
 
     fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
@@ -171,45 +142,6 @@ fn environment() -> BTreeMap<String, String> {
 /// Whether this process runs in Herdr, so new tabs can open beside it.
 fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
-}
-
-/// Run `plan` in a new tab with `worker`, taking focus as `placement` asks.
-async fn start_add(
-    ctx: &Context,
-    plan: &AddPlan,
-    placement: Placement,
-    worker: &[OsString],
-) -> Result<bool> {
-    let directive = TabDirective::create()?;
-    let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
-    run_in_pane(&created.root_pane.pane_id, worker).await?;
-    directive.hand_over()?;
-    Ok(true)
-}
-
-/// The file in which the worker leaves the workspace for the tab's shell to
-/// enter. Shoal removes it until the tab runs its worker; then the shell
-/// removes it at its next prompt, or the watcher when it closes the tab.
-struct TabDirective(tempfile::TempPath);
-
-impl TabDirective {
-    fn create() -> Result<Self> {
-        let file = tempfile::Builder::new()
-            .prefix("shoal-cd.")
-            .tempfile()
-            .context("create the tab's shell directive")?;
-        Ok(Self(file.into_temp_path()))
-    }
-
-    /// The tab environment entry naming the file.
-    fn env(&self) -> String {
-        format!("{}={}", env::SHELL_DIRECTIVE, self.0.display())
-    }
-
-    fn hand_over(self) -> Result<()> {
-        self.0.keep().context("keep the tab's shell directive")?;
-        Ok(())
-    }
 }
 
 /// Run Shoal with `args` in the pane the agent of `record` stopped in, once
@@ -262,39 +194,16 @@ fn current_pane() -> Option<String> {
         .filter(|pane| !pane.is_empty())
 }
 
-/// Run Shoal with `args` in a new tab at `cwd`, focused when `focus` is set.
-async fn run_in_tab(
-    ctx: &Context,
-    cwd: &Path,
-    label: &str,
-    args: &[OsString],
-    focus: bool,
-) -> Result<()> {
-    let created = created(tab_command(ctx, cwd, label, focus)?).await?;
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
-    argv.extend_from_slice(args);
-    run_in_pane(&created.root_pane.pane_id, &argv).await
+/// Run `start` in a new tab.
+async fn open_tab(start: &Start<'_>) -> Result<()> {
+    let created = created(tab_command(start.cwd, start.label, start.focus, start.env)?).await?;
+    run_in_pane(&created.root_pane.pane_id, start.argv).await
 }
 
-// The tab environment carries the plan, keeping the typed command short, and
-// the file in which the worker leaves the workspace for the tab's shell to enter.
-async fn create_tab(
-    ctx: &Context,
-    plan: &AddPlan,
-    directive: &TabDirective,
-    focus: bool,
-) -> Result<CreatedResult> {
-    let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
-    create.arg("--env").arg(format!(
-        "{}={}",
-        env::ADD_PLAN,
-        serde_json::to_string(plan)?
-    ));
-    create.arg("--env").arg(directive.env());
-    created(create).await
-}
-
-fn tab_command(ctx: &Context, cwd: &Path, label: &str, focus: bool) -> Result<Command> {
+/// The command that creates a tab at `cwd` with `env`. Herdr starts it in
+/// its server's environment, so `env` carries what the tab needs from the
+/// caller's.
+fn tab_command(cwd: &Path, label: &str, focus: bool, env: &[(&str, String)]) -> Result<Command> {
     let workspace = std::env::var_os("HERDR_WORKSPACE_ID")
         .filter(|id| !id.is_empty())
         .context("Herdr did not provide HERDR_WORKSPACE_ID")?;
@@ -307,21 +216,9 @@ fn tab_command(ctx: &Context, cwd: &Path, label: &str, focus: bool) -> Result<Co
         .arg("--label")
         .arg(label)
         .arg(if focus { "--focus" } else { "--no-focus" });
-    // Preserve this CLI's config location, independently of the Herdr server's environment.
-    let config = Config::path(&ctx.paths);
-    let config_home = config
-        .parent()
-        .and_then(Path::parent)
-        .context("config has no parent")?;
-    create
-        .arg("--env")
-        .arg(format!("HOME={}", ctx.paths.home.display()));
-    create
-        .arg("--env")
-        .arg(format!("XDG_CONFIG_HOME={}", config_home.display()));
-    // Likewise its output setting, which agents the tab starts inherit.
-    let (name, value) = crate::env::output_setting();
-    create.arg("--env").arg(format!("{name}={value}"));
+    for (name, value) in env {
+        create.arg("--env").arg(format!("{name}={value}"));
+    }
     Ok(create)
 }
 
