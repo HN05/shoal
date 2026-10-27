@@ -58,8 +58,14 @@ pub(super) async fn start_watcher(
             kept_at: kept_at.as_deref(),
         },
     )?;
-    let mut watcher = tokio::process::Command::new(&argv[0]);
-    watcher
+    spawn_detached(ctx, &argv)
+        .with_context(|| format!("watch the workspace to close its {} place", host.name()))
+}
+
+/// Start `argv` in its own session, apart from this process and its terminal.
+fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result<()> {
+    let mut child = tokio::process::Command::new(&argv[0]);
+    child
         .args(&argv[1..])
         .current_dir(&ctx.paths.home)
         .stdin(Stdio::null())
@@ -67,16 +73,14 @@ pub(super) async fn start_watcher(
         .stderr(Stdio::null());
     // SAFETY: setsid detaches the forked child without allocating, before exec.
     unsafe {
-        watcher.pre_exec(|| {
+        child.pre_exec(|| {
             if libc::setsid() == -1 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
         });
     }
-    watcher
-        .spawn()
-        .with_context(|| format!("watch the workspace to close its {} place", host.name()))?;
+    child.spawn()?;
     Ok(())
 }
 
