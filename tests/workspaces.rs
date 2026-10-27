@@ -23770,36 +23770,25 @@ fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
     assert!(disabled > enabled, "zmx leaked mouse reporting mode");
 }
 
-/// Processes that stand in for chat agents, ended with the test.
-struct ChatProcesses(Vec<std::process::Child>);
-
-impl Drop for ChatProcesses {
-    fn drop(&mut self) {
-        for process in &mut self.0 {
-            let _ = process.kill();
-            let _ = process.wait();
-        }
-    }
-}
-
 #[test]
 fn attach_returns_to_chats_by_name() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    let mut processes = ChatProcesses(Vec::new());
-    let mut start = |name: &str| {
-        let process = Command::new("sleep").arg("600").spawn().unwrap();
+    let other = init_repo(home, "other", &[("tracked", "committed\n")]);
+    let other_repository = fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    // The chats last while this test's process runs.
+    let start = |repository: &Value, name: &str| {
         let response = fixture.request(serde_json::json!({"start_chat":{
-            "repository": repository["id"], "name": name, "agent": "claude", "pid": process.id()
+            "repository": repository["id"], "name": name, "agent": "claude",
+            "pid": std::process::id()
         }}));
-        processes.0.push(process);
         assert_eq!(response["type"], "chat", "{response}");
         response["data"]["id"].as_str().unwrap().to_owned()
     };
-    let talk = start("talk");
-    let plan = start("plan-7");
-    start("quiet");
+    let talk = start(&repository, "talk");
+    let plan = start(&repository, "plan-7");
+    start(&other_repository, "quiet");
     // Sessions are found by their label, whatever their name.
     let session = |name: &str, chat: &str| {
         format!("  name={name}\tpid=1\tclients=0\tshoal.agent=claude\tshoal.chat={chat}\n")
@@ -23827,8 +23816,8 @@ fn attach_returns_to_chats_by_name() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "first"]);
 
-    // In the checkout, with two chats running there, the picker offers the
-    // chats with sessions by name.
+    // In a checkout with two chats running, the picker offers the chats with
+    // sessions by name.
     let (output, rows) = fixture.pick_in(&fixture.repo, &["attach"], &talk, "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
@@ -23842,27 +23831,22 @@ fn attach_returns_to_chats_by_name() {
     }
     assert_eq!(attached(), ["attach", "second"]);
 
-    // A chat without a session says where it runs instead.
-    let (output, transcript) = fixture.interactive(&["attach", "quiet"], "");
-    assert!(!output.status.success());
-    assert!(
-        transcript.contains(
-            "quiet has no session to attach; it runs in the Herdr tab or terminal that started it"
-        ),
-        "{transcript}"
-    );
-
-    // Once the checkout's other chats end, attaching there needs no name.
-    for process in &mut processes.0[1..] {
-        process.kill().unwrap();
-        process.wait().unwrap();
+    // A chat without a session says where it runs instead, whether named or
+    // taken as its checkout's only chat.
+    let mut named = fixture.command();
+    named.args(["attach", "quiet"]);
+    let mut current = fixture.command();
+    current.current_dir(&other).arg("attach");
+    for command in [&mut named, &mut current] {
+        let (output, transcript) = fixture.interactive_command(command, "");
+        assert!(!output.status.success());
+        assert!(
+            transcript.contains(
+                "quiet has no session to attach; it runs in the Herdr tab or terminal that started it"
+            ),
+            "{transcript}"
+        );
     }
-    let (output, transcript) = fixture.interactive_command(
-        fixture.command().current_dir(&fixture.repo).arg("attach"),
-        "",
-    );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert_eq!(attached(), ["attach", "second"]);
 }
 
 #[test]
