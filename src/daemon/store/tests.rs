@@ -247,6 +247,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         chat_names::name_chats(&db)?;
         db.execute_batch(include_str!("chat_names.sql"))?;
     }
+    if version >= 72 {
+        db.execute_batch(include_str!("agent_queue_stopped_restores.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -369,6 +372,31 @@ fn queued_launches_keep_their_order_as_typed_entries() -> Result<()> {
             ("later".into(), "launch".into())
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn restores_outlive_their_execution_and_launches_keep_their_dependencies() -> Result<()> {
+    let mut db = historical_database(71)?;
+    db.execute_batch(
+        "INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,plan,env,state,created_at)
+                VALUES (4,'launch','launch','repo','later','claude','{}','{}','queued',1);
+         INSERT INTO agent_queue_dependencies(entry_id,kind,target)
+                VALUES ('launch','workspace','worker');
+         INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,execution_id,state,created_at,workspace_id)
+                VALUES (2,'restore','restore','repo','worker','claude','execution','queued',1,'workspace');",
+    )?;
+    migrate(&mut db)?;
+    let count = |sql: &str| -> Result<i64> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
+    assert_eq!(count("SELECT COUNT(*) FROM agent_queue_dependencies")?, 1);
+    db.execute("DELETE FROM executions WHERE id='execution'", [])?;
+    assert_eq!(count("SELECT COUNT(*) FROM agent_queue")?, 2);
+    // A restore the daemon starts carries its terminal's variables.
+    db.execute(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,workspace_id)
+            VALUES ('started','restore','repo','worker','claude','{}','ended','queued',1,'workspace')",
+        [],
+    )?;
     Ok(())
 }
 
