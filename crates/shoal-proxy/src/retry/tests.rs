@@ -71,6 +71,10 @@ impl crate::clock::Clock for Backwards {
         *now
     }
 
+    fn unix_seconds(&self) -> u64 {
+        crate::clock::MANUAL_UNIX_START
+    }
+
     fn sleep(&self, _: Duration) -> crate::clock::Sleep {
         Box::pin(std::future::pending())
     }
@@ -90,16 +94,22 @@ fn a_failure_read_before_the_outage_started_does_not_break_it() {
 
 #[test]
 fn an_error_that_names_its_reset_says_how_long_to_wait() {
+    let now = 1_700_000_000;
     assert_eq!(
-        error_wait(&serde_json::json!({"resets_in_seconds": 7200})),
+        error_wait(&serde_json::json!({"resets_in_seconds": 7200}), now),
         Some(Duration::from_secs(7200))
     );
-    let tomorrow = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 86_400;
-    let wait = error_wait(&serde_json::json!({"resets_at": tomorrow})).unwrap();
-    assert!(wait > POLICY.budget, "{wait:?}");
-    assert_eq!(error_wait(&serde_json::json!({"message": "busy"})), None);
+    assert_eq!(
+        error_wait(&serde_json::json!({"resets_at": now + 86_400}), now),
+        Some(Duration::from_secs(86_400))
+    );
+    // A reset that has passed asks for no wait.
+    assert_eq!(
+        error_wait(&serde_json::json!({"resets_at": now - 60}), now),
+        Some(Duration::ZERO)
+    );
+    assert_eq!(
+        error_wait(&serde_json::json!({"message": "busy"}), now),
+        None
+    );
 }

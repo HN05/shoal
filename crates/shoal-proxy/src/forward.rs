@@ -171,7 +171,7 @@ impl Forwarder {
         match (Failure::of_status(response.status()), request.protocol) {
             (Some(failure), _) => failed_status(failure, response, self.clock.as_ref()).await,
             (None, Some(protocol)) if is_event_stream(&response) => {
-                opened(protocol, response).await
+                opened(protocol, response, self.clock.as_ref()).await
             }
             (None, _) => Attempt::Answered(passthrough(response)),
         }
@@ -260,13 +260,18 @@ async fn failed_status(
         .ok()
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
+    let now = clock.unix_seconds();
     let retry_after = retry::retry_after(&parts.headers)
-        .or_else(|| error.as_ref().and_then(retry::error_wait))
+        .or_else(|| {
+            error
+                .as_ref()
+                .and_then(|error| retry::error_wait(error, now))
+        })
         .or_else(|| {
             // Anthropic names when every limit resets on each response, so
             // only a refusal waits for it.
             (failure == Failure::RateLimited)
-                .then(|| retry::limit_reset(&parts.headers))
+                .then(|| retry::limit_reset(&parts.headers, now))
                 .flatten()
         });
     Attempt::Failed(Failed {
@@ -280,7 +285,7 @@ async fn failed_status(
 
 /// The first events of `response`'s stream: a failure among them, or an end
 /// before any content, is an attempt that failed; content goes to the agent.
-async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
+async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Clock) -> Attempt {
     let (mut parts, mut body) = response.into_parts();
     strip_hop_by_hop(&mut parts.headers);
     parts.headers.remove(header::CONTENT_LENGTH);
@@ -302,7 +307,9 @@ async fn opened(protocol: Protocol, response: Response<Incoming>) -> Attempt {
         // an HTTP failure's body.
         Ok(Opening::Failure(failure, error, read)) => Attempt::Failed(Failed {
             failure,
-            retry_after: error.as_ref().and_then(retry::error_wait),
+            retry_after: error
+                .as_ref()
+                .and_then(|error| retry::error_wait(error, clock.unix_seconds())),
             in_stream: true,
             error,
             response: Response::from_parts(parts, full(read)),

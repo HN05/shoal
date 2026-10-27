@@ -658,11 +658,7 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
 
 #[tokio::test]
 async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let reset = (now + 7200).to_string();
+    let reset = (clock::MANUAL_UNIX_START + 7200).to_string();
     let limited = reset.clone();
     let upstream = FakeUpstream::start(move |_| {
         let mut response = reply(
@@ -676,21 +672,18 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
         response
     })
     .await;
-    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (addr, mut events, _clock) = proxy_on(upstream.url("")).await;
     let (status, _, _) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
     assert_eq!(status.as_u16(), 429);
     assert_eq!(upstream.requests().len(), 1);
-    let events = drain(&mut events);
-    let [
-        Event::Failed {
-            wait: Some(wait), ..
-        },
-    ] = events.as_slice()
-    else {
-        panic!("{events:?}");
-    };
-    // The test reads the clock a moment before the proxy does.
-    assert!((7100..=7200).contains(&wait.as_secs()), "{wait:?}");
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::RateLimited,
+            in_stream: false,
+            wait: Some(Duration::from_secs(7200)),
+        }]
+    );
 
     // Every response names the reset, so an overload does not wait for it.
     let upstream = FakeUpstream::start(move |received| {

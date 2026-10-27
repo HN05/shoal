@@ -8,6 +8,10 @@ pub(crate) trait Clock: Send + Sync {
     /// The time since the clock started.
     fn now(&self) -> Duration;
 
+    /// The wall-clock time in Unix seconds, which an upstream's reset times
+    /// are given in.
+    fn unix_seconds(&self) -> u64;
+
     /// A future that completes once `duration` has passed: a wait between
     /// attempts.
     fn sleep(&self, duration: Duration) -> Sleep;
@@ -30,6 +34,12 @@ impl Tokio {
 impl Clock for Tokio {
     fn now(&self) -> Duration {
         self.0.elapsed()
+    }
+
+    fn unix_seconds(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_secs())
     }
 
     fn sleep(&self, duration: Duration) -> Sleep {
@@ -61,6 +71,10 @@ struct Sleeper {
     deadline: bool,
     wake: tokio::sync::oneshot::Sender<()>,
 }
+
+/// The Unix second a [`Manual`] clock starts at.
+#[cfg(test)]
+pub(crate) const MANUAL_UNIX_START: u64 = 1_700_000_000;
 
 #[cfg(test)]
 impl Manual {
@@ -144,6 +158,10 @@ impl Manual {
 impl Clock for Manual {
     fn now(&self) -> Duration {
         self.state.lock().unwrap().now
+    }
+
+    fn unix_seconds(&self) -> u64 {
+        MANUAL_UNIX_START + self.now().as_secs()
     }
 
     fn sleep(&self, duration: Duration) -> Sleep {

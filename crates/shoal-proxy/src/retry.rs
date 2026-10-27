@@ -164,18 +164,20 @@ impl Outage {
     }
 }
 
-/// The wait an upstream error's reset time asks for, as a usage limit
-/// gives it: `resets_in_seconds`, or `resets_at` in Unix seconds.
-pub(crate) fn error_wait(error: &serde_json::Value) -> Option<Duration> {
+/// The wait an upstream error's reset time asks for at Unix second `now`,
+/// as a usage limit gives it: `resets_in_seconds`, or `resets_at` in Unix
+/// seconds.
+pub(crate) fn error_wait(error: &serde_json::Value, now: u64) -> Option<Duration> {
     if let Some(seconds) = error["resets_in_seconds"].as_u64() {
         return Some(Duration::from_secs(seconds));
     }
-    until(error["resets_at"].as_u64()?)
+    Some(until(error["resets_at"].as_u64()?, now))
 }
 
-/// The wait until Anthropic's subscription usage limit resets, which its
-/// `anthropic-ratelimit-unified-reset` header gives in Unix seconds.
-pub(crate) fn limit_reset(headers: &HeaderMap) -> Option<Duration> {
+/// The wait at Unix second `now` until Anthropic's subscription usage limit
+/// resets, which its `anthropic-ratelimit-unified-reset` header gives in
+/// Unix seconds.
+pub(crate) fn limit_reset(headers: &HeaderMap, now: u64) -> Option<Duration> {
     let reset = headers
         .get("anthropic-ratelimit-unified-reset")?
         .to_str()
@@ -183,16 +185,12 @@ pub(crate) fn limit_reset(headers: &HeaderMap) -> Option<Duration> {
         .trim()
         .parse()
         .ok()?;
-    until(reset)
+    Some(until(reset, now))
 }
 
-/// The wait until Unix second `at`.
-fn until(at: u64) -> Option<Duration> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs();
-    Some(Duration::from_secs(at.saturating_sub(now)))
+/// The wait from Unix second `now` until Unix second `at`.
+fn until(at: u64, now: u64) -> Duration {
+    Duration::from_secs(at.saturating_sub(now))
 }
 
 /// The wait a `Retry-After` header in seconds asks for.
