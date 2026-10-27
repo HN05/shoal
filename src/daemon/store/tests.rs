@@ -243,6 +243,10 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 70 {
         db.execute_batch(include_str!("workspace_turn_retries.sql"))?;
     }
+    if version >= 71 {
+        chat_names::name_chats(&db)?;
+        db.execute_batch(include_str!("chat_names.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -286,6 +290,62 @@ fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
         migrate(&mut db)?;
         assert_eq!(schema_snapshot(&db)?, expected);
     }
+    Ok(())
+}
+
+#[test]
+fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
+    let mut db = historical_database(70)?;
+    db.execute_batch(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('taken','repo','repo-chat-2','/taken','taken','ready');
+         INSERT INTO chats(id,repository_id,number,agent,pid,birth,started_at)
+             VALUES ('first','repo',1,'claude',1,'b',1),('second','repo',2,'codex',2,'b',2);
+         UPDATE workspaces SET chat_id='second' WHERE id='workspace';
+         INSERT INTO chat_messages(chat_id,created_at,workspace,message)
+             VALUES ('second',1,'worker','hello');",
+    )?;
+    let count = |db: &Connection, table: &str| -> Result<i64> {
+        Ok(db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?)
+    };
+    let events = count(&db, "workspace_events")?;
+    migrate(&mut db)?;
+
+    let names = db
+        .prepare("SELECT id,name FROM chats ORDER BY id")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        names,
+        [
+            ("first".into(), "repo-chat".into()),
+            ("second".into(), "repo-chat-3".into())
+        ]
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT chat_id FROM workspaces WHERE id='workspace'",
+            [],
+            |r| { r.get::<_, String>(0) }
+        )?,
+        "second"
+    );
+    assert_eq!(count(&db, "chat_messages")?, 1);
+    // The journal gains no events and names its chats as the rows do.
+    assert_eq!(count(&db, "workspace_events")?, events);
+    let started = db
+        .prepare(
+            "SELECT json_extract(record,'$.chat.name'),json_type(record,'$.chat.number')
+             FROM workspace_events WHERE json_extract(record,'$.kind')='chat_started' ORDER BY id",
+        )?
+        .query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        started,
+        [("repo-chat".into(), None), ("repo-chat-3".into(), None)]
+    );
     Ok(())
 }
 

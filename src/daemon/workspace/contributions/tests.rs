@@ -123,7 +123,12 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
     let repo = contribution(&manager, root.path()).await;
     assert!(manager.begin_contribution_removal(&repo).await.unwrap());
     let chat = manager
-        .start_chat(repo.id.as_str().into(), "claude".into(), std::process::id())
+        .start_chat(
+            repo.id.as_str().into(),
+            "chat-1".into(),
+            "claude".into(),
+            std::process::id(),
+        )
         .await
         .unwrap_err();
     assert!(chat.to_string().contains("being removed"), "{chat:#}");

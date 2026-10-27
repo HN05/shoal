@@ -196,6 +196,8 @@ impl<'a> AgentEnvironment<'a> {
 /// One chat about a repository in its registered checkout.
 pub(in crate::cli) struct ChatLaunch {
     pub repository: Repository,
+    /// The name the chat is recorded under.
+    pub name: String,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,

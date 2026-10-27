@@ -24,15 +24,21 @@ pub(super) async fn handle(
         }
         ChatMethod::StartChat {
             repository,
+            name,
             agent,
             pid,
-        } => Body::Chat(manager.start_chat(repository, agent, pid).await?),
+        } => Body::Chat(manager.start_chat(repository, name, agent, pid).await?),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(if caller.is_some() {
             Vec::new()
         } else {
             manager.chats().await?
         }),
+        ChatMethod::CheckChatName { name } => {
+            manager.check_chat_name(name).await?;
+            Body::Ok
+        }
+        ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
         ChatMethod::ChatUpdates { chat } => Body::PrUpdates(manager.chat_updates(&chat).await?),
         ChatMethod::AcknowledgeChatMessages { chat, ids } => {
             manager.mark_chat_messages_delivered(&chat, ids).await?;
@@ -47,6 +53,8 @@ impl Scoped for ChatMethod {
             ChatMethod::ListChats => None,
             ChatMethod::StartChat { .. }
             | ChatMethod::MoveChat { .. }
+            | ChatMethod::CheckChatName { .. }
+            | ChatMethod::FreeChatName { .. }
             | ChatMethod::ChatUpdates { .. }
             | ChatMethod::WaitChatMessages { .. }
             | ChatMethod::AcknowledgeChatMessages { .. } => return Err(denied()),

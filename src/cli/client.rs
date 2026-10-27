@@ -231,17 +231,28 @@ pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
     request(paths, WorkspaceMethod::ListWorkspaces).await
 }
 
-/// Record a chat whose agent replaces this process.
-pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> Result<Chat> {
+/// Record the chat `name` whose agent replaces this process.
+pub async fn start_chat(
+    paths: &Paths,
+    repository: &Repository,
+    name: &str,
+    agent: &str,
+) -> Result<Chat> {
     request(
         paths,
         ChatMethod::StartChat {
             repository: repository.id.clone().into(),
+            name: name.to_owned(),
             agent: agent.to_owned(),
             pid: std::process::id(),
         },
     )
     .await
+}
+
+/// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
+pub async fn free_chat_name(paths: &Paths, name: String) -> Result<String> {
+    request(paths, ChatMethod::FreeChatName { name }).await
 }
 
 /// Hand `chat` to process `pid`, whose agent now runs it.

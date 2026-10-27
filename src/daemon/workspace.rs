@@ -608,6 +608,7 @@ impl Manager {
         }
         let name = name.map(|name| derive_workspace_name(&name));
         if let Some(name) = name.clone() {
+            self.end_finished_chats().await?;
             self.store
                 .run(move |db| store::ensure_name_available(db, &name, None))
                 .await?;
@@ -690,6 +691,8 @@ impl Manager {
             .map(|git_dir| identity::marked_owner(git_dir))
             .transpose()?
             .flatten();
+        // A chat that ended no longer holds its name.
+        self.end_finished_chats().await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;

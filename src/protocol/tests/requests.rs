@@ -86,9 +86,11 @@ const REQUESTS: &[&str] = &[
     r#""list_agents""#,
     r#"{"restart_agent":{"execution":"e1"}}"#,
     // Chats.
-    r#"{"start_chat":{"repository":"app","agent":"claude","pid":4}}"#,
+    r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude","pid":4}}"#,
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
     r#""list_chats""#,
+    r#"{"check_chat_name":{"name":"app-chat"}}"#,
+    r#"{"free_chat_name":{"name":"app-chat"}}"#,
     r#"{"chat_updates":{"chat":"c1"}}"#,
     r#"{"wait_chat_messages":{"chat":"c1"}}"#,
     r#"{"acknowledge_chat_messages":{"chat":"c1","ids":[1]}}"#,

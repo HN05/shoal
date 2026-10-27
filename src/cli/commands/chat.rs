@@ -46,6 +46,8 @@ pub(super) struct Topic {
     pub relaunch: Vec<OsString>,
     /// The new tab's label.
     pub label: String,
+    /// The chat's name unless another holds it.
+    pub name: String,
     /// The task the agent starts on, or `None` to wait for the user.
     pub opening: Option<String>,
 }
@@ -55,6 +57,7 @@ impl Topic {
         Self {
             relaunch: vec!["chat".into(), repo.id.clone().into()],
             label: format!("{} chat", repository::name(repo)),
+            name: format!("{}-chat", repository::name(repo)),
             opening: None,
         }
     }
@@ -90,6 +93,7 @@ pub(super) async fn begin(
     sync(ctx, &repo).await;
     let settings = self::settings(ctx, &repo).await?;
     let launch = agents::ChatLaunch {
+        name: client::free_chat_name(&ctx.paths, topic.name.clone()).await?,
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
         repository: repo,
@@ -102,6 +106,7 @@ pub(super) async fn begin(
     ensure!(ctx.interactive(), "chat needs a terminal");
     let agents::ChatLaunch {
         repository: repo,
+        name,
         settings,
         instructions,
         opening,
@@ -112,7 +117,7 @@ pub(super) async fn begin(
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
-    let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
+    let chat = client::start_chat(&ctx.paths, &repo, &name, agent.name()).await?;
     run_here(
         ctx,
         &repo,
@@ -144,11 +149,9 @@ async fn sync(ctx: &Context, repo: &Repository) {
 /// `shoal work --chats`.
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let chats = listed(ctx, filter).await?;
-    let repositories = repositories(ctx, &chats).await?;
     let rows = ui::workspace_tree_rows(
         &[],
         &chats,
-        &repositories,
         &Default::default(),
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
@@ -166,14 +169,6 @@ pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Cha
     let mut chats = client::chats(&ctx.paths).await?;
     chats.retain(|chat| filter.keeps_chat(chat));
     Ok(chats)
-}
-
-/// The repositories that name `chats` in text rows; JSON output needs none.
-pub(super) async fn repositories(ctx: &Context, chats: &[Chat]) -> Result<Vec<Repository>> {
-    if ctx.json || chats.is_empty() {
-        return Ok(Vec::new());
-    }
-    client::repositories(&ctx.paths).await
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.

@@ -116,6 +116,8 @@ impl Manager {
             branch: branch.to_owned(),
         };
         let caller_execution = caller_execution.map(str::to_owned);
+        // A chat that ended no longer holds its name.
+        self.end_finished_chats().await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;

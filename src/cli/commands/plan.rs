@@ -102,6 +102,7 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
             repo.id.clone().into(),
         ],
         label: format!("{} plan", issue.tab_label(repo)),
+        name: format!("{}-plan-{}", crate::repository::name(repo), issue.number),
         opening: Some(prompt(issue, labels)),
     }
 }

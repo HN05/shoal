@@ -467,6 +467,7 @@ response_bodies! {
     Workspaces(Vec<Workspace>),
     Chat(crate::model::Chat),
     Chats(Vec<crate::model::Chat>),
+    ChatName(String),
     Branches(Vec<crate::git::existing_branch::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),

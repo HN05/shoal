@@ -235,6 +235,7 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
     let name = format!("happy-{}", agent.as_str());
     let ChatLaunch {
         repository,
+        name: chat_name,
         settings,
         instructions,
         opening,
@@ -258,7 +259,7 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
     }
     let daemon_recorded = warn_without_daemon(ctx);
     // This process holds the chat until the session runs.
-    let record = client::start_chat(&ctx.paths, repository, &name).await?;
+    let record = client::start_chat(&ctx.paths, repository, chat_name, &name).await?;
     let files = ctx.paths.chat_files(&record);
     let opening = Opening::prepare(
         ctx,
@@ -288,7 +289,7 @@ async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i
         &format!(
             "Started Happy {} chat {} for {} (pid {}); open it in the Happy app\nOutput: {}{}",
             agent.as_str(),
-            record.number,
+            record.name,
             crate::repository::name(repository),
             record.pid,
             log.display(),

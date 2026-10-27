@@ -99,7 +99,6 @@ pub fn workspace_rows(
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
-    repositories: &[Repository],
     stopped: &HashSet<String>,
     palette: Palette,
     width: Option<usize>,
@@ -119,7 +118,7 @@ pub fn workspace_tree_rows(
         tree.push(&mut rows, root, 0);
     }
     for chat in chats {
-        rows.push(chat_row(chat, repositories, palette));
+        rows.push(chat_row(chat, palette));
         for root in roots.iter().filter(|w| opened_by(w, chat)) {
             tree.push(&mut rows, root, 1);
         }
@@ -196,30 +195,18 @@ fn tree_workspace_row(
     )
 }
 
-fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (String, [Cell; 5]) {
+fn chat_row(chat: &Chat, palette: Palette) -> (String, [Cell; 5]) {
     let status = ListStatus::ProcessRunning;
     (
         palette.paint(Style::Heading, "◆"),
         [
-            (chat_label(chat, repositories), Some(Style::Heading)),
+            (chat.name.clone(), Some(Style::Heading)),
             (String::new(), None),
             (status.label().into(), Some(status.style())),
             (String::new(), None),
             (chat.agent.clone(), None),
         ],
     )
-}
-
-/// How lists name a chat: after its repository, numbered after the first.
-pub fn chat_label(chat: &Chat, repositories: &[Repository]) -> String {
-    let repository = repositories
-        .iter()
-        .find(|repo| repo.id == chat.repository_id)
-        .map_or("unknown repository", crate::repository::name);
-    match chat.number {
-        1 => format!("{repository} chat"),
-        number => format!("{repository} chat {number}"),
-    }
 }
 
 /// `workspace_rows` with a status, which picks the marker, and a status cell

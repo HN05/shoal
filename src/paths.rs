@@ -112,13 +112,10 @@ impl Paths {
     }
 
     /// Where a chat started detached keeps its log and first message, named
-    /// by its repository and number so a later chat with that number
-    /// replaces them.
+    /// after the chat so a later chat with that name replaces them.
     #[cfg_attr(not(feature = "happy"), allow(dead_code))]
     pub fn chat_files(&self, chat: &crate::model::Chat) -> PathBuf {
-        self.state
-            .join("chats")
-            .join(format!("{}-{}", chat.repository_id, chat.number))
+        self.state.join("chats").join(&chat.name)
     }
 
     /// Run data Shoal keeps for one workspace, such as detached session logs;

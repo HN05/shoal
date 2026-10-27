@@ -960,16 +960,18 @@ starts detached in the checkout as `shoal happy` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output and any saved first message replace those of
-the repository's earlier chat with its number, at
-`<state>/chats/<repository id>-<number>.log` and `.prompt.md`; `--json` reports
+an earlier chat with its name, at `<state>/chats/<name>.log` and `.prompt.md`;
+`--json` reports
 the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 `happy_daemon_recorded`. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
-pressure or resumed. The daemon records each chat while its agent process runs,
-numbering a repository's running chats from 1; `shoal work` lists it with the
-workspaces it opened, and [workspace events](#workspace-events) report its
-start and end. A workspace
+pressure or resumed. The daemon records each chat under its name while its
+agent process runs. Workspaces and running chats share one set of names across
+repositories: a chat cannot take a workspace's name or a name an unfinished
+rename reserves, and a workspace cannot be created or renamed to a running
+chat's name. The name frees once the chat's process ends. `shoal work` lists the chat by name with the workspaces it
+opened, and [workspace events](#workspace-events) report its start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
 field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
 chat, which returns it to you. While it runs, the chat
@@ -2789,7 +2791,7 @@ recorded workspace branch remains unchanged.
 
 A `type: "chat"` line records a chat's start or end: its `id`, `created_at`,
 `kind` (`chat_started` or `chat_ended`) and a `chat` object with its `id`,
-`repository_id`, `number`, `agent`, `pid` and Unix-seconds `started_at`.
+`repository_id`, `name`, `agent`, `pid` and Unix-seconds `started_at`.
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.

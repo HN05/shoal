@@ -22617,6 +22617,9 @@ fn install_recording_agent(fixture: &Fixture, agent: &str) {
     );
 }
 
+/// The default name of a chat about the fixture's repository.
+const CHAT_NAME: &str = "repo-with---quotes----literal-chat";
+
 /// Every retained journal event.
 fn journal(fixture: &Fixture) -> Vec<Value> {
     let output = fixture
@@ -22683,7 +22686,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(started["type"], "chat");
     assert_eq!(started["chat"]["repository_id"], id);
     assert_eq!(started["chat"]["agent"], "claude");
-    assert_eq!(started["chat"]["number"], 1);
+    assert_eq!(started["chat"]["name"], CHAT_NAME);
     assert_eq!(
         fs::read_to_string(home.join("chat-id")).unwrap().trim(),
         started["chat"]["id"].as_str().unwrap()
@@ -22786,8 +22789,6 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     let chats: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     assert_eq!(chats, serde_json::json!([started["chat"]]));
-    let name = fs::canonicalize(&fixture.repo).unwrap();
-    let name = name.file_name().unwrap().to_str().unwrap();
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
         .lines()
@@ -22802,7 +22803,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         rows,
         [
             vec![
-                format!("◆ {name} chat").as_str(),
+                format!("◆ {CHAT_NAME}").as_str(),
                 "process running",
                 "claude"
             ],
@@ -22812,7 +22813,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
 
     let status = fs::read_to_string(home.join("chat-status")).unwrap();
     assert!(
-        status.contains(&format!("Chat:          {name} chat (claude)\n")),
+        status.contains(&format!("Chat:          {CHAT_NAME} (claude)\n")),
         "{status}"
     );
 
@@ -23230,7 +23231,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let (started, recorded) = chat("happy-claude");
     let chat_record = &started["chat"];
     assert_eq!(chat_record["agent"], "happy-claude");
-    assert_eq!(chat_record["number"], 1);
+    assert_eq!(chat_record["name"], CHAT_NAME);
     assert!(
         recorded.contains(&format!("cwd={}\n", checkout.display())),
         "{recorded}"
@@ -23270,7 +23271,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     // Happy's Codex takes them as its first message, saved here when Happy
     // cannot deliver it.
     let (started, recorded) = chat("happy-codex");
-    assert_eq!(started["chat"]["number"], 2);
+    assert_eq!(started["chat"]["name"], format!("{CHAT_NAME}-2"));
     assert_eq!(
         args(&recorded),
         [

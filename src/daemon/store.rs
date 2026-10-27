@@ -14,10 +14,11 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 70;
+const SCHEMA_VERSION: i64 = 71;
 
 #[cfg(test)]
 mod benchmark;
+mod chat_names;
 #[cfg(test)]
 mod event_tests;
 mod worker;
@@ -88,11 +89,12 @@ impl Store {
     }
 }
 
-/// Checks existing rows before a migration's SQL runs; failure aborts the upgrade.
-type Precondition = fn(&Connection) -> Result<()>;
+/// Runs before a migration's SQL to check existing rows, or to change them
+/// where SQL cannot; failure aborts the upgrade.
+type Prepare = fn(&Connection) -> Result<()>;
 
 // Append schema changes in version order; startup recovery belongs in quarantine.
-const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
+const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (
         1,
         "CREATE TABLE IF NOT EXISTS repositories (
@@ -406,6 +408,11 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         WHERE kind='question_asked';", None),
     (69, DEMOS, None),
     (70, include_str!("store/workspace_turn_retries.sql"), None),
+    (
+        71,
+        include_str!("store/chat_names.sql"),
+        Some(chat_names::name_chats),
+    ),
 ];
 
 /// The demo each running execution runs; a demo ends with its execution.
@@ -577,10 +584,10 @@ fn migrate(db: &mut Connection) -> Result<()> {
         return Ok(());
     }
     let tx = db.transaction()?;
-    for &(target, sql, precondition) in MIGRATIONS {
+    for &(target, sql, prepare) in MIGRATIONS {
         if target > version {
-            if let Some(precondition) = precondition {
-                precondition(&tx)?;
+            if let Some(prepare) = prepare {
+                prepare(&tx)?;
             }
             tx.execute_batch(sql)
                 .with_context(|| format!("apply schema migration {target}"))?;
@@ -649,21 +656,48 @@ pub fn ensure_path_outside_moves(db: &Connection, path: &std::path::Path) -> Res
     Ok(())
 }
 
-/// Refuse a workspace name another workspace or an unfinished rename holds.
+/// What holds a name: workspaces, unfinished renames and running chats share
+/// one namespace across repositories.
+enum NameHolder {
+    Workspace,
+    Rename,
+    Chat,
+}
+
+/// What holds `name`, other than the workspace `except_id`. Chats are
+/// running as far as the caller ended finished ones first.
+fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<Option<NameHolder>> {
+    if exists(
+        db,
+        "SELECT 1 FROM workspaces WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
+        rusqlite::params![name, except_id],
+    )? {
+        return Ok(Some(NameHolder::Workspace));
+    }
+    if exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])? {
+        return Ok(Some(NameHolder::Rename));
+    }
+    if exists(db, "SELECT 1 FROM chats WHERE name=?1", [name])? {
+        return Ok(Some(NameHolder::Chat));
+    }
+    Ok(None)
+}
+
+/// Refuse a name another workspace, an unfinished rename or a running chat holds.
 pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
-    ensure!(
-        !exists(
-            db,
-            "SELECT 1 FROM workspaces WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
-            rusqlite::params![name, except_id],
-        )?,
-        "workspace name already exists: {name}"
-    );
-    ensure!(
-        !exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])?,
-        "workspace name is reserved by an unfinished rename: {name}"
-    );
-    Ok(())
+    match name_holder(db, name, except_id)? {
+        None => Ok(()),
+        Some(NameHolder::Workspace) => anyhow::bail!("workspace name already exists: {name}"),
+        Some(NameHolder::Rename) => {
+            anyhow::bail!("workspace name is reserved by an unfinished rename: {name}")
+        }
+        Some(NameHolder::Chat) => anyhow::bail!("a running chat already has the name {name}"),
+    }
+}
+
+/// Whether a workspace, an unfinished rename or a running chat holds `name`.
+pub fn name_taken(db: &Connection, name: &str) -> Result<bool> {
+    Ok(name_holder(db, name, None)?.is_some())
 }
 
 /// Check ownership before inserting a workspace or reserving a rename in a transaction.

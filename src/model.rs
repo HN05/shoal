@@ -669,8 +669,8 @@ pub struct LandPlan {
 pub struct Chat {
     pub id: String,
     pub repository_id: String,
-    /// Tells the repository's running chats apart; the first is 1.
-    pub number: u32,
+    /// Unique among workspace names and the names of running chats.
+    pub name: String,
     pub agent: String,
     pub pid: u32,
     pub started_at: i64,
