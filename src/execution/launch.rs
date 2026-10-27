@@ -234,14 +234,18 @@ async fn prepare_tracked_launch(
         None
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
-    let (link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
-    if let Some(auth) = auth.as_mut() {
-        auth.start_proxy(&plan.environment).await?;
-    }
-    if let Some(proxy) = auth.as_mut().and_then(|auth| auth.proxy.as_mut()) {
-        proxy.report_turns(paths, &plan.workspace.id, &plan.id);
-    }
-    let command = execution_command(paths, &plan, command, mode)?;
+    let (mut link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
+    // The daemon has registered the execution, so a launch that fails from
+    // here reports its end, which lets the daemon forget it.
+    let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
+        Ok(command) => command,
+        Err(error) => {
+            if let Err(report) = report_completion(&mut link, 1, mode).await {
+                eprintln!("warning: unable to report execution completion: {report:#}");
+            }
+            return Err(error);
+        }
+    };
     Ok(TrackedLaunch {
         link,
         plan,
@@ -250,6 +254,24 @@ async fn prepare_tracked_launch(
         recovery,
         record: None,
     })
+}
+
+/// Start the agent's proxy for the registered `plan`, and the command it
+/// runs.
+async fn ready_command(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: Vec<OsString>,
+    mode: &Mode,
+    auth: Option<&mut AgentLaunch>,
+) -> Result<Vec<OsString>> {
+    if let Some(auth) = auth {
+        auth.start_proxy(&plan.environment).await?;
+        if let Some(proxy) = auth.proxy.as_mut() {
+            proxy.report_turns(paths, &plan.workspace.id, &plan.id);
+        }
+    }
+    execution_command(paths, plan, command, mode)
 }
 
 async fn open_execution(

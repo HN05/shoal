@@ -12746,6 +12746,66 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
 }
 
 #[test]
+fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let config = home.join(".config/shoal/config.toml");
+    let mut text = fs::read_to_string(&config).unwrap();
+    text.push_str(
+        "[proxy.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
+         key = { env = 'CLIPROXY_TEST_KEY' }\n\
+         [ai.claude]\nproxy = 'cliproxy'\n",
+    );
+    fs::write(&config, text).unwrap();
+    let reload = fixture.run(&["daemon", "reload"]);
+    assert!(reload.status.success(), "{reload:?}");
+    fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "proxied",
+    ]);
+    fixture.add("proxied");
+    install_test_script(
+        home.join("bin/claude"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\n",
+    );
+
+    // Without its key the agent never starts, and its execution ends.
+    let output = fixture
+        .command()
+        .args(["claude", "proxied"])
+        .env_remove("CLIPROXY_TEST_KEY")
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("the proxy's key variable CLIPROXY_TEST_KEY is not set"),
+        "{stderr}"
+    );
+    assert!(!home.join("claude-args").exists());
+    let status = fixture.ok(&["status", "proxied"]);
+    assert_eq!(status["executions"], serde_json::json!([]), "{status}");
+
+    // With it, Claude Code is pointed at the proxy on a loopback port.
+    let output = fixture
+        .command()
+        .args(["claude", "proxied"])
+        .env("CLIPROXY_TEST_KEY", "sk-test")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let args = fs::read_to_string(home.join("claude-args")).unwrap();
+    assert!(
+        args.contains("\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:"),
+        "{args}"
+    );
+    assert!(!args.contains("sk-test"), "{args}");
+}
+
+#[test]
 fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
