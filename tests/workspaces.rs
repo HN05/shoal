@@ -1153,7 +1153,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
         .join("state/workspaces")
         .join(workspace["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
-    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
+    fs::write(state.join("closing-herdr-tab-7"), "").unwrap();
     let export = |tab: &str| {
         fixture
             .command()
@@ -11587,7 +11587,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         .join("state/workspaces")
         .join(workspaces[1]["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
-    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
+    fs::write(state.join("closing-herdr-tab-7"), "").unwrap();
     let refused = fixture
         .command()
         .args(["rm", "first", "second", "--yes"])
@@ -11597,11 +11597,11 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
-        stderr.contains("tab closes with the workspace, ending the removal"),
+        stderr.contains("terminal closes with the workspace, ending the removal"),
         "{stderr}"
     );
     assert!(path(0).exists());
-    fs::remove_file(state.join("closing-tab-tab-7")).unwrap();
+    fs::remove_file(state.join("closing-herdr-tab-7")).unwrap();
 
     let (no, prompt) = fixture.interactive(&["rm", "first", "second", "third"], "n\n");
     let prompt = prompt.replace("\r\n", "\n");
@@ -21274,18 +21274,26 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 /// Runs a session's command in place of a zmx session, recording each call
 /// and serving the sessions listed in `$HOME/zmx-sessions`. A detached
 /// session keeps the environment it was created with and runs sent text as
-/// its shell would, logging the output to `$HOME/zmx-<name>.log`.
+/// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
+/// listed once `$HOME/zmx-keep-sessions` exists. Calls from a place watcher
+/// go to `$HOME/zmx-watch-calls`, out of the recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
 import json, os, subprocess, sys
 from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
-with (root / 'zmx-calls').open('a') as calls:
+parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
+    capture_output=True, text=True).stdout
+log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
+with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
-if args[:1] == ['set']:
+if args[:1] in (['set'], ['kill']):
     pass
 elif args[:1] == ['run']:
     (root / f'zmx-{args[1]}.env').write_text(json.dumps(dict(os.environ)))
+    if (root / 'zmx-keep-sessions').exists():
+        with (root / 'zmx-sessions').open('a') as sessions:
+            sessions.write(f'  name={args[1]}\tpid=1\n')
 elif args[:1] == ['send'] and not (root / f'zmx-{args[1]}.env').exists():
     # An attached session's agent reads what is typed; record that it was.
     (root / 'zmx-sent').touch()
@@ -21466,6 +21474,8 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
             state.to_str().unwrap(),
             "--text",
             "internal",
+            "add",
+            "--host",
             "herdr",
             "--close-when-done"
         ]
@@ -23396,7 +23406,9 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert_eq!(calls[2][..2], ["send", "background"]);
     assert!(
         calls[2][2].starts_with("SHOAL_ENDS_SESSION=1 ")
-            && calls[2][2].ends_with(" internal add && exit; exec \"$SHELL\" -l\r"),
+            && calls[2][2].ends_with(
+                " internal add --host zmx --close-when-done && exit; exec \"$SHELL\" -l\r"
+            ),
         "{calls:?}"
     );
     let session: Value =
@@ -23623,6 +23635,69 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fs::read_to_string(fixture.root.path().join("login-shells")).unwrap_or_default(),
         "-l\n-l\n"
     );
+}
+
+#[test]
+fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n[done]\ncleanup = false\n",
+    ));
+    let home = fixture.root.path();
+    // The fake session outlives its agent, as one with a shell would.
+    fs::write(home.join("zmx-keep-sessions"), "").unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal"))
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "kept",
+                "--agent",
+                "pi",
+                "--",
+                "go",
+            ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let watched = || fs::read_to_string(home.join("zmx-watch-calls")).unwrap_or_default();
+    wait_until("the session's end", || {
+        watched().lines().any(|call| call == r#"["kill", "kept"]"#)
+    });
+    assert!(
+        fixture.ok(&["status", "kept"])["workspace"]["done"]
+            .as_bool()
+            .unwrap()
+    );
+}
+
+#[test]
+fn a_detached_session_stays_open_without_close_when_done() {
+    let fixture = Fixture::with_config(Some(
+        "close_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "open",
+            "--agent",
+            "pi",
+            "--",
+            "go",
+        ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let calls = zmx_calls(&fixture);
+    assert!(
+        calls[2][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
+        "{calls:?}"
+    );
+    assert!(!fixture.root.path().join("zmx-watch-calls").exists());
 }
 
 #[test]

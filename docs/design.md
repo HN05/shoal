@@ -588,7 +588,9 @@ agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with 
 allocated workspace branch by default. An optional `herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
-with the launch plan so the worker preserves the caller's naming choice.
+with the launch plan so the worker preserves the caller's naming choice. Shoal
+renders the label in its generic terminal layer; a host only applies the label it
+is given, so naming rules and their daemon and forge lookups live in one place.
 The plan travels in the tab's environment, naming a found issue by URL rather
 than carrying its unbounded body, and preserving
 state/config selection and literal arguments without hook scripts or state files.
@@ -607,14 +609,20 @@ The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits, and the tab's shell enters the
 workspace through its own exported navigation file, followed once at a prompt
-after the worker writes it. Completion that keeps the workspace closes them only
-after tracked executions have resolved or Herdr reports the agent's turn finished
-(`idle` or `done`), since interactive agents stay running at their prompt, and
-never while stopped work waits for resume, so the tab keeps the stop's cause and
-`shoal resume --all` can restore the agent in its pane; removal closes them
-immediately, so completion cleanup leaves the agent its grace period.
+after the worker writes it. Completion that keeps the workspace closes the place
+Shoal opened for it, a Herdr tab or a zmx session, only after tracked executions
+have resolved or the agent's turn finished, since interactive agents stay running
+at their prompt, and never while stopped work waits for resume, so the place keeps
+the stop's cause and `shoal resume --all` can restore the agent there; removal
+closes it immediately, so completion cleanup leaves the agent its grace period.
+The turn comes from the agent's hooks, and from the host only for an agent
+without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
+of such agents close with their execution. The rule, the watcher and its marker
+are generic: a host only closes a place and reports whether it is open and what
+its agent is doing. Top-level `close_when_done` applies to every host, and
+`herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
-that lifecycle change. A tab watcher ends once Herdr reports its tab missing,
+that lifecycle change. A watcher ends once its host reports the place missing,
 whatever the daemon reports; one refused for a protocol mismatch restarts
 from the installation path Shoal was started through, never a resolved versioned
 binary, once another binary is installed there, so tabs opened before an upgrade

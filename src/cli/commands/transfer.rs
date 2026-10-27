@@ -448,7 +448,7 @@ async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result
         ),
         None => ensure!(
             !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
-            "this tab closes when the export removes the workspace, ending the stream; export to a file with -o, or from another tab"
+            "this terminal closes when the export removes the workspace, ending the stream; export to a file with -o, or from another terminal"
         ),
     }
     Ok(check)

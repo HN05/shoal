@@ -122,8 +122,12 @@ impl Host for Herdr {
         Box::pin(tab_state(place))
     }
 
+    /// `herdr.close_when_done` overrides the top-level option.
     fn closes_when_done(&self, settings: &Effective) -> bool {
-        settings.herdr.close_when_done
+        settings
+            .herdr
+            .close_when_done
+            .unwrap_or(settings.close_when_done)
     }
 
     fn names_places(&self) -> bool {

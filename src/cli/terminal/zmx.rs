@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{DemoWorker, Host, Placement, Session};
+use super::{DemoWorker, Host, PlaceState, Placement, Session};
 use crate::{
     cli::{
         agents::ensure_program,
@@ -140,6 +140,22 @@ impl Host for Zmx {
     /// A detached session ends with its agent, leaving no shell.
     fn places_keep_shells(&self) -> bool {
         false
+    }
+
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(kill(place))
+    }
+
+    /// zmx reads no agent state, so a session is only open or gone.
+    fn place_state<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(async move {
+            let open = list().await?.iter().any(|(session, _)| session == place);
+            Ok(if open {
+                PlaceState::Open(None)
+            } else {
+                PlaceState::Gone
+            })
+        })
     }
 
     fn prompt_session(&self) -> Option<OsString> {
@@ -438,6 +454,17 @@ async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
         .checked()
         .await
         .context("label the zmx session")?;
+    Ok(())
+}
+
+/// End `session` with everything running in it.
+async fn kill(session: &str) -> Result<()> {
+    let mut kill = Command::new(Tool::Zmx.program());
+    kill.args(["kill", session]);
+    Run::new(kill)
+        .checked()
+        .await
+        .with_context(|| format!("end zmx session {session}"))?;
     Ok(())
 }
 

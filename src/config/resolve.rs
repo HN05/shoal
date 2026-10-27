@@ -31,6 +31,7 @@ pub struct Effective {
     pub default_agent: Option<crate::agent::Agent>,
     pub max_agents: Option<config::AgentLimit>,
     pub focus: Option<bool>,
+    pub close_when_done: bool,
     pub codex: Codex,
     pub herdr: config::Herdr,
     pub happy: config::Happy,
@@ -219,11 +220,12 @@ impl Effective {
             default_agent: merged.default_agent,
             max_agents: merged.max_agents,
             focus: merged.focus,
+            close_when_done: built_in(merged.close_when_done, "close_when_done")?,
             herdr: config::Herdr {
                 enabled: built_in(merged.herdr.enabled, "herdr.enabled")?,
                 tab_name: merged.herdr.tab_name,
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
-                close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
+                close_when_done: merged.herdr.close_when_done,
             },
             happy: config::Happy {
                 enabled: built_in(merged.happy.enabled, "happy.enabled")?,
@@ -345,13 +347,14 @@ fn built_in() -> RepoConfig {
     let restore = Restore::default();
     RepoConfig {
         max_agents: Some(config::AgentLimit::Dynamic),
+        close_when_done: Some(true),
         chat_template: Some(config::templates::CHAT_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
             enabled: Some(true),
             tab_name: None,
             new_tab: Some(true),
-            close_when_done: Some(true),
+            close_when_done: None,
         },
         happy: config::repo::Happy {
             enabled: Some(false),
@@ -676,6 +679,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(default_agent),
         scalar!(max_agents),
         scalar!(focus),
+        scalar!(close_when_done),
         scalar!(codex.default_mode),
         scalar!(herdr.enabled),
         scalar!(herdr.new_tab),

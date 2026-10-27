@@ -696,6 +696,9 @@ option overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
+Shoal also ends the session, as it closes a tab, once its workspace is removed
+or `done` keeps the workspace and the agent's final turn finishes, unless the
+top-level `close_when_done = false` keeps it open.
 
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
 or `--session <name>` when it has several; `shoal status` lists them. Sessions
@@ -717,15 +720,16 @@ with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into; the
 top-level `focus` option overrides this for tabs and zmx sessions alike, and
 `shoal add --focus` focuses one launch and starts it at once, as `--now` does.
-`enabled`, `new_tab` and `close_when_done` default to true; with `enabled = false`
-Shoal treats a Herdr pane as a plain terminal:
+`enabled` and `new_tab` default to true, and `close_when_done` overrides the
+top-level option of that name for tabs; with `enabled = false` Shoal treats a
+Herdr pane as a plain terminal:
 
 ```toml
 [herdr]
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
 # tab_name = "{repo}: {branch}" # Customize the tab name
-close_when_done = true  # Close after done keeps the workspace, or at removal
+# close_when_done = true # Close after done keeps the workspace, or at removal
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,
@@ -736,8 +740,9 @@ requested branch when the tab opens and the allocated branch after creation.
 Failures before agent execution leave the tab open. Agent exits leave the tab
 open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
-or Herdr reports that the agent finished its turn, unless stopped work waits for
-`shoal resume`, and workspace removal closes it immediately. `add`
+or the agent finishes its turn, as its hooks report it or, for an agent without
+them, as Herdr does, unless stopped work waits for `shoal resume`, and workspace
+removal closes it immediately. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
@@ -1997,8 +2002,8 @@ writes its removal record and checkpoint to a new file, or to standard output fo
 with the workspace, as its Herdr tab does. It refuses before removing anything
 when the file exists or lies inside the workspace, when the daemon cannot create
 a file in its directory within 30 seconds, when a checkpoint cannot keep
-the uncommitted files, or when `-` would stream from a Herdr tab that closes with
-the workspace, and asks before releasing holds unless given
+the uncommitted files, or when `-` would stream from a Herdr tab or zmx session
+that closes with the workspace, and asks before releasing holds unless given
 `--yes`. A workspace already removed is exported from its removal record without
 another removal. The checkpoint travels as a Git bundle without the commits of
 the default remote's default branch; a checkpoint that branch already has

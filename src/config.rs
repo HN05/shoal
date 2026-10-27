@@ -117,6 +117,8 @@ pub struct Config {
     pub keep_awake: bool,
     /// Whether new tabs and sessions take the terminal; unset follows the launch.
     pub focus: Option<bool>,
+    /// Whether a place Shoal opened for a workspace closes once it is done.
+    pub close_when_done: Option<bool>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub happy: repo::Happy,
@@ -611,6 +613,7 @@ impl Config {
             default_agent: self.default_agent.clone(),
             max_agents: self.max_agents,
             focus: self.focus,
+            close_when_done: self.close_when_done,
             codex: self.codex,
             herdr: self.herdr.clone(),
             happy: self.happy.clone(),
@@ -734,5 +737,6 @@ pub struct Herdr {
     pub enabled: bool,
     pub tab_name: Option<String>,
     pub new_tab: bool,
-    pub close_when_done: bool,
+    /// Overrides the top-level `close_when_done` for Herdr tabs.
+    pub close_when_done: Option<bool>,
 }

@@ -71,6 +71,8 @@ pub struct RepoConfig {
     pub max_agents: Option<crate::config::AgentLimit>,
     /// Whether new tabs and sessions take the terminal; unset follows the launch.
     pub focus: Option<bool>,
+    /// Whether a place Shoal opened for a workspace closes once it is done.
+    pub close_when_done: Option<bool>,
     pub codex: Codex,
     pub herdr: Herdr,
     pub happy: Happy,

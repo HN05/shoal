@@ -169,8 +169,8 @@ pub(in crate::cli) trait Host: Sync {
 
     /// Whether the places this host opens for a workspace close once it is
     /// done, under `settings`.
-    fn closes_when_done(&self, _settings: &Effective) -> bool {
-        false
+    fn closes_when_done(&self, settings: &Effective) -> bool {
+        settings.close_when_done
     }
 
     /// Whether the places this host opens show a name.

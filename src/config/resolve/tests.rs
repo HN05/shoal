@@ -6,7 +6,7 @@ use crate::config::repo::parse;
 /// fails the destructuring below until the fixture states it too.
 const FULL: &str = "\
 worker_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nfocus = false\nclose_when_done = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n[happy]\nenabled = true\n\
@@ -188,7 +188,8 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
 #[test]
 fn herdr_defaults_and_options_resolve_independently() {
     let defaults = stack("", "", "").resolve().unwrap().herdr;
-    assert!(defaults.enabled && defaults.new_tab && defaults.close_when_done);
+    assert!(defaults.enabled && defaults.new_tab);
+    assert_eq!(defaults.close_when_done, None);
     assert_eq!(defaults.tab_name, None);
     let settings = stack(
         "[herdr]\nenabled = false\nnew_tab = false\n",
@@ -198,7 +199,25 @@ fn herdr_defaults_and_options_resolve_independently() {
     .resolve()
     .unwrap()
     .herdr;
-    assert!(!settings.enabled && settings.new_tab && !settings.close_when_done);
+    assert!(!settings.enabled && settings.new_tab);
+    assert_eq!(settings.close_when_done, Some(false));
+}
+
+#[test]
+fn places_close_when_done_unless_a_layer_turns_it_off() {
+    assert!(stack("", "", "").resolve().unwrap().close_when_done);
+    assert!(
+        !stack("close_when_done = false\n", "", "")
+            .resolve()
+            .unwrap()
+            .close_when_done
+    );
+    assert!(
+        stack("close_when_done = false\n", "", "close_when_done = true\n")
+            .resolve()
+            .unwrap()
+            .close_when_done
+    );
 }
 
 #[test]
@@ -304,6 +323,7 @@ fn every_option_survives_layering_in_both_directions() {
         default_agent,
         max_agents,
         focus,
+        close_when_done,
         codex,
         herdr,
         happy,
@@ -368,6 +388,7 @@ fn every_option_survives_layering_in_both_directions() {
         default_agent.is_some(),
         max_agents.is_some(),
         focus.is_some(),
+        close_when_done.is_some(),
         codex.default_mode.is_some(),
         herdr.enabled.is_some(),
         herdr.tab_name.is_some(),

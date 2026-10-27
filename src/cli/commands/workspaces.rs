@@ -2091,7 +2091,7 @@ pub(super) fn ensure_batch_removable(
     );
     ensure!(
         !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
-        "this tab closes with the workspace, ending the {noun} of the others; {verb} from another tab"
+        "this terminal closes with the workspace, ending the {noun} of the others; {verb} from another terminal"
     );
     Ok(())
 }
