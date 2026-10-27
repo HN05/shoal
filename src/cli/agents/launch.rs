@@ -157,7 +157,11 @@ pub(in crate::cli) fn input(
     hooks: Vec<OsString>,
     mut args: Vec<OsString>,
 ) -> (Vec<OsString>, String) {
-    let (instruction_args, prompt) = separate_instructions(settings, name, instructions, prompt);
+    let instruction_args = settings
+        .launch(name)
+        .arguments
+        .instruction_args(&instructions);
+    let (instruction_args, prompt) = separate_instructions(instruction_args, instructions, prompt);
     let takes_prompt = settings
         .commands
         .get(name)
@@ -174,19 +178,15 @@ pub(in crate::cli) fn input(
 }
 
 /// The arguments carrying `instructions` and the prompt left to send: an
-/// agent without an instructions template gets them ahead of its prompt.
-fn separate_instructions(
-    settings: &Effective,
-    name: &str,
+/// agent without `instruction_args`, the arguments that would carry them,
+/// gets them ahead of its prompt.
+pub(super) fn separate_instructions(
+    instruction_args: Option<Vec<OsString>>,
     instructions: String,
     prompt: Option<String>,
 ) -> (Vec<OsString>, String) {
     let prompt = prompt.unwrap_or_default();
-    match settings
-        .launch(name)
-        .arguments
-        .instruction_args(&instructions)
-    {
+    match instruction_args {
         Some(instruction_args) => (instruction_args, prompt),
         None => (
             Vec::new(),

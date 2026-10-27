@@ -174,8 +174,7 @@ fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
 }
 
 /// The first message and arguments of a workspace session, which runs
-/// without Shoal's hooks. An agent that takes instructions apart from its
-/// prompt gets them as arguments; otherwise they lead its first message.
+/// without Shoal's hooks, as a tracked launch separates them.
 fn workspace_input(
     integration: &dyn Integration,
     app: &dyn App,
@@ -189,16 +188,11 @@ fn workspace_input(
         workspace,
         super::launch::delivery(integration, settings),
     );
-    match instruction_args(app, settings, &instructions) {
-        Some(instruction_args) => (prompt, instruction_args.into_iter().chain(args).collect()),
-        None => {
-            let prompt = match prompt {
-                Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
-                _ => instructions,
-            };
-            (Some(prompt), args)
-        }
-    }
+    let instruction_args = instruction_args(app, settings, &instructions);
+    let (instruction_args, prompt) =
+        super::launch::separate_instructions(instruction_args, instructions, prompt);
+    let prompt = Some(prompt).filter(|prompt| !prompt.is_empty());
+    (prompt, instruction_args.into_iter().chain(args).collect())
 }
 
 /// The arguments that give `app`'s agent `instructions` apart from its first
