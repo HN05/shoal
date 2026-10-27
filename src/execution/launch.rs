@@ -239,6 +239,11 @@ async fn prepare_tracked_launch(
     mode: &Mode,
     agent: Option<String>,
 ) -> Result<TrackedLaunch> {
+    // An agent may get a proxy later, on a restore after an upgrade, so the
+    // binary is read now, before the upgrade can replace it.
+    if agent.is_some() {
+        crate::proxy::remember_executable();
+    }
     let mut auth = prepare_agent_launch(paths, &workspace, mode, agent.as_deref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)

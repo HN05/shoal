@@ -6,7 +6,9 @@ mod config;
 mod launch;
 
 pub use config::{Proxies, Proxy, routes, validate, validate_references};
-pub use launch::{Running, URL, fill_url, forget_reports, send_relayed, start};
+pub use launch::{
+    Running, URL, fill_url, forget_reports, remember_executable, send_relayed, start,
+};
 
 #[cfg(test)]
 mod tests;

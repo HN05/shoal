@@ -81,8 +81,27 @@ fn a_proxy_key_is_written_out_or_read_from_the_agents_environment() {
     assert!(!printed.contains("sk-raw"), "{printed}");
 }
 
+/// A daemon at `paths` that answers each request with protocol `version`,
+/// as an upgraded one does to an older client.
+fn daemon_speaking(paths: &crate::paths::Paths, version: u32) -> tokio::task::JoinHandle<()> {
+    std::fs::create_dir_all(paths.socket.parent().unwrap()).unwrap();
+    let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            let (read, mut write) = stream.into_split();
+            let mut read = tokio::io::BufReader::new(read);
+            let request: crate::protocol::Request =
+                crate::protocol::read_buffered(&mut read).await.unwrap();
+            let mut response =
+                crate::protocol::Response::new(request.id, crate::protocol::Body::Ok);
+            response.protocol = version;
+            crate::protocol::write(&mut write, &response).await.unwrap();
+        }
+    })
+}
+
 #[tokio::test]
-async fn a_report_goes_through_the_installed_release_only_once_it_replaced_the_wrapper() {
+async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
@@ -96,18 +115,37 @@ async fn a_report_goes_through_the_installed_release_only_once_it_replaced_the_w
         std::fs::rename(&staged, &binary).unwrap();
     };
     install("#!/bin/sh\nexit 1\n");
+    // The binary the wrapper started from, read before the upgrade.
     let executable = crate::cli::installed::Executable::at(binary.clone());
-    let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
-    // Before an upgrade there is nothing to hand it to.
-    assert!(!launch::relay(&paths, &executable, report).await);
+    let report = || crate::protocol::AgentMethod::ReportUpstreamReset {
+        workspace: "w".into(),
+        execution: "e".into(),
+        resets_at: None,
+    };
+    let daemon = daemon_speaking(&paths, crate::protocol::VERSION + 1);
+    // Before the upgrade replaced it, there is nothing to hand it to.
+    launch::send_with(&paths, &executable, report()).await;
+    assert!(!received.exists());
     install(&format!(
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
         received.display()
     ));
-    assert!(launch::relay(&paths, &executable, report).await);
+    launch::send_with(&paths, &executable, report()).await;
     let args = std::fs::read_to_string(&received).unwrap();
     let args: Vec<_> = args.lines().collect();
-    assert_eq!(args[args.len() - 3..], ["internal", "proxy-report", report]);
+    assert_eq!(
+        args[args.len() - 3..args.len() - 1],
+        ["internal", "proxy-report"]
+    );
+    let relayed: serde_json::Value = serde_json::from_str(args[args.len() - 1]).unwrap();
+    assert_eq!(relayed["report_upstream_reset"]["execution"], "e");
+    // A daemon that accepts the report needs no relay.
+    std::fs::remove_file(&received).unwrap();
+    daemon.abort();
+    std::fs::remove_file(&paths.socket).unwrap();
+    let _daemon = daemon_speaking(&paths, crate::protocol::VERSION);
+    launch::send_with(&paths, &executable, report()).await;
+    assert!(!received.exists());
 }
 
 #[tokio::test]

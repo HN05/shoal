@@ -63,22 +63,39 @@ impl Running {
 /// Send a wrapper's `report` to the daemon, through the installed release
 /// when an upgrade changed the daemon's protocol under this wrapper.
 async fn send(paths: &crate::paths::Paths, report: crate::protocol::AgentMethod) {
+    send_with(paths, wrapper_executable(), report).await;
+}
+
+/// [`send`], with `executable` as the binary the wrapper started from.
+pub(super) async fn send_with(
+    paths: &crate::paths::Paths,
+    executable: &crate::cli::installed::Executable,
+    report: crate::protocol::AgentMethod,
+) {
     let Ok(json) = serde_json::to_string(&report) else {
         return;
     };
     if let Err(error) = crate::cli::client::call(paths, report).await
         && error.is::<crate::cli::client::ProtocolMismatch>()
     {
-        relay(paths, wrapper_executable(), &json).await;
+        relay(paths, executable, &json).await;
     }
 }
 
-/// The binary this wrapper started from, read once, so a later upgrade
-/// shows as its replacement.
+/// The binary this wrapper started from, which [`remember_executable`]
+/// reads as it starts, before an upgrade can replace it.
 fn wrapper_executable() -> &'static crate::cli::installed::Executable {
     static EXECUTABLE: std::sync::OnceLock<crate::cli::installed::Executable> =
         std::sync::OnceLock::new();
     EXECUTABLE.get_or_init(crate::cli::installed::Executable::current)
+}
+
+/// Read the binary an agent's wrapper started from, while it is still the
+/// one at its path, so an upgrade later shows as its replacement and the
+/// proxy's reports can go through the installed release. Once the binary
+/// is replaced, the path no longer names the running one.
+pub fn remember_executable() {
+    wrapper_executable();
 }
 
 /// Hand `report`, a proxy report's JSON, to the binary installed over
