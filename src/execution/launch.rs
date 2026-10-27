@@ -189,9 +189,7 @@ impl TrackedLaunch {
                 {
                     let (workspace, execution) = (&self.plan.workspace.id, &self.plan.id);
                     crate::proxy::forget_reports(paths, workspace, execution).await;
-                    if let Some(proxy) = auth.proxy.as_mut() {
-                        proxy.report_turns(paths, workspace, execution);
-                    }
+                    auth.report_proxy(paths, workspace, execution);
                 }
                 self.plan.ports = ports;
                 self.command = command;
@@ -284,9 +282,7 @@ async fn ready_command(
 ) -> Result<Vec<OsString>> {
     if let Some(auth) = auth {
         auth.start_proxy(&plan.environment).await?;
-        if let Some(proxy) = auth.proxy.as_mut() {
-            proxy.report_turns(paths, &plan.workspace.id, &plan.id);
-        }
+        auth.report_proxy(paths, &plan.workspace.id, &plan.id);
     }
     execution_command(paths, plan, command, mode)
 }

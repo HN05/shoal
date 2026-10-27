@@ -60,6 +60,17 @@ impl AgentLaunch {
         Ok(true)
     }
 
+    /// Have the agent's proxy, when one runs, report to the daemon for
+    /// `execution` in `workspace`, its turns' ends when the proxy's failure
+    /// stream ends them.
+    pub(super) fn report_proxy(&mut self, paths: &Paths, workspace: &str, execution: &str) {
+        let kind = self.integration.unwrap_or(crate::ai::IntegrationKind::None);
+        let ends_turns = crate::cli::agents::proxy_ends_turns(kind);
+        if let Some(proxy) = self.proxy.as_mut() {
+            proxy.report_turns(paths, workspace, execution, ends_turns);
+        }
+    }
+
     /// What the agent's launch adds to this process's environment: the
     /// workspace's `environment`, the secrets, then the agent's own.
     fn configured_environment(

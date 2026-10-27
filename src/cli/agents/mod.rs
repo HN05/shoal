@@ -56,6 +56,14 @@ pub(in crate::cli) trait Integration: Sync {
         false
     }
 
+    /// Whether a response stream its proxy ends with a failure ends its
+    /// turn, which the proxy then reports: for an agent with no hook of its
+    /// own for a failed turn. One with a hook reports its turn's end itself,
+    /// since a subagent's request may fail while the turn goes on.
+    fn proxy_ends_turns(&self) -> bool {
+        false
+    }
+
     /// Arguments that only send its API requests to Shoal's proxy, for a
     /// launch Shoal gives no hooks, such as a configured resume command,
     /// with the placeholders of [`Self::hook_args`].
@@ -536,6 +544,12 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
 /// Shoal's proxy.
 pub(crate) fn hook_args(kind: IntegrationKind, proxied: bool) -> std::io::Result<Vec<OsString>> {
     integration(kind).hook_args(proxied)
+}
+
+/// Whether a failure stream from the proxy of an agent with integration
+/// `kind` ends its turn.
+pub(crate) fn proxy_ends_turns(kind: IntegrationKind) -> bool {
+    integration(kind).proxy_ends_turns()
 }
 
 /// Whether an agent with integration `kind` can go through Shoal's proxy.

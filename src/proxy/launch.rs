@@ -42,21 +42,31 @@ impl Drop for Running {
 }
 
 impl Running {
-    /// Tell the daemon about each turn the proxy ends for the agent that
-    /// `execution` runs in `workspace`: a failure it gave up on inside a
-    /// response stream ends the agent's turn, which the daemon may retry.
-    pub fn report_turns(&mut self, paths: &crate::paths::Paths, workspace: &str, execution: &str) {
+    /// Tell the daemon what the proxy learns for the agent that `execution`
+    /// runs in `workspace`: the retries it waits to make and its upstream's
+    /// resets, and, when `ends_turns`, each turn a failure it gave up on
+    /// inside a response stream ends, which the daemon may retry. Only an
+    /// agent that reports no failed turn itself takes such a failure for its
+    /// turn's end, since a subagent's request may fail while the turn goes on.
+    pub fn report_turns(
+        &mut self,
+        paths: &crate::paths::Paths,
+        workspace: &str,
+        execution: &str,
+        ends_turns: bool,
+    ) {
         #[cfg(feature = "proxy")]
         if let Some(events) = self.events.take() {
             let reporter = Reporter {
                 paths: paths.clone(),
                 workspace: workspace.to_owned(),
                 execution: execution.to_owned(),
+                ends_turns,
             };
             self.reporting = Some(tokio::spawn(reporter.run(events)));
         }
         #[cfg(not(feature = "proxy"))]
-        let _ = (paths, workspace, execution);
+        let _ = (paths, workspace, execution, ends_turns);
     }
 }
 
@@ -170,15 +180,20 @@ pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execut
 
 /// Reports a proxied agent's ended turns to the daemon.
 #[cfg(feature = "proxy")]
-struct Reporter {
-    paths: crate::paths::Paths,
-    workspace: String,
-    execution: String,
+pub(super) struct Reporter {
+    pub(super) paths: crate::paths::Paths,
+    pub(super) workspace: String,
+    pub(super) execution: String,
+    /// Whether a failure stream ends the agent's turn.
+    pub(super) ends_turns: bool,
 }
 
 #[cfg(feature = "proxy")]
 impl Reporter {
-    async fn run(self, mut events: tokio::sync::mpsc::UnboundedReceiver<shoal_proxy::Event>) {
+    pub(super) async fn run(
+        self,
+        mut events: tokio::sync::mpsc::UnboundedReceiver<shoal_proxy::Event>,
+    ) {
         use shoal_proxy::Event;
         while let Some(event) = events.recv().await {
             match event {
@@ -197,7 +212,7 @@ impl Reporter {
                     if let Some(wait) = wait {
                         self.reset(Some(wait)).await;
                     }
-                    if in_stream {
+                    if in_stream && self.ends_turns {
                         self.turn_failed(turn_failure(failure)).await;
                     }
                 }

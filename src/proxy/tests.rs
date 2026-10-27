@@ -82,22 +82,82 @@ fn a_proxy_key_is_written_out_or_read_from_the_agents_environment() {
 }
 
 /// A daemon at `paths` that answers each request with protocol `version`,
-/// as an upgraded one does to an older client.
-fn daemon_speaking(paths: &crate::paths::Paths, version: u32) -> tokio::task::JoinHandle<()> {
+/// as an upgraded one does to an older client, and keeps the name of each
+/// request's method.
+fn daemon_speaking(
+    paths: &crate::paths::Paths,
+    version: u32,
+) -> (
+    tokio::task::JoinHandle<()>,
+    std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+) {
     std::fs::create_dir_all(paths.socket.parent().unwrap()).unwrap();
     let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
-    tokio::spawn(async move {
+    let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let received = methods.clone();
+    let serving = tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
             let (read, mut write) = stream.into_split();
             let mut read = tokio::io::BufReader::new(read);
-            let request: crate::protocol::Request =
+            let request: serde_json::Value =
                 crate::protocol::read_buffered(&mut read).await.unwrap();
-            let mut response =
-                crate::protocol::Response::new(request.id, crate::protocol::Body::Ok);
+            let method = &request["method"];
+            let name = method
+                .as_object()
+                .and_then(|method| method.keys().next().cloned())
+                .unwrap_or_else(|| method.as_str().unwrap_or_default().to_owned());
+            received.lock().unwrap().push(name);
+            let id = request["id"].as_u64().unwrap();
+            let mut response = crate::protocol::Response::new(id, crate::protocol::Body::Ok);
             response.protocol = version;
             crate::protocol::write(&mut write, &response).await.unwrap();
         }
-    })
+    });
+    (serving, methods)
+}
+
+#[tokio::test]
+#[cfg(feature = "proxy")]
+async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() {
+    use shoal_proxy::{Event, Failure};
+    for (ends_turns, expected) in [
+        // Claude reports its turn's end itself.
+        (false, &["report_proxy_retry", "report_upstream_reset"][..]),
+        (
+            true,
+            &[
+                "report_proxy_retry",
+                "report_upstream_reset",
+                "report_turn_failure",
+            ][..],
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::Paths::for_test(root.path());
+        let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+        let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+        sender
+            .send(Event::Failed {
+                failure: Failure::RateLimited,
+                in_stream: true,
+                wait: Some(std::time::Duration::from_secs(60)),
+            })
+            .unwrap();
+        drop(sender);
+        let reporter = launch::Reporter {
+            paths: paths.clone(),
+            workspace: "w".into(),
+            execution: "e".into(),
+            ends_turns,
+        };
+        reporter.run(events).await;
+        assert_eq!(*methods.lock().unwrap(), expected, "{ends_turns}");
+    }
+    use crate::ai::IntegrationKind;
+    assert!(!crate::cli::agents::proxy_ends_turns(
+        IntegrationKind::Claude
+    ));
+    assert!(crate::cli::agents::proxy_ends_turns(IntegrationKind::Codex));
 }
 
 #[tokio::test]
@@ -122,7 +182,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
         execution: "e".into(),
         resets_at: None,
     };
-    let daemon = daemon_speaking(&paths, crate::protocol::VERSION + 1);
+    let (daemon, _) = daemon_speaking(&paths, crate::protocol::VERSION + 1);
     // Before the upgrade replaced it, there is nothing to hand it to.
     launch::send_with(&paths, &executable, report()).await;
     assert!(!received.exists());
