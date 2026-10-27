@@ -2679,8 +2679,10 @@ two seconds without input. `work` and `status` show
 agent waits for the user or for activity that [wakes it](#agent-messages); `status`,
 `inspect` and `work --json` give `agent_state` with `state` and the Unix-seconds
 `since` it began. A state
-reported from a tracked execution ends with that execution; one reported from
-outside lasts until the next report or removal. Each change, and each end, is
+reported from a tracked execution shows only while that execution runs, so an
+agent whose process died, such as with a reboot, shows none, and the state ends
+with the execution's record; one reported from outside lasts until the next
+report or removal. Each change, and each end, is
 a [workspace event](#workspace-events); repeating the current state is not a
 change. Agent state never notifies, records completion, or affects cleanup.
 Scoped callers report only for their own workspace; `--workspace` selects

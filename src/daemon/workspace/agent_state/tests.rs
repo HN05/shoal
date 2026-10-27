@@ -110,6 +110,47 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
 }
 
 #[tokio::test]
+async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let id = workspace.id.clone();
+    let set_execution = |state: ExecutionState| {
+        let id = id.clone();
+        manager.store.run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,?2)
+                 ON CONFLICT(id) DO UPDATE SET state=excluded.state",
+                params![id, state],
+            )?;
+            Ok(())
+        })
+    };
+    set_execution(ExecutionState::Running).await.unwrap();
+    let idle = manager
+        .set_agent_state(
+            &workspace.name,
+            AgentState::Idle,
+            Some("agent".into()),
+            None,
+        )
+        .await
+        .unwrap();
+
+    set_execution(ExecutionState::Unknown).await.unwrap();
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        None
+    );
+
+    // A wrapper that reattaches brings its state back.
+    set_execution(ExecutionState::Running).await.unwrap();
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        Some(idle)
+    );
+}
+
+#[tokio::test]
 async fn scoped_callers_report_only_for_their_own_workspace() {
     let (temp, manager) = manager().await;
     let own = workspace(&manager, &temp).await;

@@ -7,7 +7,7 @@ use super::Manager;
 use crate::{
     execution::recovery,
     model::AgentStatus,
-    state::{AgentState, TurnFailure},
+    state::{AgentState, ExecutionState, TurnFailure},
 };
 
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
@@ -15,14 +15,32 @@ pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
         .query_row(
             "SELECT state,since FROM workspace_agent_state WHERE workspace_id=?1",
             [id],
-            |row| {
-                Ok(AgentStatus {
-                    state: row.get(0)?,
-                    since: row.get(1)?,
-                })
-            },
+            status,
         )
         .optional()?)
+}
+
+/// The last reported state while an agent can still be in it: one reported
+/// from outside a tracked execution, or from one that runs. An `unknown`
+/// execution may have died with its wrapper or may reattach after a daemon
+/// restart, so its state stays recorded and shows again once it runs.
+pub(crate) fn current(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
+    Ok(db
+        .query_row(
+            "SELECT s.state,s.since FROM workspace_agent_state s
+             LEFT JOIN executions e ON e.id=s.execution_id
+             WHERE s.workspace_id=?1 AND (s.execution_id IS NULL OR e.state=?2)",
+            params![id, ExecutionState::Running],
+            status,
+        )
+        .optional()?)
+}
+
+fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
+    Ok(AgentStatus {
+        state: row.get(0)?,
+        since: row.get(1)?,
+    })
 }
 
 /// Every workspace's last reported state.

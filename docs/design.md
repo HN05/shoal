@@ -1157,8 +1157,9 @@ shape that reads without color. Like
 ready marks it is a status signal for integrations that never notifies,
 completes, or affects idle cleanup; overload protection reads it only to stop
 idle agents first. A workspace keeps the
-latest report; a report from a tracked execution ends with that execution's
-record, while one from outside lasts until replaced or removal. Changes and
+latest report; a report from a tracked execution shows only while that
+execution runs and ends with its record, while one from outside lasts until
+replaced or removal. Changes and
 endings are journal events; repeating the current state is not a change and
 keeps its start time. Shoal's terminal Claude Code and Codex launches, resumed
 ones included, add the state hooks to the launch option that carries their
