@@ -38,7 +38,7 @@ use crate::{
         api::{HttpMethod, Request, encode},
         response::Response,
     },
-    updates::{DISCUSSION, Snapshot},
+    updates::{DISCUSSION, Entry, Snapshot},
 };
 
 use super::{Backend, LoginHint, rest};
@@ -668,12 +668,13 @@ impl RestReads for Bitbucket {
         account: &Account,
         kind: ItemKind,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<(String, Entry)>> {
         let endpoint = format!("{}/comments", repo.item_endpoint(kind, number));
         let comments = repo.pages(account, &endpoint).await?;
         fingerprints(
             &comments,
             &["content", "updated_on", "deleted", "resolution"],
+            |comment| nickname(&comment["user"]),
         )
     }
 

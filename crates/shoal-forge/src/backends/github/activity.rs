@@ -6,8 +6,11 @@ use super::{Query, gh};
 use crate::{
     ForgeRepo,
     account::Account,
-    review::status::{PrState, PrStatus, github_reviews},
-    updates::{Check, DISCUSSION, MergeRevision, Snapshot, discussion_key, id_text},
+    review::{
+        status::{PrState, PrStatus, github_reviews},
+        view::login,
+    },
+    updates::{Check, DISCUSSION, Entry, MergeRevision, Snapshot, discussion_key, id_text},
 };
 
 pub(crate) async fn issue_activity(
@@ -47,7 +50,7 @@ pub(crate) async fn issue_activity(
         let id = comment.get("id").context("issue comment has no ID")?;
         snapshot
             .comments
-            .insert(discussion_key(id), comment_fingerprint(comment));
+            .insert(discussion_key(id), entry(comment, &comment["author"]));
     }
     Ok(snapshot)
 }
@@ -88,7 +91,7 @@ pub(crate) async fn pr_activity(
         let id = comment.get("id").context("review comment has no ID")?;
         snapshot.comments.insert(
             format!("inline:{}", id_text(id)),
-            comment_fingerprint(&comment),
+            entry(&comment, &comment["user"]),
         );
     }
     Ok(snapshot)
@@ -169,7 +172,7 @@ fn snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
             let id = item.get("id").context("PR comment or review has no ID")?;
             snapshot.comments.insert(
                 format!("{source}:{}", id_text(id)),
-                comment_fingerprint(item),
+                entry(item, &item["author"]),
             );
         }
     }
@@ -214,6 +217,11 @@ fn snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
         );
     }
     Ok(snapshot)
+}
+
+/// A comment or review as a snapshot records it, written by `user`.
+fn entry(item: &serde_json::Value, user: &serde_json::Value) -> Entry {
+    Entry::new(comment_fingerprint(item), login(user))
 }
 
 fn comment_fingerprint(item: &serde_json::Value) -> String {

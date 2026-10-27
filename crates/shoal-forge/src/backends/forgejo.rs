@@ -42,13 +42,13 @@ use crate::{
     review::{
         status::{PrStatus, Verdict, forgejo_reviews},
         thread::{Target, Thread},
-        view::{Details, Review},
+        view::{Details, Review, login},
     },
     transport::{
         api::{HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page},
         response::Response,
     },
-    updates::{DISCUSSION, Snapshot},
+    updates::{DISCUSSION, Entry, Snapshot},
 };
 
 /// Forgejo treats a PR whose title starts with one of these as a draft.
@@ -710,10 +710,12 @@ impl RestReads for Forgejo {
         account: &Account,
         _kind: ItemKind,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<(String, Entry)>> {
         let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
         let comments = repo.pages(account, &endpoint).await?;
-        fingerprints(&comments, &["body", "updated_at"])
+        fingerprints(&comments, &["body", "updated_at"], |comment| {
+            login(&comment["user"])
+        })
     }
 
     async fn review_activity(
@@ -721,7 +723,7 @@ impl RestReads for Forgejo {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<(String, Entry)>> {
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
         let reviews = repo.pages(account, &endpoint).await?;
         fingerprints(
@@ -734,6 +736,7 @@ impl RestReads for Forgejo {
                 "dismissed",
                 "updated_at",
             ],
+            |review| login(&review["user"]),
         )
     }
 

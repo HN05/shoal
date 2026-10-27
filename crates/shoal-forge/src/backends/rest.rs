@@ -14,7 +14,7 @@ use crate::{
         list,
     },
     review::status::{PrState, PrStatus, Verdict},
-    updates::{DISCUSSION, Snapshot},
+    updates::{DISCUSSION, Entry, Snapshot},
 };
 
 /// A CI check in the states every REST forge is mapped to; `Pending` is the
@@ -29,33 +29,35 @@ pub(crate) struct RestCheck {
 /// for the activity and status they otherwise read alike.
 pub(crate) trait RestReads: Backend {
     /// Each comment of the item's discussion by ID, with what changes when
-    /// it is added or edited. Every page: a comment missing from the set
-    /// reads as deleted.
+    /// it is added or edited and its author. Every page: a comment missing
+    /// from the set reads as deleted.
     async fn discussion(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
         number: u64,
-    ) -> Result<Vec<(String, String)>>;
+    ) -> Result<Vec<(String, Entry)>>;
 
     /// Each review by ID with what changes when it is submitted, edited,
-    /// dismissed or answered. By default inline comments are part of the
-    /// discussion and verdicts have no ID, so they change as one entry.
+    /// dismissed or answered and its reviewer. By default inline comments
+    /// are part of the discussion and verdicts have no ID, so each reviewer's
+    /// verdict is one entry.
     async fn review_activity(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
-        Ok(vec![(
-            "verdicts".into(),
-            self.verdicts(repo, account, number)
-                .await?
-                .iter()
-                .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
-                .collect(),
-        )])
+    ) -> Result<Vec<(String, Entry)>> {
+        Ok(self
+            .verdicts(repo, account, number)
+            .await?
+            .into_iter()
+            .map(|(reviewer, verdict)| {
+                let entry = Entry::new(format!("{verdict:?}"), reviewer.clone());
+                (format!("verdict:{reviewer}"), entry)
+            })
+            .collect())
     }
 
     /// The CI checks on the PR's head commit.
@@ -308,8 +310,13 @@ fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
         .collect()
 }
 
-/// Each item's ID with the fields of it that matter for activity.
-pub(crate) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(String, String)>> {
+/// Each item's ID with the fields of it that matter for activity and its
+/// author, which `author` reads from the item.
+pub(crate) fn fingerprints(
+    items: &[Value],
+    fields: &[&str],
+    author: fn(&Value) -> String,
+) -> Result<Vec<(String, Entry)>> {
     items
         .iter()
         .map(|item| {
@@ -318,7 +325,11 @@ pub(crate) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(Stri
                 .iter()
                 .map(|field| ((*field).to_owned(), item[*field].clone()))
                 .collect();
-            Ok((crate::updates::id_text(id), Value::from(fields).to_string()))
+            let fingerprint = Value::from(fields).to_string();
+            Ok((
+                crate::updates::id_text(id),
+                Entry::new(fingerprint, author(item)),
+            ))
         })
         .collect()
 }

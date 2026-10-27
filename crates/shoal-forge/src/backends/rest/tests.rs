@@ -65,15 +65,17 @@ fn merged_commits_need_full_ids_and_lists_need_numbers() {
 
 #[test]
 fn fingerprints_key_items_by_id_and_ignore_other_fields() {
-    let comment = json!({"id": 1, "body": "hi", "reactions": 1});
-    let reacted = json!({"id": 1, "body": "hi", "reactions": 2});
-    assert_eq!(
-        fingerprints(std::slice::from_ref(&comment), &["body"]).unwrap(),
-        fingerprints(&[reacted], &["body"]).unwrap()
-    );
-    let edited = json!({"id": 1, "body": "edited"});
-    let edited = fingerprints(&[edited], &["body"]).unwrap();
+    let read = |item: serde_json::Value| {
+        fingerprints(&[item], &["body"], |item| {
+            item["user"].as_str().unwrap_or_default().to_owned()
+        })
+    };
+    let comment = json!({"id": 1, "body": "hi", "reactions": 1, "user": "alice"});
+    let reacted = json!({"id": 1, "body": "hi", "reactions": 2, "user": "alice"});
+    assert_eq!(read(comment.clone()).unwrap(), read(reacted).unwrap());
+    let edited = read(json!({"id": 1, "body": "edited", "user": "alice"})).unwrap();
     assert_eq!(edited[0].0, "1");
-    assert_ne!(fingerprints(&[comment], &["body"]).unwrap(), edited);
-    assert!(fingerprints(&[json!({"body": "hi"})], &["body"]).is_err());
+    assert_eq!(edited[0].1.author, "alice");
+    assert_ne!(read(comment).unwrap(), edited);
+    assert!(read(json!({"body": "hi"})).is_err());
 }

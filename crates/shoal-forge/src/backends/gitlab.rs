@@ -38,7 +38,7 @@ use crate::{
         programs,
         response::Response,
     },
-    updates::{DISCUSSION, Snapshot},
+    updates::{DISCUSSION, Entry, Snapshot},
 };
 
 pub(crate) mod glab;
@@ -789,9 +789,11 @@ impl RestReads for GitLab {
         account: &Account,
         kind: ItemKind,
         number: u64,
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<(String, Entry)>> {
         let notes = item_notes(repo, account, kind, number).await?;
-        fingerprints(&notes, &["body", "updated_at", "resolved"])
+        fingerprints(&notes, &["body", "updated_at", "resolved"], |note| {
+            username(&note["author"])
+        })
     }
 
     async fn checks(

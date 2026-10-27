@@ -132,6 +132,26 @@ fn deleting_one_of_several_comments_is_reported() {
 }
 
 #[test]
+fn comments_saved_without_authors_match_the_same_comments_with_them() {
+    let saved: Snapshot = serde_json::from_value(json!({
+        "comments": {"discussion:1": "hi", "discussion:2": "bye"},
+        "checks": {}, "conflict": null, "state": "open", "errors": {},
+    }))
+    .unwrap();
+    let mut next = Snapshot::new("open");
+    next.record_comments(
+        DISCUSSION,
+        Ok(vec![("1".into(), Entry::new("hi".into(), "alice".into()))]),
+    );
+    assert_eq!(
+        saved.changes(&next, "pr")[0].message,
+        "Comments or reviews changed; read them with shoal view pr"
+    );
+    let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
+    assert_eq!(stored.comments, next.comments);
+}
+
+#[test]
 fn a_rate_limited_lookup_leaves_the_snapshot_incomplete_without_failing() {
     let limit = RateLimited {
         host: "forge.example".into(),

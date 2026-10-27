@@ -20,6 +20,9 @@ const FAILURE_REPORT_INTERVAL: u64 = 600;
 /// The comment source of an item's discussion, where Shoal posts comments.
 pub(crate) const DISCUSSION: &str = "discussion";
 
+mod comments;
+pub(crate) use comments::Entry;
+
 crate::state::states!(UpdateKind {
     Comment => "comment",
     CiCompleted => "ci_completed",
@@ -60,7 +63,7 @@ impl std::fmt::Display for Update {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
-    pub(crate) comments: BTreeMap<String, String>,
+    pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
     pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
@@ -146,15 +149,7 @@ impl Snapshot {
                 workspace: None,
             })
         };
-        let added_or_edited = next
-            .comments
-            .iter()
-            .any(|(id, comment)| !comment.is_empty() && self.comments.get(id) != Some(comment));
-        let deleted = self
-            .comments
-            .iter()
-            .any(|(id, comment)| !comment.is_empty() && !next.comments.contains_key(id));
-        if added_or_edited || deleted {
+        if comments::changed(&self.comments, &next.comments) {
             emit(
                 UpdateKind::Comment,
                 format!("Comments or reviews changed; read them with shoal view {url}"),
@@ -273,7 +268,10 @@ impl Snapshot {
     /// seen, and stop tracking each one taken.
     pub fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
         authored.retain(|key| match next.comments.get(key) {
-            Some(comment) if self.comments.get(key) != Some(comment) => {
+            Some(comment)
+                if self.comments.get(key).map(|seen| &seen.fingerprint)
+                    != Some(&comment.fingerprint) =>
+            {
                 self.comments.insert(key.clone(), comment.clone());
                 false
             }
@@ -313,7 +311,7 @@ impl Snapshot {
     }
 
     /// Record each comment of `source` by its ID.
-    pub(crate) fn record_comments(&mut self, source: &str, result: Result<Vec<(String, String)>>) {
+    pub(crate) fn record_comments(&mut self, source: &str, result: Result<Vec<(String, Entry)>>) {
         match result {
             Ok(comments) => {
                 self.comments.extend(
