@@ -139,6 +139,9 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
 #[test]
 fn a_closed_stdout_ends_commands_quietly() {
     let root = tempfile::tempdir().unwrap();
+    let config = root.path().join(".config/shoal/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(&config, "[commands]\ncustom-tool = ['true']\n").unwrap();
     for args in [
         vec!["skill"],
         vec!["--json", "skill", "worker"],
