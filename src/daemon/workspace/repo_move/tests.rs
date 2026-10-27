@@ -94,7 +94,12 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         .context("removal reserved during a move")?;
     assert!(error.to_string().contains("repository move is incomplete"));
     let error = manager
-        .start_chat(repo.id.clone().into(), "codex".into(), std::process::id())
+        .start_chat(
+            repo.id.clone().into(),
+            "chat-1".into(),
+            "codex".into(),
+            std::process::id(),
+        )
         .await
         .err()
         .context("chat started during a move")?;

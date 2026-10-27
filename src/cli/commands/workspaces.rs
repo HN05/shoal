@@ -1658,11 +1658,9 @@ pub(super) async fn list(
         .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));
     let queued =
         super::agent_queue::rows(ctx, &super::agent_queue::listed(ctx, filter).await?).await?;
-    let repositories = super::chat::repositories(ctx, &chats).await?;
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,
-        &repositories,
         &stopped,
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
@@ -1740,9 +1738,11 @@ impl StatusView {
         let status =
             request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
                 .await?;
-        let chat = chat_name(ctx, &chats, &status.inspection.workspace).await?;
+        let chat = chat_name(&chats, &status.inspection.workspace);
         let (sessions, sessions_error) =
-            match terminal::sessions(&status.inspection.workspace.id).await {
+            match terminal::sessions(terminal::Owner::Workspace(&status.inspection.workspace.id))
+                .await
+            {
                 Ok(sessions) => (sessions, None),
                 Err(error) => (Vec::new(), Some(format!("{error:#}"))),
             };
@@ -1757,19 +1757,12 @@ impl StatusView {
 
 /// The listed chat that opened `workspace` with its agent, else its ID, which
 /// scoped callers see without the chat.
-async fn chat_name(ctx: &Context, chats: &[Chat], workspace: &Workspace) -> Result<Option<String>> {
-    let Some(id) = &workspace.chat else {
-        return Ok(None);
-    };
-    let Some(chat) = chats.iter().find(|chat| chat.id == *id) else {
-        return Ok(Some(id.clone()));
-    };
-    let repositories = super::chat::repositories(ctx, std::slice::from_ref(chat)).await?;
-    Ok(Some(format!(
-        "{} ({})",
-        ui::chat_label(chat, &repositories),
-        chat.agent
-    )))
+fn chat_name(chats: &[Chat], workspace: &Workspace) -> Option<String> {
+    let id = workspace.chat.as_ref()?;
+    Some(match chats.iter().find(|chat| chat.id == *id) {
+        Some(chat) => format!("{} ({})", chat.name, chat.agent),
+        None => id.clone(),
+    })
 }
 
 /// Items and resources find the workspaces that link or hold them; anything

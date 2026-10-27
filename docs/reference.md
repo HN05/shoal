@@ -701,10 +701,16 @@ ends, as a tab closes, once the workspace is removed or `done` keeps the
 workspace and the agent's final turn finishes, unless the top-level
 `close_when_done = false` keeps it open.
 
-`shoal attach [workspace]` reattaches to the workspace's session, with a picker
-or `--session <name>` when it has several; `shoal status` lists them. Sessions
-are named after the workspace, suffixed `-2`, `-3`, ... when the name is in use,
-and labelled `shoal.workspace=<id>`, so `zmx ls` and `zmx attach` work as well.
+`shoal attach [target]` reattaches to the session of the workspace or running
+[chat](#chats) named `target`, with a picker or `--session <name>` when a
+workspace has several; `shoal status` lists them. Without a target it takes the
+current workspace, else the only running chat of the current checkout, else a
+picker of the workspaces and chats with sessions. A chat running in a Herdr
+tab, the Happy app or a terminal outside zmx has no session, and attaching
+says where it runs instead. Sessions are named after the workspace or chat,
+suffixed `-2`, `-3`, ... when the name is in use, and labelled
+`shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
+`zmx ls` and `zmx attach` work as well.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,
@@ -940,7 +946,7 @@ other commands do.
 
 ### Chats
 
-`shoal chat [repository] [--agent NAME] [--here] [-- ARGS]` starts a new chat
+`shoal chat [repository] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
@@ -956,26 +962,32 @@ request to reply only that it is ready and wait for you. The template substitute
 `{path}` is the checkout, and a launcher using a placeholder only a workspace has a value for is refused. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 
-Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
-labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or
+Every call starts a new chat and focuses it. Its name is `--name`, else the
+default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
+On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
+where empty input takes the default and a taken or invalid name is asked for
+again; JSON and Happy launches take the default without asking. Inside Herdr it
+opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
-session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
-inside a zmx session or a Herdr pane it runs in place. A Happy chat
+session named after the chat, which [`shoal attach <name>`](#agents)
+returns to; inside a zmx session or a Herdr pane it runs in place. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
 starts detached in the checkout as `shoal happy` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output and any saved first message replace those of
-the repository's earlier chat with its number, at
-`<state>/chats/<repository id>-<number>.log` and `.prompt.md`; `--json` reports
+an earlier chat with its name, at `<state>/chats/<name>.log` and `.prompt.md`;
+`--json` reports
 the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 `happy_daemon_recorded`. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
-pressure or resumed. The daemon records each chat while its agent process runs,
-numbering a repository's running chats from 1; `shoal work` lists it with the
-workspaces it opened, and [workspace events](#workspace-events) report its
-start and end. A workspace
+pressure or resumed. The daemon records each chat under its name while its
+agent process runs. Workspaces and running chats share one set of names across
+repositories: a chat cannot take a workspace's name or a name an unfinished
+rename reserves, and a workspace cannot be created or renamed to a running
+chat's name. The name frees once the chat's process ends. `shoal work` lists the chat by name with the workspaces it
+opened, and [workspace events](#workspace-events) report its start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
 field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
 chat, which returns it to you. While it runs, the chat
@@ -984,14 +996,14 @@ receiving their events gives you the notifications they stand for.
 
 ### Planning issues
 
-`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--here] [-- ARGS]`
+`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
 starts a [chat](#chats) that settles an issue's plan with you before anyone
 implements it. The issue is a number or URL; without one, a picker offers the
 open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
 one from either end instead; `--oldest` is refused when more than 1,000 are open,
 since the forge lists only the newest 1,000. The repository follows `shoal review --issue`, and
-the agent, tab and session follow `shoal chat`, with a tab labelled
-`<repo>#<number> plan`. Instead of waiting for you, the agent starts on the
+the agent, tab and session follow `shoal chat`, except that the chat is named
+`<repo>-plan-<number>` (suffixed while another holds it) without asking. Instead of waiting for you, the agent starts on the
 issue: it checks it against the default branch, talks the open points through
 with you in the chat, then rewrites the issue's body with a Plan section, since
 an implementing agent receives only the body, swaps `plan_label` for
@@ -2795,7 +2807,7 @@ recorded workspace branch remains unchanged.
 
 A `type: "chat"` line records a chat's start or end: its `id`, `created_at`,
 `kind` (`chat_started` or `chat_ended`) and a `chat` object with its `id`,
-`repository_id`, `number`, `agent`, `pid` and Unix-seconds `started_at`.
+`repository_id`, `name`, `agent`, `pid` and Unix-seconds `started_at`.
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.

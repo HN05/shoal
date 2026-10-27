@@ -15,7 +15,7 @@ use crate::{
     cli::{
         agents,
         availability::{Availability, Fit, Need},
-        client, ui,
+        client, terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{
@@ -494,7 +494,7 @@ impl Typed {
         let workspaces = client::workspaces(&paths).await?;
         if let Target::Workspaces(need) = target {
             let availability = Availability::load(need, &paths, &workspaces).await;
-            return Ok(workspaces
+            let mut candidates: Vec<_> = workspaces
                 .iter()
                 .filter_map(|w| {
                     let candidate = CompletionCandidate::new(&w.name);
@@ -504,7 +504,12 @@ impl Typed {
                         Fit::Hidden => None,
                     }
                 })
-                .collect());
+                .collect();
+            // Attaching reaches running chats' sessions too.
+            if need == Need::Session {
+                candidates.extend(session_chat_candidates(&paths).await?);
+            }
+            return Ok(candidates);
         }
         if matches!(target, Target::ResumeWorkspaces) {
             return Ok(workspaces
@@ -591,6 +596,17 @@ impl Typed {
 }
 
 /// Unique display names, with IDs, sources, and paths as prefix-matched extras.
+/// The running chats with an agent session, by name.
+async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
+    let attachable = terminal::session_owners(terminal::OwnerKind::Chat).await?;
+    Ok(client::chats(paths)
+        .await?
+        .into_iter()
+        .filter(|chat| attachable.contains(&chat.id))
+        .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
+        .collect())
+}
+
 fn repository_candidates(
     repos: &[crate::model::Repository],
     current: &str,

@@ -44,8 +44,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             here,
             repository,
             agent,
+            name,
             args,
-        } => chat::start(&ctx, repository, agent, here, args).await,
+        } => {
+            let options = chat::Options {
+                agent,
+                here,
+                name,
+                args,
+            };
+            chat::start(&ctx, repository, options).await
+        }
         AgentsCommand::Plan {
             issue,
             oldest,
@@ -53,6 +62,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             repository,
             here,
             agent,
+            name,
             args,
         } => {
             let pick = match (oldest, newest) {
@@ -60,7 +70,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 (_, true) => plan::Pick::Newest,
                 _ => plan::Pick::Picker,
             };
-            plan::start(&ctx, issue, repository, pick, agent, here, args).await
+            let options = chat::Options {
+                agent,
+                here,
+                name,
+                args,
+            };
+            plan::start(&ctx, issue, repository, pick, options).await
         }
     }
 }

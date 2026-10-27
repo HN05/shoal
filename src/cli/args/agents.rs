@@ -49,6 +49,9 @@ pub enum AgentsCommand {
         /// Agent to start; defaults to default_agent, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        /// Name of the chat; defaults to <repo>-chat, asked for on a terminal.
+        #[arg(long)]
+        name: Option<String>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -76,6 +79,9 @@ pub enum AgentsCommand {
         /// Agent to start; defaults to default_agent, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        /// Name of the chat; defaults to <repo>-plan-<issue number>.
+        #[arg(long)]
+        name: Option<String>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

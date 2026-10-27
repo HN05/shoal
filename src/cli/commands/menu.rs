@@ -632,7 +632,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             ));
         }
         Row::NeedsInput(workspace) => Command::Sessions(SessionsCommand::Attach {
-            workspace: Some(workspace),
+            target: Some(workspace),
             session: None,
         }),
         Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
@@ -727,7 +727,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             yes: false,
         }),
         Key::Attach => Command::Sessions(SessionsCommand::Attach {
-            workspace,
+            target: workspace,
             session: None,
         }),
         Key::Diff => Command::Changes(ChangesCommand::Diff { workspace }),

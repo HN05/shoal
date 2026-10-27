@@ -58,3 +58,25 @@ fn the_prompt_carries_the_issue_and_swaps_only_configured_labels() {
     );
     assert_eq!(relabel(&labels(None, None)), "");
 }
+
+#[test]
+fn a_plan_chat_is_named_after_its_issue_without_asking() {
+    let repo = Repository {
+        id: "id".into(),
+        path: "/repo".into(),
+        source: "https://forge.example/team/shoal.git".into(),
+        last_used: 0,
+        name: None,
+        workspaces_dir: None,
+        contribution: false,
+    };
+    let issue = Issue {
+        number: 1211,
+        title: "Attach to chats".into(),
+        url: "https://forge.example/team/shoal/issues/1211".into(),
+        details: String::new(),
+    };
+    let topic = topic(&repo, &issue, &labels(None, None));
+    assert_eq!(topic.name, "shoal-plan-1211");
+    assert!(!topic.asks_name);
+}

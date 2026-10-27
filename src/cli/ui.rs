@@ -4,7 +4,8 @@
 //!
 //! - [`prompt`]: `[y/N]` confirmations naming what an action loses
 //!   ([`confirm`]), offers to run a fix ([`offer`]), choices among a few
-//!   lettered answers, and free text ([`input`]).
+//!   lettered answers, and free text ([`input`]), also with a default
+//!   ([`input_with_default`]).
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
 //!   the chosen id ([`pick`]), a typed value ([`pick_choice`]), an issue or
 //!   PR ([`pick_item`]), the key that chose it ([`pick_with_keys`]), or a row
@@ -12,7 +13,8 @@
 //! - [`several`]: choosing several items at once; Tab selects each and
 //!   Ctrl-A all of them ([`pick_many`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
-//!   picked ([`select_workspace`]), listed by what the command needs of it.
+//!   picked ([`select_workspace`]), listed by what the command needs of it,
+//!   or picked among running chats as well ([`pick_workspace_or_chat`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!

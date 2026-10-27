@@ -21,7 +21,12 @@ async fn chat_and_worker(temp: &tempfile::TempDir, manager: &Manager) -> (Chat, 
         .await
         .unwrap();
     let chat = manager
-        .start_chat(repo.id.into(), "claude".into(), std::process::id())
+        .start_chat(
+            repo.id.into(),
+            "chat-1".into(),
+            "claude".into(),
+            std::process::id(),
+        )
         .await
         .unwrap();
     manager
@@ -177,6 +182,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
+            "chat-2".into(),
             "codex".into(),
             process.id(),
         )
@@ -251,6 +257,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
+            "chat-3".into(),
             "codex".into(),
             process.id(),
         )

@@ -84,7 +84,7 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
     workspaces[0].usage = Some(usage(Some(50.0), 1 << 20));
     workspaces[0].links.issue_title = Some("Title".into());
     workspaces[1].links.issue_title = Some("Title".into());
-    let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
     assert_eq!(
         rows,
         [
@@ -116,7 +116,7 @@ fn tree_rows_list_children_below_their_parent() {
         name: "unlisted".into(),
         branch: "unlisted".into(),
     });
-    let rows = workspace_tree_rows(&workspaces, &[], &[], &HashSet::new(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
     let expected = ["○ orphan ", "○ parent ", "○ └ child ", "○   └ grandchild "];
     assert_eq!(rows.len(), expected.len());
     for (row, start) in rows.iter().zip(expected) {

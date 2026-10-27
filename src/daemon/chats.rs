@@ -8,7 +8,10 @@ use rusqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::{
-    daemon::{chat_messages, log, workspace::Manager},
+    daemon::{
+        chat_messages, log, store,
+        workspace::{Manager, derive_workspace_name},
+    },
     model::Chat,
     process::identity::{self, Identity},
 };
@@ -27,20 +30,48 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 impl Manager {
-    /// Record the chat whose agent replaces process `pid` in the
+    /// Record the chat `name` whose agent replaces process `pid` in the
     /// repository's checkout.
     pub async fn start_chat(
         &self,
         repository: crate::repository::Selector,
+        name: String,
         agent: String,
         pid: u32,
     ) -> Result<Chat> {
+        crate::validate::name("chat", &name)?;
         let repository = self.repository(repository).await?.id;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let started_at = i64::try_from(crate::time::unix_seconds())?;
+        self.end_finished_chats().await?;
+        let chat = Chat {
+            id: Uuid::new_v4().to_string(),
+            repository_id: repository,
+            name,
+            agent,
+            pid: process.pid,
+            started_at,
+        };
         self.store
-            .run(move |db| insert(db, repository, agent, &process, started_at))
+            .run(move |db| insert(db, chat, &process.birth))
             .await
+    }
+
+    /// Refuse a name a new chat could not take now.
+    pub async fn check_chat_name(&self, name: String) -> Result<()> {
+        crate::validate::name("chat", &name)?;
+        self.end_finished_chats().await?;
+        self.store
+            .run(move |db| store::ensure_name_available(db, &name, None))
+            .await
+    }
+
+    /// `name`, made a valid name, or its lowest `-2`, `-3`, ... variant
+    /// that a new chat could take now.
+    pub async fn free_chat_name(&self, name: String) -> Result<String> {
+        let base = derive_workspace_name(&name);
+        self.end_finished_chats().await?;
+        self.store.run(move |db| free_name(db, &base)).await
     }
 
     /// Make process `pid` the one whose life a running chat lasts.
@@ -79,41 +110,26 @@ impl Manager {
     }
 }
 
-/// Insert a chat under the lowest number its repository's running chats leave
-/// free, unless the repository is being removed.
-fn insert(
-    db: &mut Connection,
-    repository: String,
-    agent: String,
-    process: &Identity,
-    started_at: i64,
-) -> Result<Chat> {
+/// Insert `chat` unless its name is taken or the repository is being removed.
+fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
     let tx = db.transaction()?;
     anyhow::ensure!(
-        !crate::daemon::store::repository_removing(&tx, &repository)?,
+        !store::repository_removing(&tx, &chat.repository_id)?,
         "the repository is being removed"
     );
     // A chat edits the checkout, which a move may be copying.
-    crate::daemon::store::ensure_repository_not_moving(&tx, &repository)?;
-    let number = free_number(&tx, &repository)?;
-    let chat = Chat {
-        id: Uuid::new_v4().to_string(),
-        repository_id: repository,
-        number,
-        agent,
-        pid: process.pid,
-        started_at,
-    };
+    store::ensure_repository_not_moving(&tx, &chat.repository_id)?;
+    store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
-        "INSERT INTO chats(id,repository_id,number,agent,pid,birth,started_at)
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
          VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
             chat.id,
             chat.repository_id,
-            chat.number,
+            chat.name,
             chat.agent,
             chat.pid,
-            process.birth,
+            birth,
             chat.started_at
         ],
     )?;
@@ -121,14 +137,28 @@ fn insert(
     Ok(chat)
 }
 
-fn free_number(db: &Connection, repository: &str) -> Result<u32> {
-    Ok(db.query_row(
-        "SELECT COALESCE(MIN(number + 1), 1) FROM (SELECT 0 AS number UNION ALL
-             SELECT number FROM chats WHERE repository_id=?1) AS used
-         WHERE number + 1 NOT IN (SELECT number FROM chats WHERE repository_id=?1)",
-        [repository],
-        |row| row.get(0),
-    )?)
+/// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
+/// to the longest name allowed.
+fn free_name(db: &mut Connection, base: &str) -> Result<String> {
+    for suffix in 1_u64.. {
+        let candidate = suffixed(base, suffix);
+        if !store::name_taken(db, &candidate)? {
+            return Ok(candidate);
+        }
+    }
+    unreachable!("an unused suffix exists")
+}
+
+/// `base`, or `base-<suffix>` from 2 on, shortened to fit the name limit.
+pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
+    let suffix = match suffix {
+        1 => String::new(),
+        n => format!("-{n}"),
+    };
+    let kept = crate::validate::MAX_NAME_LEN.saturating_sub(suffix.len());
+    let mut name: String = base.chars().take(kept).collect();
+    name.push_str(&suffix);
+    name
 }
 
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
@@ -146,14 +176,14 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
 fn running(db: &mut Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,number,agent,pid,started_at FROM chats
+            "SELECT id,repository_id,name,agent,pid,started_at FROM chats
              ORDER BY started_at, rowid",
         )?
         .query_map([], |row| {
             Ok(Chat {
                 id: row.get(0)?,
                 repository_id: row.get(1)?,
-                number: row.get(2)?,
+                name: row.get(2)?,
                 agent: row.get(3)?,
                 pid: row.get(4)?,
                 started_at: row.get(5)?,

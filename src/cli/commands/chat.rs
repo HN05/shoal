@@ -28,24 +28,47 @@ use crate::{
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
-    agent: Option<Agent>,
-    here: bool,
-    args: Vec<OsString>,
+    options: Options,
 ) -> Result<i32> {
     ensure_unscoped(ctx)?;
+    options.check_name(ctx).await?;
     let repo = chosen(ctx, repository).await?;
     let settings = settings(ctx, &repo).await?;
     let topic = Topic::repository(&repo);
-    begin(ctx, repo, settings, topic, agent, here, args).await
+    begin(ctx, repo, settings, topic, options).await
+}
+
+/// How the command line starts a chat.
+pub(super) struct Options {
+    /// Agent to start; defaults to `default_agent`, otherwise a picker.
+    pub agent: Option<Agent>,
+    /// Run in the current pane or terminal instead of beside it.
+    pub here: bool,
+    /// The chat's name; defaults to the topic's.
+    pub name: Option<String>,
+    /// Arguments forwarded to the agent.
+    pub args: Vec<OsString>,
+}
+
+impl Options {
+    /// Refuse a `--name` the daemon would refuse, before any picker opens.
+    pub async fn check_name(&self, ctx: &Context) -> Result<()> {
+        match &self.name {
+            Some(name) => client::check_chat_name(&ctx.paths, name).await,
+            None => Ok(()),
+        }
+    }
 }
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
 pub(super) struct Topic {
     /// The `shoal` command that starts the same chat again, without the
-    /// agent, `--here` or forwarded arguments.
+    /// agent, name, `--here` or forwarded arguments.
     pub relaunch: Vec<OsString>,
-    /// The new tab's label.
-    pub label: String,
+    /// The chat's default name, suffixed `-2`, `-3`, ... while another holds it.
+    pub name: String,
+    /// Whether an interactive start without `--name` asks for the name.
+    pub asks_name: bool,
     /// The task the agent starts on, or `None` to wait for the user.
     pub opening: Option<String>,
 }
@@ -54,7 +77,8 @@ impl Topic {
     fn repository(repo: &Repository) -> Self {
         Self {
             relaunch: vec!["chat".into(), repo.id.clone().into()],
-            label: format!("{} chat", repository::name(repo)),
+            name: format!("{}-chat", repository::name(repo)),
+            asks_name: true,
             opening: None,
         }
     }
@@ -77,19 +101,28 @@ pub(super) async fn settings(ctx: &Context, repo: &Repository) -> Result<Effecti
 /// Start a chat about `repo` and `topic` with the chosen agent. `settings`
 /// choose the agent before the refresh touches the checkout; the launch reads
 /// them again afterwards, so the checkout's updated configuration applies.
+/// The name is chosen before the chat starts beside this terminal, which
+/// receives it as `--name`.
 pub(super) async fn begin(
     ctx: &Context,
     repo: Repository,
     settings: Effective,
     topic: Topic,
-    agent: Option<Agent>,
-    here: bool,
-    args: Vec<OsString>,
+    options: Options,
 ) -> Result<i32> {
+    let Options {
+        agent,
+        here,
+        name: requested,
+        args,
+    } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
+    let asks_name = topic.asks_name && requested.is_none();
+    let name = initial_name(ctx, &topic, requested).await?;
     sync(ctx, &repo).await;
     let settings = self::settings(ctx, &repo).await?;
     let launch = agents::ChatLaunch {
+        name,
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
         repository: repo,
@@ -102,17 +135,27 @@ pub(super) async fn begin(
     ensure!(ctx.interactive(), "chat needs a terminal");
     let agents::ChatLaunch {
         repository: repo,
+        name,
         settings,
         instructions,
         opening,
         args,
     } = launch;
-    if !here && start_beside(ctx, &settings, &repo, &topic, &agent, &args).await? {
+    let name = if asks_name {
+        ask_name(ctx, &name).await?
+    } else {
+        name
+    };
+    if !here && start_beside(ctx, &settings, &repo, &topic, &name, &agent, &args).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
-    let chat = client::start_chat(&ctx.paths, &repo, agent.name()).await?;
+    let chat = client::start_chat(&ctx.paths, &repo, &name, agent.name()).await?;
+    if let Err(error) = terminal::label_current(terminal::Owner::Chat(&chat.id), agent.name()).await
+    {
+        eprintln!("warning: {error:#}");
+    }
     run_here(
         ctx,
         &repo,
@@ -120,6 +163,26 @@ pub(super) async fn begin(
         &command,
         &settings.launch(agent.name()).environment,
     )
+}
+
+/// `--name`, which [`Options::check_name`] checked, else the topic's name
+/// or its lowest free variant.
+async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -> Result<String> {
+    match requested {
+        Some(name) => Ok(name),
+        None => client::free_chat_name(&ctx.paths, topic.name.clone()).await,
+    }
+}
+
+/// Ask for the chat's name, offering `default`, until the daemon accepts one.
+async fn ask_name(ctx: &Context, default: &str) -> Result<String> {
+    loop {
+        let name = ui::input_with_default(ctx, "Chat name", default)?;
+        match client::check_chat_name(&ctx.paths, &name).await {
+            Ok(()) => return Ok(name),
+            Err(error) => eprintln!("{error:#}"),
+        }
+    }
 }
 
 /// Refresh the default branch as `shoal repo sync` does, so the agent reads what
@@ -144,11 +207,9 @@ async fn sync(ctx: &Context, repo: &Repository) {
 /// `shoal work --chats`.
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let chats = listed(ctx, filter).await?;
-    let repositories = repositories(ctx, &chats).await?;
     let rows = ui::workspace_tree_rows(
         &[],
         &chats,
-        &repositories,
         &Default::default(),
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
@@ -166,14 +227,6 @@ pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Cha
     let mut chats = client::chats(&ctx.paths).await?;
     chats.retain(|chat| filter.keeps_chat(chat));
     Ok(chats)
-}
-
-/// The repositories that name `chats` in text rows; JSON output needs none.
-pub(super) async fn repositories(ctx: &Context, chats: &[Chat]) -> Result<Vec<Repository>> {
-    if ctx.json || chats.is_empty() {
-        return Ok(Vec::new());
-    }
-    client::repositories(&ctx.paths).await
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
@@ -220,24 +273,31 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     ui::pick_choice(ctx, "Agent> ", &choices)?.parse()
 }
 
-/// Run this chat in a new focused tab or session at the checkout, where
-/// Shoal starts it in place, returning whether it ran there; otherwise it
-/// runs here.
+/// Run this chat, `name`, in a new focused tab or session at the checkout,
+/// where Shoal starts it in place, returning whether it ran there; otherwise
+/// it runs here.
 async fn start_beside(
     ctx: &Context,
     settings: &Effective,
     repo: &Repository,
     topic: &Topic,
+    name: &str,
     agent: &Agent,
     args: &[OsString],
 ) -> Result<bool> {
     let mut chat = topic.relaunch.clone();
-    chat.extend(["--here".into(), "--agent".into(), agent.name().into()]);
+    chat.extend([
+        "--here".into(),
+        "--name".into(),
+        name.into(),
+        "--agent".into(),
+        agent.name().into(),
+    ]);
     if !args.is_empty() {
         chat.push("--".into());
         chat.extend_from_slice(args);
     }
-    terminal::start_chat(ctx, settings, repo, agent.name(), &topic.label, &chat).await
+    terminal::start_chat(ctx, settings, repo, name, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, its opening

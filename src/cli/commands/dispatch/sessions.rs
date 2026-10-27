@@ -8,8 +8,8 @@ use crate::cli::{
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand) -> Result<i32> {
     match command {
-        SessionsCommand::Attach { workspace, session } => {
-            sessions::attach(&ctx, workspace, session).await
+        SessionsCommand::Attach { target, session } => {
+            sessions::attach(&ctx, target, session).await
         }
         SessionsCommand::Demo {
             command,

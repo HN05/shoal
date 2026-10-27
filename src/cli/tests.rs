@@ -294,6 +294,38 @@ fn codex_mode_flags_do_not_reserve_workspace_names() {
 }
 
 #[test]
+fn chat_relaunches_pass_the_chosen_name() {
+    let parsed = Cli::try_parse_from([
+        "shoal", "chat", "repo", "--here", "--name", "talk", "--agent", "claude", "--", "-x",
+    ])
+    .unwrap();
+    let Some(Command::Agents(AgentsCommand::Chat {
+        here, name, args, ..
+    })) = parsed.command
+    else {
+        panic!("wrong command")
+    };
+    assert!(here);
+    assert_eq!(name.as_deref(), Some("talk"));
+    assert_eq!(args, ["-x"]);
+    let parsed = Cli::try_parse_from([
+        "shoal",
+        "plan",
+        "https://forge.example/o/r/issues/1",
+        "--repo",
+        "r",
+        "--here",
+        "--name",
+        "r-plan-1",
+    ])
+    .unwrap();
+    assert!(matches!(
+        parsed.command,
+        Some(Command::Agents(AgentsCommand::Plan { name: Some(name), .. })) if name == "r-plan-1"
+    ));
+}
+
+#[test]
 fn add_uses_a_positional_new_branch_and_existing_branch_flag() {
     let new = Cli::try_parse_from(["shoal", "add", "repo", "feature/topic"]).unwrap();
     assert!(matches!(

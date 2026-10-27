@@ -6,9 +6,10 @@ use super::Lifetime;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatMethod {
-    /// Record a chat whose agent replaces process `pid`.
+    /// Record a chat named `name` whose agent replaces process `pid`.
     StartChat {
         repository: crate::repository::Selector,
+        name: String,
         agent: String,
         pid: u32,
     },
@@ -19,6 +20,15 @@ pub enum ChatMethod {
         pid: u32,
     },
     ListChats,
+    /// Refuse a name a new chat could not take now.
+    CheckChatName {
+        name: String,
+    },
+    /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could
+    /// take now.
+    FreeChatName {
+        name: String,
+    },
     /// The chat's undelivered messages about the workspaces it coordinates,
     /// without waiting; acknowledge them with
     /// [`Self::AcknowledgeChatMessages`]. It replaces a running wait.
