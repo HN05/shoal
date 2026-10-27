@@ -57,6 +57,10 @@ impl Manager {
         Ok(())
     }
 
+    pub async fn holds(&self, selector: &str) -> Result<Vec<WorkspaceHold>> {
+        Ok(self.workspace(selector).await?.holds)
+    }
+
     pub(crate) async fn has_holds(&self, id: &str) -> Result<bool> {
         let id = id.to_owned();
         self.store
