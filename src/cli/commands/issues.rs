@@ -199,9 +199,9 @@ impl Issue {
         name
     }
 
-    /// `<repo>#<number>`: short, and unique across repositories sharing a Herdr workspace.
+    /// The place label of a workspace for this issue in `repo`.
     pub fn tab_label(&self, repo: &Repository) -> String {
-        format!("{}#{}", crate::repository::name(repo), self.number)
+        crate::cli::terminal::issue_label(crate::repository::name(repo), self.number)
     }
 
     /// The task an issue workspace's agent starts with; the body is the

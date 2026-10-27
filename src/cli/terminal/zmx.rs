@@ -19,7 +19,7 @@ use super::{DemoWorker, Host, Placement, Session};
 use crate::{
     cli::{
         agents::ensure_program,
-        commands::{issues::Issue, workspaces::AddPlan},
+        commands::workspaces::AddPlan,
         context::Context,
         internal::{self, Worker, internal_command},
     },
@@ -69,8 +69,7 @@ impl Host for Zmx {
         &'a self,
         _ctx: &'a Context,
         _settings: &'a Effective,
-        plan: &'a mut AddPlan,
-        _issue: Option<&'a Issue>,
+        plan: &'a AddPlan,
         name: &'a str,
         placement: Placement,
         worker: &'a [OsString],
@@ -84,17 +83,18 @@ impl Host for Zmx {
         })
     }
 
+    fn runs_in_background(&self, _settings: &Effective) -> bool {
+        true
+    }
+
     fn run_in_background<'a>(
         &'a self,
         ctx: &'a Context,
-        _settings: &'a Effective,
         workspace: &'a Workspace,
+        _label: &'a str,
         args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async move {
-            run_in_background(ctx, workspace, args).await?;
-            Ok(true)
-        })
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(run_in_background(ctx, workspace, args))
     }
 
     fn run_agent<'a>(

@@ -17,7 +17,8 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{self, Palette, Style},
-        recent, terminal,
+        recent,
+        terminal::{self, PlaceName},
         ui::{self, Fallback},
     },
     daemon::{
@@ -332,15 +333,18 @@ pub(super) async fn add(
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation).await?;
     let agent = resolve_add_agent(ctx, &settings, agent).await?;
-    let tab_label = match &issue {
-        Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
+    let place_name = match &issue {
+        Some(issue) => Some(PlaceName::new(
+            None,
+            target.repository(ctx).await?,
+            Some(issue),
+        )),
         None => None,
     };
     let mut plan = AddPlan {
         repository: target.selector.clone(),
         creation,
-        tab_label,
-        tab_name: None,
+        place_name,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
         agent,
         args,
@@ -505,9 +509,9 @@ async fn planned_workspace_name(
 pub(in crate::cli) struct AddPlan {
     pub repository: crate::repository::Selector,
     pub creation: Creation,
-    tab_label: Option<String>,
+    /// The name of the place a host opens for the addition.
     #[serde(default)]
-    pub tab_name: Option<crate::cli::terminal::PlaceName>,
+    pub place_name: Option<PlaceName>,
     /// The found issue's URL; its body can exceed what a Herdr tab's
     /// environment carries, so the worker looks it up again.
     issue: Option<String>,
@@ -543,8 +547,7 @@ impl AddPlan {
                 git_profile: None,
                 pr: None,
             },
-            tab_label: None,
-            tab_name: None,
+            place_name: None,
             issue: issue.map(|issue| issue.url.clone()),
             agent: ResolvedAddAgent {
                 agent: Some(agent),
@@ -590,10 +593,9 @@ impl AddPlan {
             .as_deref()
             .or(self.creation.existing.as_deref())
             .unwrap_or("shoal add");
-        if let Some(name) = &self.tab_name {
-            return name.render(branch);
-        }
-        self.tab_label.as_deref().unwrap_or(branch).to_owned()
+        self.place_name
+            .as_ref()
+            .map_or_else(|| branch.to_owned(), |name| name.render(branch))
     }
 }
 
@@ -660,8 +662,7 @@ async fn add_planned(
     let AddPlan {
         repository: _,
         creation,
-        tab_label: _,
-        tab_name,
+        place_name,
         issue: _,
         agent,
         args,
@@ -680,12 +681,10 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
-    let label = match tab_name {
-        Some(name) => name.render(&opened.workspace.branch),
-        None => match &issue {
-            Some(issue) => issue.tab_label(target.repository(ctx).await?),
-            None => opened.workspace.branch.clone(),
-        },
+    let label = match (place_name, &issue) {
+        (Some(name), _) => name.render(&opened.workspace.branch),
+        (None, Some(issue)) => issue.tab_label(target.repository(ctx).await?),
+        (None, None) => opened.workspace.branch.clone(),
     };
     let agent_name = agent.agent.clone().map(String::from);
     terminal::host_workspace(ctx, &opened.workspace, agent_name.as_deref(), &label).await?;

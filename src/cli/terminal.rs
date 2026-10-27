@@ -34,7 +34,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, watch as watch_place};
-pub(in crate::cli) use naming::PlaceName;
+pub(in crate::cli) use naming::{PlaceName, issue_label};
 
 /// Hosts in the order they claim a terminal; a terminal none of them serves
 /// runs everything in place.
@@ -63,13 +63,11 @@ pub(in crate::cli) trait Host: Sync {
     /// Start `plan` as `placement` asks by running `worker` in a new place,
     /// returning whether it left this process. `name` is the planned
     /// workspace name.
-    #[allow(clippy::too_many_arguments)]
     fn start_add<'a>(
         &'a self,
         _ctx: &'a Context,
         _settings: &'a Effective,
-        _plan: &'a mut AddPlan,
-        _issue: Option<&'a Issue>,
+        _plan: &'a AddPlan,
         _name: &'a str,
         _placement: Placement,
         _worker: &'a [OsString],
@@ -77,16 +75,22 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(false) })
     }
 
-    /// Run Shoal with `args` for `workspace` in the background, returning
-    /// whether it started.
+    /// Whether this host runs Shoal for a workspace in the background under
+    /// `settings`.
+    fn runs_in_background(&self, _settings: &Effective) -> bool {
+        false
+    }
+
+    /// Run Shoal with `args` for `workspace` in a background place named
+    /// `label`.
     fn run_in_background<'a>(
         &'a self,
         _ctx: &'a Context,
-        _settings: &'a Effective,
         _workspace: &'a Workspace,
+        _label: &'a str,
         _args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async { Ok(false) })
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
     }
 
     /// Run Shoal with `args` where the agent of `record` stopped, when that
@@ -167,6 +171,17 @@ pub(in crate::cli) trait Host: Sync {
     /// done, under `settings`.
     fn closes_when_done(&self, _settings: &Effective) -> bool {
         false
+    }
+
+    /// Whether the places this host opens show a name.
+    fn names_places(&self) -> bool {
+        false
+    }
+
+    /// The template `settings` give the names of places this host opens,
+    /// in place of the default.
+    fn name_template(&self, _settings: &Effective) -> Option<String> {
+        None
     }
 
     /// Show `label` as the name of `place`, one this host opened.
@@ -382,9 +397,10 @@ pub(in crate::cli) async fn start_add(
     );
     let host = beside(ctx, settings);
     let placement = Placement::choose(settings.focus, !plan.runs_unattended());
+    naming::name_plan(ctx, settings, host, plan, issue).await?;
     let worker = add_worker_argv(ctx, settings, host)?;
     let started = host
-        .start_add(ctx, settings, plan, issue, name, placement, &worker)
+        .start_add(ctx, settings, plan, name, placement, &worker)
         .await?;
     if started && placement == Placement::Background {
         outln!("{}", host.background_note(name));
@@ -401,17 +417,10 @@ pub(in crate::cli) async fn start_queued(
     name: &str,
 ) -> Result<()> {
     let host = queued(settings)?;
+    naming::name_plan(ctx, settings, host, plan, None).await?;
     let worker = add_worker_argv(ctx, settings, host)?;
-    host.start_add(
-        ctx,
-        settings,
-        plan,
-        None,
-        name,
-        Placement::Background,
-        &worker,
-    )
-    .await?;
+    host.start_add(ctx, settings, plan, name, Placement::Background, &worker)
+        .await?;
     Ok(())
 }
 
@@ -471,10 +480,12 @@ pub(in crate::cli) async fn run_in_background(
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings);
-    let started = host
-        .run_in_background(ctx, settings, workspace, args)
-        .await?;
-    Ok(started.then(|| host.background_places()))
+    if !host.runs_in_background(settings) {
+        return Ok(None);
+    }
+    let label = naming::workspace_label(ctx, settings, host, workspace).await;
+    host.run_in_background(ctx, workspace, &label, args).await?;
+    Ok(Some(host.background_places()))
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal

@@ -7,18 +7,10 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, PlaceName, PlaceState, Placement, naming::workspace_label};
+use super::{DemoWorker, Host, PlaceState, Placement};
 
 mod demo;
-use crate::cli::{
-    client,
-    commands::{
-        issues::{self, Issue},
-        workspaces::AddPlan,
-    },
-    context::Context,
-    internal,
-};
+use crate::cli::{commands::workspaces::AddPlan, context::Context, internal};
 use crate::{
     config::{Config, Effective},
     env,
@@ -52,23 +44,27 @@ impl Host for Herdr {
         &'a self,
         ctx: &'a Context,
         settings: &'a Effective,
-        plan: &'a mut AddPlan,
-        issue: Option<&'a Issue>,
+        plan: &'a AddPlan,
         _name: &'a str,
         placement: Placement,
         worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(start_add(ctx, settings, plan, issue, placement, worker))
+        Box::pin(start_add(ctx, settings, plan, placement, worker))
+    }
+
+    /// A background tab, unless `herdr.new_tab` is off.
+    fn runs_in_background(&self, settings: &Effective) -> bool {
+        settings.herdr.new_tab
     }
 
     fn run_in_background<'a>(
         &'a self,
         ctx: &'a Context,
-        settings: &'a Effective,
         workspace: &'a Workspace,
+        label: &'a str,
         args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(run_in_background(ctx, settings, workspace, args))
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(run_in_tab(ctx, &workspace.path, label, args, false))
     }
 
     fn rerun_where_stopped<'a>(
@@ -130,6 +126,14 @@ impl Host for Herdr {
         settings.herdr.close_when_done
     }
 
+    fn names_places(&self) -> bool {
+        true
+    }
+
+    fn name_template(&self, settings: &Effective) -> Option<String> {
+        settings.herdr.tab_name.clone()
+    }
+
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(rename_tab(place, label))
     }
@@ -173,28 +177,16 @@ fn in_herdr() -> bool {
 }
 
 /// Run `plan` in a new tab with `worker`, taking focus as `placement` asks,
-/// unless `herdr.new_tab` is off. Without `issue`, a tab name template that
-/// names it looks it up.
+/// unless `herdr.new_tab` is off.
 async fn start_add(
     ctx: &Context,
     settings: &Effective,
-    plan: &mut AddPlan,
-    issue: Option<&Issue>,
+    plan: &AddPlan,
     placement: Placement,
     worker: &[OsString],
 ) -> Result<bool> {
     if !settings.herdr.new_tab {
         return Ok(false);
-    }
-    if let Some(template) = settings.herdr.tab_name.clone() {
-        let repos = client::repositories(&ctx.paths).await?;
-        let repo = crate::repository::select(&repos, &plan.repository).await?;
-        // A queued start has only the issue's URL; the template may name it.
-        let found = match (issue, plan.issue_url()) {
-            (None, Some(url)) => Some(issues::load(ctx, repo, url).await?),
-            _ => None,
-        };
-        plan.tab_name = Some(PlaceName::new(template, repo, issue.or(found.as_ref())));
     }
     let directive = TabDirective::create()?;
     let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
@@ -290,22 +282,6 @@ async fn run_in_tab(
     let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     run_in_pane(&created.root_pane.pane_id, &argv).await
-}
-
-/// Run Shoal with `args` in a new background tab in `workspace`, labelled
-/// as `shoal add` labels it, unless `herdr.new_tab` is off.
-async fn run_in_background(
-    ctx: &Context,
-    settings: &Effective,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<bool> {
-    if !settings.herdr.new_tab {
-        return Ok(false);
-    }
-    let label = workspace_label(ctx, settings, workspace).await;
-    run_in_tab(ctx, &workspace.path, &label, args, false).await?;
-    Ok(true)
 }
 
 // The tab environment carries the plan, keeping the typed command short, and
