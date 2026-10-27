@@ -21,6 +21,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
         assert_eq!(
             inspect_lifecycle(Some(false), vec![execution]).await,
             Lifecycle::Kept {
+                head: "head".into(),
                 running: true,
                 stopped: false,
                 turn: None,
@@ -30,6 +31,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
     assert_eq!(
         inspect_lifecycle(Some(false), vec![]).await,
         Lifecycle::Kept {
+            head: "head".into(),
             running: false,
             stopped: false,
             turn: None,
@@ -44,6 +46,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
     assert_eq!(
         inspect_with_records(Some(false), vec![], true).await,
         Lifecycle::Kept {
+            head: "head".into(),
             running: false,
             stopped: true,
             turn: None,
@@ -55,6 +58,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
 fn kept_completion_closes_the_place_once_the_agent_finishes_its_turn() {
     use AgentState::*;
     let completed = |running, stopped, turn| Lifecycle::Kept {
+        head: "head".into(),
         running,
         stopped,
         turn,
@@ -87,6 +91,7 @@ async fn kept_completion_reads_the_hooks_turn_state() {
     assert_eq!(
         lifecycle,
         Lifecycle::Kept {
+            head: "head".into(),
             running: false,
             stopped: false,
             turn: Some(AgentState::Idle),
@@ -150,13 +155,13 @@ impl Host for FakeHost {
     }
 }
 
-/// Watch `host`'s place with a daemon reporting `lifecycle`, for at most
-/// `looks` looks.
-async fn watch_fake(host: &FakeHost, lifecycle: Option<Lifecycle>, looks: usize) -> usize {
+/// Watch `host`'s place with a daemon reporting `lifecycles` in turn, the
+/// last one from then on, for at most `looks` looks.
+async fn watch_fake(host: &FakeHost, lifecycles: &[Option<Lifecycle>], looks: usize) -> usize {
     let looked = std::sync::atomic::AtomicUsize::new(0);
     let next = || {
-        looked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let lifecycle = lifecycle.clone();
+        let look = looked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let lifecycle = lifecycles[look.min(lifecycles.len() - 1)].clone();
         async move { Ok(lifecycle) }
     };
     let watching = || looked.load(std::sync::atomic::Ordering::SeqCst) < looks;
@@ -166,48 +171,78 @@ async fn watch_fake(host: &FakeHost, lifecycle: Option<Lifecycle>, looks: usize)
     looked.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-#[tokio::test(start_paused = true)]
-async fn the_watcher_closes_a_place_once_its_workspace_is_done() {
-    let kept = |turn| Lifecycle::Kept {
+/// A kept completion at `head` while the agent runs with `turn`.
+fn kept(head: &str, turn: Option<AgentState>) -> Option<Lifecycle> {
+    Some(Lifecycle::Kept {
+        head: head.into(),
         running: true,
         stopped: false,
         turn,
-    };
+    })
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_watcher_closes_a_place_once_its_workspace_is_done() {
+    let active = Some(Lifecycle::Active);
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    assert_eq!(watch_fake(&host, Some(Lifecycle::Removed), 5).await, 1);
+    assert_eq!(watch_fake(&host, &[Some(Lifecycle::Removed)], 5).await, 1);
     assert_eq!(host.closed(), ["place-1"]);
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    watch_fake(&host, Some(kept(Some(AgentState::Idle))), 5).await;
+    let idle = kept("head", Some(AgentState::Idle));
+    assert_eq!(watch_fake(&host, &[active.clone(), idle], 5).await, 2);
     assert_eq!(host.closed(), ["place-1"]);
     let host = FakeHost::new(Ok(PlaceState::Open(Some(AgentState::Idle))));
-    watch_fake(&host, Some(kept(None)), 5).await;
+    watch_fake(&host, &[active, kept("head", None)], 5).await;
     assert_eq!(host.closed(), ["place-1"]);
 }
 
 #[tokio::test(start_paused = true)]
 async fn the_watcher_keeps_a_place_without_proof() {
-    let working = Lifecycle::Kept {
-        running: true,
-        stopped: false,
-        turn: Some(AgentState::Working),
-    };
-    for (state, lifecycle) in [
-        (Ok(PlaceState::Open(None)), Some(Lifecycle::Active)),
-        (Ok(PlaceState::Open(Some(AgentState::Idle))), Some(working)),
+    let active = Some(Lifecycle::Active);
+    for (state, lifecycles) in [
+        (Ok(PlaceState::Open(None)), vec![active.clone()]),
+        (
+            Ok(PlaceState::Open(Some(AgentState::Idle))),
+            vec![active.clone(), kept("head", Some(AgentState::Working))],
+        ),
         // A failed daemon or host query proves nothing.
-        (Ok(PlaceState::Open(None)), None),
-        (Err(()), Some(Lifecycle::Removed)),
+        (Ok(PlaceState::Open(None)), vec![active, None]),
+        (Err(()), vec![Some(Lifecycle::Removed)]),
     ] {
         let host = FakeHost::new(state);
-        assert_eq!(watch_fake(&host, lifecycle, 3).await, 3);
+        assert_eq!(watch_fake(&host, &lifecycles, 3).await, 3);
         assert!(host.closed().is_empty());
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
+    let idle = || kept("head", Some(AgentState::Idle));
+    // An agent started in a workspace already done is new work.
+    let host = FakeHost::new(Ok(PlaceState::Open(None)));
+    assert_eq!(watch_fake(&host, &[idle()], 3).await, 3);
+    assert!(host.closed().is_empty());
+    // Even when the daemon could not tell at first.
+    let host = FakeHost::new(Ok(PlaceState::Open(None)));
+    assert_eq!(watch_fake(&host, &[None, idle()], 3).await, 3);
+    assert!(host.closed().is_empty());
+    // Removal, a withdrawn completion and one at another HEAD all count.
+    for later in [
+        vec![Some(Lifecycle::Removed)],
+        vec![Some(Lifecycle::Active), idle()],
+        vec![kept("next", Some(AgentState::Idle))],
+    ] {
+        let host = FakeHost::new(Ok(PlaceState::Open(None)));
+        let lifecycles: Vec<_> = [idle()].into_iter().chain(later).collect();
+        watch_fake(&host, &lifecycles, 5).await;
+        assert_eq!(host.closed(), ["place-1"]);
     }
 }
 
 #[tokio::test(start_paused = true)]
 async fn the_watcher_ends_once_the_host_reports_its_place_gone() {
     let host = FakeHost::new(Ok(PlaceState::Gone));
-    assert_eq!(watch_fake(&host, Some(Lifecycle::Removed), 5).await, 1);
+    assert_eq!(watch_fake(&host, &[Some(Lifecycle::Removed)], 5).await, 1);
     assert!(host.closed().is_empty());
 }
 

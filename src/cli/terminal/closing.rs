@@ -12,6 +12,7 @@ use super::{HOSTS, Host};
 use crate::{
     cli::{client, context::Context, installed, internal},
     env,
+    model::Inspection,
     paths::Paths,
     state::AgentState,
 };
@@ -97,7 +98,8 @@ pub async fn watch(ctx: &Context, host: String, workspace: String, place: String
 /// does not prove completion or removal, so `lifecycle` gives `None` then,
 /// or the failure that ends the watch. A closed place leaves nothing to
 /// close, whatever the daemon reports; a failed host query, like a failed
-/// daemon query, proves neither.
+/// daemon query, proves neither. A completion recorded before the watch
+/// began proves nothing either.
 async fn close_when_due<F>(
     host: &dyn Host,
     place: &str,
@@ -108,8 +110,11 @@ async fn close_when_due<F>(
 where
     F: Future<Output = Result<Option<Lifecycle>>>,
 {
+    let mut earlier = EarlierCompletion::default();
     while watching() {
-        let lifecycle = lifecycle().await?;
+        let lifecycle = lifecycle()
+            .await?
+            .filter(|lifecycle| !earlier.only_one_in(lifecycle));
         let reported = match host.place_state(place, workspace).await {
             Ok(PlaceState::Gone) => break,
             Ok(PlaceState::Open(agent)) => Some(agent),
@@ -126,6 +131,29 @@ where
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     Ok(())
+}
+
+/// The kept completion a watch began under, by its HEAD: an agent started in
+/// a workspace already done is new work, which that completion does not
+/// end. Withdrawing it, or completing again at another HEAD, ends the
+/// exemption.
+#[derive(Default)]
+struct EarlierCompletion(Option<Option<String>>);
+
+impl EarlierCompletion {
+    /// Whether `lifecycle` shows only the completion the watch began under,
+    /// remembering the first one seen.
+    fn only_one_in(&mut self, lifecycle: &Lifecycle) -> bool {
+        let head = match lifecycle {
+            Lifecycle::Kept { head, .. } => Some(head.as_str()),
+            Lifecycle::Active | Lifecycle::Removed => None,
+        };
+        let earlier = self.0.get_or_insert_with(|| head.map(str::to_owned));
+        if earlier.as_deref() != head {
+            *earlier = None;
+        }
+        earlier.is_some()
+    }
 }
 
 /// Remove the shell directive this process inherited from its place, whose
@@ -182,10 +210,11 @@ pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
 #[derive(Debug, Clone, PartialEq)]
 enum Lifecycle {
     Active,
-    /// Done without cleanup. `running` while a tracked execution has not
-    /// resolved, whose agent's hooks last reported `turn`; `stopped` while an
-    /// agent or command waits for `shoal resume`.
+    /// Done without cleanup at `head`. `running` while a tracked execution
+    /// has not resolved, whose agent's hooks last reported `turn`; `stopped`
+    /// while an agent or command waits for `shoal resume`.
     Kept {
+        head: String,
         running: bool,
         stopped: bool,
         turn: Option<AgentState>,
@@ -212,18 +241,17 @@ impl Lifecycle {
 async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
     match client::inspect(&ctx.paths, workspace.into()).await {
         // Completion cleanup keeps the place until removal, after its grace period.
-        Ok(inspection)
-            if inspection
-                .completion
-                .as_ref()
-                .is_some_and(|completion| !completion.cleanup) =>
-        {
-            Ok(Lifecycle::Kept {
-                running: !inspection.executions.is_empty(),
-                stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
-                turn: inspection.workspace.agent_state.map(|status| status.state),
-            })
-        }
+        Ok(Inspection {
+            completion: Some(completion),
+            executions,
+            workspace: record,
+            ..
+        }) if !completion.cleanup => Ok(Lifecycle::Kept {
+            head: completion.head,
+            running: !executions.is_empty(),
+            stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
+            turn: record.agent_state.map(|status| status.state),
+        }),
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
             if client::workspaces(&ctx.paths)
