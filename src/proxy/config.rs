@@ -43,7 +43,8 @@ impl std::fmt::Debug for Key {
 
 impl Key {
     /// The key itself, reading `variable` of the agent's environment for
-    /// one it names.
+    /// one it names. A build without the proxy starts none to give it to.
+    #[cfg_attr(not(feature = "proxy"), allow(dead_code))]
     pub fn value(&self, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
         let name = match self {
             Self::Raw(key) => return Ok(key.clone()),
