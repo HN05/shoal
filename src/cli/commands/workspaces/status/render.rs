@@ -8,11 +8,22 @@ use crate::{
     },
     daemon::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
+    model::{Inspection, WorkspaceStatus},
 };
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
-    let status = &view.status;
     let palette = Palette::stdout(json);
+    let status = &view.status;
+    render_workspace(status, palette);
+    render_activity(view, palette);
+    render_leases(&status.inspection, palette);
+    render_assignment(status, palette);
+    render_cleanup(status, palette);
+    render_attention(status);
+}
+
+/// The workspace, its branch, setup, changes and holds.
+fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
     let inspection = &status.inspection;
     let workspace = &inspection.workspace;
     outln!(
@@ -60,7 +71,13 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
                 .map_or(String::new(), |r| format!(" ({r})"))
         );
     }
+}
 
+/// What runs in the workspace: its executions, sessions and agent.
+fn render_activity(view: &StatusView, palette: Palette) {
+    let status = &view.status;
+    let inspection = &status.inspection;
+    let workspace = &inspection.workspace;
     outln!("Executions:    {}", inspection.executions.len());
     for execution in &inspection.executions {
         let pid = execution
@@ -105,7 +122,10 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
         outln!("Turn retry:    {}", turn_retry_label(retry));
     }
     outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
+}
 
+/// The ports, simulators and resources the workspace holds.
+fn render_leases(inspection: &Inspection, palette: Palette) {
     outln!("Ports:         {}", inspection.ports.len());
     for port in &inspection.ports {
         outln!("  {}={} ({})", port.name, port.port, port.env_var);
@@ -134,7 +154,12 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
             resources::repository_path(resource)
         );
     }
+}
 
+/// The workspace's issue, completion and PRs.
+fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
+    let inspection = &status.inspection;
+    let workspace = &inspection.workspace;
     if let Some(issue) = &inspection.issue {
         outln!("Issue:         {}", issue.url);
         if let Some(state) = status.issue_status.as_ref().and_then(|s| s.state.as_ref()) {
@@ -156,7 +181,13 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
             outln!("  {}", palette.paint(Style::Warning, error));
         }
     }
-    match &inspection.pr_cleanup {
+    render_pr_watch(status, palette);
+    render_recorded("Opened:", &workspace.links.opened);
+    render_recorded("Related:", &workspace.links.related);
+}
+
+fn render_pr_watch(status: &WorkspaceStatus, palette: Palette) {
+    match &status.inspection.pr_cleanup {
         Some(registration) => {
             match &registration.kind {
                 RegistrationKind::Watch { urls, .. } => {
@@ -175,8 +206,10 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
         }
         None => outln!("PR watch:      none"),
     }
-    render_recorded("Opened:", &workspace.links.opened);
-    render_recorded("Related:", &workspace.links.related);
+}
+
+/// When and why cleanup removes the workspace.
+fn render_cleanup(status: &WorkspaceStatus, palette: Palette) {
     outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
         outln!(
@@ -187,6 +220,11 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
     if let Some(error) = &status.cleanup_error {
         outln!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
     }
+}
+
+/// What awaits the user: the review mark and unread notifications.
+fn render_attention(status: &WorkspaceStatus) {
+    let workspace = &status.inspection.workspace;
     if workspace.review.is_empty() {
         outln!("Review:        none");
     } else {
