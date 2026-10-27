@@ -83,30 +83,6 @@ impl Integration for Happy {
     }
 }
 
-/// `shoal happy <agent>`.
-pub(in crate::cli) async fn shortcut(
-    ctx: &Context,
-    agent: Agent,
-    workspace: Option<String>,
-    prompt: Option<String>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    let name = format!("happy-{}", agent.as_str()).parse()?;
-    let options = super::LaunchOptions::default();
-    super::launch::shortcut(ctx, name, workspace, prompt, args, options).await
-}
-
-/// The agents `shoal happy <agent>` can start: each `happy-<agent>` offered
-/// and installed.
-pub(in crate::cli) fn shortcut_agents<'a>(installed: &super::Installed<'a>) -> Vec<&'a str> {
-    installed
-        .agents
-        .iter()
-        .filter(|name| installed.agent(name))
-        .filter_map(|name| name.strip_prefix("happy-"))
-        .collect()
-}
-
 /// The first message and arguments of a session of `agent`, which runs
 /// without Shoal's hooks. An agent that takes instructions apart from its
 /// prompt gets them as arguments; Happy's Codex mode takes no arguments, so

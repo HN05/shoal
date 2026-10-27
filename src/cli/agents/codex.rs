@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 
 use super::{
-    Integration, Launch, LaunchOptions, Wake, desktop,
+    Integration, Launch, Wake, desktop,
     trust::{CODEX, TrustFile},
 };
 use crate::{
@@ -60,31 +60,6 @@ impl Integration for Codex {
                 .map(Some)
         })
     }
-}
-
-/// `shoal codex`: `--cli` or `--app` overrides `codex.default_mode`.
-pub(in crate::cli) async fn shortcut(
-    ctx: &Context,
-    mode: Option<CodexMode>,
-    workspace: Option<String>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    // Explicit desktop handoffs read no settings, so no prompt template.
-    if mode == Some(CodexMode::App) {
-        let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-        return desktop::open_app(ctx, &workspace, "codex", Some(&CODEX), args).await;
-    }
-    let options = LaunchOptions {
-        tracked: mode == Some(CodexMode::Cli),
-        ..Default::default()
-    };
-    super::launch::shortcut(ctx, "codex".parse()?, workspace, None, args, options).await
-}
-
-/// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex
-/// app its `--app` opens.
-pub(super) fn shortcut_available(installed: &super::Installed) -> bool {
-    installed.agent("codex") || desktop::available("codex", installed)
 }
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.

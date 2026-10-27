@@ -11,6 +11,7 @@ mod desktop;
 #[cfg(feature = "happy")]
 mod happy;
 mod launch;
+mod shortcuts;
 mod trust;
 
 use std::{
@@ -33,13 +34,11 @@ use crate::{
     tools::Tool,
 };
 
-pub(super) use codex::shortcut as codex;
-pub(super) use desktop::shortcut as open_app;
-#[cfg(feature = "happy")]
-pub(super) use happy::shortcut as happy;
-#[cfg(feature = "happy")]
-pub(in crate::cli) use happy::shortcut_agents as happy_agents;
 pub(in crate::cli) use launch::input;
+#[cfg(feature = "happy")]
+pub(super) use shortcuts::happy;
+pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
+pub(super) use shortcuts::{codex, open_app};
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -397,45 +396,6 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
             .into_iter()
             .all(|program| program_available(program, search_path))
     })
-}
-
-/// The agents offered under some settings, with their commands and the
-/// search path, from which shortcuts judge whether they can start anything.
-pub(in crate::cli) struct Installed<'a> {
-    #[cfg_attr(not(feature = "happy"), allow(dead_code))]
-    pub(in crate::cli) agents: &'a [String],
-    pub(in crate::cli) commands: &'a Commands,
-    pub(in crate::cli) search_path: &'a OsStr,
-}
-
-impl Installed<'_> {
-    /// Whether agent `name` can launch.
-    fn agent(&self, name: &str) -> bool {
-        installed(name, self.commands, self.search_path)
-    }
-
-    /// Whether `program` is on the search path.
-    fn program(&self, program: &str) -> bool {
-        program_available(program, self.search_path)
-    }
-}
-
-/// Each shortcut subcommand with whether it can start anything, so
-/// completion offers only those that can. A tracked agent's shortcut needs
-/// the agent; a desktop shortcut needs only the app's program.
-pub(in crate::cli) fn shortcuts(installed: &Installed) -> Vec<(&'static str, bool)> {
-    vec![
-        ("claude", installed.agent("claude")),
-        ("codex", codex::shortcut_available(installed)),
-        ("happy", !happy_agents(installed).is_empty()),
-        ("t3", desktop::available("t3", installed)),
-    ]
-}
-
-/// The agents `shoal happy <agent>` can start.
-#[cfg(not(feature = "happy"))]
-pub(in crate::cli) fn happy_agents<'a>(_installed: &Installed<'a>) -> Vec<&'a str> {
-    Vec::new()
 }
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
