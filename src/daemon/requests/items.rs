@@ -71,22 +71,18 @@ pub(super) async fn handle(
             action,
         } => Body::Item(manager.item_action(&workspace, kind, item, action).await?),
         ItemMethod::OpenPull { workspace, options } => {
-            let proposer = manager.proposer(caller).await;
-            Body::Opened(manager.open_pull(&workspace, options, proposer).await?)
+            Body::Opened(manager.open_pull(&workspace, options, caller).await?)
         }
         ItemMethod::OpenIssue {
             workspace,
             issue,
             repository,
             link,
-        } => {
-            let proposer = manager.proposer(caller).await;
-            Body::Opened(
-                manager
-                    .open_issue(&workspace, issue, repository, link, proposer)
-                    .await?,
-            )
-        }
+        } => Body::Opened(
+            manager
+                .open_issue(&workspace, issue, repository, link, caller)
+                .await?,
+        ),
         ItemMethod::SelectItems {
             workspace,
             selection,

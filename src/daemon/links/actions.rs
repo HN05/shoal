@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, bail};
 
 use super::{
-    proposals::{OpenOutcome, Proposer},
+    proposals::OpenOutcome,
     wait::{OwnChange, record_own_change},
 };
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         repo::{Opening, OtherRepositories},
         resolve::Effective,
     },
-    daemon::{events, workspace::Manager},
+    daemon::{events, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::{Account, AgentLogins},
@@ -287,8 +287,8 @@ impl Manager {
 impl Manager {
     /// Open an issue as the workspace's agent account in its repository, or
     /// the one `repository` names, and link it when `link` is set. A
-    /// `proposer` records it for the user's approval instead when
-    /// `[approvals] issue_open`, or for another repository
+    /// workspace process's issue is recorded for the user's approval instead
+    /// when `[approvals] issue_open`, or for another repository
     /// `[issue] other_repositories`, says so.
     pub async fn open_issue(
         &self,
@@ -296,9 +296,10 @@ impl Manager {
         issue: NewIssue,
         repository: Option<String>,
         link: bool,
-        proposer: Option<Proposer>,
+        caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
+        let proposer = self.proposer(caller).await;
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the issue and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
@@ -419,14 +420,15 @@ impl IssueDestination {
 impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
-    /// unlinked. A `proposer` records a new PR for the user's approval
-    /// instead when `[approvals] pr_open` says so.
+    /// unlinked. A workspace process's new PR is recorded for the user's
+    /// approval instead when `[approvals] pr_open` says so.
     pub async fn open_pull(
         &self,
         selector: &str,
         options: PullOptions,
-        proposer: Option<Proposer>,
+        caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
+        let proposer = self.proposer(caller).await;
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the PR and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
