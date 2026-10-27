@@ -5805,8 +5805,18 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     let fzf = bin.join("fzf");
     // Bash reports getcwd failures at startup if the picker inherits a deleted cwd.
     install_test_script(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n");
+    install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
+    let workspace = &fixture.ok(&["work"])[0];
+    fs::write(
+        fixture.root.path().join("zmx-sessions"),
+        format!(
+            "  name=available\tclients=0\tshoal.workspace={}\n",
+            workspace["id"].as_str().unwrap()
+        ),
+    )
+    .unwrap();
 
-    for args in [vec!["status"], vec!["rm", "--yes"]] {
+    for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
         let deleted = fixture.root.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
         let path = CString::new(deleted.as_os_str().as_encoded_bytes()).unwrap();
@@ -5835,9 +5845,22 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         use std::io::Read;
         let mut transcript = String::new();
         let _ = master.read_to_string(&mut transcript);
-        assert!(transcript.is_empty(), "{transcript}");
+        if args[0] == "attach" {
+            let attached = zmx_calls(&fixture)
+                .into_iter()
+                .rfind(|call| call[0] == "attach");
+            assert_eq!(attached.unwrap(), ["attach", "available"]);
+            assert!(
+                transcript.contains("detached from available"),
+                "{transcript}"
+            );
+        } else {
+            assert!(transcript.is_empty(), "{transcript}");
+        }
         if args[0] == "status" {
             assert!(stdout.starts_with("available "), "{stdout}");
+        } else if args[0] == "attach" {
+            assert!(stdout.is_empty(), "{stdout}");
         } else {
             assert!(stdout.contains("Workspace removed"), "{stdout}");
             assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());

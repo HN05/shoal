@@ -44,9 +44,11 @@ pub(super) async fn current_checkout(repos: &[Repository]) -> Result<Option<&Rep
     Ok(repos.iter().find(|repo| Some(&repo.path) == root.as_ref()))
 }
 
-/// The root of the worktree the current directory is in.
+/// The root of the worktree the current directory is in, if it still exists.
 async fn current_root() -> Result<Option<std::path::PathBuf>> {
-    let cwd = std::env::current_dir()?;
+    let Some(cwd) = ui::current_directory()? else {
+        return Ok(None);
+    };
     match git::worktree_root(&cwd).await {
         Ok(root) => Ok(Some(std::fs::canonicalize(root.trim_end())?)),
         Err(_) => Ok(None),
