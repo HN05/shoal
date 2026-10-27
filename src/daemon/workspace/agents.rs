@@ -602,8 +602,20 @@ impl Manager {
             log!("agent turns unavailable to protection: {error:#}");
             HashMap::new()
         });
+        self.stop_agents_by_turn(protection, select, turns).await
+    }
+
+    /// Stop the agents `select` picks by `turns`, read before taking the
+    /// agents lock.
+    async fn stop_agents_by_turn(
+        &self,
+        protection: &Protection,
+        select: Select,
+        mut turns: HashMap<String, Turn>,
+    ) -> Vec<StoppedAgent> {
         let stopped: Vec<_> = {
             let mut agents = self.agents.lock().await;
+            still_idle(&mut turns, &agents);
             let running = agents
                 .iter()
                 .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
@@ -698,6 +710,20 @@ enum Select {
     /// The agent [`first_to_stop`] picks.
     One,
     All,
+}
+
+/// Count an agent idle in `turns` as working unless the turn it reported
+/// last is still idle, such as one that started a turn since they were read:
+/// its reports reach `agents` before the state the turns come from, under the
+/// lock the caller holds. One that has not reported since it started counts
+/// as working too.
+fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>) {
+    for (id, turn) in turns.iter_mut() {
+        let reported = agents.get(id).and_then(|agent| agent.turn);
+        if turn.idle() && reported != Some(AgentState::Idle) {
+            turn.state = AgentState::Working;
+        }
+    }
 }
 
 /// Of the `running` agents, by execution and start, the one whose stop costs

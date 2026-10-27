@@ -352,3 +352,52 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
         assert_eq!(Record::load(&path).unwrap().unwrap().turn, Some(turn));
     }
 }
+
+#[tokio::test]
+async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
+    use crate::{execution::recovery::Record, state::AgentState};
+    let (_root, manager) = manager().await;
+    let repo = repository(_root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "agent".into(), None, None, None)
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    manager
+        .track_agent(
+            &id,
+            "claude",
+            &workspace.id,
+            &workspace.name,
+            false,
+            Duration::ZERO,
+        )
+        .await;
+    let report = |state| manager.set_agent_state(&workspace.name, state, Some(id.clone()), None);
+    report(AgentState::Idle).await.unwrap();
+    let turns = manager.agent_turns().await.unwrap();
+    assert!(turns[&id].idle());
+    // The agent starts a turn while protection scans its processes.
+    report(AgentState::Working).await.unwrap();
+    let stopped = manager
+        .stop_agents_by_turn(
+            &Protection::load("critical memory pressure"),
+            Select::One,
+            turns,
+        )
+        .await;
+    assert_eq!(stopped.len(), 1);
+    let path = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &id);
+    assert_eq!(
+        Record::load(&path).unwrap().unwrap().turn,
+        Some(AgentState::Working)
+    );
+}
