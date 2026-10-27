@@ -198,6 +198,35 @@ fn comments_saved_without_authors_match_the_same_comments_with_them() {
 }
 
 #[test]
+fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
+    let verdicts = |pairs: &[(&str, &str)]| {
+        let mut snapshot = Snapshot::new("open");
+        let pairs = pairs
+            .iter()
+            .map(|(reviewer, verdict)| ((*reviewer).to_owned(), (*verdict).to_owned()));
+        snapshot.record_comments("reviews", Ok(verdict_entries(pairs)));
+        snapshot
+    };
+    let saved: Snapshot = serde_json::from_value(json!({
+        "comments": {"reviews:verdicts": "bob:Approved\nalice:ChangesRequested\nbob:Approved\n"},
+        "checks": {}, "conflict": null, "state": "open", "errors": {},
+    }))
+    .unwrap();
+    let both = verdicts(&[
+        ("alice", "ChangesRequested"),
+        ("bob", "Approved"),
+        ("bob", "Approved"),
+    ]);
+    assert!(saved.changes(&both, "pr").is_empty());
+    // Reviewers who share a name still change their entry one at a time.
+    let withdrawn = verdicts(&[("alice", "ChangesRequested"), ("bob", "Approved")]);
+    assert_eq!(
+        both.changes(&withdrawn, "pr")[0].message,
+        "1 updated review from bob; read them with shoal view pr"
+    );
+}
+
+#[test]
 fn a_rate_limited_lookup_leaves_the_snapshot_incomplete_without_failing() {
     let limit = RateLimited {
         host: "forge.example".into(),

@@ -14,7 +14,7 @@ use crate::{
         list,
     },
     review::status::{PrState, PrStatus, Verdict},
-    updates::{DISCUSSION, Entry, Snapshot},
+    updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
 
 /// A CI check in the states every REST forge is mapped to; `Pending` is the
@@ -41,23 +41,18 @@ pub(crate) trait RestReads: Backend {
 
     /// Each review by ID with what changes when it is submitted, edited,
     /// dismissed or answered and its reviewer. By default inline comments
-    /// are part of the discussion and verdicts have no ID, so each reviewer's
-    /// verdict is one entry.
+    /// are part of the discussion and verdicts have no ID, so each
+    /// reviewer's verdicts are one entry.
     async fn review_activity(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
     ) -> Result<Vec<(String, Entry)>> {
-        Ok(self
-            .verdicts(repo, account, number)
-            .await?
-            .into_iter()
-            .map(|(reviewer, verdict)| {
-                let entry = Entry::new(format!("{verdict:?}"), reviewer.clone());
-                (format!("verdict:{reviewer}"), entry)
-            })
-            .collect())
+        let verdicts = self.verdicts(repo, account, number).await?;
+        Ok(verdict_entries(verdicts.into_iter().map(
+            |(reviewer, verdict)| (reviewer, format!("{verdict:?}")),
+        )))
     }
 
     /// The CI checks on the PR's head commit.

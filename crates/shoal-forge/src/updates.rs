@@ -21,7 +21,7 @@ const FAILURE_REPORT_INTERVAL: u64 = 600;
 pub(crate) const DISCUSSION: &str = "discussion";
 
 mod comments;
-pub(crate) use comments::Entry;
+pub(crate) use comments::{Entry, verdict_entries};
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -63,6 +63,7 @@ impl std::fmt::Display for Update {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
+    #[serde(deserialize_with = "comments::saved")]
     pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
     pub(crate) conflict: Option<bool>,

@@ -2,7 +2,11 @@
 //! changed among them.
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// The key under which older snapshots kept every reviewer's verdict as one
+/// entry, a `reviewer:verdict` line each.
+const COMBINED_VERDICTS: &str = "reviews:verdicts";
 
 /// A comment or review as a snapshot records it: what changes when it is
 /// edited, dismissed or answered, and who wrote it.
@@ -70,6 +74,45 @@ impl Entry {
     fn recorded(&self) -> bool {
         !self.fingerprint.is_empty()
     }
+}
+
+/// One entry for each reviewer with their verdicts, so reviewers who share
+/// a name still change it when one of them changes theirs.
+pub(crate) fn verdict_entries(
+    verdicts: impl IntoIterator<Item = (String, String)>,
+) -> Vec<(String, Entry)> {
+    let mut by_reviewer = BTreeMap::<String, Vec<String>>::new();
+    for (reviewer, verdict) in verdicts {
+        by_reviewer.entry(reviewer).or_default().push(verdict);
+    }
+    by_reviewer
+        .into_iter()
+        .map(|(reviewer, mut verdicts)| {
+            verdicts.sort();
+            let entry = Entry::new(verdicts.join(","), reviewer.clone());
+            (format!("verdict:{reviewer}"), entry)
+        })
+        .collect()
+}
+
+/// The comments of a saved snapshot, splitting the combined verdicts of
+/// older snapshots into the entries `verdict_entries` records for them.
+pub(crate) fn saved<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, Entry>, D::Error> {
+    let mut comments = BTreeMap::<String, Entry>::deserialize(deserializer)?;
+    if let Some(combined) = comments.remove(COMBINED_VERDICTS) {
+        let verdicts = combined.fingerprint.lines().filter_map(|line| {
+            let (reviewer, verdict) = line.rsplit_once(':')?;
+            Some((reviewer.to_owned(), verdict.to_owned()))
+        });
+        comments.extend(
+            verdict_entries(verdicts)
+                .into_iter()
+                .map(|(key, entry)| (format!("reviews:{key}"), entry)),
+        );
+    }
+    Ok(comments)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
