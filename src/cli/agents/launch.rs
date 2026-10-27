@@ -4,7 +4,7 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{Integration, Launch, LaunchOptions, ensure_available};
+use super::{Integration, Launch, LaunchOptions, Wake, ensure_available};
 use crate::{
     agent::Agent,
     cli::{
@@ -92,7 +92,7 @@ async fn command(
     let instructions = templates::instructions(
         settings.worker_template.as_deref(),
         workspace,
-        integration.delivery(settings),
+        delivery(integration, settings),
     );
     let (args, prompt) = input(
         settings,
@@ -111,6 +111,16 @@ async fn command(
         &[("{prompt}", OsStr::new(&prompt))],
     )
     .await
+}
+
+/// How updates reach an agent with `integration` launched under `settings`:
+/// pushed when it wakes for them.
+fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
+    match integration.wakes() {
+        Wake::Hook => templates::Delivery::Pushed,
+        Wake::Prompt if terminal::agents_can_be_prompted(settings) => templates::Delivery::Pushed,
+        Wake::Prompt | Wake::Never => templates::Delivery::Watched,
+    }
 }
 
 /// What agent `name`'s configured command receives: the arguments carrying

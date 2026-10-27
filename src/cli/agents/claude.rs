@@ -6,13 +6,12 @@ use std::ffi::OsString;
 use serde_json::{Value, json};
 
 use super::{
-    Integration,
+    Integration, Wake,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
     agent::hooks,
     ai::IntegrationKind,
-    config::{Effective, templates::Delivery},
     state::{AgentState, TurnFailure},
 };
 
@@ -28,8 +27,8 @@ impl Integration for Claude {
     }
 
     /// Its hooks deliver updates and start its next turn with them.
-    fn delivery(&self, _settings: &Effective) -> Delivery {
-        Delivery::Pushed
+    fn wakes(&self) -> Wake {
+        Wake::Hook
     }
 
     fn trust_file(&self) -> Option<&'static TrustFile> {

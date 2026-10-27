@@ -9,13 +9,13 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 
 use super::{
-    Integration, Launch, LaunchOptions, desktop,
+    Integration, Launch, LaunchOptions, Wake, desktop,
     trust::{CODEX, TrustFile},
 };
 use crate::{
     agent::{CodexMode, hooks},
-    cli::{context::Context, terminal},
-    config::{Effective, templates::Delivery},
+    cli::context::Context,
+    config::Effective,
     state::AgentState,
 };
 
@@ -30,22 +30,12 @@ impl Integration for Codex {
         config_overrides(false)
     }
 
-    /// Its wrapper starts an idle Codex's next turn only in a session it can
-    /// type into.
-    fn delivery(&self, settings: &Effective) -> Delivery {
-        if terminal::agents_can_be_prompted(settings) {
-            Delivery::Pushed
-        } else {
-            Delivery::Watched
-        }
-    }
-
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CODEX)
     }
 
-    fn wakes_by_prompt(&self) -> bool {
-        true
+    fn wakes(&self) -> Wake {
+        Wake::Prompt
     }
 
     /// `codex.default_mode = "app"` opens the Codex app, which cannot receive

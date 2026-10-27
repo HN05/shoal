@@ -26,7 +26,7 @@ use crate::{
     agent::Agent,
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
-    config::{Config, Effective, named_commands::Commands, templates::Delivery},
+    config::{Config, Effective, named_commands::Commands},
     fsutil,
     model::{RemovedWorkspace, Repository, Workspace},
     protocol::{ConfigTarget, RepositoryMethod},
@@ -55,20 +55,14 @@ pub(in crate::cli) trait Integration: Sync {
         Ok(Vec::new())
     }
 
-    /// How updates reach the agent launched under `settings`.
-    fn delivery(&self, _settings: &Effective) -> Delivery {
-        Delivery::Watched
-    }
-
     /// The config file in which the agent records trusted directories.
     fn trust_file(&self) -> Option<&'static trust::TrustFile> {
         None
     }
 
-    /// Whether its wrapper wakes the idle agent by typing a prompt into its
-    /// session, for agents without a hook that can start their turn.
-    fn wakes_by_prompt(&self) -> bool {
-        false
+    /// How the idle agent wakes for an update.
+    fn wakes(&self) -> Wake {
+        Wake::Never
     }
 
     /// The programs a launch starts, when not its configured command's.
@@ -120,6 +114,20 @@ pub(in crate::cli) trait Integration: Sync {
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async { Ok(None) })
     }
+}
+
+/// How an idle agent wakes for an update, which decides whether updates are
+/// pushed to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::cli) enum Wake {
+    /// It does not; it finds updates by watching for them.
+    Never,
+    /// A hook of its own waits for the update and starts its next turn.
+    Hook,
+    /// Its wrapper types a prompt into its session, for an agent without a
+    /// hook that can start its turn; only a session the wrapper can type
+    /// into wakes it.
+    Prompt,
 }
 
 /// An agent without an integration: its configuration says everything.
@@ -554,7 +562,7 @@ pub(in crate::cli) async fn start_chat(
 /// Whether the wrapper of an agent with integration `kind` wakes it by
 /// typing a prompt.
 pub(crate) fn wakes_by_prompt(kind: IntegrationKind) -> bool {
-    integration(kind).wakes_by_prompt()
+    integration(kind).wakes() == Wake::Prompt
 }
 
 /// The failure an agent with integration `kind` reports in `event`.
