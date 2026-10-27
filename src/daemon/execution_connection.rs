@@ -391,6 +391,7 @@ async fn relay(
                     incoming,
                     stop,
                     recovering,
+                    unattachable,
                 )
                 .await?
                 {

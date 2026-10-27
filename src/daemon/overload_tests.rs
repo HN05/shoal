@@ -869,6 +869,69 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     serving.abort();
 }
 
+#[tokio::test]
+async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let id = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions[0]
+        .id
+        .clone();
+    manager
+        .set_agent_state(
+            &workspace.name,
+            crate::state::AgentState::Idle,
+            Some(id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    let monitor = manager.background_operations.read().await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    drop(monitor);
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    // Waiting for an update lets go of the hold once its processes stopped.
+    bounded(async {
+        while manager.background_operations.try_write().is_err() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(!launched.is_finished());
+    // The fixture runs no disk monitor; a reading finds the space free.
+    let generation = manager
+        .config_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    manager.publish_disk_reading(Some(generation));
+    manager
+        .send_agent_message(&workspace.name, "Review requested".into())
+        .await
+        .unwrap();
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    assert!(
+        manager
+            .notifications(false, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(|event| event.message.ends_with("for an update"))
+    );
+    serving.abort();
+}
+
 /// Launch an agent with a background command outside its process group and
 /// return that command's identity once both run.
 async fn launch_with_background(

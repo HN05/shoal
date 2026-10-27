@@ -4,7 +4,7 @@
 //! ownership checks never authorize a replacement process.
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
 
 use super::workspace::{Grant, Manager, Pause};
 use crate::daemon::log;
@@ -21,6 +21,8 @@ pub(super) enum Action {
     Finished(i32),
 }
 
+/// `hold` is the operation guard that holds back a daemon update while the
+/// wrapper waits, which a wait for an update lets go of.
 pub(super) async fn pause(
     manager: &Manager,
     execution_id: &str,
@@ -28,6 +30,7 @@ pub(super) async fn pause(
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     recover: bool,
+    hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Action> {
     ensure!(recover, "execution is not eligible for overload recovery");
     if manager.restart_requested(execution_id).await {
@@ -66,7 +69,7 @@ pub(super) async fn pause(
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
             // Every process the agent left has stopped writing.
             manager.checkpoint_after_agent(workspace_id).await;
-            manager.admit_agent_restore(execution_id, workspace_id).await
+            admit_restore(manager, execution_id, workspace_id, hold).await
         } => ready,
     };
     let resume = async {
@@ -150,6 +153,29 @@ async fn interrupted(
             Ok(Action::Stop(requested_reason(manager, execution_id).await))
         }
     }
+}
+
+/// Wait until the agent queue admits the restore. A wait for an update may
+/// last indefinitely, so it lets a daemon update through, which hands the
+/// wait to the next daemon as other shutdowns do, and takes `hold` back
+/// before the agent resumes.
+async fn admit_restore(
+    manager: &Manager,
+    execution_id: &str,
+    workspace_id: &str,
+    hold: &mut Option<OwnedRwLockReadGuard<()>>,
+) -> Result<Grant> {
+    if !manager.restore_waits_for_update(workspace_id, execution_id) {
+        return manager
+            .admit_agent_restore(execution_id, workspace_id)
+            .await;
+    }
+    hold.take();
+    let grant = manager
+        .admit_agent_restore(execution_id, workspace_id)
+        .await?;
+    *hold = Some(manager.background_operations.clone().read_owned().await);
+    Ok(grant)
 }
 
 fn restore_failed(error: anyhow::Error) -> Action {

@@ -127,7 +127,9 @@ holds no agent slot until then. Manual and automatic restores prompt the agent t
 unfinished assignment; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
-daemon instead of cancelling the restore. Restores wait in the agent queue,
+daemon instead of cancelling the restore. A daemon update waits for a stop
+and a restore waiting for load, but not through a wait for an update, which
+may last indefinitely; that wrapper reattaches to the updated daemon. Restores wait in the agent queue,
 and manual recovery persists across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded, except that a done
 assignment needs no agent, so a done workspace's agent is restored neither
