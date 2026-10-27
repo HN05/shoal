@@ -58,3 +58,14 @@ fn tails_are_bounded_and_retain_step_before_long_output() {
     assert!(job(JOB_URL_BYTES).job_url.is_some());
     assert!(job(JOB_URL_BYTES + 1).job_url.is_none());
 }
+
+#[test]
+fn failed_steps_never_name_a_step_that_succeeded() {
+    let unmarked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\nrustc 1.98.1\n\
+                    test result: FAILED\n⚙️ [runner]: exitcode '101': failure\n🏁  Job failed\n";
+    let step = |text| CheckLog::from_text("pr", "rust", text).failed_step;
+    assert_eq!(step(unmarked), None);
+    let marked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\n⭐ Run Main Test\n\
+                  test result: FAILED\n  ❌  Failure - Main Test\n⚙️ [runner]: exitcode '101': failure\n";
+    assert_eq!(step(marked).as_deref(), Some("Main Test"));
+}

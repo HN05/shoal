@@ -150,11 +150,18 @@ impl CheckLog {
     }
 }
 
+/// The step a runner log reports as failed: the one marked as failing, or the
+/// one started last before the job's failure when it did not succeed. A
+/// Forgejo job log may mark only its first steps, so a step that succeeded
+/// says nothing about which later one failed.
 fn failed_step(text: &str) -> Option<String> {
     let mut current = None;
     for line in text.lines() {
         if let Some((_, step)) = line.split_once("⭐ Run ") {
             current = Some(step.trim().chars().take(256).collect());
+        }
+        if line.contains("✅  Success - ") {
+            current = None;
         }
         if let Some((_, step)) = line.split_once("❌  Failure - ") {
             return Some(step.trim().chars().take(256).collect());
