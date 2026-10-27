@@ -24269,7 +24269,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();
-    for name in ["first", "second", "finished"] {
+    for name in ["first", "second", "third", "finished"] {
         let workspace = fixture.add(name);
         let state = fixture
             .root
@@ -24293,11 +24293,11 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         .iter()
         .map(|entry| entry["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["first", "second"], "{queued}");
+    assert_eq!(names, ["first", "second", "third"], "{queued}");
     wait_until("the first restore", || paths[0].join("restored").exists());
-    // The restored agent takes the only slot, so the second waits.
+    // The restored agent takes the only slot, so the others wait.
     let waiting = fixture.ok(&["work", "--queue"]);
-    assert_eq!(waiting.as_array().unwrap().len(), 1, "{waiting}");
+    assert_eq!(waiting.as_array().unwrap().len(), 2, "{waiting}");
     assert_eq!(waiting[0]["name"], "second", "{waiting}");
     assert_eq!(waiting[0]["state"], "queued", "{waiting}");
     let sent = zmx_calls(&fixture)
@@ -24312,8 +24312,11 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     fixture.ok(&["stop", "first"]);
     fixture.ok(&["rm", "first", "--yes"]);
     wait_until("the second restore", || paths[1].join("restored").exists());
+    assert!(!paths[3].join("restored").exists());
+    // Stopping everything also cancels the restore still waiting.
+    fixture.ok(&["stop", "--all"]);
+    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
     assert!(!paths[2].join("restored").exists());
-    fixture.ok(&["stop", "second"]);
 }
 
 /// Replace the managed daemon's executable while a request and an event

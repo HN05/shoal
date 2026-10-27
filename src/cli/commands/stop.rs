@@ -1,4 +1,6 @@
 //! Stopping saves agent sessions and commands for `shoal resume`.
+use std::collections::HashSet;
+
 use anyhow::{Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
@@ -14,7 +16,7 @@ use crate::{
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
-    state::{ExecutionState, WorkspaceState},
+    state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 
 pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
@@ -120,13 +122,15 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
     Ok(workspaces)
 }
 
-/// Stop every settled workspace with a running execution.
+/// Stop every settled workspace with a running execution or an agent whose
+/// restore is queued or requested, which stopping cancels.
 async fn stop_all(ctx: &Context) -> Result<i32> {
     let mut report = ui::Report::new("stopped", "stop");
     let mut running = Vec::new();
     let mut unknown = false;
+    let queued = queued_restores(ctx).await?;
     for workspace in client::workspaces(&ctx.paths).await? {
-        match is_running(ctx, &workspace).await {
+        match needs_stop(ctx, &workspace, &queued).await {
             Ok(true) => running.push(workspace),
             Ok(false) => {}
             Err(error) => {
@@ -185,15 +189,35 @@ async fn stop_each(
     report.finish(ctx, &summary)
 }
 
-/// Disconnected executions are left for `shoal stop <workspace>` rather than
-/// failing every bulk stop, and preparing or removing workspaces keep their
-/// lifecycle.
-async fn is_running(ctx: &Context, workspace: &Workspace) -> Result<bool> {
+/// The workspaces whose stopped agent's restore waits in the queue.
+async fn queued_restores(ctx: &Context) -> Result<HashSet<String>> {
+    Ok(super::agent_queue::entries(ctx)
+        .await?
+        .into_iter()
+        .filter(|entry| entry.kind == QueueKind::Restore && entry.state == QueueState::Queued)
+        .filter_map(|entry| entry.workspace_id)
+        .collect())
+}
+
+/// Whether `--all` stops `workspace`: a settled one with a running execution
+/// or an agent whose restore is `queued` or requested. Disconnected executions
+/// are left for `shoal stop <workspace>` rather than failing every bulk stop,
+/// and preparing or removing workspaces keep their lifecycle.
+async fn needs_stop(
+    ctx: &Context,
+    workspace: &Workspace,
+    queued: &HashSet<String>,
+) -> Result<bool> {
     if !matches!(
         workspace.state,
         WorkspaceState::Ready | WorkspaceState::Failed
     ) {
         return Ok(false);
+    }
+    if queued.contains(&workspace.id)
+        || !recovery::restore_requests(&ctx.paths, &workspace.id)?.is_empty()
+    {
+        return Ok(true);
     }
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     Ok(inspection
