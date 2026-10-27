@@ -16,7 +16,7 @@ use crate::{
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
-    state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
+    state::{ExecutionState, QueueKind, WorkspaceState},
 };
 
 pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
@@ -189,12 +189,12 @@ async fn stop_each(
     report.finish(ctx, &summary)
 }
 
-/// The workspaces whose stopped agent's restore waits in the queue.
+/// The workspaces whose stopped agent's restore is in the queue.
 async fn queued_restores(ctx: &Context) -> Result<HashSet<String>> {
     Ok(super::agent_queue::entries(ctx)
         .await?
         .into_iter()
-        .filter(|entry| entry.kind == QueueKind::Restore && entry.state == QueueState::Queued)
+        .filter(|entry| entry.kind == QueueKind::Restore)
         .filter_map(|entry| entry.workspace_id)
         .collect())
 }

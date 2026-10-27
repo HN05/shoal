@@ -227,3 +227,24 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     assert!(queue(&manager).await.is_empty());
     assert!(record_path(&manager.paths, &finished.id, "waiting").exists());
 }
+
+#[tokio::test]
+async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "work").await;
+    stop(&manager, &workspace, "agent", STOPPED);
+    let entry = manager
+        .queue_stopped_restore("work", "agent", herdr())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.queue_entry_starting(&entry.id).await.unwrap());
+    manager
+        .stop_workspace("work", crate::daemon::workspace::StopRequest::manual())
+        .await
+        .unwrap();
+    // Its worker finds the entry gone and restores nothing.
+    assert!(queue(&manager).await.is_empty());
+}

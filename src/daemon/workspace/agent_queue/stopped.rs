@@ -142,6 +142,15 @@ fn resolved_restores(paths: &Paths, waiting: Vec<(String, String, String)>) -> V
         .collect()
 }
 
+/// Delete the restores the daemon starts of `workspace_id`'s stopped agents.
+fn delete_stopped_restores(db: &Connection, workspace_id: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM agent_queue WHERE workspace_id=?1 AND kind=?2 AND env IS NOT NULL",
+        params![workspace_id, QueueKind::Restore],
+    )?;
+    Ok(())
+}
+
 /// Delete the entries `ids` that still wait; a starting one belongs to its agent.
 fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
     for id in ids {
@@ -231,25 +240,25 @@ impl Manager {
             .await
     }
 
-    /// Cancel the restores of `workspace_id`'s stopped agents, waiting or
-    /// requested, which stay stopped until `shoal resume`. The queue gate
-    /// keeps dispatch from queueing a request meanwhile.
+    /// Cancel the restores of `workspace_id`'s stopped agents, requested,
+    /// waiting or admitted, which stay stopped until `shoal resume`. The queue
+    /// gate keeps dispatch from queueing a request meanwhile, and a restore
+    /// whose agent already registered has left the queue.
     pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &str) -> Result<()> {
         let _gate = self.agent_queue_gate.lock().await;
+        self.clear_restore_requests(workspace_id)?;
+        let workspace_id = workspace_id.to_owned();
+        self.store
+            .run(move |db| delete_stopped_restores(db, &workspace_id))
+            .await
+    }
+
+    /// Clear the restore requests of `workspace_id`'s stopped agents.
+    fn clear_restore_requests(&self, workspace_id: &str) -> Result<()> {
         for (execution, _) in recovery::restore_requests(&self.paths, workspace_id)? {
             recovery::clear_restore_request(&self.paths, workspace_id, &execution)?;
         }
-        let workspace_id = workspace_id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM agent_queue
-                     WHERE workspace_id=?1 AND kind=?2 AND env IS NOT NULL AND state=?3",
-                    params![workspace_id, QueueKind::Restore, QueueState::Queued],
-                )?;
-                Ok(())
-            })
-            .await
+        Ok(())
     }
 
     /// Whether the entry `id` restores a stopped agent the daemon starts.

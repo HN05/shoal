@@ -11,7 +11,7 @@ use crate::{
     },
     model::{Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
-    state::ExecutionState,
+    state::{ExecutionState, QueueState},
 };
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
@@ -122,6 +122,12 @@ pub async fn start_entry(
     };
     crate::env::launch_queue_entry(&entry);
     let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry).await;
+    // A stop or completion since admission cancelled it.
+    let admitted = super::agent_queue::entries(ctx)
+        .await?
+        .iter()
+        .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
+    ensure!(admitted, "the queued restore was cancelled");
     let restored = run(ctx, workspace.clone(), Some(execution), false).await;
     if let Err(error) = &restored {
         super::agent_queue::fail(ctx, &entry, error).await;
