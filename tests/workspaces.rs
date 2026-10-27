@@ -10214,7 +10214,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     assert_eq!(preview[0]["directory"], "valid");
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
-    assert!(issue.contains("--repair"));
+    assert!(issue.contains("shoal work setup --skip"));
     assert_eq!(
         fixture.ok(&["status", "interrupted"])["workspace"]["state"],
         "failed"
@@ -10225,11 +10225,9 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     )
     .unwrap();
     let preview = recovery_report(&fixture, &["interrupted"]);
-    assert!(
-        preview[0]["issues"][0]
-            .as_str()
-            .unwrap()
-            .contains("--repair")
+    assert_eq!(
+        preview[0]["issues"][0],
+        "Workspace is failed; shoal status shows why"
     );
     let repaired = repaired_workspaces(&fixture, &["interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
@@ -10415,7 +10413,11 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
         "failed"
     );
     let preview = recovery_report(&fixture, &["reclaimed"]);
-    assert!(preview[0]["issues"].to_string().contains("--reclaim"));
+    assert!(
+        preview[0]["issues"]
+            .to_string()
+            .contains("reclaim it with shoal work adopt")
+    );
     let report = recovery_report(&fixture, &["reclaimed", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
     // Reclaim still requires the recorded branch and metadata no one else owns.
@@ -12179,7 +12181,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let issue = issues[0].as_str().unwrap();
     assert!(issue.contains("setup failed (exit 17"));
     assert!(issue.contains("retry with shoal work setup"));
-    assert!(issue.contains("alternatively, use --repair"));
+    assert!(issue.contains("accept a failed setup with shoal work setup --skip"));
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["workspace"],
         failed["workspace"]

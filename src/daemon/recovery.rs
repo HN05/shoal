@@ -126,7 +126,7 @@ impl Manager {
     fn validate_reconcile_options(options: ReconcileOptions) -> Result<()> {
         ensure!(
             options.repair || !(options.stop || options.acknowledge_stopped || options.reclaim),
-            "stop/acknowledge-stopped/reclaim require --repair"
+            "stopping, acknowledging stopped processes and reclaiming need repair"
         );
         Ok(())
     }
@@ -169,7 +169,7 @@ impl Manager {
         if running
             && quiescent
             && let Err(error) = self
-                .stop_workspace(&workspace.id, StopRequest::doctor())
+                .stop_workspace(&workspace.id, StopRequest::repair())
                 .await
         {
             report.issues.push(format!("connected stop: {error:#}"));
@@ -240,9 +240,12 @@ impl Manager {
         if !options.repair && workspace.state != WorkspaceState::Ready && report.issues.is_empty() {
             report.issues.push(match &workspace.error {
                 Some(error) => format!(
-                    "{error}; alternatively, use --repair to restore verified state without retrying failed operations"
+                    "{error}; to keep the workspace as it is without retrying, accept a failed setup with shoal work setup --skip"
                 ),
-                None => "Workspace state requires repair; inspect this report then use --repair".into(),
+                None => format!(
+                    "Workspace is {}; shoal status shows why",
+                    workspace.state
+                ),
             });
         }
         if options.repair
@@ -284,8 +287,8 @@ impl Manager {
                     )),
                 },
                 Err(error) => report.issues.push(format!(
-                    "Worktree ownership cannot be verified: {error:#}; if {} is still this workspace's worktree, use --repair --reclaim",
-                    workspace.path.display()
+                    "Worktree ownership cannot be verified: {error:#}; if {path} is still this workspace's worktree, reclaim it with shoal work adopt {path}",
+                    path = workspace.path.display()
                 )),
             }
             return Ok(());
@@ -430,7 +433,7 @@ fn execution_notes(connected: bool, processes: &Processes) -> Vec<String> {
         ));
     }
     if !processes.launch_recorded {
-        notes.push("Execution has incomplete launch identity; explicit --acknowledge-stopped is required after checking its processes".into());
+        notes.push("Execution has incomplete launch identity; shoal stop asks you to confirm it ended after you check its processes".into());
     }
     if !processes.unreadable.is_empty() {
         notes.push(format!(

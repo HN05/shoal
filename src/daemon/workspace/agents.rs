@@ -247,7 +247,7 @@ impl Manager {
 
     /// Prove that a protection-stopped agent ended, then forget its stopped
     /// child. Identity-verified processes it left outside its process group,
-    /// such as background shell commands, are stopped as `shoal doctor --stop`
+    /// such as background shell commands, are stopped as `shoal stop`
     /// stops them; the waiting wrapper is not a target. Reports what survives
     /// when `patience` passes without proof.
     pub(crate) async fn pause_agent_execution(

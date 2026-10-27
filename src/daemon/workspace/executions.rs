@@ -118,9 +118,9 @@ impl StopRequest {
         }
     }
 
-    pub fn doctor() -> Self {
+    pub fn repair() -> Self {
         Self {
-            reason: "stopped by shoal doctor".into(),
+            reason: "stopped to repair the workspace".into(),
             save: Save::Nothing,
         }
     }
