@@ -71,20 +71,43 @@ fn herdr_round_trips_close_when_done() {
 }
 
 #[test]
-fn herdr_watch_round_trips_workspace_and_tab() {
+fn place_watch_round_trips_host_workspace_and_place() {
     for json in [false, true] {
-        let InternalCommand::HerdrWatch { workspace, tab } = parse(
-            Worker::HerdrWatch {
+        let InternalCommand::PlaceWatch {
+            host,
+            workspace,
+            place,
+        } = parse(
+            Worker::PlaceWatch {
+                host: "herdr",
                 workspace: "workspace-id",
-                tab: "w1:t9",
+                place: "w1:t9",
             },
             json,
-        ) else {
-            panic!("expected Herdr watcher");
+        )
+        else {
+            panic!("expected a place watcher");
         };
+        assert_eq!(host, "herdr");
         assert_eq!(workspace, "workspace-id");
-        assert_eq!(tab, "w1:t9");
+        assert_eq!(place, "w1:t9");
     }
+}
+
+#[test]
+fn the_herdr_watcher_of_earlier_releases_still_parses() {
+    let cli =
+        Cli::try_parse_from(["shoal", "internal", "herdr-watch", "workspace-id", "w1:t9"]).unwrap();
+    let Some(Command::Internal {
+        command: InternalCommand::HerdrWatch { workspace, tab },
+    }) = cli.command
+    else {
+        panic!("expected the Herdr watcher");
+    };
+    assert_eq!(
+        (workspace.as_str(), tab.as_str()),
+        ("workspace-id", "w1:t9")
+    );
 }
 
 #[test]

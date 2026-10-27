@@ -33,8 +33,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             close_when_done,
             plan,
         } => terminal::herdr_worker(ctx, close_when_done, &plan).await,
+        InternalCommand::PlaceWatch {
+            host,
+            workspace,
+            place,
+        } => terminal::watch_place(&ctx, host, workspace, place).await,
         InternalCommand::HerdrWatch { workspace, tab } => {
-            terminal::watch_herdr_tab(&ctx, workspace, tab).await
+            terminal::watch_place(&ctx, "herdr".into(), workspace, tab).await
         }
         InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         InternalCommand::CopyIgnored { setup_cmd } => {

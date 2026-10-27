@@ -29,7 +29,7 @@ use crate::{
     model::{Repository, Workspace},
 };
 
-pub(in crate::cli) use closing::watch as watch_herdr_tab;
+pub(in crate::cli) use closing::{PlaceState, watch as watch_place};
 pub(in crate::cli) use herdr::worker as herdr_worker;
 pub(in crate::cli) use zmx::worker as session_worker;
 
@@ -141,10 +141,20 @@ pub(in crate::cli) trait Host: Sync {
         None
     }
 
-    /// Whether the place this process runs in closes once `workspace` is
-    /// removed.
-    fn closes_with(&self, _paths: &crate::paths::Paths, _workspace: &str) -> bool {
-        false
+    /// The place this process runs in, as [`Host::close_place`] names it.
+    fn this_place(&self) -> Option<String> {
+        None
+    }
+
+    /// Close `place`, one this host opened for a workspace.
+    fn close_place<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { anyhow::bail!("{} cannot close places", self.name()) })
+    }
+
+    /// Whether `place` is still open, and its agent's turn as this host
+    /// reads it.
+    fn place_state<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
     }
 
     /// The session this process runs in, where a prompt can be typed.
@@ -396,7 +406,7 @@ pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
 /// Whether the place this process runs in closes once `workspace` is
 /// removed, ending anything it streams.
 pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
-    HOSTS.iter().any(|host| host.closes_with(paths, workspace))
+    closing::closes_with(paths, workspace)
 }
 
 /// Where an agent running in this process sits, as its host names it, so
@@ -488,10 +498,7 @@ pub(in crate::cli) async fn session_workspaces() -> Result<HashSet<String>> {
 
 /// Attach this terminal to `session` through the host that keeps it.
 pub(in crate::cli) async fn attach(workspace: &Workspace, session: &Session) -> Result<i32> {
-    let host = HOSTS
-        .iter()
-        .find(|host| host.name() == session.host)
-        .context("the session's host is unknown")?;
+    let host = named(session.host).context("the session's host is unknown")?;
     host.attach(workspace, &session.name).await
 }
 
@@ -538,12 +545,16 @@ pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Resul
 }
 
 fn demo_host(name: &str) -> Result<&'static dyn Host> {
+    named(name).with_context(|| format!("the demo's host {name} is unknown"))
+}
+
+/// The host, or the plain terminal, that goes by `name`.
+fn named(name: &str) -> Option<&'static dyn Host> {
     HOSTS
         .iter()
         .copied()
         .chain([&Plain as &dyn Host])
         .find(|host| host.name() == name)
-        .with_context(|| format!("the demo's host {name} is unknown"))
 }
 
 /// The place a host opened for this process to add a workspace in, hosting

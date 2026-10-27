@@ -78,7 +78,15 @@ pub enum InternalCommand {
         #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
         plan: String,
     },
-    /// Close a Herdr tab once its workspace completes or is removed.
+    /// Close a terminal host's place once its workspace completes or is removed.
+    #[command(name = internal::PLACE_WATCH)]
+    PlaceWatch {
+        host: String,
+        workspace: String,
+        place: String,
+    },
+    /// The Herdr tab watcher of earlier releases, which continues here after
+    /// an upgrade.
     #[command(name = internal::HERDR_WATCH)]
     HerdrWatch { workspace: String, tab: String },
     /// Detached execution wrapper; reports the launch on stdout, then keeps tracking it.

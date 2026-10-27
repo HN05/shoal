@@ -11,6 +11,7 @@ use crate::paths::Paths;
 pub const GROUP: &str = "internal";
 pub const HERDR: &str = "herdr";
 pub const HERDR_WATCH: &str = "herdr-watch";
+pub const PLACE_WATCH: &str = "place-watch";
 pub const LAND: &str = "land";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
@@ -27,9 +28,11 @@ pub enum Worker<'a> {
     Herdr {
         close_when_done: bool,
     },
-    HerdrWatch {
+    /// Close `place` of `host` once `workspace` completes or is removed.
+    PlaceWatch {
+        host: &'a str,
         workspace: &'a str,
-        tab: &'a str,
+        place: &'a str,
     },
     Land {
         plan: &'a str,
@@ -122,8 +125,17 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
                 args.push("--close-when-done".into());
             }
         }
-        Worker::HerdrWatch { workspace, tab } => {
-            args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
+        Worker::PlaceWatch {
+            host,
+            workspace,
+            place,
+        } => {
+            args.extend([
+                PLACE_WATCH.into(),
+                host.into(),
+                workspace.into(),
+                place.into(),
+            ]);
         }
         Worker::Land { plan, push } => {
             args.push(LAND.into());

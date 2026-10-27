@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio};
+use std::{collections::BTreeMap, ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
 use serde::Deserialize;
@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, Place, PlaceName, Placement};
+use super::{DemoWorker, Host, Place, PlaceName, PlaceState, Placement};
 
 mod demo;
 use crate::cli::{
@@ -24,12 +24,13 @@ use crate::{
     env,
     execution::recovery::Record,
     model::{Repository, Workspace},
+    state::AgentState,
     subprocess::Run,
 };
 
-pub(super) struct Tab {
-    pub(super) id: String,
-    pub(super) close_when_done: bool,
+struct Tab {
+    id: String,
+    close_when_done: bool,
 }
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
@@ -117,8 +118,16 @@ impl Host for Herdr {
         current_pane()
     }
 
-    fn closes_with(&self, paths: &crate::paths::Paths, workspace: &str) -> bool {
-        super::closing::closes_with(paths, workspace)
+    fn this_place(&self) -> Option<String> {
+        current_tab()
+    }
+
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(close_tab(place))
+    }
+
+    fn place_state<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(tab_state(place))
     }
 
     fn start_demo<'a>(
@@ -192,7 +201,7 @@ async fn start_add(
 /// The file in which the worker leaves the workspace for the tab's shell to
 /// enter. Shoal removes it until the tab runs its worker; then the shell
 /// removes it at its next prompt, or the watcher when it closes the tab.
-pub(super) struct TabDirective(tempfile::TempPath);
+struct TabDirective(tempfile::TempPath);
 
 impl TabDirective {
     fn create() -> Result<Self> {
@@ -211,14 +220,6 @@ impl TabDirective {
     fn hand_over(self) -> Result<()> {
         self.0.keep().context("keep the tab's shell directive")?;
         Ok(())
-    }
-
-    /// Remove the directive this process inherited from its tab, whose shell
-    /// is gone or about to go without reaching a prompt.
-    pub(super) fn discard_inherited() {
-        if let Some(directive) = std::env::var_os(env::SHELL_DIRECTIVE) {
-            let _ = std::fs::remove_file(directive);
-        }
     }
 }
 
@@ -463,10 +464,7 @@ fn shell_command(argv: &[OsString]) -> Result<String> {
 
 pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid Herdr workspace plan")?;
-    let id = std::env::var("HERDR_TAB_ID")
-        .ok()
-        .filter(|id| !id.is_empty())
-        .context("Herdr did not provide HERDR_TAB_ID")?;
+    let id = current_tab().context("Herdr did not provide HERDR_TAB_ID")?;
     ctx.place = Some(Box::new(Tab {
         id,
         close_when_done,
@@ -500,74 +498,50 @@ impl Tab {
         }
     }
 
-    pub(super) async fn close(&self) {
-        if !self.close_when_done {
-            return;
-        }
-        let mut close = Command::new("herdr");
-        close.args(["tab", "close"]).arg(&self.id);
-        if let Err(error) = Run::new(close).checked().await {
-            eprintln!("warning: cannot close Herdr tab {}: {error:#}", self.id);
-        }
-    }
-
-    /// The tab's agent state; `None` once Herdr reports the tab gone.
-    pub(super) async fn agent_status(&self) -> Result<Option<AgentStatus>> {
-        let mut get = Command::new("herdr");
-        get.args(["tab", "get"]).arg(&self.id);
-        let output = Run::new(get).capture().await.context("query Herdr tab")?;
-        if output.status.success() {
-            return Ok(Some(
-                serde_json::from_slice::<TabInfo>(&output.stdout)
-                    .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status),
-            ));
-        }
-        if tab_not_found(&output.stdout) {
-            return Ok(None);
-        }
-        bail!(
-            "herdr tab get {} failed: {}",
-            self.id,
-            String::from_utf8_lossy(&output.stdout).trim()
-        )
-    }
-
     /// Observe lifecycle separately so returning from an agent leaves the tab
-    /// open. The watcher inherits the tab's shell directive to remove it with
-    /// the tab, whose shell may close before a prompt consumes it.
+    /// open.
     fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
         if !self.close_when_done {
             return Ok(());
         }
-        let argv = internal::internal_command(
-            &ctx.paths,
-            ctx.json,
-            internal::Worker::HerdrWatch {
-                workspace,
-                tab: &self.id,
-            },
-        )?;
-        let mut watcher = Command::new(&argv[0]);
-        watcher
-            .args(&argv[1..])
-            .current_dir(&ctx.paths.home)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        // SAFETY: setsid detaches the forked child without allocating, before exec.
-        unsafe {
-            watcher.pre_exec(|| {
-                if libc::setsid() == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        watcher
-            .spawn()
-            .context("watch workspace for Herdr tab closure")?;
-        Ok(())
+        super::closing::start_watcher(ctx, &Herdr, &self.id, workspace)
     }
+}
+
+async fn close_tab(tab: &str) -> Result<()> {
+    let mut close = Command::new("herdr");
+    close.args(["tab", "close"]).arg(tab);
+    Run::new(close)
+        .checked()
+        .await
+        .with_context(|| format!("cannot close Herdr tab {tab}"))?;
+    Ok(())
+}
+
+/// The tab's agent state, or that Herdr reports the tab gone.
+async fn tab_state(tab: &str) -> Result<PlaceState> {
+    let mut get = Command::new("herdr");
+    get.args(["tab", "get"]).arg(tab);
+    let output = Run::new(get).capture().await.context("query Herdr tab")?;
+    if output.status.success() {
+        let status = serde_json::from_slice::<TabInfo>(&output.stdout)
+            .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status);
+        return Ok(PlaceState::Open(status.turn()));
+    }
+    if tab_not_found(&output.stdout) {
+        return Ok(PlaceState::Gone);
+    }
+    bail!(
+        "herdr tab get {tab} failed: {}",
+        String::from_utf8_lossy(&output.stdout).trim()
+    )
+}
+
+/// The Herdr tab this process runs in.
+fn current_tab() -> Option<String> {
+    std::env::var("HERDR_TAB_ID")
+        .ok()
+        .filter(|tab| !tab.is_empty())
 }
 
 #[derive(Deserialize)]
@@ -603,7 +577,7 @@ fn tab_not_found(stdout: &[u8]) -> bool {
 /// Herdr's view of the agent in a tab; `Done` is a finished turn not yet seen.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum AgentStatus {
+enum AgentStatus {
     Idle,
     Working,
     Blocked,
@@ -611,6 +585,18 @@ pub(super) enum AgentStatus {
     #[default]
     #[serde(other)]
     Unknown,
+}
+
+impl AgentStatus {
+    /// The turn state Shoal reads from Herdr's view.
+    fn turn(self) -> Option<AgentState> {
+        match self {
+            Self::Idle | Self::Done => Some(AgentState::Idle),
+            Self::Working => Some(AgentState::Working),
+            Self::Blocked => Some(AgentState::Waiting),
+            Self::Unknown => None,
+        }
+    }
 }
 
 #[cfg(test)]

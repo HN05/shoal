@@ -57,6 +57,16 @@ fn tab_info_reads_the_agent_status() {
 }
 
 #[test]
+fn a_finished_or_unseen_turn_reads_as_idle() {
+    use AgentStatus::*;
+    assert_eq!(Idle.turn(), Some(AgentState::Idle));
+    assert_eq!(Done.turn(), Some(AgentState::Idle));
+    assert_eq!(Working.turn(), Some(AgentState::Working));
+    assert_eq!(Blocked.turn(), Some(AgentState::Waiting));
+    assert_eq!(Unknown.turn(), None);
+}
+
+#[test]
 fn only_herdr_reporting_the_tab_missing_proves_it_gone() {
     assert!(tab_not_found(
         br#"{"error":{"code":"tab_not_found","message":"tab w2:t9 not found"},"id":"cli:tab:get"}"#
