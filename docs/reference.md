@@ -1050,8 +1050,8 @@ user waits for a focused launch.
 
 An agent's automatic restore after a protection stop waits in the same queue,
 in order with launches, from when its processes stop. A restore of an agent
-stopped while idle holds no slot and holds back nothing behind it until an
-update arrives for the agent; then it needs a free slot, or room for its load,
+stopped while idle holds back nothing behind it, and holds no slot once its
+processes are proven stopped, until an update arrives for the agent; then it needs a free slot, or room for its load,
 as a launch does, and with disk protection on `disk.cleanup_free_gib`
 available, without waiting for healthy readings. Any other restore keeps
 the agent's slot,

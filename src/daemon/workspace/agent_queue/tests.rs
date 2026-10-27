@@ -1111,6 +1111,10 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
+    // Until its processes are proven stopped the agent keeps its slot.
+    let held = add(&manager, &repo, "held").await;
+    assert!(!held.start);
+    manager.queue_remove("held").await.unwrap();
     let restoring = await_restore(&manager, &execution).await;
     // Healthy readings do not restore it, and its slot is free for a launch.
     publish_recovery(&manager);

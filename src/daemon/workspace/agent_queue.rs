@@ -145,6 +145,29 @@ struct QueuedRow {
     workspace: Option<String>,
 }
 
+/// The executions of the `waiting` restores that wait for an update with
+/// every process of their agent proven stopped, which hold no slot. One whose
+/// processes may still run keeps its slot until they stop.
+fn dormant_restores(
+    waiting: &[Waiting],
+    restores: &HashMap<String, (String, Wake)>,
+) -> HashSet<String> {
+    waiting
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.work,
+                Work::Restore {
+                    waiting: true,
+                    wake: Wake::Update { .. },
+                }
+            )
+        })
+        .filter_map(|entry| restores.get(&entry.id))
+        .map(|(execution, _)| execution.clone())
+        .collect()
+}
+
 /// The waiting rows of the queue, in order.
 fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
@@ -389,11 +412,7 @@ impl Manager {
             .iter()
             .map(|entry| entry.repository.clone())
             .collect();
-        let dormant = restores
-            .values()
-            .filter(|(_, wake)| matches!(wake, Wake::Update { .. }))
-            .map(|(execution, _)| execution.clone())
-            .collect();
+        let dormant = dormant_restores(&waiting, &restores);
         let slots = self.occupied_slots(&dormant).await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
