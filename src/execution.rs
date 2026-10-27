@@ -21,7 +21,6 @@ use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::Paths};
 pub use completion::SetupVerificationFailure;
-#[cfg(feature = "happy")]
 pub use detached::launch_detached;
 use launch::run_tracked;
 use mode::Mode;

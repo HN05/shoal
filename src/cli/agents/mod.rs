@@ -8,7 +8,6 @@
 mod claude;
 mod codex;
 mod desktop;
-#[cfg(feature = "happy")]
 mod detached;
 #[cfg(feature = "happy")]
 mod happy;
@@ -23,7 +22,6 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use futures_util::future::BoxFuture;
 
 use crate::{
     agent::Agent,
@@ -77,35 +75,11 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
-    /// Start a chat its own way, returning once it runs; `None` runs the
-    /// configured command in place of Shoal.
-    fn chat<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _chat: &'a ChatLaunch,
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    /// Where a chat [`Self::chat`] started runs, for a user looking for it;
-    /// `None` when the chat runs in a terminal.
-    fn chat_place(&self) -> Option<&'static str> {
+    /// The app that runs the agent's workspace sessions and chats detached
+    /// from any terminal, in place of the tracked terminal launch and the
+    /// chat run in place.
+    fn detached(&self) -> Option<&dyn detached::App> {
         None
-    }
-
-    /// Whether every launch starts the agent its own way, with
-    /// [`Self::launch`], instead of the tracked terminal launch.
-    fn launches_itself(&self) -> bool {
-        false
-    }
-
-    /// Start the agent its own way.
-    fn launch<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        _launch: &'a mut Launch,
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async { Ok(None) })
     }
 }
 
@@ -185,7 +159,8 @@ const ADDED: &[Added] = &[];
 /// Where a chat of agent `name` runs when an integration it adds starts it
 /// outside any terminal, such as an app.
 pub(in crate::cli) fn chat_place(name: &str) -> Option<&'static str> {
-    added(name).and_then(|added| added.integration.chat_place())
+    let app = added(name).and_then(|added| added.integration.detached());
+    app.map(detached::App::place)
 }
 
 /// The agent `name`, when an integration adds it.
@@ -285,7 +260,7 @@ pub(in crate::cli) fn runs_in_session(
     let name = agent.name();
     let opens_app = opens_app(agent_options(settings, name), prompted, tracked);
     opens_app.is_none()
-        && !agent_integration(settings, name).launches_itself()
+        && agent_integration(settings, name).detached().is_none()
         && terminal::keeps_agents_in_sessions(settings)
 }
 
@@ -307,7 +282,7 @@ pub(super) async fn launch_agent(
         prompt.is_some(),
         options.tracked,
     );
-    let mut launch = Launch {
+    let launch = Launch {
         name: agent.into(),
         workspace,
         settings,
@@ -315,22 +290,20 @@ pub(super) async fn launch_agent(
         args,
         replaces: options.replaces,
     };
-    let own = match app {
-        Some(app) => {
-            let args = std::mem::take(&mut launch.args);
+    let replaces = launch.replaces.clone();
+    let code = match (app, integration.detached()) {
+        (Some(app), _) => {
             let trust = integration.trust_file();
-            Some(launch::open_app(ctx, &launch.workspace, app, trust, args).await?)
+            launch::open_app(ctx, &launch.workspace, app, trust, launch.args).await?
         }
-        None => integration.launch(ctx, &mut launch).await?,
+        (None, Some(detached)) => detached::start(ctx, integration, detached, launch).await?,
+        (None, None) => return launch::tracked(ctx, integration, launch).await,
     };
     // A launch of its own returns once its agent has started.
-    if let Some(code) = own {
-        for record in &launch.replaces {
-            crate::execution::recovery::consume(record)?;
-        }
-        return Ok(code);
+    for record in &replaces {
+        crate::execution::recovery::consume(record)?;
     }
-    launch::tracked(ctx, integration, launch).await
+    Ok(code)
 }
 
 /// Whether `shoal <name>` launches an agent rather than a configured command.
@@ -569,9 +542,13 @@ pub(in crate::cli) async fn start_chat(
     name: &str,
     chat: &ChatLaunch,
 ) -> Result<Option<i32>> {
-    agent_integration(&chat.settings, name)
-        .chat(ctx, chat)
-        .await
+    let integration = agent_integration(&chat.settings, name);
+    match integration.detached() {
+        Some(app) => detached::start_chat(ctx, integration, app, name, chat)
+            .await
+            .map(Some),
+        None => Ok(None),
+    }
 }
 
 /// Whether the wrapper of an agent with integration `kind` wakes it by

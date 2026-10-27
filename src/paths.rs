@@ -108,7 +108,6 @@ impl Paths {
 
     /// Where a chat started detached keeps its log and first message, named
     /// after the chat so a later chat with that name replaces them.
-    #[cfg_attr(not(feature = "happy"), allow(dead_code))]
     pub fn chat_files(&self, chat: &crate::model::Chat) -> PathBuf {
         self.state.join("chats").join(&chat.name)
     }

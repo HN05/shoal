@@ -1,114 +1,238 @@
 //! Agent sessions that run detached from any terminal, in an app the user
-//! continues them in, such as Happy.
+//! continues them in, such as Happy. Shoal records and starts each session;
+//! the [`App`] says what it runs and delivers its first message.
 use std::{
     ffi::OsString,
     os::unix::process::CommandExt,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Stdio},
 };
 
 use anyhow::{Context as _, Result};
-use serde_json::json;
+use futures_util::future::BoxFuture;
+use serde_json::{Value, json};
 
-use super::{
-    ChatLaunch, Integration,
-    happy::{Happy, Opening, instruction_args, session_input, warn_without_daemon},
-};
+use super::{ChatLaunch, Integration, Launch};
 use crate::{
     cli::{client, context::Context},
     config::{Effective, templates},
-    execution, happy,
+    execution,
     model::{Chat, Repository, Workspace},
+    paths::Paths,
 };
 
-/// Start a Happy session the way Happy's own daemon does, so it registers with
-/// that daemon and appears in the app, but detached from this terminal and
+/// An app that runs agent sessions apart from any terminal.
+pub(in crate::cli) trait App: Sync {
+    /// The app's name in output.
+    fn name(&self) -> &'static str;
+
+    /// The agent the app runs.
+    fn agent(&self) -> &'static str;
+
+    /// What a workspace session's execution records as its agent.
+    fn execution_agent(&self) -> String;
+
+    /// Where its sessions run, for a user looking for one.
+    fn place(&self) -> &'static str;
+
+    /// Whether the agent takes instructions apart from its first message,
+    /// as the arguments it is configured with.
+    fn takes_instruction_args(&self) -> bool;
+
+    /// Variables a session must not inherit from this process.
+    fn not_inherited(&self) -> &'static [&'static str];
+
+    /// What `session` runs and how its first message reaches it.
+    fn prepare<'a>(&'a self, session: Session<'a>) -> BoxFuture<'a, Result<Box<dyn Prepared>>>;
+}
+
+/// A session an [`App`] is to run, as Shoal sets it up. Only optional
+/// integrations read it.
+#[cfg_attr(not(feature = "happy"), allow(dead_code))]
+pub(in crate::cli) struct Session<'a> {
+    pub paths: &'a Paths,
+    /// Where the session runs.
+    pub directory: &'a Path,
+    /// The branch checked out there, for a workspace's session.
+    pub branch: Option<&'a str>,
+    /// Where the session keeps its files, without an extension.
+    pub files: &'a Path,
+    /// The first message.
+    pub prompt: Option<String>,
+    pub args: Vec<OsString>,
+}
+
+/// A session an [`App`] prepared.
+pub(in crate::cli) trait Prepared: Send + Sync {
+    /// The command the session runs.
+    fn command(&self) -> Vec<OsString>;
+
+    /// Variables the session runs with.
+    fn env(&self) -> Vec<(&'static str, String)>;
+
+    /// Undo the preparation of a session that never started.
+    fn discard(self: Box<Self>) -> BoxFuture<'static, ()>;
+
+    /// Deliver the first message to the started session.
+    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered>;
+}
+
+/// What output says of a first message once the session started.
+pub(in crate::cli) struct Delivered {
+    /// The line the text ends with, if any.
+    pub note: &'static str,
+    /// The object whose fields the JSON adds.
+    pub fields: Value,
+}
+
+/// Start `launch` as a session of `app`, detached from this terminal and
 /// tracked like any other workspace command. The CLI returns once the launch
 /// is recorded; the session's output goes to a log under Shoal's state.
 pub(super) async fn start(
     ctx: &Context,
-    happy: &Happy,
-    workspace: &Workspace,
-    settings: &Effective,
-    prompt: Option<String>,
-    args: Vec<OsString>,
+    integration: &dyn Integration,
+    app: &dyn App,
+    launch: Launch,
 ) -> Result<i32> {
-    let agent = happy.0;
-    super::ensure_available(&format!("happy-{}", agent.as_str()), settings)?;
-    let (prompt, args) = session_input(settings, workspace, agent, prompt, args);
-    if let Some(trust) = happy.trust_file() {
+    let Launch {
+        name,
+        workspace,
+        settings,
+        prompt,
+        args,
+        ..
+    } = launch;
+    super::ensure_available(&name, &settings)?;
+    let (prompt, args) = workspace_input(integration, app, &settings, &workspace, prompt, args);
+    if let Some(trust) = integration.trust_file() {
         trust
-            .trust_tracked(ctx, workspace, &Default::default())
+            .trust_tracked(ctx, &workspace, &Default::default())
             .await;
     }
-    let daemon_recorded = warn_without_daemon(ctx);
-    let stamp_millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis())
-        .unwrap_or_default();
-    let files = ctx
-        .paths
-        .workspace_state(&workspace.id)
-        .join(format!("happy-{}-{stamp_millis}", agent.as_str()));
-    let opening = Opening::prepare(
-        ctx,
-        agent,
-        &workspace.path,
-        Some(&workspace.branch),
-        &files,
-        prompt.as_deref(),
-    )
-    .await?;
-    let command = happy::command(agent, prompt.as_deref(), args);
-    let launch = match execution::launch_detached(
+    let files = session_files(&ctx.paths, &workspace, &name);
+    let session = Session {
+        paths: &ctx.paths,
+        directory: &workspace.path,
+        branch: Some(&workspace.branch),
+        files: &files,
+        prompt,
+        args,
+    };
+    let prepared = app.prepare(session).await?;
+    let launched = execution::launch_detached(
         &ctx.paths,
-        workspace,
+        &workspace,
         files.with_extension("log"),
-        command,
-        &happy::client::RECONNECT_ENV,
-        &opening.env(),
-        Some(&format!("happy {}", agent.as_str())),
+        prepared.command(),
+        app.not_inherited(),
+        &prepared.env(),
+        Some(&app.execution_agent()),
     )
-    .await
-    {
+    .await;
+    let launch = match launched {
         Ok(launch) => launch,
         Err(error) => {
-            opening.discard().await;
+            prepared.discard().await;
             return Err(error);
         }
     };
-    let prompt_delivered = opening.deliver(prompt.as_deref()).await;
+    let delivered = prepared.deliver().await;
+    let mut report = json!({
+        "workspace": workspace,
+        "agent": app.agent(),
+        "execution_id": launch.execution_id,
+        "pid": launch.pid,
+        "log": launch.log,
+    });
+    report_fields(&mut report, delivered.fields);
     ctx.emit(
         &format!(
-            "Started Happy {} session in {} (execution {}, pid {})\nOutput: {}{}",
-            agent.as_str(),
+            "Started {} {} session in {} (execution {}, pid {})\nOutput: {}{}",
+            app.name(),
+            app.agent(),
             workspace.name,
             launch.execution_id,
             launch.pid,
             launch.log.display(),
-            opening.delivery(prompt_delivered),
+            delivered.note,
         ),
-        json!({
-            "workspace": workspace,
-            "agent": agent,
-            "execution_id": launch.execution_id,
-            "pid": launch.pid,
-            "log": launch.log,
-            "prompt_file": opening.prompt_file,
-            "prompt_delivered": prompt_delivered,
-            "happy_session_id": opening.seeded.as_ref().map(|seeded| seeded.session.id.clone()),
-            "happy_daemon_recorded": daemon_recorded,
-        }),
+        report,
     )?;
     Ok(0)
 }
 
-/// Start a chat as a Happy session in the repository's checkout, detached as
-/// workspace sessions are, since the user continues it in the Happy app. It is
-/// no tracked execution: the chat lasts while the session's process runs.
-pub(super) async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) -> Result<i32> {
-    let agent = happy.0;
-    let name = format!("happy-{}", agent.as_str());
+/// Where a session of agent `name` keeps its files: under the workspace's
+/// state, named after the time it starts.
+fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
+    let stamp_millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or_default();
+    paths
+        .workspace_state(&workspace.id)
+        .join(format!("{name}-{stamp_millis}"))
+}
+
+/// The first message and arguments of a workspace session, which runs
+/// without Shoal's hooks. An agent that takes instructions apart from its
+/// prompt gets them as arguments; otherwise they lead its first message.
+fn workspace_input(
+    integration: &dyn Integration,
+    app: &dyn App,
+    settings: &Effective,
+    workspace: &Workspace,
+    prompt: Option<String>,
+    args: Vec<OsString>,
+) -> (Option<String>, Vec<OsString>) {
+    let instructions = templates::instructions(
+        settings.worker_template.as_deref(),
+        workspace,
+        super::launch::delivery(integration, settings),
+    );
+    match instruction_args(app, settings, &instructions) {
+        Some(instruction_args) => (prompt, instruction_args.into_iter().chain(args).collect()),
+        None => {
+            let prompt = match prompt {
+                Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
+                _ => instructions,
+            };
+            (Some(prompt), args)
+        }
+    }
+}
+
+/// The arguments that give `app`'s agent `instructions` apart from its first
+/// message, when it takes them.
+fn instruction_args(
+    app: &dyn App,
+    settings: &Effective,
+    instructions: &str,
+) -> Option<Vec<OsString>> {
+    settings
+        .launch(app.agent())
+        .arguments
+        .instruction_args(instructions)
+        .filter(|_| app.takes_instruction_args())
+}
+
+/// Add the fields of an app's object `fields` to the JSON `report`.
+fn report_fields(report: &mut Value, fields: Value) {
+    if let (Value::Object(report), Value::Object(fields)) = (report, fields) {
+        report.extend(fields);
+    }
+}
+
+/// Start `chat` as a session of `app`, agent `name`, in the repository's
+/// checkout, detached as workspace sessions are, since the user continues
+/// it in the app. It is no tracked execution: the chat lasts while the
+/// session's process runs.
+pub(super) async fn start_chat(
+    ctx: &Context,
+    integration: &dyn Integration,
+    app: &dyn App,
+    name: &str,
+    chat: &ChatLaunch,
+) -> Result<i32> {
     let ChatLaunch {
         repository,
         name: chat_name,
@@ -117,8 +241,8 @@ pub(super) async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) 
         opening,
         args,
     } = chat;
-    super::ensure_available(&name, settings)?;
-    let (prompt, args) = match instruction_args(settings, agent, instructions) {
+    super::ensure_available(name, settings)?;
+    let (prompt, args) = match instruction_args(app, settings, instructions) {
         Some(instruction_args) => (
             opening.clone(),
             instruction_args.into_iter().chain(args.clone()).collect(),
@@ -128,57 +252,55 @@ pub(super) async fn start_chat(ctx: &Context, happy: &Happy, chat: &ChatLaunch) 
             args.clone(),
         ),
     };
-    if let Some(trust) = happy.trust_file() {
+    if let Some(trust) = integration.trust_file() {
         trust
             .trust_checkout(ctx, repository, &Default::default())
             .await;
     }
-    let daemon_recorded = warn_without_daemon(ctx);
     // This process holds the chat until the session runs.
-    let record = client::start_chat(&ctx.paths, repository, chat_name, &name).await?;
+    let record = client::start_chat(&ctx.paths, repository, chat_name, name).await?;
     let files = ctx.paths.chat_files(&record);
-    let opening = Opening::prepare(
-        ctx,
-        agent,
-        &repository.path,
-        None,
-        &files,
-        prompt.as_deref(),
-    )
-    .await?;
-    let command = happy::command(agent, prompt.as_deref(), args);
+    let session = Session {
+        paths: &ctx.paths,
+        directory: &repository.path,
+        branch: None,
+        files: &files,
+        prompt,
+        args,
+    };
+    let prepared = app.prepare(session).await?;
     let log = files.with_extension("log");
-    let started = spawn_session(ctx, repository, &record, &log, command, &opening.env());
-    let handed_over = match started {
+    let spawned = spawn_session(ctx, app, repository, &record, &log, prepared.as_ref());
+    let handed_over = match spawned {
         Ok(session) => hand_over(ctx, &record, session).await,
         Err(error) => Err(error),
     };
     let record = match handed_over {
         Ok(moved) => moved,
         Err(error) => {
-            opening.discard().await;
+            prepared.discard().await;
             return Err(error);
         }
     };
-    let prompt_delivered = opening.deliver(prompt.as_deref()).await;
+    let delivered = prepared.deliver().await;
+    let mut report = json!({
+        "chat": record,
+        "log": log,
+    });
+    report_fields(&mut report, delivered.fields);
     ctx.emit(
         &format!(
-            "Started Happy {} chat {} for {} (pid {}); open it in the Happy app\nOutput: {}{}",
-            agent.as_str(),
+            "Started {} {} chat {} for {} (pid {}); open it in {}\nOutput: {}{}",
+            app.name(),
+            app.agent(),
             record.name,
             crate::repository::name(repository),
             record.pid,
+            app.place(),
             log.display(),
-            opening.delivery(prompt_delivered),
+            delivered.note,
         ),
-        json!({
-            "chat": record,
-            "log": log,
-            "prompt_file": opening.prompt_file,
-            "prompt_delivered": prompt_delivered,
-            "happy_session_id": opening.seeded.as_ref().map(|seeded| seeded.session.id.clone()),
-            "happy_daemon_recorded": daemon_recorded,
-        }),
+        report,
     )?;
     Ok(0)
 }
@@ -202,20 +324,21 @@ fn stop_session(mut session: Child) {
     let _ = session.wait();
 }
 
-/// Start `command` in its own session at the checkout with the chat's
-/// identity and `env`, writing to `log`.
+/// Start the `prepared` session of `app` in a session of its own at the
+/// checkout with the chat's identity, writing to `log`.
 fn spawn_session(
     ctx: &Context,
+    app: &dyn App,
     repository: &Repository,
     chat: &Chat,
     log: &Path,
-    command: Vec<OsString>,
-    env: &[(&str, String)],
+    prepared: &dyn Prepared,
 ) -> Result<Child> {
     if let Some(parent) = log.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
     let output = std::fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
+    let command = prepared.command();
     let mut session = std::process::Command::new(&command[0]);
     session
         .args(&command[1..])
@@ -224,11 +347,10 @@ fn spawn_session(
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output);
-    // A launch from inside another Happy session must not attach to it.
-    for name in happy::client::RECONNECT_ENV {
+    for name in app.not_inherited() {
         session.env_remove(name);
     }
-    session.envs(env.iter().map(|(name, value)| (*name, value)));
+    session.envs(prepared.env());
     // SAFETY: setsid detaches the forked child without allocating, before exec.
     unsafe {
         session.pre_exec(|| {
@@ -238,7 +360,9 @@ fn spawn_session(
             Ok(())
         });
     }
-    session.spawn().context("start the Happy session")
+    session
+        .spawn()
+        .with_context(|| format!("start the {} session", app.name()))
 }
 
 #[cfg(test)]

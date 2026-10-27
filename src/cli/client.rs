@@ -267,7 +267,6 @@ pub async fn free_chat_name(paths: &Paths, name: String) -> Result<String> {
 }
 
 /// Hand `chat` to process `pid`, whose agent now runs it.
-#[cfg_attr(not(feature = "happy"), allow(dead_code))]
 pub async fn move_chat(paths: &Paths, chat: &Chat, pid: u32) -> Result<Chat> {
     request(
         paths,

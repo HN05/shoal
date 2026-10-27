@@ -138,7 +138,7 @@ async fn command(
 
 /// How updates reach an agent with `integration` launched under `settings`:
 /// pushed when it wakes for them.
-fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
+pub(super) fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
     match integration.wakes() {
         Wake::Hook => templates::Delivery::Pushed,
         Wake::Prompt if terminal::agents_can_be_prompted(settings) => templates::Delivery::Pushed,

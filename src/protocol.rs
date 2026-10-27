@@ -115,7 +115,6 @@ pub mod timing {
     /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
     pub const DETACHED_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
     /// Collect a failed detached wrapper's exit status without waiting indefinitely.
-    #[cfg_attr(not(feature = "happy"), allow(dead_code))]
     pub const DETACHED_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
     /// Give the child time to handle a stop signal before escalating to SIGKILL.
     pub const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);

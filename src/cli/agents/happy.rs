@@ -1,4 +1,6 @@
-//! Detached Happy sessions and their tool-specific prompt delivery.
+//! Happy runs an agent in a detached session the Happy app shows, started
+//! as Happy's own daemon starts them, and delivers a first message the agent
+//! cannot take as an argument through Happy's server.
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -6,18 +8,21 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
+use serde_json::json;
 
-use super::{ChatLaunch, Integration, Launch, Options, trust::TrustFile};
+use super::{
+    Integration, Options,
+    detached::{App, Delivered, Prepared, Session},
+    trust::TrustFile,
+};
 use crate::{
     ai::IntegrationKind,
-    cli::context::Context,
-    config::{self, Effective, templates},
+    config,
     happy::{self, Agent},
-    model::Workspace,
 };
 
 /// `happy-<agent>`: the agent in a detached Happy session.
-pub(super) struct Happy(pub(super) Agent);
+pub(super) struct Happy(Agent);
 
 pub(super) const CLAUDE: Happy = Happy(Agent::Claude);
 pub(super) const CODEX: Happy = Happy(Agent::Codex);
@@ -42,33 +47,51 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
-    fn launches_itself(&self) -> bool {
-        true
+    fn detached(&self) -> Option<&dyn App> {
+        Some(self)
+    }
+}
+
+impl App for Happy {
+    fn name(&self) -> &'static str {
+        "Happy"
     }
 
-    fn chat<'a>(
-        &'a self,
-        ctx: &'a Context,
-        chat: &'a ChatLaunch,
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async move { super::detached::start_chat(ctx, self, chat).await.map(Some) })
+    fn agent(&self) -> &'static str {
+        self.0.as_str()
     }
 
-    fn chat_place(&self) -> Option<&'static str> {
-        Some("the Happy app")
+    fn execution_agent(&self) -> String {
+        format!("happy {}", self.0.as_str())
     }
 
-    fn launch<'a>(
-        &'a self,
-        ctx: &'a Context,
-        launch: &'a mut Launch,
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
+    fn place(&self) -> &'static str {
+        "the Happy app"
+    }
+
+    /// Happy's Codex mode takes no arguments.
+    fn takes_instruction_args(&self) -> bool {
+        happy::accepts_prompt(self.0)
+    }
+
+    /// A launch from inside another Happy session must not attach to it.
+    fn not_inherited(&self) -> &'static [&'static str] {
+        &happy::client::RECONNECT_ENV
+    }
+
+    /// Run the session the way Happy's own daemon does, so it registers with
+    /// that daemon and appears in the app.
+    fn prepare<'a>(&'a self, session: Session<'a>) -> BoxFuture<'a, Result<Box<dyn Prepared>>> {
         Box::pin(async move {
-            let prompt = launch.prompt.take();
-            let args = std::mem::take(&mut launch.args);
-            super::detached::start(ctx, self, &launch.workspace, &launch.settings, prompt, args)
-                .await
-                .map(Some)
+            let daemon_recorded = warn_without_daemon(&session.paths.home);
+            let opening = Opening::prepare(self.0, &session).await?;
+            let command = happy::command(self.0, session.prompt.as_deref(), session.args);
+            Ok(Box::new(HappySession {
+                command,
+                prompt: session.prompt,
+                opening,
+                daemon_recorded,
+            }) as Box<dyn Prepared>)
         })
     }
 }
@@ -83,52 +106,49 @@ pub(super) fn options(config: &config::Happy) -> Options {
     }
 }
 
-/// The first message and arguments of a session of `agent`, which runs
-/// without Shoal's hooks. An agent that takes instructions apart from its
-/// prompt gets them as arguments; Happy's Codex mode takes no arguments, so
-/// they lead its first message.
-pub(super) fn session_input(
-    settings: &Effective,
-    workspace: &Workspace,
-    agent: Agent,
+/// A Happy session ready to start.
+struct HappySession {
+    command: Vec<OsString>,
     prompt: Option<String>,
-    args: Vec<OsString>,
-) -> (Option<String>, Vec<OsString>) {
-    let instructions = templates::instructions(
-        settings.worker_template.as_deref(),
-        workspace,
-        templates::Delivery::Watched,
-    );
-    match instruction_args(settings, agent, &instructions) {
-        Some(instruction_args) => (prompt, instruction_args.into_iter().chain(args).collect()),
-        None => {
-            let prompt = match prompt {
-                Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
-                _ => instructions,
-            };
-            (Some(prompt), args)
-        }
+    opening: Opening,
+    /// Whether Happy's daemon had recorded itself.
+    daemon_recorded: bool,
+}
+
+impl Prepared for HappySession {
+    fn command(&self) -> Vec<OsString> {
+        self.command.clone()
+    }
+
+    fn env(&self) -> Vec<(&'static str, String)> {
+        self.opening.env()
+    }
+
+    fn discard(self: Box<Self>) -> BoxFuture<'static, ()> {
+        Box::pin(self.opening.discard())
+    }
+
+    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered> {
+        Box::pin(async move {
+            let prompt_delivered = self.opening.deliver(self.prompt.as_deref()).await;
+            let fields = json!({
+                "prompt_file": self.opening.prompt_file,
+                "prompt_delivered": prompt_delivered,
+                "happy_session_id": self.opening.seeded.as_ref().map(|seeded| seeded.session.id.clone()),
+                "happy_daemon_recorded": self.daemon_recorded,
+            });
+            Delivered {
+                note: self.opening.delivery(prompt_delivered),
+                fields,
+            }
+        })
     }
 }
 
-/// The arguments that give `agent` instructions apart from its first
-/// message; `None` for Happy's Codex mode, which takes no arguments.
-pub(super) fn instruction_args(
-    settings: &Effective,
-    agent: Agent,
-    instructions: &str,
-) -> Option<Vec<OsString>> {
-    settings
-        .launch(agent.as_str())
-        .arguments
-        .instruction_args(instructions)
-        .filter(|_| happy::accepts_prompt(agent))
-}
-
-/// Whether Happy's daemon has recorded itself, warning when it has not, since
-/// its sessions appear in the app only once it runs.
-pub(super) fn warn_without_daemon(ctx: &Context) -> bool {
-    let daemon_state = happy::daemon_state_path(&ctx.paths.home);
+/// Whether Happy's daemon has recorded itself under `home`, warning when it
+/// has not, since its sessions appear in the app only once it runs.
+fn warn_without_daemon(home: &Path) -> bool {
+    let daemon_state = happy::daemon_state_path(home);
     let recorded = daemon_state.is_file();
     if !recorded {
         eprintln!(
@@ -154,30 +174,31 @@ fn save_prompt(files: &Path, prompt: &str) -> Result<PathBuf> {
 /// argument: the prompt is kept in a file and, when this machine is logged in
 /// to Happy, delivered through Happy's server to a session Shoal creates for
 /// the agent to attach to.
-pub(super) struct Opening {
-    pub(super) prompt_file: Option<PathBuf>,
-    pub(super) seeded: Option<happy::client::Seeded>,
+struct Opening {
+    prompt_file: Option<PathBuf>,
+    seeded: Option<happy::client::Seeded>,
 }
 
 impl Opening {
     /// Keep the prompt beside the session's other `files` and seed its
     /// session, for an agent that cannot take it as an argument.
-    pub(super) async fn prepare(
-        ctx: &Context,
-        agent: Agent,
-        directory: &Path,
-        branch: Option<&str>,
-        files: &Path,
-        prompt: Option<&str>,
-    ) -> Result<Self> {
-        let Some(prompt) = prompt.filter(|_| !happy::accepts_prompt(agent)) else {
+    async fn prepare(agent: Agent, session: &Session<'_>) -> Result<Self> {
+        let Session {
+            paths,
+            directory,
+            branch,
+            files,
+            prompt,
+            ..
+        } = session;
+        let Some(prompt) = prompt.as_deref().filter(|_| !happy::accepts_prompt(agent)) else {
             return Ok(Self {
                 prompt_file: None,
                 seeded: None,
             });
         };
         let path = save_prompt(files, prompt)?;
-        let seeded = match happy::client::seed(&ctx.paths, directory, branch, agent).await {
+        let seeded = match happy::client::seed(paths, directory, *branch, agent).await {
             Ok(seeded) => Some(seeded),
             Err(error) => {
                 eprintln!(
@@ -194,7 +215,7 @@ impl Opening {
     }
 
     /// The variables that attach the session to the seeded one.
-    pub(super) fn env(&self) -> Vec<(&'static str, String)> {
+    fn env(&self) -> Vec<(&'static str, String)> {
         self.seeded
             .as_ref()
             .map(|seeded| seeded.session.env())
@@ -202,7 +223,7 @@ impl Opening {
     }
 
     /// Nothing will ever attach to the seeded session; do not leave it in the app.
-    pub(super) async fn discard(self) {
+    async fn discard(self) {
         if let Some(seeded) = self.seeded {
             seeded.discard().await;
         }
@@ -210,7 +231,7 @@ impl Opening {
 
     /// Send `prompt` to the started session, returning whether it arrived. A
     /// prompt passed as an argument is delivered by the launch itself.
-    pub(super) async fn deliver(&self, prompt: Option<&str>) -> bool {
+    async fn deliver(&self, prompt: Option<&str>) -> bool {
         let Some(prompt) = prompt else {
             return false;
         };
@@ -233,7 +254,7 @@ impl Opening {
     }
 
     /// The line reporting where a saved prompt went.
-    pub(super) fn delivery(&self, delivered: bool) -> &'static str {
+    fn delivery(&self, delivered: bool) -> &'static str {
         match (&self.prompt_file, delivered) {
             (Some(_), true) => "\nPrompt delivered to the session",
             (Some(_), false) => "\nPrompt saved for you to send from the app",
