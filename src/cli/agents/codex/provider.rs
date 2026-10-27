@@ -25,23 +25,24 @@ pub(super) fn route(args: &mut Vec<OsString>, url: &str, config: &Path) -> Resul
     };
     let flags = Flags::of(args);
     let selected = Selected::of(read(config)?, &flags)?;
-    let mut edits = vec![(at..at + 1, overrides(&selected, url)?)];
-    // Shoal's provider takes the built-in one's place, so the user's own
-    // choice of it, which a later override would let win, goes.
-    if selected.provider == "openai" {
-        edits.extend(
-            flags
-                .overrides
-                .iter()
-                .filter(|config| config.key == selected.key)
-                .map(|config| (config.at.clone(), Vec::new())),
-        );
-    }
-    edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
-    for (range, with) in edits {
-        args.splice(range, with);
-    }
+    let overrides = overrides(&selected, url)?;
+    place_last(args, at, &flags, overrides);
     Ok(())
+}
+
+/// Replace the placeholder at `at` with `overrides`, after every override
+/// the launch forwards: Codex applies them in order, so Shoal's win over a
+/// forwarded provider, base URL or provider table.
+fn place_last(args: &mut Vec<OsString>, at: usize, flags: &Flags, overrides: Vec<OsString>) {
+    let after = flags
+        .overrides
+        .iter()
+        .map(|config| config.at.end)
+        .filter(|end| *end > at)
+        .max()
+        .unwrap_or(at + 1);
+    args.splice(after..after, overrides);
+    args.remove(at);
 }
 
 /// The provider a launch uses, and the config key that names it.
