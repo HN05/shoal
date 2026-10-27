@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
 
-use super::environment::configured_environment;
+use super::{
+    environment::configured_environment,
+    recovery::{issues, reconcile},
+};
 use crate::{
     cli::{
         client::{self, request},
@@ -11,11 +14,11 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::recovery::{ReconcileOptions, Report},
+    daemon::recovery::ReconcileOptions,
     env, execution, git,
     hooks::{self, Hook, HookKind},
     model::Workspace,
-    protocol::{RecoveryMethod, RemovalMethod, WorkspaceMethod},
+    protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     state::WorkspaceState,
 };
@@ -219,28 +222,18 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
 }
 
 async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let reports = request::<Vec<Report>>(
-        &ctx.paths,
-        RecoveryMethod::Reconcile {
-            workspace: Some(workspace.id.clone()),
-            options: ReconcileOptions {
-                repair: true,
-                ..Default::default()
-            },
-        },
-    )
-    .await?;
-    let issues: Vec<_> = reports
-        .iter()
-        .flat_map(|report| report.issues.iter().map(String::as_str))
-        .collect();
+    let options = ReconcileOptions {
+        repair: true,
+        ..Default::default()
+    };
+    let reports = reconcile(ctx, workspace, options).await?;
     let name = &workspace.name;
     ensure!(
         reports
             .iter()
             .all(|r| r.workspace.state == WorkspaceState::Ready),
         "setup of {name} cannot be skipped: {}; stop its processes with `shoal stop {name}`, then retry",
-        issues.join("; ")
+        issues(&reports)
     );
     Ok(())
 }

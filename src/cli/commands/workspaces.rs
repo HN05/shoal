@@ -8,6 +8,7 @@ mod environment;
 mod land;
 mod link_pull;
 mod list;
+mod recovery;
 mod removal;
 mod remove;
 mod rename;

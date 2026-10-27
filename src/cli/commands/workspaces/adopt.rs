@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 
+use super::recovery::{issues, reconcile};
 use crate::{
     cli::{
         client::{self, request},
@@ -11,10 +12,10 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    daemon::recovery::{DirectoryState, ReconcileOptions, Report},
+    daemon::recovery::{DirectoryState, ReconcileOptions},
     git,
     model::Workspace,
-    protocol::{RecoveryMethod, WorkspaceMethod},
+    protocol::WorkspaceMethod,
     repository, shell,
 };
 
@@ -107,15 +108,11 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
         ..Default::default()
     };
     let reports = reconcile(ctx, &workspace, options).await?;
-    let issues: Vec<_> = reports
-        .iter()
-        .flat_map(|report| report.issues.iter().map(String::as_str))
-        .collect();
+    let issues = issues(&reports);
     ensure!(
         issues.is_empty(),
-        "could not reclaim {}: {}",
-        workspace.name,
-        issues.join("; ")
+        "could not reclaim {}: {issues}",
+        workspace.name
     );
     ctx.emit(
         &format!(
@@ -127,21 +124,6 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
     )?;
     shell::navigate(&workspace.path, ctx.json)?;
     Ok(0)
-}
-
-async fn reconcile(
-    ctx: &Context,
-    workspace: &Workspace,
-    options: ReconcileOptions,
-) -> Result<Vec<Report>> {
-    request(
-        &ctx.paths,
-        RecoveryMethod::Reconcile {
-            workspace: Some(workspace.id.clone()),
-            options,
-        },
-    )
-    .await
 }
 
 /// The registered repository whose checkout owns the worktree at `path`,
