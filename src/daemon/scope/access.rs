@@ -122,6 +122,20 @@ impl Manager {
         self.workspace_below(caller, target, REFUSAL).await
     }
 
+    /// Refuse a `branch` other than `workspace`'s own.
+    pub(in crate::daemon) async fn own_branch(
+        &self,
+        workspace: &str,
+        branch: Option<&str>,
+    ) -> Result<()> {
+        let own = self.workspace(workspace).await?.branch;
+        ensure!(
+            branch.is_none_or(|branch| branch == own),
+            "workspace processes start CI runs only on their workspace's branch"
+        );
+        Ok(())
+    }
+
     /// The caller's own repository, which `repository` must select.
     pub(in crate::daemon) async fn own_repository(
         &self,

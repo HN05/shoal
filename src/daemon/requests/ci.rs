@@ -1,7 +1,7 @@
 //! The daemon's answers to [`CiMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -79,11 +79,7 @@ impl Scoped for CiMethod {
             CiMethod::StartCiRun {
                 workspace, branch, ..
             } => {
-                let own = manager.workspace(workspace).await?.branch;
-                ensure!(
-                    branch.as_ref().is_none_or(|branch| *branch == own),
-                    "workspace processes start CI runs only on their workspace's branch"
-                );
+                manager.own_branch(workspace, branch.as_deref()).await?;
                 Some(workspace)
             }
         })
