@@ -264,7 +264,9 @@ async fn an_outage_is_retried_until_it_ends_without_a_cap() {
 #[tokio::test]
 async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    let reset = now() + 2 * 60 * 60;
+    // Resets far past any clock and long gone, so however slowly the test
+    // runs, each wait is the reset's or the backoff's.
+    let reset = 4_000_000_000_000;
     // The proxy's report arrives first, as it does for Codex.
     manager
         .report_upstream_reset(&workspace.name, execution.clone(), reset)
@@ -291,7 +293,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     );
     // A reset that has passed holds nothing back.
     manager
-        .report_upstream_reset(&other.name, execution.clone(), now() - 60)
+        .report_upstream_reset(&other.name, execution.clone(), 0)
         .await
         .unwrap();
     assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
