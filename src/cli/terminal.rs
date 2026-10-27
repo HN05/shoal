@@ -33,7 +33,7 @@ use crate::{
     model::{Repository, Workspace},
 };
 
-pub(in crate::cli) use closing::{PlaceState, watch as watch_place};
+pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 
 /// Hosts in the order they claim a terminal; a terminal none of them serves
@@ -159,13 +159,15 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { anyhow::bail!("{} cannot close places", self.name()) })
     }
 
-    /// Whether `place` is still open for `workspace`, and its agent's turn as
+    /// What tells `place` apart from a later place under the same ID, for a
+    /// host that reuses IDs.
+    fn place_instance<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    /// Whether the watched `place` is still open, and its agent's turn as
     /// this host reads it.
-    fn place_state<'a>(
-        &'a self,
-        _place: &'a str,
-        _workspace: &'a str,
-    ) -> BoxFuture<'a, Result<PlaceState>> {
+    fn place_state<'a>(&'a self, _place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
     }
 
@@ -520,18 +522,18 @@ pub(in crate::cli) async fn run_agent(
 /// Close the place of the host named `host` that this process runs in once
 /// `workspace` is done. Without a watcher the place stays open, so a
 /// failure only warns.
-pub(in crate::cli) fn close_here_when_done(ctx: &Context, host: &str, workspace: &str) {
-    let watched = named(host)
-        .with_context(|| format!("unknown terminal host {host}"))
-        .and_then(|host| {
-            let place = host.this_place().with_context(|| {
-                format!("{} did not name the place this agent runs in", host.name())
-            })?;
-            closing::start_watcher(ctx, host, &place, workspace)
-        });
-    if let Err(error) = watched {
+pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: &str, workspace: &str) {
+    if let Err(error) = watch_here(ctx, host, workspace).await {
         eprintln!("warning: {error:#}");
     }
+}
+
+async fn watch_here(ctx: &Context, host: &str, workspace: &str) -> Result<()> {
+    let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
+    let place = host
+        .this_place()
+        .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
+    closing::start_watcher(ctx, host, &place, workspace).await
 }
 
 /// Run Shoal with `args` for a chat of `agent` at the repository's checkout:
@@ -694,7 +696,7 @@ pub(in crate::cli) async fn host_workspace(
                 .await;
             place.host.rename_place(&place.id, label).await;
             if place.closes_when_done {
-                closing::start_watcher(ctx, place.host, &place.id, &workspace.id)?;
+                closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }
             labelled
         }

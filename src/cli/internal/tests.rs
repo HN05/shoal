@@ -77,26 +77,36 @@ fn add_round_trips_host_and_close_when_done() {
 }
 
 #[test]
-fn place_watch_round_trips_host_workspace_and_place() {
-    for json in [false, true] {
+fn place_watch_round_trips_its_place_and_baseline() {
+    for (json, instance, kept_at) in [
+        (false, None, None),
+        (true, Some("87854:1793121038"), Some("abc123")),
+    ] {
         let InternalCommand::PlaceWatch {
             host,
             workspace,
             place,
+            instance: parsed_instance,
+            kept_at: parsed_kept_at,
         } = parse(
             Worker::PlaceWatch {
-                host: "herdr",
+                host: "zmx",
                 workspace: "workspace-id",
-                place: "w1:t9",
+                place: "fix-login",
+                instance,
+                kept_at,
             },
             json,
         )
         else {
             panic!("expected a place watcher");
         };
-        assert_eq!(host, "herdr");
-        assert_eq!(workspace, "workspace-id");
-        assert_eq!(place, "w1:t9");
+        assert_eq!(
+            (host.as_str(), workspace.as_str(), place.as_str()),
+            ("zmx", "workspace-id", "fix-login")
+        );
+        assert_eq!(parsed_instance.as_deref(), instance);
+        assert_eq!(parsed_kept_at.as_deref(), kept_at);
     }
 }
 

@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, PlaceState, Placement};
+use super::{DemoWorker, Host, PlaceState, Placement, Watched};
 
 mod demo;
 use crate::cli::{commands::workspaces::AddPlan, context::Context, internal};
@@ -118,12 +118,8 @@ impl Host for Herdr {
         Box::pin(close_tab(place))
     }
 
-    fn place_state<'a>(
-        &'a self,
-        place: &'a str,
-        _workspace: &'a str,
-    ) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(tab_state(place))
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(tab_state(&place.id))
     }
 
     /// `herdr.close_when_done` overrides the top-level option.

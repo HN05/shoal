@@ -14,7 +14,7 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{DemoWorker, Host, PlaceState, Placement, Session};
+use super::{DemoWorker, Host, PlaceState, Placement, Session, Watched};
 use crate::{
     cli::{agents::ensure_program, commands::workspaces::AddPlan, context::Context, internal},
     config::Effective,
@@ -138,16 +138,24 @@ impl Host for Zmx {
         Box::pin(kill(place))
     }
 
-    /// zmx reads no agent state, so a session is only open or gone. A name
-    /// another workspace's session took over counts as gone.
-    fn place_state<'a>(
-        &'a self,
-        place: &'a str,
-        workspace: &'a str,
-    ) -> BoxFuture<'a, Result<PlaceState>> {
+    /// zmx reuses session names, so a session is told apart by its process
+    /// and creation time.
+    fn place_instance<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
         Box::pin(async move {
             let sessions = list().await?;
-            Ok(if hosts(&sessions, place, workspace) {
+            Ok(sessions
+                .iter()
+                .find(|(name, _)| name == place)
+                .map(|(_, fields)| instance(fields)))
+        })
+    }
+
+    /// zmx reads no agent state, so a session is only open or gone. A later
+    /// session under the same name counts as gone.
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(async move {
+            let sessions = list().await?;
+            Ok(if hosts(&sessions, place) {
                 PlaceState::Open(None)
             } else {
                 PlaceState::Gone
@@ -536,11 +544,23 @@ fn parse_list(output: &str) -> Vec<(String, Fields)> {
         .collect()
 }
 
-/// Whether `sessions` list `session` labelled with `workspace`.
-fn hosts(sessions: &[(String, Fields)], session: &str, workspace: &str) -> bool {
-    sessions
-        .iter()
-        .any(|(name, fields)| name == session && field(fields, WORKSPACE_LABEL) == Some(workspace))
+/// Whether `sessions` list the watched session: under its name, labelled
+/// with its workspace, and the instance the watch began with.
+fn hosts(sessions: &[(String, Fields)], place: &Watched) -> bool {
+    sessions.iter().any(|(name, fields)| {
+        *name == place.id
+            && field(fields, WORKSPACE_LABEL) == Some(place.workspace.as_str())
+            && place
+                .instance
+                .as_ref()
+                .is_none_or(|instance| *instance == self::instance(fields))
+    })
+}
+
+/// A session's process and creation time.
+fn instance(fields: &Fields) -> String {
+    let value = |key| field(fields, key).unwrap_or_default();
+    format!("{}:{}", value("pid"), value("created"))
 }
 
 fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {

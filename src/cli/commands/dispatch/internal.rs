@@ -33,9 +33,23 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             host,
             workspace,
             place,
-        } => terminal::watch_place(&ctx, host, workspace, place).await,
+            instance,
+            kept_at,
+        } => {
+            let place = terminal::Watched {
+                id: place,
+                workspace,
+                instance,
+            };
+            terminal::watch_place(&ctx, host, place, kept_at).await
+        }
         InternalCommand::HerdrWatch { workspace, tab } => {
-            terminal::watch_place(&ctx, "herdr".into(), workspace, tab).await
+            let place = terminal::Watched {
+                id: tab,
+                workspace,
+                instance: None,
+            };
+            terminal::watch_place(&ctx, "herdr".into(), place, None).await
         }
         InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         InternalCommand::CopyIgnored { setup_cmd } => {
@@ -77,7 +91,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             close_in,
         } => {
             if let Some(host) = close_in {
-                terminal::close_here_when_done(&ctx, &host, &workspace);
+                terminal::close_here_when_done(&ctx, &host, &workspace).await;
             }
             run_session(&ctx, workspace, agent, records, command).await
         }

@@ -26,15 +26,27 @@ pub(in crate::cli) enum PlaceState {
     Open(Option<AgentState>),
 }
 
+/// A place a watcher closes: the workspace it hosts, and what told it apart
+/// from a later place under the same ID when the watch began.
+pub(in crate::cli) struct Watched {
+    pub id: String,
+    pub workspace: String,
+    pub instance: Option<String>,
+}
+
 /// Start a detached watcher that closes `place` of `host` with `workspace`.
-/// It inherits the place's shell directive to remove it with the place,
-/// whose shell may close before a prompt consumes it.
-pub(super) fn start_watcher(
+/// It records which instance of the place it watches and the kept
+/// completion, if any, that the agent starts under, so a restart of the
+/// watcher keeps both. It inherits the place's shell directive to remove it
+/// with the place, whose shell may close before a prompt consumes it.
+pub(super) async fn start_watcher(
     ctx: &Context,
     host: &dyn Host,
     place: &str,
     workspace: &str,
 ) -> Result<()> {
+    let instance = host.place_instance(place).await?;
+    let kept_at = kept_completion(ctx, workspace).await?;
     let argv = internal::internal_command(
         &ctx.paths,
         ctx.json,
@@ -42,6 +54,8 @@ pub(super) fn start_watcher(
             host: host.name(),
             workspace,
             place,
+            instance: instance.as_deref(),
+            kept_at: kept_at.as_deref(),
         },
     )?;
     let mut watcher = tokio::process::Command::new(&argv[0]);
@@ -66,15 +80,30 @@ pub(super) fn start_watcher(
     Ok(())
 }
 
-/// The watcher: close `place` of the host named `host` once `workspace`
-/// says so. One refused for a daemon protocol change continues from the
-/// installed binary once an upgrade replaced this one.
-pub async fn watch(ctx: &Context, host: String, workspace: String, place: String) -> Result<i32> {
+/// The HEAD of `workspace`'s kept completion, if it has one.
+async fn kept_completion(ctx: &Context, workspace: &str) -> Result<Option<String>> {
+    let inspection = client::inspect(&ctx.paths, workspace.into()).await?;
+    Ok(inspection
+        .completion
+        .filter(|completion| !completion.cleanup)
+        .map(|completion| completion.head))
+}
+
+/// The watcher: close `place` of the host named `host` once its workspace
+/// says so, ignoring the completion at `kept_at` it began under. One
+/// refused for a daemon protocol change continues from the installed binary
+/// once an upgrade replaced this one.
+pub async fn watch(
+    ctx: &Context,
+    host: String,
+    place: Watched,
+    kept_at: Option<String>,
+) -> Result<i32> {
     let host = super::named(&host).with_context(|| format!("unknown terminal host {host}"))?;
-    let _closing = Marker::record(&ctx.paths, host.name(), &workspace, &place);
+    let _closing = Marker::record(&ctx.paths, host.name(), &place.workspace, &place.id);
     let executable = installed::Executable::current();
     let lifecycle = || async {
-        match workspace_lifecycle(ctx, &workspace).await {
+        match workspace_lifecycle(ctx, &place.workspace).await {
             Ok(lifecycle) => Ok(Some(lifecycle)),
             Err(error) if error.is::<client::ProtocolMismatch>() => {
                 match executable.take_over(installed::arguments) {
@@ -85,7 +114,8 @@ pub async fn watch(ctx: &Context, host: String, workspace: String, place: String
             Err(_) => Ok(None),
         }
     };
-    close_when_due(host, &place, &workspace, lifecycle, || {
+    let earlier = EarlierCompletion(kept_at);
+    close_when_due(host, &place, earlier, lifecycle, || {
         ctx.paths.state.exists()
     })
     .await?;
@@ -93,29 +123,27 @@ pub async fn watch(ctx: &Context, host: String, workspace: String, place: String
     Ok(0)
 }
 
-/// Close `place` of `workspace` once `lifecycle` and the host say so,
+/// Close `place` once `lifecycle` and the host say so,
 /// looking again while `watching` holds. A missing daemon or a failed query
 /// does not prove completion or removal, so `lifecycle` gives `None` then,
 /// or the failure that ends the watch. A closed place leaves nothing to
 /// close, whatever the daemon reports; a failed host query, like a failed
-/// daemon query, proves neither. A completion recorded before the watch
-/// began proves nothing either.
+/// daemon query, proves neither, and neither does the `earlier` completion.
 async fn close_when_due<F>(
     host: &dyn Host,
-    place: &str,
-    workspace: &str,
+    place: &Watched,
+    mut earlier: EarlierCompletion,
     mut lifecycle: impl FnMut() -> F,
     watching: impl Fn() -> bool,
 ) -> Result<()>
 where
     F: Future<Output = Result<Option<Lifecycle>>>,
 {
-    let mut earlier = EarlierCompletion::default();
     while watching() {
         let lifecycle = lifecycle()
             .await?
             .filter(|lifecycle| !earlier.only_one_in(lifecycle));
-        let reported = match host.place_state(place, workspace).await {
+        let reported = match host.place_state(place).await {
             Ok(PlaceState::Gone) => break,
             Ok(PlaceState::Open(agent)) => Some(agent),
             Err(_) => None,
@@ -123,7 +151,7 @@ where
         if let (Some(lifecycle), Some(reported)) = (lifecycle, reported)
             && lifecycle.closes(reported)
         {
-            if let Err(error) = host.close_place(place).await {
+            if let Err(error) = host.close_place(&place.id).await {
                 eprintln!("warning: {error:#}");
             }
             break;
@@ -137,22 +165,19 @@ where
 /// a workspace already done is new work, which that completion does not
 /// end. Withdrawing it, or completing again at another HEAD, ends the
 /// exemption.
-#[derive(Default)]
-struct EarlierCompletion(Option<Option<String>>);
+struct EarlierCompletion(Option<String>);
 
 impl EarlierCompletion {
-    /// Whether `lifecycle` shows only the completion the watch began under,
-    /// remembering the first one seen.
+    /// Whether `lifecycle` shows only the completion the watch began under.
     fn only_one_in(&mut self, lifecycle: &Lifecycle) -> bool {
         let head = match lifecycle {
             Lifecycle::Kept { head, .. } => Some(head.as_str()),
             Lifecycle::Active | Lifecycle::Removed => None,
         };
-        let earlier = self.0.get_or_insert_with(|| head.map(str::to_owned));
-        if earlier.as_deref() != head {
-            *earlier = None;
+        if self.0.as_deref() != head {
+            self.0 = None;
         }
-        earlier.is_some()
+        self.0.is_some()
     }
 }
 

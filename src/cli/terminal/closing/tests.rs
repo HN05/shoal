@@ -145,8 +145,7 @@ impl Host for FakeHost {
 
     fn place_state<'a>(
         &'a self,
-        _place: &'a str,
-        _workspace: &'a str,
+        _place: &'a Watched,
     ) -> futures_util::future::BoxFuture<'a, Result<PlaceState>> {
         let state = self
             .state
@@ -155,9 +154,15 @@ impl Host for FakeHost {
     }
 }
 
-/// Watch `host`'s place with a daemon reporting `lifecycles` in turn, the
-/// last one from then on, for at most `looks` looks.
-async fn watch_fake(host: &FakeHost, lifecycles: &[Option<Lifecycle>], looks: usize) -> usize {
+/// Watch `host`'s place, begun under the completion at `kept_at`, with a
+/// daemon reporting `lifecycles` in turn, the last one from then on, for at
+/// most `looks` looks.
+async fn watch_from(
+    host: &FakeHost,
+    kept_at: Option<&str>,
+    lifecycles: &[Option<Lifecycle>],
+    looks: usize,
+) -> usize {
     let looked = std::sync::atomic::AtomicUsize::new(0);
     let next = || {
         let look = looked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -165,10 +170,21 @@ async fn watch_fake(host: &FakeHost, lifecycles: &[Option<Lifecycle>], looks: us
         async move { Ok(lifecycle) }
     };
     let watching = || looked.load(std::sync::atomic::Ordering::SeqCst) < looks;
-    close_when_due(host, "place-1", "workspace", next, watching)
+    let place = Watched {
+        id: "place-1".into(),
+        workspace: "workspace".into(),
+        instance: None,
+    };
+    let earlier = EarlierCompletion(kept_at.map(str::to_owned));
+    close_when_due(host, &place, earlier, next, watching)
         .await
         .unwrap();
     looked.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// [`watch_from`] a workspace not done when the watch began.
+async fn watch_fake(host: &FakeHost, lifecycles: &[Option<Lifecycle>], looks: usize) -> usize {
+    watch_from(host, None, lifecycles, looks).await
 }
 
 /// A kept completion at `head` while the agent runs with `turn`.
@@ -220,12 +236,12 @@ async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
     let idle = || kept("head", Some(AgentState::Idle));
     // An agent started in a workspace already done is new work.
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    assert_eq!(watch_fake(&host, &[idle()], 3).await, 3);
+    assert_eq!(watch_from(&host, Some("head"), &[idle()], 3).await, 3);
     assert!(host.closed().is_empty());
-    // Even when the daemon could not tell at first.
+    // One made after the watch began closes, even before the first look.
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    assert_eq!(watch_fake(&host, &[None, idle()], 3).await, 3);
-    assert!(host.closed().is_empty());
+    assert_eq!(watch_fake(&host, &[idle()], 3).await, 1);
+    assert_eq!(host.closed(), ["place-1"]);
     // Removal, a withdrawn completion and one at another HEAD all count.
     for later in [
         vec![Some(Lifecycle::Removed)],
@@ -234,7 +250,7 @@ async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
     ] {
         let host = FakeHost::new(Ok(PlaceState::Open(None)));
         let lifecycles: Vec<_> = [idle()].into_iter().chain(later).collect();
-        watch_fake(&host, &lifecycles, 5).await;
+        watch_from(&host, Some("head"), &lifecycles, 5).await;
         assert_eq!(host.closed(), ["place-1"]);
     }
 }

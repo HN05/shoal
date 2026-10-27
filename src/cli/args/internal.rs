@@ -76,6 +76,12 @@ pub enum InternalCommand {
         host: String,
         workspace: String,
         place: String,
+        /// What told the place apart when the watch began.
+        #[arg(long)]
+        instance: Option<String>,
+        /// The HEAD of the kept completion the watch began under.
+        #[arg(long)]
+        kept_at: Option<String>,
     },
     /// The Herdr tab watcher of earlier releases, which continues here after
     /// an upgrade.

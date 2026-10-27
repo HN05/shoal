@@ -41,12 +41,24 @@ fn labels_leave_out_agent_names_zmx_cannot_hold() {
 }
 
 #[test]
-fn a_session_hosts_only_the_workspace_it_is_labelled_with() {
+fn a_watch_follows_only_the_session_it_began_with() {
     let sessions = parse_list(
-        "  name=fix\tpid=1\tshoal.workspace=w1\n  name=other\tpid=2\tshoal.workspace=w2\n  name=bare\tpid=3\n",
+        "  name=fix\tpid=7\tcreated=100\tshoal.workspace=w1\n\
+         \x20 name=other\tpid=8\tcreated=100\tshoal.workspace=w2\n\
+         \x20 name=bare\tpid=9\tcreated=100\n",
     );
-    assert!(hosts(&sessions, "fix", "w1"));
-    assert!(!hosts(&sessions, "other", "w1"));
-    assert!(!hosts(&sessions, "bare", "w1"));
-    assert!(!hosts(&sessions, "gone", "w1"));
+    let watched = |id: &str, instance: Option<&str>| Watched {
+        id: id.into(),
+        workspace: "w1".into(),
+        instance: instance.map(str::to_owned),
+    };
+    assert_eq!(instance(&sessions[0].1), "7:100");
+    assert!(hosts(&sessions, &watched("fix", Some("7:100"))));
+    assert!(hosts(&sessions, &watched("fix", None)));
+    // A later session of the same workspace under the same name.
+    assert!(!hosts(&sessions, &watched("fix", Some("6:90"))));
+    // Another workspace's session, an unlabelled one, or none at all.
+    assert!(!hosts(&sessions, &watched("other", None)));
+    assert!(!hosts(&sessions, &watched("bare", None)));
+    assert!(!hosts(&sessions, &watched("gone", None)));
 }

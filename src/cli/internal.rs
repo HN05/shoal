@@ -23,11 +23,15 @@ pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
 
 pub enum Worker<'a> {
-    /// Close `place` of `host` once `workspace` completes or is removed.
+    /// Close `place` of `host` once `workspace` completes or is removed,
+    /// while it is the `instance` the watch began with; the completion at
+    /// `kept_at` predates the watch.
     PlaceWatch {
         host: &'a str,
         workspace: &'a str,
         place: &'a str,
+        instance: Option<&'a str>,
+        kept_at: Option<&'a str>,
     },
     Land {
         plan: &'a str,
@@ -125,6 +129,8 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             host,
             workspace,
             place,
+            instance,
+            kept_at,
         } => {
             args.extend([
                 PLACE_WATCH.into(),
@@ -132,6 +138,12 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
                 workspace.into(),
                 place.into(),
             ]);
+            if let Some(instance) = instance {
+                args.extend(["--instance".into(), instance.into()]);
+            }
+            if let Some(head) = kept_at {
+                args.extend(["--kept-at".into(), head.into()]);
+            }
         }
         Worker::Land { plan, push } => {
             args.push(LAND.into());
