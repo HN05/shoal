@@ -20,6 +20,7 @@ use crate::{
     },
     env,
     model::{PortCatalog, PortOverview, PortReservation, PortSuggestion},
+    protocol::Body,
     validate,
 };
 
@@ -43,6 +44,16 @@ pub enum Acquisition {
     Allocation(Allocation<PortReservation>),
     /// The preferred port is taken and policy asks the caller to confirm.
     Suggested(PortSuggestion),
+}
+
+impl Acquisition {
+    /// The reply to a port acquisition.
+    pub fn into_body(self) -> Body {
+        match self {
+            Self::Allocation(allocation) => allocation.into_body(Body::Port),
+            Self::Suggested(suggestion) => Body::PortSuggestion(suggestion),
+        }
+    }
 }
 
 /// Probe the port on both wildcard addresses without SO_REUSEADDR: a standard

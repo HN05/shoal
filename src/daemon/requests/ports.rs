@@ -5,7 +5,6 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    ports::Acquisition,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
@@ -21,13 +20,10 @@ pub(super) async fn handle(
             workspace,
             name,
             request,
-        } => match manager
+        } => manager
             .acquire_port(&workspace, name, request, caller)
             .await?
-        {
-            Acquisition::Allocation(allocation) => allocation.into_body(Body::Port),
-            Acquisition::Suggested(proposal) => Body::PortSuggestion(proposal),
-        },
+            .into_body(),
         PortMethod::PortRelease { workspace, name } => {
             manager.release_port(&workspace, name).await?;
             Body::Ok
