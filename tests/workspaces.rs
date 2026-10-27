@@ -15450,30 +15450,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
 fn install_fake_happy(fixture: &Fixture) -> PathBuf {
     let bin = fixture.root.path().join("bin");
     let script = bin.join("happy");
-    install_test_script_with_mode(
-        &script,
-        r#"#!/bin/sh
-{
-  printf 'cwd=%s\n' "$PWD"
-  printf 'args='; printf '%s\0' "$@"; printf '\n'
-  printf 'scope=%s\nexecution=%s\nworkspace=%s\nport=%s\n' "$SHOAL_SCOPE_TOKEN" "$SHOAL_EXECUTION_ID" "$SHOAL_WORKSPACE" "$SHOAL_PORT_WEB"
-  printf 'chat=%s\n' "$SHOAL_CHAT"
-  printf 'reconnect=%s|%s|%s|%s|%s|%s\n' "$HAPPY_RECONNECT_SESSION_ID" "$HAPPY_RECONNECT_ENCRYPTION_KEY" "$HAPPY_RECONNECT_ENCRYPTION_VARIANT" "$HAPPY_RECONNECT_SEQ" "$HAPPY_RECONNECT_METADATA_VERSION" "$HAPPY_RECONNECT_AGENT_STATE_VERSION"
-  if read -r _line; then printf 'stdin=data\n'; else printf 'stdin=eof\n'; fi
-  test -t 1 && printf 'stdout=tty\n' || printf 'stdout=notty\n'
-} > "$HAPPY_RECORD.tmp"
-mv "$HAPPY_RECORD.tmp" "$HAPPY_RECORD"
-echo "hello from happy"
-echo "happy stderr" >&2
-# A real session connects to Happy's server and heartbeats; tell the fake server.
-if [ -n "$HAPPY_RECONNECT_SESSION_ID" ] && [ -n "$HAPPY_SERVER_URL" ]; then
-  sleep 1
-  curl -s -X POST "$HAPPY_SERVER_URL/test/activate/$HAPPY_RECONNECT_SESSION_ID" > /dev/null
-fi
-sleep 300
-"#,
-        0o700,
-    );
+    install_test_script_with_mode(&script, include_str!("fixtures/happy.py"), 0o700);
     // Happy starts these itself; launches need them on PATH.
     for agent in ["claude", "codex"] {
         let path = bin.join(agent);
@@ -23261,6 +23238,68 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
         started["chat"]["name"],
         "repo-with---quotes----literal-plan-12"
     );
+}
+
+#[test]
+fn setup_verifies_after_a_concurrent_happy_chat_stops() {
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
+    let record = install_fake_happy(&fixture);
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        r#"#!/bin/sh
+touch "$HOME/setup-started"
+i=0
+while [ ! -e "$HOME/setup-release" ]; do
+  [ "$i" -lt 3000 ] || exit 99
+  sleep 0.1
+  i=$((i + 1))
+done
+"#,
+    );
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let setup = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "concurrent",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_until("setup to start before the chat", || {
+        fixture.root.path().join("setup-started").exists()
+    });
+
+    let started = fixture
+        .command()
+        .args([
+            "--json",
+            "chat",
+            fixture.repo.to_str().unwrap(),
+            "--agent",
+            "happy-claude",
+        ])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+    assert!(started.status.success(), "{started:?}");
+    let started: Value = serde_json::from_slice(&started.stdout).unwrap();
+    wait_until("the Happy fixture to publish its launch", || {
+        record.exists()
+    });
+    let stopped = Command::new("kill")
+        .arg(started["chat"]["pid"].to_string())
+        .status()
+        .unwrap();
+    fs::write(fixture.root.path().join("setup-release"), "").unwrap();
+    let output = setup.wait_with_output().unwrap();
+    assert!(stopped.success());
+    assert!(output.status.success(), "{output:?}");
+    let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(workspace["state"], "ready");
 }
 
 #[test]
