@@ -7,7 +7,6 @@ use std::{
     collections::HashSet,
     ffi::{OsStr, OsString},
     io::IsTerminal,
-    path::PathBuf,
     process::ExitStatus,
 };
 
@@ -17,12 +16,7 @@ use tokio::process::Command;
 
 use super::{DemoWorker, Host, PlaceState, Placement, Session};
 use crate::{
-    cli::{
-        agents::ensure_program,
-        commands::workspaces::AddPlan,
-        context::Context,
-        internal::{self, Worker, internal_command},
-    },
+    cli::{agents::ensure_program, commands::workspaces::AddPlan, context::Context, internal},
     config::Effective,
     env,
     model::{Repository, Workspace},
@@ -99,13 +93,11 @@ impl Host for Zmx {
 
     fn run_agent<'a>(
         &'a self,
-        ctx: &'a Context,
         workspace: &'a Workspace,
         agent: &'a str,
-        records: &'a [PathBuf],
-        command: &'a [OsString],
+        worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async move { run(ctx, workspace, agent, records, command).await.map(Some) })
+        Box::pin(async move { run(workspace, agent, worker).await.map(Some) })
     }
 
     fn start_chat<'a>(
@@ -228,36 +220,20 @@ fn on_terminal() -> bool {
         && std::env::var_os(SESSION_VAR).is_none()
 }
 
-/// Start `command` as `agent`'s tracked execution in a new session and attach
+/// Start `worker`, `agent`'s tracked execution, in a new session and attach
 /// this terminal to it. zmx does not report the agent's exit status, so a
 /// session that ends or detaches returns 0; the daemon still records the exit.
-async fn run(
-    ctx: &Context,
-    workspace: &Workspace,
-    agent: &str,
-    records: &[PathBuf],
-    command: &[OsString],
-) -> Result<i32> {
+async fn run(workspace: &Workspace, agent: &str, worker: &[OsString]) -> Result<i32> {
     // Launches check zmx before any work; resumed agents reach it here.
     ensure_program(agent, Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let name = free_name(&workspace.name, &taken);
-    let worker = internal_command(
-        &ctx.paths,
-        false,
-        Worker::Session {
-            workspace: &workspace.id,
-            agent,
-            records,
-            command,
-        },
-    )?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach")
         .arg("--labels")
         .arg(labels(WORKSPACE_LABEL, &workspace.id, agent))
         .arg(&name)
-        .args(&worker)
+        .args(worker)
         .env_remove(env::SHELL_DIRECTIVE);
     if let Some(entry) = env::queue_entry() {
         zmx.env(env::QUEUE_ENTRY, entry);

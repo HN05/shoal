@@ -696,9 +696,9 @@ option overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
-Shoal also ends the session, as it closes a tab, once its workspace is removed
-or `done` keeps the workspace and the agent's final turn finishes, unless the
-top-level `close_when_done = false` keeps it open.
+Any session Shoal starts for a workspace's agent ends, as a tab closes, once the
+workspace is removed or `done` keeps the workspace and the agent's final turn
+finishes, unless the top-level `close_when_done = false` keeps it open.
 
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
 or `--session <name>` when it has several; `shoal status` lists them. Sessions

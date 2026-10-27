@@ -249,21 +249,26 @@ fn session_round_trips_records_and_literal_arguments() {
         "literal ; $value".into(),
         OsString::from_vec(vec![0xff]),
     ];
-    for records in [
-        vec![],
-        vec![PathBuf::from("/state/a record.json"), "/b".into()],
+    for (records, close_in) in [
+        (vec![], None),
+        (
+            vec![PathBuf::from("/state/a record.json"), "/b".into()],
+            Some("zmx"),
+        ),
     ] {
         let InternalCommand::Session {
             workspace,
             agent,
             records: parsed_records,
             command: parsed_command,
+            close_in: parsed_close_in,
         } = parse(
             Worker::Session {
                 workspace: "workspace-id",
                 agent: "claude",
                 records: &records,
                 command: &command,
+                close_in,
             },
             false,
         )
@@ -274,6 +279,7 @@ fn session_round_trips_records_and_literal_arguments() {
         assert_eq!(agent, "claude");
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
+        assert_eq!(parsed_close_in.as_deref(), close_in);
     }
 }
 

@@ -46,13 +46,15 @@ pub enum Worker<'a> {
         launchers: &'a Path,
         tool: &'a str,
     },
-    /// A tracked agent inside a zmx session; `records` are recovery records
-    /// the launch consumes once it starts.
+    /// A tracked agent inside a new place a host opened; `records` are
+    /// recovery records the launch consumes once it starts. With `close_in`,
+    /// the place of that host closes once the workspace is done.
     Session {
         workspace: &'a str,
         agent: &'a str,
         records: &'a [PathBuf],
         command: &'a [OsString],
+        close_in: Option<&'a str>,
     },
     /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
     Demo {
@@ -169,10 +171,14 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             agent,
             records,
             command,
+            close_in,
         } => {
             args.extend([SESSION.into(), workspace.into(), agent.into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
+            }
+            if let Some(host) = close_in {
+                args.extend(["--close-in".into(), host.into()]);
             }
             args.push("--".into());
             args.extend_from_slice(command);

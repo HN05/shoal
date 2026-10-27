@@ -114,13 +114,16 @@ pub enum InternalCommand {
         #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
         plan: String,
     },
-    /// Tracked agent inside a zmx session; consumes recovery records once started.
+    /// Tracked agent inside a new place; consumes recovery records once started.
     #[command(name = internal::SESSION)]
     Session {
         workspace: String,
         agent: String,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
+        /// Close the place of this host once the workspace is done.
+        #[arg(long)]
+        close_in: Option<String>,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },

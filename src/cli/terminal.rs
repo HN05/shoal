@@ -104,15 +104,13 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(false) })
     }
 
-    /// Run a tracked agent's `command` in a new session and attach this
-    /// terminal to it. `None` means the agent runs in place.
+    /// Run `worker`, a tracked agent of `workspace`, in a new session and
+    /// attach this terminal to it. `None` means the agent runs in place.
     fn run_agent<'a>(
         &'a self,
-        _ctx: &'a Context,
         _workspace: &'a Workspace,
         _agent: &'a str,
-        _records: &'a [PathBuf],
-        _command: &'a [OsString],
+        _worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<Option<i32>>> {
         Box::pin(async { Ok(None) })
     }
@@ -500,9 +498,36 @@ pub(in crate::cli) async fn run_agent(
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Option<i32>> {
-    current(ctx, settings)
-        .run_agent(ctx, workspace, agent, records, command)
-        .await
+    let host = current(ctx, settings);
+    let worker = crate::cli::internal::internal_command(
+        &ctx.paths,
+        false,
+        crate::cli::internal::Worker::Session {
+            workspace: &workspace.id,
+            agent,
+            records,
+            command,
+            close_in: host.closes_when_done(settings).then(|| host.name()),
+        },
+    )?;
+    host.run_agent(workspace, agent, &worker).await
+}
+
+/// Close the place of the host named `host` that this process runs in once
+/// `workspace` is done. Without a watcher the place stays open, so a
+/// failure only warns.
+pub(in crate::cli) fn close_here_when_done(ctx: &Context, host: &str, workspace: &str) {
+    let watched = named(host)
+        .with_context(|| format!("unknown terminal host {host}"))
+        .and_then(|host| {
+            let place = host.this_place().with_context(|| {
+                format!("{} did not name the place this agent runs in", host.name())
+            })?;
+            closing::start_watcher(ctx, host, &place, workspace)
+        });
+    if let Err(error) = watched {
+        eprintln!("warning: {error:#}");
+    }
 }
 
 /// Run Shoal with `args` for a chat of `agent` at the repository's checkout:

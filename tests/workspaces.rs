@@ -22581,9 +22581,10 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let worker = &calls[1][4..];
     let session = worker.iter().position(|arg| arg == "session").unwrap();
     assert_eq!(worker[session - 1], "internal");
+    // The session closes with its workspace.
     assert_eq!(
-        worker[session + 1..session + 5],
-        [id, "claude", "--", "claude"]
+        worker[session + 1..session + 7],
+        [id, "claude", "--close-in", "zmx", "--", "claude"]
     );
     assert_eq!(runs(), "persist tracked\n");
 
