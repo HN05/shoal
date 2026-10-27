@@ -1052,7 +1052,8 @@ An agent's automatic restore after a protection stop waits in the same queue,
 in order with launches, from when its processes stop. A restore of an agent
 stopped while idle holds no slot and holds back nothing behind it until an
 update arrives for the agent; then it needs a free slot, or room for its load,
-as a launch does, without waiting for healthy readings. Any other restore keeps
+as a launch does, and with disk protection on `disk.cleanup_free_gib`
+available, without waiting for healthy readings. Any other restore keeps
 the agent's slot,
 so a fixed limit lets it take that slot back on a full machine, while `dynamic`
 still needs room for its load; a lowered limit holds it until other agents

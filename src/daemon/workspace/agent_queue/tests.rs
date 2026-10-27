@@ -1142,3 +1142,44 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
             .unwrap()
     );
 }
+
+#[tokio::test]
+async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("max_agents = 'unlimited'"));
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .set_agent_state(
+            &idle.name,
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .stop_agents_for_disk_space(&crate::protocol::Protection::load("low disk"))
+            .await
+            .len()
+            == 1
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    manager
+        .send_agent_message(&idle.name, "Review requested".into())
+        .await
+        .unwrap();
+    // No reading has found the cleanup threshold free yet.
+    manager.publish_disk_reading(None);
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await, [("idle".into(), Restore, Queued)]);
+    let generation = manager
+        .config_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    manager.publish_disk_reading(Some(generation));
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}

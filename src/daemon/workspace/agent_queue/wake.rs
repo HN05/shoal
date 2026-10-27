@@ -55,8 +55,9 @@ impl Manager {
     }
 
     /// What the queued restore of `execution` in `workspace_id` waits for,
-    /// by its recovery record; whether an update is due only matters once
-    /// its agent `waits`.
+    /// by its recovery record. Whether an update is due only matters once
+    /// its agent `waits`, and free disk space must have recovered as for any
+    /// other restore, since disk protection stops agents that start below it.
     pub(super) async fn restore_wake(
         &self,
         workspace_id: &str,
@@ -66,14 +67,20 @@ impl Manager {
         if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
-        let due = waits && self.updates_waiting(workspace_id).await?;
+        let due = waits && self.restore_disk_ready() && self.updates_waiting(workspace_id).await?;
         Ok(Wake::Update { due })
+    }
+
+    /// Whether disk space allows a restore an update woke: with disk
+    /// protection on, the latest reading found the cleanup threshold free.
+    fn restore_disk_ready(&self) -> bool {
+        !self.config().overload.disk.enabled || self.disk_space_recovered()
     }
 
     /// Whether the recovery record of `execution` says it stopped between
     /// turns, so its restore waits for an update. An unreadable record leaves
     /// the turn unknown, which counts as mid-turn.
-    fn restore_waits_for_update(&self, workspace_id: &str, execution: &str) -> bool {
+    pub(crate) fn restore_waits_for_update(&self, workspace_id: &str, execution: &str) -> bool {
         let path = recovery::record_path(&self.paths, workspace_id, execution);
         recovery::Record::load(&path)
             .ok()
