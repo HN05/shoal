@@ -13,6 +13,7 @@ use crate::{
     daemon::workspace::Manager,
     execution::recovery,
     model::QueueEntry,
+    paths::Paths,
     state::{QueueKind, QueueState},
 };
 
@@ -128,6 +129,30 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The IDs of the `waiting` restores whose recovery record is gone. A record
+/// whose existence cannot be read counts as kept.
+fn resolved_restores(paths: &Paths, waiting: Vec<(String, String, String)>) -> Vec<String> {
+    waiting
+        .into_iter()
+        .filter(|(_, workspace, execution)| {
+            let path = recovery::record_path(paths, workspace, execution);
+            !path.try_exists().unwrap_or(true)
+        })
+        .map(|(id, _, _)| id)
+        .collect()
+}
+
+/// Delete the entries `ids` that still wait; a starting one belongs to its agent.
+fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
+    for id in ids {
+        db.execute(
+            "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
+            params![id, QueueState::Queued],
+        )?;
+    }
+    Ok(())
+}
+
 impl Manager {
     /// Queue the restore of the agent stopped as `execution` in `workspace`,
     /// which the daemon starts with `env` once admitted, and return its
@@ -197,27 +222,12 @@ impl Manager {
     /// after `shoal resume --now` or a discard.
     pub(super) async fn forget_resolved_restores(&self) -> Result<()> {
         let waiting = self.store.run(|db| waiting_restores(db)).await?;
-        let resolved: Vec<String> = waiting
-            .into_iter()
-            .filter(|(_, workspace, execution)| {
-                let path = recovery::record_path(&self.paths, workspace, execution);
-                !path.try_exists().unwrap_or(true)
-            })
-            .map(|(id, _, _)| id)
-            .collect();
+        let resolved = resolved_restores(&self.paths, waiting);
         if resolved.is_empty() {
             return Ok(());
         }
         self.store
-            .run(move |db| {
-                for id in resolved {
-                    db.execute(
-                        "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                        params![id, QueueState::Queued],
-                    )?;
-                }
-                Ok(())
-            })
+            .run(move |db| delete_waiting(db, &resolved))
             .await
     }
 
