@@ -1,7 +1,7 @@
 //! Chats: agents the user talks with in a repository's registered checkout.
 //! They are records, not tracked executions, so they never queue, stop under
 //! pressure or resume; a chat lasts while its process lives.
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, params};
@@ -12,7 +12,7 @@ use crate::{
         chat_messages, log, store,
         workspace::{Manager, derive_workspace_name},
     },
-    model::Chat,
+    model::{Chat, OpenedWorkspace, Workspace},
     process::identity::{self, Identity},
 };
 
@@ -107,6 +107,46 @@ impl Manager {
         self.store
             .run(move |db| assign(db, &workspace, chat.as_deref()))
             .await
+    }
+
+    /// [`Self::open_branch`] for `chat`, returning the workspace with its chat.
+    pub async fn open_branch_for_chat(
+        &self,
+        repository: crate::repository::Selector,
+        branch: &str,
+        git_profile: Option<&str>,
+        path: Option<PathBuf>,
+        base: Option<String>,
+        chat: Option<String>,
+    ) -> Result<OpenedWorkspace> {
+        let mut opened = self
+            .open_branch(repository, branch, git_profile, path, base)
+            .await?;
+        opened.workspace = self.give_to_chat(&opened.workspace.id, chat).await?;
+        Ok(opened)
+    }
+
+    /// [`Self::create_workspace`] for `chat`, returning the workspace with its
+    /// chat.
+    pub async fn create_workspace_for_chat(
+        &self,
+        repository: crate::repository::Selector,
+        name: String,
+        base: Option<String>,
+        git_profile: Option<&str>,
+        path: Option<PathBuf>,
+        chat: Option<String>,
+    ) -> Result<Workspace> {
+        let workspace = self
+            .create_workspace(repository, name, base, git_profile, path)
+            .await?;
+        self.give_to_chat(&workspace.id, chat).await
+    }
+
+    /// Assign `workspace` to `chat` and read it again.
+    async fn give_to_chat(&self, workspace: &str, chat: Option<String>) -> Result<Workspace> {
+        self.assign_chat(workspace, chat).await?;
+        self.workspace(workspace).await
     }
 }
 

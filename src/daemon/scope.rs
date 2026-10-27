@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
-    model::Repository,
+    model::{Repository, Workspace, WorkspaceTarget},
     protocol::Operation,
     repository::Selector,
 };
@@ -109,6 +109,20 @@ impl Manager {
             repositories.retain(|repository| repository.id == own);
         }
         Ok(repositories)
+    }
+
+    /// The workspaces `target` finds among those `caller` may see: the ones
+    /// in its workspace tree, or all of them for an unscoped caller.
+    pub(super) async fn find_visible_workspaces(
+        &self,
+        target: &WorkspaceTarget,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<Workspace>> {
+        let within = match caller {
+            Some(caller) => Some(self.subtree(&caller.workspace_id).await?),
+            None => None,
+        };
+        self.find_workspaces(target, within).await
     }
 
     /// The caller's own repository, which `repository` must select.
