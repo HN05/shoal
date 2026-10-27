@@ -86,7 +86,8 @@ impl ForgeRepo {
         let checks = self.kind.ci_checks(self, account, &head).await?;
         let (location, target) = self.failed_job(&checks, name)?;
         let log = self.job_log(account, location).await?;
-        Ok(CheckLog::from_text(url, name, &log).with_job(target))
+        let step = self.kind.failed_step(&log);
+        Ok(CheckLog::from_text(url, name, &log, step).with_job(target))
     }
 
     /// The head commit of PR `url`, open or not.
@@ -126,8 +127,12 @@ impl ForgeRepo {
 }
 
 impl CheckLog {
-    pub(crate) fn from_text(url: &str, name: &str, text: &str) -> Self {
-        let failed_step = failed_step(text);
+    pub(crate) fn from_text(
+        url: &str,
+        name: &str,
+        text: &str,
+        failed_step: Option<String>,
+    ) -> Self {
         let mut start = text.len().saturating_sub(TAIL_BYTES);
         while !text.is_char_boundary(start) {
             start += 1;
@@ -148,29 +153,6 @@ impl CheckLog {
             ..self
         }
     }
-}
-
-/// The step a runner log reports as failed: the one marked as failing, or the
-/// one started last before the job's failure when it did not succeed. A
-/// Forgejo job log may mark only its first steps, so a step that succeeded
-/// says nothing about which later one failed.
-fn failed_step(text: &str) -> Option<String> {
-    let mut current = None;
-    for line in text.lines() {
-        if let Some((_, step)) = line.split_once("⭐ Run ") {
-            current = Some(step.trim().chars().take(256).collect());
-        }
-        if line.contains("✅  Success - ") {
-            current = None;
-        }
-        if let Some((_, step)) = line.split_once("❌  Failure - ") {
-            return Some(step.trim().chars().take(256).collect());
-        }
-        if line.contains("[runner]:") && line.contains("failure") {
-            return current;
-        }
-    }
-    None
 }
 
 #[cfg(test)]

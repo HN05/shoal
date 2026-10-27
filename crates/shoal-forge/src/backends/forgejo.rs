@@ -597,6 +597,10 @@ impl Backend for Forgejo {
         plain::readable(&plain::without_timestamps(log))
     }
 
+    fn failed_step(&self, log: &str) -> Option<String> {
+        actions::failed_step(log)
+    }
+
     /// tea cannot send a file, so uploads need fj's token. The instance's
     /// settings are checked here, since an upload they refuse would fail only
     /// after its comment or item is posted.

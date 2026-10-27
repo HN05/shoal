@@ -117,7 +117,8 @@ impl ForgeRepo {
         let jobs = self.jobs_of(account, &run).await?;
         let job = find_job(&run, &jobs, job)?;
         let log = self.kind.run_job_log(self, account, &run, job).await?;
-        let log = CheckLog::from_text(&run.url, &job.name, &log);
+        let step = self.kind.failed_step(&log);
+        let log = CheckLog::from_text(&run.url, &job.name, &log, step);
         Ok(match &job.url {
             Some(url) => log.with_job(url.clone()),
             None => log,

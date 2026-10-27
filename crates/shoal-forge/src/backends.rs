@@ -482,6 +482,12 @@ pub(crate) trait Backend {
         plain::readable(log)
     }
 
+    /// The step the plain job log `log` names as failed, where the forge's
+    /// runner marks its steps.
+    fn failed_step(&self, _log: &str) -> Option<String> {
+        None
+    }
+
     /// The endpoint under the repository that serves the plain-text log of
     /// the job at `location`.
     fn job_log_endpoint(&self, _location: Location) -> Result<String> {
@@ -1001,6 +1007,10 @@ impl Backend for ForgeKind {
 
     fn plain_log(&self, log: &str) -> String {
         dispatch!(self, backend => backend.plain_log(log))
+    }
+
+    fn failed_step(&self, log: &str) -> Option<String> {
+        dispatch!(self, backend => backend.failed_step(log))
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

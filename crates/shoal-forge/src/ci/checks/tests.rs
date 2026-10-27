@@ -41,31 +41,17 @@ fn logs_come_from_the_failed_job_a_check_links_where_the_forge_serves_them() {
 }
 
 #[test]
-fn tails_are_bounded_and_retain_step_before_long_output() {
-    let text = format!(
-        "⭐ Run Main Test\n{}\n⚙️ [runner]: exitcode '1': failure\nJob failed\n",
-        "🦀".repeat(TAIL_BYTES)
-    );
-    let log = CheckLog::from_text("pr", "rust", &text);
+fn tails_are_bounded_and_keep_the_failed_step() {
+    let text = format!("{}\nJob failed\n", "🦀".repeat(TAIL_BYTES));
+    let log = CheckLog::from_text("pr", "rust", &text, Some("Test".into()));
     assert!(log.truncated);
     assert!(log.text.len() <= TAIL_BYTES);
-    assert_eq!(log.failed_step.as_deref(), Some("Main Test"));
+    assert_eq!(log.failed_step.as_deref(), Some("Test"));
     assert!(log.text.ends_with("Job failed\n"));
-    assert!(!CheckLog::from_text("pr", "rust", "short").truncated);
-    let long = CheckLog::from_text("pr", "rust", &"\0".repeat(TAIL_BYTES * 2));
+    assert!(!CheckLog::from_text("pr", "rust", "short", None).truncated);
+    let long = CheckLog::from_text("pr", "rust", &"\0".repeat(TAIL_BYTES * 2), None);
     assert_eq!(long.text.len(), TAIL_BYTES);
-    let job = |length| CheckLog::from_text("pr", "rust", "").with_job("j".repeat(length));
+    let job = |length| CheckLog::from_text("pr", "rust", "", None).with_job("j".repeat(length));
     assert!(job(JOB_URL_BYTES).job_url.is_some());
     assert!(job(JOB_URL_BYTES + 1).job_url.is_none());
-}
-
-#[test]
-fn failed_steps_never_name_a_step_that_succeeded() {
-    let unmarked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\nrustc 1.98.1\n\
-                    test result: FAILED\n⚙️ [runner]: exitcode '101': failure\n🏁  Job failed\n";
-    let step = |text| CheckLog::from_text("pr", "rust", text).failed_step;
-    assert_eq!(step(unmarked), None);
-    let marked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\n⭐ Run Main Test\n\
-                  test result: FAILED\n  ❌  Failure - Main Test\n⚙️ [runner]: exitcode '101': failure\n";
-    assert_eq!(step(marked).as_deref(), Some("Main Test"));
 }

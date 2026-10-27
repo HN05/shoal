@@ -66,7 +66,31 @@ pub(crate) async fn failed_check_log(
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
     let log = job_log(repo, account, &endpoint).await?;
     let log = repo.kind.plain_log(&log);
-    Ok(CheckLog::from_text(url, name, &log).with_job(job_url(repo, target)))
+    let step = failed_step(&log);
+    Ok(CheckLog::from_text(url, name, &log, step).with_job(job_url(repo, target)))
+}
+
+/// The step the runner marks as failing, or the one it started last before
+/// the job's failure when that step did not succeed. A job log may mark only
+/// its first steps, so a step that succeeded says nothing about which later
+/// one failed.
+pub(crate) fn failed_step(log: &str) -> Option<String> {
+    let mut current = None;
+    for line in log.lines() {
+        if let Some((_, step)) = line.split_once("⭐ Run ") {
+            current = Some(step.trim().chars().take(256).collect());
+        }
+        if line.contains("✅  Success - ") {
+            current = None;
+        }
+        if let Some((_, step)) = line.split_once("❌  Failure - ") {
+            return Some(step.trim().chars().take(256).collect());
+        }
+        if line.contains("[runner]:") && line.contains("failure") {
+            return current;
+        }
+    }
+    None
 }
 
 /// Forgejo links a job by its path on the host.

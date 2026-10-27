@@ -34,3 +34,19 @@ fn web_job_locations_are_repository_bound_and_use_indices() {
     assert!(job_id(&jobs, 0, 9331).is_err());
     assert!(job_id(&jobs, 1, 7).is_err());
 }
+
+#[test]
+fn failed_steps_are_the_marked_or_unfinished_step() {
+    let long = format!(
+        "⭐ Run Main Test\n{}\n⚙️ [runner]: exitcode '1': failure\n",
+        "🦀".repeat(10_000)
+    );
+    assert_eq!(failed_step(&long).as_deref(), Some("Main Test"));
+    let marked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\n⭐ Run Main Test\n\
+                  test result: FAILED\n  ❌  Failure - Main Test\n⚙️ [runner]: exitcode '101': failure\n";
+    assert_eq!(failed_step(marked).as_deref(), Some("Main Test"));
+    // Later steps of a job log can go unmarked.
+    let unmarked = "⭐ Run Main Checkout\n  ✅  Success - Main Checkout\nrustc 1.98.1\n\
+                    test result: FAILED\n⚙️ [runner]: exitcode '101': failure\n🏁  Job failed\n";
+    assert_eq!(failed_step(unmarked), None);
+}
