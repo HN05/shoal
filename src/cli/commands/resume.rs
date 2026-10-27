@@ -8,7 +8,7 @@ use crate::{
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume,
     },
-    model::{Inspection, Workspace},
+    model::{Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
     state::ExecutionState,
 };
@@ -51,6 +51,56 @@ pub async fn select(
             run_all(ctx, Some(workspaces), discard).await
         }
     }
+}
+
+/// Restore the stopped agent `execution` of the one workspace `targets`
+/// names for the daemon's start of the queued restore `entry`, whose slot the
+/// agent takes over.
+pub async fn start_entry(
+    ctx: &Context,
+    targets: WorkspaceTargets,
+    execution: Option<String>,
+    entry: String,
+) -> Result<i32> {
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "resume agents outside scoped executions"
+    );
+    let ([workspace], Some(execution)) = (targets.workspace.as_slice(), execution) else {
+        anyhow::bail!("a queued restore names one workspace and its stopped execution");
+    };
+    crate::env::launch_queue_entry(&entry);
+    let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry).await;
+    let restored = run(ctx, workspace.clone(), Some(execution), false).await;
+    if let Err(error) = &restored {
+        super::agent_queue::fail(ctx, &entry, error).await;
+    }
+    restored
+}
+
+/// The daemon's worker for the admitted restore `entry`: restore its stopped
+/// agent where it stopped, otherwise in the background, through
+/// [`start_entry`].
+pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()> {
+    let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
+        anyhow::bail!("the queued restore names no stopped agent");
+    };
+    let workspace = client::inspect(&ctx.paths, workspace.clone())
+        .await?
+        .workspace;
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let record = crate::execution::recovery::record_path(&ctx.paths, &workspace.id, execution);
+    let args = [
+        "resume",
+        &workspace.id,
+        "--execution",
+        execution,
+        "--queue-entry",
+        &entry.id,
+    ]
+    .map(OsString::from);
+    terminal::restore_queued(ctx, &settings, &workspace, &record, &args).await
 }
 
 pub async fn run(

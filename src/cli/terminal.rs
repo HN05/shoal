@@ -515,6 +515,35 @@ pub(in crate::cli) async fn rerun_where_stopped(
     Ok(reused.then(|| host.background_places()))
 }
 
+/// Run Shoal with `args`, which restore the agent of `record` in
+/// `workspace`, for the daemon's worker, which has no terminal: where the
+/// agent stopped when that place is back at its prompt, otherwise in the
+/// background of the first host that runs queued starts and can.
+pub(in crate::cli) async fn restore_queued(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    record: &Path,
+    args: &[OsString],
+) -> Result<()> {
+    if current(ctx, settings)
+        .rerun_where_stopped(ctx, record, args)
+        .await?
+    {
+        return Ok(());
+    }
+    let mut failure = None;
+    for host in HOSTS.iter().filter(|host| host.takes_queued(settings)) {
+        let label = naming::workspace_label(ctx, settings, *host, workspace).await;
+        match host.run_in_background(ctx, workspace, &label, args).await {
+            Ok(()) => return Ok(()),
+            // Herdr may be gone, as after a reboot.
+            Err(error) => failure = Some(error),
+        }
+    }
+    Err(failure.unwrap_or_else(|| anyhow::anyhow!("no terminal host can start queued agents")))
+}
+
 /// Run Shoal with `args` for `workspace` in the background, returning what
 /// such starts run in, or `None` when this terminal cannot start them.
 pub(in crate::cli) async fn run_in_background(

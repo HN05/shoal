@@ -21,6 +21,10 @@ pub enum SessionsCommand {
         /// Forget the saved agents and commands instead of resuming them.
         #[arg(long)]
         discard: bool,
+        /// The queue entry whose slot the restored agent takes, for the
+        /// daemon's start of a queued restore.
+        #[arg(long, hide = true, requires = "execution", conflicts_with = "discard")]
+        queue_entry: Option<String>,
     },
     /// Restart running agents in their terminals, resuming their sessions.
     ///

@@ -20,7 +20,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             targets,
             execution,
             discard,
+            queue_entry: None,
         } => resume::select(&ctx, targets, execution, discard).await,
+        SessionsCommand::Resume {
+            targets,
+            execution,
+            queue_entry: Some(entry),
+            ..
+        } => resume::start_entry(&ctx, targets, execution, entry).await,
         SessionsCommand::Restart {
             targets,
             agent,
