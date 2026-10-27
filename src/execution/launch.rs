@@ -328,12 +328,6 @@ async fn open_execution(
     Ok((link, plan))
 }
 
-/// The proxy `agent`'s requests go through, when it has one it can use.
-fn usable_proxy(settings: &crate::config::Effective, agent: &str) -> Option<crate::proxy::Proxy> {
-    let proxy = settings.proxy(agent)?;
-    crate::cli::agents::routes_through_proxy(settings.integration(agent)).then(|| proxy.clone())
-}
-
 async fn prepare_agent_launch(
     paths: &Paths,
     workspace: &str,
@@ -363,8 +357,11 @@ async fn prepare_agent_launch(
             .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),
         home: paths.home.clone(),
-        // Only an agent the integration can point at the proxy uses one.
-        routed: agent.and_then(|agent| usable_proxy(&settings, agent)),
+        // An agent Shoal cannot point at its proxy does not start.
+        routed: match agent {
+            Some(agent) => crate::cli::agents::launch_proxy(&settings, agent)?.cloned(),
+            None => None,
+        },
         proxy: None,
     }))
 }

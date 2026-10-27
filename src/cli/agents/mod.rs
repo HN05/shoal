@@ -459,13 +459,26 @@ pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Resu
     if let Some(reason) = agent_options(settings, name).off {
         anyhow::bail!("cannot start {name}: {reason}");
     }
+    launch_proxy(settings, name)?;
+    ensure_installed(name, &settings.commands)
+}
+
+/// The proxy agent `name`'s API requests go through, if it names one; an
+/// error when Shoal cannot point it there, for every launch, a resumed one
+/// included.
+pub(crate) fn launch_proxy<'a>(
+    settings: &'a Effective,
+    name: &str,
+) -> Result<Option<&'a crate::proxy::Proxy>> {
+    let Some(proxy) = settings.proxy(name) else {
+        return Ok(None);
+    };
     ensure!(
-        settings.proxy(name).is_none()
-            || integration(settings.integration(name)).routes_through_proxy(),
+        integration(settings.integration(name)).routes_through_proxy(),
         "cannot start {name}: Shoal cannot send its API requests through a proxy; \
          remove proxy from its [ai.{name}]"
     );
-    ensure_installed(name, &settings.commands)
+    Ok(Some(proxy))
 }
 
 /// Refuse an agent whose executables are missing.

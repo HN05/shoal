@@ -153,6 +153,12 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
         error.contains("cannot send its API requests through a proxy"),
         "{error}"
     );
+    // Every launch, a resumed one included, prepares its proxy this way.
+    let error = launch_proxy(&settings, "pi").unwrap_err().to_string();
+    assert!(error.contains("remove proxy from its [ai.pi]"), "{error}");
+    let claude = launch_proxy(&settings, "claude").unwrap().unwrap();
+    assert_eq!(claude.upstream, "http://127.0.0.1:8317");
+    assert!(launch_proxy(&settings, "codex").unwrap().is_none());
     // Claude can; whether it is installed is another matter.
     if let Err(error) = ensure_available("claude", &settings) {
         assert!(!error.to_string().contains("proxy"), "{error}");
