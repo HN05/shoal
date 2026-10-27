@@ -116,7 +116,7 @@ impl Host for Zmx {
         _settings: &'a Effective,
         repository: &'a Repository,
         agent: &'a str,
-        _label: &'a str,
+        _name: &'a str,
         args: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {

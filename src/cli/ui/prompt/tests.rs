@@ -38,3 +38,10 @@ fn yes_no_questions_default_to_no_and_repeat_unknown_answers() {
         "Register? [y/N] Please enter y or n.\nRegister? [y/N] "
     );
 }
+
+#[test]
+fn blank_input_takes_the_default() {
+    assert_eq!(or_default(String::new(), "repo-chat"), "repo-chat");
+    assert_eq!(or_default("  ".into(), "repo-chat"), "repo-chat");
+    assert_eq!(or_default(" talk ".into(), "repo-chat"), "talk");
+}

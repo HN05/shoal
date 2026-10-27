@@ -1,8 +1,6 @@
 //! `shoal plan`: settle an issue's plan with an agent in a chat before anyone
 //! implements it. The chat posts the plan to the issue's body, which is all
 //! an implementing agent receives.
-use std::ffi::OsString;
-
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -10,7 +8,6 @@ use super::{
     issues::{self, Issue},
 };
 use crate::{
-    agent::Agent,
     cli::{context::Context, ui},
     config,
     forge::items::{item::Item, link::ItemKind, list::MAX_LIMIT},
@@ -30,9 +27,7 @@ pub(super) async fn start(
     issue: Option<String>,
     repository: Option<String>,
     pick: Pick,
-    agent: Option<Agent>,
-    here: bool,
-    args: Vec<OsString>,
+    mut options: chat::Options,
 ) -> Result<i32> {
     chat::ensure_unscoped(ctx)?;
     let repo = issues::item_repository(
@@ -45,14 +40,14 @@ pub(super) async fn start(
     .await?;
     let settings = chat::settings(ctx, &repo).await?;
     // Refuse a named agent before asking for the issue.
-    let agent = chat::named_agent(&settings, agent)?;
+    options.agent = chat::named_agent(&settings, options.agent)?;
     let input = match issue {
         Some(issue) => issue,
         None => labelled(ctx, &repo, &settings.issue, pick).await?,
     };
     let issue = issues::load(ctx, &repo, &input).await?;
     let topic = topic(&repo, &issue, &settings.issue);
-    chat::begin(ctx, repo, settings, topic, agent, here, args).await
+    chat::begin(ctx, repo, settings, topic, options).await
 }
 
 /// The number of the open issue labelled `[issue] plan_label` that `pick` selects.
@@ -101,8 +96,8 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
             "--repo".into(),
             repo.id.clone().into(),
         ],
-        label: format!("{} plan", issue.tab_label(repo)),
         name: format!("{}-plan-{}", crate::repository::name(repo), issue.number),
+        asks_name: false,
         opening: Some(prompt(issue, labels)),
     }
 }

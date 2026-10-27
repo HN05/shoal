@@ -89,14 +89,14 @@ impl Host for Herdr {
         settings: &'a Effective,
         repository: &'a Repository,
         _agent: &'a str,
-        label: &'a str,
+        name: &'a str,
         args: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
             if !settings.herdr.new_tab {
                 return Ok(false);
             }
-            run_in_tab(ctx, &repository.path, label, args, true).await?;
+            run_in_tab(ctx, &repository.path, name, args, true).await?;
             Ok(true)
         })
     }

@@ -22652,7 +22652,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let id = repository["id"].as_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 
-    let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
+    // Enter takes the offered name.
+    let launch = |command: &mut Command| fixture.terminal_command(command, "\n", true);
     // A person in a JSON-default environment chats with `--text`, which the
     // session's Shoal uses too, since a chat needs text on a terminal.
     let (output, transcript) = launch(fixture.command().env("SHOAL_OUTPUT", "json").args([
@@ -22666,17 +22667,22 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         "fast",
     ]));
     assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains(&format!("Chat name [{CHAT_NAME}]:")),
+        "{transcript}"
+    );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
     let labels = format!("shoal.chat={id} shoal.agent=claude");
     assert_eq!(calls[1][..3], ["attach", "--labels", &labels]);
-    // The session's Shoal records the chat and becomes its agent.
+    // The session's Shoal records the chat under the name chosen here and
+    // becomes its agent.
     let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
     assert_eq!(calls[1][chat - 1], "--text");
     assert_eq!(
         calls[1][chat..],
         [
-            "chat", id, "--here", "--agent", "claude", "--", "--model", "fast"
+            "chat", id, "--here", "--name", CHAT_NAME, "--agent", "claude", "--", "--model", "fast"
         ]
     );
     let started = journal(&fixture)
@@ -22767,7 +22773,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
             .arg("--state-dir")
             .arg(&state)
             .args(["chat", "--agent", "claude"]),
-        "",
+        "\n",
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -22854,7 +22860,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
             .args(["chat", "--agent", "claude"]),
-        "",
+        "\n",
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -22896,7 +22902,7 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
                 .args(["chat", "--agent", "claude"]),
-            "",
+            "\n",
             true,
         );
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -22937,7 +22943,7 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
                 .args(["chat", "--agent", "claude"]),
-            "",
+            "\n",
             true,
         );
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -23013,7 +23019,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
             "--",
             "--search",
         ],
-        "",
+        "\n",
     );
     assert!(caller.status.success(), "{caller:?} {transcript}");
     let create = &herdr_calls(&fixture)[0];
@@ -23023,13 +23029,15 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         create[at + 1].clone()
     };
     assert_eq!(Path::new(&option("--cwd")), fixture.repo);
-    assert!(option("--label").ends_with(" chat"));
+    assert_eq!(option("--label"), CHAT_NAME);
     assert!(create.iter().any(|arg| arg == "--focus"));
     let worker = herdr_worker(&fixture);
     let chat = worker.iter().position(|arg| arg == "chat").unwrap();
     assert_eq!(
         worker[chat..],
-        ["chat", id, "--here", "--agent", "codex", "--", "--search"]
+        [
+            "chat", id, "--here", "--name", CHAT_NAME, "--agent", "codex", "--", "--search"
+        ]
     );
 
     // The tab's own call runs the agent in its pane.
@@ -23083,7 +23091,7 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
             fixture
                 .command()
                 .args(["chat", repo, "--agent", agent, "--here", "--", "--fast"]),
-            "",
+            "\n",
         );
         assert!(output.status.success(), "{output:?}\n{transcript}");
         chat_args(&fixture)
@@ -23189,6 +23197,15 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
             .unwrap()
             .starts_with("Plan issue #12: Clarify retries"),
         "{args:?}"
+    );
+    // The chat is named after the issue without asking.
+    let started = journal(&fixture)
+        .into_iter()
+        .rfind(|event| event["kind"] == "chat_started")
+        .unwrap();
+    assert_eq!(
+        started["chat"]["name"],
+        "repo-with---quotes----literal-plan-12"
     );
 }
 
@@ -23306,7 +23323,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
-    let (output, rows) = fixture.pick(&["chat", repo], "0", "");
+    let (output, rows) = fixture.pick(&["chat", repo], "0", "\n");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         rows.lines()
@@ -23338,7 +23355,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
         fixture
             .command()
             .args(["chat", repo, "--agent", "claude", "--here"]),
-        "",
+        "\n",
     );
     assert!(!output.status.success());
     assert!(

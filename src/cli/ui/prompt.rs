@@ -186,6 +186,22 @@ pub fn input_or_cancel(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     Ok(read_input(ctx, prompt)?.filter(|value| !value.is_empty()))
 }
 
+/// Read a value offered as `prompt [default]`, where empty input takes
+/// `default` and EOF means cancellation.
+pub fn input_with_default(ctx: &Context, prompt: &str, default: &str) -> Result<String> {
+    let value = read_input(ctx, &format!("{prompt} [{default}]"))?
+        .context("canceled: no value supplied")?;
+    Ok(or_default(value, default))
+}
+
+/// The typed value, or `default` for blank input.
+fn or_default(value: String, default: &str) -> String {
+    match value.trim() {
+        "" => default.to_owned(),
+        value => value.to_owned(),
+    }
+}
+
 /// Read a line, preserving blank input; EOF means cancellation.
 pub fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
     require_interactive(ctx)?;

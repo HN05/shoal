@@ -105,15 +105,15 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(None) })
     }
 
-    /// Run Shoal with `args` for a chat at the repository's checkout beside
-    /// this terminal, returning whether it ran there.
+    /// Run Shoal with `args` for the chat `name` at the repository's
+    /// checkout beside this terminal, returning whether it ran there.
     fn start_chat<'a>(
         &'a self,
         _ctx: &'a Context,
         _settings: &'a Effective,
         _repository: &'a Repository,
         _agent: &'a str,
-        _label: &'a str,
+        _name: &'a str,
         _args: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
@@ -449,20 +449,20 @@ pub(in crate::cli) async fn run_agent(
         .await
 }
 
-/// Run Shoal with `args` for a chat of `agent` at the repository's checkout:
-/// in a new focused tab, or in a new session this terminal attaches to, as
-/// `run_agent` does for tracked agents. Returns whether it ran there; `false`
-/// means the chat runs in place.
+/// Run Shoal with `args` for the chat `name` of `agent` at the repository's
+/// checkout: in a new focused tab, or in a new session this terminal attaches
+/// to, as `run_agent` does for tracked agents. Returns whether it ran there;
+/// `false` means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
     repository: &Repository,
     agent: &str,
-    label: &str,
+    name: &str,
     args: &[OsString],
 ) -> Result<bool> {
     beside(ctx, settings)
-        .start_chat(ctx, settings, repository, agent, label, args)
+        .start_chat(ctx, settings, repository, agent, name, args)
         .await
 }
 

@@ -934,7 +934,7 @@ other commands do.
 
 ### Chats
 
-`shoal chat [repository] [--agent NAME] [--here] [-- ARGS]` starts a new chat
+`shoal chat [repository] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
@@ -950,8 +950,12 @@ request to reply only that it is ready and wait for you. The template substitute
 `{path}` is the checkout, and a launcher using a placeholder only a workspace has a value for is refused. The checkout is trusted in the agent's
 config as workspace launches trust theirs.
 
-Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
-labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or
+Every call starts a new chat and focuses it. Its name is `--name`, else the
+default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
+On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
+where empty input takes the default and a taken or invalid name is asked for
+again; JSON and Happy launches take the default without asking. Inside Herdr it
+opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
 session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
 inside a zmx session or a Herdr pane it runs in place. A Happy chat
@@ -980,14 +984,14 @@ receiving their events gives you the notifications they stand for.
 
 ### Planning issues
 
-`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--here] [-- ARGS]`
+`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
 starts a [chat](#chats) that settles an issue's plan with you before anyone
 implements it. The issue is a number or URL; without one, a picker offers the
 open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
 one from either end instead; `--oldest` is refused when more than 1,000 are open,
 since the forge lists only the newest 1,000. The repository follows `shoal review --issue`, and
-the agent, tab and session follow `shoal chat`, with a tab labelled
-`<repo>#<number> plan`. Instead of waiting for you, the agent starts on the
+the agent, tab and session follow `shoal chat`, except that the chat is named
+`<repo>-plan-<number>` (suffixed while another holds it) without asking. Instead of waiting for you, the agent starts on the
 issue: it checks it against the default branch, talks the open points through
 with you in the chat, then rewrites the issue's body with a Plan section, since
 an implementing agent receives only the body, swaps `plan_label` for

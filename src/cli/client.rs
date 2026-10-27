@@ -250,6 +250,17 @@ pub async fn start_chat(
     .await
 }
 
+/// Refuse a name a new chat could not take now.
+pub async fn check_chat_name(paths: &Paths, name: &str) -> Result<()> {
+    request::<()>(
+        paths,
+        ChatMethod::CheckChatName {
+            name: name.to_owned(),
+        },
+    )
+    .await
+}
+
 /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
 pub async fn free_chat_name(paths: &Paths, name: String) -> Result<String> {
     request(paths, ChatMethod::FreeChatName { name }).await
