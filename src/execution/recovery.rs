@@ -18,7 +18,7 @@ use crate::{
     paths::Paths,
     process::identity::{self, Identity},
     protocol::ConfigTarget,
-    state::states,
+    state::{AgentState, states},
 };
 
 #[derive(Debug)]
@@ -66,6 +66,11 @@ pub struct Record {
     /// as from another machine, so the agent starts a new one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
+    /// What the agent was doing when it stopped, as its hooks last reported
+    /// it. Unknown for agents without hooks and for records saved before
+    /// turns were kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<AgentState>,
 }
 
 /// What a new agent of a workspace that moved where its earlier session is
@@ -219,6 +224,7 @@ impl Record {
             waiting: None,
             session: None,
             moved: false,
+            turn: None,
         }
     }
 
@@ -267,6 +273,28 @@ pub(crate) fn save_record(
     write_record(paths, workspace_id, id, record)
 }
 
+/// Keep `turn`, the state execution `id` last reported, in the recovery
+/// record it saved, unless the record already has one. An execution that
+/// saved no record stopped nothing.
+pub(crate) fn save_turn(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    turn: AgentState,
+) -> Result<()> {
+    let Some(record) = Record::load(&record_path(paths, workspace_id, id))? else {
+        return Ok(());
+    };
+    if record.turn.is_some() {
+        return Ok(());
+    }
+    let record = Record {
+        turn: Some(turn),
+        ..record
+    };
+    write_record(paths, workspace_id, id, record).map(drop)
+}
+
 fn write_record(
     paths: &Paths,
     workspace_id: &str,
@@ -287,6 +315,7 @@ fn write_record(
         record.place = record.place.or(saved.place);
         record.waiting = record.waiting.or(saved.waiting);
         record.session = record.session.or(saved.session);
+        record.turn = record.turn.or(saved.turn);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }

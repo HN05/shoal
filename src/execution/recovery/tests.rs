@@ -6,6 +6,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     let old: Record = serde_json::from_str(r#"{"agent":"codex"}"#).unwrap();
     assert!(old.stop_reason.is_none());
     assert_eq!(old.stage, None);
+    assert_eq!(old.turn, None);
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let path = save_record(
@@ -115,4 +116,28 @@ fn commands_with_arguments_that_are_not_utf8_are_not_recorded() {
     let argv = [OsString::from("cat"), OsString::from_vec(vec![0xff])];
     assert!(save_command(&paths, "workspace", "execution", &argv).is_err());
     assert!(!pending(&paths, "workspace").unwrap());
+}
+
+#[test]
+fn the_first_saved_turn_stays_through_later_saves() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
+    assert!(!pending(&paths, "workspace").unwrap());
+
+    save_record(&paths, "workspace", "execution", "codex", None).unwrap();
+    save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
+    save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
+    let recovery = Recovery {
+        agent: "codex".into(),
+        command: vec![],
+        automatic: false,
+        handoff_delivered: false,
+    };
+    let path = recovery
+        .save(&paths, "workspace", "execution", None, None, None)
+        .unwrap();
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.turn, Some(AgentState::Working));
+    assert_eq!(record.stage, Some(Stage::Stopped));
 }

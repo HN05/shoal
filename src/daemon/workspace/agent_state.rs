@@ -33,7 +33,36 @@ pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The workspace and state execution `id` last reported, while its record lasts.
+fn reported_by(db: &Connection, id: &str) -> Result<Option<(String, AgentState)>> {
+    Ok(db
+        .query_row(
+            "SELECT workspace_id,state FROM workspace_agent_state WHERE execution_id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?)
+}
+
 impl Manager {
+    /// Keep the state execution `id` last reported in the recovery record it
+    /// saved, before the state goes with the execution's record. A failure
+    /// leaves the turn unknown, as in records saved before turns were kept.
+    pub(crate) async fn keep_stopped_turn(&self, id: &str) {
+        let query = id.to_owned();
+        let kept = async {
+            let reported = self.store.run(move |db| reported_by(db, &query)).await?;
+            let Some((workspace, state)) = reported else {
+                return Ok(());
+            };
+            recovery::save_turn(&self.paths, &workspace, id, state)
+        }
+        .await;
+        if let Err(error) = kept {
+            crate::daemon::log!("turn state of stopped execution {id} not kept: {error:#}");
+        }
+    }
+
     /// Record the state reported from `execution`, which clears it when its
     /// record goes, and the agent `session` it reports for resuming it.
     /// Repeating the current report writes nothing, since hooks repeat it

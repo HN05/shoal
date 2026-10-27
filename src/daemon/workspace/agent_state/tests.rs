@@ -170,3 +170,45 @@ async fn a_failed_turn_leaves_the_agent_idle() {
         .unwrap();
     assert_eq!(status.state, AgentState::Idle);
 }
+
+#[tokio::test]
+async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
+    use crate::execution::recovery::{Record, record_path, save_record};
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES
+                    ('stopped',?1,'unknown'),('exited',?1,'unknown')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    save_record(&manager.paths, &workspace.id, "stopped", "claude", None).unwrap();
+    for execution in ["stopped", "exited"] {
+        manager
+            .set_agent_state(
+                &workspace.name,
+                AgentState::Idle,
+                Some(execution.into()),
+                None,
+            )
+            .await
+            .unwrap();
+        manager.forget_execution(execution).await.unwrap();
+    }
+
+    let path = record_path(&manager.paths, &workspace.id, "stopped");
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.turn, Some(AgentState::Idle));
+    // An execution that saved no record stopped nothing to keep a turn for.
+    assert!(
+        !record_path(&manager.paths, &workspace.id, "exited").exists(),
+        "a turn alone must not make a recovery record"
+    );
+}

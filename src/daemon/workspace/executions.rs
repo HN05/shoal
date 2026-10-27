@@ -640,6 +640,7 @@ impl Manager {
     ) -> Result<bool> {
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
+        self.keep_stopped_turn(&id).await;
         let mut connections = self.connections.lock().await;
         let record_id = id.clone();
         self.store
@@ -1151,6 +1152,7 @@ impl Manager {
 
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &str) -> Result<()> {
+        self.keep_stopped_turn(id).await;
         let id = id.to_owned();
         self.store
             .run(move |db| {
