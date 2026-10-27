@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, PlaceName, PlaceState, Placement};
+use super::{DemoWorker, Host, PlaceName, PlaceState, Placement, naming::workspace_label};
 
 mod demo;
 use crate::cli::{
@@ -228,20 +228,6 @@ impl TabDirective {
     }
 }
 
-/// The label `shoal add` gives a workspace's tab: the `tab_name` template,
-/// `<repo>#<number>` for an issue, or the branch.
-fn tab_label(
-    template: Option<String>,
-    repo: &Repository,
-    issue: Option<&Issue>,
-    branch: &str,
-) -> String {
-    match template {
-        Some(template) => PlaceName::new(template, repo, issue).render(branch),
-        None => issue.map_or_else(|| branch.to_owned(), |issue| issue.tab_label(repo)),
-    }
-}
-
 /// Run Shoal with `args` in the pane the agent of `record` stopped in, once
 /// that pane is back at its shell prompt, as it is after the wrapper exits.
 /// This terminal's own pane is never reused. Returns whether it ran.
@@ -320,32 +306,6 @@ async fn run_in_background(
     let label = workspace_label(ctx, settings, workspace).await;
     run_in_tab(ctx, &workspace.path, &label, args, false).await?;
     Ok(true)
-}
-
-/// The tab label `shoal add` would give `workspace`. A failed issue lookup
-/// falls back to the branch.
-async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Workspace) -> String {
-    let labelled = async {
-        let repositories = client::repositories(&ctx.paths).await?;
-        let repo = repositories
-            .iter()
-            .find(|repo| repo.id == workspace.repository_id)
-            .context("repository is no longer registered")?;
-        let issue = match &workspace.links.issue {
-            Some(url) => Some(issues::load(ctx, repo, url).await?),
-            None => None,
-        };
-        anyhow::Ok(tab_label(
-            settings.herdr.tab_name.clone(),
-            repo,
-            issue.as_ref(),
-            &workspace.branch,
-        ))
-    };
-    labelled.await.unwrap_or_else(|error| {
-        eprintln!("warning: cannot label the Herdr tab: {error:#}");
-        workspace.branch.clone()
-    })
 }
 
 // The tab environment carries the plan, keeping the typed command short, and

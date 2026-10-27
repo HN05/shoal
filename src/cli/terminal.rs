@@ -6,6 +6,7 @@
 mod background;
 mod closing;
 mod herdr;
+mod naming;
 mod zmx;
 
 use std::{
@@ -16,7 +17,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::BoxFuture;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::{
     commands::{
@@ -33,6 +34,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, watch as watch_place};
+pub(in crate::cli) use naming::PlaceName;
 
 /// Hosts in the order they claim a terminal; a terminal none of them serves
 /// runs everything in place.
@@ -752,45 +754,6 @@ impl Placement {
         } else {
             Self::Background
         }
-    }
-}
-
-/// The name a host gives the place hosting a new workspace: a template with
-/// the repository and issue filled in, rendered once the branch is known.
-#[derive(Serialize, Deserialize)]
-pub(in crate::cli) struct PlaceName {
-    template: String,
-    repo: String,
-    issue_number: Option<u64>,
-    issue_title: Option<String>,
-}
-
-impl PlaceName {
-    fn new(template: String, repo: &Repository, issue: Option<&Issue>) -> Self {
-        Self {
-            template,
-            repo: crate::repository::name(repo).to_owned(),
-            issue_number: issue.map(|issue| issue.number),
-            issue_title: issue.map(|issue| issue.title.clone()),
-        }
-    }
-
-    pub fn render(&self, branch: &str) -> String {
-        crate::config::templates::render(
-            &self.template,
-            &[
-                ("{repo}", &self.repo),
-                ("{branch}", branch),
-                (
-                    "{issue_number}",
-                    &self.issue_number.map(|n| n.to_string()).unwrap_or_default(),
-                ),
-                (
-                    "{issue_title}",
-                    self.issue_title.as_deref().unwrap_or_default(),
-                ),
-            ],
-        )
     }
 }
 
