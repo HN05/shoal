@@ -880,7 +880,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(record.exists());
     let resumed = fixture
         .command()
-        .args(["resume", "moving"])
+        .args(["resume", "moving", "--now"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -5071,7 +5071,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         3,
         "{resumed}"
     );
-    assert!(resumed["agents"].as_array().unwrap().is_empty());
+    assert!(resumed["queued"].as_array().unwrap().is_empty());
     let listed = fixture.run(&["work"]);
     assert!(!String::from_utf8_lossy(&listed.stdout).contains("stopped"));
     assert!(
@@ -5135,7 +5135,7 @@ fn resuming_several_goes_on_after_one_fails() {
             fs::write(path.join(".shoal.toml"), "not toml [").unwrap();
         }
     }
-    let output = fixture.run(&["--json", "resume", "broken", "good"]);
+    let output = fixture.run(&["--json", "resume", "broken", "good", "--now"]);
     assert!(!output.status.success(), "{output:?}");
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["agents"].as_array().unwrap().len(), 1, "{report}");
