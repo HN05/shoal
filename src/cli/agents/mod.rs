@@ -9,6 +9,8 @@ mod claude;
 mod codex;
 mod desktop;
 #[cfg(feature = "happy")]
+mod detached;
+#[cfg(feature = "happy")]
 mod happy;
 mod launch;
 mod shortcuts;
