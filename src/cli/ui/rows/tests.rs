@@ -26,6 +26,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         workspace_id: None,
         opens: None,
         waiting_for: Vec::new(),
+        waits_for_update: false,
         base: None,
     };
     assert_eq!(queue_status_cell(&entry).0, "queued, position 2");
@@ -34,6 +35,33 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         queue_status_cell(&entry).0,
         "queued, position 2, after api, https://forge.example/o/r/issues/7"
     );
+}
+
+#[test]
+fn queue_status_names_a_restore_that_waits_for_an_update() {
+    let mut entry = QueueEntry {
+        id: "entry".into(),
+        kind: QueueKind::Restore,
+        repository_id: "repo".into(),
+        name: "ui".into(),
+        agent: "claude".into(),
+        issue_title: None,
+        state: crate::state::QueueState::Queued,
+        position: Some(1),
+        created_at: 0,
+        workspace_id: Some("ui".into()),
+        opens: None,
+        waiting_for: Vec::new(),
+        waits_for_update: true,
+        base: None,
+    };
+    assert_eq!(
+        queue_status_cell(&entry).0,
+        "queued, position 1, after an update"
+    );
+    entry.state = crate::state::QueueState::Starting;
+    entry.position = None;
+    assert!(!queue_status_cell(&entry).0.contains("update"));
 }
 
 #[test]

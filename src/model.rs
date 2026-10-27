@@ -715,6 +715,10 @@ pub struct QueueEntry {
     /// names and issue URLs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<String>,
+    /// Whether a restore waits for an update for its agent, which stopped
+    /// between turns, rather than restoring an interrupted one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub waits_for_update: bool,
     /// The branch of the completed dependency a started launch builds on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,

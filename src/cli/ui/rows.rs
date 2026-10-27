@@ -13,7 +13,7 @@ use crate::{
     },
     forge::items::link::{self, ItemKind},
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
-    state::{AgentState, QueueKind},
+    state::{AgentState, QueueKind, QueueState},
 };
 
 /// `items` joined by `separator` into lines no wider than `width`, where
@@ -281,6 +281,9 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     };
     if !entry.waiting_for.is_empty() {
         text += &format!(", after {}", entry.waiting_for.join(", "));
+    }
+    if entry.waits_for_update && entry.state == QueueState::Queued {
+        text += ", after an update";
     }
     (text, Some(status.style()))
 }

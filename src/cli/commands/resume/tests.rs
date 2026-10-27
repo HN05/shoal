@@ -11,9 +11,12 @@ fn agents_are_labelled_by_name_stop_time_and_reason() {
     .unwrap();
     let label = agent_label(&record);
     assert!(label.starts_with("claude, stopped "), "{label}");
+    // A record without a turn counts as interrupted.
     assert!(
-        label.ends_with(" after critical memory pressure"),
+        label.ends_with(" after critical memory pressure, interrupted"),
         "{label}"
     );
     assert!(!label.contains("execution"), "{label}");
+    std::fs::write(&record, r#"{"agent":"claude","turn":"idle"}"#).unwrap();
+    assert!(agent_label(&record).ends_with(", idle"));
 }

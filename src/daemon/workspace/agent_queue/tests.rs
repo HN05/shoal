@@ -547,6 +547,8 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         [Activity::Running(_)]
     ));
     manager.queue_agent_restore(&agent.0).await.unwrap();
+    // Without a turn report the agent counts as interrupted.
+    assert!(!manager.queue_entries().await.unwrap()[0].waits_for_update);
     let _restoring = await_restore(&manager, &agent.0).await;
     assert_eq!(
         activities(manager.occupied_slots(&HashSet::new()).await.unwrap()),
@@ -1117,6 +1119,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     manager.dispatch_queue().await.unwrap();
     assert!(manager.published_recovery().is_some());
     assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
+    assert!(manager.queue_entries().await.unwrap()[0].waits_for_update);
 
     // An update makes it due; it waits for the launch's slot like a launch.
     manager

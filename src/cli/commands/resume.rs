@@ -275,7 +275,7 @@ fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<(String, 
 }
 
 /// How the agent picker names a stopped agent: its name, when it stopped,
-/// and why when known.
+/// why when known, and whether it was interrupted mid-turn or idle.
 fn agent_label(path: &Path) -> String {
     let record = Record::load(path).ok().flatten();
     let mut label = record
@@ -289,9 +289,11 @@ fn agent_label(path: &Path) -> String {
         let time = crate::time::local_minutes(stopped.as_secs() as i64);
         label.push_str(&format!(", stopped {time}"));
     }
+    let idle = record.as_ref().is_some_and(Record::between_turns);
     if let Some(reason) = record.and_then(|record| record.stop_reason) {
         label.push_str(&format!(" after {reason}"));
     }
+    label.push_str(if idle { ", idle" } else { ", interrupted" });
     label
 }
 

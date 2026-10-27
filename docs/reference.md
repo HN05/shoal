@@ -301,7 +301,9 @@ stays stopped for `shoal resume`, and the exit status is 1.
 
 `shoal resume [workspace...]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace,
-or pick the agent by name, stop time and reason on a terminal. Without a
+or pick the agent by name, stop time, reason and whether it was interrupted
+mid-turn or idle on a terminal; an agent without turn reports counts as
+interrupted. Without a
 workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
@@ -1082,9 +1084,11 @@ are gone. `--base` and `--existing` keep their own starting point, and `--now`
 and `--focus` cannot wait for work.
 
 `shoal work` lists entries after the workspaces as `queued, position N` or
-`starting`, followed by the work a waiting launch is after, a restore with its
-agent; `work --queue` lists only them (`--json` gives the entries with their
-`kind`, `launch` or `restore`, `waiting_for` while dependencies remain and
+`starting`, followed by the work a waiting launch is after, or `after an
+update` for a restore of an idle agent, and a restore with its agent; `work
+--queue` lists only them (`--json` gives the entries with their `kind`,
+`launch` or `restore`, `waiting_for` while dependencies remain,
+`waits_for_update` for a restore of an idle agent and
 `base` once a launch starts on a dependency's branch, while `work --json` stays
 a list of workspaces). `shoal rm` removes a waiting launch by name or ID, and
 only by ID when a workspace has the same name; a starting one belongs to its

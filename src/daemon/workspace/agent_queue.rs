@@ -784,10 +784,12 @@ impl Manager {
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
         let mut entries = self.numbered_entries().await?;
         let mut readiness = self.dependency_readiness().await?;
+        let waking = self.restores_waiting_for_updates().await?;
         for entry in &mut entries {
             if let Some(dependencies::Readiness::Waiting(work)) = readiness.remove(&entry.id) {
                 entry.waiting_for = work;
             }
+            entry.waits_for_update = waking.contains(&entry.id);
         }
         Ok(entries)
     }
@@ -1214,6 +1216,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         workspace_id: row.get("workspace_id")?,
         opens: row.get("opens_workspace_id")?,
         waiting_for: Vec::new(),
+        waits_for_update: false,
         base: row.get("base_branch")?,
     })
 }
