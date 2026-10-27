@@ -15,14 +15,11 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{DemoWorker, Host, Place, Placement, Session};
+use super::{DemoWorker, Host, Placement, Session};
 use crate::{
     cli::{
         agents::ensure_program,
-        commands::{
-            issues::Issue,
-            workspaces::{AddPlan, execute_add},
-        },
+        commands::{issues::Issue, workspaces::AddPlan},
         context::Context,
         internal::{self, Worker, internal_command},
     },
@@ -70,18 +67,19 @@ impl Host for Zmx {
     /// terminal attaches to.
     fn start_add<'a>(
         &'a self,
-        ctx: &'a Context,
+        _ctx: &'a Context,
         _settings: &'a Effective,
         plan: &'a mut AddPlan,
         _issue: Option<&'a Issue>,
         name: &'a str,
         placement: Placement,
+        worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
             if placement == Placement::Focus {
                 return Ok(false);
             }
-            start_add(ctx, plan, name).await?;
+            start_add(plan, name, worker).await?;
             Ok(true)
         })
     }
@@ -131,6 +129,17 @@ impl Host for Zmx {
 
     fn background_note(&self, name: &str) -> String {
         format!("Started {name} in a detached zmx session; attach with `shoal attach {name}`")
+    }
+
+    fn this_place(&self) -> Option<String> {
+        std::env::var(SESSION_VAR)
+            .ok()
+            .filter(|session| !session.is_empty())
+    }
+
+    /// A detached session ends with its agent, leaving no shell.
+    fn places_keep_shells(&self) -> bool {
+        false
     }
 
     fn prompt_session(&self) -> Option<OsString> {
@@ -193,31 +202,6 @@ impl Host for Zmx {
 
     fn send_demo_keys<'a>(&'a self, place: &'a str, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(send_keys(place, keys))
-    }
-}
-
-/// The detached session the zmx worker runs in: it adds the workspace there
-/// in place of the caller's shell, and ends with its agent, leaving no shell.
-struct DetachedSession;
-
-impl Place for DetachedSession {
-    fn host_workspace<'a>(
-        &'a self,
-        _ctx: &'a Context,
-        workspace: &'a Workspace,
-        agent: Option<&'a str>,
-        _label: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            if let Err(error) = label_current(&workspace.id, agent.unwrap_or_default()).await {
-                eprintln!("warning: {error:#}");
-            }
-            Ok(())
-        })
-    }
-
-    fn keeps_shell(&self) -> bool {
-        false
     }
 }
 
@@ -300,21 +284,12 @@ async fn run_chat(
     Ok(0)
 }
 
-/// The detached session's worker: add the workspace its launch planned, in
-/// the session in place of the caller's shell.
-pub async fn worker(mut ctx: Context, payload: &str) -> Result<i32> {
-    let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
-    ctx.place = Some(Box::new(DetachedSession));
-    execute_add(&ctx, plan).await
-}
-
-/// Run `plan` in a new detached session named after its planned workspace
-/// `name`. The session's worker reads the plan from its environment, as a
-/// Herdr tab's does.
-async fn start_add(ctx: &Context, plan: &AddPlan, name: &str) -> Result<()> {
-    let argv = internal_command(&ctx.paths, false, Worker::Add)?;
+/// Run `plan` with `worker` in a new detached session named after its
+/// planned workspace `name`. The worker reads the plan from its environment,
+/// as a Herdr tab's does.
+async fn start_add(plan: &AddPlan, name: &str, worker: &[OsString]) -> Result<()> {
     let plan = serde_json::to_string(plan)?;
-    start_detached(name, &argv, &[(env::ADD_PLAN, &plan)]).await
+    start_detached(name, worker, &[(env::ADD_PLAN, &plan)]).await
 }
 
 /// Run Shoal with `args` for `workspace` in a new detached session named

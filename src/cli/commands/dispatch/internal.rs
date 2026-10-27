@@ -29,10 +29,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::SubagentStart => subagents::start(&ctx).await,
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,
-        InternalCommand::Herdr {
-            close_when_done,
-            plan,
-        } => terminal::herdr_worker(ctx, close_when_done, &plan).await,
         InternalCommand::PlaceWatch {
             host,
             workspace,
@@ -59,7 +55,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
-        InternalCommand::Add { plan } => terminal::session_worker(ctx, &plan).await,
+        InternalCommand::Add {
+            host,
+            close_when_done,
+            plan,
+        } => terminal::add_worker(ctx, &host, close_when_done, &plan).await,
         InternalCommand::Demo {
             workspace,
             launch,

@@ -46,25 +46,31 @@ fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
 }
 
 #[test]
-fn herdr_round_trips_close_when_done() {
+fn add_round_trips_host_and_close_when_done() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     for close_when_done in [false, true] {
-        // The plan normally arrives in the tab's environment.
-        let mut args = internal_command(&paths, false, Worker::Herdr { close_when_done }).unwrap();
+        let worker = Worker::Add {
+            host: "herdr",
+            close_when_done,
+        };
+        // The plan normally arrives in the place's environment.
+        let mut args = internal_command(&paths, false, worker).unwrap();
         args.push("plan".into());
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.state_dir.as_ref(), Some(&paths.state));
         let Some(Command::Internal {
             command:
-                InternalCommand::Herdr {
+                InternalCommand::Add {
+                    host,
                     close_when_done: parsed,
                     plan,
                 },
         }) = cli.command
         else {
-            panic!("expected Herdr worker");
+            panic!("expected the add worker");
         };
+        assert_eq!(host, "herdr");
         assert_eq!(parsed, close_when_done);
         assert_eq!(plan, "plan");
     }

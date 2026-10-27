@@ -9,7 +9,6 @@ use crate::paths::Paths;
 
 /// The hidden command that holds every worker below.
 pub const GROUP: &str = "internal";
-pub const HERDR: &str = "herdr";
 pub const HERDR_WATCH: &str = "herdr-watch";
 pub const PLACE_WATCH: &str = "place-watch";
 pub const LAND: &str = "land";
@@ -24,10 +23,6 @@ pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
 
 pub enum Worker<'a> {
-    /// Add the workspace planned in the environment in this Herdr tab.
-    Herdr {
-        close_when_done: bool,
-    },
     /// Close `place` of `host` once `workspace` completes or is removed.
     PlaceWatch {
         host: &'a str,
@@ -69,8 +64,13 @@ pub enum Worker<'a> {
     QueueStart {
         entry: &'a str,
     },
-    /// Add the workspace planned in the environment in this detached session.
-    Add,
+    /// Add the workspace planned in the environment in the place `host`
+    /// opened for it, closing it once the workspace is done when
+    /// `close_when_done` is set.
+    Add {
+        host: &'a str,
+        close_when_done: bool,
+    },
     /// Copy the checkout's ignored files, then run setup.
     CopyIgnored {
         setup_cmd: Option<&'a Path>,
@@ -119,12 +119,6 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
     ];
     args.push(GROUP.into());
     match worker {
-        Worker::Herdr { close_when_done } => {
-            args.push(HERDR.into());
-            if close_when_done {
-                args.push("--close-when-done".into());
-            }
-        }
         Worker::PlaceWatch {
             host,
             workspace,
@@ -198,7 +192,15 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             args.extend_from_slice(command);
         }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
-        Worker::Add => args.push(ADD.into()),
+        Worker::Add {
+            host,
+            close_when_done,
+        } => {
+            args.extend([ADD.into(), "--host".into(), host.into()]);
+            if close_when_done {
+                args.push("--close-when-done".into());
+            }
+        }
         Worker::CopyIgnored { setup_cmd } => {
             args.push(COPY_IGNORED.into());
             if let Some(setup_cmd) = setup_cmd {

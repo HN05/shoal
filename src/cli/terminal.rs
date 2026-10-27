@@ -19,7 +19,10 @@ use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    commands::{issues::Issue, workspaces::AddPlan},
+    commands::{
+        issues::Issue,
+        workspaces::{AddPlan, execute_add},
+    },
     context::Context,
 };
 use crate::{
@@ -30,8 +33,6 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, watch as watch_place};
-pub(in crate::cli) use herdr::worker as herdr_worker;
-pub(in crate::cli) use zmx::worker as session_worker;
 
 /// Hosts in the order they claim a terminal; a terminal none of them serves
 /// runs everything in place.
@@ -57,8 +58,10 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
-    /// Start `plan` as `placement` asks, returning whether it left this
-    /// process. `name` is the planned workspace name.
+    /// Start `plan` as `placement` asks by running `worker` in a new place,
+    /// returning whether it left this process. `name` is the planned
+    /// workspace name.
+    #[allow(clippy::too_many_arguments)]
     fn start_add<'a>(
         &'a self,
         _ctx: &'a Context,
@@ -67,6 +70,7 @@ pub(in crate::cli) trait Host: Sync {
         _issue: Option<&'a Issue>,
         _name: &'a str,
         _placement: Placement,
+        _worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
@@ -155,6 +159,23 @@ pub(in crate::cli) trait Host: Sync {
     /// reads it.
     fn place_state<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
+    }
+
+    /// Whether the places this host opens for a workspace close once it is
+    /// done, under `settings`.
+    fn closes_when_done(&self, _settings: &Effective) -> bool {
+        false
+    }
+
+    /// Show `label` as the name of `place`, one this host opened.
+    fn rename_place<'a>(&'a self, _place: &'a str, _label: &'a str) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    /// Whether a place this host opens for an addition keeps a shell that
+    /// enters the workspace afterwards.
+    fn places_keep_shells(&self) -> bool {
+        true
     }
 
     /// The session this process runs in, where a prompt can be typed.
@@ -359,8 +380,9 @@ pub(in crate::cli) async fn start_add(
     );
     let host = beside(ctx, settings);
     let placement = Placement::choose(settings.focus, !plan.runs_unattended());
+    let worker = add_worker_argv(ctx, settings, host)?;
     let started = host
-        .start_add(ctx, settings, plan, issue, name, placement)
+        .start_add(ctx, settings, plan, issue, name, placement, &worker)
         .await?;
     if started && placement == Placement::Background {
         outln!("{}", host.background_note(name));
@@ -376,9 +398,18 @@ pub(in crate::cli) async fn start_queued(
     plan: &mut AddPlan,
     name: &str,
 ) -> Result<()> {
-    queued(settings)?
-        .start_add(ctx, settings, plan, None, name, Placement::Background)
-        .await?;
+    let host = queued(settings)?;
+    let worker = add_worker_argv(ctx, settings, host)?;
+    host.start_add(
+        ctx,
+        settings,
+        plan,
+        None,
+        name,
+        Placement::Background,
+        &worker,
+    )
+    .await?;
     Ok(())
 }
 
@@ -559,25 +590,51 @@ fn named(name: &str) -> Option<&'static dyn Host> {
 
 /// The place a host opened for this process to add a workspace in, hosting
 /// it in place of the caller's shell.
-pub(in crate::cli) trait Place: Send + Sync {
-    /// Tell the place that it hosts `workspace`, whose `agent` starts there,
-    /// labelled `label`.
-    fn host_workspace<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        agent: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, Result<()>>;
+pub(in crate::cli) struct Place {
+    host: &'static dyn Host,
+    /// The place as [`Host::this_place`] names it.
+    id: String,
+    closes_when_done: bool,
+}
 
-    /// Whether a shell remains here to enter the workspace afterwards.
-    fn keeps_shell(&self) -> bool {
-        true
-    }
+/// The worker that adds the workspace `plan` describes in the place `host`
+/// opened for it, closing the place with the workspace when `settings` say
+/// so. The plan reaches it in the place's environment.
+fn add_worker_argv(ctx: &Context, settings: &Effective, host: &dyn Host) -> Result<Vec<OsString>> {
+    crate::cli::internal::internal_command(
+        &ctx.paths,
+        false,
+        crate::cli::internal::Worker::Add {
+            host: host.name(),
+            close_when_done: host.closes_when_done(settings),
+        },
+    )
+}
+
+/// The add worker: add the workspace `payload` plans in the place of the
+/// host named `host` this process runs in.
+pub(in crate::cli) async fn add_worker(
+    mut ctx: Context,
+    host: &str,
+    closes_when_done: bool,
+    payload: &str,
+) -> Result<i32> {
+    let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
+    let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
+    let id = host
+        .this_place()
+        .with_context(|| format!("{} did not name the place this worker runs in", host.name()))?;
+    ctx.place = Some(Place {
+        host,
+        id,
+        closes_when_done,
+    });
+    execute_add(&ctx, plan).await
 }
 
 /// Tell the place this process runs in that it hosts `workspace`, whose
-/// `agent` starts there. A session the user opened is labelled once an agent
+/// `agent` starts there: it takes `label`, and closes with the workspace
+/// when it should. A session the user opened is labelled once an agent
 /// starts in it.
 pub(in crate::cli) async fn host_workspace(
     ctx: &Context,
@@ -585,22 +642,32 @@ pub(in crate::cli) async fn host_workspace(
     agent: Option<&str>,
     label: &str,
 ) -> Result<()> {
-    match (&ctx.place, agent) {
-        (Some(place), _) => place.host_workspace(ctx, workspace, agent, label).await,
-        (None, Some(agent)) => {
-            if let Err(error) = label_current(&workspace.id, agent).await {
-                eprintln!("warning: {error:#}");
+    let labelled = match (&ctx.place, agent) {
+        (Some(place), _) => {
+            if place.closes_when_done {
+                closing::start_watcher(ctx, place.host, &place.id, &workspace.id)?;
             }
-            Ok(())
+            place.host.rename_place(&place.id, label).await;
+            place
+                .host
+                .label_current(&workspace.id, agent.unwrap_or_default())
+                .await
         }
+        (None, Some(agent)) => label_current(&workspace.id, agent).await,
         (None, None) => Ok(()),
+    };
+    if let Err(error) = labelled {
+        eprintln!("warning: {error:#}");
     }
+    Ok(())
 }
 
 /// Whether the shell that started this process enters a new workspace
 /// afterwards: the caller's own or that of the place opened for it.
 pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
-    ctx.place.as_ref().is_none_or(|place| place.keeps_shell())
+    ctx.place
+        .as_ref()
+        .is_none_or(|place| place.host.places_keep_shells())
 }
 
 /// Whether an agent launched here runs in a session this terminal attaches

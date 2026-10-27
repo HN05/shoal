@@ -7,14 +7,14 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, Place, PlaceName, PlaceState, Placement};
+use super::{DemoWorker, Host, PlaceName, PlaceState, Placement};
 
 mod demo;
 use crate::cli::{
     client,
     commands::{
         issues::{self, Issue},
-        workspaces::{AddPlan, execute_add},
+        workspaces::AddPlan,
     },
     context::Context,
     internal,
@@ -27,11 +27,6 @@ use crate::{
     state::AgentState,
     subprocess::Run,
 };
-
-struct Tab {
-    id: String,
-    close_when_done: bool,
-}
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place.
@@ -61,8 +56,9 @@ impl Host for Herdr {
         issue: Option<&'a Issue>,
         _name: &'a str,
         placement: Placement,
+        worker: &'a [OsString],
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(start_add(ctx, settings, plan, issue, placement))
+        Box::pin(start_add(ctx, settings, plan, issue, placement, worker))
     }
 
     fn run_in_background<'a>(
@@ -130,6 +126,14 @@ impl Host for Herdr {
         Box::pin(tab_state(place))
     }
 
+    fn closes_when_done(&self, settings: &Effective) -> bool {
+        settings.herdr.close_when_done
+    }
+
+    fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
+        Box::pin(rename_tab(place, label))
+    }
+
     fn start_demo<'a>(
         &'a self,
         ctx: &'a Context,
@@ -168,15 +172,16 @@ fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
 }
 
-/// Run `plan` in a new tab that takes focus as `placement` asks, unless
-/// `herdr.new_tab` is off. Without `issue`, a tab name template that names it
-/// looks it up.
+/// Run `plan` in a new tab with `worker`, taking focus as `placement` asks,
+/// unless `herdr.new_tab` is off. Without `issue`, a tab name template that
+/// names it looks it up.
 async fn start_add(
     ctx: &Context,
     settings: &Effective,
     plan: &mut AddPlan,
     issue: Option<&Issue>,
     placement: Placement,
+    worker: &[OsString],
 ) -> Result<bool> {
     if !settings.herdr.new_tab {
         return Ok(false);
@@ -193,7 +198,7 @@ async fn start_add(
     }
     let directive = TabDirective::create()?;
     let created = create_tab(ctx, plan, &directive, placement == Placement::Focus).await?;
-    submit_worker(ctx, created, settings.herdr.close_when_done).await?;
+    run_in_pane(&created.root_pane.pane_id, worker).await?;
     directive.hand_over()?;
     Ok(true)
 }
@@ -399,15 +404,6 @@ async fn created(create: Command) -> Result<CreatedResult> {
     Ok(created.result)
 }
 
-async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
-    let argv = internal::internal_command(
-        &ctx.paths,
-        false,
-        internal::Worker::Herdr { close_when_done },
-    )?;
-    run_in_pane(&created.root_pane.pane_id, &argv).await
-}
-
 async fn run_in_pane(pane: &str, argv: &[OsString]) -> Result<()> {
     let mut run = Command::new("herdr");
     run.args(["pane", "run"])
@@ -462,49 +458,11 @@ fn shell_command(argv: &[OsString]) -> Result<String> {
     Ok(crate::shell::quote(&words))
 }
 
-pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> Result<i32> {
-    let plan = serde_json::from_str(payload).context("invalid Herdr workspace plan")?;
-    let id = current_tab().context("Herdr did not provide HERDR_TAB_ID")?;
-    ctx.place = Some(Box::new(Tab {
-        id,
-        close_when_done,
-    }));
-    execute_add(&ctx, plan).await
-}
-
-/// A tab takes the workspace's label and closes with the workspace.
-impl Place for Tab {
-    fn host_workspace<'a>(
-        &'a self,
-        ctx: &'a Context,
-        workspace: &'a Workspace,
-        _agent: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            self.watch_workspace(ctx, &workspace.id)?;
-            self.rename(label).await;
-            Ok(())
-        })
-    }
-}
-
-impl Tab {
-    async fn rename(&self, branch: &str) {
-        let mut rename = Command::new("herdr");
-        rename.args(["tab", "rename"]).arg(&self.id).arg(branch);
-        if let Err(error) = Run::new(rename).checked().await {
-            eprintln!("warning: cannot rename Herdr tab {}: {error:#}", self.id);
-        }
-    }
-
-    /// Observe lifecycle separately so returning from an agent leaves the tab
-    /// open.
-    fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
-        if !self.close_when_done {
-            return Ok(());
-        }
-        super::closing::start_watcher(ctx, &Herdr, &self.id, workspace)
+async fn rename_tab(tab: &str, label: &str) {
+    let mut rename = Command::new("herdr");
+    rename.args(["tab", "rename"]).arg(tab).arg(label);
+    if let Err(error) = Run::new(rename).checked().await {
+        eprintln!("warning: cannot rename Herdr tab {tab}: {error:#}");
     }
 }
 

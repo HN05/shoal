@@ -15,7 +15,7 @@ use crate::{
 pub struct Context {
     pub paths: Paths,
     /// The place a backend opened for this process, when it runs in one.
-    pub(in crate::cli) place: Option<Box<dyn super::terminal::Place>>,
+    pub(in crate::cli) place: Option<super::terminal::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
     /// What the command needs of the workspace a picker offers.

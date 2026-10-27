@@ -70,14 +70,6 @@ pub enum InternalCommand {
         push: bool,
         plan: String,
     },
-    /// Add the planned workspace inside its Herdr tab.
-    #[command(name = internal::HERDR)]
-    Herdr {
-        #[arg(long)]
-        close_when_done: bool,
-        #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
-        plan: String,
-    },
     /// Close a terminal host's place once its workspace completes or is removed.
     #[command(name = internal::PLACE_WATCH)]
     PlaceWatch {
@@ -111,9 +103,14 @@ pub enum InternalCommand {
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = internal::QUEUE_START)]
     QueueStart { entry: String },
-    /// Add the planned workspace inside its detached zmx session.
+    /// Add the planned workspace inside the place `host` opened for it.
     #[command(name = internal::ADD)]
     Add {
+        #[arg(long)]
+        host: String,
+        /// Close the place once the workspace is done.
+        #[arg(long)]
+        close_when_done: bool,
         #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
         plan: String,
     },
