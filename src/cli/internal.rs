@@ -21,6 +21,7 @@ pub const ADD: &str = "add";
 pub const COPY_IGNORED: &str = "copy-ignored";
 pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
+pub const PROXY_REPORT: &str = "proxy-report";
 
 pub enum Worker<'a> {
     /// Close `place` of `host` once `workspace` completes or is removed,
@@ -86,6 +87,11 @@ pub enum Worker<'a> {
     },
     /// Print the fzf actions that switch the picker to its next view.
     MenuNext,
+    /// Send `report`, the JSON of a proxy's report, for a wrapper of an
+    /// older release that the upgraded daemon no longer speaks to.
+    ProxyReport {
+        report: &'a str,
+    },
 }
 
 /// This executable for a command a terminal or session runs as typed,
@@ -214,6 +220,7 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
         }
         Worker::MenuRows { view } => args.extend([MENU_ROWS.into(), view.into()]),
         Worker::MenuNext => args.push(MENU_NEXT.into()),
+        Worker::ProxyReport { report } => args.extend([PROXY_REPORT.into(), report.into()]),
     }
     Ok(args)
 }

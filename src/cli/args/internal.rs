@@ -21,6 +21,10 @@ pub enum InternalCommand {
     MenuRows { view: commands::menu::View },
     /// Print the fzf actions that switch the bare `shoal` picker to its next view.
     MenuNext,
+    /// Send a proxy's report for an agent wrapper of an older release, which
+    /// an upgraded daemon's protocol no longer accepts.
+    #[command(name = internal::PROXY_REPORT)]
+    ProxyReport { report: String },
     /// Report the agent's turn state; Shoal's agent hooks call it.
     AgentState {
         state: crate::state::AgentState,

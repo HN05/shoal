@@ -7,7 +7,7 @@ pub mod completion;
 pub mod context;
 pub mod forge_hosts;
 mod help;
-mod installed;
+pub(crate) mod installed;
 pub mod internal;
 pub mod list_status;
 pub mod output;

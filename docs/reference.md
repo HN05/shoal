@@ -890,7 +890,7 @@ the agent unchanged. A Codex stream that gives up ends with a `response.failed`
 event, carrying the upstream's own error such as a usage limit and its reset,
 which ends its turn, instead of an HTTP failure Codex would retry itself, and the
 wrapper reports that turn for `retry`, which waits out rate and usage limits. `status`
-shows a request the proxy waits to retry; `--json` gives `proxy_retry` with
+shows a request the proxy waits to retry, which the wrapper reports, through the installed release once an upgrade changed the daemon's protocol under it; `--json` gives `proxy_retry` with
 `failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
 settings. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default

@@ -14,6 +14,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::Events { follow, since } => events::run(&ctx, follow, since).await,
         InternalCommand::MenuRows { view } => menu::print_rows(&ctx, view).await,
         InternalCommand::MenuNext => menu::print_next(&ctx),
+        InternalCommand::ProxyReport { report } => {
+            crate::proxy::send_relayed(&ctx.paths, &report).await
+        }
         InternalCommand::AgentState { state, workspace } => {
             agent_state::run(&ctx, workspace, state).await
         }

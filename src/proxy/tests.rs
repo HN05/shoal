@@ -80,3 +80,49 @@ fn a_proxy_key_is_written_out_or_read_from_the_agents_environment() {
     let printed = format!("{:?}", config.proxy["raw"]);
     assert!(!printed.contains("sk-raw"), "{printed}");
 }
+
+#[tokio::test]
+async fn a_report_goes_through_the_installed_release_only_once_it_replaced_the_wrapper() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    let binary = root.path().join("shoal");
+    let received = root.path().join("received");
+    let install = |script: &str| {
+        // A new file, as an upgrade puts one there.
+        let staged = root.path().join("staged");
+        std::fs::write(&staged, script).unwrap();
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::rename(&staged, &binary).unwrap();
+    };
+    install("#!/bin/sh\nexit 1\n");
+    let executable = crate::cli::installed::Executable::at(binary.clone());
+    let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
+    // Before an upgrade there is nothing to hand it to.
+    assert!(!launch::relay(&paths, &executable, report).await);
+    install(&format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
+        received.display()
+    ));
+    assert!(launch::relay(&paths, &executable, report).await);
+    let args = std::fs::read_to_string(&received).unwrap();
+    let args: Vec<_> = args.lines().collect();
+    assert_eq!(args[args.len() - 3..], ["internal", "proxy-report", report]);
+}
+
+#[tokio::test]
+async fn the_proxy_report_worker_sends_only_a_proxys_reports() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    for report in [
+        r#"{"set_agent_state":{"workspace":"w","state":"idle"}}"#,
+        r#"{"report_turn_failure":{"workspace":"w","failure":"overloaded"}}"#,
+    ] {
+        let error = send_relayed(&paths, report).await.unwrap_err();
+        assert!(
+            format!("{error:#}").contains("only a proxy's reports"),
+            "{error:#}"
+        );
+    }
+    assert!(send_relayed(&paths, "not json").await.is_err());
+}

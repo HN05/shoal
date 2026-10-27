@@ -60,6 +60,74 @@ impl Running {
     }
 }
 
+/// Send a wrapper's `report` to the daemon, through the installed release
+/// when an upgrade changed the daemon's protocol under this wrapper.
+async fn send(paths: &crate::paths::Paths, report: crate::protocol::AgentMethod) {
+    let Ok(json) = serde_json::to_string(&report) else {
+        return;
+    };
+    if let Err(error) = crate::cli::client::call(paths, report).await
+        && error.is::<crate::cli::client::ProtocolMismatch>()
+    {
+        relay(paths, wrapper_executable(), &json).await;
+    }
+}
+
+/// The binary this wrapper started from, read once, so a later upgrade
+/// shows as its replacement.
+fn wrapper_executable() -> &'static crate::cli::installed::Executable {
+    static EXECUTABLE: std::sync::OnceLock<crate::cli::installed::Executable> =
+        std::sync::OnceLock::new();
+    EXECUTABLE.get_or_init(crate::cli::installed::Executable::current)
+}
+
+/// Hand `report`, a proxy report's JSON, to the binary installed over
+/// `executable`, whose protocol the upgraded daemon speaks; whether it sent
+/// it. Nothing runs when nothing replaced it.
+pub(super) async fn relay(
+    paths: &crate::paths::Paths,
+    executable: &crate::cli::installed::Executable,
+    report: &str,
+) -> bool {
+    let Some(installed) = executable.installed() else {
+        return false;
+    };
+    let worker = crate::cli::internal::Worker::ProxyReport { report };
+    let Ok(argv) = crate::cli::internal::internal_command(paths, true, worker) else {
+        return false;
+    };
+    tokio::process::Command::new(installed)
+        .args(&argv[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await
+        .is_ok_and(|status| status.success())
+}
+
+/// Send `report`, the JSON of a proxy report a wrapper of an older release
+/// could not, as the `proxy-report` worker does. Only the wrapper's own
+/// reports go through it.
+pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i32> {
+    use crate::protocol::AgentMethod;
+    let report: AgentMethod = serde_json::from_str(report).map_err(anyhow::Error::from)?;
+    anyhow::ensure!(
+        matches!(
+            report,
+            AgentMethod::ReportProxyRetry { .. }
+                | AgentMethod::ReportUpstreamReset { .. }
+                | AgentMethod::ReportTurnFailure {
+                    execution: Some(_),
+                    ..
+                }
+        ),
+        "the proxy-report worker sends only a proxy's reports"
+    );
+    crate::cli::client::call(paths, report).await?;
+    Ok(0)
+}
+
 /// Tell the daemon to forget what the proxy of `execution` in `workspace`
 /// reported once another replaces it or none runs: the retry it waited to
 /// make and its upstream's reset. A report that fails leaves them to the
@@ -79,7 +147,7 @@ pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execut
         },
     ];
     for report in reports {
-        let _ = crate::cli::client::call(paths, report).await;
+        send(paths, report).await;
     }
 }
 
@@ -176,9 +244,11 @@ impl Reporter {
     }
 
     /// The wrapper writes nothing, since its terminal is the agent's: a
-    /// report that fails leaves the retry or turn to the user.
+    /// report that fails leaves the retry or turn to the user. One an
+    /// upgraded daemon refuses for its protocol goes through the installed
+    /// release instead.
     async fn send(&self, report: crate::protocol::AgentMethod) {
-        let _ = crate::cli::client::call(&self.paths, report).await;
+        send(&self.paths, report).await;
     }
 }
 

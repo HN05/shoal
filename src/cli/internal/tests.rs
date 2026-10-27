@@ -288,3 +288,14 @@ fn queue_start_round_trips_its_entry() {
     };
     assert_eq!(entry, "entry-id");
 }
+
+#[test]
+fn proxy_report_round_trips_its_json() {
+    let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
+    let InternalCommand::ProxyReport { report: parsed } =
+        parse(Worker::ProxyReport { report }, true)
+    else {
+        panic!("expected proxy report worker");
+    };
+    assert_eq!(parsed, report);
+}
