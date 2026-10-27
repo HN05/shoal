@@ -107,6 +107,7 @@ impl Manager {
             id,
             &agent.name,
             Some(&Protection::restart().reason),
+            agent.turn,
         )
         .context("save the agent's recovery record")?;
         let (restart, answer) = Restart::new();

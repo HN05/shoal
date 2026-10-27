@@ -1,13 +1,20 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
-use super::{GuardMode, Manager, capacity::Activity};
+use super::{GuardMode, Manager, agent_turns::Turn, capacity::Activity};
 pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
-use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
+use crate::{
+    daemon::notifications::NotificationKind,
+    protocol::timing,
+    state::{AgentState, WorkspaceState},
+};
 
 mod restart;
 
@@ -561,7 +568,7 @@ impl Manager {
 
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
         !self
-            .stop_agents(&Protection::load(reason), Select::Newest)
+            .stop_agents(&Protection::load(reason), Select::One)
             .await
             .is_empty()
     }
@@ -575,21 +582,30 @@ impl Manager {
     }
 
     async fn stop_agents(&self, protection: &Protection, select: Select) -> Vec<StoppedAgent> {
+        // Without turns every agent counts as working, as one without hooks does.
+        let turns = self.agent_turns().await.unwrap_or_else(|error| {
+            log!("agent turns unavailable to protection: {error:#}");
+            HashMap::new()
+        });
         let stopped: Vec<_> = {
             let mut agents = self.agents.lock().await;
             let running = agents
-                .iter_mut()
-                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow());
-            let selected: Vec<_> = match select {
-                Select::Newest => running
-                    .max_by_key(|(_, agent)| agent.started)
+                .iter()
+                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
+                .map(|(id, agent)| (id, agent.started));
+            let selected: Vec<String> = match select {
+                Select::One => first_to_stop(running, &turns)
                     .into_iter()
+                    .cloned()
                     .collect(),
-                Select::All => running.collect(),
+                Select::All => running.map(|(id, _)| id.clone()).collect(),
             };
             selected
                 .into_iter()
-                .filter_map(|(id, agent)| self.protect(id, agent, protection))
+                .filter_map(|id| {
+                    let turn = turns.get(&id).map(|turn| turn.state);
+                    self.protect(&id, agents.get_mut(&id)?, protection, turn)
+                })
                 .collect()
         };
         if !stopped.is_empty() {
@@ -608,6 +624,7 @@ impl Manager {
         id: &str,
         agent: &mut Agent,
         protection: &Protection,
+        turn: Option<AgentState>,
     ) -> Option<StoppedAgent> {
         let handoff = crate::execution::recovery::save_record(
             &self.paths,
@@ -615,6 +632,7 @@ impl Manager {
             id,
             &agent.name,
             Some(&protection.reason),
+            turn,
         );
         if let Err(error) = &handoff {
             log!("overload recovery handoff not saved: {error:#}");
@@ -659,8 +677,27 @@ impl Manager {
 }
 
 enum Select {
-    Newest,
+    /// The agent [`first_to_stop`] picks.
+    One,
     All,
+}
+
+/// Of the `running` agents, by execution and start, the one whose stop costs
+/// the least work: the one idle longest, otherwise the newest, which has the
+/// least progress to lose.
+fn first_to_stop<'a>(
+    running: impl Iterator<Item = (&'a String, Instant)>,
+    turns: &HashMap<String, Turn>,
+) -> Option<&'a String> {
+    let (idle, working): (Vec<_>, Vec<_>) =
+        running.partition(|(id, _)| turns.get(*id).is_some_and(Turn::idle));
+    match idle.into_iter().min_by_key(|(id, _)| turns[*id].since) {
+        Some((id, _)) => Some(id),
+        None => working
+            .into_iter()
+            .max_by_key(|(_, started)| *started)
+            .map(|(id, _)| id),
+    }
 }
 
 /// An agent asked to stop for protection.

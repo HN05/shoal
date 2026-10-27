@@ -149,7 +149,7 @@ async fn inspect_with_records(
     let paths = Paths::for_test(temp.path());
     paths.prepare().unwrap();
     if stopped {
-        crate::execution::recovery::save_record(&paths, "workspace", "agent", "codex", None)
+        crate::execution::recovery::save_record(&paths, "workspace", "agent", "codex", None, None)
             .unwrap();
     }
     let listener = UnixListener::bind(&paths.socket).unwrap();

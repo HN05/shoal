@@ -272,3 +272,83 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .unwrap();
     assert_eq!(manager.agents.lock().await.len(), 1);
 }
+
+#[tokio::test]
+async fn overload_stops_the_agent_idle_longest_before_working_ones() {
+    use crate::{execution::recovery::Record, state::AgentState};
+    let (_root, manager) = manager().await;
+    let repo = repository(_root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut agents = Vec::new();
+    for (name, state, idle_for) in [
+        ("working", AgentState::Working, 0),
+        ("idle-longest", AgentState::Idle, 120),
+        ("idle", AgentState::Idle, 60),
+    ] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap();
+        manager
+            .track_agent(
+                &execution.plan.id,
+                name,
+                &workspace.id,
+                &workspace.name,
+                false,
+                Duration::ZERO,
+            )
+            .await;
+        manager
+            .set_agent_state(
+                &workspace.name,
+                state,
+                Some(execution.plan.id.clone()),
+                None,
+            )
+            .await
+            .unwrap();
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspace_agent_state SET since=since-?2 WHERE workspace_id=?1",
+                    rusqlite::params![id, idle_for],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        agents.push((workspace, execution));
+    }
+    // The working agent started last, so the newest-first order alone would
+    // stop it first.
+    let stopped = |index: usize| *agents[index].1.stop.borrow();
+    for (index, turn) in [
+        (1, AgentState::Idle),
+        (2, AgentState::Idle),
+        (0, AgentState::Working),
+    ] {
+        assert!(
+            manager
+                .stop_agent_for_overload("critical memory pressure")
+                .await
+        );
+        assert!(stopped(index), "agent {index} stops next");
+        let (workspace, execution) = &agents[index];
+        let path = crate::execution::recovery::record_path(
+            &manager.paths,
+            &workspace.id,
+            &execution.plan.id,
+        );
+        assert_eq!(Record::load(&path).unwrap().unwrap().turn, Some(turn));
+    }
+}

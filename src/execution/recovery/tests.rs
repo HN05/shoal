@@ -15,6 +15,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
         "execution",
         "codex",
         Some("critical memory pressure"),
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -45,7 +46,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
             None,
         )
         .unwrap();
-    save_record(&paths, "workspace", "execution", "codex", None).unwrap();
+    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
     let record: Record = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(
         record.stop_reason.as_deref(),
@@ -67,7 +68,7 @@ fn only_a_daemon_saved_stop_counts_as_undelivered() {
     assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
     assert!(path.is_file());
     std::fs::remove_file(&path).unwrap();
-    save_record(&paths, "workspace", "execution", "codex", None).unwrap();
+    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
     assert!(discard_undelivered(&paths, "workspace", "execution").unwrap());
     assert!(!path.exists());
     assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
@@ -125,7 +126,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     assert!(!pending(&paths, "workspace").unwrap());
 
-    save_record(&paths, "workspace", "execution", "codex", None).unwrap();
+    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     let recovery = Recovery {

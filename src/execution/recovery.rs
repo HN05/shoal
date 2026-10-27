@@ -268,8 +268,12 @@ pub(crate) fn save_record(
     id: &str,
     agent: &str,
     reason: Option<&str>,
+    turn: Option<AgentState>,
 ) -> Result<PathBuf> {
-    let record = Record::new(agent, reason, Stage::Stopping, None);
+    let record = Record {
+        turn,
+        ..Record::new(agent, reason, Stage::Stopping, None)
+    };
     write_record(paths, workspace_id, id, record)
 }
 

@@ -75,3 +75,38 @@ async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_olde
     assert!(older_head?.unreadable.is_empty());
     Ok(())
 }
+
+#[tokio::test]
+async fn only_marked_processes_outside_the_group_run_outside_it() {
+    let mut background = tokio::process::Command::new("sleep")
+        .arg("60")
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let identity = process::capture(background.id().unwrap()).unwrap().unwrap();
+    let mut execution = Execution {
+        id: "agent".into(),
+        workspace_id: "workspace".into(),
+        state: crate::state::ExecutionState::Running,
+        wrapper: None,
+        child: None,
+        group_id: Some(std::process::id()),
+    };
+    let marked = |execution_id: &str| process::Scan {
+        processes: vec![process::OwnedProcess {
+            execution_id: execution_id.into(),
+            identity: identity.clone(),
+        }],
+        ..Default::default()
+    };
+    assert!(Processes::runs_outside_group(&execution, &marked("agent")));
+    assert!(!Processes::runs_outside_group(&execution, &marked("other")));
+    execution.group_id = Some(identity.pid);
+    assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
+
+    execution.group_id = Some(std::process::id());
+    background.kill().await.unwrap();
+    background.wait().await.unwrap();
+    assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
+}

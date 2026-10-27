@@ -127,6 +127,18 @@ pub fn alive(identity: &Identity) -> Result<bool> {
     Ok(capture(identity.pid)?.as_ref() == Some(identity))
 }
 
+/// The process group of the live process `identity` names, `None` once it
+/// has exited.
+pub fn group_of(identity: &Identity) -> Option<u32> {
+    if !alive(identity).unwrap_or(false) {
+        return None;
+    }
+    let pid = i32::try_from(identity.pid).ok()?;
+    // Reading a process group sends no signal.
+    let group = unsafe { libc::getpgid(pid) };
+    u32::try_from(group).ok()
+}
+
 /// Whether the process `identity` names has exited without its parent
 /// reaping it yet, so its CPU time has not reached the parent's.
 pub fn unreaped(identity: &Identity) -> Result<bool> {

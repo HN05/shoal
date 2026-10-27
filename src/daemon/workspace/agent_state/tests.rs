@@ -189,7 +189,15 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
         })
         .await
         .unwrap();
-    save_record(&manager.paths, &workspace.id, "stopped", "claude", None).unwrap();
+    save_record(
+        &manager.paths,
+        &workspace.id,
+        "stopped",
+        "claude",
+        None,
+        None,
+    )
+    .unwrap();
     for execution in ["stopped", "exited"] {
         manager
             .set_agent_state(

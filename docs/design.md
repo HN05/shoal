@@ -105,7 +105,11 @@ CPU is opt-in and requires sustained aggregate busy time. One `load` setting
 user chooses how hard to load the machine without tuning each percentage;
 explicit thresholds override it. Linux memory defaults rise with swap, which
 makes the OOM killer a later risk. Stop connected tracked
-agents through their execution wrappers, preserving work and leases. Once the
+agents through their execution wrappers, preserving work and leases: the agent
+idle longest first, since an idle agent loses no turn, and a working one, newest
+first, only when no idle one is left. An idle agent with processes outside its
+process group counts as working, since their completion may start its next
+turn, and so does one without turn reports. Once the
 wrapper reports the stop, the daemon also stops the agent's identity-verified
 processes outside its process group, such as background shell commands, since
 automatic and manual restores both require the execution proven stopped. When
@@ -1134,7 +1138,8 @@ completion `finished`, which only stopped work and an agent needing input
 outrank. A row's marker groups statuses by what they ask of the user, in a
 shape that reads without color. Like
 ready marks it is a status signal for integrations that never notifies,
-completes, or affects idle cleanup and overload decisions. A workspace keeps the
+completes, or affects idle cleanup; overload protection reads it only to stop
+idle agents first. A workspace keeps the
 latest report; a report from a tracked execution ends with that execution's
 record, while one from outside lasts until replaced or removal. Changes and
 endings are journal events; repeating the current state is not a change and

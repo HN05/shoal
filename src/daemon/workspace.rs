@@ -2,6 +2,7 @@
 mod adoption;
 pub(crate) mod agent_queue;
 pub(crate) mod agent_state;
+mod agent_turns;
 mod agents;
 mod branches;
 pub(crate) mod capacity;

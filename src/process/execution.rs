@@ -57,6 +57,19 @@ impl Processes {
         })
     }
 
+    /// Whether the scan found a process carrying the execution's marker
+    /// outside its process group, such as a background command an agent
+    /// started, whose completion may start its next turn. The wrapper is not
+    /// one.
+    pub fn runs_outside_group(execution: &Execution, scan: &process::Scan) -> bool {
+        scan.processes.iter().any(|owned| {
+            owned.execution_id == execution.id
+                && execution.wrapper.as_ref() != Some(&owned.identity)
+                && process::group_of(&owned.identity)
+                    .is_some_and(|group| execution.group_id.is_none_or(|own| group != own))
+        })
+    }
+
     /// A marker can establish ownership even when the original group leader died.
     pub fn unverified(&self) -> Vec<process::Identity> {
         self.group_candidates

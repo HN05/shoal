@@ -385,6 +385,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         &id,
         "fixture",
         Some("test memory pressure"),
+        None,
     )
     .unwrap();
     // A daemon stops accepting before it shuts down; the next one serves the

@@ -129,8 +129,11 @@ then suggests `shoal resume --all`.
 
 ### Overload protection
 
-At the configured memory threshold, the daemon asks the newest connected tracked
-agent to stop. Linux measures usage from `MemAvailable`, including reclaimable
+At the configured memory threshold, the daemon asks one connected tracked agent
+to stop: the one idle longest, otherwise the newest. An agent is idle when its
+hooks last reported a finished turn and none of its processes run outside its
+process group, such as a background command whose completion would start its
+next turn; an agent without turn reports counts as working. Linux measures usage from `MemAvailable`, including reclaimable
 cache; macOS uses native critical pressure. The wrapper terminates the process
 group through its normal grace period. The monitor waits for the cooldown before
 resampling and stopping another agent if pressure persists. It retains workspaces, execution recovery records and resource

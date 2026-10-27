@@ -130,6 +130,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
         "stopped-agent",
         "claude",
         Some("overload"),
+        None,
     )
     .unwrap();
 
