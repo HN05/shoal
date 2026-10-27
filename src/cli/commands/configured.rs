@@ -216,10 +216,10 @@ fn defined_globally(ctx: &Context, name: &str) -> Result<bool> {
 
 /// The daemon's workspaces; none without a running daemon.
 async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
-    if client::status(&ctx.paths).await?.is_none() {
-        return Ok(Vec::new());
+    match client::workspaces(&ctx.paths).await {
+        Err(error) if client::is_unreachable(&error) => Ok(Vec::new()),
+        workspaces => workspaces,
     }
-    client::workspaces(&ctx.paths).await
 }
 
 /// The workspace `named` selects, else the current one; `None` when it does
