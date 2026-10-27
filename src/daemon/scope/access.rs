@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 
 use super::Caller;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{approvals::ApprovalRequest, workspace::Manager},
     model::{Repository, Workspace, WorkspaceTarget},
     repository::Selector,
 };
@@ -67,6 +67,24 @@ impl Manager {
             "{refusal}"
         );
         Ok(workspace)
+    }
+
+    /// Approval request `id`, which must be routed to the caller to decide.
+    /// Only the stored routing counts; the decision rechecks it with its grant.
+    pub(in crate::daemon) async fn routed_approval(
+        &self,
+        caller: &Caller,
+        id: i64,
+    ) -> Result<ApprovalRequest> {
+        let request = self
+            .approval_request(id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?;
+        ensure!(
+            request.decider.as_deref() == Some(caller.workspace_id.as_str()),
+            "workspace processes decide only the approval requests routed to them; ask the user to run this command"
+        );
+        Ok(request)
     }
 
     /// The caller's own repository, which `repository` must select.

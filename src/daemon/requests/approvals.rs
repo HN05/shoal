@@ -1,7 +1,7 @@
 //! The daemon's answers to [`ApprovalMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -31,27 +31,11 @@ pub(super) async fn handle(
             approve,
             shown,
             details,
-        } => {
-            let decided = match &caller {
-                // A workspace process decides only what was routed to it.
-                Some(caller) => {
-                    manager
-                        .decide_routed_approval(
-                            &caller.workspace_id,
-                            id,
-                            approve,
-                            shown.map(|shown| *shown),
-                        )
-                        .await?
-                }
-                None => {
-                    manager
-                        .decide_approval(id, approve, shown.map(|shown| *shown), details)
-                        .await?
-                }
-            };
-            Body::ApprovalRequest(Box::new(decided))
-        }
+        } => Body::ApprovalRequest(Box::new(
+            manager
+                .decide_approval_as(caller, id, approve, shown.map(|shown| *shown), details)
+                .await?,
+        )),
         ApprovalMethod::EscalateApproval {
             workspace,
             id,
@@ -66,38 +50,27 @@ pub(super) async fn handle(
 
 impl Scoped for ApprovalMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
-        let owner = &caller.workspace_id;
         Ok(match self {
             ApprovalMethod::ListApprovals { workspace } => {
-                Some(workspace.get_or_insert_with(|| owner.clone()))
+                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
             }
             ApprovalMethod::ShowApproval { id } => {
                 show_approval(manager, Some(caller), *id).await?;
                 None
             }
             ApprovalMethod::DecideApproval { id, shown, .. } => {
-                // A coordinating agent decides the requests routed to it. Only the
-                // stored routing counts; the decision rechecks it with its grant.
-                let request = manager
-                    .approval_request(*id)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?;
-                ensure!(
-                    request.decider.as_deref() == Some(owner.as_str()),
-                    "workspace processes decide only the approval requests routed to them; ask the user to run this command"
-                );
-                if shown.is_none() {
-                    *shown = Some(Box::new(request));
-                }
+                shown.get_or_insert(Box::new(manager.routed_approval(caller, *id).await?));
                 None
             }
-            ApprovalMethod::EscalateApproval { workspace, .. } => {
-                ensure!(
-                    manager.workspace(workspace).await?.id == *owner,
-                    "workspace processes pass up only the approval requests routed to their own workspace"
-                );
-                Some(workspace)
-            }
+            ApprovalMethod::EscalateApproval { workspace, .. } => Some(
+                manager
+                    .own_workspace(
+                        caller,
+                        workspace,
+                        "workspace processes pass up only the approval requests routed to their own workspace",
+                    )
+                    .await?,
+            ),
             ApprovalMethod::WithdrawApproval { workspace, .. } => Some(workspace),
         })
     }

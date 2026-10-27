@@ -10,6 +10,7 @@ use crate::{
         log,
         notifications::{self, About, NotificationKind},
         resources::{Definition, LockMode, Scope},
+        scope::Caller,
         store,
         workspace::Manager,
     },
@@ -882,6 +883,25 @@ impl Manager {
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await
+    }
+
+    /// Decide request `id` as `caller`: a workspace process decides only what
+    /// was routed to it, and only the user decides with `details`.
+    pub(super) async fn decide_approval_as(
+        &self,
+        caller: Option<&Caller>,
+        id: i64,
+        approve: bool,
+        shown: Option<ApprovalRequest>,
+        details: proposals::ProposalDecision,
+    ) -> Result<ApprovalRequest> {
+        match caller {
+            Some(caller) => {
+                self.decide_routed_approval(&caller.workspace_id, id, approve, shown)
+                    .await
+            }
+            None => self.decide_approval(id, approve, shown, details).await,
+        }
     }
 
     /// Record the decision and tell the requesting workspace's agents about a
