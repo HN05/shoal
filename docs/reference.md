@@ -1099,8 +1099,9 @@ starts it as it starts a queued launch: in the Herdr pane the agent stopped in
 once that pane is back at its prompt, otherwise in a background tab where
 `herdr.new_tab` allows, otherwise in a detached zmx session. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
-and leaves the agent stopped. Stopping the workspace cancels a waiting one, and
-resuming or discarding the agent another way removes it.
+and leaves the agent stopped. Stopping the workspace or marking its assignment
+done cancels a pending one, and resuming or discarding the agent another way
+removes it.
 
 `--after` names work the launch waits for: a workspace or queued agent of the
 repository, or an issue number or URL; repeat it for more. An issue launch also

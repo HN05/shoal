@@ -231,9 +231,14 @@ impl Manager {
             .await
     }
 
-    /// Cancel the waiting restores of `workspace_id`'s stopped agents, which
-    /// stay stopped until `shoal resume`.
+    /// Cancel the restores of `workspace_id`'s stopped agents, waiting or
+    /// requested, which stay stopped until `shoal resume`. The queue gate
+    /// keeps dispatch from queueing a request meanwhile.
     pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &str) -> Result<()> {
+        let _gate = self.agent_queue_gate.lock().await;
+        for (execution, _) in recovery::restore_requests(&self.paths, workspace_id)? {
+            recovery::clear_restore_request(&self.paths, workspace_id, &execution)?;
+        }
         let workspace_id = workspace_id.to_owned();
         self.store
             .run(move |db| {

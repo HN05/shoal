@@ -92,6 +92,11 @@ impl Manager {
         );
         let closed = persisted.closed;
         self.forget_last_session(&workspace.id);
+        // A done assignment needs no agent; only naming the workspace in
+        // `shoal resume` restores it now.
+        if let Err(error) = self.cancel_stopped_restores(&workspace.id).await {
+            crate::daemon::log!("agent queue: {error:#}");
+        }
         self.notify(
             Some(&workspace.name),
             NotificationKind::WorkspaceDone,

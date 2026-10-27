@@ -107,8 +107,8 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     stop(&manager, &open, &running, SIGNALLED);
     stop(&manager, &open, "ended", SIGNALLED);
     stop(&manager, &open, "manual", STOPPED);
-    stop(&manager, &done, "finished", SIGNALLED);
     manager.mark_done(&done.id, false).await.unwrap();
+    stop(&manager, &done, "finished", SIGNALLED);
 
     manager.dispatch_queue().await.unwrap();
     let entries = manager.queue_entries().await.unwrap();
@@ -193,4 +193,37 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     }));
     // The agent stays stopped for `shoal resume`.
     assert!(record_path(&manager.paths, &workspace.id, "agent").exists());
+}
+
+#[tokio::test]
+async fn a_stop_or_completion_keeps_stopped_agents_down() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let busy = create(&manager, &repo, "busy").await;
+    let (_running, _connection) = connected_agent(&manager, &busy).await;
+    // A signal stop's request that dispatch has not queued yet.
+    let signalled = create(&manager, &repo, "signalled").await;
+    stop(&manager, &signalled, "requested", SIGNALLED);
+    manager
+        .stop_workspace("signalled", crate::daemon::workspace::StopRequest::manual())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(queue(&manager).await.is_empty());
+    let record = Record::load(&record_path(&manager.paths, &signalled.id, "requested"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.restore_request, None);
+
+    // A restore waiting when its assignment is done is cancelled.
+    let finished = create(&manager, &repo, "finished").await;
+    stop(&manager, &finished, "waiting", STOPPED);
+    manager
+        .queue_stopped_restore("finished", "waiting", herdr())
+        .await
+        .unwrap();
+    manager.mark_done(&finished.id, false).await.unwrap();
+    assert!(queue(&manager).await.is_empty());
+    assert!(record_path(&manager.paths, &finished.id, "waiting").exists());
 }
