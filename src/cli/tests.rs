@@ -494,3 +494,56 @@ fn numbered_requests_keep_inspection_and_actions_distinct() {
         ));
     }
 }
+
+/// Each built-in command below `command`, with its deferred arguments built,
+/// and its path below `shoal`.
+fn built_in_commands(
+    command: &clap::Command,
+    path: &[String],
+) -> Vec<(Vec<String>, clap::Command)> {
+    let mut commands = Vec::new();
+    for listed in command.get_subcommands() {
+        let mut built = listed.clone();
+        let _ = built.render_usage();
+        let mut below = path.to_vec();
+        below.push(built.get_name().to_owned());
+        commands.extend(built_in_commands(&built, &below));
+        commands.push((below, built));
+    }
+    commands
+}
+
+#[test]
+fn unknown_input_fails_at_every_built_in_level() {
+    use clap::error::ErrorKind;
+
+    let mut root = <Cli as clap::CommandFactory>::command();
+    let _ = root.render_usage();
+    let mut commands = built_in_commands(&root, &[]);
+    commands.push((Vec::new(), root));
+    let mut failures = Vec::new();
+    for (path, command) in &commands {
+        let mut expected = vec![
+            ("--bogus-flag", ErrorKind::UnknownArgument),
+            ("-h", ErrorKind::DisplayHelp),
+        ];
+        // A word a positional argument takes is a value, not a subcommand;
+        // the top level runs it as a configured command.
+        if command.has_subcommands()
+            && command.get_positionals().next().is_none()
+            && !path.is_empty()
+        {
+            expected.push(("bogus-subcommand", ErrorKind::InvalidSubcommand));
+        }
+        for (word, kind) in expected {
+            let words = std::iter::once("shoal")
+                .chain(path.iter().map(String::as_str))
+                .chain([word]);
+            let result = <Cli as clap::CommandFactory>::command().try_get_matches_from(words);
+            if result.as_ref().err().map(clap::Error::kind) != Some(kind) {
+                failures.push(format!("shoal {} {word}", path.join(" ")));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
