@@ -248,10 +248,15 @@ impl Manager {
     }
 
     pub async fn simulator_overview(&self, selector: Option<&str>) -> Result<SimulatorOverview> {
-        let owner = self.workspace_filter(selector).await?;
         Ok(SimulatorOverview {
-            simulators: self.list_simulators(owner.as_deref()).await?,
+            simulators: self.selected_simulators(selector).await?,
         })
+    }
+
+    /// The simulators of the workspace `selector` names, or all of them.
+    pub async fn selected_simulators(&self, selector: Option<&str>) -> Result<Vec<Simulator>> {
+        let owner = self.workspace_filter(selector).await?;
+        self.list_simulators(owner.as_deref()).await
     }
 
     /// Managed simulators; current ownership takes precedence over last ownership.

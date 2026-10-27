@@ -215,12 +215,15 @@ impl Manager {
             .await
     }
 
+    /// The clean requests of the workspace `selector` names, or of all of
+    /// them, newest first.
     pub async fn clean_history(
         &self,
-        owner: Option<String>,
+        selector: Option<&str>,
         limit: u32,
         before: Option<i64>,
     ) -> Result<Vec<AuditEntry>> {
+        let owner = self.workspace_filter(selector).await?;
         ensure!(
             (1..=50).contains(&limit),
             "history limit must be between 1 and 50"
