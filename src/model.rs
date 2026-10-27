@@ -708,6 +708,9 @@ pub struct QueueEntry {
     pub created_at: i64,
     /// The workspace a starting launch opened, or a restore's own.
     pub workspace_id: Option<String>,
+    /// The stopped execution a restore restores.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<String>,
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<String>,

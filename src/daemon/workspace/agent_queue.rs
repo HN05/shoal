@@ -1,6 +1,7 @@
-//! The agent queue: `shoal add` launches past `max_agents` wait here and start
-//! in order as slots free. Slots are counted from what the daemon already
-//! tracks, so a limit applies however an agent started.
+//! The agent queue: `shoal add` launches past `max_agents` and restores of
+//! stopped agents wait here and start in order as slots free. Slots are
+//! counted from what the daemon already tracks, so a limit applies however an
+//! agent started.
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
@@ -143,6 +144,19 @@ struct QueuedRow {
     kind: QueueKind,
     execution: Option<String>,
     workspace: Option<String>,
+    /// Whether the daemon starts it, rather than a waiting wrapper.
+    started_here: bool,
+}
+
+/// The waiting entries as admission sees them.
+struct WaitingWork {
+    entries: Vec<Waiting>,
+    /// Each restore a waiting wrapper carries out, by entry ID, with its
+    /// execution and wake.
+    restores: HashMap<String, (String, Wake)>,
+    /// The executions of the stopped agents whose restore the daemon starts,
+    /// which hold no slot until it is admitted.
+    stopped: HashSet<String>,
 }
 
 /// The executions of the `waiting` restores that wait for an update with
@@ -172,8 +186,8 @@ fn dormant_restores(
 fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,workspace_id FROM agent_queue
-             WHERE state=?1 ORDER BY seq",
+            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL
+             FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
             Ok(QueuedRow {
@@ -182,6 +196,7 @@ fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 kind: row.get(2)?,
                 execution: row.get(3)?,
                 workspace: row.get(4)?,
+                started_here: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -324,7 +339,7 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
-const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,opens_workspace_id,base_branch";
+const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch";
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
@@ -390,11 +405,13 @@ impl Manager {
         })
     }
 
-    /// End abandoned starts and restores, then start the waiting entries that fit.
+    /// End abandoned starts and restores and those resolved another way,
+    /// then start the waiting entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue_gate.lock().await;
         self.expire_starting_entries().await?;
         self.expire_orphaned_restores().await?;
+        self.forget_resolved_restores().await?;
         self.admit_waiting(None).await?;
         Ok(())
     }
@@ -403,7 +420,11 @@ impl Manager {
     /// and return whether `caller`'s entry was admitted. An admitted restore
     /// is left to its waiting agent. Requires the queue gate.
     async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
-        let (mut waiting, restores) = self.waiting_work().await?;
+        let WaitingWork {
+            entries: mut waiting,
+            restores,
+            stopped,
+        } = self.waiting_work().await?;
         let bases = self.hold_back_dependents(&mut waiting).await?;
         if waiting.is_empty() {
             return Ok(false);
@@ -412,7 +433,8 @@ impl Manager {
             .iter()
             .map(|entry| entry.repository.clone())
             .collect();
-        let dormant = dormant_restores(&waiting, &restores);
+        let mut dormant = dormant_restores(&waiting, &restores);
+        dormant.extend(stopped);
         let slots = self.occupied_slots(&dormant).await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
@@ -436,8 +458,9 @@ impl Manager {
     }
 
     /// The queued entries in order, each restore with whether its agent
-    /// waits and what for, and each restore's execution and wake by entry ID.
-    async fn waiting_work(&self) -> Result<(Vec<Waiting>, HashMap<String, (String, Wake)>)> {
+    /// waits and what for. A restore the daemon starts is admitted like a
+    /// launch.
+    async fn waiting_work(&self) -> Result<WaitingWork> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
         let waiters: HashSet<String> = self
             .restore_waiters
@@ -447,6 +470,7 @@ impl Manager {
             .cloned()
             .collect();
         let mut restores = HashMap::new();
+        let mut stopped = HashSet::new();
         let mut waiting = Vec::new();
         for QueuedRow {
             id,
@@ -454,9 +478,14 @@ impl Manager {
             kind,
             execution,
             workspace,
+            started_here,
         } in queued
         {
             let work = match (kind, execution, workspace) {
+                (QueueKind::Restore, Some(execution), Some(_)) if started_here => {
+                    stopped.insert(execution);
+                    Work::Launch
+                }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
                     let waits = waiters.contains(&execution);
                     let wake = self.restore_wake(&workspace, &execution, waits).await?;
@@ -474,7 +503,11 @@ impl Manager {
                 work,
             });
         }
-        Ok((waiting, restores))
+        Ok(WaitingWork {
+            entries: waiting,
+            restores,
+            stopped,
+        })
     }
 
     /// Grant the admitted restores of `restores`, by execution.
@@ -511,7 +544,8 @@ impl Manager {
     }
 
     /// Mark `admitted` entries starting, each on its base from `bases`,
-    /// returning the launches the daemon starts.
+    /// returning those the daemon starts: launches and the restores that
+    /// carry a start environment.
     async fn mark_starting(
         &self,
         admitted: Vec<String>,
@@ -527,17 +561,16 @@ impl Manager {
                         "UPDATE agent_queue SET state=?2,seen_at=?3,base_branch=?4 WHERE id=?1",
                         params![id, QueueState::Starting, now, bases.remove(&id)],
                     )?;
-                    let (kind, name, env): (QueueKind, String, Option<String>) = tx.query_row(
-                        "SELECT kind,name,env FROM agent_queue WHERE id=?1",
+                    let (name, env): (String, Option<String>) = tx.query_row(
+                        "SELECT name,env FROM agent_queue WHERE id=?1",
                         [&id],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?)),
                     )?;
-                    if kind == QueueKind::Launch {
+                    if let Some(env) = env {
                         starts.push(Start {
                             id,
                             name,
-                            env: serde_json::from_str(&env.unwrap_or_default())
-                                .context("read queued environment")?,
+                            env: serde_json::from_str(&env).context("read queued environment")?,
                         });
                     }
                 }
@@ -713,8 +746,9 @@ impl Manager {
         Ok(slots)
     }
 
-    /// End starting launches whose holder has been gone for the grace period.
-    /// One that never opened a workspace failed to start, so say so.
+    /// End starting launches and restores the daemon started whose holder has
+    /// been gone for the grace period. A launch that never opened a workspace,
+    /// like a restore whose agent never registered, failed to start, so say so.
     async fn expire_starting_entries(&self) -> Result<()> {
         let held: HashSet<String> = self
             .agent_queue_holds
@@ -730,31 +764,37 @@ impl Manager {
                 let tx = db.transaction()?;
                 let stale = tx
                     .prepare(
-                        "SELECT id,name,workspace_id FROM agent_queue
-                         WHERE state=?1 AND kind=?2 AND seen_at<?3",
+                        "SELECT id,name,kind,workspace_id IS NULL FROM agent_queue
+                         WHERE state=?1 AND env IS NOT NULL AND seen_at<?2",
                     )?
-                    .query_map(
-                        params![QueueState::Starting, QueueKind::Launch, cutoff],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                    )?
-                    .collect::<rusqlite::Result<Vec<(String, String, Option<String>)>>>()?;
+                    .query_map(params![QueueState::Starting, cutoff], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<(String, String, QueueKind, bool)>>>()?;
                 let mut expired = Vec::new();
-                for (id, name, workspace) in stale {
+                for (id, name, kind, unopened) in stale {
                     if held.contains(&id) {
                         continue;
                     }
                     tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
-                    expired.push((name, workspace));
+                    let failure = match kind {
+                        QueueKind::Launch if unopened => {
+                            "its launch ended without opening the workspace"
+                        }
+                        QueueKind::Launch => continue,
+                        QueueKind::Restore => "its restore ended before the agent started",
+                    };
+                    expired.push((name, failure));
                 }
                 tx.commit()?;
                 Ok(expired)
             })
             .await?;
-        for (name, _) in expired.iter().filter(|(_, workspace)| workspace.is_none()) {
+        for (name, failure) in expired {
             self.notify(
-                Some(name),
+                Some(&name),
                 NotificationKind::QueueFailed,
-                format!("{name} did not start from the agent queue: its launch ended without opening the workspace"),
+                format!("{name} did not start from the agent queue: {failure}"),
             )
             .await;
         }
@@ -763,7 +803,8 @@ impl Manager {
 
     /// Forget restores whose wrapper has been gone for the grace period, such
     /// as one that never reattached after a daemon restart. Its recovery
-    /// record stays for `shoal resume`.
+    /// record stays for `shoal resume`. A restore the daemon starts has no
+    /// wrapper.
     async fn expire_orphaned_restores(&self) -> Result<()> {
         let connected: HashSet<String> = self.connections.lock().await.keys().cloned().collect();
         let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
@@ -771,7 +812,10 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 let stale = tx
-                    .prepare("SELECT execution_id FROM agent_queue WHERE kind=?1 AND seen_at<?2")?
+                    .prepare(
+                        "SELECT execution_id FROM agent_queue
+                         WHERE kind=?1 AND env IS NULL AND seen_at<?2",
+                    )?
                     .query_map(params![QueueKind::Restore, cutoff], |row| row.get(0))?
                     .collect::<rusqlite::Result<Vec<String>>>()?;
                 for execution in stale.iter().filter(|id| !connected.contains(*id)) {
@@ -857,7 +901,8 @@ impl Manager {
             .await
     }
 
-    /// Remove a waiting entry by ID or name.
+    /// Remove a waiting entry by ID or name. A stopped agent whose restore is
+    /// removed stays stopped.
     pub async fn queue_remove(&self, selector: &str) -> Result<QueueEntry> {
         // Dispatch cannot start the entry between finding and deleting it.
         let _gate = self.agent_queue_gate.lock().await;
@@ -874,7 +919,7 @@ impl Manager {
             "several queue entries are named {selector}; pass the entry ID"
         );
         ensure!(
-            entry.kind == QueueKind::Launch,
+            entry.kind == QueueKind::Launch || self.restores_stopped_agent(&entry.id).await?,
             "{0} waits to restore its stopped agent; shoal stop {0} cancels the restore",
             entry.name
         );
@@ -1233,6 +1278,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         position: None,
         created_at: row.get("created_at")?,
         workspace_id: row.get("workspace_id")?,
+        execution: row.get("execution_id")?,
         opens: row.get("opens_workspace_id")?,
         waiting_for: Vec::new(),
         waits_for_update: false,
@@ -1241,6 +1287,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
 }
 
 mod dependencies;
+mod stopped;
 mod wake;
 
 pub(crate) use wake::Grant;

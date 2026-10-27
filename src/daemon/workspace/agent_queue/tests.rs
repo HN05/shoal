@@ -164,7 +164,7 @@ pub(super) async fn register(
 }
 
 /// Limit the machine to `limit` agents; host disk must not decide the test.
-fn limit_globally(manager: &Manager, limit: u32) {
+pub(super) fn limit_globally(manager: &Manager, limit: u32) {
     manager.publish_config(global_config(&format!(
         "max_agents = {limit}\n[overload.disk]\nenabled = false"
     )));
@@ -494,7 +494,7 @@ async fn low_disk_holds_fixed_limits() {
 
 /// An agent connected in `workspace`, which protection may stop, and the
 /// receiver that keeps its connection open.
-async fn connected_agent(
+pub(super) async fn connected_agent(
     manager: &Manager,
     workspace: &crate::model::Workspace,
 ) -> (String, tokio::sync::watch::Receiver<bool>) {
@@ -629,7 +629,7 @@ fn publish_recovery(manager: &Manager) {
 }
 
 /// Each entry's name, kind and state in queue order.
-async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
+pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
     manager
         .queue_entries()
         .await

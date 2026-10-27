@@ -32,6 +32,13 @@ pub enum QueueMethod {
         entry: String,
         error: String,
     },
+    /// Queue the restore of a stopped agent, which the daemon starts with
+    /// `env` once admitted.
+    QueueRestore {
+        workspace: String,
+        execution: String,
+        env: std::collections::BTreeMap<String, String>,
+    },
 }
 
 impl QueueMethod {

@@ -882,7 +882,7 @@ impl Manager {
         })
     }
 
-    /// Stop every execution, cancelling agents' waiting automatic restores.
+    /// Stop every execution, cancelling agents' waiting restores.
     pub async fn stop_workspace(&self, selector: &str, request: StopRequest) -> Result<()> {
         self.stop_workspace_executions(
             selector,
@@ -938,9 +938,12 @@ impl Manager {
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
-        let result = self
+        let mut result = self
             .stop_executions_keeping(&workspace.id, policy, &request, protected)
             .await;
+        if result.is_ok() && protected == Protected::Stop {
+            result = self.cancel_stopped_restores(&workspace.id).await;
+        }
         // A stop waiting for the user's confirmation has not failed.
         let failure = result
             .as_ref()

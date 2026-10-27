@@ -37,6 +37,15 @@ pub(super) async fn handle(
             manager.fail_queue_entry(&entry, &error).await?;
             Body::Ok
         }
+        QueueMethod::QueueRestore {
+            workspace,
+            execution,
+            env,
+        } => Body::QueueEntry(
+            manager
+                .queue_stopped_restore(&workspace, &execution, env)
+                .await?,
+        ),
     }))
 }
 
@@ -49,7 +58,8 @@ impl Scoped for QueueMethod {
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueHold { .. }
             | QueueMethod::QueueAttach { .. }
-            | QueueMethod::QueueFail { .. } => return Err(denied()),
+            | QueueMethod::QueueFail { .. }
+            | QueueMethod::QueueRestore { .. } => return Err(denied()),
         })
     }
 }
