@@ -20,7 +20,15 @@ pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Re
     for found in &found {
         merge_into(&mut merged, read(&found.value, directory)?);
     }
-    merged["env"]["ANTHROPIC_BASE_URL"] = Value::String(url.to_owned());
+    let env = merged
+        .as_object_mut()
+        .expect("merged settings are an object")
+        .entry("env")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(env) = env.as_object_mut() else {
+        anyhow::bail!("Claude settings' env is not a JSON object");
+    };
+    env.insert("ANTHROPIC_BASE_URL".into(), Value::String(url.to_owned()));
     replace(args, &found, &merged);
     Ok(())
 }

@@ -73,6 +73,7 @@ fn settings_that_cannot_be_read_fail_the_launch() {
     for (value, message) in [
         ("missing.json", "read Claude settings"),
         ("{not json", "parse Claude settings"),
+        (r#"{"env":false}"#, "env is not a JSON object"),
         ("{}", ""),
     ] {
         let mut given = args(&["claude", "--settings", "{}", "--settings", value]);
