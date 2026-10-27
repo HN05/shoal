@@ -5,8 +5,8 @@ use std::{collections::HashSet, io};
 use anyhow::{Result, ensure};
 
 use super::{
-    Cell, Entries, pick, pick_many, picker_width, require_interactive, rows_with_status,
-    status_cell,
+    Cell, Entries, chat_entries, pick, pick_many, picker_width, require_interactive,
+    rows_with_status, status_cell,
 };
 use crate::{
     cli::{
@@ -20,7 +20,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     execution::recovery,
-    model::Workspace,
+    model::{Chat, Workspace},
     paths::Paths,
 };
 
@@ -297,6 +297,23 @@ pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result
     let entries = workspace_entries(ctx, workspaces, true).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick(ctx, "Workspace> ", entries)
+}
+
+/// Pick a workspace, as [`pick_workspace`] offers them, or one of `chats`,
+/// listed after them by name. Returns the chosen workspace's or chat's ID.
+pub async fn pick_workspace_or_chat(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    chats: &[Chat],
+) -> Result<String> {
+    let mut entries = workspace_entries(ctx, workspaces, true).await;
+    entries.extend(chat_entries(
+        chats,
+        Palette::stderr(ctx.json),
+        picker_width(),
+    ));
+    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    pick(ctx, "Workspace or chat> ", entries)
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {

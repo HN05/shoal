@@ -64,6 +64,10 @@ impl Integration for Happy {
         Box::pin(async move { start_chat(ctx, self, chat).await.map(Some) })
     }
 
+    fn chat_place(&self) -> Option<&'static str> {
+        Some("the Happy app")
+    }
+
     fn launch<'a>(
         &'a self,
         ctx: &'a Context,

@@ -22673,10 +22673,11 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
-    let labels = format!("shoal.chat={id} shoal.agent=claude");
-    assert_eq!(calls[1][..3], ["attach", "--labels", &labels]);
-    // The session's Shoal records the chat under the name chosen here and
-    // becomes its agent.
+    // The session is named after the chat, cut to fit zmx's socket path.
+    let session = &CHAT_NAME[..32];
+    assert_eq!(calls[1][..2], ["attach", session]);
+    // The session's Shoal records the chat under the name chosen here,
+    // labels its session with it and becomes its agent.
     let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
     assert_eq!(calls[1][chat - 1], "--text");
     assert_eq!(
@@ -22693,6 +22694,16 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(started["chat"]["repository_id"], id);
     assert_eq!(started["chat"]["agent"], "claude");
     assert_eq!(started["chat"]["name"], CHAT_NAME);
+    let chat_id = started["chat"]["id"].as_str().unwrap();
+    assert_eq!(
+        calls[2],
+        [
+            "set",
+            session,
+            &format!("shoal.chat={chat_id}"),
+            "shoal.agent=claude"
+        ]
+    );
     assert_eq!(
         fs::read_to_string(home.join("chat-id")).unwrap().trim(),
         started["chat"]["id"].as_str().unwrap()
@@ -22732,21 +22743,23 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     // Chats are not workspace executions.
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 
-    // Inside a session the agent replaces Shoal in place, and a later chat
-    // starts another one instead of reusing it.
+    // Inside a session the agent replaces Shoal in place, labelling that
+    // session, and a later chat starts another one instead of reusing it.
     let before = zmx_calls(&fixture).len();
     let (output, transcript) = launch(
         fixture
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude"]),
+            .args(["chat", "--agent", "claude", "--name", "outer-chat"]),
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert_eq!(zmx_calls(&fixture).len(), before);
+    let calls = zmx_calls(&fixture);
+    assert_eq!(calls.len(), before + 1);
+    assert_eq!(calls[before][..2], ["set", "outer"]);
     assert_eq!(
         fs::read_to_string(home.join("chat-sessions")).unwrap(),
-        format!("{}\nouter\n", calls[1][3])
+        format!("{session}\nouter\n")
     );
 }
 
@@ -23734,6 +23747,101 @@ fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
     assert!(disabled > enabled, "zmx leaked mouse reporting mode");
 }
 
+/// Processes that stand in for chat agents, ended with the test.
+struct ChatProcesses(Vec<std::process::Child>);
+
+impl Drop for ChatProcesses {
+    fn drop(&mut self) {
+        for process in &mut self.0 {
+            let _ = process.kill();
+            let _ = process.wait();
+        }
+    }
+}
+
+#[test]
+fn attach_returns_to_chats_by_name() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let mut processes = ChatProcesses(Vec::new());
+    let mut start = |name: &str| {
+        let process = Command::new("sleep").arg("600").spawn().unwrap();
+        let response = fixture.request(serde_json::json!({"start_chat":{
+            "repository": repository["id"], "name": name, "agent": "claude", "pid": process.id()
+        }}));
+        processes.0.push(process);
+        assert_eq!(response["type"], "chat", "{response}");
+        response["data"]["id"].as_str().unwrap().to_owned()
+    };
+    let talk = start("talk");
+    let plan = start("plan-7");
+    start("quiet");
+    // Sessions are found by their label, whatever their name.
+    let session = |name: &str, chat: &str| {
+        format!("  name={name}\tpid=1\tclients=0\tshoal.agent=claude\tshoal.chat={chat}\n")
+    };
+    fs::write(
+        home.join("zmx-sessions"),
+        session("first", &plan) + &session("second", &talk),
+    )
+    .unwrap();
+    let attached = || {
+        zmx_calls(&fixture)
+            .into_iter()
+            .rfind(|call| call[0] == "attach")
+            .unwrap()
+    };
+
+    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "second"]);
+    assert!(
+        transcript.contains("detached from second; run `shoal attach talk` to return"),
+        "{transcript}"
+    );
+    let (output, transcript) = fixture.interactive(&["attach", "plan-7"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "first"]);
+
+    // In the checkout, with two chats running there, the picker offers the
+    // chats with sessions by name.
+    let (output, rows) = fixture.pick_in(&fixture.repo, &["attach"], &talk, "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    for (id, name) in [(&talk, "talk"), (&plan, "plan-7")] {
+        assert!(
+            rows.iter()
+                .any(|row| row.starts_with(id.as_str()) && row.contains(name)),
+            "{rows:?}"
+        );
+    }
+    assert_eq!(attached(), ["attach", "second"]);
+
+    // A chat without a session says where it runs instead.
+    let (output, transcript) = fixture.interactive(&["attach", "quiet"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains(
+            "quiet has no session to attach; it runs in the Herdr tab or terminal that started it"
+        ),
+        "{transcript}"
+    );
+
+    // Once the checkout's other chats end, attaching there needs no name.
+    for process in &mut processes.0[1..] {
+        process.kill().unwrap();
+        process.wait().unwrap();
+    }
+    let (output, transcript) = fixture.interactive_command(
+        fixture.command().current_dir(&fixture.repo).arg("attach"),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "second"]);
+}
+
 #[test]
 fn attach_selects_a_session_of_the_workspace() {
     let fixture = Fixture::new();
@@ -23756,7 +23864,7 @@ fn attach_selects_a_session_of_the_workspace() {
     let (output, transcript) = fixture.interactive(&["attach"], "");
     assert!(!output.status.success());
     assert!(
-        transcript.contains("no workspace has an agent session"),
+        transcript.contains("no workspace or chat has an agent session"),
         "{transcript}"
     );
 

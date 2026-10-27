@@ -697,10 +697,16 @@ in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
 
-`shoal attach [workspace]` reattaches to the workspace's session, with a picker
-or `--session <name>` when it has several; `shoal status` lists them. Sessions
-are named after the workspace, suffixed `-2`, `-3`, ... when the name is in use,
-and labelled `shoal.workspace=<id>`, so `zmx ls` and `zmx attach` work as well.
+`shoal attach [target]` reattaches to the session of the workspace or running
+[chat](#chats) named `target`, with a picker or `--session <name>` when a
+workspace has several; `shoal status` lists them. Without a target it takes the
+current workspace, else the only running chat of the current checkout, else a
+picker of the workspaces and chats with sessions. A chat running in a Herdr
+tab, the Happy app or a terminal outside zmx has no session, and attaching
+says where it runs instead. Sessions are named after the workspace or chat,
+suffixed `-2`, `-3`, ... when the name is in use, and labelled
+`shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
+`zmx ls` and `zmx attach` work as well.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,
@@ -957,8 +963,8 @@ where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
 opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
-session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
-inside a zmx session or a Herdr pane it runs in place. A Happy chat
+session named after the chat, which [`shoal attach <name>`](#agents)
+returns to; inside a zmx session or a Herdr pane it runs in place. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
 starts detached in the checkout as `shoal happy` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as

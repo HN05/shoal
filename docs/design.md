@@ -1183,7 +1183,10 @@ grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
-ends. A chat waits for the user to speak first unless it opens on a
+ends. The process the user runs chooses the name, so the tab or session that
+hosts the chat carries it before the chat is recorded; the recorded chat then
+labels its zmx session with its ID, so `shoal attach` finds the session by the
+chat's record, not by a session name zmx may have suffixed. A chat waits for the user to speak first unless it opens on a
 task: an agent that takes instructions apart from the first message gets them
 so, and another gets them as its first message, which starts a turn and so asks
 only for a short reply or carries the task.

@@ -19,9 +19,7 @@ pub(super) async fn current_repository(
     repos: Vec<Repository>,
     hint: &str,
 ) -> Result<String> {
-    let cwd = std::env::current_dir()?;
-    if let Ok(root) = git::worktree_root(&cwd).await {
-        let root = std::fs::canonicalize(root.trim_end())?;
+    if let Some(root) = current_root().await? {
         if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
             return Ok(repo.id.clone());
         }
@@ -38,6 +36,21 @@ pub(super) async fn current_repository(
         "no current registered repository; {hint}"
     );
     ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
+}
+
+/// The registered repository whose checkout the current directory is in.
+pub(super) async fn current_checkout(repos: &[Repository]) -> Result<Option<&Repository>> {
+    let root = current_root().await?;
+    Ok(repos.iter().find(|repo| Some(&repo.path) == root.as_ref()))
+}
+
+/// The root of the worktree the current directory is in.
+async fn current_root() -> Result<Option<std::path::PathBuf>> {
+    let cwd = std::env::current_dir()?;
+    match git::worktree_root(&cwd).await {
+        Ok(root) => Ok(Some(std::fs::canonicalize(root.trim_end())?)),
+        Err(_) => Ok(None),
+    }
 }
 
 /// The registered repository whose origin the issue URL belongs to.

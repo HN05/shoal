@@ -1,8 +1,8 @@
 //! zmx sessions keep terminal agents running after their terminal closes. zmx
 //! owns the pty, passes output through unchanged while attached, and restores
-//! the screen on attach; Shoal names each session after its workspace and
-//! labels it with the workspace ID so `shoal attach` can find it. Repository
-//! chats are labelled with the repository ID instead.
+//! the screen on attach; Shoal names each session after its workspace or chat
+//! and labels it with the workspace's or chat's ID so `shoal attach` can find
+//! it.
 use std::{
     collections::HashSet,
     ffi::{OsStr, OsString},
@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{DemoWorker, Host, Place, Placement, Session};
+use super::{ChatStart, DemoWorker, Host, Owner, OwnerKind, Place, Placement, Session};
 use crate::{
     cli::{
         agents::ensure_program,
@@ -29,7 +29,6 @@ use crate::{
     config::Effective,
     env,
     model::{Repository, Workspace},
-    repository,
     subprocess::Run,
     tools::Tool,
 };
@@ -115,13 +114,13 @@ impl Host for Zmx {
         ctx: &'a Context,
         _settings: &'a Effective,
         repository: &'a Repository,
-        agent: &'a str,
-        _name: &'a str,
+        name: &'a str,
         args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
+    ) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
-            run_chat(ctx, repository, agent, args).await?;
-            Ok(true)
+            run_chat(ctx, repository, name, args)
+                .await
+                .map(ChatStart::Session)
         })
     }
 
@@ -141,12 +140,8 @@ impl Host for Zmx {
         Box::pin(submit_prompt(session, text))
     }
 
-    fn label_current<'a>(
-        &'a self,
-        workspace_id: &'a str,
-        agent: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(label_current(workspace_id, agent))
+    fn label_current<'a>(&'a self, owner: Owner<'a>, agent: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(label_current(owner, agent))
     }
 
     fn keeps_agents_in_sessions(&self) -> bool {
@@ -157,20 +152,16 @@ impl Host for Zmx {
         on_terminal().then(|| Tool::Zmx.program())
     }
 
-    fn sessions<'a>(&'a self, workspace_id: &'a str) -> BoxFuture<'a, Result<Vec<Session>>> {
-        Box::pin(sessions(workspace_id))
+    fn sessions<'a>(&'a self, owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
+        Box::pin(sessions(owner))
     }
 
-    fn session_workspaces(&self) -> BoxFuture<'_, Result<HashSet<String>>> {
-        Box::pin(session_workspaces())
+    fn session_owners(&self, kind: OwnerKind) -> BoxFuture<'_, Result<HashSet<String>>> {
+        Box::pin(session_owners(kind))
     }
 
-    fn attach<'a>(
-        &'a self,
-        workspace: &'a Workspace,
-        session: &'a str,
-    ) -> BoxFuture<'a, Result<i32>> {
-        Box::pin(attach(workspace, session))
+    fn attach<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(attach(session))
     }
 
     fn start_demo<'a>(
@@ -209,7 +200,8 @@ impl Place for DetachedSession {
         _label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            if let Err(error) = label_current(&workspace.id, agent.unwrap_or_default()).await {
+            let owner = Owner::Workspace(&workspace.id);
+            if let Err(error) = label_current(owner, agent.unwrap_or_default()).await {
                 eprintln!("warning: {error:#}");
             }
             Ok(())
@@ -255,7 +247,7 @@ async fn run(
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach")
         .arg("--labels")
-        .arg(labels(WORKSPACE_LABEL, &workspace.id, agent))
+        .arg(labels(Owner::Workspace(&workspace.id), agent))
         .arg(&name)
         .args(&worker)
         .env_remove(env::SHELL_DIRECTIVE);
@@ -266,38 +258,31 @@ async fn run(
     finish(workspace, &name, status).await
 }
 
-/// Run Shoal with `args` for a chat in a new session at the repository's
-/// checkout and attach this terminal to it. The session's Shoal records the
-/// chat and becomes its agent, as it would in place.
+/// Run Shoal with `args` for the chat `name` in a new session named after
+/// it at the repository's checkout, and attach this terminal to it. The
+/// session's Shoal records the chat, labels the session with it and becomes
+/// its agent, as it would in place. Returns the session's name.
 async fn run_chat(
     ctx: &Context,
     repository: &Repository,
-    agent: &str,
+    name: &str,
     args: &[OsString],
-) -> Result<i32> {
+) -> Result<String> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
-    let name = free_name(&format!("{}-chat", repository::name(repository)), &taken);
+    let session = free_name(name, &taken);
     let mut argv = internal::session_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     let status = Command::new(Tool::Zmx.program())
         .arg("attach")
-        .arg("--labels")
-        .arg(labels(CHAT_LABEL, &repository.id, agent))
-        .arg(&name)
+        .arg(&session)
         .args(&argv)
         .current_dir(&repository.path)
         .env_remove(env::SHELL_DIRECTIVE)
         .status()
         .await
         .context("run zmx")?;
-    crate::execution::reset_input_modes();
-    if !status.success() {
-        bail!("zmx exited with {status}");
-    }
-    if list().await?.iter().any(|(session, _)| *session == name) {
-        eprintln!("shoal: detached from {name}; run `zmx attach {name}` to return");
-    }
-    Ok(0)
+    ended(status)?;
+    Ok(session)
 }
 
 /// The detached session's worker: add the workspace its launch planned, in
@@ -450,15 +435,15 @@ async fn submit_prompt(session: &OsStr, text: &str) -> Result<()> {
 }
 
 /// Label the zmx session this process runs in, when it runs in one, so
-/// `shoal attach` finds the workspace's agent there.
-async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
+/// `shoal attach` finds `owner`'s agent there.
+async fn label_current(owner: Owner<'_>, agent: &str) -> Result<()> {
     let Some(session) = std::env::var_os(SESSION_VAR) else {
         return Ok(());
     };
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)
-        .args(labels(WORKSPACE_LABEL, workspace_id, agent).split(' '));
+        .args(labels(owner, agent).split(' '));
     Run::new(set)
         .checked()
         .await
@@ -466,41 +451,39 @@ async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
     Ok(())
 }
 
-/// Attach this terminal to `session`, reporting a detach as `run` does.
-async fn attach(workspace: &Workspace, session: &str) -> Result<i32> {
+/// Attach this terminal to `session` until the user detaches or it ends.
+async fn attach(session: &str) -> Result<()> {
     ensure_program("attach", Tool::Zmx.program())?;
     let status = Command::new(Tool::Zmx.program())
         .args(["attach", session])
         .status()
         .await
         .context("run zmx")?;
-    finish(workspace, session, status).await
+    ended(status)
 }
 
-async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result<i32> {
+/// Restore the terminal after zmx left it, refusing a failed zmx.
+fn ended(status: ExitStatus) -> Result<()> {
     crate::execution::reset_input_modes();
     if !status.success() {
         bail!("zmx exited with {status}");
     }
-    if sessions(&workspace.id)
-        .await?
-        .iter()
-        .any(|session| session.name == name)
-    {
-        eprintln!(
-            "shoal: detached from {name}; run `shoal attach {}` to return",
-            workspace.name
-        );
-    }
+    Ok(())
+}
+
+async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result<i32> {
+    ended(status)?;
+    super::report_detach(Owner::Workspace(&workspace.id), &workspace.name, name).await?;
     Ok(0)
 }
 
-/// The workspace's running sessions, oldest name first.
-async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
+/// `owner`'s running sessions, oldest name first.
+async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
+    let label = owner_label(owner.kind());
     let mut sessions: Vec<_> = list()
         .await?
         .into_iter()
-        .filter(|(_, fields)| field(fields, WORKSPACE_LABEL) == Some(workspace_id))
+        .filter(|(_, fields)| field(fields, label) == Some(owner.id()))
         .map(|(name, fields)| Session {
             agent: field(&fields, AGENT_LABEL).map(str::to_owned),
             clients: field(&fields, "clients")
@@ -514,12 +497,13 @@ async fn sessions(workspace_id: &str) -> Result<Vec<Session>> {
     Ok(sessions)
 }
 
-/// The IDs of workspaces with at least one agent session.
-async fn session_workspaces() -> Result<HashSet<String>> {
+/// The IDs of the owners of `kind` with at least one agent session.
+async fn session_owners(kind: OwnerKind) -> Result<HashSet<String>> {
+    let label = owner_label(kind);
     Ok(list()
         .await?
         .into_iter()
-        .filter_map(|(_, fields)| field(&fields, WORKSPACE_LABEL).map(str::to_owned))
+        .filter_map(|(_, fields)| field(&fields, label).map(str::to_owned))
         .collect())
 }
 
@@ -560,19 +544,27 @@ fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
+/// The label that names a session's owner of `kind`.
+fn owner_label(kind: OwnerKind) -> &'static str {
+    match kind {
+        OwnerKind::Workspace => WORKSPACE_LABEL,
+        OwnerKind::Chat => CHAT_LABEL,
+    }
+}
+
 /// zmx separates labels with spaces, so an agent name containing one is left out.
-fn labels(owner: &str, id: &str, agent: &str) -> String {
-    let mut labels = format!("{owner}={id}");
+fn labels(owner: Owner<'_>, agent: &str) -> String {
+    let mut labels = format!("{}={}", owner_label(owner.kind()), owner.id());
     if !agent.is_empty() && !agent.contains(char::is_whitespace) {
         labels.push_str(&format!(" {AGENT_LABEL}={agent}"));
     }
     labels
 }
 
-/// The workspace name, shortened to fit a socket path, then suffixed `-2`,
-/// `-3`, ... past sessions that already use it.
-fn free_name(workspace: &str, taken: &HashSet<String>) -> String {
-    let base: String = workspace.chars().take(MAX_NAME_LEN).collect();
+/// The workspace's or chat's name, shortened to fit a socket path, then
+/// suffixed `-2`, `-3`, ... past sessions that already use it.
+fn free_name(owner: &str, taken: &HashSet<String>) -> String {
+    let base: String = owner.chars().take(MAX_NAME_LEN).collect();
     std::iter::once(base.clone())
         .chain((2..).map(|n| format!("{base}-{n}")))
         .find(|name| !taken.contains(name))

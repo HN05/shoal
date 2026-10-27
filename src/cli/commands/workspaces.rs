@@ -1741,7 +1741,9 @@ impl StatusView {
                 .await?;
         let chat = chat_name(&chats, &status.inspection.workspace);
         let (sessions, sessions_error) =
-            match terminal::sessions(&status.inspection.workspace.id).await {
+            match terminal::sessions(terminal::Owner::Workspace(&status.inspection.workspace.id))
+                .await
+            {
                 Ok(sessions) => (sessions, None),
                 Err(error) => (Vec::new(), Some(format!("{error:#}"))),
             };

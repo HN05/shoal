@@ -27,15 +27,15 @@ fn names_fit_the_socket_path_and_skip_taken_ones() {
 #[test]
 fn labels_leave_out_agent_names_zmx_cannot_hold() {
     assert_eq!(
-        labels(WORKSPACE_LABEL, "w1", "claude"),
+        labels(Owner::Workspace("w1"), "claude"),
         "shoal.workspace=w1 shoal.agent=claude"
     );
     assert_eq!(
-        labels(WORKSPACE_LABEL, "w1", "my agent"),
+        labels(Owner::Workspace("w1"), "my agent"),
         "shoal.workspace=w1"
     );
     assert_eq!(
-        labels(CHAT_LABEL, "r1", "codex"),
-        "shoal.chat=r1 shoal.agent=codex"
+        labels(Owner::Chat("c1"), "codex"),
+        "shoal.chat=c1 shoal.agent=codex"
     );
 }

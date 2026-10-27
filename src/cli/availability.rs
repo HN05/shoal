@@ -100,7 +100,7 @@ impl Need {
     /// What a picker reports when no workspace is left to offer.
     pub fn none_offered(self) -> &'static str {
         match self {
-            Self::Session => "no workspace has an agent session",
+            Self::Session => "no workspace or chat has an agent session",
             Self::Running => "nothing is running in any workspace",
             Self::Done => "no workspace is done",
             Self::Base => "no workspace has a base workspace",
@@ -143,7 +143,9 @@ pub struct Availability {
 impl Availability {
     pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Self {
         let sessions = if need == Need::Session {
-            terminal::session_workspaces().await.unwrap_or_default()
+            terminal::session_owners(terminal::OwnerKind::Workspace)
+                .await
+                .unwrap_or_default()
         } else {
             HashSet::new()
         };

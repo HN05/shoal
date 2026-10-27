@@ -39,12 +39,16 @@ pub enum SessionsCommand {
         #[arg(long)]
         sequential: bool,
     },
-    /// Attach this terminal to a workspace's agent session; Ctrl-\ detaches.
+    /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches.
     ///
-    /// Terminal agents run in zmx sessions that keep running after their
-    /// terminal closes or detaches.
+    /// Terminal agents and chats run in zmx sessions that keep running after
+    /// their terminal closes or detaches. Without a target, attaches the
+    /// current workspace's session, else the current checkout's only running
+    /// chat, else offers a picker.
     Attach {
-        workspace: Option<String>,
+        /// Workspace or running chat, by name.
+        #[arg(id = "workspace", value_name = "TARGET")]
+        target: Option<String>,
         /// Session to attach when the workspace has several.
         #[arg(long)]
         session: Option<String>,

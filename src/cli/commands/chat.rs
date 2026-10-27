@@ -141,6 +141,10 @@ pub(super) async fn begin(
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, &name, agent.name()).await?;
+    if let Err(error) = terminal::label_current(terminal::Owner::Chat(&chat.id), agent.name()).await
+    {
+        eprintln!("warning: {error:#}");
+    }
     run_here(
         ctx,
         &repo,
@@ -285,7 +289,7 @@ async fn start_beside(
         chat.push("--".into());
         chat.extend_from_slice(args);
     }
-    terminal::start_chat(ctx, settings, repo, agent.name(), name, &chat).await
+    terminal::start_chat(ctx, settings, repo, name, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, its opening

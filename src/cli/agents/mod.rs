@@ -98,6 +98,12 @@ pub(in crate::cli) trait Integration: Sync {
         Box::pin(async { Ok(None) })
     }
 
+    /// Where a chat [`Self::chat`] started runs, for a user looking for it;
+    /// `None` when the chat runs in a terminal.
+    fn chat_place(&self) -> Option<&'static str> {
+        None
+    }
+
     /// Whether a launch under `settings`, given a first message when
     /// `prompted`, starts the agent its own way instead of the tracked
     /// terminal launch, which a `tracked` launch always uses.
@@ -138,6 +144,12 @@ const ADDED: &[(&str, &dyn Integration)] = &[
 ];
 #[cfg(not(feature = "happy"))]
 const ADDED: &[(&str, &dyn Integration)] = &[];
+
+/// Where a chat of agent `name` runs when an integration it adds starts it
+/// outside any terminal, such as an app.
+pub(in crate::cli) fn chat_place(name: &str) -> Option<&'static str> {
+    added(name).and_then(|integration| integration.chat_place())
+}
 
 /// The integration that runs `name`, when an integration adds that agent.
 fn added(name: &str) -> Option<&'static dyn Integration> {

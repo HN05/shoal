@@ -195,6 +195,21 @@ fn tree_workspace_row(
     )
 }
 
+/// Picker entries for running chats, labelled as lists show them.
+pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> Entries {
+    let (markers, cells): (Vec<_>, Vec<_>) =
+        chats.iter().map(|chat| chat_row(chat, palette)).unzip();
+    let labels = markers
+        .into_iter()
+        .zip(aligned_to(cells, palette, title_limit(width)))
+        .map(|(marker, row)| format!("{marker} {row}"));
+    chats
+        .iter()
+        .map(|chat| chat.id.clone())
+        .zip(labels)
+        .collect()
+}
+
 fn chat_row(chat: &Chat, palette: Palette) -> (String, [Cell; 5]) {
     let status = ListStatus::ProcessRunning;
     (

@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{DemoWorker, Host, Place, PlaceName, Placement};
+use super::{ChatStart, DemoWorker, Host, Place, PlaceName, Placement};
 
 mod demo;
 use crate::cli::{
@@ -88,16 +88,15 @@ impl Host for Herdr {
         ctx: &'a Context,
         settings: &'a Effective,
         repository: &'a Repository,
-        _agent: &'a str,
         name: &'a str,
         args: &'a [OsString],
-    ) -> BoxFuture<'a, Result<bool>> {
+    ) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
             if !settings.herdr.new_tab {
-                return Ok(false);
+                return Ok(ChatStart::Here);
             }
             run_in_tab(ctx, &repository.path, name, args, true).await?;
-            Ok(true)
+            Ok(ChatStart::Tab)
         })
     }
 
