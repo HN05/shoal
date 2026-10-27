@@ -67,9 +67,8 @@ async fn check_removals(
 }
 
 async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
-    let result = remove_checked(ctx, check.workspace.id.clone(), &check).await?;
-    let mut output = serde_json::to_value(&result)?;
-    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
+    let result = remove_checked(ctx, &check).await?;
+    let output = removal_output(&result, &check)?;
     ctx.emit_styled(
         Style::Success,
         &removal_message("Workspace removed", &result),
@@ -83,11 +82,10 @@ async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
     let mut report = ui::Report::new("removed", "remove");
     for check in checks {
         let name = &check.workspace.name;
-        match remove_checked(ctx, check.workspace.id.clone(), &check).await {
+        match remove_checked(ctx, &check).await {
             Ok(result) => {
-                let mut output = serde_json::to_value(&result)?;
+                let mut output = removal_output(&result, &check)?;
                 output["workspace"] = json!(name);
-                output["holds"] = serde_json::to_value(&check.workspace.holds)?;
                 let message = removal_message(&format!("Removed {name}"), &result);
                 report.done(ctx, &message, output);
             }
@@ -99,13 +97,9 @@ async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
 /// saw: more appearing meanwhile makes the daemon refuse.
-async fn remove_checked(
-    ctx: &Context,
-    workspace: String,
-    check: &RemovalCheck,
-) -> Result<RemovalResult> {
+async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalResult> {
     let method = RemovalMethod::RemoveWorkspace {
-        workspace,
+        workspace: check.workspace.id.clone(),
         unsaved: UnsavedWork::confirming(check),
     };
     let result = leaving(
@@ -118,6 +112,13 @@ async fn remove_checked(
         eprintln!("warning: {error}");
     }
     Ok(result)
+}
+
+/// What JSON reports for a removal: its result and the workspace's holds.
+fn removal_output(result: &RemovalResult, check: &RemovalCheck) -> Result<serde_json::Value> {
+    let mut output = serde_json::to_value(result)?;
+    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
+    Ok(output)
 }
 
 /// Ask once before removing workspaces that would lose unsaved work or
