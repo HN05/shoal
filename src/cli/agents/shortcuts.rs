@@ -4,7 +4,7 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{LaunchOptions, desktop, trust::CODEX};
+use super::{LaunchOptions, codex::APP, trust::CODEX};
 #[cfg(feature = "happy")]
 use crate::happy::Agent;
 use crate::{agent::CodexMode, cli::context::Context, config::named_commands::Commands};
@@ -19,7 +19,7 @@ pub(in crate::cli) async fn codex(
     // Explicit desktop handoffs read no settings, so no prompt template.
     if mode == Some(CodexMode::App) {
         let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-        return desktop::open_app(ctx, &workspace, "codex", Some(&CODEX), args).await;
+        return super::launch::open_app(ctx, &workspace, APP, Some(&CODEX), args).await;
     }
     let options = LaunchOptions {
         tracked: mode == Some(CodexMode::Cli),
@@ -31,7 +31,7 @@ pub(in crate::cli) async fn codex(
 /// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex
 /// app its `--app` opens.
 fn codex_available(installed: &Installed) -> bool {
-    installed.agent("codex") || app_available("codex", installed)
+    installed.agent("codex") || app_available(APP, installed)
 }
 
 /// `shoal t3` and other shortcuts that only open an app.
@@ -42,7 +42,7 @@ pub(in crate::cli) async fn open_app(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-    desktop::open_app(ctx, &workspace, program, None, args).await
+    super::launch::open_app(ctx, &workspace, program, None, args).await
 }
 
 /// Whether the desktop shortcut that runs `program` can start: it starts no

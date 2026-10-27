@@ -4,20 +4,20 @@
 //! Codex app.
 use std::ffi::OsString;
 
-use anyhow::Result;
-use futures_util::future::BoxFuture;
 use serde_json::Value;
 
 use super::{
-    Integration, Launch, Wake, desktop,
+    Integration, Options, Wake,
     trust::{CODEX, TrustFile},
 };
 use crate::{
     agent::{CodexMode, hooks},
-    cli::context::Context,
-    config::Effective,
+    config,
     state::AgentState,
 };
+
+/// The program that opens the Codex app.
+pub(super) const APP: &str = "codex";
 
 pub(super) struct Codex;
 
@@ -37,28 +37,14 @@ impl Integration for Codex {
     fn wakes(&self) -> Wake {
         Wake::Prompt
     }
+}
 
-    /// `codex.default_mode = "app"` opens the Codex app, which cannot receive
-    /// a prompt, so a launch with one stays in the terminal, as a tracked one
-    /// does.
-    fn launches_itself(&self, settings: &Effective, prompted: bool, tracked: bool) -> bool {
-        !prompted && !tracked && settings.codex.default_mode == CodexMode::App
-    }
-
-    fn launch<'a>(
-        &'a self,
-        ctx: &'a Context,
-        launch: &'a mut Launch,
-    ) -> BoxFuture<'a, Result<Option<i32>>> {
-        Box::pin(async move {
-            if !self.launches_itself(&launch.settings, launch.prompt.is_some(), launch.tracked) {
-                return Ok(None);
-            }
-            let args = std::mem::take(&mut launch.args);
-            desktop::open_app(ctx, &launch.workspace, "codex", Some(&CODEX), args)
-                .await
-                .map(Some)
-        })
+/// What Codex's section sets: `codex.default_mode = "app"` hands launches to
+/// the Codex app.
+pub(super) fn options(config: &config::Codex) -> Options {
+    Options {
+        app: (config.default_mode == CodexMode::App).then_some(APP),
+        ..Options::default()
     }
 }
 

@@ -10,11 +10,11 @@ use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 use serde_json::json;
 
-use super::{ChatLaunch, Integration, Launch, trust::TrustFile};
+use super::{ChatLaunch, Integration, Launch, Options, trust::TrustFile};
 use crate::{
     ai::IntegrationKind,
     cli::{client, context::Context},
-    config::{Effective, templates},
+    config::{self, Effective, templates},
     execution,
     happy::{self, Agent},
     model::{Chat, Repository, Workspace},
@@ -46,13 +46,7 @@ impl Integration for Happy {
         self.inner().trust_file()
     }
 
-    fn unavailable(&self, settings: &Effective) -> Option<&'static str> {
-        (!settings.happy.enabled).then_some(
-            "Happy sessions are off; set happy.enabled = true in the repository or global config",
-        )
-    }
-
-    fn launches_itself(&self, _settings: &Effective, _prompted: bool, _tracked: bool) -> bool {
+    fn launches_itself(&self) -> bool {
         true
     }
 
@@ -80,6 +74,16 @@ impl Integration for Happy {
                 .await
                 .map(Some)
         })
+    }
+}
+
+/// What Happy's section sets: `happy.enabled` turns Happy sessions on.
+pub(super) fn options(config: &config::Happy) -> Options {
+    Options {
+        off: (!config.enabled).then_some(
+            "Happy sessions are off; set happy.enabled = true in the repository or global config",
+        ),
+        ..Options::default()
     }
 }
 

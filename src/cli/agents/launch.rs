@@ -1,10 +1,14 @@
-//! Tracked terminal launches: the agent's configured command with Shoal's
-//! instructions, hooks and prompt, run through the execution wrapper.
+//! Tracked terminal launches, the agent's configured command with Shoal's
+//! instructions, hooks and prompt, run through the execution wrapper, and
+//! untracked handoffs to a desktop app.
 use std::ffi::{OsStr, OsString};
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
-use super::{Integration, Launch, LaunchOptions, Wake, ensure_available};
+use super::{
+    AgentEnvironment, Integration, Launch, LaunchOptions, Wake, desktop, ensure_available,
+    trust::TrustFile,
+};
 use crate::{
     agent::Agent,
     cli::{
@@ -41,6 +45,25 @@ pub(super) async fn shortcut(
 ) -> Result<i32> {
     let workspace = shortcut_workspace(ctx, workspace).await?;
     super::launch_agent(ctx, agent, workspace, prompt, args, options).await
+}
+
+/// Hand `workspace` to `program`'s desktop app with `args`, untracked,
+/// trusting it first in the app's `trust` file, when it has one.
+pub(super) async fn open_app(
+    ctx: &Context,
+    workspace: &Workspace,
+    program: &str,
+    trust: Option<&TrustFile>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    super::ensure_program(&format!("{program} app"), program)?;
+    ensure!(workspace.path.is_dir(), "workspace directory is missing");
+    if let Some(trust) = trust {
+        // The app runs with this process's environment, not the workspace's.
+        let environment = AgentEnvironment::inherited(&ctx.paths.home);
+        trust.trust_workspace(ctx, workspace, &environment).await;
+    }
+    desktop::open(program, &workspace.path, args).await
 }
 
 /// Run `launch` as a tracked agent in its workspace, in a session this

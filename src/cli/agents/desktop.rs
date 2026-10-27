@@ -1,38 +1,20 @@
-//! Explicit, untracked desktop-app handoffs.
-use std::ffi::OsString;
+//! Desktop apps a launch hands a workspace to, which run untracked.
+use std::{ffi::OsString, path::Path};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 
-use super::{AgentEnvironment, trust::TrustFile};
-use crate::{cli::context::Context, env, execution, model::Workspace};
+use crate::{env, execution};
 
-/// Desktop launchers hand the directory to another process. Their short-lived
-/// command is not the agent session and must not own/kill the app's process
-/// group. `trust` is the app's trust file, when it has one.
-pub(super) async fn open_app(
-    ctx: &Context,
-    workspace: &Workspace,
-    program: &str,
-    trust: Option<&TrustFile>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    super::ensure_program(&format!("{program} app"), program)?;
-    ensure!(workspace.path.is_dir(), "workspace directory is missing");
-    if let Some(trust) = trust {
-        // The app runs with this process's environment, not the workspace's.
-        trust
-            .trust_workspace(
-                ctx,
-                workspace,
-                &AgentEnvironment::inherited(&ctx.paths.home),
-            )
-            .await;
-    }
+/// Open `program`'s app at `directory` with `args`, returning its
+/// launcher's exit code. The launcher hands the directory to another
+/// process; its short-lived command is not the agent session and must not
+/// own/kill the app's process group.
+pub(super) async fn open(program: &str, directory: &Path, args: Vec<OsString>) -> Result<i32> {
     let status = tokio::process::Command::new(program)
         .arg("app")
-        .arg(&workspace.path)
+        .arg(directory)
         .args(args)
-        .current_dir(&workspace.path)
+        .current_dir(directory)
         .env_remove(env::SHELL_DIRECTIVE)
         .status()
         .await
