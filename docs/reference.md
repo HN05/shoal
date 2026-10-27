@@ -559,8 +559,10 @@ Use `shoal run -- <command> <arguments>` for arbitrary commands and
 `shoal run check [--workspace W] -- <extra arguments>` for configured ones; the shorter `shoal check`
 form is equivalent when the name does not collide with a built-in command. Omit
 the workspace to use the current one, otherwise the picker, which offers only the
-workspaces that define a repository-only command. Unknown
-names are rejected with suggestions for similar built-ins. Put
+workspaces that define a repository-only command. Unless the global
+configuration, the current or named workspace, or on a terminal any workspace
+defines a name, it is rejected as unknown with suggestions for similar built-ins
+before its arguments are read, so `-h` and flags apply only to defined commands. Put
 Shoal's global flags before `run` or the shorthand command name. Bare `shoal run`
 lists each effective command's argument array, source layer, and whether its bare
 name is a built-in; outside a managed workspace it lists only global commands and

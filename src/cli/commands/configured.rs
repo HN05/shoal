@@ -101,14 +101,8 @@ async fn listing_layers(ctx: &Context, workspace: Option<String>) -> Result<Conf
 /// The repository layers of the current workspace; none without a running
 /// daemon or a current workspace.
 async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
-    if client::status(&ctx.paths).await?.is_none() {
-        return Ok(ConfigLayers::default());
-    }
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    let current = std::env::current_dir().ok();
-    let context = WorkspaceContext::from_directory(&workspaces, current.as_deref());
-    let workspace = context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory);
-    let Some(workspace) = workspace else {
+    let workspaces = running_workspaces(ctx).await?;
+    let Some(workspace) = current_workspace(&workspaces)? else {
         return Ok(ConfigLayers::default());
     };
     workspace_layers(ctx, workspace.id.clone()).await
@@ -131,17 +125,31 @@ struct Invocation {
     args: Vec<OsString>,
 }
 
-/// The name, workspace and arguments of `shoal <name>`; `None` once help
-/// has been printed.
-pub(super) type Invoked = (String, Option<String>, Vec<OsString>);
-
-pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<Invoked>> {
-    let name = words[0]
+/// The name `shoal <name>` runs.
+pub(super) fn command_name(words: &[OsString]) -> Result<String> {
+    Ok(words[0]
         .to_str()
         .context("command name must be UTF-8")?
-        .to_owned();
+        .to_owned())
+}
+
+/// The workspace `shoal <name>` names, read past help and argument errors so
+/// that the name is checked before either is reported.
+pub(super) fn named_workspace(words: &[OsString]) -> Option<String> {
+    Invocation::command()
+        .disable_help_flag(true)
+        .ignore_errors(true)
+        .try_get_matches_from(words)
+        .ok()?
+        .get_one::<String>("workspace")
+        .cloned()
+}
+
+/// The workspace and arguments of `shoal <name>`; `None` once help has been
+/// printed.
+pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<(Option<String>, Vec<OsString>)>> {
     match Invocation::try_parse_from(words) {
-        Ok(invocation) => Ok(Some((name, invocation.workspace, invocation.args))),
+        Ok(invocation) => Ok(Some((invocation.workspace, invocation.args))),
         Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {
             crate::cli::output::print_clap_output(&error);
             Ok(None)
@@ -150,39 +158,137 @@ pub(super) fn invocation(words: Vec<OsString>) -> Result<Option<Invoked>> {
     }
 }
 
+/// The configuration that defines a command for one run.
+pub(super) enum Definition {
+    /// The global configuration: the named or current workspace runs it, else
+    /// the one picked.
+    Global(Option<String>),
+    /// The named or current workspace's configuration.
+    Workspace(String),
+    /// Only these other workspaces define it; the user picks one.
+    Elsewhere(Vec<Workspace>),
+}
+
+/// Where `name` is defined for a run in the `named` or current workspace; an
+/// unknown command when no configuration it could run from defines it.
+pub(super) async fn definition(
+    ctx: &Context,
+    name: &str,
+    named: Option<String>,
+) -> Result<Definition> {
+    if defined_globally(ctx, name)? {
+        return Ok(Definition::Global(named));
+    }
+    let workspaces = running_workspaces(ctx).await?;
+    if let Some(workspace) = selected_workspace(ctx, &workspaces, named.clone()).await? {
+        if !defines(ctx, &workspace.id, name).await? {
+            return Err(unknown_command(name));
+        }
+        return Ok(Definition::Workspace(workspace.id.clone()));
+    }
+    let defining = defining_workspaces(ctx, workspaces, name).await;
+    if defining.is_empty() {
+        return Err(unknown_command(name));
+    }
+    // The arguments more likely belong to a mistyped built-in.
+    if let Some(selector) = named {
+        return Err(anyhow::anyhow!("unknown workspace: {selector}").context(unknown_command(name)));
+    }
+    if !ctx.interactive() {
+        return Err(anyhow::Error::new(ui::NoCurrentWorkspace)
+            .context("repository-only commands require a current or explicit workspace")
+            .context(unknown_command(name)));
+    }
+    Ok(Definition::Elsewhere(defining))
+}
+
+fn defined_globally(ctx: &Context, name: &str) -> Result<bool> {
+    Ok(Config::load(&ctx.paths)?
+        .resolve(&ConfigLayers::default())?
+        .commands
+        .contains_key(name))
+}
+
+/// The daemon's workspaces; none without a running daemon.
+async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
+    if client::status(&ctx.paths).await?.is_none() {
+        return Ok(Vec::new());
+    }
+    client::workspaces(&ctx.paths).await
+}
+
+/// The workspace `named` selects, else the current one; `None` when it does
+/// not exist or there is no current workspace.
+async fn selected_workspace<'a>(
+    ctx: &Context,
+    workspaces: &'a [Workspace],
+    named: Option<String>,
+) -> Result<Option<&'a Workspace>> {
+    let Some(selector) = named else {
+        return current_workspace(workspaces);
+    };
+    let selector = ui::explicit_workspace(ctx, selector).await?;
+    Ok(workspaces
+        .iter()
+        .find(|known| known.id == selector || known.name == selector))
+}
+
+/// The workspace of the current directory, else the caller's scope.
+fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
+    let current = ui::current_directory()?;
+    let context = WorkspaceContext::from_directory(workspaces, current.as_deref());
+    Ok(context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory))
+}
+
+async fn defines(ctx: &Context, workspace: &str, name: &str) -> Result<bool> {
+    let target = ConfigTarget::Workspace(workspace.to_owned());
+    Ok(client::settings(&ctx.paths, target)
+        .await?
+        .commands
+        .contains_key(name))
+}
+
+/// Those of `workspaces` whose repository configuration defines `name`.
+async fn defining_workspaces(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    name: &str,
+) -> Vec<Workspace> {
+    let mut defining = Vec::new();
+    for workspace in workspaces {
+        // A workspace whose configuration cannot load does not define it.
+        if defines(ctx, &workspace.id, name).await.unwrap_or(false) {
+            defining.push(workspace);
+        }
+    }
+    defining
+}
+
 pub(crate) async fn run(
     ctx: &Context,
     name: &str,
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let known_globally = Config::load(&ctx.paths)?
-        .resolve(&ConfigLayers::default())?
-        .commands
-        .contains_key(name);
-    let fallback = if known_globally {
-        Fallback::CurrentDirectory
-    } else {
-        Fallback::CurrentDirectoryOnly
-    };
-    let explicit = workspace.is_some();
-    let workspace = match ui::select_workspace(ctx, workspace, fallback).await {
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
-            let defining = defining_workspaces(ctx, name).await?;
-            if defining.is_empty() {
-                return Err(error
-                    .context("repository-only commands require a current or explicit workspace")
-                    .context(unknown_command(name)));
-            }
-            let workspace = ui::pick_workspace(ctx, defining).await?;
-            recent::record(ctx, &workspace).await;
-            workspace
+    let definition = definition(ctx, name, workspace).await?;
+    run_defined(ctx, name, definition, args).await
+}
+
+/// Runs `name` in a workspace whose configuration `definition` found it in.
+pub(super) async fn run_defined(
+    ctx: &Context,
+    name: &str,
+    definition: Definition,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    let workspace = match definition {
+        Definition::Global(named) => {
+            ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?
         }
-        workspace => workspace?,
+        Definition::Workspace(workspace) => workspace,
+        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining).await?,
     };
-    if explicit && !known_globally {
-        ensure_workspace_exists(ctx, name, &workspace).await?;
-    }
+    recent::record(ctx, &workspace).await;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(
@@ -194,39 +300,6 @@ pub(crate) async fn run(
     )
     .await?;
     execution::run_command(&ctx.paths, workspace, command).await
-}
-
-/// Refuses `name` as unknown when the workspace named in its arguments does
-/// not exist: the arguments more likely belong to a mistyped built-in.
-async fn ensure_workspace_exists(ctx: &Context, name: &str, workspace: &str) -> Result<()> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    if workspaces
-        .iter()
-        .any(|known| known.id == workspace || known.name == workspace)
-    {
-        return Ok(());
-    }
-    Err(anyhow::anyhow!("unknown workspace: {workspace}").context(unknown_command(name)))
-}
-
-/// Workspaces whose repository configuration defines `name`; none for
-/// noninteractive callers, who must name the workspace.
-async fn defining_workspaces(ctx: &Context, name: &str) -> Result<Vec<Workspace>> {
-    let mut defining = Vec::new();
-    if !ctx.interactive() {
-        return Ok(defining);
-    }
-    for workspace in client::workspaces(&ctx.paths).await? {
-        let target = ConfigTarget::Workspace(workspace.id.clone());
-        // A workspace whose configuration cannot load does not define it.
-        if client::settings(&ctx.paths, target)
-            .await
-            .is_ok_and(|settings| settings.commands.contains_key(name))
-        {
-            defining.push(workspace);
-        }
-    }
-    Ok(defining)
 }
 
 async fn expand(

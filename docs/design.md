@@ -791,7 +791,8 @@ provides an explicit spelling for names that collide with built-ins; built-ins w
 the bare shorthand. Without a current or explicit workspace, repository-only
 commands pick from the workspaces whose configuration defines them. Unknown
 names report a command error with suggestions for similar built-ins and never
-open a picker. Workspace fields expand once within individual
+open a picker; the definition is looked up before the arguments are parsed, so
+help and argument errors belong only to defined commands. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit` runs the
 `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path, through the same

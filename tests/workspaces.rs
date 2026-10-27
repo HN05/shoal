@@ -16674,10 +16674,8 @@ fn unknown_commands_never_open_the_workspace_picker() {
         .unwrap();
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
-    assert!(
-        error.contains("unknown command \"lsit\"") && error.contains("no current workspace"),
-        "{error}"
-    );
+    assert!(error.contains("unknown command \"lsit\""), "{error}");
+    assert!(!error.contains("workspace"), "{error}");
     assert!(!error.contains("non-interactive"), "{error}");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(
@@ -16713,6 +16711,84 @@ fn unknown_commands_never_open_the_workspace_picker() {
         .output()
         .unwrap();
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
+}
+
+/// The error message of a failed run, read from JSON when `json` is set.
+fn failure_message(output: &Output, json: bool) -> String {
+    if !json {
+        return String::from_utf8_lossy(&output.stderr).into_owned();
+    }
+    let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+    error["error"]["message"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn undefined_commands_fail_as_unknown_in_every_form() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("command-target");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[commands]\nlocal-check = ['printf', '%s', 'repository command']\n",
+    )
+    .unwrap();
+    for directory in [fixture.root.path(), path] {
+        for (format, json) in [("--text", false), ("--json", true)] {
+            for args in [
+                vec!["bogus"],
+                vec!["bogus", "-h"],
+                vec!["bogus", "--help"],
+                vec!["bogus", "--all"],
+                vec!["bogus", "command-target"],
+                vec!["bogus", "missing"],
+                vec!["bogus", "--", "x"],
+                vec!["run", "bogus"],
+                vec!["run", "bogus", "--workspace", "command-target"],
+            ] {
+                let output = fixture
+                    .command()
+                    .current_dir(directory)
+                    .arg(format)
+                    .args(&args)
+                    .output()
+                    .unwrap();
+                assert!(!output.status.success(), "{directory:?} {args:?}");
+                assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+                let error = failure_message(&output, json);
+                assert!(error.contains("unknown command \"bogus\""), "{error}");
+                assert!(!error.contains("workspace"), "{args:?}: {error}");
+            }
+        }
+    }
+
+    // A command the workspace defines parses its own arguments.
+    let help = fixture
+        .command()
+        .current_dir(path)
+        .args(["local-check", "-h"])
+        .output()
+        .unwrap();
+    assert!(help.status.success(), "{help:?}");
+    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check [WORKSPACE]"));
+    let flag = fixture
+        .command()
+        .current_dir(path)
+        .args(["local-check", "--all"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&flag.stderr).contains("unexpected argument '--all'"),
+        "{flag:?}"
+    );
+    let output = fixture.run(&["local-check", "command-target", "--", "extra"]);
+    assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
+    // Elsewhere only the workspace that defines it is missing.
+    let output = fixture.run(&["local-check", "-h"]);
+    let error = failure_message(&output, false);
+    assert!(error.contains("pass an explicit workspace"), "{error}");
+    let output = fixture.run(&["local-check", "missing"]);
+    let error = failure_message(&output, false);
+    assert!(error.contains("unknown workspace: missing"), "{error}");
 }
 
 #[test]

@@ -258,6 +258,12 @@ pub(super) async fn launch_agent(
     launch::tracked(ctx, integration, launch).await
 }
 
+/// Whether `shoal <name>` launches an agent rather than a configured command.
+pub(super) fn is_agent(ctx: &Context, name: &str) -> Result<bool> {
+    let tools = Config::load(&ctx.paths)?.ai.tools;
+    Ok(crate::ai::agents(&tools).any(|agent| agent == name) || added(name).is_some())
+}
+
 /// `shoal <name>` and `shoal run <name>`: agents launch with their prompts,
 /// other names run as plain configured commands.
 pub(super) async fn run_named(
@@ -266,9 +272,7 @@ pub(super) async fn run_named(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let tools = Config::load(&ctx.paths)?.ai.tools;
-    let runs_as_agent = crate::ai::agents(&tools).any(|agent| agent == name);
-    if !runs_as_agent && added(name).is_none() {
+    if !is_agent(ctx, name)? {
         return configured::run(ctx, name, workspace, args).await;
     }
     launch::shortcut(
