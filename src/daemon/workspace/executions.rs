@@ -893,15 +893,21 @@ impl Manager {
         .await
     }
 
-    /// Stop as [`Manager::stop_workspace`] does, treating executions whose
-    /// launch identity was never recorded as ended once nothing of them is
-    /// visible, because the user checked.
-    pub async fn stop_workspace_acknowledged(
+    /// Stop as [`Manager::stop_workspace`] does at the user's request. With
+    /// `acknowledge_unproven`, executions whose launch identity was never
+    /// recorded count as ended once nothing of them is visible, because the
+    /// user checked.
+    pub async fn stop_workspace_manually(
         &self,
         selector: &str,
-        request: StopRequest,
+        acknowledge_unproven: bool,
     ) -> Result<()> {
-        self.stop_workspace_executions(selector, request, Protected::Stop, StopPolicy::Acknowledged)
+        let policy = if acknowledge_unproven {
+            StopPolicy::Acknowledged
+        } else {
+            StopPolicy::RequireCompleteProof
+        };
+        self.stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
             .await
     }
 
