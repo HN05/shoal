@@ -59,6 +59,14 @@ impl Buffered {
         })
     }
 
+    /// Whether a subagent sent the request: Codex names the thread a
+    /// subagent's requests come from, or the kind of subagent.
+    pub(crate) fn sent_by_subagent(&self) -> bool {
+        ["x-codex-parent-thread-id", "x-openai-subagent"]
+            .iter()
+            .any(|name| self.headers.contains_key(*name))
+    }
+
     /// The stream that reports `failure` to an agent that streams this
     /// request, as its protocol does.
     pub(crate) fn failure_stream(

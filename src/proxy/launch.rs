@@ -203,16 +203,18 @@ impl Reporter {
                     wait,
                 } => self.retrying(turn_failure(failure), attempt, wait).await,
                 // The reset goes first, so the turn's retry waits past it.
+                // A subagent's failed stream ends no turn of the agent's own.
                 Event::Failed {
                     failure,
                     in_stream,
                     wait,
+                    subagent,
                 } => {
                     self.retried(None).await;
                     if let Some(wait) = wait {
                         self.reset(Some(wait)).await;
                     }
-                    if in_stream && self.ends_turns {
+                    if in_stream && self.ends_turns && !subagent {
                         self.turn_failed(turn_failure(failure)).await;
                     }
                 }

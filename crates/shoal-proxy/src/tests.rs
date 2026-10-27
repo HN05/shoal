@@ -317,6 +317,7 @@ async fn an_outage_past_its_budget_reaches_the_agent_at_once() {
             failure: Failure::Overloaded,
             in_stream: false,
             wait: None,
+            subagent: false,
         })
     );
     let waited: Duration = events
@@ -362,6 +363,7 @@ async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
             failure: Failure::Unreachable,
             in_stream: false,
             wait: None,
+            subagent: false,
         })
     );
 }
@@ -462,6 +464,7 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
             failure: Failure::Overloaded,
             in_stream: true,
             wait: None,
+            subagent: false,
         })
     );
 
@@ -482,6 +485,7 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
             failure: Failure::Overloaded,
             in_stream: true,
             wait: None,
+            subagent: false,
         })
     );
 
@@ -500,6 +504,7 @@ async fn a_streaming_codex_request_ends_its_turn_once_the_proxy_gives_up() {
             failure: Failure::Overloaded,
             in_stream: false,
             wait: None,
+            subagent: false,
         })
     );
 }
@@ -525,6 +530,7 @@ async fn a_retry_the_upstream_never_answers_gives_up_with_the_outage() {
             failure: Failure::Unreachable,
             in_stream: false,
             wait: None,
+            subagent: false,
         })
     );
 }
@@ -584,6 +590,7 @@ async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
             failure: Failure::ServerError,
             in_stream: false,
             wait: None,
+            subagent: false,
         })
     );
 
@@ -600,6 +607,7 @@ async fn a_stream_that_keeps_ending_early_reaches_the_agent_as_a_failure() {
             failure: Failure::ServerError,
             in_stream: true,
             wait: None,
+            subagent: false,
         })
     );
 }
@@ -626,6 +634,7 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
             failure: Failure::RateLimited,
             in_stream: true,
             wait: Some(Duration::from_secs(7200)),
+            subagent: false,
         }]
     );
 
@@ -652,6 +661,7 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
             failure: Failure::RateLimited,
             in_stream: false,
             wait: Some(Duration::from_secs(7200)),
+            subagent: false,
         }]
     );
 }
@@ -682,6 +692,7 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
             failure: Failure::RateLimited,
             in_stream: false,
             wait: Some(Duration::from_secs(7200)),
+            subagent: false,
         }]
     );
 
@@ -700,6 +711,34 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
     let (addr, _) = proxy(upstream.url("")).await;
     let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
     assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+}
+
+#[tokio::test]
+async fn a_subagents_failure_says_it_was_a_subagents() {
+    let upstream = FakeUpstream::start(|_| {
+        reply(
+            429,
+            r#"{"error":{"type":"usage_limit_reached","resets_in_seconds":7200}}"#,
+        )
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    for (header, subagent) in [
+        (None, false),
+        (Some(("x-codex-parent-thread-id", "t1")), true),
+        (Some(("x-openai-subagent", "review")), true),
+    ] {
+        let mut request = Request::post("/responses");
+        if let Some((name, value)) = header {
+            request = request.header(name, value);
+        }
+        send(addr, request, r#"{"stream":true}"#).await;
+        let events = drain(&mut events);
+        assert!(
+            matches!(events[..], [Event::Failed { subagent: s, .. }] if s == subagent),
+            "{header:?}: {events:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -745,6 +784,7 @@ async fn a_usage_limit_inside_the_stream_ends_the_turn_at_once() {
             failure: Failure::RateLimited,
             in_stream: true,
             wait: Some(Duration::from_secs(7200)),
+            subagent: false,
         }]
     );
 }

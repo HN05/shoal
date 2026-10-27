@@ -220,6 +220,7 @@ impl Forwarder {
             failure: failed.failure,
             in_stream: failed.in_stream,
             wait: failed.retry_after,
+            subagent: request.sent_by_subagent(),
         });
         failed.response
     }

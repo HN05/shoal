@@ -120,17 +120,21 @@ fn daemon_speaking(
 #[cfg(feature = "proxy")]
 async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() {
     use shoal_proxy::{Event, Failure};
-    for (ends_turns, expected) in [
+    let failed = ["report_proxy_retry", "report_upstream_reset"];
+    for (ends_turns, subagent, expected) in [
         // Claude reports its turn's end itself.
-        (false, &["report_proxy_retry", "report_upstream_reset"][..]),
+        (false, false, &failed[..]),
         (
             true,
+            false,
             &[
                 "report_proxy_retry",
                 "report_upstream_reset",
                 "report_turn_failure",
             ][..],
         ),
+        // A Codex subagent's failure leaves its parent's turn going.
+        (true, true, &failed[..]),
     ] {
         let root = tempfile::tempdir().unwrap();
         let paths = crate::paths::Paths::for_test(root.path());
@@ -141,6 +145,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
                 failure: Failure::RateLimited,
                 in_stream: true,
                 wait: Some(std::time::Duration::from_secs(60)),
+                subagent,
             })
             .unwrap();
         drop(sender);
@@ -151,7 +156,11 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
             ends_turns,
         };
         reporter.run(events).await;
-        assert_eq!(*methods.lock().unwrap(), expected, "{ends_turns}");
+        assert_eq!(
+            *methods.lock().unwrap(),
+            expected,
+            "{ends_turns} {subagent}"
+        );
     }
     use crate::ai::IntegrationKind;
     assert!(!crate::cli::agents::proxy_ends_turns(
