@@ -39,3 +39,14 @@ fn labels_leave_out_agent_names_zmx_cannot_hold() {
         "shoal.chat=r1 shoal.agent=codex"
     );
 }
+
+#[test]
+fn a_session_hosts_only_the_workspace_it_is_labelled_with() {
+    let sessions = parse_list(
+        "  name=fix\tpid=1\tshoal.workspace=w1\n  name=other\tpid=2\tshoal.workspace=w2\n  name=bare\tpid=3\n",
+    );
+    assert!(hosts(&sessions, "fix", "w1"));
+    assert!(!hosts(&sessions, "other", "w1"));
+    assert!(!hosts(&sessions, "bare", "w1"));
+    assert!(!hosts(&sessions, "gone", "w1"));
+}

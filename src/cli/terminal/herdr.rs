@@ -118,7 +118,11 @@ impl Host for Herdr {
         Box::pin(close_tab(place))
     }
 
-    fn place_state<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+    fn place_state<'a>(
+        &'a self,
+        place: &'a str,
+        _workspace: &'a str,
+    ) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(tab_state(place))
     }
 

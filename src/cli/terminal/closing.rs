@@ -19,7 +19,7 @@ use crate::{
 /// What a host shows of a place it opened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::cli) enum PlaceState {
-    /// The host reports the place gone.
+    /// The host reports the place gone, or hosting something else.
     Gone,
     /// The place is open, with its agent's turn state when the host reads one.
     Open(Option<AgentState>),
@@ -84,20 +84,24 @@ pub async fn watch(ctx: &Context, host: String, workspace: String, place: String
             Err(_) => Ok(None),
         }
     };
-    close_when_due(host, &place, lifecycle, || ctx.paths.state.exists()).await?;
+    close_when_due(host, &place, &workspace, lifecycle, || {
+        ctx.paths.state.exists()
+    })
+    .await?;
     discard_inherited_directive();
     Ok(0)
 }
 
-/// Close `place` once `lifecycle` and the host say so, looking again while
-/// `watching` holds. A missing daemon or a failed query does not prove
-/// completion or removal, so `lifecycle` gives `None` then, or the failure
-/// that ends the watch. A closed place leaves nothing to close, whatever the
-/// daemon reports; a failed host query, like a failed daemon query, proves
-/// neither.
+/// Close `place` of `workspace` once `lifecycle` and the host say so,
+/// looking again while `watching` holds. A missing daemon or a failed query
+/// does not prove completion or removal, so `lifecycle` gives `None` then,
+/// or the failure that ends the watch. A closed place leaves nothing to
+/// close, whatever the daemon reports; a failed host query, like a failed
+/// daemon query, proves neither.
 async fn close_when_due<F>(
     host: &dyn Host,
     place: &str,
+    workspace: &str,
     mut lifecycle: impl FnMut() -> F,
     watching: impl Fn() -> bool,
 ) -> Result<()>
@@ -106,7 +110,7 @@ where
 {
     while watching() {
         let lifecycle = lifecycle().await?;
-        let reported = match host.place_state(place).await {
+        let reported = match host.place_state(place, workspace).await {
             Ok(PlaceState::Gone) => break,
             Ok(PlaceState::Open(agent)) => Some(agent),
             Err(_) => None,

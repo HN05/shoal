@@ -21275,8 +21275,9 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 /// and serving the sessions listed in `$HOME/zmx-sessions`. A detached
 /// session keeps the environment it was created with and runs sent text as
 /// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
-/// listed once `$HOME/zmx-keep-sessions` exists. Calls from a place watcher
-/// go to `$HOME/zmx-watch-calls`, out of the recorded actions.
+/// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
+/// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
+/// recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
 import json, os, subprocess, sys
 from pathlib import Path
@@ -21287,7 +21288,12 @@ parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
 log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
-if args[:1] in (['set'], ['kill']):
+if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
+    sessions = root / 'zmx-sessions'
+    lines = [line + '\t' + '\t'.join(args[2:]) if line.split('\t')[0].strip() == f'name={args[1]}' else line
+        for line in sessions.read_text().splitlines()]
+    sessions.write_text(''.join(line + '\n' for line in lines))
+elif args[:1] in (['set'], ['kill']):
     pass
 elif args[:1] == ['run']:
     (root / f'zmx-{args[1]}.env').write_text(json.dumps(dict(os.environ)))

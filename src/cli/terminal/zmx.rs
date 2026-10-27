@@ -138,11 +138,16 @@ impl Host for Zmx {
         Box::pin(kill(place))
     }
 
-    /// zmx reads no agent state, so a session is only open or gone.
-    fn place_state<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+    /// zmx reads no agent state, so a session is only open or gone. A name
+    /// another workspace's session took over counts as gone.
+    fn place_state<'a>(
+        &'a self,
+        place: &'a str,
+        workspace: &'a str,
+    ) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(async move {
-            let open = list().await?.iter().any(|(session, _)| session == place);
-            Ok(if open {
+            let sessions = list().await?;
+            Ok(if hosts(&sessions, place, workspace) {
                 PlaceState::Open(None)
             } else {
                 PlaceState::Gone
@@ -529,6 +534,13 @@ fn parse_list(output: &str) -> Vec<(String, Fields)> {
             Some((name, fields))
         })
         .collect()
+}
+
+/// Whether `sessions` list `session` labelled with `workspace`.
+fn hosts(sessions: &[(String, Fields)], session: &str, workspace: &str) -> bool {
+    sessions
+        .iter()
+        .any(|(name, fields)| name == session && field(fields, WORKSPACE_LABEL) == Some(workspace))
 }
 
 fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {

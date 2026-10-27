@@ -159,9 +159,13 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { anyhow::bail!("{} cannot close places", self.name()) })
     }
 
-    /// Whether `place` is still open, and its agent's turn as this host
-    /// reads it.
-    fn place_state<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<PlaceState>> {
+    /// Whether `place` is still open for `workspace`, and its agent's turn as
+    /// this host reads it.
+    fn place_state<'a>(
+        &'a self,
+        _place: &'a str,
+        _workspace: &'a str,
+    ) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
     }
 
@@ -681,15 +685,18 @@ pub(in crate::cli) async fn host_workspace(
     label: &str,
 ) -> Result<()> {
     let labelled = match (&ctx.place, agent) {
+        // A place is labelled before it is watched, since the watcher only
+        // closes a place it finds hosting the workspace.
         (Some(place), _) => {
+            let labelled = place
+                .host
+                .label_current(&workspace.id, agent.unwrap_or_default())
+                .await;
+            place.host.rename_place(&place.id, label).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id)?;
             }
-            place.host.rename_place(&place.id, label).await;
-            place
-                .host
-                .label_current(&workspace.id, agent.unwrap_or_default())
-                .await
+            labelled
         }
         (None, Some(agent)) => label_current(&workspace.id, agent).await,
         (None, None) => Ok(()),

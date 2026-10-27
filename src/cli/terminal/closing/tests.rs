@@ -141,6 +141,7 @@ impl Host for FakeHost {
     fn place_state<'a>(
         &'a self,
         _place: &'a str,
+        _workspace: &'a str,
     ) -> futures_util::future::BoxFuture<'a, Result<PlaceState>> {
         let state = self
             .state
@@ -159,7 +160,7 @@ async fn watch_fake(host: &FakeHost, lifecycle: Option<Lifecycle>, looks: usize)
         async move { Ok(lifecycle) }
     };
     let watching = || looked.load(std::sync::atomic::Ordering::SeqCst) < looks;
-    close_when_due(host, "place-1", next, watching)
+    close_when_due(host, "place-1", "workspace", next, watching)
         .await
         .unwrap();
     looked.load(std::sync::atomic::Ordering::SeqCst)
