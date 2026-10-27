@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::Caller;
 use crate::{
-    daemon::{approvals::ApprovalRequest, workspace::Manager},
+    daemon::{approvals::ApprovalRequest, questions::Question, workspace::Manager},
     model::{Chat, QueueEntry, QueueRequest, Repository, Workspace, WorkspaceTarget},
     repository::Selector,
 };
@@ -134,6 +134,30 @@ impl Manager {
             "workspace processes start CI runs only on their workspace's branch"
         );
         Ok(())
+    }
+
+    /// Question `id` for the caller to answer, which must be one of a
+    /// workspace below its own. The answer binds to the question returned,
+    /// `shown` when given, and refuses it once a later question reuses its
+    /// number.
+    pub(in crate::daemon) async fn answerable_question(
+        &self,
+        caller: &Caller,
+        id: i64,
+        shown: Option<Question>,
+    ) -> Result<Question> {
+        let owner = &caller.workspace_id;
+        let question = match shown {
+            Some(shown) => shown,
+            None => self.question(id).await?,
+        };
+        ensure!(
+            question.id == id
+                && question.workspace_id != *owner
+                && self.within_subtree(owner, &question.workspace_id).await?,
+            "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
+        );
+        Ok(question)
     }
 
     /// The caller's own repository, which `repository` must select.
