@@ -16782,6 +16782,15 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
     );
     let output = fixture.run(&["local-check", "command-target", "--", "extra"]);
     assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
+    // Help names the defining workspace before or after the flag.
+    for args in [
+        ["local-check", "-h", "command-target"],
+        ["local-check", "command-target", "--help"],
+    ] {
+        let help = fixture.run(&args);
+        assert!(help.status.success(), "{args:?}: {help:?}");
+        assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check"));
+    }
     // Elsewhere only the workspace that defines it is missing.
     let output = fixture.run(&["local-check", "-h"]);
     let error = failure_message(&output, false);

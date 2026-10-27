@@ -133,11 +133,16 @@ pub(super) fn command_name(words: &[OsString]) -> Result<String> {
         .to_owned())
 }
 
-/// The workspace `shoal <name>` names, read past help and argument errors so
-/// that the name is checked before either is reported.
+/// The workspace `shoal <name>` names, read past help flags and argument
+/// errors so that the name is checked before either is reported.
 pub(super) fn named_workspace(words: &[OsString]) -> Option<String> {
+    let help = clap::Arg::new("help")
+        .short('h')
+        .long("help")
+        .action(clap::ArgAction::SetTrue);
     Invocation::command()
         .disable_help_flag(true)
+        .arg(help)
         .ignore_errors(true)
         .try_get_matches_from(words)
         .ok()?
