@@ -145,6 +145,25 @@ struct QueuedRow {
     workspace: Option<String>,
 }
 
+/// The waiting rows of the queue, in order.
+fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
+    Ok(db
+        .prepare(
+            "SELECT id,repository_id,kind,execution_id,workspace_id FROM agent_queue
+             WHERE state=?1 ORDER BY seq",
+        )?
+        .query_map([QueueState::Queued], |row| {
+            Ok(QueuedRow {
+                id: row.get(0)?,
+                repository: row.get(1)?,
+                kind: row.get(2)?,
+                execution: row.get(3)?,
+                workspace: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// A launch to record in the queue.
 struct Launch {
     id: String,
@@ -400,26 +419,7 @@ impl Manager {
     /// The queued entries in order, each restore with whether its agent
     /// waits and what for, and each restore's execution and wake by entry ID.
     async fn waiting_work(&self) -> Result<(Vec<Waiting>, HashMap<String, (String, Wake)>)> {
-        let queued = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,repository_id,kind,execution_id,workspace_id FROM agent_queue
-                         WHERE state=?1 ORDER BY seq",
-                    )?
-                    .query_map([QueueState::Queued], |row| {
-                        Ok(QueuedRow {
-                            id: row.get(0)?,
-                            repository: row.get(1)?,
-                            kind: row.get(2)?,
-                            execution: row.get(3)?,
-                            workspace: row.get(4)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
-            .await?;
+        let queued = self.store.run(|db| queued_rows(db)).await?;
         let waiters: HashSet<String> = self
             .restore_waiters
             .lock()

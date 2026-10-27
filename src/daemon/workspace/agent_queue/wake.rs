@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
+use rusqlite::Connection;
 
 use super::Wake;
 use crate::{daemon::workspace::Manager, execution::recovery, state::QueueKind};
@@ -18,27 +19,38 @@ pub(crate) enum Grant {
     Update,
 }
 
+/// A restore entry with the workspace and execution of its agent.
+struct RestoreRow {
+    id: String,
+    workspace: String,
+    execution: String,
+}
+
+/// Every restore entry of the queue.
+fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
+    Ok(db
+        .prepare(
+            "SELECT id,workspace_id,execution_id FROM agent_queue
+             WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL",
+        )?
+        .query_map([QueueKind::Restore], |row| {
+            Ok(RestoreRow {
+                id: row.get(0)?,
+                workspace: row.get(1)?,
+                execution: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 impl Manager {
     /// The IDs of the restore entries whose agent stopped between turns.
     pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<String>> {
-        let restores = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,workspace_id,execution_id FROM agent_queue
-                         WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL",
-                    )?
-                    .query_map([QueueKind::Restore], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<(String, String, String)>>>()?)
-            })
-            .await?;
+        let restores = self.store.run(|db| restore_rows(db)).await?;
         Ok(restores
             .into_iter()
-            .filter(|(_, workspace, execution)| self.stopped_between_turns(workspace, execution))
-            .map(|(id, _, _)| id)
+            .filter(|row| self.restore_waits_for_update(&row.workspace, &row.execution))
+            .map(|row| row.id)
             .collect())
     }
 
@@ -51,7 +63,7 @@ impl Manager {
         execution: &str,
         waits: bool,
     ) -> Result<Wake> {
-        if !self.stopped_between_turns(workspace_id, execution) {
+        if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
         let due = waits && self.updates_waiting(workspace_id).await?;
@@ -59,9 +71,9 @@ impl Manager {
     }
 
     /// Whether the recovery record of `execution` says it stopped between
-    /// turns. An unreadable record leaves the turn unknown, which counts as
-    /// mid-turn.
-    fn stopped_between_turns(&self, workspace_id: &str, execution: &str) -> bool {
+    /// turns, so its restore waits for an update. An unreadable record leaves
+    /// the turn unknown, which counts as mid-turn.
+    fn restore_waits_for_update(&self, workspace_id: &str, execution: &str) -> bool {
         let path = recovery::record_path(&self.paths, workspace_id, execution);
         recovery::Record::load(&path)
             .ok()
