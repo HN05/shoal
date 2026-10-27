@@ -913,7 +913,10 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager.adopt_workspace(&repo.id, &worktree).await.unwrap();
+    let workspace = manager
+        .adopt_workspace(&repo.id, &worktree, false)
+        .await
+        .unwrap();
     let removed = manager
         .remove_workspace(
             &workspace.id,

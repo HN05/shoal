@@ -12,24 +12,9 @@ use anyhow::{Context, Result, ensure};
 use std::path::{Path, PathBuf};
 
 impl Manager {
+    /// Take the linked worktree at `path` into Shoal's lifecycle, or with
+    /// `copy` a new worktree with its files on a branch of its own.
     pub async fn adopt_workspace(
-        &self,
-        repository: impl Into<crate::repository::Selector>,
-        path: &Path,
-    ) -> Result<Workspace> {
-        self.adopt_workspace_with_mode(repository, path, false)
-            .await
-    }
-
-    pub async fn copy_workspace(
-        &self,
-        repository: impl Into<crate::repository::Selector>,
-        path: &Path,
-    ) -> Result<Workspace> {
-        self.adopt_workspace_with_mode(repository, path, true).await
-    }
-
-    async fn adopt_workspace_with_mode(
         &self,
         repository: impl Into<crate::repository::Selector>,
         path: &Path,

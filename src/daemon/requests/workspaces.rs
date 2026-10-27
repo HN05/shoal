@@ -86,14 +86,7 @@ pub(super) async fn handle(
             repository,
             path,
             copy,
-        } => {
-            let workspace = if copy {
-                manager.copy_workspace(&repository, &path).await?
-            } else {
-                manager.adopt_workspace(&repository, &path).await?
-            };
-            Body::Workspace(workspace)
-        }
+        } => Body::Workspace(manager.adopt_workspace(&repository, &path, copy).await?),
         WorkspaceMethod::RenameWorkspace { workspace, branch } => Body::Workspace(
             manager
                 .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
