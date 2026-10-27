@@ -56,6 +56,13 @@ pub(in crate::cli) trait Integration: Sync {
         false
     }
 
+    /// Arguments that only send its API requests to Shoal's proxy, for a
+    /// launch Shoal gives no hooks, such as a configured resume command,
+    /// with the placeholders of [`Self::hook_args`].
+    fn proxy_args(&self) -> Vec<OsString> {
+        Vec::new()
+    }
+
     /// Fill in the proxy placeholders of `args` with the proxy's `url`, for
     /// the agent running with `environment`.
     fn route_through_proxy(
@@ -534,6 +541,22 @@ pub(crate) fn route_through_proxy(
     let environment = AgentEnvironment { home, configured };
     integration(kind).route_through_proxy(&mut command, url, &environment)?;
     Ok(command)
+}
+
+/// `command`, a configured command of agent `name` that Shoal gives no
+/// hooks, with the arguments that send its API requests to its proxy when it
+/// has one it can use: before a `--`, after which arguments are the
+/// agent's prompt, else at the end.
+pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Vec<OsString>) {
+    let kind = settings.integration(name);
+    if settings.proxy(name).is_none() || !routes_through_proxy(kind) {
+        return;
+    }
+    let at = command
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(command.len());
+    command.splice(at..at, integration(kind).proxy_args());
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt

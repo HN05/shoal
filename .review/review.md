@@ -429,8 +429,10 @@ configured command for another agent, plus proven child
   forwarded arguments when no prompt placeholder is configured.
   Plain command invocations expand `{prompt}` to an empty string.
   Failed-turn retries default on for Claude and its profiles, honor the nearest
-  `retry` setting, and wait out usage limits without an attempt cap; transient
-  API failures keep a bounded retry budget.
+  `retry` setting, and retry every failure a retry can fix without an attempt
+  cap, so outages and usage limits are waited out; a reset the agent's proxy
+  reports holds the retry until it has passed. A failure no retry fixes
+  notifies instead.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
   Installing for every tool writes only into skill directories that exist.

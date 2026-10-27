@@ -133,7 +133,7 @@ impl Recovery {
         }
         let prompt = std::ffi::OsStr::new(&message);
         let (command, handoff_delivered) = if let Some(argv) = configured {
-            let command = configured::expand_with_fields(
+            let mut command = configured::expand_with_fields(
                 paths,
                 &settings.agent_resume,
                 &name,
@@ -142,6 +142,8 @@ impl Recovery {
                 &[("{prompt}", prompt)],
             )
             .await?;
+            // Without Shoal's hooks it still goes through the agent's proxy.
+            crate::cli::agents::with_proxy_args(&settings, &name, &mut command);
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else if let Some(mut args) = resume_args {
             args.extend(

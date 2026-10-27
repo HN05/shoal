@@ -28,6 +28,11 @@ impl Integration for Claude {
         settings(false, false)
     }
 
+    fn proxy_args(&self) -> Vec<OsString> {
+        let settings = json!({"env": {"ANTHROPIC_BASE_URL": crate::proxy::URL}});
+        vec!["--settings".into(), settings.to_string().into()]
+    }
+
     /// Its hooks deliver updates and start its next turn with them.
     fn wakes(&self) -> Wake {
         Wake::Hook

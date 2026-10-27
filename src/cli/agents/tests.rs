@@ -69,6 +69,59 @@ fn integrations_serve_only_the_names_they_list() {
 }
 
 #[test]
+fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
+    let config: crate::config::Config = toml::from_str(
+        "[proxy.local]\nupstream = 'http://127.0.0.1:8317'\n\
+         [ai.claude]\nproxy = 'local'\n[ai.codex]\nproxy = 'local'\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let with = |name: &str, command: &[&str]| {
+        let mut command: Vec<OsString> = command.iter().map(Into::into).collect();
+        with_proxy_args(&settings, name, &mut command);
+        command
+    };
+    // Claude's proxy URL goes in a settings file of its own.
+    let claude = with("claude", &["claude", "--continue"]);
+    assert_eq!(claude[..3], ["claude", "--continue", "--settings"]);
+    let url = format!(r#""ANTHROPIC_BASE_URL":"{}""#, crate::proxy::URL);
+    assert!(claude[3].to_str().unwrap().contains(&url), "{claude:?}");
+    // Codex's provider placeholder comes before a prompt after `--`.
+    assert_eq!(
+        with("codex", &["saved-session", "--", "prompt"]),
+        [
+            "saved-session",
+            "{shoal-proxy-codex-provider}",
+            "--",
+            "prompt"
+        ]
+    );
+    // Then the wrapper routes them as it does a launch's own.
+    let home = tempfile::tempdir().unwrap();
+    let routed = route_through_proxy(
+        IntegrationKind::Claude,
+        claude,
+        "http://127.0.0.1:4000",
+        home.path(),
+        &BTreeMap::new(),
+    )
+    .unwrap();
+    assert!(
+        routed[3]
+            .to_str()
+            .unwrap()
+            .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#),
+        "{routed:?}"
+    );
+    // An agent without a proxy runs its command as configured.
+    let plain: crate::config::Config = toml::from_str("").unwrap();
+    let plain = plain.resolve(&Default::default()).unwrap();
+    let mut command: Vec<OsString> = vec!["claude".into(), "--continue".into()];
+    with_proxy_args(&plain, "claude", &mut command);
+    assert_eq!(command, ["claude", "--continue"]);
+}
+
+#[test]
 fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     let config: crate::config::Config = toml::from_str(
         "[proxy.local]\nupstream = 'http://127.0.0.1:8317'\n\

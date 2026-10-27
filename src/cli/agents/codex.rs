@@ -53,6 +53,10 @@ impl Integration for Codex {
         true
     }
 
+    fn proxy_args(&self) -> Vec<OsString> {
+        vec![PROVIDER.into()]
+    }
+
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CODEX)
     }
