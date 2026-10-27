@@ -12811,7 +12811,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
             .current_dir(&fixture.repo)
             .env("INHERITED_TOKEN", "secret")
             .args(["chat", "--agent", "claude-chat", "--here"]),
-        "",
+        "\n",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let env = fs::read_to_string(home.join("claude-env")).unwrap();
