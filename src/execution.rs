@@ -21,7 +21,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::Paths};
 pub use completion::SetupVerificationFailure;
-pub use detached::launch_detached;
+pub use detached::{DetachedLaunch, launch_detached};
 use launch::run_tracked;
 use mode::Mode;
 pub use supervise::exit_code;

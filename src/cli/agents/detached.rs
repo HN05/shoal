@@ -16,7 +16,7 @@ use super::{ChatLaunch, Integration, Launch};
 use crate::{
     cli::{client, context::Context},
     config::{Effective, templates},
-    execution,
+    execution::{self, DetachedLaunch},
     model::{Chat, Repository, Workspace},
     paths::Paths,
 };
@@ -119,9 +119,25 @@ pub(super) async fn start(
         args,
     };
     let prepared = app.prepare(session).await?;
+    let (launch, prepared) = launch_session(ctx, app, &workspace, &files, prepared).await?;
+    let delivered = prepared.deliver().await;
+    report_session(ctx, app, &workspace, &launch, delivered)?;
+    Ok(0)
+}
+
+/// Launch the `prepared` session of `app` in `workspace` as a detached
+/// execution logging beside its other `files`, discarding the preparation
+/// when it cannot start.
+async fn launch_session(
+    ctx: &Context,
+    app: &dyn App,
+    workspace: &Workspace,
+    files: &Path,
+    prepared: Box<dyn Prepared>,
+) -> Result<(DetachedLaunch, Box<dyn Prepared>)> {
     let launched = execution::launch_detached(
         &ctx.paths,
-        &workspace,
+        workspace,
         files.with_extension("log"),
         prepared.command(),
         app.not_inherited(),
@@ -129,14 +145,24 @@ pub(super) async fn start(
         Some(&app.execution_agent()),
     )
     .await;
-    let launch = match launched {
-        Ok(launch) => launch,
+    match launched {
+        Ok(launch) => Ok((launch, prepared)),
         Err(error) => {
             prepared.discard().await;
-            return Err(error);
+            Err(error)
         }
-    };
-    let delivered = prepared.deliver().await;
+    }
+}
+
+/// Report the workspace session `launch` started, with what `delivered`
+/// says of its first message.
+fn report_session(
+    ctx: &Context,
+    app: &dyn App,
+    workspace: &Workspace,
+    launch: &DetachedLaunch,
+    delivered: Delivered,
+) -> Result<()> {
     let mut report = json!({
         "workspace": workspace,
         "agent": app.agent(),
@@ -157,8 +183,7 @@ pub(super) async fn start(
             delivered.note,
         ),
         report,
-    )?;
-    Ok(0)
+    )
 }
 
 /// Where a session of agent `name` keeps its files: under the workspace's
@@ -236,16 +261,7 @@ pub(super) async fn start_chat(
         args,
     } = chat;
     super::ensure_available(name, settings)?;
-    let (prompt, args) = match instruction_args(app, settings, instructions) {
-        Some(instruction_args) => (
-            opening.clone(),
-            instruction_args.into_iter().chain(args.clone()).collect(),
-        ),
-        None => (
-            templates::chat_first_message(instructions, opening.as_deref()),
-            args.clone(),
-        ),
-    };
+    let (prompt, args) = chat_input(app, settings, instructions, opening, args);
     if let Some(trust) = integration.trust_file() {
         trust
             .trust_checkout(ctx, repository, &Default::default())
@@ -264,21 +280,72 @@ pub(super) async fn start_chat(
     };
     let prepared = app.prepare(session).await?;
     let log = files.with_extension("log");
-    let spawned = spawn_session(ctx, app, repository, &record, &log, prepared.as_ref());
+    let (record, prepared) = hand_to_session(ctx, app, repository, &record, &log, prepared).await?;
+    let delivered = prepared.deliver().await;
+    report_chat(ctx, app, repository, &record, &log, delivered)?;
+    Ok(0)
+}
+
+/// The first message and arguments of a chat session: the instructions as
+/// arguments with the chat's `opening`, where the agent takes them apart,
+/// otherwise as the first message, which starts a turn before the user
+/// speaks.
+fn chat_input(
+    app: &dyn App,
+    settings: &Effective,
+    instructions: &str,
+    opening: &Option<String>,
+    args: &[OsString],
+) -> (Option<String>, Vec<OsString>) {
+    match instruction_args(app, settings, instructions) {
+        Some(instruction_args) => (
+            opening.clone(),
+            instruction_args.into_iter().chain(args.to_vec()).collect(),
+        ),
+        None => (
+            templates::chat_first_message(instructions, opening.as_deref()),
+            args.to_vec(),
+        ),
+    }
+}
+
+/// Start the `prepared` session of `app` for `chat`, logging to `log`, and
+/// hand the chat to it, discarding the preparation when either fails.
+/// Returns the chat as the daemon now records it.
+async fn hand_to_session(
+    ctx: &Context,
+    app: &dyn App,
+    repository: &Repository,
+    chat: &Chat,
+    log: &Path,
+    prepared: Box<dyn Prepared>,
+) -> Result<(Chat, Box<dyn Prepared>)> {
+    let spawned = spawn_session(ctx, app, repository, chat, log, prepared.as_ref());
     let handed_over = match spawned {
-        Ok(session) => hand_over(ctx, &record, session).await,
+        Ok(session) => hand_over(ctx, chat, session).await,
         Err(error) => Err(error),
     };
-    let record = match handed_over {
-        Ok(moved) => moved,
+    match handed_over {
+        Ok(moved) => Ok((moved, prepared)),
         Err(error) => {
             prepared.discard().await;
-            return Err(error);
+            Err(error)
         }
-    };
-    let delivered = prepared.deliver().await;
+    }
+}
+
+/// Report the `chat` session started with its output in `log`, with what
+/// `delivered` says of its first message.
+fn report_chat(
+    ctx: &Context,
+    app: &dyn App,
+    repository: &Repository,
+    chat: &Chat,
+    log: &Path,
+    delivered: Delivered,
+) -> Result<()> {
     let mut report = json!({
-        "chat": record,
+        "chat": chat,
         "log": log,
     });
     report_fields(&mut report, delivered.fields);
@@ -287,16 +354,15 @@ pub(super) async fn start_chat(
             "Started {} {} chat {} for {} (pid {}); open it in {}\nOutput: {}{}",
             app.name(),
             app.agent(),
-            record.name,
+            chat.name,
             crate::repository::name(repository),
-            record.pid,
+            chat.pid,
             app.place(),
             log.display(),
             delivered.note,
         ),
         report,
-    )?;
-    Ok(0)
+    )
 }
 
 /// Hand `chat` to `session`'s process, stopping the session when the daemon
