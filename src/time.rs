@@ -9,6 +9,14 @@ pub(crate) fn unix_seconds() -> u64 {
         .as_secs()
 }
 
+/// The Unix second `wait` from now, saturating rather than wrapping. Only
+/// the proxy, which a build without it does not run, reports such times.
+#[cfg_attr(not(feature = "proxy"), allow(dead_code))]
+pub(crate) fn unix_seconds_after(wait: std::time::Duration) -> i64 {
+    let now = i64::try_from(unix_seconds()).unwrap_or(i64::MAX);
+    now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX))
+}
+
 /// `YYYY-MM-DD HH:MM` in the local time zone.
 pub(crate) fn local_minutes(unix_seconds: i64) -> String {
     local(unix_seconds, false)

@@ -109,18 +109,15 @@ fn daemon_speaking(
 #[cfg(feature = "proxy")]
 async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() {
     use shoal_proxy::{Event, Failure};
-    let failed = ["report_proxy_retry", "report_upstream_reset"];
+    // No retry was shown, so none is taken away.
+    let failed = ["report_upstream_reset"];
     for (ends_turns, subagent, expected) in [
         // Claude reports its turn's end itself.
         (false, false, &failed[..]),
         (
             true,
             false,
-            &[
-                "report_proxy_retry",
-                "report_upstream_reset",
-                "report_turn_failure",
-            ][..],
+            &["report_upstream_reset", "report_turn_failure"][..],
         ),
         // A Codex subagent's failure leaves its parent's turn going.
         (true, true, &failed[..]),
@@ -143,6 +140,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
             workspace: "w".into(),
             execution: "e".into(),
             ends_turns,
+            sent: Default::default(),
         };
         reporter.run(events).await;
         assert_eq!(
@@ -171,12 +169,10 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
         workspace: "w".into(),
         execution: "e".into(),
         ends_turns: true,
+        sent: Default::default(),
     };
     reporter.run(events).await;
-    assert_eq!(
-        *methods.lock().unwrap(),
-        ["report_proxy_retry", "report_turn_failure"]
-    );
+    assert_eq!(*methods.lock().unwrap(), ["report_turn_failure"]);
     use crate::ai::IntegrationKind;
     assert!(!crate::cli::agents::proxy_ends_turns(
         IntegrationKind::Claude
@@ -200,7 +196,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     };
     install("#!/bin/sh\nexit 1\n");
     // The binary the wrapper started from, read before the upgrade.
-    let executable = crate::cli::installed::Executable::at(binary.clone());
+    let origin = launch::Origin::at(crate::cli::installed::Executable::at(binary.clone()));
     let report = || crate::protocol::AgentMethod::ReportUpstreamReset {
         workspace: "w".into(),
         execution: "e".into(),
@@ -208,13 +204,13 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     };
     let (daemon, _) = daemon_speaking(&paths, crate::protocol::VERSION + 1);
     // Before the upgrade replaced it, there is nothing to hand it to.
-    launch::send_with(&paths, &executable, report()).await;
+    launch::send_from(&paths, &origin, report()).await;
     assert!(!received.exists());
     install(&format!(
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
         received.display()
     ));
-    launch::send_with(&paths, &executable, report()).await;
+    launch::send_from(&paths, &origin, report()).await;
     let args = std::fs::read_to_string(&received).unwrap();
     let args: Vec<_> = args.lines().collect();
     assert_eq!(
@@ -223,12 +219,17 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     );
     let relayed: serde_json::Value = serde_json::from_str(args[args.len() - 1]).unwrap();
     assert_eq!(relayed["report_upstream_reset"]["execution"], "e");
-    // A daemon that accepts the report needs no relay.
+    // Once refused, the wrapper goes to the installed release at once.
     std::fs::remove_file(&received).unwrap();
     daemon.abort();
     std::fs::remove_file(&paths.socket).unwrap();
+    launch::send_from(&paths, &origin, report()).await;
+    assert!(received.exists());
+    // A wrapper the daemon never refused needs no relay.
+    std::fs::remove_file(&received).unwrap();
+    let origin = launch::Origin::at(crate::cli::installed::Executable::at(binary.clone()));
     let _daemon = daemon_speaking(&paths, crate::protocol::VERSION);
-    launch::send_with(&paths, &executable, report()).await;
+    launch::send_from(&paths, &origin, report()).await;
     assert!(!received.exists());
 }
 
@@ -253,4 +254,57 @@ async fn the_proxy_report_worker_sends_only_a_proxys_reports() {
 #[cfg(feature = "proxy")]
 fn agents_name_the_key_in_the_header_the_proxy_reads() {
     assert_eq!(KEY_HEADER, shoal_proxy::CLIENT_KEY_HEADER);
+}
+
+#[tokio::test]
+#[cfg(feature = "proxy")]
+async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() {
+    use shoal_proxy::{Event, Failure};
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let limited = Event::Failed {
+        failure: Failure::RateLimited,
+        in_stream: false,
+        wait: Some(std::time::Duration::from_secs(7200)),
+        subagent: false,
+    };
+    for event in [
+        Event::Retrying {
+            failure: Failure::Overloaded,
+            attempt: 1,
+            wait: std::time::Duration::from_secs(1),
+        },
+        limited.clone(),
+        // Each request the given-up outage fails names the same reset.
+        limited,
+        Event::Recovered,
+        // Nothing is left to clear.
+        Event::Recovered,
+    ] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: true,
+        sent: Default::default(),
+    };
+    reporter.run(events).await;
+    let mut methods = methods.lock().unwrap().clone();
+    // The two clears go together, in either order.
+    methods[3..].sort();
+    assert_eq!(
+        methods,
+        [
+            "report_proxy_retry",
+            "report_proxy_retry",
+            "report_upstream_reset",
+            "report_proxy_retry",
+            "report_upstream_reset",
+        ]
+    );
 }

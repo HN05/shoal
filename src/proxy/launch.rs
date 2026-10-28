@@ -69,6 +69,7 @@ impl Running {
                 workspace: workspace.to_owned(),
                 execution: execution.to_owned(),
                 ends_turns,
+                sent: Sent::default(),
             };
             self.reporting = Some(tokio::spawn(reporter.run(events)));
         }
@@ -77,34 +78,55 @@ impl Running {
     }
 }
 
-/// Send a wrapper's `report` to the daemon, through the installed release
-/// when an upgrade changed the daemon's protocol under this wrapper.
-async fn send(paths: &crate::paths::Paths, report: crate::protocol::AgentMethod) {
-    send_with(paths, wrapper_executable(), report).await;
+/// The binary an agent's wrapper started from, and whether an upgraded
+/// daemon has refused its protocol, after which its reports go to the
+/// installed release at once rather than to a call bound to fail.
+pub(super) struct Origin {
+    executable: crate::cli::installed::Executable,
+    upgraded: std::sync::atomic::AtomicBool,
 }
 
-/// [`send`], with `executable` as the binary the wrapper started from.
-pub(super) async fn send_with(
-    paths: &crate::paths::Paths,
-    executable: &crate::cli::installed::Executable,
-    report: crate::protocol::AgentMethod,
-) {
-    let Ok(json) = serde_json::to_string(&report) else {
-        return;
-    };
-    if let Err(error) = crate::cli::client::call(paths, report).await
-        && error.is::<crate::cli::client::ProtocolMismatch>()
-    {
-        relay(paths, executable, &json).await;
+impl Origin {
+    pub(super) fn at(executable: crate::cli::installed::Executable) -> Self {
+        Self {
+            executable,
+            upgraded: std::sync::atomic::AtomicBool::new(false),
+        }
     }
 }
 
-/// The binary this wrapper started from, which [`remember_executable`]
-/// reads as it starts, before an upgrade can replace it.
-fn wrapper_executable() -> &'static crate::cli::installed::Executable {
-    static EXECUTABLE: std::sync::OnceLock<crate::cli::installed::Executable> =
-        std::sync::OnceLock::new();
-    EXECUTABLE.get_or_init(crate::cli::installed::Executable::current)
+/// Send a wrapper's `report` to the daemon, through the installed release
+/// when an upgrade changed the daemon's protocol under this wrapper.
+async fn send(paths: &crate::paths::Paths, report: crate::protocol::AgentMethod) {
+    send_from(paths, origin(), report).await;
+}
+
+/// [`send`] from the wrapper `origin` describes.
+pub(super) async fn send_from(
+    paths: &crate::paths::Paths,
+    origin: &Origin,
+    report: crate::protocol::AgentMethod,
+) {
+    use std::sync::atomic::Ordering;
+    let Ok(json) = serde_json::to_string(&report) else {
+        return;
+    };
+    if !origin.upgraded.load(Ordering::Relaxed) {
+        match crate::cli::client::call(paths, report).await {
+            Err(error) if error.is::<crate::cli::client::ProtocolMismatch>() => {
+                origin.upgraded.store(true, Ordering::Relaxed);
+            }
+            _ => return,
+        }
+    }
+    relay(paths, &origin.executable, &json).await;
+}
+
+/// The wrapper's own [`Origin`], whose binary [`remember_executable`] reads
+/// as it starts, before an upgrade can replace it.
+fn origin() -> &'static Origin {
+    static ORIGIN: std::sync::OnceLock<Origin> = std::sync::OnceLock::new();
+    ORIGIN.get_or_init(|| Origin::at(crate::cli::installed::Executable::current()))
 }
 
 /// Read the binary an agent's wrapper started from, while it is still the
@@ -112,13 +134,13 @@ fn wrapper_executable() -> &'static crate::cli::installed::Executable {
 /// proxy's reports can go through the installed release. Once the binary
 /// is replaced, the path no longer names the running one.
 pub fn remember_executable() {
-    wrapper_executable();
+    origin();
 }
 
 /// Hand `report`, a proxy report's JSON, to the binary installed over
 /// `executable`, whose protocol the upgraded daemon speaks; whether it sent
 /// it. Nothing runs when nothing replaced it.
-pub(super) async fn relay(
+async fn relay(
     paths: &crate::paths::Paths,
     executable: &crate::cli::installed::Executable,
     report: &str,
@@ -168,21 +190,17 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
 /// execution's end.
 pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execution: &str) {
     use crate::protocol::AgentMethod;
-    let reports = [
-        AgentMethod::ReportProxyRetry {
-            workspace: workspace.to_owned(),
-            execution: execution.to_owned(),
-            retry: None,
-        },
-        AgentMethod::ReportUpstreamReset {
-            workspace: workspace.to_owned(),
-            execution: execution.to_owned(),
-            resets_at: None,
-        },
-    ];
-    for report in reports {
-        send(paths, report).await;
-    }
+    let retry = AgentMethod::ReportProxyRetry {
+        workspace: workspace.to_owned(),
+        execution: execution.to_owned(),
+        retry: None,
+    };
+    let reset = AgentMethod::ReportUpstreamReset {
+        workspace: workspace.to_owned(),
+        execution: execution.to_owned(),
+        resets_at: None,
+    };
+    tokio::join!(send(paths, retry), send(paths, reset));
 }
 
 /// Reports a proxied agent's ended turns to the daemon.
@@ -193,12 +211,25 @@ pub(super) struct Reporter {
     pub(super) execution: String,
     /// Whether a failure stream ends the agent's turn.
     pub(super) ends_turns: bool,
+    /// What the daemon last heard, so nothing is cleared that was never
+    /// shown and the same reset is not sent again.
+    pub(super) sent: Sent,
+}
+
+/// What a [`Reporter`] last told the daemon.
+#[cfg(feature = "proxy")]
+#[derive(Default)]
+pub(super) struct Sent {
+    /// Whether it shows a retry the proxy waits to make.
+    retry: bool,
+    /// The Unix second until which the upstream refuses requests.
+    reset: Option<i64>,
 }
 
 #[cfg(feature = "proxy")]
 impl Reporter {
     pub(super) async fn run(
-        self,
+        mut self,
         mut events: tokio::sync::mpsc::UnboundedReceiver<shoal_proxy::Event>,
     ) {
         use shoal_proxy::Event;
@@ -217,9 +248,9 @@ impl Reporter {
                     wait,
                     subagent,
                 } => {
-                    self.retried(None).await;
+                    self.retry_done().await;
                     if let Some(wait) = wait {
-                        self.reset(Some(wait)).await;
+                        self.reset(crate::time::unix_seconds_after(wait)).await;
                     }
                     if in_stream && self.ends_turns && !subagent {
                         self.turn_failed(turn_failure(failure)).await;
@@ -227,8 +258,9 @@ impl Reporter {
                 }
                 // An upstream that answers again refuses nothing until.
                 Event::Recovered => {
-                    self.retried(None).await;
-                    self.reset(None).await;
+                    if std::mem::take(&mut self.sent).told() {
+                        forget_reports(&self.paths, &self.workspace, &self.execution).await;
+                    }
                 }
             }
         }
@@ -236,18 +268,25 @@ impl Reporter {
 
     /// Show the retry the proxy waits `wait` to make in the agent's status.
     async fn retrying(
-        &self,
+        &mut self,
         failure: crate::state::TurnFailure,
         attempt: u32,
         wait: std::time::Duration,
     ) {
-        let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
         let retry = crate::daemon::workspace::proxy_retries::ProxyRetry {
             failure,
             attempt,
-            next_at: now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX)),
+            next_at: crate::time::unix_seconds_after(wait),
         };
         self.retried(Some(retry)).await;
+        self.sent.retry = true;
+    }
+
+    /// Take the retry the agent's status shows away, when it shows one.
+    async fn retry_done(&mut self) {
+        if std::mem::take(&mut self.sent.retry) {
+            self.retried(None).await;
+        }
     }
 
     async fn retried(&self, retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>) {
@@ -259,19 +298,25 @@ impl Reporter {
         .await;
     }
 
-    /// Tell the daemon the upstream refuses requests for `wait`, so a
-    /// retry of the agent's turn, which the agent itself may report, waits
-    /// past it; `None` once it answers again.
-    async fn reset(&self, wait: Option<std::time::Duration>) {
-        let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
-        let resets_at =
-            wait.map(|wait| now.saturating_add(i64::try_from(wait.as_secs()).unwrap_or(i64::MAX)));
+    /// Tell the daemon the upstream refuses requests until Unix second
+    /// `resets_at`, so a retry of the agent's turn, which the agent itself
+    /// may report, waits past it. The same reset, a second off for the time
+    /// it took to arrive, is not sent again.
+    async fn reset(&mut self, resets_at: i64) {
+        if self
+            .sent
+            .reset
+            .is_some_and(|sent| sent.abs_diff(resets_at) <= 1)
+        {
+            return;
+        }
         self.send(crate::protocol::AgentMethod::ReportUpstreamReset {
             workspace: self.workspace.clone(),
             execution: self.execution.clone(),
-            resets_at,
+            resets_at: Some(resets_at),
         })
         .await;
+        self.sent.reset = Some(resets_at);
     }
 
     async fn turn_failed(&self, failure: crate::state::TurnFailure) {
@@ -290,6 +335,14 @@ impl Reporter {
     /// release instead.
     async fn send(&self, report: crate::protocol::AgentMethod) {
         send(&self.paths, report).await;
+    }
+}
+
+#[cfg(feature = "proxy")]
+impl Sent {
+    /// Whether the daemon holds anything of the proxy's to forget.
+    fn told(&self) -> bool {
+        self.retry || self.reset.is_some()
     }
 }
 
