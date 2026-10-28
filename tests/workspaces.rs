@@ -48,6 +48,10 @@ const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "forges.\"forge.example\".type = \"forgejo\"\n";
+/// A long-running command whose environment stays readable once launchd adopts
+/// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
+/// tests' setup verification.
+const READABLE_SLEEP: [&str; 3] = ["python3", "-c", "import time; time.sleep(60)"];
 
 impl Fixture {
     fn new() -> Self {
@@ -10834,7 +10838,8 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
     fixture.add("orphan");
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "orphan", "--", "sleep", "30"])
+        .args(["run", "--workspace", "orphan", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -10882,7 +10887,8 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
 fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value {
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", workspace, "--", "sleep", "30"])
+        .args(["run", "--workspace", workspace, "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -10975,7 +10981,8 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     fixture.ok(&["acquire", "resource", "lock", "--workspace", "orphan"]);
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "orphan", "--", "sleep", "30"])
+        .args(["run", "--workspace", "orphan", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -11023,7 +11030,8 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     let port = fixture.ok(&["acquire", "port", "web", "--workspace", "connected"]);
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "connected", "--", "sleep", "30"])
+        .args(["run", "--workspace", "connected", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -11355,7 +11363,8 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(String::from_utf8_lossy(&scoped.stderr).contains("workspace processes can only"));
     let mut command = fixture
         .command()
-        .args(["run", "--workspace", "first", "--", "sleep", "30"])
+        .args(["run", "--workspace", "first", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -14042,7 +14051,8 @@ fn merged_stops_agent_and_releases_resources_without_idle_delay() {
     fixture.ok(&["acquire", "resource", "device", "--workspace", "merged"]);
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "merged", "--", "sleep", "60"])
+        .args(["run", "--workspace", "merged", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -20772,7 +20782,8 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
     fixture.ok(&["acquire", "resource", "device", "--workspace", "finished"]);
     let mut wrapper = fixture
         .command()
-        .args(["run", "--workspace", "finished", "--", "sleep", "60"])
+        .args(["run", "--workspace", "finished", "--"])
+        .args(READABLE_SLEEP)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
