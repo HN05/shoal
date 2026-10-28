@@ -31,6 +31,7 @@ use crate::{
     demos::Launch,
     env,
     model::{Repository, Workspace},
+    sessions::HostName,
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
@@ -139,8 +140,8 @@ impl Configured {
 /// A terminal host: a multiplexer or terminal app that runs Shoal work beside
 /// the caller. A capability a host lacks keeps that work in this process.
 pub(in crate::cli) trait Host: Sync {
-    /// The name sessions and messages use.
-    fn name(&self) -> &'static str;
+    /// The name records, sessions and messages use.
+    fn name(&self) -> HostName;
 
     /// Whether this host serves the terminal this process runs in, where
     /// config enables it.
@@ -378,8 +379,8 @@ pub(in crate::cli) struct Demo<'a> {
 struct Plain;
 
 impl Host for Plain {
-    fn name(&self) -> &'static str {
-        "terminal"
+    fn name(&self) -> HostName {
+        HostName::Terminal
     }
 
     fn serves(&self) -> bool {
@@ -767,7 +768,7 @@ async fn start_in_background(
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
     let mut argv = shoal_command(ctx, args)?;
     if host.closes_when_done {
-        argv.extend(["--close-in".into(), host.host.name().into()]);
+        argv.extend(["--close-in".into(), host.host.name().as_str().into()]);
     }
     let start = Start {
         state: &ctx.paths.state,
@@ -805,7 +806,7 @@ pub(in crate::cli) async fn run_agent(
             agent,
             records,
             command,
-            close_in: closes_when_done.then(|| host.name()),
+            close_in: closes_when_done.then(|| host.name().as_str()),
         },
     )?;
     let mut env = place_env(ctx)?;
@@ -967,15 +968,15 @@ pub(in crate::cli) async fn start_demo(
             cwd: &workspace.path,
             label: &demo_label(host, workspace, name),
             env: &env,
-            worker: &|place: &str| worker(host.name(), place),
+            worker: &|place: &str| worker(host.name().as_str(), place),
         };
         if let Some(place) = host.start_demo(&demo).await? {
-            return Ok((host.name(), place));
+            return Ok((host.name().as_str(), place));
         }
     }
-    let worker = |place: &str| worker(Plain.name(), place);
+    let worker = |place: &str| worker(Plain.name().as_str(), place);
     let place = background::start_demo(&ctx.paths, workspace, name, &worker)?;
-    Ok((Plain.name(), place))
+    Ok((Plain.name().as_str(), place))
 }
 
 /// What the place `host` opens for demo `name` of `workspace` is called:
@@ -1013,7 +1014,7 @@ fn demo_host(name: &str) -> Result<&'static dyn Host> {
 fn named(name: &str) -> Option<&'static dyn Host> {
     hosts()
         .chain([&Plain as &dyn Host])
-        .find(|host| host.name() == name)
+        .find(|host| host.name().as_str() == name)
 }
 
 /// The place a host opened for this process to add a workspace in, hosting
@@ -1033,7 +1034,7 @@ fn add_worker_argv(ctx: &Context, host: &Configured) -> Result<Vec<OsString>> {
         &ctx.paths,
         false,
         crate::cli::internal::Worker::Add {
-            host: host.host.name(),
+            host: host.host.name().as_str(),
             close_when_done: host.closes_when_done,
         },
     )

@@ -119,8 +119,8 @@ impl FakeHost {
 }
 
 impl Host for FakeHost {
-    fn name(&self) -> &'static str {
-        "fake"
+    fn name(&self) -> crate::sessions::HostName {
+        crate::sessions::HostName::Terminal
     }
 
     fn serves(&self) -> bool {

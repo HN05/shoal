@@ -19,7 +19,10 @@ use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start,
 use crate::{
     cli::agents::ensure_program,
     env,
-    sessions::zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, kill, list},
+    sessions::{
+        HostName,
+        zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, kill, list},
+    },
     subprocess::Run,
     tools::Tool,
 };
@@ -30,15 +33,13 @@ const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
 const MAX_NAME_LEN: usize = 32;
 
-const NAME: &str = "zmx";
-
 /// zmx keeps agents in sessions that outlive the caller's terminal, outside
 /// Herdr panes.
 pub(super) struct Zmx;
 
 impl Host for Zmx {
-    fn name(&self) -> &'static str {
-        NAME
+    fn name(&self) -> HostName {
+        HostName::Zmx
     }
 
     fn serves(&self) -> bool {
@@ -522,7 +523,7 @@ async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
                 .and_then(|clients| clients.parse().ok())
                 .unwrap_or(0),
             name,
-            host: NAME,
+            host: HostName::Zmx.as_str(),
         })
         .collect();
     sessions.sort_by(|a, b| a.name.cmp(&b.name));

@@ -51,7 +51,7 @@ pub(super) async fn start_watcher(
         &ctx.paths,
         ctx.json,
         internal::Worker::PlaceWatch {
-            host: host.name(),
+            host: host.name().as_str(),
             workspace,
             place,
             instance: instance.as_deref(),
@@ -104,7 +104,12 @@ pub async fn watch(
     kept_at: Option<String>,
 ) -> Result<i32> {
     let host = super::named(&host).with_context(|| format!("unknown terminal host {host}"))?;
-    let _closing = Marker::record(&ctx.paths, host.name(), &place.workspace, &place.id);
+    let _closing = Marker::record(
+        &ctx.paths,
+        host.name().as_str(),
+        &place.workspace,
+        &place.id,
+    );
     let executable = installed::Executable::current();
     let lifecycle = || async {
         match workspace_lifecycle(ctx, &place.workspace).await {
@@ -239,7 +244,7 @@ pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
     hosts().any(|host| {
         host.this_place().is_some_and(|place| {
             [
-                Marker::path(paths, host.name(), workspace, &place),
+                Marker::path(paths, host.name().as_str(), workspace, &place),
                 Marker::earlier_path(paths, workspace, &place),
             ]
             .into_iter()

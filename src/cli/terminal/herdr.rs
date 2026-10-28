@@ -10,15 +10,15 @@ use futures_util::future::BoxFuture;
 use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
 
 mod demo;
-use crate::{config, state::AgentState, subprocess::Run};
+use crate::{config, sessions::HostName, state::AgentState, subprocess::Run};
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place.
 pub(super) struct Herdr;
 
 impl Host for Herdr {
-    fn name(&self) -> &'static str {
-        "herdr"
+    fn name(&self) -> HostName {
+        HostName::Herdr
     }
 
     /// A Herdr pane.

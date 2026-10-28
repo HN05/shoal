@@ -1,7 +1,10 @@
 //! Terminal sessions Shoal created, shared by the CLI and daemon. Places the
 //! user opened stay theirs, even when Shoal runs an agent in them.
 mod locking;
+mod origin;
 pub(crate) mod zmx;
+
+pub(crate) use origin::HostName;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
