@@ -216,17 +216,17 @@ impl Rex {
     }
 
     /// Whether `block`'s shell is back at its prompt: open, its program
-    /// running, and nothing in the foreground but that shell.
-    pub async fn at_prompt(&self, block: &str) -> Result<bool> {
-        let Some(output) = self
+    /// running, and nothing in the foreground but that shell. A block that is
+    /// gone or unreadable, as on a server that cannot be reached, is not.
+    pub async fn at_prompt(&self, block: &str) -> bool {
+        let Ok(Some(output)) = self
             .run_found(&["block", "call", "-b", block, "process"])
-            .await?
+            .await
         else {
-            return Ok(false);
+            return false;
         };
-        let processes: Processes =
-            serde_json::from_slice(&output).context("invalid Rex process list")?;
-        Ok(processes.shell_in_foreground())
+        serde_json::from_slice::<Processes>(&output)
+            .is_ok_and(|processes| processes.shell_in_foreground())
     }
 
     /// Type `text` into `block` exactly as given.

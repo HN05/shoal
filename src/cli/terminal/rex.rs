@@ -326,7 +326,7 @@ async fn reveal(server: &Server, block: &Block, id: &str, name: &str) -> Result<
 /// prompt.
 async fn run_at_prompt(place: &Origin, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
     let server = Server::recorded(&place.data)?;
-    if !server.at_prompt(place.id()).await? {
+    if !server.at_prompt(place.id()).await {
         return Ok(false);
     }
     let typed = Typed::new(argv, env)?;

@@ -176,3 +176,24 @@ async fn a_new_window_types_its_input_into_a_shell() {
     assert_eq!(options["cwd"], "/work");
     assert_eq!(options["initial_input"], " shoal internal launch /tmp/f\r");
 }
+
+#[tokio::test]
+async fn an_unreachable_server_shows_no_prompt_to_rerun_at() {
+    let (_root, rex) = fake(r#"{('block', 'call'): (4, 'no Rex server is running')}"#);
+    assert!(!rex.at_prompt("block:1").await);
+}
+
+#[tokio::test]
+async fn closing_a_block_leaves_its_window_to_rex() {
+    let (root, rex) = fake(
+        r#"{('block', 'inspect'): (0, '{"session_id": "session:1", "block": {"window_id": "window:1"}}'), ('block', 'close'): (0, '')}"#,
+    );
+    // The fake still reports the block after closing, as a refused close would.
+    assert!(rex.close("block:1").await.is_err());
+    let closes: Vec<_> = calls(&root)
+        .into_iter()
+        .filter(|call| call.contains(&"close".to_owned()))
+        .collect();
+    assert_eq!(closes.len(), 1);
+    assert!(closes[0].contains(&"block".to_owned()));
+}
