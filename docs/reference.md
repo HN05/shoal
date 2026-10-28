@@ -84,8 +84,8 @@ it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 user. Service commands target the one registered per-user service, whose state
 directory must match. `daemon status` exits 1 when offline. A daemon that
 owns the state directory but does not answer is reported with its PID by every
-command; `daemon stop` and `daemon restart` still stop it, a foreground one with
-SIGTERM. `daemon start`
+command. `daemon status`, `stop` and `restart` need no request capacity, and stop
+a foreground daemon whose status fails, as while it starts, with SIGTERM. `daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
 `shoal daemon install` preserves the invoked executable's symlink path and captures the
