@@ -32,6 +32,15 @@ use tokio::{
 };
 use uuid::Uuid;
 
+/// The workspaces with a running execution. One whose wrapper is gone is
+/// left for `shoal stop <workspace>` rather than failing every bulk stop.
+fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
+    Ok(db
+        .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
+        .query_map([ExecutionState::Running], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -882,7 +891,29 @@ impl Manager {
         })
     }
 
-    /// Stop every execution, cancelling agents' waiting automatic restores.
+    /// The settled workspaces `shoal stop --all` stops: those with a running
+    /// execution or a stopped agent whose restore is requested or queued. The
+    /// queue gate keeps restores from moving between the queue and their
+    /// agents meanwhile, and executions are read before requests, which an
+    /// agent a signal stops saves before its execution ends.
+    pub async fn stop_targets(&self) -> Result<Vec<Workspace>> {
+        let _gate = self.agent_queue_gate.lock().await;
+        let mut targets = self.store.run(|db| running_workspaces(db)).await?;
+        targets.extend(self.pending_restore_workspaces().await?);
+        Ok(self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .filter(|workspace| {
+                matches!(
+                    workspace.state,
+                    WorkspaceState::Ready | WorkspaceState::Failed
+                ) && targets.contains(&workspace.id)
+            })
+            .collect())
+    }
+
+    /// Stop every execution, cancelling agents' waiting restores.
     pub async fn stop_workspace(&self, selector: &str, request: StopRequest) -> Result<()> {
         self.stop_workspace_executions(
             selector,
@@ -893,15 +924,21 @@ impl Manager {
         .await
     }
 
-    /// Stop as [`Manager::stop_workspace`] does, treating executions whose
-    /// launch identity was never recorded as ended once nothing of them is
-    /// visible, because the user checked.
-    pub async fn stop_workspace_acknowledged(
+    /// Stop as [`Manager::stop_workspace`] does at the user's request. With
+    /// `acknowledge_unproven`, executions whose launch identity was never
+    /// recorded count as ended once nothing of them is visible, because the
+    /// user checked.
+    pub async fn stop_workspace_manually(
         &self,
         selector: &str,
-        request: StopRequest,
+        acknowledge_unproven: bool,
     ) -> Result<()> {
-        self.stop_workspace_executions(selector, request, Protected::Stop, StopPolicy::Acknowledged)
+        let policy = if acknowledge_unproven {
+            StopPolicy::Acknowledged
+        } else {
+            StopPolicy::RequireCompleteProof
+        };
+        self.stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
             .await
     }
 
@@ -932,9 +969,21 @@ impl Manager {
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
-        let result = self
-            .stop_executions_keeping(&workspace.id, policy, &request, protected)
-            .await;
+        let result = async {
+            // Before stopping, so a restore admitted meanwhile cannot start
+            // after, and again once stopped, for the request of an agent a
+            // signal was ending meanwhile.
+            if protected == Protected::Stop {
+                self.cancel_stopped_restores(&workspace.id).await?;
+            }
+            self.stop_executions_keeping(&workspace.id, policy, &request, protected)
+                .await?;
+            if protected == Protected::Stop {
+                self.cancel_stopped_restores(&workspace.id).await?;
+            }
+            anyhow::Ok(())
+        }
+        .await;
         // A stop waiting for the user's confirmation has not failed.
         let failure = result
             .as_ref()

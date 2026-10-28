@@ -115,6 +115,21 @@ impl Manager {
         Ok(())
     }
 
+    /// The workspace `selector` names once its worktree verifies, and with
+    /// `on_branch` once it is on its recorded branch.
+    pub(crate) async fn verify_workspace(
+        &self,
+        selector: &str,
+        on_branch: bool,
+    ) -> Result<Workspace> {
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        if on_branch {
+            crate::daemon::links::pr::current_head(&workspace).await?;
+        }
+        Ok(workspace)
+    }
+
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
         let actual_git_dir = self.linked_git_dir(workspace).await?;
         verify_owner(

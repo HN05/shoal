@@ -31,6 +31,7 @@ mod repo_move;
 mod repo_removal;
 mod restore;
 pub(crate) mod review;
+pub(crate) mod spotlight;
 mod stack;
 mod status;
 mod stopped_work;

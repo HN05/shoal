@@ -14,7 +14,7 @@ use crate::{
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
-    state::{ExecutionState, WorkspaceState},
+    state::WorkspaceState,
 };
 
 pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
@@ -120,22 +120,13 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
     Ok(workspaces)
 }
 
-/// Stop every settled workspace with a running execution.
+/// Stop every settled workspace with a running execution or an agent whose
+/// restore is queued or requested, which stopping cancels; the daemon selects
+/// them while no restore can move between the queue and its agent.
 async fn stop_all(ctx: &Context) -> Result<i32> {
-    let mut report = ui::Report::new("stopped", "stop");
-    let mut running = Vec::new();
-    let mut unknown = false;
-    for workspace in client::workspaces(&ctx.paths).await? {
-        match is_running(ctx, &workspace).await {
-            Ok(true) => running.push(workspace),
-            Ok(false) => {}
-            Err(error) => {
-                report.failed(ctx, &workspace.name, &error);
-                unknown = true;
-            }
-        }
-    }
-    if running.is_empty() && !unknown {
+    let report = ui::Report::new("stopped", "stop");
+    let running = request::<Vec<Workspace>>(&ctx.paths, RemovalMethod::StopTargets).await?;
+    if running.is_empty() {
         ctx.emit(
             "No running agents or commands",
             json!({"stopped": [], "failed": []}),
@@ -183,21 +174,4 @@ async fn stop_each(
         (false, false) => format!("Restore with shoal resume{resume}"),
     };
     report.finish(ctx, &summary)
-}
-
-/// Disconnected executions are left for `shoal stop <workspace>` rather than
-/// failing every bulk stop, and preparing or removing workspaces keep their
-/// lifecycle.
-async fn is_running(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    if !matches!(
-        workspace.state,
-        WorkspaceState::Ready | WorkspaceState::Failed
-    ) {
-        return Ok(false);
-    }
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
-    Ok(inspection
-        .executions
-        .iter()
-        .any(|execution| execution.state == ExecutionState::Running))
 }

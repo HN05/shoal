@@ -23,8 +23,7 @@ pub(super) async fn handle(
             Body::SimOverview(manager.simulator_overview(workspace.as_deref()).await?)
         }
         SimulatorMethod::SimList { workspace } => {
-            let owner = manager.workspace_filter(workspace.as_deref()).await?;
-            Body::Simulators(manager.list_simulators(owner.as_deref()).await?)
+            Body::Simulators(manager.selected_simulators(workspace.as_deref()).await?)
         }
         SimulatorMethod::SimAcquire { workspace, request } => manager
             .acquire_simulator(&workspace, request, caller)
@@ -38,10 +37,11 @@ pub(super) async fn handle(
             workspace,
             limit,
             before,
-        } => {
-            let owner = manager.workspace_filter(workspace.as_deref()).await?;
-            Body::SimHistory(manager.clean_history(owner, limit, before).await?)
-        }
+        } => Body::SimHistory(
+            manager
+                .clean_history(workspace.as_deref(), limit, before)
+                .await?,
+        ),
     }))
 }
 
@@ -54,7 +54,7 @@ impl Scoped for SimulatorMethod {
             SimulatorMethod::SimOverview { workspace }
             | SimulatorMethod::SimList { workspace }
             | SimulatorMethod::SimHistory { workspace, .. } => {
-                Some(workspace.get_or_insert_with(|| caller.workspace_id.clone()))
+                Some(caller.own_by_default(workspace))
             }
         })
     }

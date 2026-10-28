@@ -1,14 +1,17 @@
 //! The daemon's answers to [`RepositoryMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
-use crate::protocol::{Body, RepositoryMethod};
+use crate::{
+    daemon::workspace::spotlight::Layout,
+    protocol::{Body, RepositoryMethod},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -21,12 +24,7 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::AgentEnvironments));
         }
         RepositoryMethod::ListRepositories => {
-            let mut repos = manager.repositories().await?;
-            if let Some(caller) = caller {
-                let owner = manager.workspace(&caller.workspace_id).await?;
-                repos.retain(|r| r.id == owner.repository_id);
-            }
-            Body::Repositories(repos)
+            Body::Repositories(manager.visible_repositories(caller).await?)
         }
         RepositoryMethod::RegisterRepository { source, name, path } => {
             Body::Repository(manager.register_repository(source, name, path).await?)
@@ -54,12 +52,16 @@ pub(super) async fn handle(
         RepositoryMethod::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
-        RepositoryMethod::PlanRepositoryMoves { root } => {
-            Body::Repositories(manager.plan_repository_moves(root.as_deref()).await?)
-        }
-        RepositoryMethod::MoveRepositories => {
-            Body::MovedRepositories(manager.move_repositories().await?)
-        }
+        RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
+            manager
+                .plan_repository_moves(root.as_deref(), Layout::migration(regular_dir))
+                .await?,
+        ),
+        RepositoryMethod::MoveRepositories { regular_dir } => Body::MovedRepositories(
+            manager
+                .move_repositories(Layout::migration(regular_dir))
+                .await?,
+        ),
         RepositoryMethod::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)
         }
@@ -93,12 +95,7 @@ impl Scoped for RepositoryMethod {
         Ok(match self {
             RepositoryMethod::ListRepositories => None,
             RepositoryMethod::SyncRepository { repository } => {
-                let own = manager.workspace(&caller.workspace_id).await?.repository_id;
-                ensure!(
-                    manager.repository(&*repository).await?.id == own,
-                    "workspace processes can only sync their own repository"
-                );
-                *repository = own.into();
+                *repository = manager.own_repository(caller, repository).await?;
                 None
             }
             RepositoryMethod::RegisterRepository { .. }
@@ -109,7 +106,7 @@ impl Scoped for RepositoryMethod {
             | RepositoryMethod::EditRepositoryConfig { .. }
             | RepositoryMethod::RemoveRepository { .. }
             | RepositoryMethod::PlanRepositoryMoves { .. }
-            | RepositoryMethod::MoveRepositories
+            | RepositoryMethod::MoveRepositories { .. }
             | RepositoryMethod::ListBranches { .. }
             | RepositoryMethod::KeptBranches { .. }
             | RepositoryMethod::DeleteKeptBranches { .. }

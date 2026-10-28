@@ -21,8 +21,8 @@ const REQUESTS: &[&str] = &[
     r#"{"set_repository_config":{"repository":"app","toml":"[ports]\n"}}"#,
     r#"{"edit_repository_config":{"repository":"app","changes":[{"key":"setup_cmd","value":null}]}}"#,
     r#"{"remove_repository":{"repository":"app"}}"#,
-    r#"{"plan_repository_moves":{"root":"/work"}}"#,
-    r#""move_repositories""#,
+    r#"{"plan_repository_moves":{"root":"/work","regular_dir":false}}"#,
+    r#"{"move_repositories":{"regular_dir":true}}"#,
     r#"{"sync_repository":{"repository":"app"}}"#,
     r#"{"list_branches":{"repository":"app"}}"#,
     r#"{"kept_branches":{"repository":"app"}}"#,
@@ -59,6 +59,7 @@ const REQUESTS: &[&str] = &[
     r#"{"hold_list":{"workspace":"fix"}}"#,
     r#"{"watch_workspace_events":{"since":4,"follow":true}}"#,
     // Removal and restore.
+    r#""stop_targets""#,
     r#"{"stop_workspace":{"workspace":"fix","acknowledge_unproven":false}}"#,
     r#"{"check_removal":{"workspace":"fix","include_changes":true}}"#,
     r#"{"remove_workspace":{"workspace":"fix","unsaved":"all"}}"#,
@@ -102,6 +103,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_hold":{"entry":"q1"}}"#,
     r#"{"queue_attach":{"entry":"q1","workspace":"fix"}}"#,
     r#"{"queue_fail":{"entry":"q1","error":"no agent"}}"#,
+    r#"{"queue_restore":{"workspace":"fix","execution":"e1","env":{}}}"#,
     // Demos.
     r#"{"list_demos":{"workspace":null}}"#,
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,

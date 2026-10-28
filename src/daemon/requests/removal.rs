@@ -7,7 +7,7 @@ use super::super::{
     answer::Answer,
     cleanup,
     scope::{Caller, Scoped, denied},
-    workspace::{Manager, StopRequest},
+    workspace::Manager,
 };
 use crate::{
     protocol::{Body, RemovalMethod},
@@ -20,35 +20,24 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: RemovalMethod) -> Res
             let listed = manager.removed_workspaces().await;
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
+        RemovalMethod::StopTargets => Body::Workspaces(manager.stop_targets().await?),
         RemovalMethod::StopWorkspace {
             workspace,
             acknowledge_unproven,
         } => {
-            if acknowledge_unproven {
-                manager
-                    .stop_workspace_acknowledged(&workspace, StopRequest::manual())
-                    .await?;
-            } else {
-                manager
-                    .stop_workspace(&workspace, StopRequest::manual())
-                    .await?;
-            }
+            manager
+                .stop_workspace_manually(&workspace, acknowledge_unproven)
+                .await?;
             Body::Ok
         }
         RemovalMethod::CheckRemoval {
             workspace,
             include_changes,
-        } => {
-            let mut check = manager
-                .check_removal(&workspace, InspectionPolicy::GitOnly)
-                .await?;
-            if include_changes && check.dirty {
-                check.load_changed_files().await?;
-                check.unsaved_files_archived =
-                    manager.archives_unsaved_files(&check.workspace).await?;
-            }
-            Body::RemovalCheck(check)
-        }
+        } => Body::RemovalCheck(
+            manager
+                .check_manual_removal(&workspace, include_changes)
+                .await?,
+        ),
         RemovalMethod::RemoveWorkspace { workspace, unsaved } => Body::RemovalResult(
             manager
                 .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)

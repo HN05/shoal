@@ -1,7 +1,7 @@
 //! The daemon's answers to [`QuestionMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -49,37 +49,22 @@ pub(super) async fn handle(
 
 impl Scoped for QuestionMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
-        let owner = &caller.workspace_id;
         Ok(match self {
             QuestionMethod::AskQuestion { workspace, .. }
             | QuestionMethod::WithdrawQuestion { workspace, .. }
             | QuestionMethod::AwaitAnswer { workspace, .. } => Some(workspace),
-            QuestionMethod::ListQuestions { workspace } => {
-                Some(workspace.get_or_insert_with(|| owner.clone()))
-            }
+            QuestionMethod::ListQuestions { workspace } => Some(caller.own_by_default(workspace)),
             QuestionMethod::ShowQuestion { id } => {
                 show_question(manager, Some(caller), *id).await?;
                 None
             }
             QuestionMethod::AnswerQuestion { id, shown, .. }
             | QuestionMethod::AcceptQuestionRecommendation { id, shown } => {
-                // A coordinating agent answers the questions of the workspaces
-                // below its own. The answer binds to the question authorized
-                // here, which the answer refuses once a later question reuses
-                // its number.
-                let question = match shown.take() {
-                    Some(shown) => shown,
-                    None => manager.question(*id).await?,
-                };
-                ensure!(
-                    question.id == *id
-                        && question.workspace_id != *owner
-                        && manager
-                            .within_subtree(owner, &question.workspace_id)
-                            .await?,
-                    "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
+                *shown = Some(
+                    manager
+                        .answerable_question(caller, *id, shown.take())
+                        .await?,
                 );
-                *shown = Some(question);
                 None
             }
         })

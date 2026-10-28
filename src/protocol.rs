@@ -67,7 +67,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 144;
+pub const VERSION: u32 = 145;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -452,6 +452,7 @@ response_bodies! {
     Repository(Repository),
     RepositoryConfig(LocalConfig),
     RepositoryRemoved(RepositoryRemoval),
+    RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),
     Workspace(Workspace),
     Hold(crate::model::WorkspaceHold),

@@ -215,36 +215,48 @@ impl Manager {
             .await
     }
 
+    /// The clean requests of the workspace `selector` names, or of all of
+    /// them, newest first.
     pub async fn clean_history(
         &self,
-        owner: Option<String>,
+        selector: Option<&str>,
         limit: u32,
         before: Option<i64>,
     ) -> Result<Vec<AuditEntry>> {
+        let owner = self.workspace_filter(selector).await?;
         ensure!(
             (1..=50).contains(&limit),
             "history limit must be between 1 and 50"
         );
         self.store
-            .run(move |db| {
-                let records = db
-                    .prepare(
-                        "SELECT id,record FROM simulator_clean_requests WHERE (?1 IS NULL OR workspace_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3",
-                    )?
-                    .query_map(params![owner, before, limit], |r| {
-                        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                records
-                    .into_iter()
-                    .map(|(id, record)| {
-                        Ok(AuditEntry {
-                            id,
-                            request: serde_json::from_str(&record)?,
-                        })
-                    })
-                    .collect()
-            })
+            .run(move |db| history(db, owner.as_deref(), limit, before))
             .await
     }
+}
+
+/// Up to `limit` clean requests before `before`, of `owner` or of every
+/// workspace, newest first.
+fn history(
+    db: &rusqlite::Connection,
+    owner: Option<&str>,
+    limit: u32,
+    before: Option<i64>,
+) -> Result<Vec<AuditEntry>> {
+    let records = db
+        .prepare(
+            "SELECT id,record FROM simulator_clean_requests WHERE (?1 IS NULL OR workspace_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3",
+        )?
+        .query_map(params![owner, before, limit], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    records
+        .into_iter()
+        .map(|(id, record)| {
+            Ok(AuditEntry {
+                id,
+                request: serde_json::from_str(&record)?,
+            })
+        })
+        .collect()
 }

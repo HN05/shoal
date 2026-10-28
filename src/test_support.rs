@@ -64,6 +64,19 @@ pub async fn manager() -> (tempfile::TempDir, Arc<Manager>) {
     (root, manager)
 }
 
+/// [`manager`] in a home whose name Spotlight indexes, unlike `tempfile`'s
+/// `.tmp` directories, so the excluded root layout has something to change.
+pub async fn indexed_manager() -> (tempfile::TempDir, Arc<Manager>) {
+    let root = tempfile::Builder::new()
+        .prefix("indexed")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let paths = Paths::for_test(root.path());
+    write_global_config(&paths, "[cleanup]\ngrace_minutes = 0\n");
+    let manager = Manager::open(paths).await.unwrap();
+    (root, manager)
+}
+
 /// Replace the global config with `text` and reload it.
 pub async fn configure(manager: &Manager, text: &str) {
     write_global_config(&manager.paths, text);

@@ -100,6 +100,16 @@ impl Manager {
             .await
     }
 
+    /// [`Self::workspace_hook`] of the workspace `selector` names.
+    pub(crate) async fn selected_workspace_hook(
+        &self,
+        selector: &str,
+        kind: HookKind,
+    ) -> Result<Option<std::path::PathBuf>> {
+        let workspace = self.workspace(selector).await?;
+        self.workspace_hook(&workspace, kind).await
+    }
+
     /// A hook's executable from the resolved settings, in the directory it
     /// runs from.
     pub(crate) async fn workspace_hook(

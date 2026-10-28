@@ -267,18 +267,21 @@ which print what stopped them and how to restore them, retaining work and resour
 with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 Several workspaces, or `--all` for every ready or failed workspace with a running
-execution, stop in parallel, reporting each failure without keeping the others running.
+execution or a pending restore, stop in parallel, reporting each failure without keeping the others running.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
 closing its terminal, logging out or shutting down sends, is saved the same way,
-with the signal as its stop reason, so `shoal resume --all` restores it after a
-reboot; other commands just end.
+with the signal as its stop reason, and its restore waits in the
+[agent queue](#agent-queue) once its execution has ended, so it comes back after
+a reboot without a command; run `shoal stop --all` first to keep agents down. An
+agent whose restore needs a session picker, or whose assignment is done, waits
+for `shoal resume` instead. Other commands just end.
 For an execution whose wrapper is gone, `shoal stop <workspace>` stops the
 processes it verifies as the execution's and forgets the record once nothing of
 it is visible. Processes it cannot verify or read fail the stop with their PIDs,
 for you to check and stop yourself. An execution Shoal never recorded the launch
 of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking. Stopping several workspaces does not ask: without
-`--yes`, it reports such a workspace as failed. Stopping cancels a waiting automatic
+`--yes`, it reports such a workspace as failed. Stopping cancels a waiting
 restore and requires explicit resume even with `[agent_resume]` configured.
 Run stop, restart and resume outside scoped executions, except that a workspace
 process may discard the stopped work of a workspace below its own with
@@ -299,11 +302,10 @@ a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal resume`. An agent that does not start again
 stays stopped for `shoal resume`, and the exit status is 1.
 
-`shoal resume [workspace...]` restores a saved agent recovery record after its
-wrapper exits; use `--execution <id>` when several agents stopped in one workspace,
-or pick the agent by name, stop time, reason and whether it was interrupted
-mid-turn or idle on a terminal; an agent without turn reports counts as
-interrupted. Without a
+`shoal resume [workspace...]` queues the restore of each agent a saved recovery
+record keeps after its wrapper exits, or only the `--execution <id>` one, and
+reports how many it queued; the [agent queue](#agent-queue) starts them as
+`max_agents` allows. Without a
 workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
@@ -318,13 +320,18 @@ and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent w
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
 Several workspaces, which each need stopped work, or `--all` for every workspace whose
 assignment is not done, resume together and report commands without an agent,
-skipping agents whose wrapper still waits to restore them. In an
+skipping agents whose wrapper still waits to restore them; a done workspace's
+agent restores only when its workspace is named.
+`--now` starts the agents at once regardless of the limits; with several stopped
+in one workspace, use `--execution` or pick the agent by name, stop time, reason
+and whether it was interrupted mid-turn or idle on a terminal; an agent without
+turn reports counts as interrupted. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
 pane it stopped in once that pane is back at its prompt. Otherwise it restores a
 single agent in the current terminal and starts several in the background, as
 `shoal add` does: a tab per agent where `herdr.new_tab` allows, labelled as
 `shoal add` labels it, or a detached zmx session per agent on a terminal outside
-Herdr. Without a terminal it lists them as `shoal resume` commands to run in
+Herdr. Without a terminal it lists them as `shoal resume --now` commands to run in
 separate terminals.
 Use `--discard` to forget the workspace's stopped agents and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
@@ -1026,6 +1033,7 @@ shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal add <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
+shoal resume --all                            # Queues the restore of every stopped agent
 shoal work --queue                            # Waiting and starting entries
 shoal rm 612-add-queue-cmd                    # Removes a waiting launch
 ```
@@ -1050,7 +1058,8 @@ counts every agent on the machine; a repository's fixed value (saved config or
 `.shoal.toml` in its registered checkout) counts only that repository's agents,
 within the global limit, while `dynamic` there adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
-done; `shoal done`, the agent's exit, `resume --discard` and removal free it.
+done or its restore waits in the queue; `shoal done`, the agent's exit,
+`resume --discard` and removal free it.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns
@@ -1084,6 +1093,16 @@ restore removes the entry and keeps the recovery record. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 
+A restore that `shoal resume` or a signal stop queues joins the back of the
+queue and needs a free slot, or room for its load, as a launch does. The daemon
+starts it as it starts a queued launch: in the Herdr pane the agent stopped in
+once that pane is back at its prompt, otherwise in a background tab where
+`herdr.new_tab` allows, otherwise in a detached zmx session. A restore whose
+agent has not started within two minutes records a `queue_failed` notification
+and leaves the agent stopped. Stopping the workspace or marking its assignment
+done cancels a pending one, and resuming or discarding the agent another way
+removes it.
+
 `--after` names work the launch waits for: a workspace or queued agent of the
 repository, or an issue number or URL; repeat it for more. An issue launch also
 waits for the open issues its forge records as blocking it: Forgejo and GitHub
@@ -1106,7 +1125,7 @@ and `--focus` cannot wait for work.
 `starting`, followed by the work a waiting launch is after, or `after an
 update` for a restore of an idle agent, and a restore with its agent; `work
 --queue` lists only them (`--json` gives the entries with their `kind`,
-`launch` or `restore`, `waiting_for` while dependencies remain,
+`launch` or `restore`, a restore's stopped `execution`, `waiting_for` while dependencies remain,
 `waits_for_update` for a restore of an idle agent and
 `base` once a launch starts on a dependency's branch, while `work --json` stays
 a list of workspaces). `shoal rm` removes a waiting launch by name or ID, and
@@ -1451,6 +1470,12 @@ with its existing path is fine; a different path is rejected. Registering, and
 creating a workspace, fail when the daemon cannot create a file in the directory
 it would write within 30 seconds, as on a volume macOS has not given it access to.
 
+On macOS, Spotlight does not index a `root_dir` Shoal creates: it is a symlink
+to `<parent>/.<name>.noindex`, a directory Spotlight skips by name, so `~/shoal`
+still leads to every workspace while Shoal and Git show the real paths. An
+existing `root_dir` is used as it is; [`repo migrate`](#move-repositories-to-a-new-root)
+moves it out of Spotlight, or back with `--regular-dir`.
+
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
 lose trailing slashes so worktrees get a remote forge CLIs recognize. Names from
@@ -1596,11 +1621,15 @@ workspace creation is blocked until the same command is retried.
 ```sh
 shoal repo migrate /Volumes/Work/shoal -y  # Save root_dir, then move
 shoal repo migrate -y                      # Move into the configured root_dir
+shoal repo migrate --regular-dir -y        # Keep root_dir a regular directory
 ```
 
 Moves each repository directory outside `root_dir` into it whole, with its URL
 clone, workspaces, seed and shared caches, keeping its name or suffixing it when
-taken. A root on another filesystem is copied, then the original is deleted. A
+taken. On macOS it moves them into the [directory Spotlight skips](#repositories)
+and then makes `root_dir` the link to it, refusing when `root_dir` holds other
+files; `--regular-dir` keeps `root_dir` a regular directory, replacing that link
+and moving the repositories back. A root on another filesystem is copied, then the original is deleted. A
 checkout or workspace placed outside the repository directory stays where it is.
 A path argument is saved as the global `root_dir` and the daemon reloads it first.
 Interactive calls run the checks below, then list the directories to move and

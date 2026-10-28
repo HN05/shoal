@@ -43,7 +43,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
             "execution",
             None,
             Some("w1:p2".into()),
-            None,
+            Restorer::User,
         )
         .unwrap();
     save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
@@ -84,10 +84,18 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
         automatic: true,
         handoff_delivered: false,
     };
-    let wrapper = identity::capture(std::process::id()).unwrap();
-    assert!(wrapper.is_some());
+    let wrapper = identity::capture(std::process::id())
+        .unwrap()
+        .expect("this process has an identity");
     recovery
-        .save(&paths, "removed", "execution", None, None, wrapper)
+        .save(
+            &paths,
+            "removed",
+            "execution",
+            None,
+            None,
+            Restorer::Wrapper(wrapper),
+        )
         .unwrap();
     save_command(&paths, "removed", "command", &[OsString::from("true")]).unwrap();
 
@@ -136,9 +144,44 @@ fn the_first_saved_turn_stays_through_later_saves() {
         handoff_delivered: false,
     };
     let path = recovery
-        .save(&paths, "workspace", "execution", None, None, None)
+        .save(&paths, "workspace", "execution", None, None, Restorer::User)
         .unwrap();
     let record = Record::load(&path).unwrap().unwrap();
     assert_eq!(record.turn, Some(AgentState::Working));
     assert_eq!(record.stage, Some(Stage::Stopped));
+}
+
+#[test]
+fn a_restore_request_sits_beside_the_record_until_forgotten() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let recovery = Recovery {
+        agent: "claude".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: false,
+    };
+    let env = BTreeMap::from([("HERDR_ENV".to_owned(), "1".to_owned())]);
+    let record = recovery
+        .save(
+            &paths,
+            "workspace",
+            "execution",
+            Some("its terminal closed"),
+            None,
+            Restorer::Queue(env.clone()),
+        )
+        .unwrap();
+    assert_eq!(
+        restore_requests(&paths, "workspace").unwrap(),
+        [("execution".to_owned(), env)]
+    );
+    // The request is no stopped work of its own.
+    assert_eq!(agent_records(&paths, "workspace").unwrap(), ["execution"]);
+
+    forget_restore_request(&paths, "workspace", "execution").unwrap();
+    assert!(restore_requests(&paths, "workspace").unwrap().is_empty());
+    let record = Record::load(&record).unwrap().expect("the record stays");
+    assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
+    forget_restore_request(&paths, "workspace", "execution").unwrap();
 }

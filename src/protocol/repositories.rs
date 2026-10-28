@@ -37,9 +37,15 @@ pub enum RepositoryMethod {
     /// configured `root_dir`, after the checks it runs before moving any.
     PlanRepositoryMoves {
         root: Option<std::path::PathBuf>,
+        /// Keep the root a regular directory instead of one Spotlight skips.
+        #[serde(default)]
+        regular_dir: bool,
     },
     /// Move every repository directory into the configured `root_dir`.
-    MoveRepositories,
+    MoveRepositories {
+        #[serde(default)]
+        regular_dir: bool,
+    },
     /// Fetch the default branch's remote and fast-forward the local default branch.
     SyncRepository {
         repository: crate::repository::Selector,

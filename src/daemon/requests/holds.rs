@@ -21,9 +21,7 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: HoldMethod) -> Result
             manager.release_hold(&workspace, name).await?;
             Body::Ok
         }
-        HoldMethod::HoldList { workspace } => {
-            Body::Holds(manager.workspace(&workspace).await?.holds)
-        }
+        HoldMethod::HoldList { workspace } => Body::Holds(manager.holds(&workspace).await?),
     }))
 }
 

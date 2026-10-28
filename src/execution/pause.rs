@@ -4,7 +4,11 @@ use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;
 
-use super::{Mode, link::Link, recovery};
+use super::{
+    Mode,
+    link::Link,
+    recovery::{self, Restorer},
+};
 use crate::{
     model::{ExecutionPlan, PortReservation},
     paths::Paths,
@@ -36,9 +40,18 @@ pub(super) async fn pause_agent(
     stop: &Halt,
 ) -> Result<AfterPause> {
     let automatic = recovery.automatic && stop.recovers();
-    let saved = save_paused_agent(paths, plan, mode, recovery, stop, automatic);
+    let restorer = restorer(recovery, stop, automatic);
+    let queued = matches!(restorer, Restorer::Queue(_));
+    let saved = save_paused_agent(paths, plan, mode, recovery, stop, restorer);
     match &saved {
         // The terminal may have closed with the session.
+        Ok(_) if queued => {
+            let _ = writeln!(
+                std::io::stderr(),
+                "shoal: agent stopped{}; its restore waits in the agent queue",
+                stop.stated_reason()
+            );
+        }
         Ok(_) if !automatic => {
             let restore = stop.manual_restore(&plan.workspace.name, &plan.id);
             let _ = writeln!(std::io::stderr(), "{restore}");
@@ -100,15 +113,30 @@ async fn await_restore(
     }
 }
 
-/// The recovery record of a paused agent, naming where it ran and, when it
-/// restores automatically, this wrapper as the one waiting to restore it.
+/// What restores the paused agent besides `shoal resume`: this wrapper when
+/// protection stopped it to restore it `automatic`ally, the agent queue when a
+/// signal ended its session and its restore needs no user, otherwise nothing.
+fn restorer(recovery: &recovery::Recovery, stop: &Halt, automatic: bool) -> Restorer {
+    if automatic {
+        return this_wrapper().map_or(Restorer::User, Restorer::Wrapper);
+    }
+    match stop {
+        Halt::Ended { .. } if recovery.automatic => {
+            Restorer::Queue(crate::cli::terminal::start_environment())
+        }
+        _ => Restorer::User,
+    }
+}
+
+/// The recovery record of a paused agent, naming where it ran and what
+/// restores it.
 fn save_paused_agent(
     paths: &Paths,
     plan: &ExecutionPlan,
     mode: &Mode,
     recovery: &recovery::Recovery,
     stop: &Halt,
-    automatic: bool,
+    restorer: Restorer,
 ) -> Result<PathBuf> {
     // A detached agent never ran in the launching terminal.
     let place = (!matches!(mode, Mode::Detached { .. }))
@@ -120,7 +148,7 @@ fn save_paused_agent(
         &plan.id,
         stop.saved_reason(),
         place,
-        automatic.then(this_wrapper).flatten(),
+        restorer,
     )
 }
 

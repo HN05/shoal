@@ -7,6 +7,8 @@ use crate::{
 };
 use anyhow::{Result, ensure};
 
+mod access;
+
 /// The workspace and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {
@@ -91,6 +93,12 @@ impl Caller {
 
     pub fn kind(&self) -> Option<ExecutionKind> {
         self.execution.as_ref().map(|execution| execution.kind)
+    }
+
+    /// The workspace an optional filter names, which defaults to the caller's
+    /// own.
+    pub(super) fn own_by_default<'a>(&self, workspace: &'a mut Option<String>) -> &'a mut String {
+        workspace.get_or_insert_with(|| self.workspace_id.clone())
     }
 }
 

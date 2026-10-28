@@ -115,9 +115,13 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             agent,
             args,
         } => return super::repo_setup::start(ctx, repository, agent, args).await,
-        RepoCommand::Migrate { root, confirmation } => {
+        RepoCommand::Migrate {
+            root,
+            regular_dir,
+            confirmation,
+        } => {
             let root = root.map(|root| absolute(ctx, root)).transpose()?;
-            super::repo_migrate::run(ctx, root, confirmation.yes).await?;
+            super::repo_migrate::run(ctx, root, regular_dir, confirmation.yes).await?;
         }
         RepoCommand::Rm {
             repository,

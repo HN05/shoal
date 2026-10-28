@@ -44,10 +44,7 @@ pub(super) async fn handle(
             }));
         }
         ExecutionMethod::CheckLanding => {
-            ensure!(
-                caller.is_some_and(|caller| caller.kind() == Some(ExecutionKind::Land)),
-                "landing execution required"
-            );
+            require_landing(caller, "landing execution required")?;
             Body::Ok
         }
         ExecutionMethod::ListAgents => Body::RunningAgents(manager.running_agents().await?),
@@ -65,10 +62,10 @@ impl Scoped for ExecutionMethod {
                 return Err(denied());
             }
             ExecutionMethod::CheckLanding => {
-                ensure!(
-                    caller.kind() == Some(ExecutionKind::Land),
-                    "only an authorized landing execution may run the land worker"
-                );
+                require_landing(
+                    Some(caller),
+                    "only an authorized landing execution may run the land worker",
+                )?;
                 None
             }
             ExecutionMethod::Execute {
@@ -81,12 +78,27 @@ impl Scoped for ExecutionMethod {
                 kind: ExecutionKind::Setup,
                 ..
             } => {
-                ensure!(
-                    caller.kind() != Some(ExecutionKind::Setup),
-                    "a setup command cannot recursively run setup"
-                );
+                refuse_nested_setup(caller)?;
                 Some(workspace)
             }
         })
     }
+}
+
+/// Refuse a caller other than a landing execution; `refusal` says why.
+fn require_landing(caller: Option<&Caller>, refusal: &str) -> Result<()> {
+    ensure!(
+        caller.is_some_and(|caller| caller.kind() == Some(ExecutionKind::Land)),
+        "{refusal}"
+    );
+    Ok(())
+}
+
+/// Refuse a setup command running setup.
+fn refuse_nested_setup(caller: &Caller) -> Result<()> {
+    ensure!(
+        caller.kind() != Some(ExecutionKind::Setup),
+        "a setup command cannot recursively run setup"
+    );
+    Ok(())
 }

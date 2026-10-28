@@ -1782,7 +1782,7 @@ async fn copy_adoption_records_ownership_and_finishes_ready() {
     fs::write(source.path.join("copied"), "copied files\n").unwrap();
     let copied = f
         .manager
-        .copy_workspace(&f.repo_id, &source.path)
+        .adopt_workspace(&f.repo_id, &source.path, true)
         .await
         .unwrap();
 
@@ -1818,13 +1818,17 @@ async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
     };
     // A marker outliving its record, e.g. after a state reset, is replaced.
     let (path, marker) = marked("adopt/stale", "forgotten-workspace");
-    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    let w = f
+        .manager
+        .adopt_workspace(&f.repo_id, &path, false)
+        .await
+        .unwrap();
     assert_eq!(fs::read_to_string(&marker).unwrap(), format!("{}\n", w.id));
     // One naming a recorded workspace refuses adoption and stays in place.
     let (path, marker) = marked("adopt/owned", &w.id);
     let error = f
         .manager
-        .adopt_workspace(&f.repo_id, &path)
+        .adopt_workspace(&f.repo_id, &path, false)
         .await
         .unwrap_err();
     assert!(
@@ -1855,7 +1859,11 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     )
     .unwrap();
     let before = git(&path, &["status", "--porcelain"]);
-    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    let w = f
+        .manager
+        .adopt_workspace(&f.repo_id, &path, false)
+        .await
+        .unwrap();
     assert_eq!(w.name, "adopt-topic");
     assert_eq!(w.state, crate::state::WorkspaceState::Ready);
     assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
@@ -1867,7 +1875,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(git(&path, &["status", "--porcelain"]), before);
     assert_eq!(
         f.manager
-            .adopt_workspace(&f.repo_id, &path)
+            .adopt_workspace(&f.repo_id, &path, false)
             .await
             .unwrap()
             .id,
@@ -1910,7 +1918,7 @@ async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
     let f = Fixture::new().await;
     assert!(
         f.manager
-            .adopt_workspace(&f.repo_id, &f.repo)
+            .adopt_workspace(&f.repo_id, &f.repo, false)
             .await
             .is_err()
     );
@@ -1919,15 +1927,25 @@ async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
         &f.repo,
         &["worktree", "add", "--detach", path.to_str().unwrap()],
     );
-    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &path, false)
+            .await
+            .is_err()
+    );
     git(&path, &["switch", "-c", "adopt/topic"]);
     git(&f.repo, &["worktree", "lock", path.to_str().unwrap()]);
-    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &path, false)
+            .await
+            .is_err()
+    );
     git(&f.repo, &["worktree", "unlock", path.to_str().unwrap()]);
     fs::create_dir(path.join("child")).unwrap();
     assert!(
         f.manager
-            .adopt_workspace(&f.repo_id, &path.join("child"))
+            .adopt_workspace(&f.repo_id, &path.join("child"), false)
             .await
             .is_err()
     );
@@ -1935,7 +1953,7 @@ async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
     assert!(
         other
             .manager
-            .adopt_workspace(&other.repo_id, &path)
+            .adopt_workspace(&other.repo_id, &path, false)
             .await
             .is_err()
     );
@@ -1951,9 +1969,19 @@ async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
         ],
     );
     git(&moved, &["switch", "-c", "renamed"]);
-    assert!(f.manager.adopt_workspace(&f.repo_id, &moved).await.is_err());
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &moved, false)
+            .await
+            .is_err()
+    );
     f.add("adopt-topic").await;
-    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &path, false)
+            .await
+            .is_err()
+    );
     assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 2);
     assert!(path.join("tracked").exists());
 }
@@ -1980,7 +2008,11 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
             "refs/remotes/origin/main",
         ],
     );
-    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    let w = f
+        .manager
+        .adopt_workspace(&f.repo_id, &path, false)
+        .await
+        .unwrap();
     assert!(w.base_ref.is_none());
     assert_eq!(
         w.base_commit.as_deref(),

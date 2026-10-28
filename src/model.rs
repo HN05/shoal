@@ -38,6 +38,14 @@ pub struct RepositoryRemoval {
     pub workspace_paths: Vec<PathBuf>,
 }
 
+/// The repository directories a move would take into `directory`, the
+/// canonical directory that holds `root_dir`'s repositories.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepositoryMoves {
+    pub directory: PathBuf,
+    pub repositories: Vec<Repository>,
+}
+
 /// A repository directory moved into the configured `root_dir`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MovedRepository {
@@ -708,6 +716,9 @@ pub struct QueueEntry {
     pub created_at: i64,
     /// The workspace a starting launch opened, or a restore's own.
     pub workspace_id: Option<String>,
+    /// The stopped execution a restore restores.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<String>,
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<String>,

@@ -43,14 +43,6 @@ pub(super) struct Launch {
     pub after: Vec<Dependency>,
 }
 
-/// What the daemon's start of a queued launch needs from this process: its
-/// terminal host's variables and its output setting.
-fn launch_environment() -> std::collections::BTreeMap<String, String> {
-    let mut env = terminal::environment();
-    env.extend([crate::env::output_setting()]);
-    env
-}
-
 /// Ask the daemon for a slot for `launch`, which `plan` starts.
 pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Result<Admission> {
     let request = QueueRequest {
@@ -59,7 +51,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         agent: launch.agent,
         issue_title: launch.issue_title,
         plan: serde_json::to_string(plan)?,
-        env: launch_environment(),
+        env: terminal::start_environment(),
         now: launch.now,
         workspace: None,
         after: launch.after,
@@ -111,7 +103,7 @@ pub(super) async fn queue_in(
         agent,
         issue_title,
         plan: serde_json::to_string(plan)?,
-        env: launch_environment(),
+        env: terminal::start_environment(),
         now: false,
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),
@@ -210,29 +202,43 @@ async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
     Ok((queued, plan))
 }
 
-/// The daemon's worker for an admitted entry: open its tab or session.
+/// The daemon's worker for an admitted entry: open its tab or session, or
+/// restore its stopped agent.
 pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
     let started = async {
-        let (queued, plan) = plan(ctx, &entry).await?;
-        if let Some(workspace) = &queued.entry.opens {
-            let workspace = client::inspect(&ctx.paths, workspace.clone())
-                .await?
-                .workspace;
-            anyhow::ensure!(
-                plan.opens(&workspace),
-                "the queued launch does not open workspace {}",
-                workspace.name
-            );
+        let queued = entries(ctx)
+            .await?
+            .into_iter()
+            .find(|queued| queued.id == entry)
+            .ok_or_else(|| anyhow::anyhow!("queue entry no longer exists"))?;
+        match queued.kind {
+            QueueKind::Launch => start_launch(ctx, &entry).await,
+            QueueKind::Restore => super::resume::start_queued(ctx, &queued).await,
         }
-        let mut plan = plan;
-        plan.creation.build_on(queued.entry.base.clone());
-        super::workspaces::start_queued(ctx, plan, &queued.entry.name).await
     }
     .await;
     if let Err(error) = &started {
         fail(ctx, &entry, error).await;
     }
     started.map(|()| 0)
+}
+
+/// Open the tab or session of the admitted launch `entry`.
+async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
+    let (queued, plan) = plan(ctx, entry).await?;
+    if let Some(workspace) = &queued.entry.opens {
+        let workspace = client::inspect(&ctx.paths, workspace.clone())
+            .await?
+            .workspace;
+        anyhow::ensure!(
+            plan.opens(&workspace),
+            "the queued launch does not open workspace {}",
+            workspace.name
+        );
+    }
+    let mut plan = plan;
+    plan.creation.build_on(queued.entry.base.clone());
+    super::workspaces::start_queued(ctx, plan, &queued.entry.name).await
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

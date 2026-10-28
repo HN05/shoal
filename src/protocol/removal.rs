@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemovalMethod {
+    /// The workspaces `stop --all` stops.
+    StopTargets,
     StopWorkspace {
         workspace: String,
         /// The user checked that executions Shoal cannot prove ended did.

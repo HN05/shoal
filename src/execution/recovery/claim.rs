@@ -13,15 +13,39 @@ impl Drop for RecoveryClaim {
     }
 }
 
+/// How often a claim follows a record that was replaced while it locked it.
+const CLAIM_ATTEMPTS: usize = 3;
+
 pub(crate) fn claim(path: &std::path::Path) -> Result<RecoveryClaim> {
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)?;
+    for _ in 0..CLAIM_ATTEMPTS {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)?;
+        if let Some(claim) = lock_current(file, path)? {
+            return Ok(claim);
+        }
+    }
+    anyhow::bail!("this recovery record is already being resumed")
+}
+
+/// Lock `file`, opened at `path`, unless another claim holds it. `None` when
+/// `path` names another file by then: replacing a record, as clearing its
+/// restore request does, leaves a lock on the old file guarding nothing.
+fn lock_current(file: std::fs::File, path: &std::path::Path) -> Result<Option<RecoveryClaim>> {
+    use std::os::unix::fs::MetadataExt as _;
     fs2::FileExt::try_lock_exclusive(&file)
         .context("this recovery record is already being resumed")?;
-    ensure!(path.try_exists()?, "recovery record was already consumed");
-    Ok(RecoveryClaim(file))
+    let current = match std::fs::metadata(path) {
+        Ok(current) => current,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("recovery record was already consumed")
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let locked = file.metadata()?;
+    let same = (locked.dev(), locked.ino()) == (current.dev(), current.ino());
+    Ok(same.then_some(RecoveryClaim(file)))
 }
 
 /// Forget saved records, returning their execution IDs.

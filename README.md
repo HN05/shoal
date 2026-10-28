@@ -164,7 +164,8 @@ shoal stop fix-login api      # Stop several; the picker selects them with Tab o
 shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
-shoal resume --all            # Restore stopped agents; report stopped commands
+shoal resume --all            # Queue the restore of stopped agents; report stopped commands
+shoal resume fix-login --now  # Restore its stopped agent at once
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal done fix-login --undo        # Withdraw a recorded done
@@ -263,8 +264,10 @@ false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
 executions. Agents restore once space returns; `shoal resume` restores the rest. Stop agents manually with `shoal stop`, then restore
-a stopped session with `shoal resume`. `shoal resume` also continues an agent that
-exited on its own, such as one you quit. Codex and Claude automatically continue
+a stopped session with `shoal resume`, which queues the restore to start as
+`max_agents` allows; `--now` starts it at once. Agents whose terminal closed, or
+that a logout or reboot stopped, come back through the same queue on their own.
+`shoal resume` also continues an agent that exited on its own, such as one you quit. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.
 

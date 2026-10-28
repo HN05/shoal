@@ -122,6 +122,14 @@ pub async fn watch_environment(manager: std::sync::Arc<Manager>) {
 }
 
 impl Manager {
+    /// Reload the global config, then recheck the environment with it in
+    /// [`watch_environment`], since the checks can outlast a reply's budget.
+    pub async fn reload_config_and_recheck(&self) -> Result<()> {
+        self.reload_config().await?;
+        self.environment_recheck.notify_one();
+        Ok(())
+    }
+
     /// Record an alert for each problem with the daemon's tools, `root_dir`,
     /// registered checkouts and the global config, and for each recorded host
     /// that now serves another forge, as the daemon starts or reloads its

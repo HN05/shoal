@@ -30,14 +30,18 @@ pub(super) async fn handle(
             git_profile,
             base,
             chat,
-        } => {
-            let mut opened = manager
-                .open_branch(&repository, &branch, git_profile.as_deref(), path, base)
-                .await?;
-            manager.assign_chat(&opened.workspace.id, chat).await?;
-            opened.workspace = manager.workspace(&opened.workspace.id).await?;
-            Body::OpenedWorkspace(opened)
-        }
+        } => Body::OpenedWorkspace(
+            manager
+                .open_branch_for_chat(
+                    repository,
+                    &branch,
+                    git_profile.as_deref(),
+                    path,
+                    base,
+                    chat,
+                )
+                .await?,
+        ),
         WorkspaceMethod::CreateWorkspace {
             path,
             repository,
@@ -45,13 +49,18 @@ pub(super) async fn handle(
             base,
             git_profile,
             chat,
-        } => {
-            let workspace = manager
-                .create_workspace(&repository, name, base, git_profile.as_deref(), path)
-                .await?;
-            manager.assign_chat(&workspace.id, chat).await?;
-            Body::Workspace(manager.workspace(&workspace.id).await?)
-        }
+        } => Body::Workspace(
+            manager
+                .create_workspace_for_chat(
+                    repository,
+                    name,
+                    base,
+                    git_profile.as_deref(),
+                    path,
+                    chat,
+                )
+                .await?,
+        ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
             Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
         }
@@ -68,13 +77,17 @@ pub(super) async fn handle(
             git_profile,
             path,
         } => {
-            let options = workspace::NewWorktreeOptions {
-                git_profile: git_profile.as_deref(),
-                path: path.as_deref(),
-                base: base.as_deref(),
-            };
             manager
-                .check_creation(&repository, branch.as_deref(), existing.as_deref(), options)
+                .check_creation(
+                    &repository,
+                    branch.as_deref(),
+                    existing.as_deref(),
+                    workspace::NewWorktreeOptions {
+                        git_profile: git_profile.as_deref(),
+                        path: path.as_deref(),
+                        base: base.as_deref(),
+                    },
+                )
                 .await?;
             Body::Ok
         }
@@ -86,14 +99,7 @@ pub(super) async fn handle(
             repository,
             path,
             copy,
-        } => {
-            let workspace = if copy {
-                manager.copy_workspace(&repository, &path).await?
-            } else {
-                manager.adopt_workspace(&repository, &path).await?
-            };
-            Body::Workspace(workspace)
-        }
+        } => Body::Workspace(manager.adopt_workspace(&repository, &path, copy).await?),
         WorkspaceMethod::RenameWorkspace { workspace, branch } => Body::Workspace(
             manager
                 .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
@@ -114,14 +120,7 @@ pub(super) async fn handle(
         WorkspaceMethod::VerifyWorkspace {
             workspace,
             on_branch,
-        } => {
-            let workspace = manager.workspace(&workspace).await?;
-            manager.verify_worktree(&workspace).await?;
-            if on_branch {
-                crate::daemon::links::pr::current_head(&workspace).await?;
-            }
-            Body::Workspace(workspace)
-        }
+        } => Body::Workspace(manager.verify_workspace(&workspace, on_branch).await?),
         WorkspaceMethod::FastForwardWorkspace { workspace, branch } => {
             Body::FastForwarded(manager.fast_forward_workspace(&workspace, &branch).await?)
         }
@@ -141,12 +140,7 @@ pub(super) async fn handle(
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
         WorkspaceMethod::FindWorkspaces { target } => {
-            // Scoped callers find workspaces in their subtree only.
-            let within = match caller {
-                Some(caller) => Some(manager.subtree(&caller.workspace_id).await?),
-                None => None,
-            };
-            Body::Workspaces(manager.find_workspaces(&target, within).await?)
+            Body::Workspaces(manager.find_visible_workspaces(&target, caller).await?)
         }
         WorkspaceMethod::DiffBase { workspace } => {
             Body::DiffBase(manager.diff_base(&workspace).await?)
@@ -164,8 +158,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         WorkspaceMethod::WorkspaceHook { workspace, kind } => {
-            let workspace = manager.workspace(&workspace).await?;
-            Body::Hook(manager.workspace_hook(&workspace, kind).await?)
+            Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
         }
         WorkspaceMethod::LayeredConfig { target } => {
             Body::LayeredConfig(Box::new(manager.config_layers_for(target).await?))

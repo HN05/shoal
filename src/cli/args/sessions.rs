@@ -11,7 +11,11 @@ use crate::{
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum SessionsCommand {
-    /// Restore stopped agent sessions and list interrupted commands.
+    /// Queue the restore of stopped agent sessions and list interrupted commands.
+    ///
+    /// The daemon starts queued restores as `max_agents` allows: where each
+    /// agent stopped, otherwise in a background Herdr tab or a detached zmx
+    /// session. `--all` leaves out workspaces whose assignment is done.
     Resume {
         #[command(flatten)]
         targets: WorkspaceTargets,
@@ -21,6 +25,14 @@ pub enum SessionsCommand {
         /// Forget the saved agents and commands instead of resuming them.
         #[arg(long)]
         discard: bool,
+        /// Start at once regardless of the agent limits; one agent restores
+        /// in this terminal.
+        #[arg(long, conflicts_with = "discard")]
+        now: bool,
+        /// The queue entry whose slot the restored agent takes, for the
+        /// daemon's start of a queued restore.
+        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        queue_entry: Option<String>,
     },
     /// Restart running agents in their terminals, resuming their sessions.
     ///

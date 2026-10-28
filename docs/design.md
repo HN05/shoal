@@ -195,7 +195,12 @@ prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers cannot stop executions. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
-without the agent choosing to quit, and the daemon may already be gone. An
+without the agent choosing to quit, and the daemon may already be gone. Unlike a
+manual stop, the agent then comes back on its own through the agent queue: a
+request beside its record asks for the restore, which the daemon queues once the
+execution has ended, so agents a reboot interrupted return without a command.
+The request is its own file so that forgetting it, as a stop does, never
+replaces a record a resume holds. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.
@@ -268,6 +273,12 @@ default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
 checkout, and outside the state directory; a root inside either, or inside a
 recorded repository directory, is refused.
+On macOS a root Shoal creates links to `<parent>/.<name>.noindex`, which holds
+its contents: Spotlight ignores `.metadata_never_index` below a volume root and
+its privacy list needs root, so only a skipped name keeps build output out of
+the index, and the link keeps `root_dir` the same on every system. An existing
+root is used as found; only `repo migrate` changes it, by default to the link,
+or back to a regular directory with `--regular-dir`.
 Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
 differ from the terminal's, and on macOS opening a file on a volume it lacks
@@ -701,6 +712,14 @@ agent when its restored process registers. The entry is keyed by execution, so a
 place and a restart cannot restore it twice; an entry without its wrapper for the
 start grace period is dropped, and cancellation or failure leaves the recovery
 record.
+`shoal resume` queues restores instead of starting every stopped agent at once,
+which overloaded the machine; `--now` starts them at once, as `add --now` does.
+No wrapper waits for such a restore, so the daemon starts it through the queue
+start worker as it starts a launch in an existing workspace, and admits it like
+a launch: its stopped agent holds no slot while it waits, so stopped agents past
+a limit cannot keep each other from restoring. Its entry names the execution
+without referencing its row, which ended with the agent, and leaves the queue
+once the recovery record is gone.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

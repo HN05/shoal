@@ -651,10 +651,13 @@ pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
     queued(settings)?.host.ensure_installed()
 }
 
-/// The variables a later start needs to reach this terminal's host, such
-/// as a queued start the daemon runs without a terminal.
-pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
-    hosts().flat_map(|host| host.environment()).collect()
+/// What a start the daemon runs later for this process needs, without a
+/// terminal: the variables that reach this terminal's host and the output
+/// setting.
+pub(crate) fn start_environment() -> BTreeMap<String, String> {
+    let mut env: BTreeMap<_, _> = hosts().flat_map(|host| host.environment()).collect();
+    env.extend([env::output_setting()]);
+    env
 }
 
 /// Whether the place this process runs in closes once `workspace` is
@@ -679,12 +682,22 @@ pub(in crate::cli) async fn rerun_where_stopped(
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings).host;
+    let reused = rerun_in_host(ctx, host, record, args).await?;
+    Ok(reused.then(|| host.background_places()))
+}
+
+/// Restore the agent of `record` in its earlier place in `host`, when idle.
+async fn rerun_in_host(
+    ctx: &Context,
+    host: &dyn Host,
+    record: &Path,
+    args: &[OsString],
+) -> Result<bool> {
     let Some(place) = stopped_place(host, record) else {
-        return Ok(None);
+        return Ok(false);
     };
     let argv = shoal_command(ctx, args)?;
-    let reused = host.run_in_place(&place, &argv, &place_env(ctx)?).await?;
-    Ok(reused.then(|| host.background_places()))
+    host.run_in_place(&place, &argv, &place_env(ctx)?).await
 }
 
 /// Where the agent of `record` stopped, unless that is where this process
@@ -695,6 +708,31 @@ fn stopped_place(host: &dyn Host, record: &Path) -> Option<String> {
         .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
         .and_then(|record| record.place)
         .filter(|place| host.current_place().as_ref() != Some(place))
+}
+
+/// Run Shoal with `args`, which restore the agent of `record` in
+/// `workspace`, for the daemon's worker, which has no terminal: where the
+/// agent stopped when that place is back at its prompt, otherwise in the
+/// background of the first host that runs queued starts and can.
+pub(in crate::cli) async fn restore_queued(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    record: &Path,
+    args: &[OsString],
+) -> Result<()> {
+    if rerun_in_host(ctx, current(settings).host, record, args).await? {
+        return Ok(());
+    }
+    let mut failure = None;
+    for host in Configured::all(settings).filter(Configured::takes_queued) {
+        match start_in_background(ctx, &host, workspace, args).await {
+            Ok(()) => return Ok(()),
+            // Herdr may be gone, as after a reboot.
+            Err(error) => failure = Some(error),
+        }
+    }
+    Err(failure.unwrap_or_else(|| anyhow::anyhow!("no terminal host can start queued agents")))
 }
 
 /// Run Shoal with `args` for `workspace` in the background, returning what
@@ -709,6 +747,17 @@ pub(in crate::cli) async fn run_in_background(
     if !host.runs_in_background() {
         return Ok(None);
     }
+    start_in_background(ctx, &host, workspace, args).await?;
+    Ok(Some(host.host.background_places()))
+}
+
+/// Run Shoal with `args` for `workspace` in a new background place of `host`.
+async fn start_in_background(
+    ctx: &Context,
+    host: &Configured,
+    workspace: &Workspace,
+    args: &[OsString],
+) -> Result<()> {
     let template = host.options.name_template.clone();
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
     let start = Start {
@@ -718,8 +767,7 @@ pub(in crate::cli) async fn run_in_background(
         argv: &shoal_command(ctx, args)?,
         env: &place_env(ctx)?,
     };
-    host.host.run_in_background(&start).await?;
-    Ok(Some(host.host.background_places()))
+    host.host.run_in_background(&start).await
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal

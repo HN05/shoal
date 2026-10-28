@@ -37,7 +37,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         &["worktree", "add", "--lock", "--detach", "../.seed/worktree"],
     );
 
-    let moved = manager.move_repositories().await?;
+    let moved = manager.move_repositories(Layout::Regular).await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
@@ -70,7 +70,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     }
 
     // Moving again finds nothing outside the root, and new workspaces go there.
-    assert!(manager.move_repositories().await?.is_empty());
+    assert!(manager.move_repositories(Layout::Regular).await?.is_empty());
     let next = manager
         .create_workspace(&repo.id, "next".into(), None, None, None)
         .await?;
@@ -234,7 +234,7 @@ async fn the_destination_avoids_a_deleted_workspace_recorded_there() -> Result<(
         .await?;
     fs::remove_dir_all(root.join("origin"))?;
 
-    let moved = manager.move_repositories().await?;
+    let moved = manager.move_repositories(Layout::Regular).await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
@@ -367,14 +367,14 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
         .register_repository(other.to_str().context("path")?.into(), None, None)
         .await?;
     let error = manager
-        .move_repositories()
+        .move_repositories(Layout::Regular)
         .await
         .err()
         .context("moved another repository's checkout")?;
     assert!(format!("{error:#}").contains("belongs to the repository"));
     manager.remove_repository(&other.id).await?;
 
-    manager.move_repositories().await?;
+    manager.move_repositories(Layout::Regular).await?;
     let moved = manager.repository(&repo.id).await?;
     let expected = root.join("project/checkout");
     assert_eq!(moved.path, expected);
@@ -401,11 +401,90 @@ async fn refuses_a_root_inside_a_repository_directory_or_workspace() -> Result<(
     ] {
         test_support::configure(&manager, &format!("root_dir = {:?}\n", inside)).await;
         let error = manager
-            .move_repositories()
+            .move_repositories(Layout::Regular)
             .await
             .err()
             .context("moved into itself")?;
         assert!(error.to_string().contains(message), "{error:#}");
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> {
+    let (temp, manager) = test_support::indexed_manager().await;
+    let origin = test_support::repository(temp.path(), "origin");
+    let repo = manager
+        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .await?;
+    let workspace = manager
+        .create_workspace(&repo.id, "feature".into(), None, None, None)
+        .await?;
+    let old = repo.workspaces_dir.clone().context("no directory")?;
+    let root = old.parent().context("no root")?.to_owned();
+    let excluded = root.with_file_name(".shoal.noindex");
+
+    let plan = manager
+        .plan_repository_moves(None, Layout::Excluded)
+        .await?;
+    assert_eq!(plan.directory, excluded);
+    assert!(fs::symlink_metadata(&root)?.is_dir());
+    fs::write(root.join("notes"), "")?;
+    let error = manager
+        .move_repositories(Layout::Excluded)
+        .await
+        .err()
+        .context("moved with a file left in the root")?;
+    assert!(error.to_string().contains("--regular-dir"), "{error:#}");
+    assert!(old.exists());
+
+    fs::remove_file(root.join("notes"))?;
+    let moved = manager.move_repositories(Layout::Excluded).await?;
+    let [moved] = moved.as_slice() else {
+        anyhow::bail!("expected one move: {moved:?}");
+    };
+    let directory = excluded.join("origin");
+    assert_eq!(moved.repository.workspaces_dir.as_ref(), Some(&directory));
+    assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
+    let workspace = manager.workspace(&workspace.id).await?;
+    assert_eq!(workspace.path, directory.join("feature"));
+    manager.verify_worktree(&workspace).await?;
+
+    // A regular directory replaces the link and takes the repository back.
+    let moved = manager.move_repositories(Layout::Regular).await?;
+    let [moved] = moved.as_slice() else {
+        anyhow::bail!("expected one move: {moved:?}");
+    };
+    assert_eq!(
+        moved.repository.workspaces_dir.as_ref(),
+        Some(&root.join("origin"))
+    );
+    assert!(fs::symlink_metadata(&root)?.is_dir());
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<()> {
+    let (temp, manager) = test_support::indexed_manager().await;
+    let origin = test_support::repository(temp.path(), "origin");
+    let repo = manager
+        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .await?;
+    let placed = fs::canonicalize(temp.path())?.join("placed");
+    manager
+        .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
+        .await?;
+    fs::remove_dir_all(&placed)?;
+    test_support::configure(&manager, &format!("root_dir = {:?}\n", placed)).await;
+    let error = manager
+        .move_repositories(Layout::Excluded)
+        .await
+        .err()
+        .context("linked a workspace path")?;
+    assert!(
+        error.to_string().contains("inside the workspace placed"),
+        "{error:#}"
+    );
+    assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
 }

@@ -1,7 +1,7 @@
 //! The daemon's answers to [`AgentMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -28,13 +28,8 @@ pub(super) async fn handle(
             deliveries,
             messages,
         } => {
-            // Item updates first: a failure then leaves both to be delivered
-            // again, while deleted messages could not be.
             manager
-                .acknowledge_pr_updates(&workspace, deliveries)
-                .await?;
-            manager
-                .mark_agent_messages_delivered(&workspace, messages)
+                .acknowledge_agent_delivery(&workspace, deliveries, messages)
                 .await?;
             Body::Ok
         }
@@ -42,26 +37,20 @@ pub(super) async fn handle(
             workspace,
             state,
             session,
-        } => {
-            let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
-            Body::AgentStatus(
-                manager
-                    .set_agent_state(&workspace, state, execution, session)
-                    .await?,
-            )
-        }
+        } => Body::AgentStatus(
+            manager
+                .set_agent_state(&workspace, state, execution(caller), session)
+                .await?,
+        ),
         AgentMethod::ReportTurnFailure {
             workspace,
             failure,
             session,
-        } => {
-            let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
-            Body::AgentStatus(
-                manager
-                    .report_turn_failure(&workspace, failure, execution, session)
-                    .await?,
-            )
-        }
+        } => Body::AgentStatus(
+            manager
+                .report_turn_failure(&workspace, failure, execution(caller), session)
+                .await?,
+        ),
         AgentMethod::SendAgentMessage { workspace, message } => {
             manager.send_agent_message(&workspace, message).await?;
             Body::Ok
@@ -83,30 +72,38 @@ pub(super) async fn handle(
 
 impl Scoped for AgentMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
-        let owner = &caller.workspace_id;
         Ok(match self {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentMessages { workspace }
             | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
+            // A report claims the workspace for the reporting agent, which
+            // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
-            | AgentMethod::ReportTurnFailure { workspace, .. } => {
-                // A report claims the workspace for the reporting agent, which
-                // would keep a child's events from reaching its coordinator.
-                ensure!(
-                    manager.workspace(workspace).await?.id == *owner,
-                    "workspace processes report agent state only for their own workspace"
-                );
-                Some(workspace)
-            }
-            AgentMethod::SendAgentMessage { workspace, .. } => {
-                ensure!(
-                    manager.workspace(workspace).await?.id != *owner,
-                    "workspace processes send agent messages only to the workspaces below theirs"
-                );
-                Some(workspace)
-            }
+            | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
+                manager
+                    .own_workspace(
+                        caller,
+                        workspace,
+                        "workspace processes report agent state only for their own workspace",
+                    )
+                    .await?,
+            ),
+            AgentMethod::SendAgentMessage { workspace, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        workspace,
+                        "workspace processes send agent messages only to the workspaces below theirs",
+                    )
+                    .await?,
+            ),
         })
     }
+}
+
+/// The tracked execution a report comes from.
+fn execution(caller: Option<&Caller>) -> Option<String> {
+    caller.and_then(Caller::execution_id).map(str::to_owned)
 }

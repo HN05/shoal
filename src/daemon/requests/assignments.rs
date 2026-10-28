@@ -1,7 +1,7 @@
 //! The daemon's answers to [`AssignmentMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -41,13 +41,15 @@ impl Scoped for AssignmentMethod {
             | AssignmentMethod::WorkspaceUndone { workspace }
             | AssignmentMethod::MarkReady { workspace, .. }
             | AssignmentMethod::ClearReady { workspace, .. } => Some(workspace),
-            AssignmentMethod::DiscardStoppedWork { workspace, .. } => {
-                ensure!(
-                    manager.workspace(workspace).await?.id != caller.workspace_id,
-                    "workspace processes discard stopped work only in the workspaces below theirs"
-                );
-                Some(workspace)
-            }
+            AssignmentMethod::DiscardStoppedWork { workspace, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        workspace,
+                        "workspace processes discard stopped work only in the workspaces below theirs",
+                    )
+                    .await?,
+            ),
         })
     }
 }

@@ -294,7 +294,7 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
 fn queue_subject(entry: &QueueEntry) -> String {
     match entry.kind {
         QueueKind::Launch => entry.issue_title.clone().unwrap_or_default(),
-        QueueKind::Restore => format!("Automatic restore of {}", entry.agent),
+        QueueKind::Restore => format!("Restore of {}", entry.agent),
     }
 }
 

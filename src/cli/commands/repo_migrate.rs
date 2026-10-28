@@ -12,32 +12,36 @@ use crate::{
         ui,
     },
     config::{Config, edit::Change},
-    model::{MovedRepository, Repository},
+    model::{MovedRepository, RepositoryMoves},
     protocol::RepositoryMethod,
     repository,
 };
 
 /// Check that every repository outside `root`, or the configured root, can
 /// move, confirm, save `root` as `root_dir` when given, then have the daemon
-/// move them.
-pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -> Result<()> {
+/// move them, into a directory Spotlight skips unless `regular_dir`.
+pub(super) async fn run(
+    ctx: &Context,
+    root: Option<PathBuf>,
+    regular_dir: bool,
+    confirmed: bool,
+) -> Result<()> {
     let repositories = client::repositories(&ctx.paths).await?;
-    let moving = ctx
+    let moves = ctx
         .progress(
             "Checking repositories",
-            request::<Vec<Repository>>(
+            request::<RepositoryMoves>(
                 &ctx.paths,
-                RepositoryMethod::PlanRepositoryMoves { root: root.clone() },
+                RepositoryMethod::PlanRepositoryMoves {
+                    root: root.clone(),
+                    regular_dir,
+                },
             ),
         )
         .await?;
-    if !confirmed && !moving.is_empty() {
-        let target = match &root {
-            Some(root) => root.clone(),
-            None => Config::load(&ctx.paths)?.root_dir(&ctx.paths)?,
-        };
+    if !confirmed && !moves.repositories.is_empty() {
         ensure!(
-            ui::confirm(ctx, &plan(&target, &moving), "--yes")?,
+            ui::confirm(ctx, &plan(&moves), "--yes")?,
             "repository move canceled"
         );
     }
@@ -47,7 +51,10 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
     let moved = ctx
         .progress(
             "Moving repositories",
-            request::<Vec<MovedRepository>>(&ctx.paths, RepositoryMethod::MoveRepositories),
+            request::<Vec<MovedRepository>>(
+                &ctx.paths,
+                RepositoryMethod::MoveRepositories { regular_dir },
+            ),
         )
         .await?;
     // Agents trust the new paths when they next start there.
@@ -81,9 +88,12 @@ pub(super) async fn run(ctx: &Context, root: Option<PathBuf>, confirmed: bool) -
     })
 }
 
-fn plan(root: &Path, moving: &[Repository]) -> String {
-    let mut text = format!("Move repository directories into {}:", root.display());
-    for repo in moving {
+fn plan(moves: &RepositoryMoves) -> String {
+    let mut text = format!(
+        "Move repository directories into {}:",
+        moves.directory.display()
+    );
+    for repo in &moves.repositories {
         if let Some(directory) = &repo.workspaces_dir {
             text.push_str(&format!(
                 "\n  {}: {}",
