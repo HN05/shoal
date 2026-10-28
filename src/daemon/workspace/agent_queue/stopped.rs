@@ -1,6 +1,6 @@
 //! Restores of stopped agents that the daemon starts, as it starts launches
 //! in existing workspaces: `shoal resume` queues them, and so does a signal
-//! that ended an agent's session, through the agent's recovery record. Each
+//! that ended an agent's session, through a request beside its record. Each
 //! is admitted like a launch and leaves the queue once its agent registers,
 //! or while waiting once its record is gone, as after `shoal resume --now` or
 //! a discard.
@@ -190,18 +190,18 @@ impl Manager {
             .context("the restore already left the agent queue")
     }
 
-    /// Queue the restores that stopped agents' records request once their
-    /// execution has ended. A done workspace's agent waits until
-    /// `shoal resume` names its workspace.
+    /// Queue the restores that stopped agents request once their execution
+    /// has ended. A done workspace's agent waits until `shoal resume` names
+    /// its workspace.
     pub(super) async fn queue_requested_restores(&self) -> Result<()> {
         let (workspaces, recorded) = self
             .store
             .run(|db| Ok((open_workspaces(db)?, recorded_executions(db)?)))
             .await?;
         for workspace in workspaces {
-            for (execution, record) in recovery::restore_requests(&self.paths, &workspace.id)? {
+            for (execution, env) in recovery::restore_requests(&self.paths, &workspace.id)? {
                 if !recorded.contains(&execution) {
-                    self.queue_requested_restore(&workspace, &execution, record)
+                    self.queue_requested_restore(&workspace, &execution, &env)
                         .await?;
                 }
             }
@@ -209,27 +209,25 @@ impl Manager {
         Ok(())
     }
 
-    /// Queue the restore `record` requests for `execution` in `workspace`,
-    /// then clear the request. One that cannot be queued keeps its request
-    /// without holding back the others.
+    /// Queue the restore requested for the agent stopped as `execution` in
+    /// `workspace`, which starts with `env`, then forget the request. One
+    /// whose record is gone, resumed or discarded, is only forgotten; one
+    /// that cannot be queued stays without holding back the others.
     async fn queue_requested_restore(
         &self,
         workspace: &Target,
         execution: &str,
-        record: recovery::Record,
+        env: &BTreeMap<String, String>,
     ) -> Result<()> {
-        // A resume restoring the agent now holds its record and consumes it.
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
-        let Ok(_claim) = recovery::claim(&path) else {
-            return Ok(());
-        };
-        let env = record.restore_request.unwrap_or_default();
-        let restore = Restore::new(workspace.clone(), execution, &record.agent, &env)?;
-        if let Err(error) = self.store.run(move |db| insert(db, &restore)).await {
-            crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
-            return Ok(());
+        if let Some(record) = recovery::Record::load(&path).ok().flatten() {
+            let restore = Restore::new(workspace.clone(), execution, &record.agent, env)?;
+            if let Err(error) = self.store.run(move |db| insert(db, &restore)).await {
+                crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
+                return Ok(());
+            }
         }
-        recovery::clear_restore_request(&path)
+        recovery::forget_restore_request(&self.paths, &workspace.id, execution)
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
@@ -258,14 +256,10 @@ impl Manager {
             .await
     }
 
-    /// Clear the restore requests of `workspace_id`'s stopped agents, except
-    /// one a resume restoring the agent holds and consumes.
+    /// Forget the restore requests of `workspace_id`'s stopped agents.
     fn clear_restore_requests(&self, workspace_id: &str) -> Result<()> {
         for (execution, _) in recovery::restore_requests(&self.paths, workspace_id)? {
-            let path = recovery::record_path(&self.paths, workspace_id, &execution);
-            if let Ok(_claim) = recovery::claim(&path) {
-                recovery::clear_restore_request(&path)?;
-            }
+            recovery::forget_restore_request(&self.paths, workspace_id, &execution)?;
         }
         Ok(())
     }

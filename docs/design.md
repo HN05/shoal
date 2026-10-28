@@ -196,9 +196,11 @@ command is not known to be safe. Scoped callers cannot stop executions. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
 without the agent choosing to quit, and the daemon may already be gone. Unlike a
-manual stop, the agent then comes back on its own through the agent queue: its
-record asks for the restore, which the daemon queues once the execution has
-ended, so agents a reboot interrupted return without a command. An
+manual stop, the agent then comes back on its own through the agent queue: a
+request beside its record asks for the restore, which the daemon queues once the
+execution has ended, so agents a reboot interrupted return without a command.
+The request is its own file so that forgetting it, as a stop does, never
+replaces a record a resume holds. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.

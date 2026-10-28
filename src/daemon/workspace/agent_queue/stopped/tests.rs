@@ -3,7 +3,7 @@ use crate::{
     daemon::workspace::agent_queue::tests::{
         connected_agent, create, limit_globally, queue, register, started,
     },
-    execution::recovery::{Record, record_path},
+    execution::recovery::record_path,
     model::Workspace,
     state::QueueKind::Restore,
     state::QueueState::{Queued, Starting},
@@ -23,8 +23,26 @@ fn stop(manager: &Manager, workspace: &Workspace, execution: &str, record: &str)
 }
 
 const STOPPED: &str = r#"{"agent":"claude","stage":"stopped"}"#;
-const SIGNALLED: &str =
-    r#"{"agent":"claude","stage":"stopped","restore_request":{"HERDR_ENV":"1"}}"#;
+
+/// Save the record and restore request a signal stop leaves.
+fn signal_stop(manager: &Manager, workspace: &Workspace, execution: &str) {
+    stop(manager, workspace, execution, STOPPED);
+    let request = record_path(&manager.paths, &workspace.id, execution)
+        .with_file_name(format!("{execution}.restore-request.json"));
+    std::fs::write(request, r#"{"HERDR_ENV":"1"}"#).unwrap();
+}
+
+/// The variables the restore requested for `execution` starts with.
+fn requested(
+    manager: &Manager,
+    workspace: &Workspace,
+    execution: &str,
+) -> Option<BTreeMap<String, String>> {
+    recovery::restore_requests(&manager.paths, &workspace.id)
+        .unwrap()
+        .into_iter()
+        .find_map(|(id, env)| (id == execution).then_some(env))
+}
 
 #[tokio::test]
 async fn resumed_agents_start_from_the_daemon_as_slots_free() {
@@ -104,11 +122,11 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     let open = create(&manager, &repo, "open").await;
     let done = create(&manager, &repo, "done").await;
     let (running, _connection) = connected_agent(&manager, &open).await;
-    stop(&manager, &open, &running, SIGNALLED);
-    stop(&manager, &open, "ended", SIGNALLED);
+    signal_stop(&manager, &open, &running);
+    signal_stop(&manager, &open, "ended");
     stop(&manager, &open, "manual", STOPPED);
     manager.mark_done(&done.id, false).await.unwrap();
-    stop(&manager, &done, "finished", SIGNALLED);
+    signal_stop(&manager, &done, "finished");
 
     manager.dispatch_queue().await.unwrap();
     let entries = manager.queue_entries().await.unwrap();
@@ -116,16 +134,10 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].execution.as_deref(), Some("ended"));
     assert!(started(&entries[0].id));
-    let request = |workspace: &Workspace, execution: &str| {
-        Record::load(&record_path(&manager.paths, &workspace.id, execution))
-            .unwrap()
-            .unwrap()
-            .restore_request
-    };
-    assert_eq!(request(&open, "ended"), None);
+    assert_eq!(requested(&manager, &open, "ended"), None);
     // The running execution, like a done workspace's agent, keeps its request.
-    assert_eq!(request(&open, &running), Some(herdr()));
-    assert_eq!(request(&done, "finished"), Some(herdr()));
+    assert_eq!(requested(&manager, &open, &running), Some(herdr()));
+    assert_eq!(requested(&manager, &done, "finished"), Some(herdr()));
 }
 
 #[tokio::test]
@@ -204,17 +216,15 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     let (_running, _connection) = connected_agent(&manager, &busy).await;
     // A signal stop's request that dispatch has not queued yet.
     let signalled = create(&manager, &repo, "signalled").await;
-    stop(&manager, &signalled, "requested", SIGNALLED);
+    signal_stop(&manager, &signalled, "requested");
     manager
         .stop_workspace("signalled", crate::daemon::workspace::StopRequest::manual())
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(queue(&manager).await.is_empty());
-    let record = Record::load(&record_path(&manager.paths, &signalled.id, "requested"))
-        .unwrap()
-        .unwrap();
-    assert_eq!(record.restore_request, None);
+    assert_eq!(requested(&manager, &signalled, "requested"), None);
+    assert!(record_path(&manager.paths, &signalled.id, "requested").exists());
 
     // A restore waiting when its assignment is done is cancelled.
     let finished = create(&manager, &repo, "finished").await;
@@ -256,26 +266,35 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
 }
 
 #[tokio::test]
-async fn a_request_waits_while_a_resume_holds_its_record() {
+async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("max_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
-    stop(&manager, &workspace, "agent", SIGNALLED);
+    signal_stop(&manager, &workspace, "agent");
     let path = record_path(&manager.paths, &workspace.id, "agent");
-    let claim = crate::execution::recovery::claim(&path).unwrap();
-    manager.dispatch_queue().await.unwrap();
+    let resuming = crate::execution::recovery::claim(&path).unwrap();
     manager
-        .cancel_stopped_restores(&workspace.id)
+        .stop_workspace("work", crate::daemon::workspace::StopRequest::manual())
         .await
         .unwrap();
-    assert!(queue(&manager).await.is_empty());
-    // Neither replaced the record the resume holds.
-    assert_eq!(
-        Record::load(&path).unwrap().unwrap().restore_request,
-        Some(herdr())
-    );
-    drop(claim);
+    // The resume fails and keeps the record, yet nothing restores the agent.
+    drop(resuming);
     manager.dispatch_queue().await.unwrap();
-    assert_eq!(queue(&manager).await.len(), 1);
+    assert!(queue(&manager).await.is_empty());
+    assert!(path.exists());
+}
+
+#[tokio::test]
+async fn a_request_whose_record_is_gone_is_forgotten() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("max_agents = 'none'"));
+    let workspace = create(&manager, &repo, "work").await;
+    signal_stop(&manager, &workspace, "agent");
+    // A resume consumed the record before dispatch saw the request.
+    std::fs::remove_file(record_path(&manager.paths, &workspace.id, "agent")).unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(queue(&manager).await.is_empty());
+    assert_eq!(requested(&manager, &workspace, "agent"), None);
 }

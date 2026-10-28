@@ -152,7 +152,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
 }
 
 #[test]
-fn a_restore_request_stays_until_the_daemon_clears_it() {
+fn a_restore_request_sits_beside_the_record_until_forgotten() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
@@ -162,7 +162,7 @@ fn a_restore_request_stays_until_the_daemon_clears_it() {
         handoff_delivered: false,
     };
     let env = BTreeMap::from([("HERDR_ENV".to_owned(), "1".to_owned())]);
-    recovery
+    let record = recovery
         .save(
             &paths,
             "workspace",
@@ -172,19 +172,16 @@ fn a_restore_request_stays_until_the_daemon_clears_it() {
             Restorer::Queue(env.clone()),
         )
         .unwrap();
-    // The daemon's later save of the turn keeps the request.
-    save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
-    let requests = restore_requests(&paths, "workspace").unwrap();
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].0, "execution");
-    assert_eq!(requests[0].1.restore_request.as_ref(), Some(&env));
+    assert_eq!(
+        restore_requests(&paths, "workspace").unwrap(),
+        [("execution".to_owned(), env)]
+    );
+    // The request is no stopped work of its own.
+    assert_eq!(agent_records(&paths, "workspace").unwrap(), ["execution"]);
 
-    clear_restore_request(&record_path(&paths, "workspace", "execution")).unwrap();
+    forget_restore_request(&paths, "workspace", "execution").unwrap();
     assert!(restore_requests(&paths, "workspace").unwrap().is_empty());
-    let record = Record::load(&record_path(&paths, "workspace", "execution"))
-        .unwrap()
-        .expect("the record stays for shoal resume");
+    let record = Record::load(&record).unwrap().expect("the record stays");
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
-    // A record already resumed has nothing to clear.
-    clear_restore_request(&record_path(&paths, "workspace", "gone")).unwrap();
+    forget_restore_request(&paths, "workspace", "execution").unwrap();
 }
