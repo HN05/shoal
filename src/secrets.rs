@@ -7,7 +7,6 @@ use std::{
     ffi::{OsStr, OsString},
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::Stdio,
 };
 
 use crate::{env, paths::Paths};
@@ -39,17 +38,10 @@ pub fn validate(secrets: &Secrets) -> Result<()> {
             !env::PROTECTED.contains(&name.as_str()),
             "[secrets] cannot set {name}"
         );
-        ensure!(
-            secret
-                .command
-                .first()
-                .is_some_and(|program| !program.is_empty()),
-            "secrets.{name}.command must name a program"
-        );
-        ensure!(
-            secret.command.iter().all(|word| !word.contains('\0')),
-            "secrets.{name}.command contains NUL"
-        );
+        crate::config::value::validate_command(
+            &format!("secrets.{name}.command"),
+            &secret.command,
+        )?;
         // Environment secrets are fetched before the agent can ask for them.
         ensure!(
             !secret.requires_approval || !secret.tools.is_empty(),
@@ -309,45 +301,11 @@ fn exported_names<'a>(names: impl Iterator<Item = &'a String>) -> String {
     all.join(":")
 }
 
-/// Run the secret's command without input, so it never consumes the
-/// launching terminal's or a tool's; its diagnostics reach the caller's
-/// stderr. `path` replaces PATH for it. One trailing line break is the
-/// command's formatting, not the value's.
+/// Fetch the secret's value with PATH replaced by `path`.
 async fn fetch(name: &str, secret: &Secret, path: Option<&OsStr>) -> Result<OsString> {
-    use std::os::unix::ffi::OsStringExt;
-    let mut command = tokio::process::Command::new(&secret.command[0]);
-    if let Some(path) = path {
-        command.env("PATH", path);
-    }
-    let output = command
-        .args(&secret.command[1..])
-        .stdin(Stdio::null())
-        .stderr(Stdio::inherit())
-        .output()
+    crate::config::value::command_output(&secret.command, path)
         .await
-        .with_context(|| format!("secrets.{name}: run {}", secret.command[0]))?;
-    ensure!(
-        output.status.success(),
-        "secrets.{name}: {} exited with {}",
-        secret.command[0],
-        output.status
-    );
-    let mut value = output.stdout;
-    if value.ends_with(b"\n") {
-        value.pop();
-        if value.ends_with(b"\r") {
-            value.pop();
-        }
-    }
-    ensure!(
-        !value.is_empty(),
-        "secrets.{name}: the command printed nothing"
-    );
-    ensure!(
-        !value.contains(&0),
-        "secrets.{name}: the value contains NUL"
-    );
-    Ok(OsString::from_vec(value))
+        .with_context(|| format!("secrets.{name}"))
 }
 
 #[cfg(test)]

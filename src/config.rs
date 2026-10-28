@@ -9,6 +9,7 @@ pub mod resolve;
 pub mod templates;
 #[cfg(test)]
 mod tests;
+pub mod value;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
