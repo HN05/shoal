@@ -128,9 +128,10 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
     let mut report = ui::Report::new("stopped", "stop");
     let mut running = Vec::new();
     let mut unknown = false;
-    let queued = queued_restores(ctx).await?;
-    for workspace in client::workspaces(&ctx.paths).await? {
-        match needs_stop(ctx, &workspace, &queued).await {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let pending = pending_restores(ctx, &workspaces).await?;
+    for workspace in workspaces {
+        match needs_stop(ctx, &workspace, &pending).await {
             Ok(true) => running.push(workspace),
             Ok(false) => {}
             Err(error) => {
@@ -189,24 +190,35 @@ async fn stop_each(
     report.finish(ctx, &summary)
 }
 
-/// The workspaces whose stopped agent's restore is in the queue.
-async fn queued_restores(ctx: &Context) -> Result<HashSet<String>> {
-    Ok(super::agent_queue::entries(ctx)
-        .await?
-        .into_iter()
-        .filter(|entry| entry.kind == QueueKind::Restore)
-        .filter_map(|entry| entry.workspace_id)
-        .collect())
+/// The `workspaces` whose stopped agent's restore is requested or in the
+/// queue. Requests are read first: the daemon queues one before forgetting
+/// it, so a restore moving between them is seen in one or the other, and one
+/// whose agent registers after the queue is read shows as its execution.
+async fn pending_restores(ctx: &Context, workspaces: &[Workspace]) -> Result<HashSet<String>> {
+    let mut pending = HashSet::new();
+    for workspace in workspaces {
+        if !recovery::restore_requests(&ctx.paths, &workspace.id)?.is_empty() {
+            pending.insert(workspace.id.clone());
+        }
+    }
+    pending.extend(
+        super::agent_queue::entries(ctx)
+            .await?
+            .into_iter()
+            .filter(|entry| entry.kind == QueueKind::Restore)
+            .filter_map(|entry| entry.workspace_id),
+    );
+    Ok(pending)
 }
 
 /// Whether `--all` stops `workspace`: a settled one with a running execution
-/// or an agent whose restore is `queued` or requested. Disconnected executions
-/// are left for `shoal stop <workspace>` rather than failing every bulk stop,
-/// and preparing or removing workspaces keep their lifecycle.
+/// or a `pending` restore. Disconnected executions are left for
+/// `shoal stop <workspace>` rather than failing every bulk stop, and preparing
+/// or removing workspaces keep their lifecycle.
 async fn needs_stop(
     ctx: &Context,
     workspace: &Workspace,
-    queued: &HashSet<String>,
+    pending: &HashSet<String>,
 ) -> Result<bool> {
     if !matches!(
         workspace.state,
@@ -214,9 +226,7 @@ async fn needs_stop(
     ) {
         return Ok(false);
     }
-    if queued.contains(&workspace.id)
-        || !recovery::restore_requests(&ctx.paths, &workspace.id)?.is_empty()
-    {
+    if pending.contains(&workspace.id) {
         return Ok(true);
     }
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
