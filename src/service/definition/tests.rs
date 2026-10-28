@@ -8,6 +8,10 @@ fn paths() -> Paths {
 fn launch_agent_preserves_literal_arguments() {
     let definition = definition(&paths(), Path::new("/tmp/a & b/shoal"), Platform::Mac).unwrap();
     let value = plist::Value::from_reader_xml(definition.content.as_bytes()).unwrap();
+    assert_eq!(
+        value.as_dictionary().unwrap()["ExitTimeOut"].as_unsigned_integer(),
+        Some(SERVICE_STOP_TIMEOUT.as_secs())
+    );
     let args = value.as_dictionary().unwrap()["ProgramArguments"]
         .as_array()
         .unwrap();
@@ -24,5 +28,11 @@ fn systemd_escapes_expansion_and_quotes() {
     assert!(systemd_quote("/a\nExecStart=bad", true).is_err());
     let definition = definition(&paths(), Path::new("/tmp/shoal"), Platform::Linux).unwrap();
     assert!(definition.content.contains("Type=exec"));
+    assert!(
+        definition
+            .content
+            .lines()
+            .any(|line| { line == format!("TimeoutStopSec={}", SERVICE_STOP_TIMEOUT.as_secs()) })
+    );
     assert!(definition.content.contains("%%name/$$data"));
 }

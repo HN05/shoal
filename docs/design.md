@@ -1720,7 +1720,8 @@ started, such as a terminal's `login`, which runs as another user and is never
 stopped itself; one launchd adopted after its parent exited has none and counts
 as unreadable. The reporting wrapper may remain alive
 awaiting acknowledgement; workspace stopping allows for child registration,
-stopping and completion verification. Recovery polls
+stopping and completion verification; service termination and its command
+deadlines cover that drain. Recovery polls
 incomplete proof within a separate bounded wait and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is

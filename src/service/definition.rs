@@ -1,5 +1,5 @@
 //! Service definition paths, rendering and ownership checks.
-use super::{LABEL, Platform, UNIT};
+use super::{LABEL, Platform, UNIT, control::SERVICE_STOP_TIMEOUT};
 use crate::{
     fsutil::{self, Permissions, ReplaceOptions},
     paths::Paths,
@@ -94,6 +94,7 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
         "--managed",
     ];
     let search_path = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into());
+    let stop_seconds = SERVICE_STOP_TIMEOUT.as_secs();
     let content = match platform {
         Platform::Mac => {
             let args = args
@@ -102,7 +103,7 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
                 .collect::<Result<Vec<_>>>()?
                 .join("\n");
             format!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>\n<key>Label</key><string>{LABEL}</string>\n<key>ProgramArguments</key><array>{args}</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n<key>ThrottleInterval</key><integer>5</integer>\n<key>EnvironmentVariables</key><dict><key>PATH</key><string>{}</string></dict>\n<key>StandardOutPath</key><string>/dev/null</string>\n<key>StandardErrorPath</key><string>{}</string>\n</dict></plist>\n",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>\n<key>Label</key><string>{LABEL}</string>\n<key>ProgramArguments</key><array>{args}</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n<key>ThrottleInterval</key><integer>5</integer>\n<key>ExitTimeOut</key><integer>{stop_seconds}</integer>\n<key>EnvironmentVariables</key><dict><key>PATH</key><string>{}</string></dict>\n<key>StandardOutPath</key><string>/dev/null</string>\n<key>StandardErrorPath</key><string>{}</string>\n</dict></plist>\n",
                 xml(&search_path)?,
                 xml(text(&paths.daemon_log())?)?
             )
@@ -114,7 +115,7 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
                 .collect::<Result<Vec<_>>>()?
                 .join(" ");
             format!(
-                "[Unit]\nDescription=Shoal local agent resource manager\n\n[Service]\nType=exec\nExecStart={args}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+                "[Unit]\nDescription=Shoal local agent resource manager\n\n[Service]\nType=exec\nExecStart={args}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec={stop_seconds}\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
                 systemd_quote(&format!("PATH={search_path}"), false)?
             )
         }
