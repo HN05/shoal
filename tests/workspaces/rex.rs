@@ -134,6 +134,16 @@ impl Drop for RexServer {
     }
 }
 
+/// The names of `workspace`'s sessions, as `shoal status` lists them.
+fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
+    fixture.ok(&["status", workspace])["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|session| session["name"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
     fixture.ok(&["status", workspace])["executions"]
         .as_array()
@@ -164,6 +174,8 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     );
     assert!(output.status.success(), "{output:?} {transcript}");
     // The window's shell runs the add worker, which runs the agent in place.
+    // The wrapper records its place once its execution registers, so wait
+    // for the session itself.
     wait_until("the agent to run in its window", || {
         fixture
             .ok(&["work"])
@@ -171,13 +183,9 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == "placed")
-            && executions(&fixture, "placed") == 1
+            && sessions(&fixture, "placed") == ["placed"]
     });
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
-    let status = fixture.ok(&["status", "placed"]);
-    let sessions = status["sessions"].as_array().unwrap();
-    assert_eq!(sessions.len(), 1, "{status}");
-    assert_eq!(sessions[0]["name"], "placed");
     // Every rex call above was a client that has since disconnected; the
     // agent keeps running in its block.
     assert_eq!(executions(&fixture, "placed"), 1);
@@ -263,7 +271,9 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
     fixture.add("gone");
     let (session, block) = rex.session("work", &fixture.repo);
     rex.type_shoal(&fixture, &block, "run --workspace gone -- sleep 600");
-    wait_until("the command to run", || executions(&fixture, "gone") == 1);
+    wait_until("the command's place to be recorded", || {
+        sessions(&fixture, "gone").len() == 1
+    });
     let attach = || {
         fixture.interactive_command(
             rex.inside(fixture.command().args(["attach", "gone"]), &session, &block),
