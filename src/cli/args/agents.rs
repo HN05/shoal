@@ -11,9 +11,15 @@ use crate::{
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum AgentsCommand {
-    /// Run Claude Code in a workspace.
+    /// Run Claude Code or open the Claude app.
     Claude {
         workspace: Option<String>,
+        /// Run the Claude Code CLI, overriding claude.default_mode.
+        #[arg(long, conflicts_with = "app")]
+        cli: bool,
+        /// Open the workspace in the Claude app, overriding claude.default_mode.
+        #[arg(long, conflicts_with = "cli")]
+        app: bool,
         #[arg(last = true)]
         args: Vec<OsString>,
     },

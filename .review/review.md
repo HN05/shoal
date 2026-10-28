@@ -341,7 +341,7 @@ instead of the PR delivery guidance below.
   `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
   in a `Host` under `cli/terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
-- Claude and Codex launches (including Happy and Codex app handoffs) persist
+- Claude and Codex launches (including Happy and Claude and Codex app handoffs) persist
   trust for the repository's shared Shoal workspaces directory, or an explicitly
   placed workspace outside it, even when the user config is absent, preserving
   other settings; successful repository removal removes those trust entries while

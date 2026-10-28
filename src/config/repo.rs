@@ -73,6 +73,7 @@ pub struct RepoConfig {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
+    pub claude: Shortcut,
     pub codex: Shortcut,
     pub herdr: Herdr,
     pub happy: Happy,
@@ -330,7 +331,8 @@ pub struct SimulatorPreferences {
     pub preferred: Vec<String>,
 }
 
-/// Repository value for the global `[codex]`; `None` keeps the layer below.
+/// Repository value for the global `[claude]` or `[codex]`; `None` keeps the
+/// layer below.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Shortcut {

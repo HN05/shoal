@@ -175,6 +175,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "history", "s"], "sim"),
         (vec!["shoal", "daemon", "re"], "restart"),
         (vec!["shoal", "codex", "--a"], "--app"),
+        (vec!["shoal", "claude", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
         (vec!["shoal", "open"], "opencode"),

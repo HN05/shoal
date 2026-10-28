@@ -171,3 +171,22 @@ fn the_proxys_key_joins_the_agents_own_headers() {
         )]
     );
 }
+
+#[test]
+fn the_claude_app_link_encodes_the_folder_and_takes_no_arguments() {
+    assert_eq!(
+        percent_encode("/a b/ä+%_.-~".as_bytes()),
+        "%2Fa%20b%2F%C3%A4%2B%25_.-~"
+    );
+    let link = new_session(Path::new("/work/x y"), Vec::new());
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            link.unwrap(),
+            [OsString::from("claude://code/new?folder=%2Fwork%2Fx%20y")]
+        );
+        let refused = new_session(Path::new("/work"), vec!["--model".into()]);
+        assert!(refused.is_err());
+    } else {
+        assert!(link.is_err());
+    }
+}

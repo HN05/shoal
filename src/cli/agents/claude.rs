@@ -1,12 +1,15 @@
 //! Claude Code: its hooks deliver updates, report its turn state, wake it
-//! when idle and make the worktrees it creates child workspaces, and
-//! `.claude.json` records the directories it trusts.
-use std::ffi::OsString;
+//! when idle and make the worktrees it creates child workspaces,
+//! `.claude.json` records the directories it trusts, and a `claude://` link
+//! opens a workspace in the Claude app.
+use std::{ffi::OsString, os::unix::ffi::OsStrExt as _, path::Path};
 
+use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 
 use super::{
     AgentEnvironment, Integration, Wake,
+    desktop::App,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
@@ -71,6 +74,10 @@ impl Integration for Claude {
         Some(&CLAUDE_CODE)
     }
 
+    fn app(&self) -> Option<&'static App> {
+        Some(&APP)
+    }
+
     /// `StopFailure` names Claude Code's error kind; a gateway such as a
     /// proxy reports an overloaded upstream as a server error.
     fn turn_failure(&self, event: &Value) -> Option<TurnFailure> {
@@ -81,6 +88,40 @@ impl Integration for Claude {
             _ => TurnFailure::Other,
         })
     }
+}
+
+/// The Claude app, opened with the link `claude --desktop` opens, which needs
+/// no Claude account sign-in of the CLI.
+pub(in crate::cli) const APP: App = App {
+    name: "Claude app",
+    program: "open",
+    bundle: Some("/Applications/Claude.app"),
+    args: new_session,
+};
+
+/// `open`'s argument: the link that starts a Claude Code session in
+/// `directory`. The link carries no arguments.
+fn new_session(directory: &Path, args: Vec<OsString>) -> Result<Vec<OsString>> {
+    ensure!(
+        cfg!(target_os = "macos"),
+        "the Claude app opens workspaces only on macOS"
+    );
+    ensure!(args.is_empty(), "the Claude app takes no arguments");
+    let folder = percent_encode(directory.as_os_str().as_bytes());
+    Ok(vec![format!("claude://code/new?folder={folder}").into()])
+}
+
+/// `bytes` with every byte but the URL-unreserved ones percent-encoded.
+fn percent_encode(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|&byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's

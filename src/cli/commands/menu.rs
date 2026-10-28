@@ -724,7 +724,15 @@ type OpenApp = fn(Option<String>) -> Command;
 
 /// Desktop handoffs the menu offers beside agents: each label, app and
 /// command that opens the app.
-const APPS: [(&str, &agents::App, OpenApp); 2] = [
+const APPS: [(&str, &agents::App, OpenApp); 3] = [
+    ("claude app", &agents::CLAUDE_APP, |workspace| {
+        Command::Agents(AgentsCommand::Claude {
+            workspace,
+            cli: false,
+            app: true,
+            args: vec![],
+        })
+    }),
     ("codex app", &agents::CODEX_APP, |workspace| {
         Command::Agents(AgentsCommand::Codex {
             workspace,

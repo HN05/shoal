@@ -11,8 +11,9 @@ use crate::{
     agent::AgentMode, ai::IntegrationKind, cli::context::Context, config::named_commands::Commands,
 };
 
-/// `shoal codex`, which runs the agent of integration `kind` or opens its
-/// desktop app: `--cli` or `--app` overrides its `default_mode`.
+/// `shoal claude` and `shoal codex`, which run the agent of integration
+/// `kind` or open its desktop app: `--cli` or `--app` overrides its
+/// `default_mode`.
 pub(in crate::cli) async fn with_app(
     ctx: &Context,
     kind: IntegrationKind,

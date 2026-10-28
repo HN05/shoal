@@ -119,6 +119,7 @@ pub struct Config {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
+    pub claude: repo::Shortcut,
     pub codex: repo::Shortcut,
     pub herdr: repo::Herdr,
     pub happy: repo::Happy,
@@ -618,6 +619,7 @@ impl Config {
             max_agents: self.max_agents,
             focus: self.focus,
             close_when_done: self.close_when_done,
+            claude: self.claude,
             codex: self.codex,
             herdr: self.herdr.clone(),
             happy: self.happy.clone(),

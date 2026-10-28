@@ -13,8 +13,14 @@ use crate::{
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) -> Result<i32> {
     match command {
-        AgentsCommand::Claude { workspace, args } => {
-            agents::run_named(&ctx, "claude", workspace, args).await
+        AgentsCommand::Claude {
+            workspace,
+            cli,
+            app,
+            args,
+        } => {
+            let mode = mode(cli, app);
+            agents::with_app(&ctx, IntegrationKind::Claude, mode, workspace, args).await
         }
         AgentsCommand::Codex {
             workspace,

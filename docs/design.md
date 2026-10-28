@@ -895,7 +895,7 @@ Plain command invocations expand `{prompt}` to an empty string. User arguments
 and inserted prompt text remain literal. A provider's instruction, resume and
 extra directory arguments are configuration, built in for the tools Shoal ships;
 an integration keyed by agent name adds only what configuration cannot express, such as hooks,
-trust entries, waking an idle agent or a launch of its own (the Codex app, Happy
+trust entries, waking an idle agent or a launch of its own (the Claude and Codex apps, Happy
 sessions), so commands never name a tool. Other names add no tool-specific setup.
 A `base` makes an entry a launch profile of another tool, run with the
 integration its chain of bases ends at, so one tool can run with several
@@ -931,12 +931,13 @@ split nothing and get none. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
-launches and Codex app handoffs do so too. The user config is the one the agent
+launches and Claude and Codex app handoffs do so too. The user config is the one the agent
 reads: a tracked agent's follows the workspace's `[env]`, while the app and chats
 run with Shoal's environment. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
-Codex's default mode is a config value read at launch; `--cli` and `--app`
-override it.
+Claude's and Codex's default modes are config values read at launch; `--cli` and `--app`
+override them. The Claude app opens through the `claude://` link that `claude --desktop`
+opens, since that command refuses a CLI signed in through an API token or gateway.
 Successful repository removal drops those trust fields for the removed workspace
 directory and worktrees, in Shoal's user config and in each one its workspaces'
 `[env]` gave a tracked agent, while preserving other project settings. The daemon
@@ -967,7 +968,7 @@ Interactive `add` uses an agent picker when no agent is named; non-interactive
 additions launch only when an agent is named. `add --agent` launches only after
 creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
-workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no
+workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
 tracking or scope; external hosts can hold a workspace while their session is open.
 Happy sessions are an optional integration behind a default Cargo feature and
 the `happy.enabled` setting, off by default, so its encrypted client stays out of

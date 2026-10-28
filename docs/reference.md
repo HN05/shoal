@@ -438,6 +438,7 @@ shoal cd -                               # Previous directory
 shoal run --workspace fix-login -- cargo test
 shoal edit fix-login                     # Open in $VISUAL/$EDITOR or the edit command
 shoal claude fix-login -- --help
+shoal claude fix-login --app             # Claude desktop app (macOS)
 shoal codex                              # Current workspace or picker; default mode
 shoal codex fix-login --cli -- --help
 shoal codex fix-login --app              # Codex desktop app
@@ -925,19 +926,26 @@ accept any `[commands]` name; `shoal run <name>` for a name that is not an AI to
 remains a plain command invocation without agent prompts or exit notifications,
 expanding `{prompt}` to an empty string.
 
-`shoal codex` without `--cli`/`--app` uses `codex.default_mode` from the workspace's
-repository config or `~/.config/shoal/config.toml` (or
-`$XDG_CONFIG_HOME/shoal/config.toml`), read at launch without a daemon restart:
+`shoal claude` and `shoal codex` without `--cli`/`--app` use `claude.default_mode`
+and `codex.default_mode` from the workspace's repository config or
+`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`), read at
+launch without a daemon restart:
 
 ```toml
+[claude]
+default_mode = "cli" # Or "app"
+
 [codex]
 default_mode = "cli" # Or "app"
 ```
 
 App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
-and preserve the launcher's output and exit code. They add no agent flags and
-provide no execution tracking, scope token, port variables or output default (so automatic
-cleanup cannot see their activity); T3's app must already be running.
+and preserve the launcher's output and exit code. The Claude app opens only on
+macOS, through `open claude://code/new?folder=<path>`, takes no `--` arguments,
+and appears in the menu once `/Applications/Claude.app` is installed. App
+launches add no agent flags and provide no execution tracking, scope token, port
+variables or output default (so automatic cleanup cannot see their activity);
+T3's app must already be running.
 
 Happy sessions are an optional integration: off until `happy.enabled = true` in
 global or repository config, and absent from builds without the default `happy`

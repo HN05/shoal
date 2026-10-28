@@ -35,6 +35,7 @@ pub struct Effective {
     pub max_agents: Option<config::AgentLimit>,
     pub focus: Option<bool>,
     pub close_when_done: bool,
+    pub claude: Shortcut,
     pub codex: Shortcut,
     pub herdr: config::Herdr,
     pub happy: config::Happy,
@@ -240,6 +241,9 @@ impl Effective {
             happy: config::Happy {
                 enabled: built_in(merged.happy.enabled, "happy.enabled")?,
             },
+            claude: Shortcut {
+                default_mode: built_in(merged.claude.default_mode, "claude.default_mode")?,
+            },
             codex: Shortcut {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
@@ -368,6 +372,9 @@ fn built_in() -> RepoConfig {
         },
         happy: config::repo::Happy {
             enabled: Some(false),
+        },
+        claude: config::repo::Shortcut {
+            default_mode: Some(Shortcut::default().default_mode),
         },
         codex: config::repo::Shortcut {
             default_mode: Some(Shortcut::default().default_mode),
@@ -690,6 +697,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(max_agents),
         scalar!(focus),
         scalar!(close_when_done),
+        scalar!(claude.default_mode),
         scalar!(codex.default_mode),
         scalar!(herdr.enabled),
         scalar!(herdr.new_tab),

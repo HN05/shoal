@@ -120,6 +120,10 @@ new_tab = true
 # Offer happy-claude and happy-codex, which start detached Happy sessions.
 enabled = false
 
+[claude]
+# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
+default_mode = "cli"
+
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"

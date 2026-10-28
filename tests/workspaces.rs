@@ -4733,6 +4733,57 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
 }
 
 #[test]
+fn claude_app_opens_a_new_session_link_for_the_workspace() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("claude-app");
+    let path = workspace["path"].as_str().unwrap();
+    let bin = fixture.root.path().join("open-bin");
+    install_test_script_with_mode(
+        bin.join("open"),
+        "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\"\nexit 7\n",
+        0o700,
+    );
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("config.toml"),
+        "[claude]\ndefault_mode = 'app'\n",
+    )
+    .unwrap();
+    for args in [vec!["claude", "--app", "claude-app"], vec!["claude"]] {
+        let output = fixture
+            .command()
+            .current_dir(path)
+            .args(&args)
+            .env("PATH", fixture.restricted_path(&bin))
+            .output()
+            .unwrap();
+        if cfg!(target_os = "macos") {
+            assert_eq!(output.status.code(), Some(7), "{output:?}");
+            let folder = path.replace('/', "%2F");
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("{path}\nclaude://code/new?folder={folder}\n")
+            );
+        } else {
+            assert!(!output.status.success());
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("only on macOS"),
+                "{output:?}"
+            );
+        }
+    }
+    let output = fixture
+        .command()
+        .args(["claude", "--app", "claude-app", "--", "--model", "opus"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, b"");
+}
+
+#[test]
 fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
     let workspace = fixture.add("shortcut");

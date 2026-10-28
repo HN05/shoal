@@ -13,22 +13,27 @@ impl Config {
 }
 
 #[test]
-fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
+fn agent_modes_default_to_cli_and_reject_invalid_settings() {
     use crate::agent::AgentMode;
 
-    for text in ["", "[codex]"] {
+    for text in ["", "[claude]\n[codex]"] {
         let config: Config = toml::from_str(text).unwrap();
+        assert_eq!(config.claude.default_mode, None);
         assert_eq!(config.codex.default_mode, None);
         let effective = config.effective(&RepoConfig::default()).unwrap();
+        assert_eq!(effective.claude.default_mode, AgentMode::Cli);
         assert_eq!(effective.codex.default_mode, AgentMode::Cli);
     }
+    let config: Config = toml::from_str("[claude]\ndefault_mode = 'app'").unwrap();
+    assert_eq!(config.claude.default_mode, Some(AgentMode::App));
+    assert_eq!(config.codex.default_mode, None);
     let config: Config = toml::from_str("[codex]\ndefault_mode = 'app'").unwrap();
     assert_eq!(config.codex.default_mode, Some(AgentMode::App));
-    for text in [
-        "[codex]\ndefault_mode = 'desktop'",
-        "[codex]\ndefaut_mode = 'app'",
-    ] {
-        assert!(toml::from_str::<Config>(text).is_err());
+    for section in ["claude", "codex"] {
+        for setting in ["default_mode = 'desktop'", "defaut_mode = 'app'"] {
+            let text = format!("[{section}]\n{setting}");
+            assert!(toml::from_str::<Config>(&text).is_err());
+        }
     }
 }
 

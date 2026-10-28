@@ -268,28 +268,38 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
 }
 
 #[test]
-fn codex_mode_flags_do_not_reserve_workspace_names() {
-    for (args, expected_workspace, expected_cli, expected_app) in [
-        (["shoal", "codex", "cli", "--app"], "cli", false, true),
-        (["shoal", "codex", "--cli", "app"], "app", true, false),
-    ] {
-        let parsed = Cli::try_parse_from(args).unwrap();
-        let Some(Command::Agents(AgentsCommand::Codex {
-            workspace,
-            cli,
-            app,
-            ..
-        })) = parsed.command
-        else {
-            panic!("wrong command")
-        };
-        assert_eq!(workspace.as_deref(), Some(expected_workspace));
-        assert_eq!(cli, expected_cli);
-        assert_eq!(app, expected_app);
-    }
+fn agent_mode_flags_do_not_reserve_workspace_names() {
+    for agent in ["claude", "codex"] {
+        for (args, expected_workspace, expected_cli, expected_app) in [
+            (["shoal", agent, "cli", "--app"], "cli", false, true),
+            (["shoal", agent, "--cli", "app"], "app", true, false),
+        ] {
+            let parsed = Cli::try_parse_from(args).unwrap();
+            let (workspace, cli, app) = match parsed.command {
+                Some(Command::Agents(
+                    AgentsCommand::Claude {
+                        workspace,
+                        cli,
+                        app,
+                        ..
+                    }
+                    | AgentsCommand::Codex {
+                        workspace,
+                        cli,
+                        app,
+                        ..
+                    },
+                )) => (workspace, cli, app),
+                _ => panic!("wrong command"),
+            };
+            assert_eq!(workspace.as_deref(), Some(expected_workspace));
+            assert_eq!(cli, expected_cli);
+            assert_eq!(app, expected_app);
+        }
 
-    assert!(Cli::try_parse_from(["shoal", "codex", "--cli", "--app"]).is_err());
-    assert!(Cli::try_parse_from(["shoal", "codex", "cli", "workspace"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", agent, "--cli", "--app"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", agent, "cli", "workspace"]).is_err());
+    }
 }
 
 #[test]

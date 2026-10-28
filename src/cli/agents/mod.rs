@@ -34,6 +34,7 @@ use crate::{
     tools::Tool,
 };
 
+pub(in crate::cli) use claude::APP as CLAUDE_APP;
 pub(in crate::cli) use codex::APP as CODEX_APP;
 pub(in crate::cli) use desktop::{App, T3};
 pub(in crate::cli) use launch::input;
@@ -179,8 +180,9 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
 /// own section: `default_mode = "app"` hands launches to its desktop app.
 fn tool_options(kind: IntegrationKind, settings: &Effective) -> Options {
     let shortcut = match kind {
+        IntegrationKind::Claude => &settings.claude,
         IntegrationKind::Codex => &settings.codex,
-        IntegrationKind::Claude | IntegrationKind::None => return Options::default(),
+        IntegrationKind::None => return Options::default(),
     };
     Options {
         app: integration(kind)
