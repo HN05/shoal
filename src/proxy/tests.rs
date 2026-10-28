@@ -162,6 +162,32 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
             "{ends_turns} {subagent}"
         );
     }
+    // A failure no retry fixes ends a Codex turn too, which the daemon then
+    // reports instead of retrying.
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    sender
+        .send(Event::Failed {
+            failure: Failure::Other,
+            in_stream: true,
+            wait: None,
+            subagent: false,
+        })
+        .unwrap();
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: true,
+    };
+    reporter.run(events).await;
+    assert_eq!(
+        *methods.lock().unwrap(),
+        ["report_proxy_retry", "report_turn_failure"]
+    );
     use crate::ai::IntegrationKind;
     assert!(!crate::cli::agents::proxy_ends_turns(
         IntegrationKind::Claude

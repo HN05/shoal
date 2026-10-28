@@ -226,6 +226,16 @@ impl Forwarder {
     /// of an HTTP failure, which the agent would retry itself.
     fn give_up(&self, failed: Failed, request: &Buffered) -> Response<Body> {
         if !failed.failure.retryable() {
+            // One inside the stream still ends the agent's turn, which an
+            // agent without a hook for it learns of only here.
+            if failed.in_stream {
+                self.report(Event::Failed {
+                    failure: failed.failure,
+                    in_stream: true,
+                    wait: None,
+                    subagent: request.sent_by_subagent(),
+                });
+            }
             return failed.response;
         }
         let failed = match request.failure_stream(failed.failure, failed.error.as_ref()) {

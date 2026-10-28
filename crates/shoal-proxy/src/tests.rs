@@ -795,6 +795,30 @@ async fn a_rate_limit_inside_a_claude_stream_waits_for_the_reset_its_headers_nam
 }
 
 #[tokio::test]
+async fn a_failure_no_retry_fixes_inside_a_stream_still_ends_the_turn() {
+    let opening = format!(
+        "{RESPONSE_CREATED}event: response.failed\ndata: {}\n\n",
+        r#"{"type":"response.failed","response":{"error":{"code":"insufficient_quota","message":"Out of credits."}}}"#
+    );
+    let reply_with = opening.clone();
+    let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (_, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    // Passed on as it came, at once.
+    assert_eq!(body, opening);
+    assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::Other,
+            in_stream: true,
+            wait: None,
+            subagent: false,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn a_subagents_failure_says_it_was_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(

@@ -26,7 +26,8 @@ pub enum Event {
         attempt: u32,
         wait: Duration,
     },
-    /// The proxy gave up on a failure it retries, so the agent gets it;
+    /// The proxy gave up on a failure it retries, or passed on one inside a
+    /// stream that no retry fixes, so the agent gets it;
     /// `in_stream` when it arrives inside a response stream, `wait` when the
     /// upstream said how long it would refuse, such as until a usage limit
     /// resets, and `subagent` when a subagent of the agent's sent the
