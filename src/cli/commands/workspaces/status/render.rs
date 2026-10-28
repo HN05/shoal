@@ -286,17 +286,11 @@ fn proxy_retry_label(retry: &crate::daemon::workspace::proxy_retries::ProxyRetry
 
 /// A pending retry of the agent's failed turn as `status` shows it.
 fn turn_retry_label(retry: &crate::daemon::workspace::turn_retry::TurnRetry) -> String {
-    let progress = format!("attempt {}", retry.attempt);
+    let (failure, attempt) = (retry.failure.describe(), retry.attempt);
     if retry.delivered {
-        format!(
-            "{} ({progress}), agent asked to continue",
-            retry.failure.describe()
-        )
+        format!("{failure} (attempt {attempt}), agent asked to continue")
     } else {
-        format!(
-            "{} ({progress}) at {}",
-            retry.failure.describe(),
-            crate::time::local_minutes(retry.due_at)
-        )
+        let due = crate::time::local_minutes(retry.due_at);
+        format!("{failure} (attempt {attempt}) at {due}")
     }
 }

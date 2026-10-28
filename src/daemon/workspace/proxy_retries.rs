@@ -60,11 +60,7 @@ impl Manager {
         if !ended {
             return;
         }
-        let execution = execution.to_owned();
-        let forgot = self
-            .store
-            .run(move |db| super::turn_retry::forget_upstream_reset(db, &execution))
-            .await;
+        let forgot = self.record_upstream_reset(execution.to_owned(), None).await;
         if let Err(error) = forgot {
             crate::daemon::log!("forget the upstream reset of an ended execution: {error:#}");
         }

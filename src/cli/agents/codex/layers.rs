@@ -16,15 +16,18 @@ pub(super) fn effective(
     directory: &Path,
 ) -> Result<toml::Table> {
     let user = read(&codex_home.join("config.toml"))?;
-    let mut config = user.clone();
-    let profile = profile.or_else(|| user.get("profile")?.as_str());
+    let profile = profile
+        .map(str::to_owned)
+        .or_else(|| user.get("profile")?.as_str().map(str::to_owned));
+    let trusted = trusted(&user, directory);
+    let mut config = user;
     if let Some(profile) = profile {
         merge(
             &mut config,
             read(&codex_home.join(format!("{profile}.config.toml")))?,
         );
     }
-    if trusted(&user, directory) {
+    if trusted {
         for project in project_directories(&config, directory) {
             merge(&mut config, read(&project.join(".codex/config.toml"))?);
         }
@@ -81,7 +84,7 @@ fn project_directories(config: &toml::Table, directory: &Path) -> Vec<PathBuf> {
 }
 
 /// Merge `layer` over `config`: tables key by key, anything else replaced.
-pub(super) fn merge(config: &mut toml::Table, layer: toml::Table) {
+fn merge(config: &mut toml::Table, layer: toml::Table) {
     for (key, value) in layer {
         match (config.get_mut(&key), value) {
             (Some(toml::Value::Table(below)), toml::Value::Table(above)) => merge(below, above),

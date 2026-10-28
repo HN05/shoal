@@ -67,10 +67,6 @@ impl Integration for Claude {
         Wake::Hook
     }
 
-    fn routes_through_proxy(&self) -> bool {
-        true
-    }
-
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CLAUDE_CODE)
     }

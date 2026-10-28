@@ -146,7 +146,7 @@ fn record_reset(db: &mut Connection, execution: &str, reset: Option<i64>) -> Res
 
 /// When the upstream of `execution`'s proxy last said it refuses requests
 /// until.
-pub(super) fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<i64>> {
+fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<i64>> {
     Ok(db
         .query_row(
             "SELECT resets_at FROM execution_upstream_resets WHERE execution_id=?1",
@@ -157,7 +157,7 @@ pub(super) fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<
 }
 
 /// Forget the reset `execution`'s proxy reported.
-pub(super) fn forget_upstream_reset(db: &Connection, execution: &str) -> Result<()> {
+fn forget_upstream_reset(db: &Connection, execution: &str) -> Result<()> {
     db.execute(
         "DELETE FROM execution_upstream_resets WHERE execution_id=?1",
         [execution],

@@ -54,10 +54,6 @@ impl Integration for Codex {
         config_overrides(false)
     }
 
-    fn routes_through_proxy(&self) -> bool {
-        true
-    }
-
     /// Codex fires no hook after a failed turn, so the proxy's failure
     /// stream, which ends it, is the only word of it.
     fn proxy_ends_turns(&self) -> bool {

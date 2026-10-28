@@ -53,10 +53,10 @@ pub(in crate::cli) trait Integration: Sync {
         Ok(Vec::new())
     }
 
-    /// Whether its launches can send their API requests to Shoal's proxy,
-    /// which [`Self::hook_args`] and [`Self::route_through_proxy`] then do.
+    /// Whether its launches can send their API requests to Shoal's proxy:
+    /// those of an integration with arguments that point it there.
     fn routes_through_proxy(&self) -> bool {
-        false
+        !self.proxy_args().is_empty()
     }
 
     /// Whether a response stream its proxy ends with a failure ends its
