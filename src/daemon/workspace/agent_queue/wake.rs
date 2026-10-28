@@ -1,12 +1,12 @@
 //! What wakes a queued restore: sustained healthy readings for an agent
-//! stopped mid-turn, an update for one stopped between turns, which has
-//! nothing to do until then.
+//! protection stopped mid-turn, an update for one stopped between turns,
+//! which has nothing to do until then, unless `shoal resume` asked for it.
 use std::collections::HashSet;
 
 use anyhow::Result;
 use rusqlite::Connection;
 
-use super::Wake;
+use super::{Wake, Work};
 use crate::{daemon::workspace::Manager, execution::recovery, state::QueueKind};
 
 /// What admitted a restore.
@@ -28,12 +28,15 @@ struct RestoreRow {
     execution: String,
 }
 
-/// Every restore entry of the queue.
+/// Every restore entry of the queue that waits for an update when its
+/// agent stopped between turns: one a waiting wrapper carries out, or one
+/// Shoal queued on its own.
 fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
     Ok(db
         .prepare(
             "SELECT id,workspace_id,execution_id FROM agent_queue
-             WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL",
+             WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL
+                AND (env IS NULL OR automatic)",
         )?
         .query_map([QueueKind::Restore], |row| {
             Ok(RestoreRow {
@@ -78,8 +81,34 @@ impl Manager {
         if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
-        let due = waits && self.restore_disk_ready() && self.updates_waiting(workspace_id).await?;
+        let due = waits && self.update_due(workspace_id).await?;
         Ok(Wake::Update { due })
+    }
+
+    /// How admission sees the restore of `execution` in `workspace_id` that
+    /// the daemon starts: like a launch, except that an `automatic` one of
+    /// an agent stopped between turns waits for an update first. Its agent's
+    /// processes have stopped, so it holds no slot meanwhile.
+    pub(super) async fn stopped_restore_work(
+        &self,
+        workspace_id: &str,
+        execution: &str,
+        automatic: bool,
+    ) -> Result<Work> {
+        if !automatic || !self.restore_waits_for_update(workspace_id, execution) {
+            return Ok(Work::Launch);
+        }
+        let due = self.update_due(workspace_id).await?;
+        Ok(Work::Restore {
+            waiting: true,
+            wake: Wake::Update { due },
+        })
+    }
+
+    /// Whether an update waits for the agent of `workspace_id` and free disk
+    /// space allows restoring it.
+    async fn update_due(&self, workspace_id: &str) -> Result<bool> {
+        Ok(self.restore_disk_ready() && self.updates_waiting(workspace_id).await?)
     }
 
     /// Whether disk space allows a restore an update woke: with disk

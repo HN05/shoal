@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 74;
+const SCHEMA_VERSION: i64 = 75;
 
 #[cfg(test)]
 mod benchmark;
@@ -416,7 +416,13 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (72, include_str!("store/agent_queue_stopped_restores.sql"), None),
     (73, include_str!("store/session_cleanup.sql"), None),
     (74, include_str!("store/execution_upstream_resets.sql"), None),
+    (75, AUTOMATIC_RESTORES, None),
 ];
+
+/// Restores Shoal queued on its own, as after a signal stop, rather than
+/// `shoal resume`: one of an agent stopped between turns waits for an update.
+const AUTOMATIC_RESTORES: &str = "ALTER TABLE agent_queue
+    ADD COLUMN automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1));";
 
 /// The demo each running execution runs; a demo ends with its execution.
 const DEMOS: &str = "CREATE TABLE demos (

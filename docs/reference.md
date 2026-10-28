@@ -281,6 +281,8 @@ closing its terminal, logging out or shutting down sends, is saved as stopped
 work with the signal as its stop reason, and its restore waits in the
 [agent queue](#agent-queue) once its execution has ended, so it comes back after
 a reboot without a command; run `shoal stop --all` first to keep agents down. An
+agent that was idle comes back only when an update arrives for it, unless
+processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits
 for `shoal resume` instead. Other commands just end.
 For an execution whose wrapper is gone, `shoal stop <workspace>` stops the
@@ -1198,7 +1200,10 @@ lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 
 A restore that `shoal resume` or a signal stop queues joins the back of the
-queue and needs a free slot, or room for its load, as a launch does. The daemon
+queue and needs a free slot, or room for its load, as a launch does. A signal
+stop's restore of an idle agent holds no slot and holds nothing back until its
+update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
+The daemon
 starts it as it starts a queued launch: in the Herdr pane the agent stopped in
 once that pane is back at its prompt, otherwise in a background tab where
 `herdr.new_tab` allows, otherwise in a detached zmx session. A restore whose

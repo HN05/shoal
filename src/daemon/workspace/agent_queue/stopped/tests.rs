@@ -140,6 +140,80 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     assert_eq!(requested(&manager, &done, "finished"), Some(herdr()));
 }
 
+/// The record of an agent stopped between turns.
+const IDLE: &str = r#"{"agent":"claude","stage":"stopped","turn":"idle"}"#;
+
+/// The queued entry restoring `execution`.
+async fn entry(manager: &Manager, execution: &str) -> QueueEntry {
+    manager
+        .queue_entries()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.execution.as_deref() == Some(execution))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let mut workspaces = Vec::new();
+    for (name, record) in [("idle", IDLE), ("resumed", IDLE), ("working", STOPPED)] {
+        let workspace = create(&manager, &repo, name).await;
+        let execution = format!("{name}-agent");
+        signal_stop(&manager, &workspace, &execution);
+        stop(&manager, &workspace, &execution, record);
+        workspaces.push(workspace);
+    }
+    // The idle agents hold no slot, so the one stopped mid-turn takes it.
+    manager.dispatch_queue().await.unwrap();
+    let working = entry(&manager, "working-agent").await;
+    assert!(started(&working.id) && !working.waits_for_update);
+    for execution in ["idle-agent", "resumed-agent"] {
+        let waiting = entry(&manager, execution).await;
+        assert!(waiting.waits_for_update && waiting.state == Queued);
+    }
+
+    // Resuming one keeps its place, and it waits only for a slot.
+    manager
+        .queue_stopped_restore("resumed", "resumed-agent", herdr())
+        .await
+        .unwrap();
+    assert!(!entry(&manager, "resumed-agent").await.waits_for_update);
+    manager
+        .consume_queue_entry(&working.id, &workspaces[2].id)
+        .await;
+    std::fs::remove_file(record_path(
+        &manager.paths,
+        &workspaces[2].id,
+        "working-agent",
+    ))
+    .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let resumed = entry(&manager, "resumed-agent").await;
+    assert!(started(&resumed.id));
+    assert_eq!(entry(&manager, "idle-agent").await.state, Queued);
+
+    // An update for the idle agent restores it once a slot is free.
+    manager
+        .consume_queue_entry(&resumed.id, &workspaces[1].id)
+        .await;
+    std::fs::remove_file(record_path(
+        &manager.paths,
+        &workspaces[1].id,
+        "resumed-agent",
+    ))
+    .unwrap();
+    manager
+        .send_agent_message("idle", "Review requested".into())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&entry(&manager, "idle-agent").await.id));
+}
+
 #[tokio::test]
 async fn restores_leave_the_queue_once_resolved_or_cancelled() {
     let (temp, manager) = manager().await;

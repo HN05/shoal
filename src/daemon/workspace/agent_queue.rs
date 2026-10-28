@@ -162,6 +162,8 @@ struct QueuedRow {
     workspace: Option<String>,
     /// Whether the daemon starts it, rather than a waiting wrapper.
     started_here: bool,
+    /// Whether Shoal queued the restore on its own.
+    automatic: bool,
 }
 
 /// The waiting entries as admission sees them.
@@ -202,7 +204,7 @@ fn dormant_restores(
 fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL
+            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL,automatic
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -213,6 +215,7 @@ fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 execution: row.get(3)?,
                 workspace: row.get(4)?,
                 started_here: row.get(5)?,
+                automatic: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -517,7 +520,7 @@ impl Manager {
 
     /// The queued entries in order, each restore with whether its agent
     /// waits and what for. A restore the daemon starts is admitted like a
-    /// launch.
+    /// launch once it waits for nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
         let waiters = self.agent_queue.restore_waiters();
@@ -531,12 +534,16 @@ impl Manager {
             execution,
             workspace,
             started_here,
+            automatic,
         } in queued
         {
             let work = match (kind, execution, workspace) {
-                (QueueKind::Restore, Some(execution), Some(_)) if started_here => {
+                (QueueKind::Restore, Some(execution), Some(workspace)) if started_here => {
+                    let work = self
+                        .stopped_restore_work(&workspace, &execution, automatic)
+                        .await?;
                     stopped.insert(execution);
-                    Work::Launch
+                    work
                 }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
                     let waits = waiters.contains(&execution);

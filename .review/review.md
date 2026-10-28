@@ -397,7 +397,10 @@ configured command for another agent, plus proven child
   preserve work and leases, and never rerun a recorded command. Every daemon stop
   carries its cause, which the wrapper prints after the agent stops. A hangup or
   terminate signal to an agent's wrapper or agent saves the agent's recovery the
-  same way, with the signal as its reason, and is not an exit on its own.
+  same way, with the signal as its reason, and is not an exit on its own. Its
+  queued restore of an agent stopped between turns, with no processes left
+  outside its process group, waits for an update unless `shoal resume` asked
+  for it.
   Scoped callers cannot stop executions.
 - Command wrappers keep running when the daemon goes away and reattach only after
   the daemon verifies the record, scope token, wrapper and child identities and

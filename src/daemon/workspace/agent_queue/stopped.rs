@@ -35,6 +35,9 @@ struct Restore {
     agent: String,
     execution: String,
     env: String,
+    /// Shoal queued it on its own rather than `shoal resume`, so an agent
+    /// stopped between turns waits for an update.
+    automatic: bool,
 }
 
 impl Restore {
@@ -43,6 +46,7 @@ impl Restore {
         execution: &str,
         agent: &str,
         env: &BTreeMap<String, String>,
+        automatic: bool,
     ) -> Result<Self> {
         Ok(Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -50,13 +54,15 @@ impl Restore {
             agent: agent.to_owned(),
             execution: execution.to_owned(),
             env: serde_json::to_string(env)?,
+            automatic,
         })
     }
 }
 
 /// Record `restore` behind the work already waiting, unless its execution
-/// already has one. Its workspace must be ready and its execution ended,
-/// since a recorded one runs, waits for its wrapper's restore or is unresolved.
+/// already has one, which a resume keeps in place and makes no longer
+/// automatic. Its workspace must be ready and its execution ended, since a
+/// recorded one runs, waits for its wrapper's restore or is unresolved.
 fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
     let tx = db.transaction()?;
     crate::daemon::store::require_ready(&tx, &restore.target.id)
@@ -73,9 +79,9 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
     );
     let now = crate::time::unix_seconds() as i64;
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,workspace_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10)
-         ON CONFLICT(execution_id) DO NOTHING",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,workspace_id,automatic)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11)
+         ON CONFLICT(execution_id) DO UPDATE SET automatic=automatic AND excluded.automatic",
         params![
             restore.id,
             QueueKind::Restore,
@@ -87,6 +93,7 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
             QueueState::Queued,
             now,
             restore.target.id,
+            restore.automatic,
         ],
     )?;
     tx.commit()?;
@@ -196,7 +203,8 @@ fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
 impl Manager {
     /// Queue the restore of the agent stopped as `execution` in `workspace`,
     /// or of its last session, which the daemon starts with `env` once
-    /// admitted, and return its entry. Queueing it again keeps its place.
+    /// admitted, and return its entry. Queueing it again keeps its place,
+    /// and the agent no longer waits for an update there.
     pub async fn queue_stopped_restore(
         &self,
         workspace: &str,
@@ -211,7 +219,7 @@ impl Manager {
             repository: workspace.repository_id,
             name: workspace.name,
         };
-        let restore = Restore::new(target, execution, &agent, &env)?;
+        let restore = Restore::new(target, execution, &agent, &env, false)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
         self.store.run(move |db| insert(db, &restore)).await?;
@@ -253,7 +261,7 @@ impl Manager {
     ) -> Result<()> {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
         if let Some(record) = recovery::Record::load(&path).ok().flatten() {
-            let restore = Restore::new(workspace.clone(), execution, &record.agent, env)?;
+            let restore = Restore::new(workspace.clone(), execution, &record.agent, env, true)?;
             if let Err(error) = self.store.run(move |db| insert(db, &restore)).await {
                 crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
                 return Ok(());

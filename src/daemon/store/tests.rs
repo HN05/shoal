@@ -256,6 +256,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 74 {
         db.execute_batch(include_str!("execution_upstream_resets.sql"))?;
     }
+    if version >= 75 {
+        db.execute_batch(AUTOMATIC_RESTORES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
