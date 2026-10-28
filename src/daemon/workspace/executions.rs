@@ -32,6 +32,15 @@ use tokio::{
 };
 use uuid::Uuid;
 
+/// The workspaces with a running execution. One whose wrapper is gone is
+/// left for `shoal stop <workspace>` rather than failing every bulk stop.
+fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
+    Ok(db
+        .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
+        .query_map([ExecutionState::Running], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -880,6 +889,28 @@ impl Manager {
             Ok(processes) => processes.completion_issue(),
             Err(error) => Some(format!("process inspection failed: {error:#}")),
         })
+    }
+
+    /// The settled workspaces `shoal stop --all` stops: those with a running
+    /// execution or a stopped agent whose restore is requested or queued. The
+    /// queue gate keeps restores from moving between the queue and their
+    /// agents meanwhile, and executions are read before requests, which an
+    /// agent a signal stops saves before its execution ends.
+    pub async fn stop_targets(&self) -> Result<Vec<Workspace>> {
+        let _gate = self.agent_queue_gate.lock().await;
+        let mut targets = self.store.run(|db| running_workspaces(db)).await?;
+        targets.extend(self.pending_restore_workspaces().await?);
+        Ok(self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .filter(|workspace| {
+                matches!(
+                    workspace.state,
+                    WorkspaceState::Ready | WorkspaceState::Failed
+                ) && targets.contains(&workspace.id)
+            })
+            .collect())
     }
 
     /// Stop every execution, cancelling agents' waiting restores.

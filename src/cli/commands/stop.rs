@@ -1,6 +1,4 @@
 //! Stopping saves agent sessions and commands for `shoal resume`.
-use std::collections::HashSet;
-
 use anyhow::{Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
@@ -16,7 +14,7 @@ use crate::{
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
-    state::{ExecutionState, QueueKind, WorkspaceState},
+    state::WorkspaceState,
 };
 
 pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
@@ -123,31 +121,12 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
 }
 
 /// Stop every settled workspace with a running execution or an agent whose
-/// restore is queued or requested, which stopping cancels. Executions are
-/// read first: an agent a signal stops saves its restore request before its
-/// execution ends, so it is seen running or as a pending restore.
+/// restore is queued or requested, which stopping cancels; the daemon selects
+/// them while no restore can move between the queue and its agent.
 async fn stop_all(ctx: &Context) -> Result<i32> {
-    let mut report = ui::Report::new("stopped", "stop");
-    let mut running = Vec::new();
-    let mut idle = Vec::new();
-    let mut unknown = false;
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    for workspace in workspaces.iter().filter(|workspace| settled(workspace)) {
-        match is_running(ctx, workspace).await {
-            Ok(true) => running.push(workspace.clone()),
-            Ok(false) => idle.push(workspace.clone()),
-            Err(error) => {
-                report.failed(ctx, &workspace.name, &error);
-                unknown = true;
-            }
-        }
-    }
-    let pending = pending_restores(ctx, &workspaces).await?;
-    running.extend(
-        idle.into_iter()
-            .filter(|workspace| pending.contains(&workspace.id)),
-    );
-    if running.is_empty() && !unknown {
+    let report = ui::Report::new("stopped", "stop");
+    let running = request::<Vec<Workspace>>(&ctx.paths, RemovalMethod::StopTargets).await?;
+    if running.is_empty() {
         ctx.emit(
             "No running agents or commands",
             json!({"stopped": [], "failed": []}),
@@ -195,44 +174,4 @@ async fn stop_each(
         (false, false) => format!("Restore with shoal resume{resume}"),
     };
     report.finish(ctx, &summary)
-}
-
-/// The `workspaces` whose stopped agent's restore is requested or in the
-/// queue. Requests are read first: the daemon queues one before forgetting
-/// it, so a restore moving between them is seen in one or the other, and one
-/// whose agent registers after the queue is read shows as its execution.
-async fn pending_restores(ctx: &Context, workspaces: &[Workspace]) -> Result<HashSet<String>> {
-    let mut pending = HashSet::new();
-    for workspace in workspaces {
-        if !recovery::restore_requests(&ctx.paths, &workspace.id)?.is_empty() {
-            pending.insert(workspace.id.clone());
-        }
-    }
-    pending.extend(
-        super::agent_queue::entries(ctx)
-            .await?
-            .into_iter()
-            .filter(|entry| entry.kind == QueueKind::Restore)
-            .filter_map(|entry| entry.workspace_id),
-    );
-    Ok(pending)
-}
-
-/// Whether `workspace` is ready or failed, which stopping it leaves as is;
-/// preparing or removing workspaces keep their lifecycle.
-fn settled(workspace: &Workspace) -> bool {
-    matches!(
-        workspace.state,
-        WorkspaceState::Ready | WorkspaceState::Failed
-    )
-}
-
-/// Whether `workspace` has a running execution. Disconnected executions are
-/// left for `shoal stop <workspace>` rather than failing every bulk stop.
-async fn is_running(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
-    Ok(inspection
-        .executions
-        .iter()
-        .any(|execution| execution.state == ExecutionState::Running))
 }

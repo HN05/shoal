@@ -298,3 +298,32 @@ async fn a_request_whose_record_is_gone_is_forgotten() {
     assert!(queue(&manager).await.is_empty());
     assert_eq!(requested(&manager, &workspace, "agent"), None);
 }
+
+#[tokio::test]
+async fn stop_all_selects_running_agents_and_pending_restores() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let running = create(&manager, &repo, "running").await;
+    let (_execution, _connection) = connected_agent(&manager, &running).await;
+    let queued = create(&manager, &repo, "queued").await;
+    stop(&manager, &queued, "waiting", STOPPED);
+    manager
+        .queue_stopped_restore("queued", "waiting", herdr())
+        .await
+        .unwrap();
+    let requested = create(&manager, &repo, "requested").await;
+    signal_stop(&manager, &requested, "agent");
+    let idle = create(&manager, &repo, "idle").await;
+    stop(&manager, &idle, "manual", STOPPED);
+
+    let mut targets: Vec<String> = manager
+        .stop_targets()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|workspace| workspace.name)
+        .collect();
+    targets.sort();
+    assert_eq!(targets, ["queued", "requested", "running"]);
+}

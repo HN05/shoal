@@ -20,6 +20,7 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: RemovalMethod) -> Res
             let listed = manager.removed_workspaces().await;
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
+        RemovalMethod::StopTargets => Body::Workspaces(manager.stop_targets().await?),
         RemovalMethod::StopWorkspace {
             workspace,
             acknowledge_unproven,

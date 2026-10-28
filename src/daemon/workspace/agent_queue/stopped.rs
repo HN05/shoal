@@ -116,6 +116,22 @@ fn recorded_executions(db: &Connection) -> Result<HashSet<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Every workspace's ID.
+fn all_workspaces(db: &Connection) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT id FROM workspaces")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The workspaces with a restore in the queue.
+fn restoring_workspaces(db: &Connection) -> Result<HashSet<String>> {
+    Ok(db
+        .prepare("SELECT DISTINCT workspace_id FROM agent_queue WHERE kind=?1")?
+        .query_map([QueueKind::Restore], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
 fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
     Ok(db
@@ -262,6 +278,25 @@ impl Manager {
             recovery::forget_restore_request(&self.paths, workspace_id, &execution)?;
         }
         Ok(())
+    }
+
+    /// The workspaces with a stopped agent whose restore is requested or in
+    /// the queue. Requires the queue gate, which keeps restores in the queue
+    /// until it is released.
+    pub(in crate::daemon::workspace) async fn pending_restore_workspaces(
+        &self,
+    ) -> Result<HashSet<String>> {
+        let (workspaces, queued) = self
+            .store
+            .run(|db| Ok((all_workspaces(db)?, restoring_workspaces(db)?)))
+            .await?;
+        let mut pending = queued;
+        for workspace in workspaces {
+            if !recovery::restore_requests(&self.paths, &workspace)?.is_empty() {
+                pending.insert(workspace);
+            }
+        }
+        Ok(pending)
     }
 
     /// Whether the entry `id` restores a stopped agent the daemon starts.
