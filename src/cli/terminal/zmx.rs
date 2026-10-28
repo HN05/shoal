@@ -16,11 +16,11 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched};
-use crate::{cli::agents::ensure_program, env, subprocess::Run, tools::Tool};
+use crate::{cli::agents::ensure_program, env, sessions::zmx::{Fields, WORKSPACE_LABEL, field, kill, list}, subprocess::Run, tools::Tool};
+
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
-const WORKSPACE_LABEL: &str = "shoal.workspace";
 const CHAT_LABEL: &str = "shoal.chat";
 const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
@@ -372,17 +372,6 @@ async fn label_current(owner: Owner<'_>, agent: &str) -> Result<()> {
     Ok(())
 }
 
-/// End `session` with everything running in it.
-async fn kill(session: &str) -> Result<()> {
-    let mut kill = Command::new(Tool::Zmx.program());
-    kill.args(["kill", session]);
-    Run::new(kill)
-        .checked()
-        .await
-        .with_context(|| format!("end zmx session {session}"))?;
-    Ok(())
-}
-
 /// Attach this terminal to `session` until the user detaches or it ends.
 async fn attach(session: &str) -> Result<()> {
     ensure_program("attach", Tool::Zmx.program())?;
@@ -433,36 +422,6 @@ async fn session_owners(kind: OwnerKind) -> Result<HashSet<String>> {
         .collect())
 }
 
-type Fields = Vec<(String, String)>;
-
-/// Every zmx session with its fields and labels.
-async fn list() -> Result<Vec<(String, Fields)>> {
-    let mut command = Command::new(Tool::Zmx.program());
-    command.arg("list");
-    let output = Run::new(command)
-        .checked()
-        .await
-        .context("list zmx sessions")?;
-    Ok(parse_list(&String::from_utf8_lossy(&output.stdout)))
-}
-
-/// `zmx list` prints one session per line after a two-column marker, as
-/// tab-separated `key=value` fields followed by its labels.
-fn parse_list(output: &str) -> Vec<(String, Fields)> {
-    output
-        .lines()
-        .filter_map(|line| {
-            let fields: Fields = line[line.find("name=")?..]
-                .split('\t')
-                .filter_map(|field| field.split_once('='))
-                .map(|(key, value)| (key.to_owned(), value.to_owned()))
-                .collect();
-            let name = field(&fields, "name")?.to_owned();
-            Some((name, fields))
-        })
-        .collect()
-}
-
 /// Whether `sessions` list the watched session: under its name, labelled
 /// with its workspace, and the instance the watch began with.
 fn hosts(sessions: &[(String, Fields)], place: &Watched) -> bool {
@@ -480,13 +439,6 @@ fn hosts(sessions: &[(String, Fields)], place: &Watched) -> bool {
 fn instance(fields: &Fields) -> String {
     let value = |key| field(fields, key).unwrap_or_default();
     format!("{}:{}", value("pid"), value("created"))
-}
-
-fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
-    fields
-        .iter()
-        .find(|(name, _)| name == key)
-        .map(|(_, value)| value.as_str())
 }
 
 /// The label that names a session's owner of `kind`.

@@ -30,6 +30,7 @@ mod repository;
 mod secrets;
 mod seed;
 mod service;
+mod sessions;
 mod shell;
 mod sim;
 mod state;
