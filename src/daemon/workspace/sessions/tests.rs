@@ -15,6 +15,7 @@ use std::{
 
 #[derive(Default)]
 struct FakeHost {
+    name: Option<&'static str>,
     remaining: Mutex<Vec<(String, String)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
     closed: Mutex<Vec<String>>,
@@ -49,7 +50,7 @@ impl FakeHost {
 
 impl Host for FakeHost {
     fn name(&self) -> &'static str {
-        "zmx"
+        self.name.unwrap_or("zmx")
     }
     fn sessions<'a>(&'a self, _: &'a Path, _: bool) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
@@ -118,8 +119,17 @@ impl Host for FakeHost {
 }
 
 async fn fixture() -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
+    fixture_for("zmx").await
+}
+
+async fn fixture_for(
+    name: &'static str,
+) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
     let (root, mut manager) = manager().await;
-    let host = Arc::new(FakeHost::default());
+    let host = Arc::new(FakeHost {
+        name: Some(name),
+        ..Default::default()
+    });
     Arc::get_mut(&mut manager)
         .context("manager is shared")?
         .session_hosts = vec![host.clone()];
@@ -206,57 +216,59 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
 async fn demos_close_their_session_after_completion_or_verified_forgetting() -> Result<()> {
     use crate::{daemon::workspace::ExecutionKind, demos::Launch};
 
-    let (_root, manager, workspace, host) = fixture().await?;
-    for disconnected in [false, true] {
-        let name = if disconnected {
-            "disconnected"
-        } else {
-            "connected"
-        };
-        host.add(name, &workspace.id)?;
-        host.demo(name, name)?;
-        let demo = Launch {
-            id: name.into(),
-            name: name.into(),
-            preset: None,
-            open: None,
-            scheme: None,
-            environment: Default::default(),
-            host: "zmx".into(),
-            place: name.into(),
-        };
-        let started = manager
-            .begin_execution_running(
-                &workspace.id,
-                None,
-                ExecutionKind::Command,
-                None,
-                Some(demo),
-            )
-            .await?;
-        if disconnected {
-            let execution = started.plan.id.clone();
-            drop(started);
-            // Disconnected stop paths call this after proving processes stopped.
-            manager.forget_execution(&execution).await?;
-        } else {
-            // Unknown process state must leave the session open for recovery.
-            assert!(
-                !manager
-                    .finish_execution(started.plan.id.clone(), ExecutionKind::Command, None)
-                    .await?
-            );
-            assert!(host.closed()?.is_empty());
-            assert!(
-                manager
-                    .finish_execution(started.plan.id, ExecutionKind::Command, Some(0))
-                    .await?
-            );
+    for host_name in ["zmx", "herdr", "future-host"] {
+        let (_root, manager, workspace, host) = fixture_for(host_name).await?;
+        for disconnected in [false, true] {
+            let name = if disconnected {
+                "disconnected"
+            } else {
+                "connected"
+            };
+            host.add(name, &workspace.id)?;
+            host.demo(name, name)?;
+            let demo = Launch {
+                id: name.into(),
+                name: name.into(),
+                preset: None,
+                open: None,
+                scheme: None,
+                environment: Default::default(),
+                host: host_name.into(),
+                place: name.into(),
+            };
+            let started = manager
+                .begin_execution_running(
+                    &workspace.id,
+                    None,
+                    ExecutionKind::Command,
+                    None,
+                    Some(demo),
+                )
+                .await?;
+            if disconnected {
+                let execution = started.plan.id.clone();
+                drop(started);
+                // Disconnected stop paths call this after proving processes stopped.
+                manager.forget_execution(&execution).await?;
+            } else {
+                // Unknown process state must leave the session open for recovery.
+                assert!(
+                    !manager
+                        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, None)
+                        .await?
+                );
+                assert!(host.closed()?.is_empty());
+                assert!(
+                    manager
+                        .finish_execution(started.plan.id, ExecutionKind::Command, Some(0))
+                        .await?
+                );
+            }
         }
+        assert_eq!(host.closed()?, ["connected", "disconnected"]);
+        assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
+        assert!(manager.find_workspace(&workspace.id).await?.is_some());
     }
-    assert_eq!(host.closed()?, ["connected", "disconnected"]);
-    assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
-    assert!(manager.find_workspace(&workspace.id).await?.is_some());
     Ok(())
 }
 

@@ -143,3 +143,33 @@ fn reusing_a_herdr_workspace_pane_for_a_chat_clears_cleanup_ownership() -> anyho
     }
     Ok(())
 }
+
+#[test]
+fn failed_herdr_demo_handoffs_only_close_the_original_verified_pane() -> anyhow::Result<()> {
+    for after in ["same", "replacement", "unreachable"] {
+        let fixture = fixture();
+        fixture.add("demo-owner");
+        fs::write(fixture.root.path().join("herdr-run-fails"), after)?;
+        let output = fixture
+            .command()
+            .env("HERDR_ENV", "1")
+            .env("HERDR_WORKSPACE_ID", "w1")
+            .env(
+                "HERDR_SOCKET_PATH",
+                fixture.root.path().join("demo-herdr.sock"),
+            )
+            .args(["demo", "start", "--workspace", "demo-owner", "--", "true"])
+            .output()?;
+        assert!(!output.status.success(), "{after}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("handoff failed"),
+            "{output:?}"
+        );
+        assert_eq!(
+            closed(&fixture)?.len(),
+            usize::from(after == "same"),
+            "{after}"
+        );
+    }
+    Ok(())
+}

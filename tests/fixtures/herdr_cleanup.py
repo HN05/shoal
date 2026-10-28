@@ -12,6 +12,14 @@ with (root / 'herdr-calls').open('a') as calls:
 if args[:2] == ['tab', 'create']:
     print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
 elif args[:2] == ['pane', 'run']:
+    failure = root / 'herdr-run-fails'
+    if failure.exists():
+        after = failure.read_text()
+        if after == 'replacement':
+            (root / 'herdr-terminal').write_text('replacement-terminal')
+        if after == 'unreachable':
+            (root / 'herdr-unreachable').write_text('')
+        sys.exit('handoff failed')
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
     print('{}')
 elif args[:2] == ['pane', 'get']:

@@ -54,6 +54,15 @@ pub(crate) async fn label_current(state: &Path, workspace: Option<&str>) -> Resu
     Ok(())
 }
 
+pub(crate) async fn record_demo(
+    state: &Path,
+    pane: &str,
+    workspace: &str,
+    launch: &str,
+) -> Result<()> {
+    record(state, pane, Some(workspace), Some(launch)).await
+}
+
 async fn record(
     state: &Path,
     pane: &str,
@@ -66,6 +75,10 @@ async fn record(
         return records::forget(state, &place.key());
     }
     records::write(state, &native::verified(place).await?)
+}
+
+pub(crate) async fn close_demo(state: &Path, pane: &str, launch: &str) -> Result<()> {
+    Herdr.close(state, pane, &Owner::Demo(launch.into())).await
 }
 
 async fn close_owned(state: &Path, place: &Place) -> Result<()> {
