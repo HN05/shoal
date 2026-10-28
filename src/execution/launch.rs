@@ -61,16 +61,21 @@ pub(super) async fn run_tracked(
         if let Some(refusal) = launch.link.refusal() {
             eprintln!("shoal: {refusal}; command stopped");
         }
-        match outcome {
+        let ran = started.elapsed();
+        // A failure after the run, such as a restored agent's proxy that
+        // cannot start, still reports the execution's end; a restore record
+        // it did not consume stays for `shoal resume`.
+        let next = match outcome {
             Ok(outcome) => {
-                let ran = started.elapsed();
-                if let Some(code) = launch
+                launch
                     .after_run(paths, &mode, outcome, &mut restarts, ran)
-                    .await?
-                {
-                    break Ok(code);
-                }
+                    .await
             }
+            Err(error) => Err(error),
+        };
+        match next {
+            Ok(Some(code)) => break Ok(code),
+            Ok(None) => {}
             Err(error) => break Err(error),
         }
     };
