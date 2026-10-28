@@ -1,9 +1,11 @@
 //! The global `[proxy.<name>]` tables and the proxy each AI tool's agents
 //! reach their upstream through.
-use std::{collections::BTreeMap, ffi::OsString};
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
+
+use crate::config::value::Value;
 
 pub type Proxies = BTreeMap<String, Proxy>;
 
@@ -16,62 +18,21 @@ pub struct Proxy {
     /// The key the upstream gets instead of the agent's own credentials;
     /// without one, the agent's pass through.
     #[serde(default)]
-    pub key: Option<Key>,
-}
-
-/// An upstream key, as written or from the agent's environment.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-#[serde(
-    untagged,
-    deny_unknown_fields,
-    expecting = "a key, or { env = \"<variable>\" } naming the variable that holds it"
-)]
-pub enum Key {
-    Raw(String),
-    Env { env: String },
-}
-
-/// A key as written never shows in what Shoal prints.
-impl std::fmt::Debug for Key {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Raw(_) => f.write_str("Raw(..)"),
-            Self::Env { env } => f.debug_struct("Env").field("env", env).finish(),
-        }
-    }
-}
-
-impl Key {
-    /// The key itself, reading `variable` of the agent's environment for
-    /// one it names. A build without the proxy starts none to give it to.
-    #[cfg_attr(not(feature = "proxy"), allow(dead_code))]
-    pub fn value(&self, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
-        let name = match self {
-            Self::Raw(key) => return Ok(key.clone()),
-            Self::Env { env } => env,
-        };
-        let value = variable(name)
-            .filter(|value| !value.is_empty())
-            .with_context(|| format!("the proxy's key variable {name} is not set"))?;
-        value
-            .into_string()
-            .map_err(|_| anyhow::anyhow!("the proxy's key variable {name} is not UTF-8"))
-    }
+    pub key: Option<Value>,
 }
 
 pub fn validate(proxies: &Proxies) -> Result<()> {
     for (name, proxy) in proxies {
         crate::validate::name("proxy", name)?;
         validate_upstream(&proxy.upstream).with_context(|| format!("proxy.{name}.upstream"))?;
-        match &proxy.key {
-            Some(Key::Raw(key)) => ensure!(
+        if let Some(key) = &proxy.key {
+            key.validate(&format!("proxy.{name}.key"))?;
+        }
+        if let Some(Value::Written(key)) = &proxy.key {
+            ensure!(
                 !key.is_empty() && key.bytes().all(|byte| byte.is_ascii_graphic()),
                 "proxy.{name}.key must be visible ASCII text"
-            ),
-            Some(Key::Env { env }) => {
-                crate::env::validate_configured_name(&format!("proxy.{name}.key"), env)?;
-            }
-            None => {}
+            );
         }
     }
     Ok(())

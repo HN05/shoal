@@ -29,7 +29,11 @@ the daemon and state never hold the values, hooks drop them, and tracked
 worktree files cannot name them. A tool secret may require approval: the
 launcher fetches it only after the daemon confirms a workspace grant bound to
 its command and tools, and fails instead of waiting. Environment secrets cannot
-require approval, since they are fetched before the agent can ask. Forge changes Shoal
+require approval, since they are fetched before the agent can ask. A setting
+that takes its value from outside the config, such as a proxy's upstream key,
+shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }`
+run like a secret's command when the agent starts, and Shoal prints no written
+value. Forge changes Shoal
 makes for a workspace act as the agent too: through the `gh` wrapper, and on
 Forgejo with the token the agent's fj saved under the configured `fj_home`,
 because fj has no API passthrough, or else through the agent's `tea` wrapper. An agent Git profile

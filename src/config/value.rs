@@ -1,10 +1,70 @@
-//! Values that settings take from a command's standard output.
+//! A setting's value, as written, from a variable of the agent's
+//! environment, or from a command's standard output.
 use std::{
     ffi::{OsStr, OsString},
     process::Stdio,
 };
 
 use anyhow::{Context, Result, ensure};
+use serde::Deserialize;
+
+/// A setting's value: as written, `{ env = "<variable>" }` or
+/// `{ cmd = ["<program>", ...] }`.
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(
+    untagged,
+    deny_unknown_fields,
+    expecting = "a value, { env = \"<variable>\" } naming the variable that holds it, or { cmd = [\"<program>\", ...] } printing it"
+)]
+pub enum Value {
+    Written(String),
+    Env { env: String },
+    Cmd { cmd: Vec<String> },
+}
+
+/// A value as written never shows in what Shoal prints.
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Written(_) => f.write_str("Written(..)"),
+            Self::Env { env } => f.debug_struct("Env").field("env", env).finish(),
+            Self::Cmd { cmd } => f.debug_struct("Cmd").field("cmd", cmd).finish(),
+        }
+    }
+}
+
+impl Value {
+    /// The variable or command the value names is one Shoal can read or run.
+    pub fn validate(&self, setting: &str) -> Result<()> {
+        match self {
+            Self::Written(_) => Ok(()),
+            Self::Env { env } => crate::env::validate_configured_name(setting, env),
+            Self::Cmd { cmd } => validate_command(&format!("{setting}.cmd"), cmd),
+        }
+    }
+
+    /// The value itself, reading `variable` of the agent's environment for
+    /// one it names. A build without the proxy reads none yet.
+    #[cfg_attr(not(feature = "proxy"), allow(dead_code))]
+    pub async fn resolve(&self, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
+        let (value, source) = match self {
+            Self::Written(value) => return Ok(value.clone()),
+            Self::Env { env } => {
+                let value = variable(env)
+                    .filter(|value| !value.is_empty())
+                    .with_context(|| format!("variable {env} is not set"))?;
+                (value, format!("variable {env}"))
+            }
+            Self::Cmd { cmd } => (
+                command_output(cmd, None).await?,
+                format!("the output of {}", cmd[0]),
+            ),
+        };
+        value
+            .into_string()
+            .map_err(|_| anyhow::anyhow!("{source} is not UTF-8"))
+    }
+}
 
 /// `setting`, an argument array, names a program and holds no NUL.
 pub fn validate_command(setting: &str, command: &[String]) -> Result<()> {
@@ -54,3 +114,6 @@ pub async fn command_output(command: &[String], path: Option<&OsStr>) -> Result<
     ensure!(!value.contains(&0), "{program} printed NUL");
     Ok(OsString::from_vec(value))
 }
+
+#[cfg(test)]
+mod tests;

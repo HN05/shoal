@@ -12876,7 +12876,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
     assert!(!output.status.success(), "{output:?}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("the proxy's key variable CLIPROXY_TEST_KEY is not set"),
+        stderr.contains("the proxy's key: variable CLIPROXY_TEST_KEY is not set"),
         "{stderr}"
     );
     assert!(!home.join("claude-args").exists());

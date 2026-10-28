@@ -321,7 +321,7 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
 
 /// Start `proxy` on a free loopback port, serving on this process's
 /// runtime, with its key from `variable` of the agent's environment when it
-/// names one.
+/// names one, or from the command it names.
 #[cfg(feature = "proxy")]
 pub async fn start(
     proxy: &super::Proxy,
@@ -329,7 +329,8 @@ pub async fn start(
 ) -> Result<Running> {
     let mut upstream = shoal_proxy::Upstream::parse(&proxy.upstream)?;
     if let Some(key) = &proxy.key {
-        upstream = upstream.with_key(&key.value(variable)?)?;
+        let key = key.resolve(variable).await.context("the proxy's key")?;
+        upstream = upstream.with_key(&key)?;
     }
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     let key = uuid::Uuid::new_v4().simple().to_string();

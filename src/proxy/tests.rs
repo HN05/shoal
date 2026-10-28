@@ -54,6 +54,10 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
             "proxy.local.key",
         ),
         (
+            "[proxy.local]\nupstream = 'http://host'\nkey = { cmd = [] }\n",
+            "proxy.local.key.cmd must name a program",
+        ),
+        (
             "[proxy.local]\nupstream = 'http://host'\nkey = { file = 'key' }\n",
             "naming the variable that holds it",
         ),
@@ -63,19 +67,19 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     }
 }
 
-#[test]
-fn a_proxy_key_is_written_out_or_read_from_the_agents_environment() {
+#[tokio::test]
+async fn a_proxy_key_is_written_out_read_from_the_agents_environment_or_fetched() {
     let config = parse(
         "[proxy.raw]\nupstream = 'http://host'\nkey = 'sk-raw'\n\
-         [proxy.env]\nupstream = 'http://host'\nkey = { env = 'CLIPROXY_KEY' }\n",
+         [proxy.env]\nupstream = 'http://host'\nkey = { env = 'CLIPROXY_KEY' }\n\
+         [proxy.cmd]\nupstream = 'http://host'\nkey = { cmd = ['echo', 'sk-cmd'] }\n",
     )
     .unwrap();
     let key = |name: &str| config.proxy[name].key.clone().unwrap();
     let set = |name: &str| (name == "CLIPROXY_KEY").then(|| "sk-env".into());
-    assert_eq!(key("raw").value(set).unwrap(), "sk-raw");
-    assert_eq!(key("env").value(set).unwrap(), "sk-env");
-    let error = format!("{:#}", key("env").value(|_| None).unwrap_err());
-    assert!(error.contains("CLIPROXY_KEY is not set"), "{error}");
+    assert_eq!(key("raw").resolve(set).await.unwrap(), "sk-raw");
+    assert_eq!(key("env").resolve(set).await.unwrap(), "sk-env");
+    assert_eq!(key("cmd").resolve(set).await.unwrap(), "sk-cmd");
     // A key as written never shows in what Shoal prints.
     let printed = format!("{:?}", config.proxy["raw"]);
     assert!(!printed.contains("sk-raw"), "{printed}");
