@@ -62,6 +62,7 @@ impl std::hash::Hash for Identity {
 /// A process's identity and its parent's unique ID, which the kernel keeps
 /// after the parent exits and launchd adopts the process, until the process
 /// replaces its image.
+#[cfg_attr(test, derive(Clone))]
 struct Lineage {
     identity: Identity,
     unique: Option<u64>,
@@ -229,15 +230,20 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
-    let listing = same_user_pids().await?;
+    let listing = list_processes().await?;
     let marker = format!("{marker}=").into_bytes();
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         let mut inventory = Inventory {
             observed: HashMap::new(),
         };
-        for pid in listing {
+        for pid in listing.own {
             if let Some(process) = observe(pid, &marker, &ids, settle_deadline)? {
+                inventory.observed.insert(pid, process);
+            }
+        }
+        for pid in listing.elevated {
+            if let Some(process) = observe_elevated(pid)? {
                 inventory.observed.insert(pid, process);
             }
         }
@@ -247,30 +253,48 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
     .context("process inventory worker failed")?
 }
 
-/// Same-user processes other than init and the daemon.
-async fn same_user_pids() -> Result<Vec<u32>> {
+/// The processes an inventory observes, other than init and the daemon.
+struct Listing {
+    /// Processes running as this user.
+    own: Vec<u32>,
+    /// Setuid programs this user started, such as `login`, which run as
+    /// another user.
+    elevated: Vec<u32>,
+}
+
+async fn list_processes() -> Result<Listing> {
     let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
+    command
+        .args(["-ax", "-o", "pid=,uid=,ruid="])
+        .env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
         .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
         .output()
         .await
         .context("process inventory failed")?;
-    let mut inventory = Vec::new();
+    let user = unsafe { libc::geteuid() };
+    let mut listing = Listing {
+        own: Vec::new(),
+        elevated: Vec::new(),
+    };
     for line in output.lines() {
         let fields: Vec<_> = line.split_whitespace().collect();
-        ensure!(fields.len() == 2, "invalid process inventory");
+        ensure!(fields.len() == 3, "invalid process inventory");
         let pid: u32 = fields[0].parse()?;
+        if pid <= 1 || pid == std::process::id() {
+            continue;
+        }
         // System daemons may run as negative UIDs such as nobody (-2);
         // they are never ours.
-        let Ok(uid) = fields[1].parse::<u32>() else {
-            continue;
-        };
-        if uid == unsafe { libc::geteuid() } && pid > 1 && pid != std::process::id() {
-            inventory.push(pid);
+        let uid = fields[1].parse::<u32>().ok();
+        let real = fields[2].parse::<u32>().ok();
+        if uid == Some(user) {
+            listing.own.push(pid);
+        } else if real == Some(user) {
+            listing.elevated.push(pid);
         }
     }
-    Ok(inventory)
+    Ok(listing)
 }
 
 /// One live process and what its own environment says about its owner.
@@ -285,6 +309,10 @@ enum Evidence {
     Unreadable,
     /// Settled empty, which a platform binary's hidden environment also reads as.
     Hidden,
+    /// A setuid program this user started, whose environment came from the
+    /// parent that started it. It runs as another user, so it is never
+    /// reported or stopped itself.
+    Elevated,
 }
 
 /// Read `pid`'s environment for `marker`, unless it has exited.
@@ -315,6 +343,14 @@ fn observe(
     Ok(Some(Observed { lineage, evidence }))
 }
 
+/// Observe `pid`, a setuid program this user started, unless it has exited.
+fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
+    Ok(elevated_lineage(pid)?.map(|lineage| Observed {
+        lineage,
+        evidence: Evidence::Elevated,
+    }))
+}
+
 #[derive(Clone)]
 enum Attribution {
     Owned(String),
@@ -341,6 +377,9 @@ impl Inventory {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
         for (pid, process) in &self.observed {
+            if matches!(process.evidence, Evidence::Elevated) {
+                continue;
+            }
             let identity = &process.lineage.identity;
             match self.resolve(*pid, &mut attributions) {
                 Attribution::Owned(execution_id) if alive(identity)? => {
@@ -361,8 +400,8 @@ impl Inventory {
 
     /// `pid`'s owner by its own environment, or for a hidden one by the
     /// nearest ancestor whose environment tells, as its environment was
-    /// inherited from there. A hidden process launchd adopted has no ancestor
-    /// left to tell.
+    /// inherited from there through any setuid programs between them. A
+    /// hidden process launchd adopted has no ancestor left to tell.
     fn resolve(&self, pid: u32, attributions: &mut HashMap<u32, Attribution>) -> Attribution {
         let mut hidden: Vec<&Observed> = Vec::new();
         let mut current = pid;
@@ -385,7 +424,7 @@ impl Inventory {
                 Evidence::Marked(id) => break Attribution::Owned(id.clone()),
                 Evidence::Unmarked => break Attribution::Foreign,
                 Evidence::Unreadable => break Attribution::Unknown(lineage.identity.clone()),
-                Evidence::Hidden => hidden.push(process),
+                Evidence::Hidden | Evidence::Elevated => hidden.push(process),
             }
             if lineage.parent_pid <= 1 {
                 break if lineage.adopted {
@@ -547,6 +586,81 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         parent_pid: bsd.pbi_ppid,
         adopted: bsd.pbi_ppid == 1 && !started_by_launchd(&info.unique, launchd_version()),
     }))
+}
+
+/// The lineage of `pid`, a setuid program this user started, from the
+/// records macOS shows for any process, since it refuses the full identity
+/// of another user's process.
+#[cfg(target_os = "macos")]
+fn elevated_lineage(pid: u32) -> Result<Option<Lineage>> {
+    let read = || pid_info::<UniqueIdentifiers>(pid, PROC_PIDUNIQIDENTIFIERINFO, 0);
+    let Some(unique) = read()? else {
+        return Ok(None);
+    };
+    let (Some(short), Some(birth)) = (
+        pid_info::<libc::proc_bsdshortinfo>(pid, libc::PROC_PIDT_SHORTBSDINFO, 0)?,
+        start_time(pid)?,
+    ) else {
+        return Ok(None);
+    };
+    // The process may have exited between the reads and left its PID to
+    // another; unique IDs are never reused.
+    let same = read()?.is_some_and(|again| again.unique == unique.unique);
+    // BSD SZOMB = 5. Zombies cannot execute or hold resources.
+    if !same || short.pbsi_status == 5 {
+        return Ok(None);
+    }
+    Ok(Some(Lineage {
+        identity: Identity {
+            pid,
+            birth,
+            unique: boot_session().map(|boot| UniqueId {
+                boot: boot.clone(),
+                id: unique.unique,
+            }),
+        },
+        unique: Some(unique.unique),
+        parent: Some(unique.parent_unique),
+        parent_pid: short.pbsi_ppid,
+        adopted: short.pbsi_ppid == 1 && !started_by_launchd(&unique, launchd_version()),
+    }))
+}
+
+/// When `pid` started, in the form its identity records. `p_starttime` opens
+/// `kinfo_proc`, which libc does not bind and macOS shows for any process.
+#[cfg(target_os = "macos")]
+fn start_time(pid: u32) -> Result<Option<String>> {
+    // `sizeof(struct kinfo_proc)` on 64-bit macOS.
+    const KINFO_PROC_SIZE: usize = 648;
+    let mut record = [0_u8; KINFO_PROC_SIZE];
+    let mut len = record.len();
+    let mut mib = [
+        libc::CTL_KERN,
+        libc::KERN_PROC,
+        libc::KERN_PROC_PID,
+        pid as i32,
+    ];
+    let result = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as u32,
+            record.as_mut_ptr().cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if result != 0 {
+        return Err(std::io::Error::last_os_error()).context("inspect process start");
+    }
+    // An exited process has no record.
+    if len == 0 {
+        return Ok(None);
+    }
+    ensure!(len == KINFO_PROC_SIZE, "incomplete process record");
+    let seconds = i64::from_ne_bytes(record[..8].try_into()?);
+    let micros = i32::from_ne_bytes(record[8..12].try_into()?);
+    Ok(Some(format!("{seconds}:{micros}")))
 }
 
 /// This boot's session UUID, which names the boot unique process IDs belong to.
@@ -732,6 +846,19 @@ fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
 
 #[cfg(target_os = "linux")]
 fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
+    proc_lineage(pid, |owner| owner == unsafe { libc::geteuid() })
+}
+
+/// The lineage of `pid`, a setuid program this user started, whose records
+/// another user owns.
+#[cfg(target_os = "linux")]
+fn elevated_lineage(pid: u32) -> Result<Option<Lineage>> {
+    proc_lineage(pid, |owner| owner != unsafe { libc::geteuid() })
+}
+
+/// The lineage of `pid` when `owned` accepts the owner of its records.
+#[cfg(target_os = "linux")]
+fn proc_lineage(pid: u32, owned: impl Fn(u32) -> bool) -> Result<Option<Lineage>> {
     use std::os::unix::fs::MetadataExt;
     let path = format!("/proc/{pid}");
     let metadata = match std::fs::metadata(&path) {
@@ -739,7 +866,7 @@ fn platform_lineage(pid: u32) -> Result<Option<Lineage>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.into()),
     };
-    if metadata.uid() != unsafe { libc::geteuid() } {
+    if !owned(metadata.uid()) {
         return Ok(None);
     }
     let Some(stat) = read_process_stat(&format!("{path}/stat"))? else {

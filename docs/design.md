@@ -1715,8 +1715,10 @@ exit clears its execution and permits setup readiness only when marker, child an
 group evidence has no survivors and environment visibility is complete; a settled
 empty environment is readable evidence, except a macOS platform binary's, which
 reads that way when hidden. A hidden environment takes the attribution of the
-nearest ancestor whose environment tells; one launchd adopted after its parent
-exited has none and counts as unreadable. The reporting wrapper may remain alive
+nearest ancestor whose environment tells, through any setuid program the user
+started, such as a terminal's `login`, which runs as another user and is never
+stopped itself; one launchd adopted after its parent exited has none and counts
+as unreadable. The reporting wrapper may remain alive
 awaiting acknowledgement. Recovery polls
 incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved

@@ -201,6 +201,73 @@ fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells
     Ok(())
 }
 
+/// A shell under a setuid program the user started, such as a terminal's
+/// `login` or an agent's `sudo -u`, which runs as root yet accepts the user's
+/// signals, takes the attribution of the setuid program's parent.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Result<()> {
+    use Evidence::{Hidden, Marked, Unmarked};
+    // `top` runs setuid root like `login`; it samples until killed.
+    let mut setuid = std::process::Command::new("/usr/bin/top")
+        .args(["-l", "0", "-s", "60"])
+        .stdout(std::process::Stdio::null())
+        .spawn()?;
+    let elevated = observe_elevated(setuid.id());
+    setuid.kill()?;
+    setuid.wait()?;
+    let elevated = elevated?.context("observe the setuid program")?;
+    ensure!(elevated.lineage.parent_pid == std::process::id());
+    let shell = || {
+        let (pid, mut shell) =
+            observed(u32::MAX >> 1, elevated.lineage.identity.pid, false, Hidden);
+        // Started after the setuid program, as its child.
+        shell.lineage.identity.birth = format!("{}:0", u32::MAX);
+        (pid, shell)
+    };
+    let starter = |evidence| Inventory {
+        observed: HashMap::from([
+            shell(),
+            (
+                elevated.lineage.identity.pid,
+                Observed {
+                    lineage: elevated.lineage.clone(),
+                    evidence: Evidence::Elevated,
+                },
+            ),
+            observed(std::process::id(), 1, false, evidence),
+        ]),
+    };
+    let resolve = |inventory: Inventory| match inventory.resolve(u32::MAX >> 1, &mut HashMap::new())
+    {
+        Attribution::Owned(id) => format!("owned by {id}"),
+        Attribution::Foreign => "foreign".into(),
+        Attribution::Unknown(head) => format!("unknown under {}", head.pid),
+    };
+    assert_eq!(resolve(starter(Unmarked)), "foreign");
+    assert_eq!(
+        resolve(starter(Marked("execution".into()))),
+        "owned by execution"
+    );
+    // The setuid program is never reported itself.
+    let scan = starter(Marked("execution".into())).attribute()?;
+    assert!(scan.unreadable.is_empty());
+    assert!(
+        scan.processes
+            .iter()
+            .all(|owned| owned.identity.pid != elevated.lineage.identity.pid)
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_start_time_matches_the_birth_of_the_identity() -> Result<()> {
+    let own = capture(std::process::id())?.context("own identity")?;
+    assert_eq!(start_time(own.pid)?, Some(own.birth));
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn launchd_starts_a_process_only_by_a_read_and_matching_version() {
