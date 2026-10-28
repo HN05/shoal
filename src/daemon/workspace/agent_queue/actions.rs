@@ -136,24 +136,30 @@ impl Manager {
             .waiting_entry(selector, caller, "; remove its workspace instead")
             .await?;
         if let Some(execution) = self.waiting_wrapper(&entry).await? {
-            self.executions
-                .connections()
-                .await
-                .stop(&execution, &StopRequest::queue_cancel(), false)
-                .await?;
+            self.stop_waiting_wrapper(&execution).await?;
         }
-        let id = entry.id.clone();
-        let removed = self
-            .store
-            .run(move |db| {
-                Ok(db.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                    params![id, QueueState::Queued],
-                )?)
-            })
-            .await?;
-        ensure!(removed == 1, "{} is no longer waiting", entry.name);
+        ensure!(
+            self.delete_waiting_entry(entry.id.clone()).await?,
+            "{} is no longer waiting",
+            entry.name
+        );
         Ok(entry)
+    }
+
+    /// Stop the wrapper of `execution` waiting for its restore, as `shoal
+    /// stop` stops it, leaving its recovery record.
+    async fn stop_waiting_wrapper(&self, execution: &str) -> Result<()> {
+        self.executions
+            .connections()
+            .await
+            .stop(execution, &StopRequest::queue_cancel(), false)
+            .await?;
+        Ok(())
+    }
+
+    /// Delete the entry `id` if it still waits, returning whether it did.
+    async fn delete_waiting_entry(&self, id: String) -> Result<bool> {
+        self.store.run(move |db| delete_waiting(db, &id)).await
     }
 
     /// Move the waiting entry `selector` names to `place`, or stop the
@@ -190,6 +196,14 @@ impl Manager {
         })
     }
 
+    /// Record `restore`, which no entry has yet, at `place`, returning its
+    /// entry's ID.
+    async fn place_restore(&self, restore: WaitingRestore, place: QueuePlace) -> Result<String> {
+        self.store
+            .run(move |db| record_placed_restore(db, &restore, &place))
+            .await
+    }
+
     /// Place the waiting entry `id` at `place`, only further back when
     /// `back_only`, returning its new position.
     async fn place_entry(&self, id: String, place: QueuePlace, back_only: bool) -> Result<usize> {
@@ -208,8 +222,9 @@ impl Manager {
     }
 
     /// Stop the agent running in the workspace `selector` names and place
-    /// its restore, which its wrapper waits for, at `place`. The wrapper may
-    /// already have queued it, which keeps its entry.
+    /// its restore, which its wrapper waits for, at `place`. The place is
+    /// taken before the stop, so a place that cannot be taken stops nothing;
+    /// the wrapper's own queueing then keeps it.
     async fn move_running_agent(&self, selector: &str, place: QueuePlace) -> Result<MovedEntry> {
         let workspace = self
             .workspace(selector)
@@ -220,22 +235,16 @@ impl Manager {
             .agent_name(&execution)
             .await
             .context("the agent disconnected")?;
-        self.stop_for_queue_move(&execution).await?;
         let restore = WaitingRestore {
             workspace,
-            execution,
+            execution: execution.clone(),
             agent,
         };
-        let id = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let id = record_waiting_restore(&tx, &restore)?;
-                order::place(&tx, &id, &place)?;
-                tx.commit()?;
-                Ok(id)
-            })
-            .await?;
+        let id = self.place_restore(restore, place).await?;
+        if let Err(error) = self.stop_for_queue_move(&execution).await {
+            self.delete_waiting_entry(id).await?;
+            return Err(error);
+        }
         let entry = self
             .queue_entries()
             .await?
@@ -247,6 +256,38 @@ impl Manager {
             stopped: true,
         })
     }
+}
+
+/// Delete the entry `id` if it still waits, returning whether it did.
+fn delete_waiting(db: &rusqlite::Connection, id: &str) -> Result<bool> {
+    let deleted = db.execute(
+        "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
+        params![id, QueueState::Queued],
+    )?;
+    Ok(deleted == 1)
+}
+
+/// Record `restore` at `place` in one transaction, refusing an agent whose
+/// restore already has an entry.
+fn record_placed_restore(
+    db: &mut rusqlite::Connection,
+    restore: &WaitingRestore,
+    place: &QueuePlace,
+) -> Result<String> {
+    let tx = db.transaction()?;
+    ensure!(
+        !crate::daemon::store::exists(
+            &tx,
+            "SELECT 1 FROM agent_queue WHERE execution_id=?1",
+            [&restore.execution],
+        )?,
+        "the restore of {} is already in the agent queue",
+        restore.workspace.name
+    );
+    let id = record_waiting_restore(&tx, restore)?;
+    order::place(&tx, &id, place)?;
+    tx.commit()?;
+    Ok(id)
 }
 
 #[cfg(test)]

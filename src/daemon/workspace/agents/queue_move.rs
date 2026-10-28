@@ -65,8 +65,11 @@ impl Manager {
         )
         .context("save the agent's recovery record")?;
         agent.overload = Some(protection);
+        // As for a protection stop, an update waits until the wrapper has
+        // stopped the agent and lets go of it while the restore waits.
+        agent.update_hold = self.gates.try_owned_operation();
         if agent.stop.send(true).is_err() {
-            agent.overload = None;
+            agent.cancel_recovery();
             recovery::consume(&handoff)?;
             bail!("{} disconnected", agent.name);
         }

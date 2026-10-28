@@ -243,7 +243,19 @@ async fn only_restorable_agents_move_and_only_for_unscoped_callers() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let api = create(&manager, &repo, "api").await;
-    let (execution, _stop) = connected_agent(&manager, &api).await;
+    let (execution, stop) = connected_agent(&manager, &api).await;
+    // A place outside the queue stops nothing.
+    let error = manager
+        .queue_move("api", QueuePlace::Position(2), None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("outside the queue"),
+        "{error:#}"
+    );
+    assert!(!stop.has_changed().unwrap());
+    assert!(!manager.agent_was_overloaded(&execution).await);
+    assert!(manager.queue_entries().await.unwrap().is_empty());
     let caller = Caller {
         workspace_id: create(&manager, &repo, "parent").await.id,
         execution: None,
