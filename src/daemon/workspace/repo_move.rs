@@ -14,7 +14,7 @@ use crate::{
     process, repository, seed,
     state::WorkspaceState,
 };
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use std::{
     collections::BTreeMap,
@@ -136,27 +136,18 @@ impl Manager {
         target: &registry::ConfiguredRoot,
         repositories: &[Repository],
     ) -> Result<spotlight::Plan> {
-        let plan = registry::plan_root(
+        let workspaces = self.list_workspaces().await?;
+        let recorded = registry::Recorded {
+            repositories,
+            workspaces: &workspaces,
+        };
+        registry::plan_root(
             target,
             &fs::canonicalize(&self.paths.state)?,
-            repositories,
+            &recorded,
             None,
         )
-        .await?;
-        let workspaces = self.list_workspaces().await?;
-        for location in plan.locations()? {
-            if let Some(workspace) = workspaces
-                .iter()
-                .find(|workspace| location.starts_with(&workspace.path))
-            {
-                bail!(
-                    "root_dir {} is inside the workspace {}",
-                    location.display(),
-                    workspace.name
-                );
-            }
-        }
-        Ok(plan)
+        .await
     }
 
     /// Refuse a repository whose directory is missing or in use, or whose

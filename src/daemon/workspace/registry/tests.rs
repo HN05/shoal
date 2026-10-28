@@ -40,7 +40,7 @@ async fn an_excluded_root_refuses_a_sibling_that_resolves_into_state() {
     let state = parent.join("state");
     std::fs::create_dir(&state).unwrap();
     std::os::unix::fs::symlink(&state, parent.join(".shoal.noindex")).unwrap();
-    let error = super::prepare_root(&root, &state, &[], None)
+    let error = super::prepare_root(&root, &state, &nothing(), None)
         .await
         .unwrap_err();
     assert!(
@@ -63,9 +63,17 @@ async fn an_excluded_root_refuses_a_recorded_repository_directory() {
         workspaces_dir: Some(root.path.clone()),
         contribution: false,
     };
-    let error = super::prepare_root(&root, &parent.join("state"), &[recorded], None)
-        .await
-        .unwrap_err();
+    let error = super::prepare_root(
+        &root,
+        &parent.join("state"),
+        &super::Recorded {
+            repositories: &[recorded],
+            workspaces: &[],
+        },
+        None,
+    )
+    .await
+    .unwrap_err();
     assert!(
         error
             .to_string()
@@ -87,10 +95,51 @@ async fn registration_keeps_a_checkout_in_a_root_spotlight_indexes() {
         &root,
         &parent.join("state"),
         "checkout",
-        &[],
+        &nothing(),
     )
     .await
     .unwrap();
     assert_eq!(path, checkout);
     assert_eq!(directory, project);
+}
+
+#[tokio::test]
+async fn an_excluded_root_refuses_a_workspace_at_its_excluded_directory() {
+    let (temp, manager) = crate::test_support::indexed_manager().await;
+    let origin = repository(temp.path(), "origin");
+    let repo = manager
+        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .await
+        .unwrap();
+    let home = std::fs::canonicalize(temp.path()).unwrap();
+    let placed = home.join(".other.noindex");
+    manager
+        .create_workspace(&repo.id, "placed".into(), None, None, Some(placed))
+        .await
+        .unwrap();
+    let root = super::ConfiguredRoot {
+        path: home.join("other"),
+        layout: crate::daemon::workspace::spotlight::Layout::Excluded,
+    };
+    let repositories = manager.repositories().await.unwrap();
+    let workspaces = manager.list_workspaces().await.unwrap();
+    let recorded = super::Recorded {
+        repositories: &repositories,
+        workspaces: &workspaces,
+    };
+    let error = super::prepare_root(&root, &home.join("state"), &recorded, None)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("inside the workspace placed"),
+        "{error:#}"
+    );
+    assert!(std::fs::symlink_metadata(&root.path).is_err());
+}
+
+fn nothing() -> super::Recorded<'static> {
+    super::Recorded {
+        repositories: &[],
+        workspaces: &[],
+    }
 }

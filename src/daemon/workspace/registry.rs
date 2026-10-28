@@ -1,6 +1,11 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, spotlight};
-use crate::{daemon::store, git, model::Repository, repository, validate};
+use crate::{
+    daemon::store,
+    git,
+    model::{Repository, Workspace},
+    repository, validate,
+};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use std::{
@@ -115,8 +120,13 @@ impl Manager {
             Registration::Regular => None,
             Registration::Contribution => self.contribution_fork(&source).await?,
         };
+        let workspaces = self.list_workspaces().await?;
+        let recorded = Recorded {
+            repositories: &repositories,
+            workspaces: &workspaces,
+        };
         let (path, workspaces_dir) = if Path::new(&source).exists() {
-            local_checkout_location(&source, &root, &state, &directory_name, &repositories).await?
+            local_checkout_location(&source, &root, &state, &directory_name, &recorded).await?
         } else {
             let cloning = Cloning {
                 source: &source,
@@ -129,7 +139,7 @@ impl Manager {
                 &state,
                 &directory_name,
                 name.as_deref(),
-                &repositories,
+                &recorded,
             )
             .await?
         };
@@ -209,10 +219,15 @@ impl Manager {
         if let Some(directory) = &current.workspaces_dir {
             return Ok(directory.clone());
         }
+        let workspaces = self.list_workspaces().await?;
+        let recorded = Recorded {
+            repositories: &repositories,
+            workspaces: &workspaces,
+        };
         let root = prepare_root(
             &self.configured_root()?,
             &fs::canonicalize(&self.paths.state)?,
-            &repositories,
+            &recorded,
             None,
         )
         .await?;
@@ -302,11 +317,12 @@ async fn local_checkout_location(
     root: &ConfiguredRoot,
     state: &Path,
     directory_name: &str,
-    repositories: &[Repository],
+    recorded: &Recorded<'_>,
 ) -> Result<(PathBuf, PathBuf)> {
     let toplevel = git::worktree_root(Path::new(source)).await?;
     let path = fs::canonicalize(toplevel.trim())?;
-    let root = prepare_root(root, state, repositories, Some(&path)).await?;
+    let root = prepare_root(root, state, recorded, Some(&path)).await?;
+    let repositories = recorded.repositories;
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
     // directory, unless `<x>` is itself a checkout or another repository's.
     let placed = path
@@ -342,8 +358,9 @@ async fn clone_into_reserved_directory(
     state: &Path,
     directory_name: &str,
     requested_name: Option<&str>,
-    repositories: &[Repository],
+    recorded: &Recorded<'_>,
 ) -> Result<(PathBuf, PathBuf)> {
+    let repositories = recorded.repositories;
     ensure!(
         requested_name.is_none_or(|name| {
             repositories
@@ -357,7 +374,7 @@ async fn clone_into_reserved_directory(
         source.contains("://") || source.contains('@'),
         "repository path does not exist: {source}"
     );
-    let root = prepare_root(root, state, repositories, None).await?;
+    let root = prepare_root(root, state, recorded, None).await?;
     if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
         crate::daemon::access::ensure_writable(parent).await?;
     }
@@ -422,19 +439,25 @@ impl Manager {
     }
 }
 
+/// What Shoal records, which a root must stay out of.
+pub(super) struct Recorded<'a> {
+    pub(super) repositories: &'a [Repository],
+    pub(super) workspaces: &'a [Workspace],
+}
+
 /// The canonical, existing directory that holds repository directories: the
 /// `root_dir`, or where its layout keeps them. Worktrees must stay out of
-/// Shoal's state, every checkout, including the one `checkout` registers, and
-/// every repository directory, and the daemon must be able to write there, so
-/// a root it cannot write or that is or resolves inside one of them is
-/// refused before anything is created or linked.
+/// Shoal's state, every checkout, including the one `checkout` registers,
+/// every repository directory and every workspace, and the daemon must be
+/// able to write there, so a root it cannot write or that is or resolves
+/// inside one of them is refused before anything is created or linked.
 pub(super) async fn prepare_root(
     root: &ConfiguredRoot,
     state: &Path,
-    repositories: &[Repository],
+    recorded: &Recorded<'_>,
     checkout: Option<&Path>,
 ) -> Result<PathBuf> {
-    let plan = plan_root(root, state, repositories, checkout).await?;
+    let plan = plan_root(root, state, recorded, checkout).await?;
     plan.apply()?;
     plan.destination()
 }
@@ -444,25 +467,26 @@ pub(super) async fn prepare_root(
 pub(super) async fn plan_root(
     root: &ConfiguredRoot,
     state: &Path,
-    repositories: &[Repository],
+    recorded: &Recorded<'_>,
     checkout: Option<&Path>,
 ) -> Result<spotlight::Plan> {
     let plan = spotlight::plan(&root.path, root.layout)?;
     for location in plan.locations()? {
-        ensure_outside(&location, state, repositories, checkout)?;
+        ensure_outside(&location, state, recorded, checkout)?;
         crate::daemon::access::ensure_writable(&location).await?;
     }
     Ok(plan)
 }
 
-/// Refuse a root `location` inside Shoal's state, a checkout or a repository
-/// directory.
+/// Refuse a root `location` inside Shoal's state, a checkout, a repository
+/// directory or a workspace.
 fn ensure_outside(
     location: &Path,
     state: &Path,
-    repositories: &[Repository],
+    recorded: &Recorded<'_>,
     checkout: Option<&Path>,
 ) -> Result<()> {
+    let repositories = recorded.repositories;
     ensure!(
         !location.starts_with(state),
         "root_dir {} is inside Shoal's state directory",
@@ -486,6 +510,17 @@ fn ensure_outside(
             "root_dir {} is inside the repository directory {}",
             location.display(),
             directory.display()
+        );
+    }
+    if let Some(workspace) = recorded
+        .workspaces
+        .iter()
+        .find(|workspace| location.starts_with(&workspace.path))
+    {
+        bail!(
+            "root_dir {} is inside the workspace {}",
+            location.display(),
+            workspace.name
         );
     }
     Ok(())

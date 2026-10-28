@@ -412,7 +412,7 @@ async fn refuses_a_root_inside_a_repository_directory_or_workspace() -> Result<(
 
 #[tokio::test]
 async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> {
-    let (temp, manager) = indexed_manager().await?;
+    let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
         .register_repository(format!("file://{}", origin.display()).into(), None, None)
@@ -465,7 +465,7 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
 
 #[tokio::test]
 async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<()> {
-    let (temp, manager) = indexed_manager().await?;
+    let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
         .register_repository(format!("file://{}", origin.display()).into(), None, None)
@@ -487,13 +487,4 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
     );
     assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
-}
-
-/// A manager whose home has a name Spotlight indexes, unlike `tempfile`'s
-/// `.tmp` directories, so the excluded layout has something to change.
-async fn indexed_manager() -> Result<(tempfile::TempDir, Arc<Manager>)> {
-    let temp = tempfile::Builder::new().prefix("move").tempdir_in("/tmp")?;
-    let manager = Manager::open(crate::paths::Paths::for_test(temp.path())).await?;
-    test_support::configure(&manager, "[cleanup]\ngrace_minutes = 0\n").await;
-    Ok((temp, manager))
 }
