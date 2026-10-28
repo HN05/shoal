@@ -285,7 +285,9 @@ fn happy_completes_only_with_an_installed_agent_to_run() {
     )
     .unwrap();
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
-    // Happy alone runs no agent, so neither it nor its agents complete.
+    // Happy alone runs no agent, so neither it nor its agents complete. An
+    // installed Claude app completes `shoal claude` on its own.
+    let claude_app = cfg!(target_os = "macos") && Path::new("/Applications/Claude.app").exists();
     install_programs(home.path(), &["happy"]);
     for words in [vec!["shoal", "ha"], vec!["shoal", "happy", "c"]] {
         let mut command = completion(home.path(), "bash", &words);
@@ -294,7 +296,7 @@ fn happy_completes_only_with_an_installed_agent_to_run() {
         assert!(
             !values
                 .iter()
-                .any(|value| value == "happy" || value == "claude"),
+                .any(|value| value == "happy" || (value == "claude" && !claude_app)),
             "{words:?}: {values:?}"
         );
     }

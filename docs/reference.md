@@ -942,7 +942,7 @@ default_mode = "cli" # Or "app"
 App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
 and preserve the launcher's output and exit code. The Claude app opens only on
 macOS, through `open claude://code/new?folder=<path>`, takes no `--` arguments,
-and appears in the menu once `/Applications/Claude.app` is installed. App
+and the menu and completion offer it once `/Applications/Claude.app` is installed. App
 launches add no agent flags and provide no execution tracking, scope token, port
 variables or output default (so automatic cleanup cannot see their activity);
 T3's app must already be running.

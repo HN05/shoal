@@ -24,9 +24,8 @@ pub(in crate::cli) async fn with_app(
     let integration = super::integration(kind);
     // Explicit desktop handoffs read no settings, so no prompt template.
     if let Some(app) = integration.app().filter(|_| mode == Some(AgentMode::App)) {
-        let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
         let trust = integration.trust_file();
-        return super::launch::open_app(ctx, &workspace, app, trust, args).await;
+        return super::launch::app_shortcut(ctx, workspace, app, trust, args).await;
     }
     let options = LaunchOptions {
         tracked: mode == Some(AgentMode::Cli),
@@ -36,10 +35,10 @@ pub(in crate::cli) async fn with_app(
     super::launch::shortcut(ctx, agent, workspace, None, args, options).await
 }
 
-/// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex
-/// app its `--app` opens.
-fn codex_available(installed: &Installed) -> bool {
-    installed.agent("codex") || app_available(&super::CODEX_APP, installed)
+/// Whether `shoal <name>` can start: the CLI as a tracked agent, or the
+/// desktop `app` its `--app` opens.
+fn with_app_available(name: &str, app: &App, installed: &Installed) -> bool {
+    installed.agent(name) || app_available(app, installed)
 }
 
 /// `shoal t3` and other shortcuts that only open an app.
@@ -49,8 +48,7 @@ pub(in crate::cli) async fn open_app(
     app: &App,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-    super::launch::open_app(ctx, &workspace, app, None, args).await
+    super::launch::app_shortcut(ctx, workspace, app, None, args).await
 }
 
 /// Whether the desktop shortcut that opens `app` can start: it starts no
@@ -106,8 +104,14 @@ impl Installed<'_> {
 /// the agent; a desktop shortcut needs only the app.
 pub(in crate::cli) fn shortcuts(installed: &Installed) -> Vec<(&'static str, bool)> {
     vec![
-        ("claude", installed.agent("claude")),
-        ("codex", codex_available(installed)),
+        (
+            "claude",
+            with_app_available("claude", &super::CLAUDE_APP, installed),
+        ),
+        (
+            "codex",
+            with_app_available("codex", &super::CODEX_APP, installed),
+        ),
         ("happy", !happy_agents(installed).is_empty()),
         ("t3", app_available(&super::desktop::T3, installed)),
     ]

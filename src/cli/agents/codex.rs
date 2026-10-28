@@ -19,6 +19,7 @@ pub(in crate::cli) const APP: App = App {
     name: "codex app",
     program: "codex",
     bundle: None,
+    check: desktop::any_arguments,
     args: desktop::app_subcommand,
 };
 

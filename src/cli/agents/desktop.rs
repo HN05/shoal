@@ -18,9 +18,12 @@ pub(in crate::cli) struct App {
     /// The app bundle the launcher opens, when the launcher cannot install
     /// it.
     pub bundle: Option<&'static str>,
+    /// Refuse forwarded arguments the app cannot open with on this host,
+    /// before a workspace is picked.
+    pub check: fn(&[OsString]) -> Result<()>,
     /// The launcher's arguments that open a directory with the forwarded
-    /// arguments, or why the app cannot open them.
-    pub args: fn(&Path, Vec<OsString>) -> Result<Vec<OsString>>,
+    /// arguments.
+    pub args: fn(&Path, Vec<OsString>) -> Vec<OsString>,
 }
 
 impl App {
@@ -37,16 +40,22 @@ pub(in crate::cli) const T3: App = App {
     name: "t3 app",
     program: "t3",
     bundle: None,
+    check: any_arguments,
     args: app_subcommand,
 };
 
+/// The check of an app that takes any arguments on any host.
+pub(super) fn any_arguments(_args: &[OsString]) -> Result<()> {
+    Ok(())
+}
+
 /// Arguments of a launcher whose `app` subcommand takes the directory
 /// followed by the forwarded arguments.
-pub(super) fn app_subcommand(directory: &Path, args: Vec<OsString>) -> Result<Vec<OsString>> {
-    Ok([OsString::from("app"), directory.into()]
+pub(super) fn app_subcommand(directory: &Path, args: Vec<OsString>) -> Vec<OsString> {
+    [OsString::from("app"), directory.into()]
         .into_iter()
         .chain(args)
-        .collect())
+        .collect()
 }
 
 /// Run `app`'s launcher with `args` from `directory`, returning its exit

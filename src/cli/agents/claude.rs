@@ -96,19 +96,26 @@ pub(in crate::cli) const APP: App = App {
     name: "Claude app",
     program: "open",
     bundle: Some("/Applications/Claude.app"),
+    check: macos_without_arguments,
     args: new_session,
 };
 
-/// `open`'s argument: the link that starts a Claude Code session in
-/// `directory`. The link carries no arguments.
-fn new_session(directory: &Path, args: Vec<OsString>) -> Result<Vec<OsString>> {
+/// The Claude app opens through `open` on macOS, and its link carries no
+/// arguments.
+fn macos_without_arguments(args: &[OsString]) -> Result<()> {
     ensure!(
         cfg!(target_os = "macos"),
         "the Claude app opens workspaces only on macOS"
     );
     ensure!(args.is_empty(), "the Claude app takes no arguments");
+    Ok(())
+}
+
+/// `open`'s argument: the link that starts a Claude Code session in
+/// `directory`.
+fn new_session(directory: &Path, _args: Vec<OsString>) -> Vec<OsString> {
     let folder = percent_encode(directory.as_os_str().as_bytes());
-    Ok(vec![format!("claude://code/new?folder={folder}").into()])
+    vec![format!("claude://code/new?folder={folder}").into()]
 }
 
 /// `bytes` with every byte but the URL-unreserved ones percent-encoded.

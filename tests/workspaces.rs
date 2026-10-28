@@ -4773,14 +4773,24 @@ fn claude_app_opens_a_new_session_link_for_the_workspace() {
             );
         }
     }
+    // Arguments the app cannot take are refused before a workspace is picked.
     let output = fixture
         .command()
-        .args(["claude", "--app", "claude-app", "--", "--model", "opus"])
+        .args(["claude", "--app", "--", "--model", "opus"])
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
     assert!(!output.status.success());
     assert_eq!(output.stdout, b"");
+    let refusal = if cfg!(target_os = "macos") {
+        "takes no arguments"
+    } else {
+        "only on macOS"
+    };
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(refusal),
+        "{output:?}"
+    );
 }
 
 #[test]
