@@ -30,6 +30,9 @@ pub(super) struct AgentLaunch {
     pub(super) proxy: Option<crate::proxy::Running>,
 }
 
+/// How long a proxy's key command may run once the launch has registered.
+const KEY_COMMAND_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// Run the command that `routed` takes its key from, when it names one.
 pub(super) async fn fetch_command_key(
     routed: Option<&crate::proxy::Proxy>,
@@ -63,7 +66,10 @@ impl AgentLaunch {
     }
 
     /// The value of the proxy's `key`: the one fetched before the launch
-    /// registered for the same command, otherwise read now.
+    /// registered for the same command, otherwise read now. Only a restore
+    /// whose proxy changed runs a key command now, while the daemon awaits
+    /// the agent's start without taking stops, so the command gets
+    /// [`KEY_COMMAND_LIMIT`].
     async fn proxy_key(
         &self,
         key: &Value,
@@ -76,7 +82,16 @@ impl AgentLaunch {
         }
         let configured = self.configured_environment(environment);
         let variable = |name: &str| self.variable(&configured, name);
-        key.resolve(variable).await.context("the proxy's key")
+        tokio::time::timeout(KEY_COMMAND_LIMIT, key.resolve(variable))
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "its command did not finish within {}s",
+                    KEY_COMMAND_LIMIT.as_secs()
+                )
+            })
+            .flatten()
+            .context("the proxy's key")
     }
 
     /// Run the restored agent, with the workspace's `environment`, through

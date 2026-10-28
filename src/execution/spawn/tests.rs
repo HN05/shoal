@@ -101,3 +101,21 @@ async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered()
         None
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_restore_that_runs_a_key_command_stops_it_at_the_limit() {
+    let home = tempfile::tempdir().unwrap();
+    let mut launch = launch(home.path());
+    let hanging: crate::proxy::Proxy =
+        toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['sleep', '86400'] }")
+            .unwrap();
+    let error = launch
+        .restart_proxy(Some(hanging), &BTreeMap::new())
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("did not finish within 60s"),
+        "{error:#}"
+    );
+    assert!(launch.proxy.is_none());
+}

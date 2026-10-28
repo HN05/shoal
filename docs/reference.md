@@ -891,7 +891,8 @@ an upstream such as CLIProxyAPI that wants its own key. `key` is the key itself,
 runs with, `[env]`, secrets and the tool's `env` included, or `{ cmd = [...] }`,
 an argument array run then like a [`[secrets]`](#agent-secrets) command, whose
 output is the key; a variable that is not set or a command that fails or prints
-nothing fails the launch. Any local user can reach a loopback port, so each proxy answers only requests that name a key it draws when it starts, in an `x-shoal-proxy-key` header the upstream never sees. The key reaches the agent through its environment, which only its user can read, not its command line: Claude Code gets it in `ANTHROPIC_CUSTOM_HEADERS`, after any headers it has, and Codex's provider names `SHOAL_PROXY_KEY` in its `env_http_headers`. An `ANTHROPIC_CUSTOM_HEADERS` in Claude's own settings replaces the one Shoal sets, and the proxy then refuses its requests. The proxy retries what the agent would otherwise fail on:
+nothing fails the launch. A restore whose proxy names another key command gives
+it a minute. Any local user can reach a loopback port, so each proxy answers only requests that name a key it draws when it starts, in an `x-shoal-proxy-key` header the upstream never sees. The key reaches the agent through its environment, which only its user can read, not its command line: Claude Code gets it in `ANTHROPIC_CUSTOM_HEADERS`, after any headers it has, and Codex's provider names `SHOAL_PROXY_KEY` in its `env_http_headers`. An `ANTHROPIC_CUSTOM_HEADERS` in Claude's own settings replaces the one Shoal sets, and the proxy then refuses its requests. The proxy retries what the agent would otherwise fail on:
 a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
 that reports one of those before any content, waiting from a second, doubling to
 half a minute, or as long as the upstream's `Retry-After`, the reset time its
