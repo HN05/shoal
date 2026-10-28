@@ -593,9 +593,8 @@ numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
 hide the decision being made.
 
-`herdr.enabled = false` makes new work in a Herdr pane behave as a plain
-terminal; `new_tab` only governs opening new tabs. Existing owned panes still
-close when their ownership ends.
+`herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
+plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
 allocated workspace branch by default. An optional `herdr.tab_name` template
@@ -627,9 +626,7 @@ Shoal opened for it, a Herdr tab or a zmx session, only after tracked executions
 have resolved or the agent's turn finished, since interactive agents stay running
 at their prompt, and never while stopped work waits for resume, so the place keeps
 the stop's cause and `shoal resume --all` can restore the agent there; removal
-closes owned places through the daemon adapters, so completion cleanup leaves
-the agent its grace period. Watchers stop once removal persists, leaving failed
-closes to the daemon's retries.
+closes it immediately, so completion cleanup leaves the agent its grace period.
 The turn comes from the agent's hooks, and from the host only for an agent
 without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
 of such agents close with their execution. The rule, the watcher and its marker
@@ -643,19 +640,17 @@ from the installation path Shoal was started through, never a resolved versioned
 binary, once another binary is installed there, so tabs opened before an upgrade
 still close.
 
-Terminal hosts register launch and cleanup adapters together; lifecycle policy
-uses their ownership, discovery and verified-close operations. Hosts with separate
-ownership checks and closes serialize them against reassignment within the native
-server namespace. Removal closes owned places; startup and cleanup sweeps close
-those whose workspace record is gone, retrying failures without restoring ownership.
-Relabelling replaces
-obsolete ownership before any in-place agent or chat can launch, so removal
-preserves a place reused by another owner.
-Herdr ownership persists in the owning state directory with its server socket,
-pane, terminal identity and a unique native ownership marker. Relabelling
-replaces or clears that marker across state directories, even with handoffs
-disabled. Cleanup requires both the marker and terminal identity to match,
-preserving other panes in the tab and replacements at the same pane ID.
+Shoal closes only the zmx sessions it created; a session the user opened stays
+theirs even after an agent ran in it. Creation
+sets `shoal.created=1`, which relabelling never adds. The daemon closes a
+workspace's sessions when it removes the workspace, whatever `close_when_done`
+says, and startup and cleanup sweeps close those whose workspace record is gone,
+retrying failures without restoring ownership. Sessions from before the label
+have no known origin and are left alone. Relabelling replaces obsolete ownership
+before any in-place agent or chat can launch, so removal preserves a session
+reused by another owner. zmx has no conditional kill, so ownership checks,
+relabelling and closes hold a lock beside zmx's socket directory, shared by
+every state directory using that server.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx
@@ -672,8 +667,7 @@ shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. `attach` and `status`
-look sessions up through `zmx list`. Only the default daemon cleans up legacy
-sessions without a state label. A detached session that Shoal
+look sessions up through `zmx list`. A detached session that Shoal
 starts labels itself once its workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch

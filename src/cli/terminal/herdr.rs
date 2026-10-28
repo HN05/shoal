@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, Options, Owner, PlaceState, Start, Watched};
+use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
 
 mod demo;
 use crate::{config, state::AgentState, subprocess::Run};
@@ -100,23 +100,6 @@ impl Host for Herdr {
         Box::pin(rename_tab(place, label))
     }
 
-    fn label_current<'a>(
-        &'a self,
-        state: &'a Path,
-        owner: Owner<'a>,
-        _: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        let workspace = match owner {
-            Owner::Workspace(id) => Some(id),
-            Owner::Chat(_) => None,
-        };
-        Box::pin(crate::sessions::herdr::label_current(state, workspace))
-    }
-
-    fn clear_current_ownership<'a>(&'a self, state: &'a Path) -> BoxFuture<'a, Result<()>> {
-        Box::pin(crate::sessions::herdr::label_current(state, None))
-    }
-
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
         Box::pin(async move { demo::start(demo).await.map(Some) })
     }
@@ -137,8 +120,7 @@ impl Host for Herdr {
 /// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
 /// (`herdr.new_tab`), their names (`herdr.tab_name`), and
 /// `herdr.close_when_done`, which overrides the top-level option.
-pub(super) fn options(settings: &config::Effective) -> Options {
-    let config = &settings.herdr;
+pub(super) fn options(config: &config::Herdr) -> Options {
     Options {
         enabled: config.enabled,
         opens_places: config.new_tab,

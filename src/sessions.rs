@@ -1,6 +1,5 @@
-//! Terminal session integrations shared by the CLI and daemon.
-//! The registry wires launch and cleanup capabilities together.
-pub(crate) mod herdr;
+//! Terminal sessions Shoal created, shared by the CLI and daemon. Places the
+//! user opened stay theirs, even when Shoal runs an agent in them.
 mod locking;
 pub(crate) mod zmx;
 
@@ -28,11 +27,7 @@ pub(crate) enum Owner {
 /// Verified closes must exclude ownership replacement in the native namespace.
 pub(crate) trait Host: Send + Sync {
     fn name(&self) -> &'static str;
-    fn sessions<'a>(
-        &'a self,
-        state: &'a Path,
-        include_legacy: bool,
-    ) -> BoxFuture<'a, Result<Vec<Session>>>;
+    fn sessions<'a>(&'a self, state: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>>;
     fn close<'a>(
         &'a self,
         state: &'a Path,
@@ -41,28 +36,11 @@ pub(crate) trait Host: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-// Every registered terminal host supplies both launch and cleanup adapters.
-// Adding a host cannot silently omit its lifecycle operations.
-macro_rules! registered_hosts {
-    ($registry:ident) => {
-        $registry! {
-            (herdr, Herdr, crate::sessions::herdr::Herdr),
-            (zmx, Zmx, crate::sessions::zmx::Zmx),
-        }
-    };
-}
-pub(crate) use registered_hosts;
-
 pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
     // Unit tests inject hosts and never discover or close the user's sessions.
     if cfg!(test) {
         Vec::new()
     } else {
-        macro_rules! cleanup_hosts {
-            ($(($module:ident, $host:ident, $cleanup:path)),* $(,)?) => {
-                vec![$(Arc::new($cleanup) as Arc<dyn Host>),*]
-            };
-        }
-        registered_hosts!(cleanup_hosts)
+        vec![Arc::new(zmx::Zmx)]
     }
 }

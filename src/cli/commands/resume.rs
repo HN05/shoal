@@ -350,7 +350,6 @@ async fn launch(
     }
     terminal::label_current(
         &ctx.paths,
-        &settings,
         terminal::Owner::Workspace(&workspace.id),
         &recovery.agent,
     )

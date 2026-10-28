@@ -19,7 +19,7 @@ use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start,
 use crate::{
     cli::agents::ensure_program,
     env,
-    sessions::zmx::{CHAT_LABEL, Fields, WORKSPACE_LABEL, field, kill, list},
+    sessions::zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, kill, list},
     subprocess::Run,
     tools::Tool,
 };
@@ -35,10 +35,6 @@ const NAME: &str = "zmx";
 /// zmx keeps agents in sessions that outlive the caller's terminal, outside
 /// Herdr panes.
 pub(super) struct Zmx;
-
-pub(super) fn options(_: &crate::config::Effective) -> super::Options {
-    super::Options::DEFAULT
-}
 
 impl Host for Zmx {
     fn name(&self) -> &'static str {
@@ -209,7 +205,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach").arg("--labels").arg(format!(
-        "{} {}",
+        "{} {CREATED} {}",
         labels(owner, agent),
         crate::sessions::zmx::state_label(start.state)?
     ));
@@ -224,7 +220,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
 async fn run_chat(start: &Start<'_>) -> Result<String> {
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
-    zmx.arg("attach");
+    zmx.args(["attach", "--labels", CREATED]);
     attach_new(&mut zmx, &name, start);
     ended(zmx.status().await.context("run zmx")?)?;
     Ok(name)
@@ -260,6 +256,10 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
         start.argv,
         &NewSession {
             environment: start.env,
+            labels: vec![
+                CREATED.into(),
+                crate::sessions::zmx::state_label(start.state)?,
+            ],
             keep_failed_shell: true,
             ..Default::default()
         },
@@ -281,6 +281,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<String> {
             clear: super::NOT_INHERITED_BY_DEMOS,
             labels: vec![
                 labels(Owner::Workspace(demo.workspace), ""),
+                CREATED.into(),
                 format!("shoal.demo={}", demo.launch),
                 crate::sessions::zmx::state_label(demo.state)?,
             ],

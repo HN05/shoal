@@ -21381,14 +21381,6 @@ fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
 }
 
 fn install_fake_herdr(fixture: &Fixture) {
-    fs::write(
-        fixture
-            .root
-            .path()
-            .join("fixture-herdr.sock.shoal-ownership.lock"),
-        "",
-    )
-    .unwrap();
     install_test_script(
         fixture.root.path().join("bin/herdr"),
         r#"#!/usr/bin/env python3
@@ -21397,7 +21389,7 @@ from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
 # Tab watchers poll `tab get`; keep those reads out of the recorded actions.
-log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else ('herdr-pane-gets' if args[:2] in (['pane', 'get'], ['pane', 'report-metadata']) else 'herdr-calls')
+log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else 'herdr-calls'
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
@@ -21415,26 +21407,12 @@ elif args[:2] == ['tab', 'get']:
         print(json.dumps({'error': {'code': 'server_not_running'}}))
         sys.exit(1)
     print(json.dumps({'result': {'tab_id': args[2]}}))
-elif args[:2] == ['pane', 'get']:
-    marker = root / 'herdr-ownership'
-    tokens = json.loads(marker.read_text()) if marker.exists() else {}
-    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': 'original-terminal', 'tokens': tokens}}}))
-elif args[:2] == ['pane', 'report-metadata']:
-    marker = root / 'herdr-ownership'
-    tokens = json.loads(marker.read_text()) if marker.exists() else {}
-    for index, arg in enumerate(args):
-        if arg == '--token':
-            key, value = args[index + 1].split('=', 1)
-            tokens[key] = value
-        elif arg == '--clear-token':
-            tokens.pop(args[index + 1], None)
-    marker.write_text(json.dumps(tokens))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()
     processes = {'shell_pid': 1, 'foreground_process_group_id': 1 if at_prompt else 2}
     print(json.dumps({'result': {'process_info': processes}}))
-print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info'], ['pane', 'get']) else None
+print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info']) else None
 "#,
     );
 }
@@ -21462,13 +21440,7 @@ fn herdr_worker_command(fixture: &Fixture) -> Command {
     command
         .env_remove("SHOAL_STATE_DIR")
         .args(&herdr_worker(fixture)[1..])
-        .env("HERDR_TAB_ID", "w1:t9")
-        .env("HERDR_ENV", "1")
-        .env("HERDR_PANE_ID", "w1:p9")
-        .env(
-            "HERDR_SOCKET_PATH",
-            fixture.root.path().join("fixture-herdr.sock"),
-        );
+        .env("HERDR_TAB_ID", "w1:t9");
     let calls = herdr_calls(fixture);
     let create = calls
         .iter()
@@ -22239,9 +22211,7 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
 
 fn wait_for_herdr_close(fixture: &Fixture) {
     wait_until("Herdr tab closure", || {
-        herdr_calls(fixture).last().is_some_and(|call| {
-            call == &["tab", "close", "w1:t9"] || call == &["pane", "close", "w1:p9"]
-        })
+        herdr_calls(fixture).last().unwrap() == &["tab", "close", "w1:t9"]
     });
 }
 
@@ -22655,7 +22625,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     assert_eq!(calls[0], ["list"]);
     let labels = format!("shoal.workspace={id} shoal.agent=claude");
     assert_eq!(calls[1][..2], ["attach", "--labels"]);
-    assert!(calls[1][2].starts_with(&format!("{labels} shoal.state=")));
+    assert!(calls[1][2].starts_with(&format!("{labels} shoal.created=1 shoal.state=")));
     assert_eq!(calls[1][3], "persist");
     let worker = &calls[1][4..];
     let session = worker.iter().position(|arg| arg == "session").unwrap();
@@ -22768,7 +22738,10 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(calls[0], ["list"]);
     // The session is named after the chat, cut to fit zmx's socket path.
     let session = &CHAT_NAME[..32];
-    assert_eq!(calls[1][..2], ["attach", session]);
+    assert_eq!(
+        calls[1][..4],
+        ["attach", "--labels", "shoal.created=1", session]
+    );
     // The session's Shoal records the chat under the name chosen here,
     // labels its session with it and becomes its agent.
     let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
@@ -22870,7 +22843,7 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
     fs::write(
         home.join("zmx-sessions"),
         format!(
-            "name=reused\tpid=1\tshoal.workspace={workspace_id}\tshoal.demo=old-launch\tuser.label=keep\n"
+            "name=reused\tpid=1\tshoal.created=1\tshoal.workspace={workspace_id}\tshoal.demo=old-launch\tuser.label=keep\n"
         ),
     )?;
     let (output, transcript) = fixture.terminal_command(
@@ -23628,10 +23601,13 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[1], ["run", "background", "-d", "true"]);
     assert_eq!(calls[2], ["list"]);
-    assert_eq!(calls[3][..2], ["send", "background"]);
+    // Only sessions Shoal created carry the creation label.
+    assert_eq!(calls[3][..3], ["set", "background", "shoal.created=1"]);
+    assert!(calls[3][3].starts_with("shoal.state="), "{calls:?}");
+    assert_eq!(calls[4][..2], ["send", "background"]);
     assert!(
-        calls[3][2].starts_with("SHOAL_ENDS_SESSION=1 ")
-            && calls[3][2].ends_with(
+        calls[4][2].starts_with("SHOAL_ENDS_SESSION=1 ")
+            && calls[4][2].ends_with(
                 " internal add --host zmx --close-when-done && exit; exec \"$SHELL\" -l\r"
             ),
         "{calls:?}"
@@ -23943,7 +23919,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert!(
-        calls[3][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
+        calls[4][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
         "{calls:?}"
     );
     assert!(!fixture.root.path().join("zmx-watch-calls").exists());

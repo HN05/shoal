@@ -28,24 +28,29 @@ fn list_parses_names_fields_and_labels_after_the_marker() {
 }
 
 #[test]
-fn session_cleanup_is_scoped_to_its_state_directory() -> Result<()> {
+fn session_cleanup_is_scoped_to_sessions_this_state_created() -> Result<()> {
     let root = tempfile::tempdir()?;
     let state = root.path().join("state with spaces");
     let other = root.path().join("other-state");
     std::fs::create_dir(&state)?;
     std::fs::create_dir(&other)?;
     let label = state_label(&state)?;
-    let owned = parse_list(&format!("name=ours\t{label}\n"));
-    let foreign = parse_list(&format!("name=theirs\t{}\n", state_label(&other)?));
     assert!(!label.contains(char::is_whitespace));
-    for (_, fields) in owned {
-        assert!(in_state(&fields, &label, false));
+    let listed = |labels: &str| parse_list(&format!("name=session\t{labels}\n"));
+    for (_, fields) in listed(&format!("{CREATED}\t{label}")) {
+        assert!(in_state(&fields, &label));
     }
-    for (_, fields) in foreign {
-        assert!(!in_state(&fields, &label, true));
+    for labels in [
+        format!("{CREATED}\t{}", state_label(&other)?),
+        // Relabelling a session the user opened never makes it Shoal's.
+        label.clone(),
+        CREATED.into(),
+        String::new(),
+    ] {
+        for (_, fields) in listed(&labels) {
+            assert!(!in_state(&fields, &label), "{labels}");
+        }
     }
-    assert!(!in_state(&Vec::new(), &label, false));
-    assert!(in_state(&Vec::new(), &label, true));
     Ok(())
 }
 
@@ -67,9 +72,12 @@ fn state_labels_identify_equivalent_paths_and_reject_missing_directories() -> Re
         state.canonicalize()?,
     ] {
         assert_eq!(label, state_label(&equivalent)?);
-        let sessions = parse_list(&format!("name=ours\t{}\n", state_label(&equivalent)?));
+        let sessions = parse_list(&format!(
+            "name=ours\t{CREATED}\t{}\n",
+            state_label(&equivalent)?
+        ));
         for (_, fields) in sessions {
-            assert!(in_state(&fields, &label, false));
+            assert!(in_state(&fields, &label));
         }
     }
     assert_ne!(label, state_label(root.path())?);
@@ -79,7 +87,8 @@ fn state_labels_identify_equivalent_paths_and_reject_missing_directories() -> Re
 
 #[test]
 fn closing_checks_ownership_even_when_a_name_is_reused() {
-    let listed = parse_list("name=reused\tshoal.workspace=w1\tshoal.demo=new-launch\n");
+    let listed =
+        parse_list("name=reused\tshoal.created=1\tshoal.workspace=w1\tshoal.demo=new-launch\n");
     for (_, fields) in listed {
         assert!(owned_by(
             &fields,
@@ -101,9 +110,24 @@ fn closing_checks_ownership_even_when_a_name_is_reused() {
 }
 
 #[test]
+fn sessions_the_user_opened_are_never_closed() {
+    for (_, fields) in parse_list("name=mine\tshoal.workspace=w1\tshoal.demo=launch\n") {
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Workspace("w1".into())
+        ));
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Demo("launch".into())
+        ));
+    }
+}
+
+#[test]
 fn conflicting_chat_ownership_never_authorizes_workspace_or_demo_cleanup() {
-    let sessions =
-        parse_list("name=reused\tshoal.workspace=w1\tshoal.demo=old-launch\tshoal.chat=c1\n");
+    let sessions = parse_list(
+        "name=reused\tshoal.created=1\tshoal.workspace=w1\tshoal.demo=old-launch\tshoal.chat=c1\n",
+    );
     for (_, fields) in sessions {
         assert!(workspace_owner(&fields).is_none());
         assert!(!owned_by(

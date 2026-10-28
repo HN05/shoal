@@ -17,29 +17,16 @@ pub(super) async fn start(demo: &Demo<'_>) -> Result<String> {
         .await?
         .root_pane
         .pane_id;
-    crate::sessions::herdr::record_demo(demo.state, &pane, demo.workspace, demo.launch).await?;
-    if let Err(error) = run_worker(demo, &pane).await {
-        if let Err(cleanup) =
-            crate::sessions::herdr::close_demo(demo.state, &pane, demo.launch).await
-        {
-            eprintln!(
-                "warning: failed demo launch cleanup: {cleanup:#}; pane retained for workspace cleanup"
-            );
-        }
-        return Err(error);
-    }
-    Ok(pane)
-}
-
-async fn run_worker(demo: &Demo<'_>, pane: &str) -> Result<()> {
     let mut run = Command::new("herdr");
-    run.args(["pane", "run", pane])
-        .arg(format!("{}; exit", shell_command(&(demo.worker)(pane)?)?));
+    run.args(["pane", "run", &pane]).arg(format!(
+        "{} && exit",
+        shell_command(&(demo.worker)(&pane)?)?
+    ));
     Run::new(run)
         .checked()
         .await
-        .context("run the demo in its Herdr tab")?;
-    Ok(())
+        .context("run the demo in its Herdr tab (tab retained)")?;
+    Ok(pane)
 }
 
 /// Focus the tab holding the demo's pane.

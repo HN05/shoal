@@ -91,13 +91,7 @@ pub(super) async fn tracked(
     {
         return Ok(code);
     }
-    terminal::label_current(
-        &ctx.paths,
-        &settings,
-        terminal::Owner::Workspace(&workspace.id),
-        &name,
-    )
-    .await?;
+    terminal::label_current(&ctx.paths, terminal::Owner::Workspace(&workspace.id), &name).await?;
     if replaces.is_empty() {
         return execution::run(&ctx.paths, workspace.id, command, Some(name)).await;
     }

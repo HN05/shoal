@@ -57,11 +57,6 @@ impl Paths {
         })
     }
 
-    /// Whether the state directory is the one a CLI with this home uses by default.
-    pub fn is_default_state(&self) -> bool {
-        self.state == self.home.join(DEFAULT_STATE)
-    }
-
     pub fn prepare(&self) -> Result<()> {
         fs::create_dir_all(&self.state).context("create state directory")?;
         fs::set_permissions(&self.state, fs::Permissions::from_mode(0o700))?;

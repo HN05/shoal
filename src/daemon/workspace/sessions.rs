@@ -1,5 +1,6 @@
-//! End terminal sessions after ownership ends, including leftovers from older
-//! removals. Hosts supply discovery and close operations, not lifecycle policy.
+//! End terminal sessions Shoal created once their owner ends, including
+//! leftovers from failed closes. Hosts supply discovery and close operations,
+//! not lifecycle policy.
 pub(super) mod pending;
 
 use anyhow::{Context as _, Result};
@@ -27,7 +28,7 @@ impl Manager {
         host: &dyn crate::sessions::Host,
         workspace: &str,
     ) -> Result<()> {
-        for session in host.sessions(&self.paths.state, true).await? {
+        for session in host.sessions(&self.paths.state).await? {
             if session.workspace == workspace {
                 self.close_session(
                     host,
@@ -41,8 +42,7 @@ impl Manager {
     }
 
     /// Read ownership fresh for each session: a stale list must not classify a
-    /// newly registered workspace as removed. Only the default daemon owns
-    /// legacy sessions without a state-directory label.
+    /// newly registered workspace as removed.
     pub(crate) async fn cleanup_orphan_sessions(&self) {
         self.retry_session_closes(None).await;
         for host in &self.session_hosts {
@@ -53,10 +53,7 @@ impl Manager {
     }
 
     async fn cleanup_host_sessions(&self, host: &dyn crate::sessions::Host) -> Result<()> {
-        for session in host
-            .sessions(&self.paths.state, self.paths.is_default_state())
-            .await?
-        {
+        for session in host.sessions(&self.paths.state).await? {
             if self.find_workspace(&session.workspace).await?.is_none() {
                 self.close_session(
                     host,

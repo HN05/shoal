@@ -720,14 +720,13 @@ tab, the Happy app or a terminal outside zmx has no session, and attaching
 says where it runs instead. Sessions are named after the workspace or chat,
 suffixed `-2`, `-3`, ... when the name is in use, and labelled
 `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
-`zmx ls` and `zmx attach` work as well. Removing a workspace closes its owned
-terminal places, including zmx sessions and Herdr panes, regardless of
-`close_when_done`. Daemon startup and cleanup sweeps retry closes whose workspace
-is gone, through each host's adapter. Herdr verifies the recorded server,
-terminal identity and current ownership marker, preserving other panes and
-places reused from another state directory. In-place agent and chat launches
-require ownership to be replaced or cleared successfully. Only the default state
-directory claims older zmx sessions without a state label.
+`zmx ls` and `zmx attach` work as well. Sessions Shoal creates are also labelled
+`shoal.created=1`. Removing a workspace ends the sessions Shoal created for it,
+regardless of `close_when_done`, and daemon startup and `shoal cleanup` end those
+whose workspace is gone. A session you opened yourself stays open, even after a
+Shoal agent ran in it, as do sessions from Shoal versions without the label. An
+agent or chat launched in place refuses to start if Shoal cannot relabel the
+session.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,

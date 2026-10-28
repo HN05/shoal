@@ -8,6 +8,9 @@ use crate::{subprocess::Run, tools::Tool};
 
 pub(crate) const WORKSPACE_LABEL: &str = "shoal.workspace";
 pub(crate) const CHAT_LABEL: &str = "shoal.chat";
+/// Set only when Shoal creates a session. Relabelling never adds it, so a
+/// session the user opened stays theirs after Shoal runs an agent in it.
+pub(crate) const CREATED: &str = "shoal.created=1";
 
 /// Serialize in-place ownership replacement with verified cleanup in the native
 /// namespace, regardless of which Shoal state directory initiated it.
@@ -107,12 +110,18 @@ pub(crate) fn state_label(state: &Path) -> Result<String> {
     ))
 }
 
-/// Unnamespaced sessions predate state labels and belong to the default daemon.
-fn in_state(fields: &Fields, state_label: &str, include_legacy: bool) -> bool {
-    match field(fields, "shoal.state") {
-        Some(label) => state_label == format!("shoal.state={label}"),
-        None => include_legacy,
-    }
+/// Sessions this state directory currently owns and that Shoal created.
+/// Older sessions carry neither label, so their origin is unknown.
+fn in_state(fields: &Fields, state_label: &str) -> bool {
+    created(fields)
+        && field(fields, "shoal.state")
+            .is_some_and(|label| state_label == format!("shoal.state={label}"))
+}
+
+fn created(fields: &Fields) -> bool {
+    CREATED
+        .split_once('=')
+        .is_some_and(|(key, value)| field(fields, key) == Some(value))
 }
 
 pub(super) struct Zmx;
@@ -124,14 +133,13 @@ impl super::Host for Zmx {
     fn sessions<'a>(
         &'a self,
         state: &'a Path,
-        include_legacy: bool,
     ) -> futures_util::future::BoxFuture<'a, Result<Vec<super::Session>>> {
         Box::pin(async move {
             let state_label = state_label(state)?;
             Ok(list()
                 .await?
                 .into_iter()
-                .filter(|(_, fields)| in_state(fields, &state_label, include_legacy))
+                .filter(|(_, fields)| in_state(fields, &state_label))
                 .filter_map(|(name, fields)| {
                     let workspace = workspace_owner(&fields)?.to_owned();
                     Some(super::Session { name, workspace })
@@ -160,8 +168,12 @@ impl super::Host for Zmx {
     }
 }
 
-/// Session names can be reused; a close must still own the current session.
+/// Session names can be reused; a close must still own the current session,
+/// which Shoal created.
 fn owned_by(fields: &Fields, owner: &super::Owner) -> bool {
+    if !created(fields) {
+        return false;
+    }
     match owner {
         super::Owner::Workspace(id) => workspace_owner(fields) == Some(id.as_str()),
         super::Owner::Demo(id) => {

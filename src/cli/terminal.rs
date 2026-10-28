@@ -2,8 +2,7 @@
 //! launch; this module chooses whether it takes the terminal or runs in the
 //! background, and the [`Host`] that carries that out with its own
 //! primitives. Commands never name a host; adding one means implementing
-//! [`Host`] and the shared cleanup trait, then registering both through
-//! `sessions::registered_hosts`.
+//! [`Host`] and listing it in [`HOSTS`].
 mod background;
 mod closing;
 mod herdr;
@@ -41,12 +40,16 @@ pub(in crate::cli) use naming::{PlaceName, issue_label};
 /// Hosts in the order they claim a terminal, each with the options its own
 /// config section gives; a terminal none of them serves runs everything in
 /// place.
-macro_rules! terminal_hosts {
-    ($(($module:ident, $host:ident, $cleanup:path)),* $(,)?) => {
-        &[$(Registered { host: &$module::$host, options: $module::options }),*]
-    };
-}
-const HOSTS: &[Registered] = crate::sessions::registered_hosts!(terminal_hosts);
+const HOSTS: &[Registered] = &[
+    Registered {
+        host: &herdr::Herdr,
+        options: |settings| herdr::options(&settings.herdr),
+    },
+    Registered {
+        host: &zmx::Zmx,
+        options: |_| Options::DEFAULT,
+    },
+];
 
 /// A host with the options `settings` give it.
 struct Registered {
@@ -283,12 +286,6 @@ pub(in crate::cli) trait Host: Sync {
         _owner: Owner<'a>,
         _agent: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { Ok(()) })
-    }
-
-    /// Forget obsolete ownership in this process's place when the integration
-    /// is disabled, so another state directory cannot retain an old claim.
-    fn clear_current_ownership<'a>(&'a self, _state: &'a Path) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
 
@@ -1068,24 +1065,11 @@ pub(in crate::cli) async fn host_workspace(
             }
             Ok(())
         }
-        (None, Some(agent)) => label_workspace(ctx, workspace, agent).await,
+        (None, Some(agent)) => {
+            label_current(&ctx.paths, Owner::Workspace(&workspace.id), agent).await
+        }
         (None, None) => Ok(()),
     }
-}
-
-async fn label_workspace(ctx: &Context, workspace: &Workspace, agent: &str) -> Result<()> {
-    let settings = super::client::settings(
-        &ctx.paths,
-        crate::protocol::ConfigTarget::Workspace(workspace.id.clone()),
-    )
-    .await?;
-    label_current(
-        &ctx.paths,
-        &settings,
-        Owner::Workspace(&workspace.id),
-        agent,
-    )
-    .await
 }
 
 /// Whether the shell that started this process enters a new workspace
@@ -1126,16 +1110,11 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
 /// `shoal attach` finds `owner`'s agent there.
 pub(in crate::cli) async fn label_current(
     paths: &crate::paths::Paths,
-    settings: &Effective,
     owner: Owner<'_>,
     agent: &str,
 ) -> Result<()> {
-    for host in Configured::all(settings) {
-        if host.options.enabled {
-            host.host.label_current(&paths.state, owner, agent).await?;
-        } else {
-            host.host.clear_current_ownership(&paths.state).await?;
-        }
+    for host in hosts() {
+        host.label_current(&paths.state, owner, agent).await?;
     }
     Ok(())
 }

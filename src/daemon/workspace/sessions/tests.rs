@@ -52,7 +52,7 @@ impl Host for FakeHost {
     fn name(&self) -> &'static str {
         self.name.unwrap_or("zmx")
     }
-    fn sessions<'a>(&'a self, _: &'a Path, _: bool) -> BoxFuture<'a, Result<Vec<Session>>> {
+    fn sessions<'a>(&'a self, _: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
             Ok(self
                 .remaining
@@ -216,7 +216,7 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
 async fn demos_close_their_session_after_completion_or_verified_forgetting() -> Result<()> {
     use crate::{daemon::workspace::ExecutionKind, demos::Launch};
 
-    for host_name in ["zmx", "herdr", "future-host"] {
+    for host_name in ["zmx", "future-host"] {
         let (_root, manager, workspace, host) = fixture_for(host_name).await?;
         for disconnected in [false, true] {
             let name = if disconnected {
