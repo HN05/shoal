@@ -38,6 +38,7 @@ mod restart_recovery;
 pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
+mod startup;
 mod startup_audit;
 pub mod store;
 mod untracked;
@@ -93,16 +94,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     paths.prepare()?;
     let descriptors = connections::raise_descriptor_limit();
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
-    let manager = Manager::open(paths.clone()).await?;
-    manager.store.quarantine_interrupted_operations().await?;
-    // Finishing a move restores the states quarantine failed.
-    if let Err(error) = manager.finish_repository_moves().await {
-        log!("{error:#}");
-    }
-    manager.learn_recorded_forge_hosts().await?;
-    manager.audit_worktrees().await?;
-    manager.cleanup_orphan_sessions().await;
-    let listener = ownership.listen()?;
+    let startup = startup::Startup::begin(ownership.listen()?);
+    log!("shoal daemon listening on {}", paths.socket.display());
+    let manager = start(&startup, &paths).await?;
+    let (listener, held) = startup.finish().await;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
@@ -114,7 +109,6 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         shutdown,
         capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
-    log!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
     spawn_supervised(
@@ -161,6 +155,15 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         poll_item_activity,
     );
     let mut clients = JoinSet::new();
+    for (stream, request) in held {
+        let server = server.clone();
+        let operation = server.manager.gates.owned_operation().await;
+        clients.spawn(async move {
+            if let Err(error) = serve_request(stream, server, request, operation).await {
+                log!("client connection: {error:#}");
+            }
+        });
+    }
     let mut quiescence = None;
     let result = loop {
         tokio::select! {
@@ -203,6 +206,32 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         return ownership.hand_off(&update.expect("update monitor enabled").path, &listener);
     }
     result
+}
+
+/// Open the daemon's state and reconcile it with what changed while it was
+/// not running.
+async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>> {
+    let manager = startup
+        .step("opening the state database", Manager::open(paths.clone()))
+        .await?;
+    startup
+        .step(
+            "quarantining interrupted operations",
+            manager.store.quarantine_interrupted_operations(),
+        )
+        .await?;
+    // Finishing a move restores the states quarantine failed.
+    let moves = manager.finish_repository_moves();
+    if let Err(error) = startup.step("finishing repository moves", moves).await {
+        log!("{error:#}");
+    }
+    let hosts = manager.learn_recorded_forge_hosts();
+    startup.step("learning forge hosts", hosts).await?;
+    let audit = manager.audit_worktrees();
+    startup.step("auditing worktrees", audit).await?;
+    let sessions = manager.cleanup_orphan_sessions();
+    startup.step("cleaning up orphan sessions", sessions).await;
+    Ok(manager)
 }
 
 /// Register a manager-owned loop with panic supervision.
@@ -259,8 +288,7 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     }
 }
 
-/// Answer one connection's request: read it, admit it, resume an execution
-/// or accept it, then answer it.
+/// Answer one connection's request.
 async fn serve(
     mut stream: UnixStream,
     server: Server,
@@ -269,6 +297,17 @@ async fn serve(
     let Some(request) = read_request(&mut stream).await? else {
         return Ok(());
     };
+    serve_request(stream, server, request, operation_guard).await
+}
+
+/// Admit a connection's request, resume an execution or accept it, then
+/// answer it.
+async fn serve_request(
+    mut stream: UnixStream,
+    server: Server,
+    request: Request,
+    operation_guard: OperationGuard,
+) -> Result<()> {
     let _span = request_span(&request);
     let Some(_slot) = admit(&mut stream, &server, &request).await? else {
         return Ok(());

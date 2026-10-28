@@ -1761,7 +1761,10 @@ integration is not loaded. Opening
 persistence only migrates schema. Under the daemon lock, startup then atomically
 quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
-migrations available for retry. Startup audits but never deletes, kills or
+migrations available for retry. The daemon binds its socket before this work:
+until it ends, a status request is refused with the running step and how long it
+has run, a request its client sends again is closed unanswered, and other requests
+wait; a step that runs past a minute is logged. Startup audits but never deletes, kills or
 releases leases, and clears an unknown execution only when stopped-agent
 reconciliation proves it ended. The cleanup sweep rechecks only the workspaces the
 audit failed and readies one once its ownership verifies, checking before it
