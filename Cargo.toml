@@ -25,7 +25,7 @@ uuid = "1.26.1"
 
 [package]
 name = "shoal"
-version = "0.11.4"
+version = "0.12.0"
 description = "Local workspaces and resource allocation for coding agents"
 edition.workspace = true
 rust-version.workspace = true
