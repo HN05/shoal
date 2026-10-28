@@ -374,7 +374,8 @@ instead of the PR delivery guidance below.
 configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom;
   an agent stopped between turns restores on its next update instead, with free
-  disk space, holding no slot meanwhile once its processes are proven stopped.
+  disk space, holding no slot and keeping its workspace from no cleanup
+  meanwhile once its processes are proven stopped.
   Unknown turns count as mid-turn.
   The protection stop, and an agent's reported exit, also stop the agent's
   identity-verified processes outside its process group; a wrapper whose stop

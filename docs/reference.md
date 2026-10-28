@@ -2921,6 +2921,9 @@ dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, or merged into the default branch as removal
 decides; no fetch.
+A restore of an idle agent waiting for an update blocks nothing: removal cancels
+it and keeps the agent stopped, so `shoal work restore` brings it back for
+`shoal resume`.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
 

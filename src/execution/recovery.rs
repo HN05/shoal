@@ -984,6 +984,16 @@ pub fn any_pending(paths: &Paths) -> bool {
 
 /// Pending recovery is unfinished work even when its Git tree is clean.
 pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
+    pending_except(paths, workspace_id, |_| false)
+}
+
+/// Whether recovery is pending for executions of the workspace other than
+/// those `excepted` selects.
+pub(crate) fn pending_except(
+    paths: &Paths,
+    workspace_id: &str,
+    excepted: impl Fn(&str) -> bool,
+) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -993,7 +1003,10 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
         let entry = entry?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.ends_with(AGENT_SUFFIX) || name.ends_with(COMMAND_SUFFIX) {
+        let execution = name
+            .strip_suffix(AGENT_SUFFIX)
+            .or_else(|| name.strip_suffix(COMMAND_SUFFIX));
+        if execution.is_some_and(|execution| !excepted(execution)) {
             return Ok(true);
         }
     }

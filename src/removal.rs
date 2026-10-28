@@ -39,6 +39,20 @@ pub struct RemovalCheck {
     /// the inspection; it is not part of the CLI protocol response.
     #[serde(skip)]
     pub(crate) default_branch: Option<String>,
+    /// The restores of idle agents, which `running_commands` and
+    /// `processes` leave out; daemon state like `default_branch`.
+    #[serde(skip)]
+    pub(crate) idle_restores: Vec<IdleRestore>,
+}
+
+/// A wrapper waiting for an update to restore its agent, which stopped
+/// between turns with every process: nothing runs for it until the update
+/// arrives, so it keeps the workspace from no cleanup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct IdleRestore {
+    pub execution: String,
+    /// The waiting wrapper, which may use the workspace directory.
+    pub wrapper: Option<u32>,
 }
 
 /// What a manual removal may delete that neither a branch nor a remote
@@ -177,7 +191,12 @@ impl RemovalCheck {
     }
 
     pub async fn load_directory_processes(&mut self) -> Result<()> {
-        self.processes = process::in_directory(&self.workspace.path).await?;
+        let wrappers: Vec<u32> = self
+            .idle_restores
+            .iter()
+            .filter_map(|restore| restore.wrapper)
+            .collect();
+        self.processes = process::in_directory_except(&self.workspace.path, &wrappers).await?;
         Ok(())
     }
 
@@ -255,16 +274,19 @@ pub enum InspectionPolicy {
     IncludeDirectoryProcesses,
 }
 
-/// Gather state for a removal decision without deciding whether removal is safe.
-pub async fn inspect(
+/// Gather state for a removal decision without deciding whether removal is
+/// safe. `running_commands` leaves out the `idle_restores`.
+pub(crate) async fn inspect(
     workspace: Workspace,
     running_commands: usize,
+    idle_restores: Vec<IdleRestore>,
     policy: InspectionPolicy,
     default_branch: Option<&str>,
 ) -> Result<RemovalCheck> {
     let mut check = RemovalCheck {
         workspace,
         running_commands,
+        idle_restores,
         processes: vec![],
         dirty: false,
         changed_files: vec![],

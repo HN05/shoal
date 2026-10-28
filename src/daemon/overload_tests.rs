@@ -13,6 +13,7 @@ use std::{
 use tokio::net::UnixListener;
 
 mod agent_restart;
+mod idle_cleanup;
 mod queue_move;
 mod restart;
 

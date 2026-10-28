@@ -13,7 +13,8 @@ use crate::{
     hooks::{self, Hook, HookKind},
     model::{CleanupReason, Workspace},
     removal::{
-        self, BranchOutcome, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
+        self, BranchOutcome, IdleRestore, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult,
+        UnsavedWork,
     },
     state::WorkspaceState,
 };
@@ -246,6 +247,24 @@ fn worktree_cleanup_reason(check: &RemovalCheck) -> Option<CleanupReason> {
     }
 }
 
+/// The workspace's executions as cleanup sees them.
+struct CleanupExecutions {
+    /// Those other than the idle restores, which keep the workspace.
+    running: usize,
+    /// The restores of idle agents, with those a removal stopped.
+    idle: Vec<IdleRestore>,
+}
+
+impl CleanupExecutions {
+    /// Whether `execution` is one of the idle restores, whose recovery record
+    /// the removal record keeps.
+    fn idle_restore(&self, execution: &str) -> bool {
+        self.idle
+            .iter()
+            .any(|restore| restore.execution == execution)
+    }
+}
+
 /// A post-remove hook resolved while the workspace record still exists.
 struct PostRemoveHook {
     command: PathBuf,
@@ -278,6 +297,16 @@ impl Manager {
         policy: InspectionPolicy,
     ) -> Result<RemovalCheck> {
         let workspace = self.workspace(selector).await?;
+        let executions = self.cleanup_executions(&workspace.id, &[]).await?;
+        self.inspect_removal(workspace, policy, executions).await
+    }
+
+    async fn inspect_removal(
+        &self,
+        workspace: Workspace,
+        policy: InspectionPolicy,
+        executions: CleanupExecutions,
+    ) -> Result<RemovalCheck> {
         if workspace.path.exists() {
             self.verify_worktree(&workspace).await?;
         }
@@ -286,8 +315,47 @@ impl Manager {
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
-        let executions = self.workspace_execution_count(&workspace.id).await?;
-        removal::inspect(workspace, executions, policy, default_branch.as_deref()).await
+        removal::inspect(
+            workspace,
+            executions.running,
+            executions.idle,
+            policy,
+            default_branch.as_deref(),
+        )
+        .await
+    }
+
+    /// The workspace's executions, telling the restores of idle agents, which
+    /// keep it from no cleanup, from the others. `cancelled` are the idle
+    /// restores a removal stopped, whose records and exiting wrappers it
+    /// still disregards.
+    async fn cleanup_executions(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<CleanupExecutions> {
+        let mut executions = CleanupExecutions {
+            running: self.workspace_execution_count(id).await?,
+            idle: cancelled.to_vec(),
+        };
+        if executions.running == 0 {
+            return Ok(executions);
+        }
+        let idle = self.idle_restores(id).await?;
+        // Only an idle restore needs the details of its execution.
+        if idle.is_empty() {
+            return Ok(executions);
+        }
+        for execution in self.workspace_executions(id).await? {
+            if idle.contains(&execution.id) {
+                executions.running -= 1;
+                executions.idle.push(IdleRestore {
+                    execution: execution.id,
+                    wrapper: execution.wrapper.map(|wrapper| wrapper.pid),
+                });
+            }
+        }
+        Ok(executions)
     }
 
     pub async fn remove_workspace(
@@ -311,7 +379,7 @@ impl Manager {
     /// every sweep, or `None` when it is not a candidate.
     pub async fn cleanup_signals(&self, id: &str) -> Result<Option<u64>> {
         Ok(self
-            .cleanup_candidate(id)
+            .cleanup_candidate(id, &[])
             .await?
             .ok()
             .map(|(_, signals)| signals))
@@ -325,7 +393,17 @@ impl Manager {
 
     /// The snapshot of a cleanup candidate, or why it is not one.
     pub async fn cleanup_candidacy(&self, id: &str) -> Result<Result<Snapshot, CleanupReason>> {
-        let (path, signals) = match self.cleanup_candidate(id).await? {
+        self.idle_candidacy(id, &[]).await
+    }
+
+    /// The snapshot of a cleanup candidate whose `cancelled` restores a
+    /// removal stopped, or why it is not one.
+    async fn idle_candidacy(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Result<Snapshot, CleanupReason>> {
+        let (path, signals) = match self.cleanup_candidate(id, cancelled).await? {
             Ok(candidate) => candidate,
             Err(reason) => return Ok(Err(reason)),
         };
@@ -347,7 +425,7 @@ impl Manager {
                     state: workspace.state,
                 });
             }
-            if let Err(reason) = self.cleanup_candidate(&workspace.id).await? {
+            if let Err(reason) = self.cleanup_candidate(&workspace.id, &[]).await? {
                 return Ok(reason);
             }
             let auto = self.workspace_settings(workspace).await?.cleanup.auto;
@@ -365,13 +443,25 @@ impl Manager {
         })
     }
 
-    /// The path and cleanup signals of a candidate, or the first reason it is not one.
-    async fn cleanup_candidate(&self, id: &str) -> Result<Result<(PathBuf, u64), CleanupReason>> {
-        if let Some(reason) = self.recorded_cleanup_reason(id).await? {
+    /// The path and cleanup signals of a candidate whose `cancelled`
+    /// restores a removal stopped, or the first reason it is not one.
+    async fn cleanup_candidate(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
+        let executions = self.cleanup_executions(id, cancelled).await?;
+        if let Some(reason) = self.recorded_cleanup_reason(id, &executions).await? {
             return Ok(Err(reason));
         }
         // Git state rules out most workspaces, so lsof only scans for safe ones.
-        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
+        let mut check = self
+            .inspect_removal(
+                self.workspace(id).await?,
+                InspectionPolicy::GitOnly,
+                executions,
+            )
+            .await?;
         if let Some(reason) = worktree_cleanup_reason(&check) {
             return Ok(Err(reason));
         }
@@ -391,12 +481,25 @@ impl Manager {
     /// it is not one: merged into the default branch and unused, with no Git
     /// operation under way, no workspace stacked on it or split from it, no
     /// hold or keep choice, and any unsaved files left over from merged work. Assignment
-    /// state does not keep it.
-    pub async fn merged_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
-        if self.keep_reason(id).await?.is_some() || self.usage_reason(id).await?.is_some() {
+    /// state does not keep it. `cancelled` are the restores a removal stopped.
+    async fn merged_candidate(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<(PathBuf, u64)>> {
+        let executions = self.cleanup_executions(id, cancelled).await?;
+        if self.keep_reason(id).await?.is_some()
+            || self.usage_reason(id, &executions).await?.is_some()
+        {
             return Ok(None);
         }
-        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
+        let mut check = self
+            .inspect_removal(
+                self.workspace(id).await?,
+                InspectionPolicy::GitOnly,
+                executions,
+            )
+            .await?;
         if !check.workspace.path.is_dir()
             || !Rule::Merged.allows(&check)
             || git::status::operation_in_progress(&check.workspace.path).await?
@@ -418,7 +521,15 @@ impl Manager {
 
     /// The full snapshot of a merged cleanup candidate.
     pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
-        let Some((path, signals)) = self.merged_candidate(id).await? else {
+        self.merged_snapshot_after(id, &[]).await
+    }
+
+    async fn merged_snapshot_after(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<Snapshot>> {
+        let Some((path, signals)) = self.merged_candidate(id, cancelled).await? else {
             return Ok(None);
         };
         let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
@@ -430,36 +541,61 @@ impl Manager {
         }))
     }
 
-    /// The signals an automatic removal compares after stopping commands,
-    /// under the rule that made the workspace a candidate.
-    async fn automatic_signals(&self, id: &str, rule: Rule) -> Result<Option<u64>> {
-        match rule {
-            Rule::Idle => self.cleanup_signals(id).await,
-            Rule::Merged => Ok(self.merged_candidate(id).await?.map(|(_, signals)| signals)),
-        }
+    /// The signals an automatic removal compares after stopping commands
+    /// and the `cancelled` restores, under the rule that made the workspace a
+    /// candidate.
+    async fn automatic_signals(
+        &self,
+        id: &str,
+        rule: Rule,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<u64>> {
+        Ok(match rule {
+            Rule::Idle => self
+                .cleanup_candidate(id, cancelled)
+                .await?
+                .ok()
+                .map(|(_, signals)| signals),
+            Rule::Merged => self
+                .merged_candidate(id, cancelled)
+                .await?
+                .map(|(_, signals)| signals),
+        })
     }
 
-    async fn automatic_snapshot(&self, id: &str, rule: Rule) -> Result<Option<Snapshot>> {
+    async fn automatic_snapshot(
+        &self,
+        id: &str,
+        rule: Rule,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<Snapshot>> {
         match rule {
-            Rule::Idle => self.cleanup_snapshot(id).await,
-            Rule::Merged => self.merged_snapshot(id).await,
+            Rule::Idle => Ok(self.idle_candidacy(id, cancelled).await?.ok()),
+            Rule::Merged => self.merged_snapshot_after(id, cancelled).await,
         }
     }
 
     /// What daemon records keep the workspace: holds, open questions and
     /// assignment state first, since their own cleanup paths decide removal,
-    /// then commands and leases.
-    async fn recorded_cleanup_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+    /// then stopped work besides the idle restores of `executions`, then
+    /// commands and leases.
+    async fn recorded_cleanup_reason(
+        &self,
+        id: &str,
+        executions: &CleanupExecutions,
+    ) -> Result<Option<CleanupReason>> {
         if let Some(retention) = self.keep_reason(id).await? {
             return Ok(Some(retention.into()));
         }
         if let Some(reason) = self.assignment_reason(id).await? {
             return Ok(Some(reason));
         }
-        if crate::execution::recovery::pending(&self.paths, id)? {
+        if crate::execution::recovery::pending_except(&self.paths, id, |execution| {
+            executions.idle_restore(execution)
+        })? {
             return Ok(Some(CleanupReason::Recovering));
         }
-        self.usage_reason(id).await
+        self.usage_reason(id, executions).await
     }
 
     /// What keeps the workspace from every unattended removal, completion
@@ -497,9 +633,14 @@ impl Manager {
         Ok(None)
     }
 
-    /// Active commands and leases; saved stopped work does not imply use.
-    async fn usage_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        if self.workspace_has_executions(id).await? {
+    /// Active commands and leases; saved stopped work and idle restores do
+    /// not imply use.
+    async fn usage_reason(
+        &self,
+        id: &str,
+        executions: &CleanupExecutions,
+    ) -> Result<Option<CleanupReason>> {
+        if executions.running > 0 {
             return Ok(Some(CleanupReason::RunningCommands));
         }
         if !self.list_resources(Some(id)).await?.is_empty() {
@@ -585,7 +726,7 @@ impl Manager {
         if !removal.waits_for_grace() {
             return Ok(false);
         }
-        self.recheck_removal(workspace, removal, Stage::Initial)
+        self.recheck_removal(workspace, removal, Stage::Initial, &[])
             .await?;
         let grace = self.workspace_settings(workspace).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
@@ -749,15 +890,19 @@ impl Manager {
         removal: Removal<'_>,
     ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
-        self.recheck_removal(workspace, removal, Stage::Initial)
+        let initial = self
+            .recheck_removal(workspace, removal, Stage::Initial, &[])
             .await?;
+        // Stopping cancels the restores of idle agents, whose records the
+        // removal record keeps and whose wrappers exit on their own.
+        let cancelled = initial.idle_restores;
         self.stop_executions(
             &workspace.id,
             removal.stop_policy(),
             &super::StopRequest::restorable_removal(),
         )
         .await?;
-        self.recheck_removal(workspace, removal, Stage::AfterStop)
+        self.recheck_removal(workspace, removal, Stage::AfterStop, &cancelled)
             .await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
@@ -782,7 +927,7 @@ impl Manager {
         // and the checkpoint must include.
         self.stop_workspace_processes(&workspace.id).await?;
         let check = self
-            .recheck_removal(workspace, removal, Stage::AfterHooks)
+            .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
             .await?;
         // The final inspection decides what goes.
         let (files, branch) = worktrunk_removal_options(&check, removal.unsaved());
@@ -812,15 +957,22 @@ impl Manager {
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at
-    /// `stage`, returning the inspection removal proceeds with.
+    /// `stage`, after stopping the `cancelled` restores, returning the
+    /// inspection removal proceeds with.
     async fn recheck_removal(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
         stage: Stage,
+        cancelled: &[IdleRestore],
     ) -> Result<RemovalCheck> {
+        let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
         let check = self
-            .check_removal(&workspace.id, removal.inspection())
+            .inspect_removal(
+                self.workspace(&workspace.id).await?,
+                removal.inspection(),
+                executions,
+            )
             .await?;
         // The reservation refuses new questions and PR proposals, so this
         // covers those made after the sweep's own check.
@@ -840,7 +992,8 @@ impl Manager {
             // cover changes made before removal started.
             (Removal::Automatic { .. }, Stage::Initial) => {}
             (Removal::Automatic { snapshot, .. }, Stage::AfterStop) => ensure!(
-                self.automatic_signals(&workspace.id, snapshot.rule).await?
+                self.automatic_signals(&workspace.id, snapshot.rule, cancelled)
+                    .await?
                     == Some(snapshot.signals),
                 "workspace changed {}",
                 stage.change()
@@ -848,7 +1001,7 @@ impl Manager {
             // The tree is compared only after the hooks: change times only
             // move forward, so that also covers changes made before them.
             (Removal::Automatic { snapshot, .. }, Stage::AfterHooks) => ensure!(
-                self.automatic_snapshot(&workspace.id, snapshot.rule)
+                self.automatic_snapshot(&workspace.id, snapshot.rule, cancelled)
                     .await?
                     == Some(snapshot),
                 "workspace changed {}",

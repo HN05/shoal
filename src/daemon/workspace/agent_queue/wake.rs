@@ -7,7 +7,11 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use super::{Wake, Work};
-use crate::{daemon::workspace::Manager, execution::recovery, state::QueueKind};
+use crate::{
+    daemon::workspace::Manager,
+    execution::recovery,
+    state::{QueueKind, QueueState},
+};
 
 /// What admitted a restore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,7 +52,40 @@ fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The executions of the workspace's restores that wait in the queue.
+fn queued_restores(db: &Connection, workspace_id: &str) -> Result<Vec<String>> {
+    Ok(db
+        .prepare(
+            "SELECT execution_id FROM agent_queue
+             WHERE kind=?1 AND workspace_id=?2 AND state=?3 AND execution_id IS NOT NULL",
+        )?
+        .query_map(
+            rusqlite::params![QueueKind::Restore, workspace_id, QueueState::Queued],
+            |row| row.get(0),
+        )?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 impl Manager {
+    /// The executions of the workspace whose wrapper waits, with every
+    /// process of its agent stopped between turns, for an update that has
+    /// not arrived.
+    pub(crate) async fn idle_restores(&self, workspace_id: &str) -> Result<HashSet<String>> {
+        let id = workspace_id.to_owned();
+        let queued = self.store.run(move |db| queued_restores(db, &id)).await?;
+        let waiters = self.agent_queue.restore_waiters();
+        let mut idle = HashSet::new();
+        for execution in queued {
+            if waiters.contains(&execution)
+                && self.restore_wake(workspace_id, &execution, true).await?
+                    == (Wake::Update { due: false })
+            {
+                idle.insert(execution);
+            }
+        }
+        Ok(idle)
+    }
+
     /// The IDs of the restore entries that wait for an update, whose agent
     /// stopped between turns.
     pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<String>> {

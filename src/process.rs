@@ -12,7 +12,12 @@ use tokio::process::Command;
 
 /// Automatic cleanup treats every process using the directory as activity.
 pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
-    let excluded = [std::process::id()];
+    in_directory_except(root, &[]).await
+}
+
+/// The processes using the directory besides those of `excluded`.
+pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
+    let own = std::process::id();
     let mut command = Command::new(Tool::Lsof.program());
     command
         .args([
@@ -43,6 +48,7 @@ pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
         } else if let Some(value) = line.strip_prefix('c') {
             name = value.to_owned();
         } else if let Some(value) = line.strip_prefix('n')
+            && pid != own
             && !excluded.contains(&pid)
             && Path::new(value).starts_with(&root)
         {
@@ -51,3 +57,6 @@ pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
     }
     Ok(found)
 }
+
+#[cfg(test)]
+mod tests;
