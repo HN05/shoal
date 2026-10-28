@@ -84,8 +84,8 @@ pub(crate) struct Waiting {
 /// an update woke, needs a free slot and another restore takes back its own;
 /// under dynamic admission each needs room for its load. Those other restores
 /// start only on sustained healthy readings (`recovered`), one per healthy
-/// interval, and nothing queued behind one starts before it. An entry that
-/// does not fit is passed over; once nothing more can start the pass ends.
+/// interval. An entry that waits or does not fit keeps its place and is
+/// passed over; once nothing more can start the pass ends.
 pub(crate) fn admit(
     occupied: &[String],
     waiting: &[Waiting],
@@ -112,7 +112,7 @@ pub(crate) fn admit(
                 true => 0,
                 false => continue,
             },
-            Work::Restore { .. } if !recovered => break,
+            Work::Restore { .. } if !recovered => continue,
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };

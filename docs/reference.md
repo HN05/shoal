@@ -1095,9 +1095,9 @@ the agent's slot,
 so a fixed limit lets it take that slot back on a full machine, while `dynamic`
 still needs room for its load; a lowered limit holds it until other agents
 leave. It starts only after the recovery interval's healthy readings, one
-restore per interval, and until they arrive nothing queued behind it starts; a
-stop, reload or unhealthy reading before the restored agent starts returns it to
-its place. The restored
+restore per interval, and keeps its place meanwhile without holding back the
+entries behind it; a stop, reload or unhealthy reading before the restored agent
+starts returns it to its place. The restored
 agent takes the slot over once it runs. Stopping the workspace or a failed
 restore removes the entry and keeps the recovery record. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not

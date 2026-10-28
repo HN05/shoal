@@ -100,14 +100,21 @@ fn restores_take_back_their_own_slot_under_fixed_limits() {
 }
 
 #[test]
-fn restores_wait_for_healthy_readings_and_hold_back_later_entries() {
+fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
     let mut queue = waiting(&[("a1", "a"), ("ra", "a"), ("rb", "b"), ("b1", "b")]);
     let occupied = vec!["a".to_owned(), "b".to_owned()];
     let unlimited = Limits::default();
-    // Without healthy readings only the launch ahead of the restores starts.
-    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1"]);
+    // Without healthy readings the restores keep their place and the
+    // launches around them start.
+    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1", "b1"]);
     // Each healthy interval restores one agent; the rest keep their place.
-    assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "ra"]);
+    assert_eq!(
+        admit(&occupied, &queue, &unlimited, true),
+        ["a1", "ra", "b1"]
+    );
+    // A full machine keeps the launch behind them waiting.
+    let full = limits(Some(3), &[]);
+    assert_eq!(admit(&occupied, &queue, &full, false), ["a1"]);
     // A restore whose agent is not waiting yet is passed over.
     queue[1].work = Work::Restore {
         waiting: false,
