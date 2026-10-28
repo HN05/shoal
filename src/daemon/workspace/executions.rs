@@ -646,10 +646,9 @@ impl Manager {
         exit_code: Option<i32>,
         scan: Option<Result<process::Scan>>,
     ) -> Result<bool> {
-        let scanned = scan.as_ref().and_then(|scan| scan.as_ref().ok());
-        self.keep_stopped_turn(&id, scanned).await;
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
+        self.keep_stopped_turn(&id, None).await;
         let connections = self.executions.connections().await;
         let demo = self
             .record_execution_completion(&id, kind, exit_code, issue)

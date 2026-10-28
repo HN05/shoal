@@ -234,6 +234,26 @@ fn waiting_process() -> tokio::process::Child {
         .unwrap()
 }
 
+/// A process waiting in a group of its own, marked as `execution`'s when
+/// given. It runs this test binary, whose environment the scan can read where
+/// a system binary's may be hidden.
+fn background_process(execution: Option<&str>) -> tokio::process::Child {
+    let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "process::identity::tests::marked_child",
+            "--ignored",
+        ])
+        .stdout(std::process::Stdio::null())
+        .env_clear()
+        .env("SHOAL_TEST_PROCESS", "1");
+    if let Some(execution) = execution {
+        command.env(crate::env::EXECUTION_ID, execution);
+    }
+    command.process_group(0).kill_on_drop(true).spawn().unwrap()
+}
+
 #[tokio::test]
 async fn unreadable_process_keeps_finished_execution_unknown() {
     for kind in [ExecutionKind::Command, ExecutionKind::Setup] {
@@ -831,34 +851,19 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
             .set_agent_state(&workspace.name, AgentState::Idle, Some(id.clone()), None)
             .await
             .unwrap();
-        // A signal stop saved the agent.
+        // A signal stop saved the agent, which leaves a background command
+        // it started running in a process group of its own.
         save_record(&manager.paths, &workspace.id, &id, "claude", None, None).unwrap();
-        let mut command = waiting_process();
-        let identity = process::capture(command.id().unwrap()).unwrap().unwrap();
-        let processes = background
-            .then(|| process::OwnedProcess {
-                execution_id: id.clone(),
-                identity,
-            })
-            .into_iter()
-            .collect();
-        let scan = process::Scan {
-            processes,
-            ..Default::default()
-        };
-        manager
-            .finish_execution_after_scan(
-                id.clone(),
-                ExecutionKind::Command,
-                Some(0),
-                Some(Ok(scan)),
-            )
-            .await
-            .unwrap();
+        let mut command = background_process(background.then_some(id.as_str()));
+
+        // The agent's exit stops that command before the execution ends.
+        manager.stop_exited_agent_processes(&id).await;
         command.kill().await.unwrap();
         command.wait().await.unwrap();
-        // Reconciliation forgets the execution once its work has ended.
-        manager.forget_execution(&id).await.unwrap();
+        manager
+            .finish_execution(id.clone(), ExecutionKind::Command, Some(0))
+            .await
+            .unwrap();
 
         let record = Record::load(&record_path(&manager.paths, &workspace.id, &id))
             .unwrap()
