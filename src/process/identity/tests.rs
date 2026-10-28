@@ -123,6 +123,8 @@ async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Res
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
     let mut command = tokio::process::Command::new("sh")
         .args(["-c", "sleep 30 & echo $!; read _"])
+        // The job inherits the marker, as a tracked command's jobs do.
+        .env(crate::env::EXECUTION_ID, "execution")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .process_group(0)
