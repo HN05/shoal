@@ -15,6 +15,8 @@ pub(super) struct Place {
     pub socket: String,
     pub pane: String,
     pub terminal: String,
+    #[serde(default)]
+    pub ownership: String,
     pub workspace: String,
     pub demo: Option<String>,
 }
@@ -28,6 +30,7 @@ impl Place {
             socket,
             pane: pane.into(),
             terminal: String::new(),
+            ownership: uuid::Uuid::new_v4().to_string(),
             workspace: workspace.unwrap_or_default().into(),
             demo: demo.map(Into::into),
         })

@@ -724,9 +724,10 @@ suffixed `-2`, `-3`, ... when the name is in use, and labelled
 `zmx ls` and `zmx attach` work as well. Removing a workspace closes its owned
 terminal places, including zmx sessions and Herdr panes, regardless of
 `close_when_done`. Daemon startup and cleanup sweeps retry closes whose workspace
-is gone, through each host's adapter. Herdr closes use the recorded server and
-terminal identity, preserving other panes and replacements; ownership is
-recorded when Shoal starts work there. Only the default state directory claims
+is gone, through each host's adapter. Herdr verifies the recorded server,
+terminal identity and current ownership marker, preserving other panes and
+places reused from another state directory; ownership is recorded when Shoal
+starts work there. Only the default state directory claims
 older zmx sessions without a state label.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up

@@ -287,7 +287,7 @@ pub(in crate::cli) trait Host: Sync {
     }
 
     /// Forget obsolete ownership in this process's place when the integration
-    /// is disabled, without contacting the terminal host.
+    /// is disabled, so another state directory cannot retain an old claim.
     fn clear_current_ownership<'a>(&'a self, _state: &'a Path) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }

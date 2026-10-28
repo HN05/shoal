@@ -5,7 +5,8 @@ import shlex
 import sys
 from pathlib import Path
 
-root = Path(os.environ['HOME'])
+socket = os.environ.get('HERDR_SOCKET_PATH')
+root = Path(socket).parent if socket else Path(os.environ['HOME'])
 args = sys.argv[1:]
 with (root / 'herdr-calls').open('a') as calls:
     calls.write(json.dumps(args) + '\n')
@@ -31,7 +32,20 @@ elif args[:2] == ['pane', 'get']:
         sys.exit(1)
     identity = root / 'herdr-terminal'
     terminal = identity.read_text() if identity.exists() else 'terminal-original'
-    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': terminal}}}))
+    marker = root / 'herdr-ownership'
+    tokens = json.loads(marker.read_text()) if marker.exists() else {}
+    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': terminal, 'tokens': tokens}}}))
+elif args[:2] == ['pane', 'report-metadata']:
+    marker = root / 'herdr-ownership'
+    tokens = json.loads(marker.read_text()) if marker.exists() else {}
+    for index, arg in enumerate(args):
+        if arg == '--token':
+            key, value = args[index + 1].split('=', 1)
+            tokens[key] = value
+        elif arg == '--clear-token':
+            tokens.pop(args[index + 1], None)
+    marker.write_text(json.dumps(tokens))
+    print('{}')
 elif args[:2] == ['pane', 'close']:
     if (root / 'herdr-close-fails').exists():
         sys.exit('close failed')

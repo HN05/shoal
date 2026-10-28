@@ -21352,7 +21352,7 @@ from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
 # Tab watchers poll `tab get`; keep those reads out of the recorded actions.
-log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else ('herdr-pane-gets' if args[:2] == ['pane', 'get'] else 'herdr-calls')
+log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else ('herdr-pane-gets' if args[:2] in (['pane', 'get'], ['pane', 'report-metadata']) else 'herdr-calls')
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
@@ -21371,7 +21371,19 @@ elif args[:2] == ['tab', 'get']:
         sys.exit(1)
     print(json.dumps({'result': {'tab_id': args[2]}}))
 elif args[:2] == ['pane', 'get']:
-    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': 'original-terminal'}}}))
+    marker = root / 'herdr-ownership'
+    tokens = json.loads(marker.read_text()) if marker.exists() else {}
+    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': 'original-terminal', 'tokens': tokens}}}))
+elif args[:2] == ['pane', 'report-metadata']:
+    marker = root / 'herdr-ownership'
+    tokens = json.loads(marker.read_text()) if marker.exists() else {}
+    for index, arg in enumerate(args):
+        if arg == '--token':
+            key, value = args[index + 1].split('=', 1)
+            tokens[key] = value
+        elif arg == '--clear-token':
+            tokens.pop(args[index + 1], None)
+    marker.write_text(json.dumps(tokens))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()

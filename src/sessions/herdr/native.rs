@@ -3,7 +3,7 @@ use super::records::Place;
 use crate::subprocess::Run;
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::Deserialize;
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use tokio::process::Command;
 
 pub(super) fn current_pane() -> Result<Option<String>> {
@@ -15,11 +15,45 @@ pub(super) fn current_pane() -> Result<Option<String>> {
     ))
 }
 
-pub(super) async fn verified(mut place: Place) -> Result<Place> {
-    place.terminal = terminal(&place)
+pub(super) async fn claim(mut place: Place) -> Result<Place> {
+    place.terminal = pane(&place)
         .await?
-        .context("Herdr pane disappeared before ownership was recorded")?;
+        .context("Herdr pane disappeared before ownership was recorded")?
+        .terminal_id;
+    set_ownership(&place, Some(&place.ownership)).await?;
     Ok(place)
+}
+
+// A native marker invalidates records retained by other Shoal state directories.
+const OWNERSHIP_TOKEN: &str = "shoal_owner";
+
+pub(super) async fn release(place: &Place) -> Result<()> {
+    set_ownership(place, None).await
+}
+
+async fn set_ownership(place: &Place, ownership: Option<&str>) -> Result<()> {
+    let mut command = command(place, "report-metadata");
+    command.args(["--source", "shoal"]);
+    match ownership {
+        Some(id) => {
+            command
+                .arg("--token")
+                .arg(format!("{OWNERSHIP_TOKEN}={id}"));
+        }
+        None => {
+            command.args(["--clear-token", OWNERSHIP_TOKEN]);
+        }
+    }
+    Run::new(command)
+        .timeout(Duration::from_secs(30))
+        .checked()
+        .await
+        .context("update Herdr pane ownership")?;
+    Ok(())
+}
+
+pub(super) async fn owns(place: &Place) -> Result<bool> {
+    Ok(pane(place).await?.is_some_and(|pane| pane.owned_by(place)))
 }
 
 fn command(place: &Place, operation: &str) -> Command {
@@ -35,14 +69,14 @@ pub(super) async fn close_pane(place: &Place) -> Result<()> {
         .timeout(Duration::from_secs(30))
         .checked()
         .await;
-    if result.is_err() && terminal(place).await?.is_none() {
+    if result.is_err() && pane(place).await?.is_none() {
         return Ok(());
     }
     result.with_context(|| format!("close Herdr pane {}", place.pane))?;
     Ok(())
 }
 
-pub(super) async fn terminal(place: &Place) -> Result<Option<String>> {
+async fn pane(place: &Place) -> Result<Option<Pane>> {
     let output = Run::new(command(place, "get"))
         .timeout(Duration::from_secs(30))
         .capture()
@@ -55,7 +89,7 @@ pub(super) async fn terminal(place: &Place) -> Result<Option<String>> {
                 && !response.result.pane.terminal_id.is_empty(),
             "Herdr did not verify the pane's terminal identity"
         );
-        return Ok(Some(response.result.pane.terminal_id));
+        return Ok(Some(response.result.pane));
     }
     if missing(&output.stdout) || missing(&output.stderr) {
         return Ok(None);
@@ -85,6 +119,16 @@ struct PaneResult {
 struct Pane {
     pane_id: String,
     terminal_id: String,
+    #[serde(default)]
+    tokens: BTreeMap<String, String>,
+}
+
+impl Pane {
+    fn owned_by(&self, place: &Place) -> bool {
+        self.terminal_id == place.terminal
+            && !place.ownership.is_empty()
+            && self.tokens.get(OWNERSHIP_TOKEN) == Some(&place.ownership)
+    }
 }
 #[derive(Deserialize)]
 struct Failure {

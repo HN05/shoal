@@ -214,3 +214,86 @@ fn removal_ends_the_place_watcher_without_closing_other_panes_in_its_tab() -> an
     );
     Ok(())
 }
+
+#[test]
+fn a_chat_in_another_state_invalidates_prior_herdr_workspace_ownership() -> anyhow::Result<()> {
+    for enabled in [true, false] {
+        let original = fixture();
+        start_workspace(&original)?;
+        let other = fixture();
+        if !enabled {
+            fs::write(
+                other.root.path().join(".config/shoal/config.toml"),
+                "close_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n[herdr]\nenabled = false\n",
+            )?;
+        }
+        let mut command = other.command();
+        command
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", "w1:p9")
+            .env(
+                "HERDR_SOCKET_PATH",
+                original.root.path().join("owned-herdr.sock"),
+            )
+            .args([
+                "chat",
+                other
+                    .repo
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("repo path"))?,
+                "--here",
+                "--name",
+                "chat",
+                "--agent",
+                "pi",
+            ]);
+        let (output, transcript) = other.interactive_command(&mut command, "");
+        assert!(output.status.success(), "{output:?} {transcript}");
+        // The old state's durable record still exists, but its native claim
+        // has been invalidated by the other state's chat.
+        assert!(
+            fs::read_dir(original.root.path().join("state/terminal-sessions/herdr"))?
+                .filter_map(Result::ok)
+                .any(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+        );
+        original.ok(&["rm", "owned", "--yes"]);
+        assert!(closed(&original)?.is_empty());
+    }
+    Ok(())
+}
+
+#[test]
+fn another_states_workspace_replaces_the_native_herdr_claim() -> anyhow::Result<()> {
+    let original = fixture();
+    start_workspace(&original)?;
+    let other = fixture();
+    fs::write(
+        other.root.path().join(".config/shoal/config.toml"),
+        "close_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n[herdr]\nnew_tab = false\n",
+    )?;
+    let mut command = other.command();
+    command
+        .env("HERDR_ENV", "1")
+        .env("HERDR_PANE_ID", "w1:p9")
+        .env(
+            "HERDR_SOCKET_PATH",
+            original.root.path().join("owned-herdr.sock"),
+        )
+        .args([
+            "add",
+            other
+                .repo
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("repo path"))?,
+            "new-owner",
+            "--agent",
+            "pi",
+        ]);
+    let (output, transcript) = other.interactive_command(&mut command, "");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    original.ok(&["rm", "owned", "--yes"]);
+    assert!(closed(&original)?.is_empty());
+    other.ok(&["rm", "new-owner", "--yes"]);
+    assert_eq!(closed(&original)?.len(), 1);
+    Ok(())
+}

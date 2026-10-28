@@ -447,11 +447,13 @@ configured command for another agent, plus proven child
   terminal emulator between agent and terminal; launches without a terminal, inside
   zmx, or in an enabled Herdr pane run in place. Hosts register launch and cleanup
   adapters together. Removal closes owned terminal places, including Herdr panes;
-  startup and cleanup sweeps close orphan sessions only in their state namespace, with legacy labels claimed only by the default daemon. Relabelling
+  startup and cleanup sweeps close orphan sessions only in their state namespace,
+  with legacy labels claimed only by the default daemon. Relabelling
   replaces obsolete ownership; conflicting chat labels prevent workspace cleanup.
-  Herdr ownership persists with the server socket, pane and terminal identity;
-  cleanup verifies the terminal and closes only that pane. Disabling handoffs
-  preserves cleanup of already owned places. Place watchers end on removal;
+  Herdr ownership persists with its server socket, pane, terminal identity and
+  native ownership marker. Relabelling replaces or clears the marker across
+  state directories; cleanup verifies marker and terminal before closing that
+  pane. Disabling handoffs preserves cleanup of already owned places. Place watchers end on removal;
   only daemon adapters close removed ownership, avoiding a second tab close.
   Failed detached handoffs close only the originally observed process and creation time.
   A demo session closes after verified execution completion, including a disconnected stop, only

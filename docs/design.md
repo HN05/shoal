@@ -649,8 +649,10 @@ owned places, and startup and cleanup sweeps close those whose workspace record
 is gone, retrying failures without restoring ownership. Relabelling replaces
 obsolete ownership, so removal preserves a workspace place reused for a chat.
 Herdr ownership persists in the owning state directory with its server socket,
-pane and terminal identity; cleanup closes only the matching pane, preserving
-other panes in the tab and replacements at the same pane ID.
+pane, terminal identity and a unique native ownership marker. Relabelling
+replaces or clears that marker across state directories, even with handoffs
+disabled. Cleanup requires both the marker and terminal identity to match,
+preserving other panes in the tab and replacements at the same pane ID.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx

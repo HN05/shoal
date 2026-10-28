@@ -72,9 +72,10 @@ async fn record(
     let place = Place::current_server(pane, workspace, demo)?;
     let _lock = records::lock(state).await?;
     if workspace.is_none() {
+        native::release(&place).await?;
         return records::forget(state, &place.key());
     }
-    records::write(state, &native::verified(place).await?)
+    records::write(state, &native::claim(place).await?)
 }
 
 pub(crate) async fn close_demo(state: &Path, pane: &str, launch: &str) -> Result<()> {
@@ -82,7 +83,7 @@ pub(crate) async fn close_demo(state: &Path, pane: &str, launch: &str) -> Result
 }
 
 async fn close_owned(state: &Path, place: &Place) -> Result<()> {
-    if native::terminal(place).await?.as_ref() == Some(&place.terminal) {
+    if native::owns(place).await? {
         native::close_pane(place).await?;
     }
     records::forget(state, &place.key())

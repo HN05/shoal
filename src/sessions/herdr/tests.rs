@@ -7,6 +7,7 @@ fn place(socket: &str, workspace: &str, demo: Option<&str>) -> Place {
         socket: socket.into(),
         pane: "w1:p1".into(),
         terminal: "original-terminal".into(),
+        ownership: uuid::Uuid::new_v4().to_string(),
         workspace: workspace.into(),
         demo: demo.map(Into::into),
     }
