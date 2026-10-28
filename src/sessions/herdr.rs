@@ -71,6 +71,7 @@ async fn record(
 ) -> Result<()> {
     let place = Place::current_server(pane, workspace, demo)?;
     let _lock = records::lock(state).await?;
+    let _server = super::locking::for_socket(Path::new(&place.socket)).await?;
     if workspace.is_none() {
         native::release(&place).await?;
         return records::forget(state, &place.key());
@@ -83,6 +84,7 @@ pub(crate) async fn close_demo(state: &Path, pane: &str, launch: &str) -> Result
 }
 
 async fn close_owned(state: &Path, place: &Place) -> Result<()> {
+    let _server = super::locking::for_socket(Path::new(&place.socket)).await?;
     if native::owns(place).await? {
         native::close_pane(place).await?;
     }

@@ -3,6 +3,7 @@ import json
 import os
 import shlex
 import sys
+import time
 from pathlib import Path
 
 socket = os.environ.get('HERDR_SOCKET_PATH')
@@ -34,6 +35,15 @@ elif args[:2] == ['pane', 'get']:
     terminal = identity.read_text() if identity.exists() else 'terminal-original'
     marker = root / 'herdr-ownership'
     tokens = json.loads(marker.read_text()) if marker.exists() else {}
+    pause = root / 'herdr-pause-owner-check'
+    if pause.exists():
+        pause.unlink()
+        (root / 'herdr-owner-check-paused').touch()
+        deadline = time.monotonic() + 120
+        while not (root / 'herdr-owner-check-release').exists():
+            if time.monotonic() >= deadline:
+                sys.exit('ownership check hang guard')
+            time.sleep(0.01)
     print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': terminal, 'tokens': tokens}}}))
 elif args[:2] == ['pane', 'report-metadata']:
     if (root / 'herdr-label-fails').exists():
@@ -53,6 +63,8 @@ elif args[:2] == ['pane', 'close']:
         sys.exit('close failed')
     with (root / 'herdr-closed').open('a') as closed:
         closed.write(json.dumps([os.environ.get('HERDR_SOCKET_PATH'), args[2]]) + '\n')
+    if (root / 'herdr-close-removes-pane').exists():
+        (root / 'herdr-gone').touch()
     print('{}')
 else:
     print('{}')

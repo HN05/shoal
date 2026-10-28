@@ -652,7 +652,8 @@ preserves a place reused by another owner.
 Herdr ownership persists in the owning state directory with its server socket,
 pane, terminal identity and a unique native ownership marker. Relabelling
 replaces or clears that marker across state directories, even with handoffs
-disabled. Cleanup requires both the marker and terminal identity to match,
+disabled. Ownership changes and verified closes hold a server-scoped lock across
+state directories. Cleanup requires both the marker and terminal identity to match,
 preserving other panes in the tab and replacements at the same pane ID.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:

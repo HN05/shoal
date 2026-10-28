@@ -453,7 +453,8 @@ configured command for another agent, plus proven child
   conflicting chat labels prevent workspace cleanup.
   Herdr ownership persists with its server socket, pane, terminal identity and
   native ownership marker. Relabelling replaces or clears the marker across
-  state directories; cleanup verifies marker and terminal before closing that
+  state directories; a server-scoped lock serializes reassignment and verified
+  closes across states. Cleanup verifies marker and terminal before closing that
   pane. Disabling handoffs preserves cleanup of already owned places. Place watchers end on removal;
   only daemon adapters close removed ownership, avoiding a second tab close.
   Failed detached handoffs close only the originally observed process and creation time.

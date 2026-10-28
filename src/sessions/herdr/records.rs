@@ -55,8 +55,8 @@ fn directory(state: &Path) -> PathBuf {
     state.join("terminal-sessions/herdr")
 }
 
-/// Serialize relabelling and closing across CLI and daemon processes. Waiting
-/// for another process's lock must never block the async executor.
+/// Serialize this state's ownership records across CLI and daemon processes.
+/// Native mutations also take the shared server lock, after this one.
 pub(super) async fn lock(state: &Path) -> Result<fs::File> {
     let directory = directory(state);
     tokio::task::spawn_blocking(move || {

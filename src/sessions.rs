@@ -1,6 +1,7 @@
 //! Terminal session integrations shared by the CLI and daemon.
 //! The registry wires launch and cleanup capabilities together.
 pub(crate) mod herdr;
+mod locking;
 pub(crate) mod zmx;
 
 use anyhow::Result;

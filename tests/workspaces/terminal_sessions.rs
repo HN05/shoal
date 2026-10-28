@@ -8,6 +8,16 @@ fn fixture() -> Fixture {
         fixture.root.path().join("bin/herdr"),
         include_str!("../fixtures/herdr_cleanup.py"),
     );
+    for socket in ["owned-herdr.sock", "demo-herdr.sock", "fixture-herdr.sock"] {
+        fs::write(
+            fixture
+                .root
+                .path()
+                .join(format!("{socket}.shoal-ownership.lock")),
+            "",
+        )
+        .expect("prepare isolated terminal lock");
+    }
     fixture
 }
 
@@ -307,6 +317,7 @@ struct Shortcut<'a> {
 impl Drop for Shortcut<'_> {
     fn drop(&mut self) {
         let _ = self.fixture.run(&["stop", "new-owner", "--yes"]);
+        let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
@@ -548,5 +559,98 @@ fn failed_herdr_labelling_refuses_the_add_worker_before_starting_its_agent() -> 
     assert!(transcript.contains("ownership update failed"));
     assert!(!home.join("new-agent-started").exists());
     assert_eq!(fs::read(home.join("herdr-ownership"))?, ownership);
+    Ok(())
+}
+
+/// Always release the fixture's native query before reaping our removal CLI.
+struct PausedRemoval {
+    child: Child,
+    release: PathBuf,
+}
+
+impl Drop for PausedRemoval {
+    fn drop(&mut self) {
+        let _ = fs::write(&self.release, "");
+        let _ = self.child.wait();
+    }
+}
+
+#[test]
+fn herdr_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<()> {
+    let original = fixture();
+    start_workspace(&original)?;
+    let home = original.root.path();
+    let other = fixture();
+    other.add("new-owner");
+    install_test_script(
+        other.root.path().join("bin/claude"),
+        "#!/bin/sh\ntouch \"$HOME/new-agent-started\"\n",
+    );
+    fs::write(home.join("herdr-pause-owner-check"), "")?;
+    fs::write(home.join("herdr-close-removes-pane"), "")?;
+    let mut removal = PausedRemoval {
+        child: original
+            .command()
+            .args(["rm", "owned", "--yes"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?,
+        release: home.join("herdr-owner-check-release"),
+    };
+    wait_until("native ownership check paused", || {
+        home.join("herdr-owner-check-paused").exists()
+    });
+    // The native response has captured the old marker. Verify cleanup holds
+    // the shared lock while that response and its following close are pending.
+    let shared = fs::File::open(home.join("owned-herdr.sock.shoal-ownership.lock"))?;
+    assert_eq!(
+        fs2::FileExt::try_lock_exclusive(&shared)
+            .expect_err("verified close must exclude cross-state reassignment")
+            .kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    let ownership = fs::read(home.join("herdr-ownership"))?;
+    let mut agent = Shortcut {
+        fixture: &other,
+        child: other
+            .command()
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", "w1:p9")
+            .env("HERDR_SOCKET_PATH", home.join("owned-herdr.sock"))
+            .args(["claude", "new-owner"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?,
+    };
+    let local = other
+        .root
+        .path()
+        .join("state/terminal-sessions/herdr/ownership.lock");
+    let waiting = wait_for("reassignment reached its ownership operation", || {
+        if agent
+            .child
+            .try_wait()
+            .expect("query own shortcut")
+            .is_some()
+        {
+            return Some(false);
+        }
+        let file = fs::File::open(&local).ok()?;
+        fs2::FileExt::try_lock_exclusive(&file)
+            .err()
+            .filter(|error| error.kind() == std::io::ErrorKind::WouldBlock)
+            .map(|_| true)
+    });
+    assert!(waiting, "reassignment must wait until the close finishes");
+    assert_eq!(fs::read(home.join("herdr-ownership"))?, ownership);
+    assert!(!other.root.path().join("new-agent-started").exists());
+    fs::write(&removal.release, "")?;
+    assert!(removal.child.wait()?.success());
+    let status = wait_for("reassignment observes the closed pane", || {
+        agent.child.try_wait().expect("query own shortcut")
+    });
+    assert!(!status.success());
+    assert!(!other.root.path().join("new-agent-started").exists());
+    assert_eq!(closed(&original)?.len(), 1);
     Ok(())
 }

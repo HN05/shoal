@@ -21346,6 +21346,14 @@ fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
 }
 
 fn install_fake_herdr(fixture: &Fixture) {
+    fs::write(
+        fixture
+            .root
+            .path()
+            .join("fixture-herdr.sock.shoal-ownership.lock"),
+        "",
+    )
+    .unwrap();
     install_test_script(
         fixture.root.path().join("bin/herdr"),
         r#"#!/usr/bin/env python3
