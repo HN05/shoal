@@ -198,6 +198,8 @@ impl Manager {
             name: workspace.name,
         };
         let restore = Restore::new(target, execution, &record.agent, &env)?;
+        // Read the entry before dispatch can start it and its agent take it.
+        let _gate = self.agent_queue_gate.lock().await;
         self.store.run(move |db| insert(db, &restore)).await?;
         self.queue_entries()
             .await?
