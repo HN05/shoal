@@ -143,20 +143,28 @@ impl Rex {
     /// The oldest session labelled `label`, created at `cwd` when there is
     /// none.
     pub async fn session(&self, label: &str, cwd: &Path) -> Result<String> {
+        match oldest_labelled(&self.sessions().await?, label) {
+            Some(oldest) => Ok(oldest.to_owned()),
+            None => self.create_session(label, cwd).await,
+        }
+    }
+
+    /// Every session on the server.
+    async fn sessions(&self) -> Result<Vec<Session>> {
         let listed: Sessions = serde_json::from_slice(&self.run(&["ls", "--json"]).await?)
             .context("invalid Rex session list")?;
-        if let Some(oldest) = oldest_labelled(&listed.sessions, label) {
-            return Ok(oldest.to_owned());
-        }
+        Ok(listed.sessions)
+    }
+
+    /// A new session labelled `label` at `cwd`.
+    async fn create_session(&self, label: &str, cwd: &Path) -> Result<String> {
         let cwd = cwd
             .to_str()
             .context("the session's directory is not UTF-8")?;
-        let created: Created = serde_json::from_slice(
-            &self
-                .run(&["session", "new", label, "-c", cwd, "--json"])
-                .await?,
-        )
-        .context("invalid Rex session")?;
+        let output = self
+            .run(&["session", "new", label, "-c", cwd, "--json"])
+            .await?;
+        let created: Created = serde_json::from_slice(&output).context("invalid Rex session")?;
         Ok(created.session_id)
     }
 
