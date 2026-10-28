@@ -120,7 +120,7 @@ process identities, then restores the agent's name and automatic recovery
 setting, so stop, overload protection, exit notifications and
 `post_agent_exit_cmd` work as before. A command that exits while the daemon is
 away reports its exit code once reattached; after it exits the wrapper prints
-that it is waiting and gives up after a minute or on Ctrl-C, leaving the
+that it is waiting and gives up after two minutes or on Ctrl-C, leaving the
 execution for `shoal stop`. When the daemon refuses an execution, the wrapper
 stops the command and saves what `shoal stop` saves. Waiting executions stay
 active for cleanup and removal. Setup, landing and wrappers from releases before
