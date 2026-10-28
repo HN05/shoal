@@ -64,6 +64,10 @@ impl Fixture {
             "workspace integration tests require Worktrunk (wt)"
         );
         let root = tempfile::tempdir_in("/tmp").unwrap();
+        // Debug builds only open existing native ownership locks. Prepare the
+        // isolated zmx namespace for terminal launch and cleanup tests.
+        fs::write(root.path().join("zmx.shoal-ownership.lock"), "")
+            .expect("prepare isolated zmx ownership lock");
         // Remove eligible workspaces on their first sweep unless a test sets
         // its own grace period.
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
