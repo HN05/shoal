@@ -1003,11 +1003,14 @@ impl Identity {
 /// A live, identity-verified leader establishes ownership of its group and
 /// current descendants (including children that started another session).
 /// After it exits, its lineage still establishes ownership of the processes
-/// descending from it through live parents. Without that proof, group members
-/// are candidates only and must not be killed.
+/// descending from it through live parents, except those below a process
+/// whose own environment lacks the marker of `execution`, such as a demo the
+/// command started. Without that proof, group members are candidates only and
+/// must not be killed.
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
+    execution: Option<&str>,
 ) -> Result<(Vec<Identity>, Vec<Identity>)> {
     let Some(group) = group else {
         return Ok((vec![], vec![]));
@@ -1036,7 +1039,10 @@ pub async fn related(
     let Some(root) = child.and_then(Identity::lineage_root) else {
         return Ok((vec![], identities));
     };
-    let lineage = descended_from(root, &rows)?;
+    let execution = execution.map(str::to_owned);
+    let lineage = tokio::task::spawn_blocking(move || descended_from(root, &rows, execution))
+        .await
+        .context("process lineage worker failed")??;
     let candidates = identities
         .into_iter()
         .filter(|identity| !lineage.contains(identity))
@@ -1092,18 +1098,53 @@ fn descendants(mut pids: HashSet<u32>, rows: &[(u32, u32, u32)]) -> HashSet<u32>
 }
 
 /// The live processes whose parent unique IDs lead to the process with
-/// unique ID `root`, which may have exited.
-fn descended_from(root: u64, rows: &[(u32, u32, u32)]) -> Result<Vec<Identity>> {
+/// unique ID `root`, which may have exited, short of those that left
+/// `execution`.
+fn descended_from(
+    root: u64,
+    rows: &[(u32, u32, u32)],
+    execution: Option<String>,
+) -> Result<Vec<Identity>> {
     let mut lineages = Vec::new();
     for (pid, _, _) in rows {
         lineages.extend(lineage(*pid)?);
     }
-    Ok(lineage_descendants(root, lineages))
+    let Some(execution) = execution else {
+        return lineage_descendants(root, lineages, |_| Ok(false));
+    };
+    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
+    let ids = HashSet::from([execution]);
+    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    lineage_descendants(root, lineages, |identity| {
+        left_execution(identity, &marker, &ids, deadline)
+    })
+}
+
+/// Whether the process's own environment, read rather than hidden, lacks
+/// the execution's marker: a process started without it, such as a demo,
+/// no longer belongs to the execution, nor do its descendants.
+fn left_execution(
+    identity: &Identity,
+    marker: &[u8],
+    ids: &HashSet<String>,
+    deadline: std::time::Instant,
+) -> Result<bool> {
+    Ok(
+        observe(identity.pid, marker, ids, deadline)?.is_some_and(|observed| {
+            observed.lineage.identity == *identity
+                && matches!(observed.evidence, Evidence::Unmarked)
+        }),
+    )
 }
 
 /// A parent's unique ID is lower than its children's, since the kernel
 /// assigns them in order, so one pass in that order finds every descendant.
-fn lineage_descendants(root: u64, mut lineages: Vec<Lineage>) -> Vec<Identity> {
+/// A descendant that `left` names is left out with its own descendants.
+fn lineage_descendants(
+    root: u64,
+    mut lineages: Vec<Lineage>,
+    mut left: impl FnMut(&Identity) -> Result<bool>,
+) -> Result<Vec<Identity>> {
     lineages.sort_by_key(|lineage| lineage.unique);
     let mut ancestors = HashSet::from([root]);
     let mut found = Vec::new();
@@ -1111,12 +1152,12 @@ fn lineage_descendants(root: u64, mut lineages: Vec<Lineage>) -> Vec<Identity> {
         let (Some(unique), Some(parent)) = (lineage.unique, lineage.parent) else {
             continue;
         };
-        if ancestors.contains(&parent) {
+        if ancestors.contains(&parent) && !left(&lineage.identity)? {
             ancestors.insert(unique);
             found.push(lineage.identity);
         }
     }
-    found
+    Ok(found)
 }
 
 pub async fn stop_verified(targets: &[Identity]) -> Result<()> {

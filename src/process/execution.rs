@@ -26,8 +26,12 @@ impl Processes {
             .filter(|p| p.execution_id == execution.id)
             .map(|p| p.identity.clone())
             .collect();
-        let (related, group_candidates) =
-            process::related(execution.child.as_ref(), execution.group_id).await?;
+        let (related, group_candidates) = process::related(
+            execution.child.as_ref(),
+            execution.group_id,
+            Some(&execution.id),
+        )
+        .await?;
         owned.extend(related);
         if let Some(child) = &execution.child
             && process::alive(child)?

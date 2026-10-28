@@ -27,9 +27,24 @@ fn lineage_follows_unique_ids_through_exited_parents_only_to_the_root() {
     let found = lineage_descendants(
         10,
         vec![process(13, 13, 11), process(12, 12, 9), process(11, 11, 10)],
-    );
+        |_| Ok(false),
+    )
+    .unwrap();
     let pids: Vec<_> = found.iter().map(|identity| identity.pid).collect();
     assert_eq!(pids, [11, 13]);
+    // 11 left the execution, as a demo does, so 13 below it is not found.
+    let found = lineage_descendants(
+        10,
+        vec![
+            process(13, 13, 11),
+            process(14, 14, 10),
+            process(11, 11, 10),
+        ],
+        |identity| Ok(identity.pid == 11),
+    )
+    .unwrap();
+    let pids: Vec<_> = found.iter().map(|identity| identity.pid).collect();
+    assert_eq!(pids, [14]);
 }
 
 #[test]
@@ -74,7 +89,7 @@ async fn children_of_an_orphaned_group_member_are_owned_with_a_live_leader() -> 
     while parent(member).and_then(parent) == Some(identity.pid) {
         tokio::task::yield_now().await;
     }
-    let (owned, _) = related(Some(&identity), Some(identity.pid)).await?;
+    let (owned, _) = related(Some(&identity), Some(identity.pid), Some("execution")).await?;
     signal(&child, libc::SIGKILL)?;
     leader.stdin.take().context("stdin")?.shutdown().await?;
     assert!(owned.contains(&child));
@@ -124,7 +139,8 @@ async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Res
     }
     command.stdin.take().context("stdin")?.shutdown().await?;
     command.wait().await?;
-    let (owned, candidates) = related(Some(&identity), Some(identity.pid)).await?;
+    let (owned, candidates) =
+        related(Some(&identity), Some(identity.pid), Some("execution")).await?;
     signal(&job, libc::SIGKILL)?;
     assert!(owned.contains(&job));
     assert!(!candidates.contains(&job));

@@ -293,7 +293,7 @@ impl ProcessGroup {
     async fn wait_for_exit(&self) -> Result<()> {
         // The leader may exit before descendants finish their signal handlers.
         // Native identity checks exclude zombies that can no longer clean up.
-        while !process::identity::related(None, Some(self.pid()))
+        while !process::identity::related(None, Some(self.pid()), None)
             .await?
             .1
             .is_empty()
