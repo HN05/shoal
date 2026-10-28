@@ -27,7 +27,12 @@ impl Manager {
     ) -> Result<()> {
         for session in host.sessions(&self.paths.state, true).await? {
             if session.workspace == workspace {
-                self.close_session(host, &session.name).await;
+                self.close_session(
+                    host,
+                    &session.name,
+                    &crate::sessions::Owner::Workspace(session.workspace),
+                )
+                .await;
             }
         }
         Ok(())
@@ -50,7 +55,12 @@ impl Manager {
             .await?
         {
             if self.find_workspace(&session.workspace).await?.is_none() {
-                self.close_session(host, &session.name).await;
+                self.close_session(
+                    host,
+                    &session.name,
+                    &crate::sessions::Owner::Workspace(session.workspace),
+                )
+                .await;
             }
         }
         Ok(())
@@ -67,12 +77,22 @@ impl Manager {
             .iter()
             .find(|host| host.name() == launch.host)
         {
-            self.close_session(host.as_ref(), &launch.place).await;
+            self.close_session(
+                host.as_ref(),
+                &launch.place,
+                &crate::sessions::Owner::Demo(launch.id),
+            )
+            .await;
         }
     }
 
-    async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str) {
-        if let Err(error) = host.close(name).await {
+    async fn close_session(
+        &self,
+        host: &dyn crate::sessions::Host,
+        name: &str,
+        owner: &crate::sessions::Owner,
+    ) {
+        if let Err(error) = host.close(name, owner).await {
             self.session_cleanup_failed(None, &error).await;
         }
     }

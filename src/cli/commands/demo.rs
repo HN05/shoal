@@ -276,7 +276,7 @@ async fn place(
         )
     };
     let (host, place) =
-        terminal::start_demo(ctx, settings, workspace, &chosen.name, &worker).await?;
+        terminal::start_demo(ctx, settings, workspace, &chosen.name, &id, &worker).await?;
     Ok(launch(host, &place))
 }
 

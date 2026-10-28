@@ -42,3 +42,26 @@ fn state_labels_are_stable_and_whitespace_free() {
         state_label(std::path::Path::new("/other-state"))
     );
 }
+
+#[test]
+fn closing_checks_ownership_even_when_a_name_is_reused() {
+    let listed = parse_list("name=reused\tshoal.workspace=w1\tshoal.demo=new-launch\n");
+    for (_, fields) in listed {
+        assert!(owned_by(
+            &fields,
+            &super::super::Owner::Workspace("w1".into())
+        ));
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Workspace("w2".into())
+        ));
+        assert!(owned_by(
+            &fields,
+            &super::super::Owner::Demo("new-launch".into())
+        ));
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Demo("old-launch".into())
+        ));
+    }
+}

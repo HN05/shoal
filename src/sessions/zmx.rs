@@ -105,9 +105,31 @@ impl super::Host for Zmx {
         })
     }
 
-    fn close<'a>(&'a self, session: &'a str) -> futures_util::future::BoxFuture<'a, Result<()>> {
-        Box::pin(kill(session))
+    fn close<'a>(
+        &'a self,
+        session: &'a str,
+        owner: &'a super::Owner,
+    ) -> futures_util::future::BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            if list()
+                .await?
+                .iter()
+                .any(|(name, fields)| name == session && owned_by(fields, owner))
+            {
+                kill(session).await?;
+            }
+            Ok(())
+        })
     }
+}
+
+/// Session names can be reused; a close must still own the current session.
+fn owned_by(fields: &Fields, owner: &super::Owner) -> bool {
+    let (label, id) = match owner {
+        super::Owner::Workspace(id) => (WORKSPACE_LABEL, id),
+        super::Owner::Demo(id) => ("shoal.demo", id),
+    };
+    field(fields, label) == Some(id.as_str())
 }
 
 #[cfg(test)]

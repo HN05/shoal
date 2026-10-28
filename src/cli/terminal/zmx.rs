@@ -278,6 +278,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<String> {
             clear: super::NOT_INHERITED_BY_DEMOS,
             labels: vec![
                 labels(Owner::Workspace(demo.workspace), ""),
+                format!("shoal.demo={}", demo.launch),
                 crate::sessions::zmx::state_label(demo.state),
             ],
             ..Default::default()

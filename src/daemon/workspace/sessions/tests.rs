@@ -17,6 +17,7 @@ use std::{
 #[derive(Default)]
 struct FakeHost {
     remaining: Mutex<Vec<(String, String)>>,
+    demos: Mutex<std::collections::HashMap<String, String>>,
     closed: Mutex<Vec<String>>,
     fail: AtomicBool,
 }
@@ -27,6 +28,14 @@ impl FakeHost {
             .lock()
             .map_err(|e| anyhow::anyhow!("{e}"))?
             .push((name.into(), workspace.into()));
+        Ok(())
+    }
+
+    fn demo(&self, name: &str, launch: &str) -> Result<()> {
+        self.demos
+            .lock()
+            .map_err(|e| anyhow::anyhow!("{e}"))?
+            .insert(name.into(), launch.into());
         Ok(())
     }
 
@@ -58,8 +67,39 @@ impl Host for FakeHost {
         })
     }
 
-    fn close<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<()>> {
+    fn close<'a>(
+        &'a self,
+        name: &'a str,
+        owner: &'a crate::sessions::Owner,
+    ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            if !self
+                .remaining
+                .lock()
+                .map_err(|e| anyhow::anyhow!("{e}"))?
+                .iter()
+                .any(|(session, _)| session == name)
+            {
+                return Ok(());
+            }
+            let owned = match owner {
+                crate::sessions::Owner::Workspace(workspace) => self
+                    .remaining
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!("{e}"))?
+                    .iter()
+                    .any(|(session, id)| session == name && id == workspace),
+                crate::sessions::Owner::Demo(launch) => {
+                    self.demos
+                        .lock()
+                        .map_err(|e| anyhow::anyhow!("{e}"))?
+                        .get(name)
+                        == Some(launch)
+                }
+            };
+            if !owned {
+                return Ok(());
+            }
             anyhow::ensure!(
                 !(self.fail.load(Ordering::Relaxed) && name == "bad"),
                 "close failed"
@@ -174,6 +214,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
             "connected"
         };
         host.add(name, &workspace.id)?;
+        host.demo(name, name)?;
         let demo = Launch {
             id: name.into(),
             name: name.into(),
@@ -216,5 +257,37 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
     assert_eq!(host.closed()?, ["connected", "disconnected"]);
     assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
     assert!(manager.find_workspace(&workspace.id).await?.is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspace() -> Result<()> {
+    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+
+    let (_root, manager, workspace, host) = fixture().await?;
+    host.add("reused", &workspace.id)?;
+    host.demo("reused", "old-launch")?;
+    let demo = Launch {
+        id: "old-launch".into(),
+        name: "demo".into(),
+        preset: None,
+        open: None,
+        scheme: None,
+        environment: Default::default(),
+        host: "zmx".into(),
+        place: "reused".into(),
+    };
+    let started = manager
+        .begin_execution_running(
+            &workspace.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(demo),
+        )
+        .await?;
+    host.demo("reused", "new-launch")?;
+    manager.forget_execution(&started.plan.id).await?;
+    assert!(host.closed()?.is_empty());
     Ok(())
 }

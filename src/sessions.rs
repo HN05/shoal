@@ -11,6 +11,14 @@ pub(crate) struct Session {
     pub workspace: String,
 }
 
+/// The ownership that must still match when a session is closed. Demo launches
+/// have unique IDs even when their host reuses a session name in one workspace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Owner {
+    Workspace(String),
+    Demo(String),
+}
+
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
 pub(crate) trait Host: Send + Sync {
     fn name(&self) -> &'static str;
@@ -19,7 +27,7 @@ pub(crate) trait Host: Send + Sync {
         state: &'a Path,
         include_legacy: bool,
     ) -> BoxFuture<'a, Result<Vec<Session>>>;
-    fn close<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<()>>;
+    fn close<'a>(&'a self, session: &'a str, owner: &'a Owner) -> BoxFuture<'a, Result<()>>;
 }
 
 pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
