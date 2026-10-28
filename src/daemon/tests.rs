@@ -65,3 +65,29 @@ pub(super) fn server(manager: Arc<Manager>) -> Server {
         capacity: Arc::new(connections::Capacity::new(1, 1)),
     }
 }
+
+#[tokio::test]
+async fn a_hangup_cancels_a_request_that_only_reads_state() {
+    let (client, mut stream) = UnixStream::pair().unwrap();
+    drop(client);
+    let pending = std::future::pending::<answer::Answer>();
+    let cancelled = unless_abandoned(&mut stream, "request status", true, pending);
+    assert!(
+        timeout(Duration::from_secs(60), cancelled)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn a_request_that_changes_state_finishes_after_a_hangup() {
+    let (client, mut stream) = UnixStream::pair().unwrap();
+    drop(client);
+    let finished = async { answer::Answer::Body(protocol::Body::Ok) };
+    let answer = unless_abandoned(&mut stream, "request mark_ready", false, finished).await;
+    assert!(matches!(
+        answer,
+        Some(answer::Answer::Body(protocol::Body::Ok))
+    ));
+}

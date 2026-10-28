@@ -137,10 +137,9 @@ pub(super) async fn answer_wait(
     manager: &Manager,
     wait: impl Future<Output = Result<Body>>,
 ) -> Result<()> {
-    let mut closed = [0u8; 1];
     let result = tokio::select! {
         result = wait => result,
-        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+        () = hangup(&mut stream) => return Ok(()),
     };
     let body = result
         .unwrap_or_else(|error| Body::error(ErrorCode::OperationFailed, format!("{error:#}")));
@@ -150,4 +149,11 @@ pub(super) async fn answer_wait(
         return Ok(());
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
+}
+
+/// Wait until the client hangs up. A client sends nothing after its request,
+/// so anything readable means it closed the connection.
+pub(super) async fn hangup(stream: &mut UnixStream) {
+    let mut closed = [0u8; 1];
+    let _ = tokio::io::AsyncReadExt::read(stream, &mut closed).await;
 }

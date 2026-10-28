@@ -312,7 +312,7 @@ async fn serve_request(
     let Some(_slot) = admit(&mut stream, &server, &request).await? else {
         return Ok(());
     };
-    let name = request.method.name();
+    let name = format!("request {}", request.method.name());
     let mut operation = match request.method {
         // Wrappers from any release reattach, and their launch scope does not
         // survive the restart; the record and token they present prove ownership.
@@ -340,11 +340,36 @@ async fn serve_request(
     let Some(caller) = accepted.await? else {
         return Ok(());
     };
+    let reads_only = operation.reads_only();
     let answer = requests::operation(&server, operation, caller.as_ref());
-    let answer = log::when_slow(&format!("request {name}"), answer).await;
+    let answer = log::when_slow(&name, answer);
+    let Some(answer) = unless_abandoned(&mut stream, &name, reads_only, answer).await else {
+        return Ok(());
+    };
     answer
         .send(stream, request.id, &server.manager, operation_guard)
         .await
+}
+
+/// The request's answer, or `None` once its client hung up first on a
+/// request that only reads state, which cancels it. One that changes state
+/// finishes, so a hangup never leaves it half done.
+async fn unless_abandoned(
+    stream: &mut UnixStream,
+    name: &str,
+    reads_only: bool,
+    answer: impl Future<Output = answer::Answer>,
+) -> Option<answer::Answer> {
+    if !reads_only {
+        return Some(answer.await);
+    }
+    tokio::select! {
+        answer = answer => Some(answer),
+        () = answer::hangup(stream) => {
+            log!("cancelled {name}: its client hung up");
+            None
+        }
+    }
 }
 
 /// The client's request, or `None` once an unreadable one was refused.
