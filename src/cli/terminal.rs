@@ -754,7 +754,9 @@ pub(in crate::cli) async fn run_in_background(
     Ok(Some(host.host.background_places()))
 }
 
-/// Run Shoal with `args` for `workspace` in a new background place of `host`.
+/// Run Shoal with `args`, a restore of `workspace`, in a new background
+/// place of `host`, telling the restore to close the place with the
+/// workspace when config says so.
 async fn start_in_background(
     ctx: &Context,
     host: &Configured,
@@ -763,12 +765,16 @@ async fn start_in_background(
 ) -> Result<()> {
     let template = host.options.name_template.clone();
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
+    let mut argv = shoal_command(ctx, args)?;
+    if host.closes_when_done {
+        argv.extend(["--close-in".into(), host.host.name().into()]);
+    }
     let start = Start {
         state: &ctx.paths.state,
         cwd: &workspace.path,
         label: &label,
         focus: false,
-        argv: &shoal_command(ctx, args)?,
+        argv: &argv,
         env: &place_env(ctx)?,
     };
     host.host.run_in_background(&start).await
@@ -826,16 +832,37 @@ pub(in crate::cli) async fn run_agent(
 /// `workspace` is done. Without a watcher the place stays open, so a
 /// failure only warns.
 pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: &str, workspace: &str) {
-    if let Err(error) = watch_here(ctx, host, workspace).await {
+    if let Err(error) = watch_here(ctx, host, workspace, false).await {
         eprintln!("warning: {error:#}");
     }
 }
 
-async fn watch_here(ctx: &Context, host: &str, workspace: &str) -> Result<()> {
+/// Close the place of the host named `host` that this process runs in, one
+/// opened in the background for `workspace` before anything labelled it,
+/// once the workspace is done. The place is labelled with the workspace
+/// first, since the watcher only closes a place it finds hosting it; the
+/// agent that starts there adds its own name.
+pub(in crate::cli) async fn close_background_place_when_done(
+    ctx: &Context,
+    host: &str,
+    workspace: &str,
+) {
+    if let Err(error) = watch_here(ctx, host, workspace, true).await {
+        eprintln!("warning: {error:#}");
+    }
+}
+
+/// Watch the place of the host named `host` that this process runs in,
+/// labelling it with `workspace` first when `label`.
+async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> Result<()> {
     let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
     let place = host
         .this_place()
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
+    if label {
+        host.label_current(&ctx.paths.state, Owner::Workspace(workspace), "")
+            .await?;
+    }
     closing::start_watcher(ctx, host, &place, workspace).await
 }
 

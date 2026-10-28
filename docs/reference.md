@@ -715,9 +715,9 @@ option overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
-When `done` keeps the workspace, a session Shoal starts for `shoal add` or an
-attached agent ends after the agent's final turn, unless the top-level
-`close_when_done = false` keeps it open.
+When `done` keeps the workspace, a session Shoal starts for `shoal add`, an
+attached agent or a background `shoal resume` ends after the agent's final turn,
+unless the top-level `close_when_done = false` keeps it open.
 
 `shoal attach [target]` reattaches to the session of the workspace or running
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
@@ -773,7 +773,8 @@ open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
 them, as Herdr does, unless stopped work waits for `shoal resume`, and workspace
-removal closes it immediately. `add`
+removal closes it immediately. A background tab `shoal resume` opens closes the
+same way; a pane it reuses keeps its tab's behavior. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 

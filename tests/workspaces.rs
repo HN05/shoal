@@ -21792,22 +21792,26 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     );
     let calls = herdr_calls(&fixture);
     assert_eq!(calls.len(), 5, "{calls:?}");
-    let resumed = |run: &[String], (_, id, execution): &(String, String, String)| {
-        let worker = run[3].split(' ').collect::<Vec<_>>();
-        assert_eq!(
-            worker[worker.len() - 5..],
-            [
+    let resumed =
+        |run: &[String], (_, id, execution): &(String, String, String), close: &[&str]| {
+            let worker = run[3].split(' ').collect::<Vec<_>>();
+            let resume = [
                 "resume",
                 id.as_str(),
                 "--execution",
                 execution.as_str(),
-                "--now"
-            ]
-        );
-    };
+                "--now",
+            ];
+            assert_eq!(
+                worker[worker.len() - 5 - close.len()..],
+                [&resume[..], close].concat()
+            );
+        };
     assert_eq!(calls[0][..4], ["pane", "process-info", "--pane", "w1:p5"]);
     assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
-    resumed(&calls[1], &expected[0]);
+    // The reused pane keeps the watcher its tab has; the new tab closes with
+    // its workspace.
+    resumed(&calls[1], &expected[0], &[]);
     // The reused pane's shell gets the caller's output setting for the agent,
     // and the resume there shows text to the person at that pane.
     assert!(
@@ -21824,7 +21828,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     assert_eq!(create[label + 1], "resumed second");
     assert!(create.iter().any(|arg| arg == "--no-focus"));
     assert_eq!(calls[4][..3], ["pane", "run", "w1:p9"]);
-    resumed(&calls[4], &expected[1]);
+    resumed(&calls[4], &expected[1], &["--close-in", "herdr"]);
 }
 
 #[test]
@@ -24051,7 +24055,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .unwrap();
         assert!(
             send[2].ends_with(&format!(
-                " resume {id} --execution {execution} --now && exit; exec \"$SHELL\" -l\r"
+                " resume {id} --execution {execution} --now --close-in zmx && exit; exec \"$SHELL\" -l\r"
             )),
             "{send:?}"
         );

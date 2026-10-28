@@ -637,8 +637,9 @@ The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits, and the tab's shell enters the
 workspace through its own exported navigation file, followed once at a prompt
-after the worker writes it. Completion that keeps the workspace closes the place
-Shoal opened for it, a Herdr tab or a zmx session, only after tracked executions
+after the worker writes it. Completion that keeps the workspace closes a place
+Shoal opened for it, a Herdr tab or a zmx session for an addition, an attached
+agent or a background resume, only after tracked executions
 have resolved or the agent's turn finished, since interactive agents stay running
 at their prompt, and never while stopped work waits for resume, so the place keeps
 the stop's cause and `shoal resume --all` can restore the agent there; removal
@@ -647,7 +648,9 @@ The turn comes from the agent's hooks, and from the host only for an agent
 without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
 of such agents close with their execution. The rule, the watcher and its marker
 are generic: a host only closes a place and reports whether it is open and what
-its agent is doing. Top-level `close_when_done` applies to every host, and
+its agent is doing, and generic code tells the Shoal it starts in a new place
+whether to watch it, while a resume in the pane its agent stopped in leaves that
+tab's watcher as it was. Top-level `close_when_done` applies to every host, and
 `herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,

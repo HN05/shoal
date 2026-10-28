@@ -34,6 +34,10 @@ pub enum SessionsCommand {
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "now"])]
         queue_entry: Option<String>,
+        /// The host whose place, opened in the background for this restore,
+        /// closes once the workspace is done.
+        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        close_in: Option<String>,
     },
     /// Restart running agents in their terminals, resuming their sessions.
     ///

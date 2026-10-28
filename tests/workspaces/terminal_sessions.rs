@@ -344,3 +344,45 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     assert!(!other.root.path().join("new-agent-started").exists());
     Ok(())
 }
+
+/// A restore the daemon starts in a detached session closes that session once
+/// a completion that keeps the workspace has the restored agent finished.
+#[test]
+fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow::Result<()> {
+    let fixture = Fixture::with_config(Some(&format!(
+        "[commands]\npi = ['sh', '-c', 'exit 0']\n[agent_resume]\npi = ['{}', 'done']\n[done]\ncleanup = false\n",
+        env!("CARGO_BIN_EXE_shoal")
+    )));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The fake session outlives its agent, as one with a shell would.
+    fs::write(home.join("zmx-keep-sessions"), "")?;
+    let workspace = fixture.add("resumed");
+    let id = workspace["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("workspace ID"))?;
+    let state = home.join("state/workspaces").join(id);
+    fs::create_dir_all(&state)?;
+    fs::write(
+        state.join("resumed-agent.recovery.json"),
+        r#"{"agent":"pi"}"#,
+    )?;
+    fixture.ok(&["resume", "resumed"]);
+    let watched = || fs::read_to_string(home.join("zmx-watch-calls")).unwrap_or_default();
+    wait_until("the session's end", || {
+        watched()
+            .lines()
+            .any(|call| call == r#"["kill", "resumed"]"#)
+    });
+    let sent = zmx_calls(&fixture)
+        .into_iter()
+        .find(|call| call.starts_with(&["send".into(), "resumed".into()]))
+        .ok_or_else(|| anyhow::anyhow!("no restore was sent to the session"))?;
+    assert!(sent[2].contains(" --close-in zmx "), "{sent:?}");
+    assert!(
+        fixture.ok(&["status", "resumed"])["workspace"]["done"]
+            .as_bool()
+            .unwrap_or_default()
+    );
+    Ok(())
+}

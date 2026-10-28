@@ -21,14 +21,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             execution,
             discard,
             now,
-            queue_entry: None,
-        } => resume::select(&ctx, targets, execution, discard, now).await,
-        SessionsCommand::Resume {
-            targets,
-            execution,
-            queue_entry: Some(entry),
-            ..
-        } => resume::start_entry(&ctx, targets, execution, entry).await,
+            queue_entry,
+            close_in,
+        } => {
+            if let Some(host) = close_in {
+                resume::close_place_when_done(&ctx, &host, &targets).await;
+            }
+            match queue_entry {
+                None => resume::select(&ctx, targets, execution, discard, now).await,
+                Some(entry) => resume::start_entry(&ctx, targets, execution, entry).await,
+            }
+        }
         SessionsCommand::Restart {
             targets,
             agent,

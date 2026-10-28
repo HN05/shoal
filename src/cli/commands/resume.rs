@@ -158,6 +158,14 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
     terminal::restore_queued(ctx, &settings, &workspace, &record, &args).await
 }
 
+/// Close the place this restore runs in, one `host` opened in the
+/// background for it, once the one workspace `targets` names is done.
+pub async fn close_place_when_done(ctx: &Context, host: &str, targets: &WorkspaceTargets) {
+    if let [workspace] = targets.workspace.as_slice() {
+        terminal::close_background_place_when_done(ctx, host, workspace).await;
+    }
+}
+
 pub async fn run(
     ctx: &Context,
     workspace: String,
