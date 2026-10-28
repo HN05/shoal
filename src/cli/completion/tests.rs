@@ -103,6 +103,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 agent: "codex".into(),
                 pid: 1,
                 started_at: 0,
+                origin: None,
             }])
         } else {
             assert!(matches!(

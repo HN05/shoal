@@ -219,7 +219,7 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
         let columns = match table {
             "repositories" => "id,path,source,last_used,name,workspaces_dir",
             "workspaces" => WORKSPACE_COLUMNS,
-            "executions" => EXECUTION_COLUMNS,
+            "executions" => "id,workspace_id,state,wrapper,child,group_id",
             _ => "*",
         };
         let mut statement = db.prepare(&format!("SELECT {columns} FROM {table} ORDER BY rowid"))?;

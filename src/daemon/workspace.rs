@@ -26,6 +26,7 @@ mod location;
 mod overload_recovery;
 mod ownership;
 pub(crate) mod paths;
+mod places;
 mod pr_gate;
 pub(crate) mod proxy_retries;
 mod registry;

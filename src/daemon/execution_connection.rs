@@ -13,6 +13,7 @@ use tokio::{
 use super::{
     approvals::Undecided,
     execution_recovery,
+    log::log,
     scope::Caller,
     workspace::{
         Completing, ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution,
@@ -36,6 +37,8 @@ pub(super) struct ExecutionContext {
     pub queue_entry: Option<String>,
     /// The demo the command runs.
     pub demo: Option<crate::demos::Launch>,
+    /// Where the wrapper runs in a terminal host.
+    pub origin: Option<crate::sessions::Origin>,
     /// The scoped caller starting the execution.
     pub caller: Option<Caller>,
 }
@@ -82,6 +85,7 @@ pub(super) async fn execute(
         reattach,
         queue_entry,
         demo,
+        origin,
         caller,
     } = context;
     let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
@@ -119,6 +123,11 @@ pub(super) async fn execute(
     };
     if !reattach {
         manager.executions.mark_unattachable(&plan.id);
+    }
+    if let Some(origin) = origin
+        && let Err(error) = manager.record_execution_origin(&plan.id, origin).await
+    {
+        log!("execution {}: cannot record its place: {error:#}", plan.id);
     }
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent

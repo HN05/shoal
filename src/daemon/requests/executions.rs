@@ -26,6 +26,7 @@ pub(super) async fn handle(
             reattach,
             queue_entry,
             demo,
+            origin,
         } => {
             let manager = manager.clone();
             let context = execution_connection::ExecutionContext {
@@ -37,6 +38,7 @@ pub(super) async fn handle(
                 reattach,
                 queue_entry,
                 demo: demo.map(|demo| *demo),
+                origin: origin.map(|origin| *origin),
                 caller: caller.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {

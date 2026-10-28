@@ -43,6 +43,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "ending".into(),
             "claude".into(),
             process.id(),
+            None,
         )
         .await
         .unwrap();
@@ -52,6 +53,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "running".into(),
             "codex".into(),
             std::process::id(),
+            None,
         )
         .await
         .unwrap();
@@ -95,6 +97,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "ending".into(),
             "claude".into(),
             std::process::id(),
+            None,
         )
         .await
         .unwrap();
@@ -126,7 +129,7 @@ async fn a_chat_needs_a_running_process() {
     let pid = process.id();
     process.wait().unwrap();
     let error = manager
-        .start_chat(repo.id.into(), "chat-4".into(), "claude".into(), pid)
+        .start_chat(repo.id.into(), "chat-4".into(), "claude".into(), pid, None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("not running"), "{error:#}");
@@ -147,6 +150,7 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
             "chat-5".into(),
             "happy-claude".into(),
             std::process::id(),
+            None,
         )
         .await
         .unwrap();
@@ -193,6 +197,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
             "chat-6".into(),
             "happy-claude".into(),
             recording.id(),
+            None,
         )
         .await
         .unwrap();
@@ -228,7 +233,13 @@ async fn chats_and_workspaces_share_one_namespace() {
         .await
         .unwrap();
     let start = |name: &str, pid| {
-        manager.start_chat(repo.id.clone().into(), name.into(), "claude".into(), pid)
+        manager.start_chat(
+            repo.id.clone().into(),
+            name.into(),
+            "claude".into(),
+            pid,
+            None,
+        )
     };
     let refusal = |result: Result<Chat>| format!("{:#}", result.unwrap_err());
 

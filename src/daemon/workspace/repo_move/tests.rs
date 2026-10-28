@@ -99,6 +99,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
             "chat-1".into(),
             "codex".into(),
             std::process::id(),
+            None,
         )
         .await
         .err()

@@ -40,6 +40,7 @@ async fn scoped_landing_answers_with_its_approval_request() {
             reattach: false,
             queue_entry: None,
             demo: None,
+            origin: None,
             caller: Some(Caller {
                 workspace_id: workspace.id.clone(),
                 execution: None,
@@ -130,6 +131,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             reattach: false,
             queue_entry: None,
             demo: None,
+            origin: None,
             caller: None,
         },
         manager.gates.owned_operation().await,
@@ -213,6 +215,7 @@ async fn running_executions_leave_daemon_operations_idle() {
             caller: None,
             queue_entry: None,
             demo: None,
+            origin: None,
         },
         manager.gates.owned_operation().await,
     ));

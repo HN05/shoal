@@ -258,6 +258,7 @@ fn tracked_execution_requests_require_a_known_kind() {
             reattach: true,
             queue_entry: None,
             demo: None,
+            origin: None,
         };
         let encoded = serde_json::to_value(method).unwrap();
         assert_eq!(encoded["execute"]["kind"], spelling);

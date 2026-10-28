@@ -17,6 +17,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
             wrapper: None,
             child: None,
             group_id: None,
+            origin: None,
         };
         assert_eq!(
             inspect_lifecycle(Some(false), vec![execution]).await,

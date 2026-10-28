@@ -38,6 +38,7 @@ impl Manager {
         name: String,
         agent: String,
         pid: u32,
+        origin: Option<crate::sessions::Origin>,
     ) -> Result<Chat> {
         crate::validate::name("chat", &name)?;
         let repository = self.repository(repository).await?.id;
@@ -51,6 +52,7 @@ impl Manager {
             agent,
             pid: process.pid,
             started_at,
+            origin,
         };
         self.store
             .run(move |db| insert(db, chat, &process.birth))
@@ -161,8 +163,8 @@ fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
     store::ensure_repository_not_moving(&tx, &chat.repository_id)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
             chat.id,
             chat.repository_id,
@@ -170,7 +172,11 @@ fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
             chat.agent,
             chat.pid,
             birth,
-            chat.started_at
+            chat.started_at,
+            chat.origin
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?
         ],
     )?;
     tx.commit()?;
@@ -216,7 +222,7 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
 fn running(db: &mut Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,name,agent,pid,started_at FROM chats
+            "SELECT id,repository_id,name,agent,pid,started_at,origin FROM chats
              ORDER BY started_at, rowid",
         )?
         .query_map([], |row| {
@@ -227,6 +233,7 @@ fn running(db: &mut Connection) -> Result<Vec<Chat>> {
                 agent: row.get(3)?,
                 pid: row.get(4)?,
                 started_at: row.get(5)?,
+                origin: store::json_column(row, "origin")?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)

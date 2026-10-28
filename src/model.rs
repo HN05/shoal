@@ -377,6 +377,9 @@ pub struct Execution {
     pub wrapper: Option<Identity>,
     pub child: Option<Identity>,
     pub group_id: Option<u32>,
+    /// Where it runs in a terminal host, when its wrapper runs in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::sessions::Origin>,
 }
 
 /// An assignment completion signal, bound to the workspace's HEAD.
@@ -690,6 +693,9 @@ pub struct Chat {
     pub agent: String,
     pub pid: u32,
     pub started_at: i64,
+    /// Where it runs in a terminal host, when it runs in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::sessions::Origin>,
 }
 
 /// A connected agent, or an execution whose wrapper is gone.

@@ -317,6 +317,11 @@ async fn open_execution(
             Mode::Demo { launch } => Some(launch.clone()),
             _ => None,
         },
+        // A detached command or a demo never runs in the caller's terminal.
+        origin: match mode {
+            Mode::Detached { .. } | Mode::Demo { .. } => None,
+            _ => crate::cli::terminal::current_origin().map(Box::new),
+        },
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;

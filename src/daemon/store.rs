@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 75;
+const SCHEMA_VERSION: i64 = 76;
 
 #[cfg(test)]
 mod benchmark;
@@ -417,6 +417,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (73, include_str!("store/session_cleanup.sql"), None),
     (74, include_str!("store/execution_upstream_resets.sql"), None),
     (75, AUTOMATIC_RESTORES, None),
+    (76, include_str!("store/places.sql"), None),
 ];
 
 /// Restores Shoal queued on its own, as after a signal stop, rather than
@@ -809,7 +810,10 @@ pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
 }
 
 /// Parse an optional JSON text column, reporting failures as SQL conversions.
-fn json_column<T: DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Result<Option<T>> {
+pub(crate) fn json_column<T: DeserializeOwned>(
+    row: &Row<'_>,
+    name: &str,
+) -> rusqlite::Result<Option<T>> {
     let index = row.as_ref().column_index(name)?;
     row.get::<_, Option<String>>(index)?
         .map(|json| {
@@ -959,7 +963,7 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id";
+const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id,origin";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -969,6 +973,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
         wrapper: json_column(row, "wrapper")?,
         child: json_column(row, "child")?,
         group_id: row.get("group_id")?,
+        origin: json_column(row, "origin")?,
     })
 }
 

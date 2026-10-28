@@ -12,6 +12,9 @@ pub enum ChatMethod {
         name: String,
         agent: String,
         pid: u32,
+        /// Where the chat runs in a terminal host.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<crate::sessions::Origin>,
     },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.

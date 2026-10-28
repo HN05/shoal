@@ -27,7 +27,12 @@ pub(super) async fn handle(
             name,
             agent,
             pid,
-        } => Body::Chat(manager.start_chat(repository, name, agent, pid).await?),
+            origin,
+        } => Body::Chat(
+            manager
+                .start_chat(repository, name, agent, pid, origin)
+                .await?,
+        ),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::CheckChatName { name } => {

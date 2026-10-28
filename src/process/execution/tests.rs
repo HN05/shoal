@@ -17,6 +17,7 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
         wrapper: Some(identity.clone()),
         child: None,
         group_id: Some(identity.pid),
+        origin: None,
     };
     let scan = process::Scan {
         unreadable: vec![process::Unattributed::alone(identity)],
@@ -53,6 +54,7 @@ async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_olde
         wrapper: Some(identity.clone()),
         child: None,
         group_id: None,
+        origin: None,
     };
     let (prefix, _) = identity.birth.rsplit_once(':').context("birth")?;
     let head = |birth: String| process::Identity {
@@ -92,6 +94,7 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         wrapper: None,
         child: None,
         group_id: Some(std::process::id()),
+        origin: None,
     };
     let marked = |execution_id: &str| process::Scan {
         processes: vec![process::OwnedProcess {

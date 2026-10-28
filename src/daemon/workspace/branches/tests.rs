@@ -1308,6 +1308,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     reattach: false,
                     queue_entry: None,
                     demo: None,
+                    origin: None,
                     wrapper: wrapper.clone(),
                 };
                 let allowed = target.id == workspace.id

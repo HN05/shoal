@@ -274,6 +274,7 @@ pub async fn start_chat(
             name: name.to_owned(),
             agent: agent.to_owned(),
             pid: std::process::id(),
+            origin: crate::cli::terminal::current_origin(),
         },
     )
     .await
