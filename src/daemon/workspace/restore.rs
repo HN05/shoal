@@ -38,10 +38,9 @@ impl Manager {
         // records are in.
         let agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
         // An unreadable last session is not worth keeping the workspace for.
-        let last_session =
-            crate::execution::recovery::LastSession::load(&self.paths, &workspace.id)
-                .ok()
-                .flatten();
+        let last_sessions =
+            crate::execution::recovery::LastSession::all(&self.paths, &workspace.id)
+                .unwrap_or_default();
         let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
             repository_id: workspace.repository_id.clone(),
@@ -52,7 +51,7 @@ impl Manager {
             base_commit: workspace.base_commit.clone(),
             links,
             agents,
-            last_session,
+            last_sessions,
             cause,
             removed_at: unix_seconds(),
         };
@@ -136,12 +135,13 @@ impl Manager {
                 "cannot save stopped agents for shoal resume: {error:#}"
             ));
         }
-        if let Some(last) = &removed.last_session
-            && let Err(error) = last.write(&self.paths, &opened.workspace.id)
-        {
-            warnings.push(format!(
-                "cannot save the last agent session for shoal resume: {error:#}"
-            ));
+        for last in &removed.last_sessions {
+            if let Err(error) = last.write(&self.paths, &opened.workspace.id) {
+                warnings.push(format!(
+                    "cannot save the last {} session for shoal resume: {error:#}",
+                    last.agent
+                ));
+            }
         }
         self.adopt_removal(&removed, &opened.workspace.id).await?;
         Ok(RestoredWorkspace {

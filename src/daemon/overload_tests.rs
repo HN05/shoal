@@ -766,7 +766,7 @@ async fn report_session(manager: &Manager, workspace: &crate::model::Workspace, 
 async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     use crate::execution::recovery::{LastSession, Saved};
     let (_root, manager, workspace, serving) = fixture().await;
-    let last = || LastSession::load(&manager.paths, &workspace.id).unwrap();
+    let last = || LastSession::all(&manager.paths, &workspace.id).unwrap();
     // An agent Shoal stops is stopped work that keeps its session.
     let agent = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
@@ -776,7 +776,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
         0
     );
     bounded(agent).await.unwrap().unwrap();
-    assert_eq!(last(), None);
+    assert_eq!(last(), []);
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
     let record = crate::execution::recovery::Record::load(&saved.agents[0].1)
         .unwrap()
@@ -802,13 +802,10 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     report_session(&manager, &workspace, "quit-session").await;
     fs::write(workspace.path.join("exit"), "").unwrap();
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
+    let [quit] = last().try_into().unwrap();
     assert_eq!(
-        last(),
-        Some(LastSession {
-            agent: "fixture".into(),
-            session: Some("quit-session".into()),
-            moved: false,
-        })
+        (quit.agent.as_str(), quit.session.as_deref(), quit.moved),
+        ("fixture", Some("quit-session"), false)
     );
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
@@ -824,9 +821,9 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     );
     // The restored agent exited on its own too; finishing the assignment
     // forgets it.
-    assert!(last().is_some());
+    assert!(!last().is_empty());
     manager.mark_done(&workspace.id, false).await.unwrap();
-    assert_eq!(last(), None);
+    assert_eq!(last(), []);
     assert_ne!(
         bounded(resume_isolated(&manager, &workspace, false))
             .await
@@ -854,10 +851,7 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
         .unwrap();
     crate::process::identity::signal(&wrapper, libc::SIGHUP).unwrap();
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 129);
-    assert_eq!(
-        LastSession::load(&manager.paths, &workspace.id).unwrap(),
-        None
-    );
+    assert_eq!(LastSession::all(&manager.paths, &workspace.id).unwrap(), []);
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));

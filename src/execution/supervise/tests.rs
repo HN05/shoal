@@ -172,8 +172,9 @@ fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream
 
 /// Acknowledge the wrapper's child, returning its identity and group.
 async fn acknowledge_start(daemon: &mut BufReader<UnixStream>) -> (Option<Identity>, u32) {
-    let ExecutionEvent::Started { child, group_id } =
-        protocol::read_buffered(daemon).await.unwrap()
+    let ExecutionEvent::Started {
+        child, group_id, ..
+    } = protocol::read_buffered(daemon).await.unwrap()
     else {
         panic!("wrapper did not register its child");
     };

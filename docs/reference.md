@@ -314,10 +314,11 @@ workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
-A workspace without stopped work resumes its last agent that exited on its
-own, such as one the user quit, unless the assignment is done; the next agent
-started there or `shoal done` replaces it, and `--discard` forgets it. Unlike
-stopped work it uses no agent slot, never delays cleanup and is not part of `--all`.
+A workspace without stopped agents continues one of its last sessions, left by
+an agent that exited on its own, such as one the user quit, picked as stopped
+agents are, or the `--execution` one. A workspace keeps one per agent; the next
+new agent started there or `shoal done` replaces them. Unlike stopped work they
+use no agent slot, never delay cleanup and are not part of `--all`.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
@@ -337,7 +338,7 @@ single agent in the current terminal and starts several in the background, as
 `shoal add` labels it, or a detached zmx session per agent on a terminal outside
 Herdr. Without a terminal it lists them as `shoal resume --now` commands to run in
 separate terminals.
-Use `--discard` to forget the workspace's stopped agents and commands, every
+Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
@@ -2123,13 +2124,13 @@ without a terminal, or with `--json`, they list them instead. When
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
-and the last session for `shoal resume`, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
+and the last sessions for `shoal resume`, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
 a warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Workspace processes cannot reopen removed workspaces.
 
-Removal records the branch, base, links, stopped agents and last session with its checkpoint, and
+Removal records the branch, base, links, stopped agents and last sessions with its checkpoint, and
 keeps them until the checkpoint expires. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands

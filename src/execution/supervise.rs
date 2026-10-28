@@ -140,7 +140,8 @@ async fn register_child(
 )> {
     let (child, group, mut terminal, scope) =
         spawn_registered_child(paths, plan, command, mode, auth)?;
-    register_process(link, &group).await?;
+    let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
+    register_process(link, &group, restored).await?;
     consume_recovery_records(mode, recovery_record)?;
     report_detached_launch(plan, mode, &group)?;
     handoff_terminal(&mut terminal, &group)?;
@@ -174,11 +175,12 @@ fn spawn_registered_child(
     Ok((child, group, terminal, scope))
 }
 
-async fn register_process(link: &mut Link, group: &ProcessGroup) -> Result<()> {
+async fn register_process(link: &mut Link, group: &ProcessGroup, restored: bool) -> Result<()> {
     let identity = process::identity::capture(group.pid())?;
     link.send(&ExecutionEvent::Started {
         child: identity.clone(),
         group_id: group.pid(),
+        restored,
     })
     .await?;
     let acknowledged = timeout(timing::START_ACK_TIMEOUT, link.control()).await??;

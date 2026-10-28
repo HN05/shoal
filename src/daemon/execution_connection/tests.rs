@@ -145,6 +145,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         &ExecutionEvent::Started {
             child: None,
             group_id: wrapper.pid,
+            restored: false,
         },
     )
     .await
@@ -225,6 +226,7 @@ async fn running_executions_leave_daemon_operations_idle() {
         &ExecutionEvent::Started {
             child: None,
             group_id: wrapper.pid,
+            restored: false,
         },
     )
     .await

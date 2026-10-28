@@ -5463,12 +5463,17 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         fs::read_to_string(path.join("restored-output")).unwrap(),
         "json|json|"
     );
-    // The restored agents exited on their own, leaving only the last session.
+    // The restored agents exited on their own, leaving only their sessions;
+    // restoring one kept the other's.
     let left = fs::read_dir(&state)
         .unwrap()
-        .map(|entry| entry.unwrap().file_name())
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(left, ["last-session.json"]);
+    assert_eq!(left.len(), 2, "{left:?}");
+    assert!(
+        left.iter().all(|name| name.ends_with(".last-session.json")),
+        "{left:?}"
+    );
     let output = fixture.run(&[
         "run",
         "--workspace",
@@ -5506,9 +5511,13 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     // The removal record keeps the last session for the restored workspace.
     fixture.ok(&["rm", "quit", "--yes"]);
     let removed = fixture.ok(&["work", "restore"]);
+    let last = &removed[0]["last_sessions"][0];
     assert_eq!(
-        removed[0]["last_session"],
-        serde_json::json!({"agent": "claude", "session": "quit-session"}),
+        (&last["agent"], &last["session"]),
+        (
+            &serde_json::json!("claude"),
+            &serde_json::json!("quit-session")
+        ),
         "{removed}"
     );
     let restored = fixture.ok(&["work", "restore", "quit"]);
@@ -5594,7 +5603,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     fs::remove_file(file).unwrap();
     let exported = fixture.ok(&["export", "carried", "-o", file]);
     assert_eq!(
-        exported["manifest"]["sessions"]["last_session"]["session"], "carried-session",
+        exported["manifest"]["sessions"]["last_sessions"][0]["session"], "carried-session",
         "{exported}"
     );
     fixture.ok(&["import", file, "--repo", repo, "--new-sessions"]);

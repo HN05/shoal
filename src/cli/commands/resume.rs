@@ -79,8 +79,8 @@ async fn queue_selected(
 }
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given. With nothing stopped, its last session continues at once,
-/// since only a stopped agent's restore can wait in the queue.
+/// when given. Without stopped agents, a last session continues at once, as
+/// resuming the workspace by itself does not wait for a slot it never held.
 async fn queue_workspace(
     ctx: &Context,
     workspace: String,
@@ -91,16 +91,13 @@ async fn queue_workspace(
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
-    if saved.is_empty()
-        && execution.is_none()
-        && let Some(last) = LastSession::load(&ctx.paths, &workspace.id)?
-    {
-        return continue_last_session(ctx, &workspace, last).await;
-    }
     ensure!(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
+    if saved.agents.is_empty() && !saved.sessions.is_empty() {
+        return continue_last_session(ctx, &workspace, saved).await;
+    }
     queue::queue_all(ctx, vec![(workspace, saved)]).await
 }
 
@@ -176,16 +173,13 @@ pub async fn run(
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
-    if saved.is_empty()
-        && execution.is_none()
-        && let Some(last) = LastSession::load(&ctx.paths, &workspace_id)?
-    {
-        return continue_last_session(ctx, &inspection.workspace, last).await;
-    }
     ensure!(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
+    if saved.agents.is_empty() && !saved.sessions.is_empty() {
+        return continue_last_session(ctx, &inspection.workspace, saved).await;
+    }
     let recovery_id = execution
         .as_deref()
         .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
@@ -200,7 +194,7 @@ pub async fn run(
             ctx.show(&report, |_| {})?;
             return Ok(0);
         }
-        agents => select_agent(ctx, agents)?,
+        agents => select_agent(ctx, agents, agent_label)?,
     };
     ensure!(
         !active(&selected_id),
@@ -211,12 +205,12 @@ pub async fn run(
     if let Some(reason) = &recorded.stop_reason {
         eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
     }
-    let session = recorded.into_last_session();
+    let session = recorded.into_last_session(selected_id);
     restore(ctx, workspace, session, selected, saved.commands).await
 }
 
-/// Forget the workspace's stopped work, only `execution`'s when given, or
-/// else its last session.
+/// Forget the workspace's stopped work and last sessions, only
+/// `execution`'s when given.
 async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
     let discarded = client::request::<Discarded>(
         &ctx.paths,
@@ -226,35 +220,28 @@ async fn discard_work(ctx: &Context, workspace: String, execution: Option<String
         },
     )
     .await?;
-    match &discarded.last_session {
-        Some(agent) => ctx.show(&json!({"discarded": [], "last_session": agent}), |_| {
-            outln!(
-                "Discarded the last agent session for {}",
-                discarded.workspace
-            )
-        })?,
-        None => ctx.show(&json!({"discarded": discarded.executions}), |_| {
-            outln!(
-                "Discarded stopped agents and commands for {}",
-                discarded.workspace
-            )
-        })?,
-    }
+    ctx.show(&json!({"discarded": discarded.executions}), |_| {
+        outln!(
+            "Discarded stopped agents and commands for {}",
+            discarded.workspace
+        )
+    })?;
     Ok(0)
 }
 
-/// Continue the agent that last exited on its own in the workspace.
-async fn continue_last_session(
-    ctx: &Context,
-    workspace: &Workspace,
-    last: LastSession,
-) -> Result<i32> {
-    let path = LastSession::path(&ctx.paths, &workspace.id);
+/// Continue one of the workspace's last sessions that `saved` keeps, the
+/// only one or one picked on a terminal, telling it about the stopped
+/// commands.
+async fn continue_last_session(ctx: &Context, workspace: &Workspace, saved: Saved) -> Result<i32> {
+    let (_, path) = select_agent(ctx, &saved.sessions, session_label)?;
     let _claim = claim(&path)?;
+    let last = LastSession::load(&path)?.context("last session was already continued")?;
+    let mut commands = saved.commands;
+    let _commands = claim_commands(&mut commands);
     if !last.moved {
         eprintln!("shoal: continuing the last {} session", last.agent);
     }
-    restore(ctx, workspace, last, path, vec![]).await
+    restore(ctx, workspace, last, path, commands).await
 }
 
 /// Restore the agent of `session`, saved at `path`, telling it about the
@@ -367,15 +354,19 @@ async fn launch(
     .await
 }
 
-/// The stopped agent's execution ID and recovery record to restore: the only
-/// one, or one picked on a terminal.
-fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<(String, PathBuf)> {
+/// The execution ID and saved file of the agent to restore of `agents`: the
+/// only one, or one picked on a terminal by its `label`.
+fn select_agent(
+    ctx: &Context,
+    agents: &[(String, PathBuf)],
+    label: fn(&Path) -> String,
+) -> Result<(String, PathBuf)> {
     match agents {
         [agent] => Ok(agent.clone()),
         agents if ctx.interactive() => {
             let labels = agents
                 .iter()
-                .map(|(_, path)| agent_label(path))
+                .map(|(_, path)| label(path))
                 .collect::<Vec<_>>();
             let choices = agents
                 .iter()
@@ -395,20 +386,34 @@ fn agent_label(path: &Path) -> String {
     let mut label = record
         .as_ref()
         .map_or_else(|| "agent".to_owned(), |record| record.agent.clone());
-    let stopped = std::fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok());
-    if let Some(stopped) = stopped {
-        let time = crate::time::local_minutes(stopped.as_secs() as i64);
-        label.push_str(&format!(", stopped {time}"));
-    }
+    label.push_str(&stop_time(path));
     let idle = record.as_ref().is_some_and(Record::between_turns);
     if let Some(reason) = record.and_then(|record| record.stop_reason) {
         label.push_str(&format!(" after {reason}"));
     }
     label.push_str(if idle { ", idle" } else { ", interrupted" });
     label
+}
+
+/// How the agent picker names a last session: its agent and when it stopped.
+fn session_label(path: &Path) -> String {
+    let agent = LastSession::load(path).ok().flatten();
+    let mut label = agent.map_or_else(|| "agent".to_owned(), |last| last.agent);
+    label.push_str(&stop_time(path));
+    label
+}
+
+/// `, stopped <time>` for the agent saved at `path`, empty when unknown.
+fn stop_time(path: &Path) -> String {
+    std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|stopped| {
+            let time = crate::time::local_minutes(stopped.as_secs() as i64);
+            format!(", stopped {time}")
+        })
+        .unwrap_or_default()
 }
 
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
@@ -651,7 +656,7 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain_unattended();
         ensure!(
-            !saved.is_empty(),
+            saved.is_unfinished(),
             "{} has no stopped agents or commands to resume; resume it by itself to continue its last session",
             workspace.name
         );
@@ -660,8 +665,9 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
     Ok(stopped)
 }
 
-/// The workspaces with stopped work that no waiting wrapper restores. A done
-/// assignment needs no agent, so its workspace is included only to `discard`.
+/// The workspaces with stopped work that no waiting wrapper restores, or
+/// with last sessions to `discard`. A done assignment needs no agent, so its
+/// workspace is included only to `discard`.
 async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for workspace in client::workspaces(&ctx.paths).await? {
@@ -670,7 +676,7 @@ async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Sa
         }
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain_unattended();
-        if !saved.is_empty() {
+        if saved.is_unfinished() || discard && !saved.is_empty() {
             stopped.push((workspace, saved));
         }
     }

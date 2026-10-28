@@ -257,9 +257,11 @@ impl Record {
         }
     }
 
-    /// The session this record keeps, as a last session keeps it.
-    pub(crate) fn into_last_session(self) -> LastSession {
+    /// This record as the last session of execution `id`, which keeps its
+    /// agent and session.
+    pub(crate) fn into_last_session(self, id: String) -> LastSession {
         LastSession {
+            execution: id,
             agent: self.agent,
             session: self.session,
             moved: self.moved,
@@ -514,7 +516,8 @@ const AGENT_SUFFIX: &str = ".recovery.json";
 const REQUEST_SUFFIX: &str = ".restore-request.json";
 const COMMAND_SUFFIX: &str = ".command.json";
 const SESSION_SUFFIX: &str = ".session";
-const LAST_SESSION: &str = "last-session.json";
+const LAST_SESSION_SUFFIX: &str = ".last-session.json";
+const UNNAMED_LAST_SESSION: &str = "last-session.json";
 
 /// Whether `session` can name an agent session on a restore command line:
 /// letters, digits, `-` and `_`, never read as an option.
@@ -567,17 +570,27 @@ pub(crate) fn forget_session(paths: &Paths, workspace_id: &str, id: &str) -> Res
     consume(&session_path(paths, workspace_id, id))
 }
 
-/// The workspace's last agent that exited on its own, which `shoal resume`
-/// continues when nothing is stopped there. Unlike stopped work, it uses no
-/// agent slot and never delays cleanup.
+/// An agent that exited on its own before its assignment was done, which
+/// `shoal resume` continues. Unlike stopped work, it uses no agent slot, never
+/// delays cleanup and nothing restores it on its own. A workspace keeps one
+/// per agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LastSession {
+    /// The execution the agent ran as, which `--execution` selects. Its file
+    /// is named after it; one saved without it gets a new ID.
+    #[serde(default = "unnamed_execution")]
+    pub execution: String,
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
     /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
+}
+
+/// The key of a last session saved without its execution.
+fn unnamed_execution() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 impl LastSession {
@@ -590,13 +603,16 @@ impl LastSession {
         }
     }
 
-    pub(crate) fn path(paths: &Paths, workspace_id: &str) -> PathBuf {
-        paths.workspace_state(workspace_id).join(LAST_SESSION)
+    pub(crate) fn path(paths: &Paths, workspace_id: &str, execution: &str) -> PathBuf {
+        paths
+            .workspace_state(workspace_id)
+            .join(format!("{execution}{LAST_SESSION_SUFFIX}"))
     }
 
-    /// Save execution `id` of `agent` as the workspace's last session.
+    /// Save execution `id` of `agent` as one of the workspace's last sessions.
     pub(crate) fn save(paths: &Paths, workspace_id: &str, agent: &str, id: &str) -> Result<()> {
         Self {
+            execution: id.to_owned(),
             agent: agent.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
             moved: false,
@@ -604,11 +620,11 @@ impl LastSession {
         .write(paths, workspace_id)
     }
 
-    /// Save this as the workspace's last session.
+    /// Save this as one of the workspace's last sessions.
     pub(crate) fn write(&self, paths: &Paths, workspace_id: &str) -> Result<()> {
         std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
         crate::fsutil::replace_atomically(
-            &Self::path(paths, workspace_id),
+            &Self::path(paths, workspace_id, &self.execution),
             &serde_json::to_vec(self)?,
             ReplaceOptions {
                 permissions: Permissions::Temporary,
@@ -618,20 +634,75 @@ impl LastSession {
         Ok(())
     }
 
-    pub(crate) fn load(paths: &Paths, workspace_id: &str) -> Result<Option<Self>> {
-        let path = Self::path(paths, workspace_id);
-        match std::fs::read(&path) {
+    /// Read the last session saved at `path`, `None` once it is consumed.
+    pub(crate) fn load(path: &Path) -> Result<Option<Self>> {
+        let execution = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(LAST_SESSION_SUFFIX))
+            .with_context(|| format!("{} is not a last session", path.display()))?;
+        match std::fs::read(path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
-                .map(Some)
+                .map(|last| {
+                    Some(Self {
+                        execution: execution.to_owned(),
+                        ..last
+                    })
+                })
                 .with_context(|| format!("read {}", path.display())),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error.into()),
         }
     }
 
-    pub(crate) fn forget(paths: &Paths, workspace_id: &str) -> Result<()> {
-        consume(&Self::path(paths, workspace_id))
+    /// The workspace's last sessions; an unreadable one is left out.
+    pub(crate) fn all(paths: &Paths, workspace_id: &str) -> Result<Vec<Self>> {
+        Ok(Saved::load(paths, workspace_id)?
+            .sessions
+            .iter()
+            .filter_map(|(_, path)| Self::load(path).ok().flatten())
+            .collect())
     }
+
+    /// Forget every last session of the workspace.
+    pub(crate) fn forget_all(paths: &Paths, workspace_id: &str) -> Result<()> {
+        for (_, path) in Saved::load(paths, workspace_id)?.sessions {
+            consume(&path)?;
+        }
+        Ok(())
+    }
+}
+
+/// Give a workspace's single last session from before workspaces kept one
+/// per agent a file of its own. A concurrent reader may already have.
+fn name_unnamed_session(paths: &Paths, workspace_id: &str) -> Result<()> {
+    let unnamed = paths
+        .workspace_state(workspace_id)
+        .join(UNNAMED_LAST_SESSION);
+    let named = LastSession::path(paths, workspace_id, &unnamed_execution());
+    match std::fs::rename(unnamed, named) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Read the last sessions of a removal record, which earlier records kept as
+/// a single one.
+pub(crate) fn one_or_many_sessions<'de, D>(deserializer: D) -> Result<Vec<LastSession>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Sessions {
+        Many(Vec<LastSession>),
+        One(LastSession),
+    }
+    Ok(match Sessions::deserialize(deserializer)? {
+        Sessions::Many(sessions) => sessions,
+        Sessions::One(session) => vec![session],
+    })
 }
 
 /// A command `shoal stop` interrupted, reported by `shoal resume` instead of
@@ -717,6 +788,8 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
 pub(crate) struct Saved {
     /// Agent recovery records by execution ID.
     pub agents: Vec<(String, PathBuf)>,
+    /// Last sessions by execution ID.
+    pub sessions: Vec<(String, PathBuf)>,
     pub commands: Vec<SavedCommand>,
 }
 
@@ -730,6 +803,7 @@ pub(crate) struct SavedCommand {
 impl Saved {
     pub fn load(paths: &Paths, workspace_id: &str) -> Result<Self> {
         let mut saved = Self::default();
+        name_unnamed_session(paths, workspace_id)?;
         let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
             Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(saved),
@@ -742,6 +816,8 @@ impl Saved {
             };
             if let Some(id) = name.strip_suffix(AGENT_SUFFIX) {
                 saved.agents.push((id.to_owned(), path));
+            } else if let Some(id) = name.strip_suffix(LAST_SESSION_SUFFIX) {
+                saved.sessions.push((id.to_owned(), path));
             } else if let Some(id) = name.strip_suffix(COMMAND_SUFFIX) {
                 let record: CommandRecord = serde_json::from_slice(&std::fs::read(&path)?)
                     .with_context(|| format!("read {}", path.display()))?;
@@ -753,32 +829,44 @@ impl Saved {
             }
         }
         saved.agents.sort();
+        saved.sessions.sort();
         saved.commands.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(saved)
     }
 
-    /// Keep only the record of execution `id`; a selected agent keeps the
-    /// workspace's commands too when `with_commands`, so it receives them.
+    /// Keep only the record or last session of execution `id`; a selected
+    /// agent keeps the workspace's commands too when `with_commands`, so it
+    /// receives them.
     pub fn retain_execution(&mut self, id: &str, with_commands: bool) {
-        if self.agents.iter().any(|(agent, _)| agent == id) {
-            self.agents.retain(|(agent, _)| agent == id);
+        let selected = |(agent, _): &(String, PathBuf)| agent == id;
+        if self.agents.iter().chain(&self.sessions).any(selected) {
+            self.agents.retain(selected);
+            self.sessions.retain(selected);
             if !with_commands {
                 self.commands.clear();
             }
         } else {
             self.agents.clear();
+            self.sessions.clear();
             self.commands.retain(|command| command.id == id);
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.agents.is_empty() && self.commands.is_empty()
+        self.sessions.is_empty() && !self.is_unfinished()
     }
 
-    /// The executions of the saved agents and commands.
+    /// Whether stopped agents or commands are unfinished work, which last
+    /// sessions are not.
+    pub fn is_unfinished(&self) -> bool {
+        !(self.agents.is_empty() && self.commands.is_empty())
+    }
+
+    /// The executions of the saved agents, last sessions and commands.
     pub fn execution_ids(&self) -> Vec<String> {
         self.agents
             .iter()
+            .chain(&self.sessions)
             .map(|(id, _)| id.clone())
             .chain(self.commands.iter().map(|command| command.id.clone()))
             .collect()
@@ -807,7 +895,7 @@ pub fn any_pending(paths: &Paths) -> bool {
         entry.file_name().to_str().is_some_and(|id| {
             Saved::load(paths, id).is_ok_and(|mut saved| {
                 saved.retain_unattended();
-                !saved.is_empty()
+                saved.is_unfinished()
             })
         })
     })

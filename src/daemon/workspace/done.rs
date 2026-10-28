@@ -91,7 +91,7 @@ impl Manager {
             "assignment is already marked done at this HEAD"
         );
         let closed = persisted.closed;
-        self.forget_last_session(&workspace.id);
+        self.forget_last_sessions(&workspace.id);
         // A done assignment needs no agent; only naming the workspace in
         // `shoal resume` restores it now.
         if let Err(error) = self.cancel_stopped_restores(&workspace.id).await {

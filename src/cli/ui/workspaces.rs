@@ -189,28 +189,34 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> 
 }
 
 /// What `shoal resume` restores in a workspace, such as `stopped: claude,
-/// 1 command` or `exited: claude`, and whether it is stopped work; `None`
-/// when nothing is saved.
+/// 1 command`, and whether it is unfinished work rather than only last
+/// sessions; `None` when nothing is saved.
 pub fn resumable(paths: &Paths, workspace_id: &str) -> Option<(String, bool)> {
     let saved = recovery::Saved::load(paths, workspace_id).unwrap_or_default();
     if saved.is_empty() {
-        let last = recovery::LastSession::load(paths, workspace_id).ok()??;
-        return Some((format!("exited: {}", last.agent), false));
+        return None;
     }
-    let mut parts = saved
+    let records = saved
         .agents
         .iter()
-        .map(|(_, path)| match recovery::Record::load(path) {
-            Ok(Some(record)) => record.agent,
-            _ => "agent".to_owned(),
-        })
+        .map(|(_, path)| recovery::Record::load(path).map(|record| record.map(|r| r.agent)));
+    let sessions = saved
+        .sessions
+        .iter()
+        .map(|(_, path)| recovery::LastSession::load(path).map(|last| last.map(|l| l.agent)));
+    let mut parts = records
+        .chain(sessions)
+        .map(|agent| agent.ok().flatten().unwrap_or_else(|| "agent".to_owned()))
         .collect::<Vec<_>>();
     match saved.commands.len() {
         0 => {}
         1 => parts.push("1 command".into()),
         n => parts.push(format!("{n} commands")),
     }
-    Some((format!("stopped: {}", parts.join(", ")), true))
+    Some((
+        format!("stopped: {}", parts.join(", ")),
+        saved.is_unfinished(),
+    ))
 }
 
 /// How the resume picker and completion name a workspace without stopped work.

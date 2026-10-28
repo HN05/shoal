@@ -702,6 +702,10 @@ pub enum ExecutionEvent {
     Started {
         child: Option<Identity>,
         group_id: u32,
+        /// The child restores a saved agent, which leaves the workspace's
+        /// other last sessions; a new agent replaces them.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        restored: bool,
     },
     Finished {
         exit_code: i32,

@@ -46,8 +46,13 @@ pub struct Sessions {
     pub machine: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<StoppedAgent>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_session: Option<LastSession>,
+    #[serde(
+        default,
+        alias = "last_session",
+        deserialize_with = "crate::execution::recovery::one_or_many_sessions",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub last_sessions: Vec<LastSession>,
 }
 
 /// An export the daemon wrote, and the removal that preceded it when the
@@ -94,7 +99,7 @@ impl Manifest {
         let sessions = Some(Sessions {
             machine: crate::process::machine::id(),
             agents: removed.agents.clone(),
-            last_session: removed.last_session.clone(),
+            last_sessions: removed.last_sessions.clone(),
         });
         Ok(Self {
             remote_url: crate::repository::remote_url_from_source(&repo.source).await?,
@@ -137,7 +142,7 @@ impl Manifest {
                 }
             }
         });
-        let last_session = sessions.last_session.clone().map(|last| {
+        let last_sessions = sessions.last_sessions.iter().cloned().map(|last| {
             if last.session.is_some() {
                 last
             } else {
@@ -146,7 +151,7 @@ impl Manifest {
         });
         RemovedWorkspace {
             agents: agents.collect(),
-            last_session,
+            last_sessions: last_sessions.collect(),
             ..self.workspace.clone()
         }
     }
@@ -264,7 +269,11 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
 fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
     RemovedWorkspace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
-        last_session: removed.last_session.map(|last| last.moved()),
+        last_sessions: removed
+            .last_sessions
+            .into_iter()
+            .map(LastSession::moved)
+            .collect(),
         ..removed
     }
 }

@@ -58,10 +58,13 @@ pub(crate) fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Res
         );
         claims.push(claim(path)?);
     }
+    for (_, path) in &saved.sessions {
+        claims.push(claim(path)?);
+    }
     for command in &saved.commands {
         claims.push(claim(&command.path)?);
     }
-    for (_, path) in &saved.agents {
+    for (_, path) in saved.agents.iter().chain(&saved.sessions) {
         std::fs::remove_file(path)?;
     }
     for command in &saved.commands {

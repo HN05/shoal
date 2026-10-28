@@ -285,6 +285,7 @@ fn manifest_with_sessions() -> Manifest {
         stopped_at: 1,
     };
     let last = LastSession {
+        execution: "quit".into(),
         agent: "codex".into(),
         session: Some("s2".into()),
         moved: false,
@@ -309,6 +310,7 @@ fn manifest_with_sessions() -> Manifest {
         "base_commit": null,
         "links": {"issue": null, "prs": []},
         "agents": [agent],
+        // Earlier removal records kept a single last session.
         "last_session": last,
         "cause": "manual",
         "removed_at": 1,
@@ -322,7 +324,7 @@ fn manifest_with_sessions() -> Manifest {
         sessions: Some(Sessions {
             machine: Some("m1".into()),
             agents: workspace.agents.clone(),
-            last_session: workspace.last_session.clone(),
+            last_sessions: workspace.last_sessions.clone(),
         }),
         workspace: moved(workspace),
     }
@@ -335,7 +337,10 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
     assert!(!here.agents[0].record.moved);
     assert_eq!(here.agents[0].record.place.as_deref(), Some("tab"));
-    let last = here.last_session.unwrap();
+    let [last] = here.last_sessions.as_slice() else {
+        panic!("one last session: {:?}", here.last_sessions);
+    };
+    assert_eq!(last.execution, "quit");
     assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
 
     for new in [
@@ -345,7 +350,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     ] {
         assert!(new.agents[0].record.moved);
         assert_eq!(new.agents[0].record.session, None);
-        assert!(new.last_session.unwrap().moved);
+        assert!(new.last_sessions[0].moved);
     }
 
     // Another machine told to keep the sessions keeps no terminal place of
@@ -354,7 +359,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     assert!(!kept.agents[0].record.moved);
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.place, None);
-    assert!(!kept.last_session.unwrap().moved);
+    assert!(!kept.last_sessions[0].moved);
 
     // So does an export from a machine without an ID.
     manifest.sessions.as_mut().unwrap().machine = None;
@@ -365,10 +370,10 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();
-    sessions.last_session.as_mut().unwrap().session = None;
+    sessions.last_sessions[0].session = None;
     let kept = manifest.workspace_on(None, Some(true));
     assert!(!kept.agents[0].record.moved);
-    assert!(kept.last_session.unwrap().moved);
+    assert!(kept.last_sessions[0].moved);
 }
 
 #[test]

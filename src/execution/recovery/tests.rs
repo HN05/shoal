@@ -189,3 +189,45 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
     forget_restore_request(&paths, "workspace", "execution").unwrap();
 }
+
+#[test]
+fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let state = paths.workspace_state("workspace");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("last-session.json"),
+        r#"{"agent":"codex","session":"earlier"}"#,
+    )
+    .unwrap();
+    LastSession::save(&paths, "workspace", "claude code", "execution").unwrap();
+    let mut saved = Saved::load(&paths, "workspace").unwrap();
+    assert!(!state.join("last-session.json").exists());
+    assert_eq!(saved.sessions.len(), 2);
+    assert!(!saved.is_empty() && !saved.is_unfinished());
+    assert!(!pending(&paths, "workspace").unwrap());
+    let mut agents = LastSession::all(&paths, "workspace")
+        .unwrap()
+        .into_iter()
+        .map(|last| (last.agent, last.session))
+        .collect::<Vec<_>>();
+    agents.sort();
+    assert_eq!(
+        agents,
+        [
+            ("claude-code".into(), None),
+            ("codex".into(), Some("earlier".into()))
+        ]
+    );
+    saved.retain_execution("execution", false);
+    assert_eq!(
+        saved.sessions,
+        [(
+            "execution".into(),
+            LastSession::path(&paths, "workspace", "execution")
+        )]
+    );
+    LastSession::forget_all(&paths, "workspace").unwrap();
+    assert!(Saved::load(&paths, "workspace").unwrap().is_empty());
+}

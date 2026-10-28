@@ -350,7 +350,11 @@ async fn relay(
             }
         };
         match event {
-            ExecutionEvent::Started { child, group_id } => {
+            ExecutionEvent::Started {
+                child,
+                group_id,
+                restored,
+            } => {
                 awaiting_started = false;
                 *started = true;
                 let _operation = match unattachable.take() {
@@ -361,7 +365,9 @@ async fn relay(
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
                 if agent.is_some() {
-                    manager.forget_last_session(&workspace.id);
+                    if !restored {
+                        manager.forget_last_sessions(&workspace.id);
+                    }
                     manager.agent_started(execution_id).await;
                 }
                 protocol::write(writer, &Control::Started).await?;

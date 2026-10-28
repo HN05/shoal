@@ -731,7 +731,7 @@ pub(in crate::cli) async fn trust_resumed(
         .filter(|agent| agent.record.session.is_some())
         .map(|agent| agent.record.agent.as_str());
     let last = removed
-        .last_session
+        .last_sessions
         .iter()
         .filter(|last| last.session.is_some())
         .map(|last| last.agent.as_str());

@@ -262,10 +262,15 @@ pub struct RemovedWorkspace {
     /// continues once the workspace is restored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<crate::execution::recovery::StoppedAgent>,
-    /// The last agent that exited on its own, which `shoal resume` continues
-    /// once the workspace is restored when no agent was stopped.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_session: Option<crate::execution::recovery::LastSession>,
+    /// The last sessions of agents, which `shoal resume` continues once the
+    /// workspace is restored.
+    #[serde(
+        default,
+        alias = "last_session",
+        deserialize_with = "crate::execution::recovery::one_or_many_sessions",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub last_sessions: Vec<crate::execution::recovery::LastSession>,
     pub cause: crate::daemon::events::EventCause,
     pub removed_at: u64,
     pub expires_at: u64,

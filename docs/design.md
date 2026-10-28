@@ -208,6 +208,9 @@ replaces a record a resume holds. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.
+A workspace keeps one per agent; a new agent replaces them, since the user
+moved on, while a restored one consumes only its own, which the wrapper says
+when it registers.
 Built-in agents resume the session ID their hooks report, since the workspace's
 latest session may belong to another agent.
 

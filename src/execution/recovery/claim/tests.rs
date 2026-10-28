@@ -37,6 +37,7 @@ fn discard_leaves_command_records_another_resume_is_reporting() {
     std::fs::write(&path, r#"{"argv":["true"]}"#).unwrap();
     let saved = Saved {
         agents: vec![],
+        sessions: vec![],
         commands: vec![SavedCommand {
             id: "execution".into(),
             path: path.clone(),
