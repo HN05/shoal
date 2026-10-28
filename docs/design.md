@@ -624,8 +624,8 @@ By default, agents that start with an issue prompt or forwarded arguments stay i
 the background, and tabs that wait for the user's input receive focus; an
 explicit focus setting or `--focus` overrides this choice. A launch the user
 waits for starts past `max_agents`, as `--now` does: one `--focus` focuses, or
-an agent waiting for input that the setting does not send to the background,
-unless `--after` makes it wait for work; the setting alone does not, so it
+an interactive call's agent waiting for input that the setting does not send to
+the background, unless `--after` makes it wait for work; the setting alone does not, so it
 cannot switch the limit off. Commands say only what they
 launch; one terminal layer chooses the placement and the backend that carries
 it out, so focus behaves alike everywhere and another backend plugs in with

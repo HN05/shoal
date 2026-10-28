@@ -64,7 +64,7 @@ pub(super) async fn admit(
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
     };
-    let now = options.starts_now(plan, settings.get().await?.focus);
+    let now = options.starts_now(plan, settings.get().await?.focus, ctx.interactive());
     let launch = agent_queue::Launch {
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
