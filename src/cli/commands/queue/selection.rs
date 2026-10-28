@@ -4,8 +4,14 @@
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
-    cli::{client, commands::agent_queue, context::Context, ui},
-    model::{QueueEntry, QueuePlace},
+    cli::{
+        client,
+        commands::{agent_queue, restart::skip_reason},
+        context::Context,
+        ui,
+    },
+    model::{QueueEntry, QueuePlace, RunningAgent},
+    protocol::ExecutionMethod,
     state::QueueState,
 };
 
@@ -67,7 +73,7 @@ pub(super) async fn pick_place(ctx: &Context, selector: &str) -> Result<QueuePla
 }
 
 /// The waiting entry `selector` names, or `None` for a workspace whose
-/// running agent the daemon then looks for.
+/// running agent can move.
 async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>> {
     let entries = agent_queue::entries(ctx).await?;
     let named: Vec<_> = entries
@@ -76,9 +82,7 @@ async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>
         .collect();
     match named.as_slice() {
         [] => {
-            client::inspect(&ctx.paths, selector.to_owned())
-                .await
-                .with_context(|| format!("{selector} is not in the agent queue"))?;
+            movable_agent(ctx, selector).await?;
             Ok(None)
         }
         [entry] => {
@@ -90,6 +94,32 @@ async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>
             Ok(Some(entry.clone()))
         }
         _ => bail!("several queue entries are named {selector}; pass the entry ID"),
+    }
+}
+
+/// Refuse a workspace `selector` names unless the one agent running there
+/// can restore in place, as the daemon checks again before stopping it.
+async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
+    let workspace = client::inspect(&ctx.paths, selector.to_owned())
+        .await
+        .with_context(|| format!("{selector} is not in the agent queue"))?
+        .workspace;
+    let name = &workspace.name;
+    let agents: Vec<RunningAgent> = client::request(&ctx.paths, ExecutionMethod::ListAgents)
+        .await
+        .with_context(|| format!("{selector} is not in the agent queue"))?;
+    let agents: Vec<_> = agents
+        .into_iter()
+        .filter(|running| running.workspace_id == workspace.id)
+        .collect();
+    let running = match agents.as_slice() {
+        [running] => running,
+        [] => bail!("{name} is not in the agent queue and runs no agent"),
+        _ => bail!("{name} runs several agents; stop them with shoal stop {name}"),
+    };
+    match skip_reason(&workspace, running) {
+        Some(reason) => bail!("{name} cannot move: {reason}"),
+        None => Ok(()),
     }
 }
 

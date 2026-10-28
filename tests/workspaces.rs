@@ -24318,6 +24318,11 @@ fn add_queues_agents_past_max_agents_until_removed() {
         message.contains("missing is not in the agent queue"),
         "{message}"
     );
+    // So does a workspace whose agent cannot restore in place.
+    let unrestorable = fixture.run(&["queue", "move", "first"]);
+    assert!(!unrestorable.status.success());
+    let message = String::from_utf8_lossy(&unrestorable.stderr);
+    assert!(message.contains("first cannot move"), "{message}");
     let cancelled = fixture.ok(&["queue", "cancel", "third"]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);

@@ -181,8 +181,9 @@ async fn in_order(
     Ok(ordered)
 }
 
-/// Why `running` cannot restart in place, if it cannot.
-fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
+/// Why `running` cannot restart in place, if it cannot; `shoal queue move`
+/// refuses such an agent too.
+pub(super) fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
     let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.name);
     match &running.agent {
         None => Some(format!(
