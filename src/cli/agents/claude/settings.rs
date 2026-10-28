@@ -20,7 +20,15 @@ pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Re
     for found in &found {
         merge_into(&mut merged, read(&found.value, directory)?);
     }
-    let env = merged
+    set_base_url(&mut merged, url)?;
+    replace(args, &found, &merged);
+    Ok(())
+}
+
+/// Send `settings`' API requests to `url`, as its `env`'s
+/// `ANTHROPIC_BASE_URL`; an error when that `env` is not an object.
+fn set_base_url(settings: &mut Value, url: &str) -> Result<()> {
+    let env = settings
         .as_object_mut()
         .expect("merged settings are an object")
         .entry("env")
@@ -29,7 +37,6 @@ pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Re
         anyhow::bail!("Claude settings' env is not a JSON object");
     };
     env.insert("ANTHROPIC_BASE_URL".into(), Value::String(url.to_owned()));
-    replace(args, &found, &merged);
     Ok(())
 }
 
