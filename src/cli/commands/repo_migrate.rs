@@ -26,6 +26,9 @@ pub(super) async fn run(
     regular_dir: bool,
     confirmed: bool,
 ) -> Result<()> {
+    let root = root
+        .map(|root| super::repositories::absolute(ctx, root))
+        .transpose()?;
     let repositories = client::repositories(&ctx.paths).await?;
     let moves = ctx
         .progress(
