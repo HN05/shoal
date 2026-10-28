@@ -2,6 +2,7 @@
 use std::{
     collections::BTreeSet,
     ffi::{OsStr, OsString},
+    future::Future,
     path::PathBuf,
     sync::{Arc, OnceLock},
     time::Duration,
@@ -353,32 +354,29 @@ impl Typed {
             .enable_all()
             .build()
         {
-            let layer = runtime.block_on(async {
-                tokio::time::timeout(Duration::from_millis(500), async {
-                    let workspaces = client::workspaces(&paths).await?;
-                    let cwd = std::env::current_dir().ok();
-                    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-                    let workspace = context
-                        .resolve(
-                            self.workspace.as_deref(),
-                            env::is_scoped(),
-                            ScopeOrder::AfterDirectory,
-                        )
-                        // Command names remain available from cwd while a typed
-                        // workspace is incomplete or unknown.
-                        .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
-                        .context("no current workspace")?;
-                    client::request::<Box<ConfigLayers>>(
-                        &paths,
-                        WorkspaceMethod::LayeredConfig {
-                            target: ConfigTarget::Workspace(workspace.id.clone()),
-                        },
+            let layer = runtime.block_on(live(async {
+                let workspaces = client::workspaces(&paths).await?;
+                let cwd = std::env::current_dir().ok();
+                let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+                let workspace = context
+                    .resolve(
+                        self.workspace.as_deref(),
+                        env::is_scoped(),
+                        ScopeOrder::AfterDirectory,
                     )
-                    .await
-                })
+                    // Command names remain available from cwd while a typed
+                    // workspace is incomplete or unknown.
+                    .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
+                    .context("no current workspace")?;
+                client::request::<Box<ConfigLayers>>(
+                    &paths,
+                    WorkspaceMethod::LayeredConfig {
+                        target: ConfigTarget::Workspace(workspace.id.clone()),
+                    },
+                )
                 .await
-            });
-            if let Ok(Ok(found)) = layer {
+            }));
+            if let Ok(found) = layer {
                 layers = *found;
             }
         }
@@ -420,10 +418,8 @@ impl Typed {
         else {
             return vec![];
         };
-        let values = runtime.block_on(async {
-            tokio::time::timeout(Duration::from_millis(500), self.candidates(target, current)).await
-        });
-        let Ok(Ok(mut values)) = values else {
+        let values = runtime.block_on(live(self.candidates(target, current)));
+        let Ok(mut values) = values else {
             return vec![];
         };
         let workspaces = matches!(target, Target::Workspaces(_) | Target::ResumeWorkspaces);
@@ -595,6 +591,13 @@ impl Typed {
     }
 }
 
+/// Apply the interactive deadline to a live lookup.
+async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
+    tokio::time::timeout(Duration::from_millis(500), lookup)
+        .await
+        .context("live completion lookup timed out")?
+}
+
 /// Unique display names, with IDs, sources, and paths as prefix-matched extras.
 /// The running chats with an agent session, by name.
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
@@ -643,3 +646,6 @@ fn repository_candidates(
     }
     candidates
 }
+
+#[cfg(test)]
+mod tests;

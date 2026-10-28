@@ -1821,22 +1821,6 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .map(str::to_owned)
             .collect::<Vec<_>>()
     };
-    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
-    fs::write(
-        fixture.root.path().join("zmx-sessions"),
-        format!(
-            "  name=first\tpid=1\tclients=0\tshoal.workspace={}\n",
-            first["id"].as_str().unwrap()
-        ),
-    )
-    .unwrap();
-    // Attach leaves out workspaces without a session.
-    let choices = described(&["attach", ""]);
-    assert!(choices.contains(&"first".into()), "{choices:?}");
-    assert!(
-        !choices.iter().any(|choice| choice.starts_with("second")),
-        "{choices:?}"
-    );
     // Workspaces without what the command acts on are left out.
     for args in [
         vec!["stop", ""],
