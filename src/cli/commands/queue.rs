@@ -88,6 +88,7 @@ async fn start(ctx: &Context, entry: Option<String>) -> Result<i32> {
 
 /// `shoal queue cancel`: remove the entry; a restore's agent stays stopped.
 async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> {
+    require_scope_token(ctx)?;
     let entry = selected(ctx, entry, "Cancel> ").await?;
     let entry: QueueEntry = request(&ctx.paths, QueueMethod::QueueRemove { entry }).await?;
     let message = match entry.kind {
@@ -108,6 +109,7 @@ async fn move_entry(
     entry: Option<String>,
     position: Option<QueuePlace>,
 ) -> Result<i32> {
+    require_scope_token(ctx)?;
     let entry = selected(ctx, entry, "Move> ").await?;
     let place = match position {
         Some(place) => place,
@@ -125,6 +127,16 @@ async fn move_entry(
     };
     ctx.emit(&message, &moved)?;
     Ok(0)
+}
+
+/// Refuse a workspace process that cleared its scope token, which the
+/// daemon would take for the user; with the token it confines the change.
+fn require_scope_token(ctx: &Context) -> Result<()> {
+    ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state) || crate::env::is_scoped(),
+        "workspace processes change the agent queue only with their scope token"
+    );
+    Ok(())
 }
 
 /// The waiting entries in queue order.
