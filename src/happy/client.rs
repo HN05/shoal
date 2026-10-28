@@ -7,30 +7,26 @@
 //! variables its daemon uses for resume-in-place, waits for the session to
 //! report alive, and posts the prompt. HTTP goes through `curl` with the
 //! token on stdin, never on the command line.
-use crate::tools::Tool;
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{Value, json};
-use tokio::{
-    process::Command,
-    time::{Instant, sleep},
-};
+use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
 use super::Agent;
 use super::crypto::{self, Variant};
 use crate::paths::Paths;
 
-pub const SERVER_URL_ENV: &str = "HAPPY_SERVER_URL";
-const DEFAULT_SERVER_URL: &str = "https://api.cluster-fluster.com";
-const CREDENTIALS_FILE: &str = "access.key";
-const SETTINGS_FILE: &str = "settings.json";
-const CLIENT_HEADER: &str = concat!("X-Happy-Client: shoal/", env!("CARGO_PKG_VERSION"));
+mod account;
+mod server;
+
+use account::{Account, Encryption};
+use server::Server;
 
 /// Variables happy-cli reads to attach to an existing session instead of
 /// creating one; its daemon sets them to resume a session in place.
@@ -42,128 +38,6 @@ pub const RECONNECT_ENV: [&str; 6] = [
     "HAPPY_RECONNECT_METADATA_VERSION",
     "HAPPY_RECONNECT_AGENT_STATE_VERSION",
 ];
-
-/// happy-cli's `access.key`: a bearer token plus either the legacy account
-/// secret or the account's box public key for per-session data keys.
-struct Credentials {
-    token: String,
-    encryption: Encryption,
-}
-
-enum Encryption {
-    Legacy(Vec<u8>),
-    DataKey { public_key: Vec<u8> },
-}
-
-fn read_credentials(happy_home: &Path) -> Result<Credentials> {
-    let path = happy_home.join(CREDENTIALS_FILE);
-    let text = std::fs::read_to_string(&path).with_context(|| {
-        format!(
-            "Happy is not logged in on this machine (no {}); run happy once to authenticate",
-            path.display()
-        )
-    })?;
-    parse_credentials(&text).with_context(|| format!("parse {}", path.display()))
-}
-
-fn parse_credentials(text: &str) -> Result<Credentials> {
-    let raw: Value = serde_json::from_str(text)?;
-    let token = raw["token"]
-        .as_str()
-        .context("credentials have no token")?
-        .to_owned();
-    let encryption = if let Some(secret) = raw["secret"].as_str() {
-        let secret = BASE64
-            .decode(secret)
-            .context("account secret is not base64")?;
-        ensure!(secret.len() == 32, "account secret must be 32 bytes");
-        Encryption::Legacy(secret)
-    } else if let Some(key) = raw["encryption"]["publicKey"].as_str() {
-        let public_key = BASE64
-            .decode(key)
-            .context("account public key is not base64")?;
-        ensure!(
-            public_key.len() == 32,
-            "account public key must be 32 bytes"
-        );
-        Encryption::DataKey { public_key }
-    } else {
-        bail!("credentials have neither a secret nor an encryption public key");
-    };
-    Ok(Credentials { token, encryption })
-}
-
-fn read_settings(happy_home: &Path) -> Value {
-    std::fs::read_to_string(happy_home.join(SETTINGS_FILE))
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or(Value::Null)
-}
-
-/// happy-cli's precedence: environment, then settings, then the default.
-fn server_url(settings: &Value) -> String {
-    std::env::var(SERVER_URL_ENV)
-        .ok()
-        .filter(|url| !url.is_empty())
-        .or_else(|| settings["serverUrl"].as_str().map(str::to_owned))
-        .unwrap_or_else(|| DEFAULT_SERVER_URL.to_owned())
-        .trim_end_matches('/')
-        .to_owned()
-}
-
-/// A Happy server and the account token, spoken through `curl`.
-struct Server {
-    url: String,
-    token: String,
-    /// Private directory for request bodies (`--data-binary @file`).
-    temp_dir: PathBuf,
-}
-
-impl Server {
-    async fn request(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
-        let mut curl = Command::new(Tool::Curl.program());
-        curl.args([
-            "-sS",
-            "-f",
-            "--max-time",
-            "30",
-            "-X",
-            method,
-            "-H",
-            "Content-Type: application/json",
-            "-H",
-            CLIENT_HEADER,
-            "-K",
-            "-",
-        ]);
-        let _body_file = match body {
-            Some(body) => {
-                let mut file = tempfile::NamedTempFile::new_in(&self.temp_dir)
-                    .context("create request body file")?;
-                serde_json::to_writer(&mut file, body)?;
-                curl.arg("--data-binary");
-                curl.arg(format!("@{}", file.path().display()));
-                Some(file)
-            }
-            None => None,
-        };
-        curl.arg(format!("{}{path}", self.url));
-        // curl's config syntax: the token never appears on a command line.
-        let output = crate::subprocess::Run::new(curl)
-            .input(format!("header = \"Authorization: Bearer {}\"\n", self.token).into_bytes())
-            .timeout(Duration::from_secs(30))
-            .checked()
-            .await
-            .with_context(|| {
-                format!("Happy server request {method} {path} failed; curl is required")
-            })?;
-        if output.stdout.iter().all(u8::is_ascii_whitespace) {
-            return Ok(Value::Null);
-        }
-        serde_json::from_slice(&output.stdout)
-            .with_context(|| format!("Happy server returned invalid JSON for {method} {path}"))
-    }
-}
 
 /// A session Shoal created for the agent to attach to.
 pub struct Session {
@@ -213,13 +87,8 @@ pub async fn seed(
     branch: Option<&str>,
     agent: Agent,
 ) -> Result<Seeded> {
-    let happy_home = super::home(&paths.home);
-    let credentials = read_credentials(&happy_home)?;
-    let settings = read_settings(&happy_home);
-    let machine_id = settings["machineId"]
-        .as_str()
-        .context("Happy settings have no machine ID; run happy once to register this machine")?;
-    let (key, variant, sealed_key) = match &credentials.encryption {
+    let account = Account::load(paths)?;
+    let (key, variant, sealed_key) = match &account.encryption {
         Encryption::Legacy(secret) => {
             let key: [u8; 32] = secret.as_slice().try_into()?;
             (key, Variant::Legacy, None)
@@ -249,9 +118,9 @@ pub async fn seed(
         "host": hostname(),
         "version": "unknown",
         "os": platform(),
-        "machineId": machine_id,
+        "machineId": account.machine_id,
         "homeDir": paths.home,
-        "happyHomeDir": happy_home,
+        "happyHomeDir": account.home,
         "startedFromDaemon": true,
         "startedBy": "daemon",
         "lifecycleState": "running",
@@ -265,11 +134,7 @@ pub async fn seed(
         "agentState": session.encrypt(&json!({"controlledByUser": false}))?,
         "dataEncryptionKey": sealed_key,
     });
-    let server = Server {
-        url: server_url(&settings),
-        token: credentials.token,
-        temp_dir: paths.state.clone(),
-    };
+    let server = account.server;
     let created = server.request("POST", "/v1/sessions", Some(&body)).await?;
     let raw = &created["session"];
     session.id = raw["id"]
