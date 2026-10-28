@@ -73,9 +73,12 @@ pub struct RepoConfig {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
+    /// The terminal host for launches from a terminal no host serves.
+    pub default_host: Option<DefaultHost>,
     pub claude: Shortcut,
     pub codex: Shortcut,
     pub herdr: Herdr,
+    pub rex: Rex,
     pub happy: Happy,
     /// Copy the main checkout's ignored files into the worktree before setup.
     pub copy_ignored: Option<bool>,
@@ -541,3 +544,23 @@ pub struct Herdr {
     pub new_tab: Option<bool>,
     pub close_when_done: Option<bool>,
 }
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Rex {
+    pub enabled: Option<bool>,
+    pub new_window: Option<bool>,
+    pub window_name: Option<String>,
+    pub session_name: Option<String>,
+    pub close_when_done: Option<bool>,
+}
+
+states!(
+    #[derive(Default)]
+    /// The terminal host for launches from a terminal no host serves.
+    DefaultHost {
+        #[default]
+        Zmx => "zmx",
+        Rex => "rex",
+    }
+);

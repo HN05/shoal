@@ -120,9 +120,12 @@ pub struct Config {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
+    /// The terminal host for launches from a terminal no host serves.
+    pub default_host: Option<repo::DefaultHost>,
     pub claude: repo::Shortcut,
     pub codex: repo::Shortcut,
     pub herdr: repo::Herdr,
+    pub rex: repo::Rex,
     pub happy: repo::Happy,
     pub overload: overload::Overload,
     pub cleanup: repo::Cleanup,
@@ -620,9 +623,11 @@ impl Config {
             max_agents: self.max_agents,
             focus: self.focus,
             close_when_done: self.close_when_done,
+            default_host: self.default_host,
             claude: self.claude,
             codex: self.codex,
             herdr: self.herdr.clone(),
+            rex: self.rex.clone(),
             happy: self.happy.clone(),
             copy_ignored: self.copy_ignored,
             pre_setup_cmd: self.pre_setup_cmd.clone(),
@@ -748,5 +753,17 @@ pub struct Herdr {
     pub tab_name: Option<String>,
     pub new_tab: bool,
     /// Overrides the top-level `close_when_done` for Herdr tabs.
+    pub close_when_done: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Rex {
+    pub enabled: bool,
+    pub new_window: bool,
+    pub window_name: Option<String>,
+    /// The session Shoal opens windows in when it has none of its own;
+    /// `{repo}` is the repository's name.
+    pub session_name: String,
+    /// Overrides the top-level `close_when_done` for Rex windows.
     pub close_when_done: Option<bool>,
 }

@@ -6,10 +6,10 @@ use crate::config::repo::parse;
 /// fails the destructuring below until the fixture states it too.
 const FULL: &str = "\
 worker_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nmax_agents = 2\nfocus = false\nclose_when_done = false\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
-[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[claude]\ndefault_mode = 'app'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n[happy]\nenabled = true\n\
+[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[claude]\ndefault_mode = 'app'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n[rex]\nenabled = false\nnew_window = false\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n[happy]\nenabled = true\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -204,6 +204,28 @@ fn herdr_defaults_and_options_resolve_independently() {
 }
 
 #[test]
+fn rex_defaults_and_options_resolve_independently() {
+    let defaults = stack("", "", "").resolve().unwrap();
+    assert_eq!(defaults.default_host, config::repo::DefaultHost::Zmx);
+    let rex = defaults.rex;
+    assert!(rex.enabled && rex.new_window);
+    assert_eq!(rex.session_name, "{repo}");
+    assert_eq!((rex.window_name, rex.close_when_done), (None, None));
+    let settings = stack(
+        "default_host = 'rex'\n[rex]\nenabled = false\nsession_name = 'work'\n",
+        "[rex]\nenabled = true\nclose_when_done = false\n",
+        "",
+    )
+    .resolve()
+    .unwrap();
+    assert_eq!(settings.default_host, config::repo::DefaultHost::Rex);
+    assert!(settings.rex.enabled);
+    assert_eq!(settings.rex.session_name, "work");
+    assert_eq!(settings.rex.close_when_done, Some(false));
+    assert!(toml::from_str::<Config>("default_host = 'herdr'\n").is_err());
+}
+
+#[test]
 fn places_close_when_done_unless_a_layer_turns_it_off() {
     assert!(stack("", "", "").resolve().unwrap().close_when_done);
     assert!(
@@ -324,9 +346,11 @@ fn every_option_survives_layering_in_both_directions() {
         max_agents,
         focus,
         close_when_done,
+        default_host,
         claude,
         codex,
         herdr,
+        rex,
         happy,
         copy_ignored,
         setup_cmd,
@@ -396,6 +420,12 @@ fn every_option_survives_layering_in_both_directions() {
         herdr.tab_name.is_some(),
         herdr.new_tab.is_some(),
         herdr.close_when_done.is_some(),
+        default_host.is_some(),
+        rex.enabled.is_some(),
+        rex.new_window.is_some(),
+        rex.window_name.is_some(),
+        rex.session_name.is_some(),
+        rex.close_when_done.is_some(),
         happy.enabled.is_some(),
         copy_ignored.is_some(),
         setup_cmd.is_some(),
