@@ -112,6 +112,7 @@ impl super::Host for Zmx {
 
     fn close<'a>(
         &'a self,
+        _state: &'a Path,
         session: &'a str,
         owner: &'a super::Owner,
     ) -> futures_util::future::BoxFuture<'a, Result<()>> {

@@ -120,7 +120,8 @@ impl Host for Herdr {
 /// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
 /// (`herdr.new_tab`), their names (`herdr.tab_name`), and
 /// `herdr.close_when_done`, which overrides the top-level option.
-pub(super) fn options(config: &config::Herdr) -> Options {
+pub(super) fn options(settings: &config::Effective) -> Options {
+    let config = &settings.herdr;
     Options {
         enabled: config.enabled,
         opens_places: config.new_tab,

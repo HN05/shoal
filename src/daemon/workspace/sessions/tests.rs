@@ -68,6 +68,7 @@ impl Host for FakeHost {
 
     fn close<'a>(
         &'a self,
+        _: &'a Path,
         name: &'a str,
         owner: &'a crate::sessions::Owner,
     ) -> BoxFuture<'a, Result<()>> {

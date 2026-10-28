@@ -36,6 +36,10 @@ const NAME: &str = "zmx";
 /// Herdr panes.
 pub(super) struct Zmx;
 
+pub(super) fn options(_: &crate::config::Effective) -> super::Options {
+    super::Options::DEFAULT
+}
+
 impl Host for Zmx {
     fn name(&self) -> &'static str {
         NAME

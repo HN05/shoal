@@ -99,7 +99,8 @@ impl Manager {
             .iter()
             .find(|host| host.name() == close.host)
             .with_context(|| format!("terminal host {} is unavailable", close.host))?;
-        host.close(&close.name, &close.owner).await?;
+        host.close(&self.paths.state, &close.name, &close.owner)
+            .await?;
         self.store
             .run(move |db| pending::forget(db, &close.id))
             .await
@@ -111,7 +112,7 @@ impl Manager {
         name: &str,
         owner: &crate::sessions::Owner,
     ) {
-        if let Err(error) = host.close(name, owner).await {
+        if let Err(error) = host.close(&self.paths.state, name, owner).await {
             self.session_cleanup_failed(None, &error).await;
         }
     }

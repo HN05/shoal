@@ -40,16 +40,12 @@ pub(in crate::cli) use naming::{PlaceName, issue_label};
 /// Hosts in the order they claim a terminal, each with the options its own
 /// config section gives; a terminal none of them serves runs everything in
 /// place.
-const HOSTS: &[Registered] = &[
-    Registered {
-        host: &herdr::Herdr,
-        options: |settings| herdr::options(&settings.herdr),
-    },
-    Registered {
-        host: &zmx::Zmx,
-        options: |_| Options::DEFAULT,
-    },
-];
+macro_rules! terminal_hosts {
+    ($(($module:ident, $host:ident, $cleanup:expr)),* $(,)?) => {
+        &[$(Registered { host: &$module::$host, options: $module::options }),*]
+    };
+}
+const HOSTS: &[Registered] = crate::sessions::registered_hosts!(terminal_hosts);
 
 /// A host with the options `settings` give it.
 struct Registered {
