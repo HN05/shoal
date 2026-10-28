@@ -5,6 +5,7 @@
 //! [`Host`] and listing it in [`HOSTS`].
 mod background;
 mod closing;
+mod groups;
 mod herdr;
 mod naming;
 mod zmx;
@@ -27,7 +28,7 @@ use super::{
     context::Context,
 };
 use crate::{
-    config::Effective,
+    config::{Effective, repo::DefaultHost},
     demos::Launch,
     env,
     model::{Repository, Workspace},
@@ -71,6 +72,9 @@ pub(in crate::cli) struct Options {
     /// The template for the names of the places it opens, in place of the
     /// default.
     pub name_template: Option<String>,
+    /// The template for the name of the group it opens places in when it
+    /// has none from the caller, for a host that keeps groups.
+    pub group_template: Option<String>,
     /// Whether the places it opens for a workspace close once it is done,
     /// over the top-level `close_when_done`.
     pub close_when_done: Option<bool>,
@@ -82,6 +86,7 @@ impl Options {
         enabled: true,
         opens_places: true,
         name_template: None,
+        group_template: None,
         close_when_done: None,
     };
 }
@@ -109,6 +114,24 @@ impl Configured {
         HOSTS
             .iter()
             .map(|registered| Self::new(registered.host, (registered.options)(settings), settings))
+    }
+
+    /// The host named `name`, or the plain terminal.
+    fn named(settings: &Effective, name: HostName) -> Self {
+        Self::all(settings)
+            .find(|host| host.host.name() == name)
+            .unwrap_or_else(|| Self::plain(settings))
+    }
+
+    /// The host `default_host` names for a terminal no host serves.
+    fn default_host(settings: &Effective) -> Self {
+        Self::named(
+            settings,
+            match settings.default_host {
+                DefaultHost::Zmx => HostName::Zmx,
+                DefaultHost::Rex => HostName::Rex,
+            },
+        )
     }
 
     /// The plain terminal, which every terminal falls back to.
@@ -158,6 +181,18 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
+    /// The group labelled `label` on the server of `near`, or this
+    /// machine's, created at `cwd` when there is none; `None` for a host
+    /// without groups.
+    fn group<'a>(
+        &'a self,
+        _near: Option<&'a Origin>,
+        _label: &'a str,
+        _cwd: &'a Path,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async { Ok(None) })
+    }
+
     /// Run `start`, a workspace addition, in a new place, returning whether
     /// it left this process. Generic code calls it only where config lets
     /// the host open places.
@@ -171,8 +206,12 @@ pub(in crate::cli) trait Host: Sync {
         false
     }
 
-    /// Run `start` in a new background place.
-    fn run_in_background<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+    /// Run `start` in a new background place, returning it where this host
+    /// names its places to the daemon.
+    fn run_in_background<'a>(
+        &'a self,
+        _start: &'a Start<'a>,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
         Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
     }
 
@@ -342,7 +381,8 @@ pub(in crate::cli) trait Host: Sync {
 const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
 
 /// The demo worker's argv for the place it runs in.
-pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a;
+pub(in crate::cli) type DemoWorker<'a> =
+    dyn Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a;
 
 /// Work a host starts in a new place, which generic code describes in full,
 /// so the host only carries it out.
@@ -418,11 +458,14 @@ impl Host for Plain {
     }
 }
 
-/// The host serving this terminal under `settings`.
+/// The host serving this terminal under `settings`. zmx claims a terminal
+/// that no other host serves, which goes to the default host.
 fn current(settings: &Effective) -> Configured {
-    Configured::all(settings)
-        .find(Configured::serves)
-        .unwrap_or_else(|| Configured::plain(settings))
+    match Configured::all(settings).find(Configured::serves) {
+        Some(host) if host.host.name() == HostName::Zmx => Configured::default_host(settings),
+        Some(host) => host,
+        None => Configured::plain(settings),
+    }
 }
 
 /// The host that starts work beside this terminal. A place a host opened for
@@ -524,9 +567,13 @@ pub(in crate::cli) async fn start_add(
     let focus = focus.then_some(true).or(settings.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
-    let origin = host.host.origin();
-    let started = host.options.opens_places
-        && run_add(ctx, &host, origin.as_ref(), plan, name, placement).await?;
+    if !host.options.opens_places {
+        return Ok(false);
+    }
+    let cwd = std::env::current_dir()?;
+    let repo = groups::Repo::Selected(plan.repository.clone());
+    let origin = groups::beside(ctx, &host, &repo, &cwd).await?;
+    let started = run_add(ctx, &host, origin.as_ref(), plan, name, placement).await?;
     if started && placement == Placement::Background {
         outln!("{}", host.host.background_note(name));
     }
@@ -542,19 +589,25 @@ pub(in crate::cli) async fn start_queued(
     name: &str,
 ) -> Result<()> {
     let origin = queued_origin()?;
-    let host = queued(settings, origin.as_ref())?;
-    naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
-    run_add(
+    let cwd = std::env::current_dir()?;
+    let repo = groups::Repo::Selected(plan.repository.clone());
+    groups::first_queued(
         ctx,
-        &host,
+        settings,
         origin.as_ref(),
-        plan,
-        name,
-        Placement::Background,
+        &repo,
+        &cwd,
+        async |host, group| {
+            naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
+            run_add(ctx, host, group, plan, name, Placement::Background).await?;
+            Ok(Some(()))
+        },
     )
-    .await?;
-    Ok(())
+    .await?
+    .context(NO_QUEUED_HOST)
 }
+
+const NO_QUEUED_HOST: &str = "no terminal host can start queued agents";
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
 /// in a new place beside `origin` as `placement` asks, returning whether it
@@ -664,17 +717,18 @@ fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
     Ok(argv)
 }
 
-/// The host that runs a queued start from `origin` under `settings`.
-fn queued(settings: &Effective, origin: Option<&Origin>) -> Result<Configured> {
-    Configured::all(settings)
-        .find(|host| host.takes_queued(origin))
-        .context("no terminal host can start queued agents")
-}
-
 /// Refuse a background start that the daemon's worker could not run from
-/// this terminal under `settings`, such as one whose host is not installed.
+/// this terminal under `settings`, such as one whose host is not installed:
+/// the host of this terminal where it takes queued starts, otherwise the
+/// default host.
 pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
-    queued(settings, current_origin().as_ref())?
+    let origin = current_origin();
+    Configured::all(settings)
+        .find(|host| {
+            host.host.name() == origin.as_ref().map_or(HostName::Terminal, |o| o.host)
+                && host.takes_queued(origin.as_ref())
+        })
+        .unwrap_or_else(|| Configured::default_host(settings))
         .host
         .ensure_installed()
 }
@@ -758,7 +812,7 @@ fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Hos
 /// Run Shoal with `args`, which restore the agent of `record` in
 /// `workspace`, for the daemon's worker, which has no terminal: where the
 /// agent stopped when that place is back at its prompt, otherwise in the
-/// background of the first host that runs queued starts and can.
+/// background of the first place a queued start from there can open.
 pub(in crate::cli) async fn restore_queued(
     ctx: &Context,
     settings: &Effective,
@@ -772,15 +826,21 @@ pub(in crate::cli) async fn restore_queued(
         return Ok(());
     }
     let origin = queued_origin()?;
-    let mut failure = None;
-    for host in Configured::all(settings).filter(|host| host.takes_queued(origin.as_ref())) {
-        match start_in_background(ctx, &host, origin.as_ref(), workspace, args).await {
-            Ok(()) => return Ok(()),
-            // Herdr may be gone, as after a reboot.
-            Err(error) => failure = Some(error),
-        }
-    }
-    Err(failure.unwrap_or_else(|| anyhow::anyhow!("no terminal host can start queued agents")))
+    let repo = groups::Repo::Id(&workspace.repository_id);
+    groups::first_queued(
+        ctx,
+        settings,
+        origin.as_ref(),
+        &repo,
+        &workspace.path,
+        async |host, group| {
+            start_in_background(ctx, host, group, workspace, args)
+                .await
+                .map(Some)
+        },
+    )
+    .await?
+    .context(NO_QUEUED_HOST)
 }
 
 /// Run Shoal with `args` for `workspace` in the background, returning what
@@ -795,7 +855,8 @@ pub(in crate::cli) async fn run_in_background(
     if !host.runs_in_background() {
         return Ok(None);
     }
-    let origin = host.host.origin();
+    let repo = groups::Repo::Id(&workspace.repository_id);
+    let origin = groups::beside(ctx, &host, &repo, &workspace.path).await?;
     start_in_background(ctx, &host, origin.as_ref(), workspace, args).await?;
     Ok(Some(host.host.background_places()))
 }
@@ -825,7 +886,8 @@ async fn start_in_background(
         argv: &argv,
         env: &place_env(ctx)?,
     };
-    host.host.run_in_background(&start).await
+    host.host.run_in_background(&start).await?;
+    Ok(())
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal
@@ -840,12 +902,14 @@ pub(in crate::cli) async fn run_agent(
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Option<i32>> {
+    let current = current(settings);
+    let repo = groups::Repo::Id(&workspace.repository_id);
+    let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
     let Configured {
         host,
         closes_when_done,
         ..
-    } = current(settings);
-    let origin = host.origin();
+    } = current;
     let worker = crate::cli::internal::internal_command(
         &ctx.paths,
         false,
@@ -931,7 +995,8 @@ pub(in crate::cli) async fn start_chat(
     if !host.options.opens_places {
         return Ok(false);
     }
-    let origin = host.host.origin();
+    let repo = groups::Repo::Known(repository);
+    let origin = groups::beside(ctx, &host, &repo, &repository.path).await?;
     let start = Start {
         state: &ctx.paths.state,
         origin: origin.as_ref(),
@@ -1007,26 +1072,36 @@ pub(in crate::cli) async fn start_demo(
     worker: &DemoWorker<'_>,
 ) -> Result<Origin> {
     let origin = current_origin();
-    let hosts = Configured::all(settings)
-        .filter(|host| host.takes_queued(origin.as_ref()) && host.host.ensure_installed().is_ok())
-        .map(|host| host.host);
+    let repo = groups::Repo::Id(&workspace.repository_id);
     let env = place_env(ctx)?;
-    for host in hosts {
-        let demo = Demo {
-            launch,
-            state: &ctx.paths.state,
-            origin: origin.as_ref(),
-            workspace: &workspace.id,
-            cwd: &workspace.path,
-            label: &demo_label(host, workspace, name),
-            env: &env,
-            worker,
-        };
-        if let Some(place) = host.start_demo(&demo).await? {
-            return Ok(place);
-        }
+    let started = groups::first_queued(
+        ctx,
+        settings,
+        origin.as_ref(),
+        &repo,
+        &workspace.path,
+        async |host, group| {
+            if host.host.ensure_installed().is_err() {
+                return Ok(None);
+            }
+            let demo = Demo {
+                launch,
+                state: &ctx.paths.state,
+                origin: group,
+                workspace: &workspace.id,
+                cwd: &workspace.path,
+                label: &demo_label(host.host, workspace, name),
+                env: &env,
+                worker,
+            };
+            host.host.start_demo(&demo).await
+        },
+    )
+    .await?;
+    match started {
+        Some(place) => Ok(place),
+        None => background::start_demo(&ctx.paths, workspace, name, worker),
     }
-    background::start_demo(&ctx.paths, workspace, name, worker)
 }
 
 /// What the place `host` opens for demo `name` of `workspace` is called:

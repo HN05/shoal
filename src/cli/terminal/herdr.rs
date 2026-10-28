@@ -48,8 +48,11 @@ impl Host for Herdr {
         true
     }
 
-    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(open_tab(start))
+    fn run_in_background<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move { open_tab(start).await.map(|()| None) })
     }
 
     /// A pane back at its shell prompt, as it is after the wrapper exits.
@@ -126,6 +129,7 @@ pub(super) fn options(config: &config::Herdr) -> Options {
         enabled: config.enabled,
         opens_places: config.new_tab,
         name_template: config.tab_name.clone(),
+        group_template: None,
         close_when_done: config.close_when_done,
     }
 }
