@@ -116,9 +116,10 @@ impl Manager {
             "{} is still stopping; start it once its processes have stopped",
             entry.name
         );
+        // The wrapper reads its grant once it sees the entry starting.
+        self.agent_queue.grant_restore(execution, Grant::Queue);
         self.mark_starting(vec![entry.id.clone()], HashMap::new())
             .await?;
-        self.agent_queue.grant_restore(execution, Grant::Queue);
         Ok(())
     }
 
