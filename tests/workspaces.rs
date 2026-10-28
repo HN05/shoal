@@ -15318,13 +15318,26 @@ fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
     let fixture = Fixture::new();
     fixture.add("worker");
     let leader = fixture.root.path().join("leader.sh");
-    let descendant = fixture.root.path().join("descendant.sh");
+    // Python keeps the descendant's environment readable once launchd adopts it.
+    let descendant = fixture.root.path().join("descendant.py");
     let ready = fixture.root.path().join("ready");
     let cleaned = fixture.root.path().join("cleaned");
-    fs::write(&leader, "trap 'exit 0' TERM\nsh \"$1\" &\nwait\n").unwrap();
+    fs::write(&leader, "trap 'exit 0' TERM\npython3 \"$1\" &\nwait\n").unwrap();
     fs::write(
         &descendant,
-        "trap 'sleep 0.2; echo done > \"$CLEANED\"; exit 0' TERM\n: > \"$READY\"\nwhile :; do sleep 30; done\n",
+        r#"import os, signal, sys, time
+
+def clean_up(*_):
+    time.sleep(0.2)
+    with open(os.environ['CLEANED'], 'w') as cleaned:
+        cleaned.write('done\n')
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, clean_up)
+open(os.environ['READY'], 'w').close()
+while True:
+    time.sleep(30)
+"#,
     )
     .unwrap();
     let wrapper = fixture
