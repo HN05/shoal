@@ -1050,31 +1050,27 @@ pub(in crate::cli) async fn host_workspace(
     agent: Option<&str>,
     label: &str,
 ) -> Result<()> {
-    let labelled = match (&ctx.place, agent) {
+    match (&ctx.place, agent) {
         // A place is labelled before it is watched, since the watcher only
         // closes a place it finds hosting the workspace.
         (Some(place), _) => {
-            let labelled = place
+            place
                 .host
                 .label_current(
                     &ctx.paths.state,
                     Owner::Workspace(&workspace.id),
                     agent.unwrap_or_default(),
                 )
-                .await;
+                .await?;
             place.host.rename_place(&place.id, label).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }
-            labelled
+            Ok(())
         }
         (None, Some(agent)) => label_workspace(ctx, workspace, agent).await,
         (None, None) => Ok(()),
-    };
-    if let Err(error) = labelled {
-        eprintln!("warning: {error:#}");
     }
-    Ok(())
 }
 
 async fn label_workspace(ctx: &Context, workspace: &Workspace, agent: &str) -> Result<()> {

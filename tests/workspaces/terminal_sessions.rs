@@ -407,3 +407,146 @@ fn an_agent_shortcut_replaces_reused_zmx_ownership() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+fn assert_failed_labelling_refuses_launches(
+    fixture: &Fixture,
+    environment: impl Fn(&mut Command),
+) -> anyhow::Result<()> {
+    let workspace = fixture.add("new-owner");
+    let state = fixture.root.path().join("state/workspaces").join(
+        workspace["id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("workspace ID"))?,
+    );
+    fs::create_dir_all(&state)?;
+    let recovery = state.join("saved.recovery.json");
+    let saved = r#"{"agent":"claude","session":"previous-session"}"#;
+    fs::write(&recovery, saved)?;
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        "#!/bin/sh\ntouch \"$HOME/new-agent-started\"\n",
+    );
+    let repo = fixture
+        .repo
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("repository path"))?;
+    for args in [
+        vec!["claude", "new-owner"],
+        vec!["resume", "new-owner", "--now"],
+        vec![
+            "chat",
+            "--here",
+            repo,
+            "--name",
+            "blocked-chat",
+            "--agent",
+            "claude",
+        ],
+        vec!["add", repo, "blocked-add", "--here", "--agent", "claude"],
+    ] {
+        let mut command = fixture.command();
+        command.args(&args);
+        environment(&mut command);
+        let (output, transcript) = fixture.interactive_command(&mut command, "");
+        assert!(
+            !output.status.success(),
+            "{args:?}: {output:?} {transcript}"
+        );
+        assert!(
+            transcript.contains("ownership update failed"),
+            "{args:?}: {transcript}"
+        );
+        assert!(!fixture.root.path().join("new-agent-started").exists());
+        assert_eq!(fs::read_to_string(&recovery)?, saved);
+        assert_eq!(
+            fixture.ok(&["status", "new-owner"])["executions"],
+            serde_json::json!([])
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn failed_herdr_labelling_refuses_agent_chat_resume_and_add_launches() -> anyhow::Result<()> {
+    for enabled in [true, false] {
+        let fixture = fixture();
+        start_workspace(&fixture)?;
+        let home = fixture.root.path();
+        let ownership = fs::read(home.join("herdr-ownership"))?;
+        if !enabled {
+            fs::write(
+                home.join(".config/shoal/config.toml"),
+                "[herdr]\nenabled = false\n",
+            )?;
+        }
+        fs::write(home.join("herdr-label-fails"), "")?;
+        assert_failed_labelling_refuses_launches(&fixture, |command| {
+            command
+                .env("HERDR_ENV", "1")
+                .env("HERDR_PANE_ID", "w1:p9")
+                .env("HERDR_SOCKET_PATH", home.join("owned-herdr.sock"));
+        })?;
+        assert_eq!(fs::read(home.join("herdr-ownership"))?, ownership);
+        fs::remove_file(home.join("herdr-label-fails"))?;
+        fixture.ok(&["rm", "owned", "--yes"]);
+        assert_eq!(closed(&fixture)?.len(), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn failed_zmx_labelling_refuses_agent_chat_resume_and_add_launches() -> anyhow::Result<()> {
+    let fixture = Fixture::new();
+    let old = fixture.add("old-owner");
+    let old_id = old["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("workspace ID"))?;
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    let ownership = format!("name=reused\tpid=1\tshoal.workspace={old_id}\n");
+    fs::write(home.join("zmx-sessions"), &ownership)?;
+    fs::write(home.join("zmx-keep-sessions"), "")?;
+    fs::write(home.join("zmx-label-fails"), "")?;
+    assert_failed_labelling_refuses_launches(&fixture, |command| {
+        command.env("ZMX_SESSION", "reused");
+    })?;
+    assert_eq!(fs::read_to_string(home.join("zmx-sessions"))?, ownership);
+    assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
+    Ok(())
+}
+
+#[test]
+fn failed_herdr_labelling_refuses_the_add_worker_before_starting_its_agent() -> anyhow::Result<()> {
+    let fixture = fixture();
+    start_workspace(&fixture)?;
+    let home = fixture.root.path();
+    let ownership = fs::read(home.join("herdr-ownership"))?;
+    install_test_script(
+        home.join("bin/claude"),
+        "#!/bin/sh\ntouch \"$HOME/new-agent-started\"\n",
+    );
+    let (output, transcript) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture
+                .repo
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("repo path"))?,
+            "blocked-worker",
+            "--agent",
+            "claude",
+        ],
+        "",
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    fs::write(home.join("herdr-label-fails"), "")?;
+    let mut worker = herdr_worker_command(&fixture);
+    worker.env("HERDR_SOCKET_PATH", home.join("owned-herdr.sock"));
+    let (output, transcript) = fixture.interactive_command(&mut worker, "");
+    assert!(!output.status.success(), "{output:?} {transcript}");
+    assert!(transcript.contains("ownership update failed"));
+    assert!(!home.join("new-agent-started").exists());
+    assert_eq!(fs::read(home.join("herdr-ownership"))?, ownership);
+    Ok(())
+}

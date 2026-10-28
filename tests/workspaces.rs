@@ -21276,6 +21276,8 @@ parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
 log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
+if args[:1] == ['set'] and (root / 'zmx-label-fails').exists():
+    sys.exit('ownership update failed')
 if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
     sessions = root / 'zmx-sessions'
     lines = []

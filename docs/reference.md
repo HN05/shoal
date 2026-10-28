@@ -726,9 +726,9 @@ terminal places, including zmx sessions and Herdr panes, regardless of
 `close_when_done`. Daemon startup and cleanup sweeps retry closes whose workspace
 is gone, through each host's adapter. Herdr verifies the recorded server,
 terminal identity and current ownership marker, preserving other panes and
-places reused from another state directory; ownership is recorded when Shoal
-starts work there. Only the default state directory claims
-older zmx sessions without a state label.
+places reused from another state directory. In-place agent and chat launches
+require ownership to be replaced or cleared successfully. Only the default state
+directory claims older zmx sessions without a state label.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,

@@ -449,7 +449,7 @@ configured command for another agent, plus proven child
   adapters together. Removal closes owned terminal places, including Herdr panes;
   startup and cleanup sweeps close orphan sessions only in their state namespace,
   with legacy labels claimed only by the default daemon. Relabelling
-  replaces obsolete ownership on every in-place agent or chat launch;
+  must replace obsolete ownership before an in-place agent or chat launches;
   conflicting chat labels prevent workspace cleanup.
   Herdr ownership persists with its server socket, pane, terminal identity and
   native ownership marker. Relabelling replaces or clears the marker across

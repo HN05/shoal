@@ -348,16 +348,13 @@ async fn launch(
     {
         return Ok(code);
     }
-    if let Err(error) = terminal::label_current(
+    terminal::label_current(
         &ctx.paths,
         &settings,
         terminal::Owner::Workspace(&workspace.id),
         &recovery.agent,
     )
-    .await
-    {
-        eprintln!("warning: {error:#}");
-    }
+    .await?;
     crate::execution::run_recovery(
         &ctx.paths,
         workspace.id.clone(),

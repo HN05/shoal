@@ -36,6 +36,8 @@ elif args[:2] == ['pane', 'get']:
     tokens = json.loads(marker.read_text()) if marker.exists() else {}
     print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': terminal, 'tokens': tokens}}}))
 elif args[:2] == ['pane', 'report-metadata']:
+    if (root / 'herdr-label-fails').exists():
+        sys.exit('ownership update failed')
     marker = root / 'herdr-ownership'
     tokens = json.loads(marker.read_text()) if marker.exists() else {}
     for index, arg in enumerate(args):
