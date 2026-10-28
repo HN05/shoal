@@ -302,7 +302,7 @@ async fn serve(
         return Ok(());
     };
     let answer = requests::operation(&server, operation, caller.as_ref());
-    let answer = connections::running::logged_when_slow(&name, answer).await;
+    let answer = log::when_slow(&format!("request {name}"), answer).await;
     answer
         .send(stream, request.id, &server.manager, operation_guard)
         .await

@@ -1,18 +1,14 @@
 //! The requests running now, so the daemon can say what holds its request
-//! capacity and log requests that run longer than expected.
+//! capacity.
 
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use tokio::time::Instant;
 
-use crate::daemon::log;
-
-/// A request running this long is logged, once, and again when it ends.
-pub(super) const SLOW_REQUEST: Duration = Duration::from_secs(60);
+use crate::daemon::log::elapsed;
 
 #[derive(Default)]
 pub(super) struct Running {
@@ -75,38 +71,6 @@ impl Running {
 impl Drop for Entry {
     fn drop(&mut self) {
         self.running.lock().started.remove(&self.id);
-    }
-}
-
-/// Run `operation`, logging it once it has run for [`SLOW_REQUEST`] and
-/// again when it ends, so a request that hangs leaves a trace.
-pub(in crate::daemon) async fn logged_when_slow<T>(
-    method: &str,
-    operation: impl Future<Output = T>,
-) -> T {
-    let started = Instant::now();
-    let mut operation = std::pin::pin!(operation);
-    tokio::select! {
-        output = &mut operation => return output,
-        () = tokio::time::sleep(SLOW_REQUEST) => {
-            log!("request {method} still running after {}", elapsed(SLOW_REQUEST));
-        }
-    }
-    let output = operation.await;
-    log!(
-        "request {method} finished after {}",
-        elapsed(started.elapsed())
-    );
-    output
-}
-
-/// A duration in its two largest units, such as `2h 3m` or `45s`.
-fn elapsed(duration: Duration) -> String {
-    let seconds = duration.as_secs();
-    match (seconds / 3600, seconds / 60 % 60, seconds % 60) {
-        (0, 0, seconds) => format!("{seconds}s"),
-        (0, minutes, seconds) => format!("{minutes}m {seconds}s"),
-        (hours, minutes, _) => format!("{hours}h {minutes}m"),
     }
 }
 

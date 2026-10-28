@@ -20,7 +20,7 @@ use super::log;
 use crate::protocol::Method;
 use running::Running;
 
-pub(super) mod running;
+mod running;
 
 /// Most request/response operations running at once. A request past it is
 /// refused at once with the requests that hold the capacity, so a few that
