@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 73;
+const SCHEMA_VERSION: i64 = 74;
 
 #[cfg(test)]
 mod benchmark;
@@ -415,6 +415,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     ),
     (72, include_str!("store/agent_queue_stopped_restores.sql"), None),
     (73, include_str!("store/session_cleanup.sql"), None),
+    (74, include_str!("store/execution_upstream_resets.sql"), None),
 ];
 
 /// The demo each running execution runs; a demo ends with its execution.

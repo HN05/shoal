@@ -302,7 +302,7 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         .report_upstream_reset(&other.name, execution.clone(), None)
         .await
         .unwrap();
-    assert_eq!(manager.upstream_reset(&execution), None);
+    assert_eq!(stored_reset(&manager, &execution).await, None);
     report(&manager, &other, &execution, AgentState::Working).await;
     fail(&manager, &other, &execution, TurnFailure::Overloaded).await;
     let transient = retry(&manager, &other).await.unwrap();
@@ -311,8 +311,52 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         .report_upstream_reset(&other.name, execution.clone(), Some(reset))
         .await
         .unwrap();
-    manager.forget_proxy_retry(&execution);
-    assert_eq!(manager.upstream_reset(&execution), None);
+    assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
+    // An ended execution waits for nothing.
+    manager.forget_proxy_retry(&execution).await;
+    assert_eq!(stored_reset(&manager, &execution).await, None);
+}
+
+/// The reset `execution`'s proxy reported, as the daemon keeps it.
+async fn stored_reset(manager: &Manager, execution: &str) -> Option<i64> {
+    let execution = execution.to_owned();
+    manager
+        .store
+        .run(move |db| upstream_reset(db, &execution))
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    let (id, execution) = (workspace.id.clone(), execution.clone());
+    let reset = 4_000_000_000_000;
+    let due_at = manager
+        .store
+        .run(move |db| {
+            let failure = TurnFailure::RateLimited;
+            // Each runs whole: the reset is kept before the failure is
+            // recorded, so the retry reads it ...
+            record_reset(db, &execution, Some(reset))?;
+            record_failure(db, &id, &execution, failure, 1000, 0.5)?;
+            let first = get(db, &id)?.context("retry after the reset")?.due_at;
+            cancel(db, &id)?;
+            record_reset(db, &execution, None)?;
+            // ... or the failure is recorded first, and the reset holds it.
+            record_failure(db, &id, &execution, failure, 1000, 0.5)?;
+            assert!(get(db, &id)?.context("retry")?.due_at < reset);
+            assert!(record_reset(db, &execution, Some(reset))?);
+            let second = get(db, &id)?.context("held retry")?.due_at;
+            Ok::<_, anyhow::Error>((first, second))
+        })
+        .await?;
+    assert_eq!(
+        due_at,
+        (reset + RESET_MARGIN_SECS, reset + RESET_MARGIN_SECS)
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -328,14 +372,14 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
             let mut now = 1000;
             // Drive the scheduling clock, without sleeping through usage limits.
             while now < 1000 + 8 * 24 * 60 * 60 {
-                record_failure(db, &id, &scheduling_execution, failure, now, 0.5, None)?;
+                record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
                 let pending = get(db, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);
                 assert!(deliver(db, &id, pending.due_at)?);
                 db.execute("DELETE FROM agent_messages WHERE workspace_id=?1", [&id])?;
                 now = pending.due_at;
             }
-            record_failure(db, &id, &scheduling_execution, failure, now, 0.5, None)?;
+            record_failure(db, &id, &scheduling_execution, failure, now, 0.5)?;
             get(db, &id)?.context("retry after eight days")
         })
         .await?;

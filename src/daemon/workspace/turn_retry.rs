@@ -97,7 +97,8 @@ fn spread() -> f64 {
 /// retry: the next attempt after a delivered one, the first for a new
 /// execution or a change between usage limits and transient failures, and the
 /// same one when the failure is reported again before it is due. An attempt
-/// waits past `reset`, when the upstream refuses requests until then.
+/// waits past the reset the execution's proxy last reported, read in the
+/// same transaction as a report of it, so neither can slip between.
 fn record_failure(
     db: &mut Connection,
     workspace_id: &str,
@@ -105,9 +106,9 @@ fn record_failure(
     failure: TurnFailure,
     now: i64,
     spread: f64,
-    reset: Option<i64>,
 ) -> Result<()> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let reset = upstream_reset(&tx, execution)?;
     let previous = previous_attempt(&tx, workspace_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| {
@@ -118,15 +119,50 @@ fn record_failure(
     Ok(())
 }
 
-/// Hold the pending retry of `execution`'s turn until past `reset`, when its
-/// upstream refuses requests until then, whichever report arrived first.
-fn wait_for_reset(db: &Connection, execution: &str, reset: i64) -> Result<bool> {
-    let changed = db.execute(
+/// Keep `reset`, when the upstream of `execution`'s proxy refuses requests
+/// until, and hold its pending turn retry until past it, together, so a
+/// failure recorded at the same time sees one or the other; `None` forgets
+/// it. Whether a pending retry was held.
+fn record_reset(db: &mut Connection, execution: &str, reset: Option<i64>) -> Result<bool> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let Some(reset) = reset else {
+        forget_upstream_reset(&tx, execution)?;
+        tx.commit()?;
+        return Ok(false);
+    };
+    tx.execute(
+        "INSERT INTO execution_upstream_resets(execution_id,resets_at) VALUES (?1,?2)
+         ON CONFLICT(execution_id) DO UPDATE SET resets_at=excluded.resets_at",
+        params![execution, reset],
+    )?;
+    let held = tx.execute(
         "UPDATE workspace_turn_retries SET due_at=MAX(due_at,?2)
          WHERE execution_id=?1 AND delivered=0",
         params![execution, reset.saturating_add(RESET_MARGIN_SECS)],
     )?;
-    Ok(changed > 0)
+    tx.commit()?;
+    Ok(held > 0)
+}
+
+/// When the upstream of `execution`'s proxy last said it refuses requests
+/// until.
+pub(super) fn upstream_reset(db: &Connection, execution: &str) -> Result<Option<i64>> {
+    Ok(db
+        .query_row(
+            "SELECT resets_at FROM execution_upstream_resets WHERE execution_id=?1",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// Forget the reset `execution`'s proxy reported.
+pub(super) fn forget_upstream_reset(db: &Connection, execution: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM execution_upstream_resets WHERE execution_id=?1",
+        [execution],
+    )?;
+    Ok(())
 }
 
 /// The persisted attempt whose execution and policy determine its successor.
@@ -355,22 +391,26 @@ impl Manager {
         if !failure.retryable() {
             return self.give_up_turn(&workspace, &agent).await;
         }
-        let reset = self.upstream_reset(execution);
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
         let (now, spread) = (i64::try_from(crate::time::unix_seconds())?, spread());
         self.store
-            .run(move |db| record_failure(db, &id, &execution, failure, now, spread, reset))
+            .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
             .await?;
         self.signals.wake_turn_retry();
         Ok(())
     }
 
-    /// Hold `execution`'s pending turn retry until past `reset`, which its
-    /// proxy reports as when the upstream refuses requests until.
-    pub(super) async fn hold_turn_retry(&self, execution: String, reset: i64) -> Result<()> {
+    /// Keep `reset`, which `execution`'s proxy reports as when the upstream
+    /// refuses requests until, holding its pending turn retry until past
+    /// it; `None` forgets it.
+    pub(super) async fn record_upstream_reset(
+        &self,
+        execution: String,
+        reset: Option<i64>,
+    ) -> Result<()> {
         if self
             .store
-            .run(move |db| wait_for_reset(db, &execution, reset))
+            .run(move |db| record_reset(db, &execution, reset))
             .await?
         {
             self.signals.wake_turn_retry();

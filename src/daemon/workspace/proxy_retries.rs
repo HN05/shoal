@@ -1,8 +1,8 @@
 //! The request a proxied agent's proxy is retrying, and when its upstream
-//! said it refuses requests until, as its wrapper reports them. The daemon
-//! only keeps them in memory: the proxy lives and dies with the wrapper, so
-//! a restart that forgets them loses nothing that still runs, beyond a turn
-//! retry that checks before a reset.
+//! said it refuses requests until, as its wrapper reports them. The retry
+//! lives only in memory: the proxy lives and dies with the wrapper, so a
+//! restart that forgets it loses nothing that still runs. The reset is kept
+//! with the turn retries it holds back.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -48,27 +48,21 @@ impl Manager {
         resets_at: Option<i64>,
     ) -> Result<()> {
         self.workspace(selector).await?;
-        let Some(resets_at) = resets_at else {
-            self.upstream_resets.lock().unwrap().remove(&execution);
-            return Ok(());
-        };
-        self.upstream_resets
-            .lock()
-            .unwrap()
-            .insert(execution.clone(), resets_at);
-        self.hold_turn_retry(execution, resets_at).await
+        self.record_upstream_reset(execution, resets_at).await
     }
 
-    /// When the upstream of `execution`'s proxy last said it refuses
-    /// requests until.
-    pub(super) fn upstream_reset(&self, execution: &str) -> Option<i64> {
-        self.upstream_resets.lock().unwrap().get(execution).copied()
-    }
-
-    /// An execution that ended no longer retries anything.
-    pub(super) fn forget_proxy_retry(&self, execution: &str) {
+    /// An execution that ended no longer retries anything, nor waits for
+    /// its upstream's reset.
+    pub(super) async fn forget_proxy_retry(&self, execution: &str) {
         self.proxy_retries.lock().unwrap().remove(execution);
-        self.upstream_resets.lock().unwrap().remove(execution);
+        let execution = execution.to_owned();
+        let forgot = self
+            .store
+            .run(move |db| super::turn_retry::forget_upstream_reset(db, &execution))
+            .await;
+        if let Err(error) = forgot {
+            crate::daemon::log!("forget the upstream reset of an ended execution: {error:#}");
+        }
     }
 
     /// The retry the proxy of one of `executions`, the workspace's running
