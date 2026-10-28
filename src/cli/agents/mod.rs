@@ -47,8 +47,8 @@ pub(super) use shortcuts::{open_app, with_app};
 /// arguments. Each default adds nothing.
 pub(in crate::cli) trait Integration: Sync {
     /// Arguments that register Shoal's hooks for the agent's session and,
-    /// when `proxied`, send its API requests to Shoal's proxy, with
-    /// placeholders that [`Self::route_through_proxy`] fills in.
+    /// when `proxied`, what [`Self::route_through_proxy`] points at Shoal's
+    /// proxy.
     fn hook_args(&self, _proxied: bool) -> std::io::Result<Vec<OsString>> {
         Ok(Vec::new())
     }
@@ -85,15 +85,14 @@ pub(in crate::cli) trait Integration: Sync {
         Vec::new()
     }
 
-    /// Fill in the proxy placeholders of `args` by `routing`, for the agent
-    /// running with `environment`.
+    /// Point `args` at the proxy by `routing`, for the agent running with
+    /// `environment`; nothing for an integration that does not route.
     fn route_through_proxy(
         &self,
-        args: &mut Vec<OsString>,
-        routing: &Routing,
+        _args: &mut Vec<OsString>,
+        _routing: &Routing,
         _environment: &AgentEnvironment,
     ) -> Result<()> {
-        crate::proxy::fill_url(args, routing.url);
         Ok(())
     }
 

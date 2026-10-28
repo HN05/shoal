@@ -1,12 +1,8 @@
-//! The proxy a tracked agent's wrapper runs, the launch arguments that
-//! name it, and the reports it sends the daemon.
+//! The proxy a tracked agent's wrapper runs, the key its requests name,
+//! and the reports it sends the daemon.
 #[cfg(feature = "proxy")]
 use anyhow::Context;
 use anyhow::Result;
-
-/// Where a proxied agent's launch arguments name the proxy's base URL,
-/// which the wrapper fills in once the proxy listens.
-pub const URL: &str = "{shoal-proxy-url}";
 
 /// The header an agent names its proxy's key in, which the proxy checks.
 pub const KEY_HEADER: &str = "x-shoal-proxy-key";
@@ -16,15 +12,6 @@ pub const KEY_HEADER: &str = "x-shoal-proxy-key";
 /// environment is the agent's alone, while any local user can read its
 /// command line.
 pub const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
-
-/// Fill in [`URL`] in each of `args` with the proxy's `url`.
-pub fn fill_url(args: &mut [std::ffi::OsString], url: &str) {
-    for arg in args {
-        if let Some(text) = arg.to_str().filter(|text| text.contains(URL)) {
-            *arg = text.replace(URL, url).into();
-        }
-    }
-}
 
 /// The proxy a tracked agent's wrapper runs while the agent does, at `url`.
 pub struct Running {

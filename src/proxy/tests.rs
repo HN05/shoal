@@ -10,21 +10,6 @@ fn parse(text: &str) -> Result<crate::config::Config> {
 }
 
 #[test]
-fn the_url_fills_in_wherever_launch_arguments_name_it() {
-    let mut args: Vec<std::ffi::OsString> = vec![
-        "--settings".into(),
-        format!(r#"{{"env":{{"ANTHROPIC_BASE_URL":"{URL}"}}}}"#).into(),
-        "plain".into(),
-    ];
-    fill_url(&mut args, "http://127.0.0.1:4000");
-    assert_eq!(
-        args[1],
-        r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:4000"}}"#
-    );
-    assert_eq!(args[2], "plain");
-}
-
-#[test]
 fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     let config = parse(
         "[proxy.cliproxy]\nupstream = 'http://127.0.0.1:8317'\n\

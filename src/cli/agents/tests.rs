@@ -81,11 +81,9 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
         with_proxy_args(&settings, name, &mut command);
         command
     };
-    // Claude's proxy URL goes in a settings file of its own.
+    // Claude gets settings of its own for the wrapper's merge to fill in.
     let claude = with("claude", &["claude", "--continue"]);
-    assert_eq!(claude[..3], ["claude", "--continue", "--settings"]);
-    let url = format!(r#""ANTHROPIC_BASE_URL":"{}""#, crate::proxy::URL);
-    assert!(claude[3].to_str().unwrap().contains(&url), "{claude:?}");
+    assert_eq!(claude, ["claude", "--continue", "--settings", "{}"]);
     // Codex's provider placeholder comes before a prompt after `--`.
     assert_eq!(
         with("codex", &["saved-session", "--", "prompt"]),

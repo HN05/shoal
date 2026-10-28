@@ -125,13 +125,11 @@ fn chat_settings_deliver_messages_and_wake_without_turn_state() {
 
 #[test]
 fn proxied_settings_send_api_requests_to_the_proxy() {
-    let env = |proxied| {
-        let args = Claude.hook_args(proxied).unwrap();
-        let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
-        settings["env"].clone()
-    };
-    assert_eq!(env(false), Value::Null);
-    assert_eq!(env(true), json!({"ANTHROPIC_BASE_URL": crate::proxy::URL}));
+    // The hooks are the same; the wrapper's merge adds the proxy's URL.
+    assert_eq!(
+        Claude.hook_args(true).unwrap(),
+        Claude.hook_args(false).unwrap()
+    );
     let mut args = Claude.hook_args(true).unwrap();
     let home = tempfile::tempdir().unwrap();
     let environment = AgentEnvironment {
