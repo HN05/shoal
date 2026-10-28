@@ -23601,7 +23601,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "max_agents = 1\n[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();
@@ -23658,7 +23658,11 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     );
 
     // An agent waiting for its first prompt attaches this terminal, which
-    // detaching returns to the caller's shell where it was.
+    // detaching returns to the caller's shell where it was. Its slot must be
+    // free in the daemon; the previous agent's output does not prove that.
+    wait_until("the detached agent's recorded completion", || {
+        fixture.ok(&["status", "background"])["executions"] == serde_json::json!([])
+    });
     let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
         fixture
