@@ -208,7 +208,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
     zmx.arg("attach").arg("--labels").arg(format!(
         "{} {}",
         labels(owner, agent),
-        crate::sessions::zmx::state_label(start.state)
+        crate::sessions::zmx::state_label(start.state)?
     ));
     attach_new(&mut zmx, &name, start);
     ended(zmx.status().await.context("run zmx")?)?;
@@ -279,7 +279,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<String> {
             labels: vec![
                 labels(Owner::Workspace(demo.workspace), ""),
                 format!("shoal.demo={}", demo.launch),
-                crate::sessions::zmx::state_label(demo.state),
+                crate::sessions::zmx::state_label(demo.state)?,
             ],
             ..Default::default()
         },
@@ -450,7 +450,7 @@ async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()
     set.arg("set")
         .arg(session)
         .args(labels(owner, agent).split(' '))
-        .arg(crate::sessions::zmx::state_label(state));
+        .arg(crate::sessions::zmx::state_label(state)?);
     Run::new(set)
         .checked()
         .await

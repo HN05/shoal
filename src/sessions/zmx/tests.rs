@@ -17,30 +17,53 @@ fn list_parses_names_fields_and_labels_after_the_marker() {
 }
 
 #[test]
-fn session_cleanup_is_scoped_to_its_state_directory() {
-    let state = std::path::Path::new("/state with spaces");
-    let other = std::path::Path::new("/other-state");
-    let owned = parse_list(&format!("name=ours\t{}\n", state_label(state)));
-    let foreign = parse_list(&format!("name=theirs\t{}\n", state_label(other)));
-    assert!(!state_label(state).contains(char::is_whitespace));
+fn session_cleanup_is_scoped_to_its_state_directory() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let state = root.path().join("state with spaces");
+    let other = root.path().join("other-state");
+    std::fs::create_dir(&state)?;
+    std::fs::create_dir(&other)?;
+    let label = state_label(&state)?;
+    let owned = parse_list(&format!("name=ours\t{label}\n"));
+    let foreign = parse_list(&format!("name=theirs\t{}\n", state_label(&other)?));
+    assert!(!label.contains(char::is_whitespace));
     for (_, fields) in owned {
-        assert!(in_state(&fields, state, false));
+        assert!(in_state(&fields, &label, false));
     }
     for (_, fields) in foreign {
-        assert!(!in_state(&fields, state, true));
+        assert!(!in_state(&fields, &label, true));
     }
-    assert!(!in_state(&Vec::new(), state, false));
-    assert!(in_state(&Vec::new(), state, true));
+    assert!(!in_state(&Vec::new(), &label, false));
+    assert!(in_state(&Vec::new(), &label, true));
+    Ok(())
 }
 
 #[test]
-fn state_labels_are_stable_and_whitespace_free() {
-    let state = std::path::Path::new("/state with spaces");
-    assert!(!state_label(state).contains(char::is_whitespace));
-    assert_ne!(
-        state_label(state),
-        state_label(std::path::Path::new("/other-state"))
-    );
+fn state_labels_identify_equivalent_paths_and_reject_missing_directories() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let state = root.path().join("state with spaces");
+    let alias = root.path().join("alias");
+    std::fs::create_dir(&state)?;
+    std::fs::create_dir(state.join("child"))?;
+    std::os::unix::fs::symlink(&state, &alias)?;
+    let label = state_label(&state)?;
+    assert!(!label.contains(char::is_whitespace));
+    for equivalent in [
+        state.join(""),
+        state.join("."),
+        state.join("child/.."),
+        alias,
+        state.canonicalize()?,
+    ] {
+        assert_eq!(label, state_label(&equivalent)?);
+        let sessions = parse_list(&format!("name=ours\t{}\n", state_label(&equivalent)?));
+        for (_, fields) in sessions {
+            assert!(in_state(&fields, &label, false));
+        }
+    }
+    assert_ne!(label, state_label(root.path())?);
+    assert!(state_label(&root.path().join("missing")).is_err());
+    Ok(())
 }
 
 #[test]

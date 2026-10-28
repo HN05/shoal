@@ -652,7 +652,7 @@ control to the caller, the CLI resets emulator input modes on the caller's
 terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
-after their workspace and labelled with its ID and state-directory identity,
+after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions; `attach` and `status` look
 them up through `zmx list`. Removal closes every session labelled with its
 workspace ID; startup and cleanup sweeps close sessions whose workspace record

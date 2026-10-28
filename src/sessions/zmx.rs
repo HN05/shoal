@@ -62,21 +62,24 @@ pub(crate) fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
-/// A whitespace-free state-directory identity for zmx's space-separated labels.
-pub(crate) fn state_label(state: &Path) -> String {
-    format!(
+/// A whitespace-free canonical directory identity for zmx's labels.
+pub(crate) fn state_label(state: &Path) -> Result<String> {
+    let state = state
+        .canonicalize()
+        .context("resolve session state directory")?;
+    Ok(format!(
         "shoal.state={}",
         Sha256::digest(state.as_os_str().as_encoded_bytes())
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
-    )
+    ))
 }
 
 /// Unnamespaced sessions predate state labels and belong to the default daemon.
-fn in_state(fields: &Fields, state: &Path, include_legacy: bool) -> bool {
+fn in_state(fields: &Fields, state_label: &str, include_legacy: bool) -> bool {
     match field(fields, "shoal.state") {
-        Some(label) => state_label(state) == format!("shoal.state={label}"),
+        Some(label) => state_label == format!("shoal.state={label}"),
         None => include_legacy,
     }
 }
@@ -93,10 +96,11 @@ impl super::Host for Zmx {
         include_legacy: bool,
     ) -> futures_util::future::BoxFuture<'a, Result<Vec<super::Session>>> {
         Box::pin(async move {
+            let state_label = state_label(state)?;
             Ok(list()
                 .await?
                 .into_iter()
-                .filter(|(_, fields)| in_state(fields, state, include_legacy))
+                .filter(|(_, fields)| in_state(fields, &state_label, include_legacy))
                 .filter_map(|(name, fields)| {
                     let workspace = field(&fields, WORKSPACE_LABEL)?.to_owned();
                     Some(super::Session { name, workspace })
