@@ -52,35 +52,61 @@ fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The executions of the workspace's restores that wait in the queue.
-fn queued_restores(db: &Connection, workspace_id: &str) -> Result<Vec<String>> {
+/// A restore of the workspace that waits in the queue.
+struct QueuedRestore {
+    execution: String,
+    /// Whether the daemon starts it, rather than a waiting wrapper.
+    started_here: bool,
+    /// Whether Shoal queued it on its own.
+    automatic: bool,
+}
+
+/// The workspace's restores that wait in the queue.
+fn queued_restores(db: &Connection, workspace_id: &str) -> Result<Vec<QueuedRestore>> {
     Ok(db
         .prepare(
-            "SELECT execution_id FROM agent_queue
+            "SELECT execution_id,env IS NOT NULL,automatic FROM agent_queue
              WHERE kind=?1 AND workspace_id=?2 AND state=?3 AND execution_id IS NOT NULL",
         )?
         .query_map(
             rusqlite::params![QueueKind::Restore, workspace_id, QueueState::Queued],
-            |row| row.get(0),
+            |row| {
+                Ok(QueuedRestore {
+                    execution: row.get(0)?,
+                    started_here: row.get(1)?,
+                    automatic: row.get(2)?,
+                })
+            },
         )?
         .collect::<rusqlite::Result<_>>()?)
 }
 
 impl Manager {
-    /// The executions of the workspace whose wrapper waits, with every
-    /// process of its agent stopped between turns, for an update that has
-    /// not arrived.
+    /// The executions of the workspace whose agent, stopped between turns
+    /// with every process, waits in the queue for an update that has not
+    /// arrived, in its wrapper or for the daemon to start it.
     pub(crate) async fn idle_restores(&self, workspace_id: &str) -> Result<HashSet<String>> {
         let id = workspace_id.to_owned();
         let queued = self.store.run(move |db| queued_restores(db, &id)).await?;
         let waiters = self.agent_queue.restore_waiters();
         let mut idle = HashSet::new();
-        for execution in queued {
-            if waiters.contains(&execution)
-                && self.restore_wake(workspace_id, &execution, true).await?
-                    == (Wake::Update { due: false })
-            {
-                idle.insert(execution);
+        for restore in queued {
+            let wake = if restore.started_here {
+                match self
+                    .stopped_restore_work(workspace_id, &restore.execution, restore.automatic)
+                    .await?
+                {
+                    Work::Restore { wake, .. } => wake,
+                    Work::Launch => continue,
+                }
+            } else if waiters.contains(&restore.execution) {
+                self.restore_wake(workspace_id, &restore.execution, true)
+                    .await?
+            } else {
+                continue;
+            };
+            if wake == (Wake::Update { due: false }) {
+                idle.insert(restore.execution);
             }
         }
         Ok(idle)

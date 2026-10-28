@@ -214,7 +214,7 @@ request beside its record asks for the restore, which the daemon queues once the
 execution has ended, so agents a reboot interrupted return without a command.
 As after a protection stop, an agent stopped between turns returns only for an
 update, counting processes still running outside its process group as a turn
-in flight; `shoal resume` asks for the agent itself, so its restore waits for
+in flight, and its restore keeps its workspace from no cleanup meanwhile; `shoal resume` asks for the agent itself, so its restore waits for
 nothing but admission.
 The request is its own file so that forgetting it, as a stop does, never
 replaces a record a resume holds. An

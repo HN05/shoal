@@ -45,13 +45,14 @@ pub struct RemovalCheck {
     pub(crate) idle_restores: Vec<IdleRestore>,
 }
 
-/// A wrapper waiting for an update to restore its agent, which stopped
-/// between turns with every process: nothing runs for it until the update
-/// arrives, so it keeps the workspace from no cleanup.
+/// A queued restore of an agent stopped between turns with every process,
+/// waiting for an update that has not arrived: nothing runs for it until
+/// then, so it keeps the workspace from no cleanup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IdleRestore {
     pub execution: String,
-    /// The waiting wrapper, which may use the workspace directory.
+    /// The wrapper waiting to restore the agent, which may use the
+    /// workspace directory; none when the daemon starts the restore.
     pub wrapper: Option<u32>,
 }
 

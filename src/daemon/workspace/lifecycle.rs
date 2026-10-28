@@ -19,7 +19,11 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ffi::OsString,
+    path::PathBuf,
+};
 
 #[cfg(test)]
 mod tests;
@@ -338,23 +342,27 @@ impl Manager {
             running: self.workspace_execution_count(id).await?,
             idle: cancelled.to_vec(),
         };
-        if executions.running == 0 {
-            return Ok(executions);
-        }
         let idle = self.idle_restores(id).await?;
-        // Only an idle restore needs the details of its execution.
-        if idle.is_empty() {
-            return Ok(executions);
-        }
-        for execution in self.workspace_executions(id).await? {
-            if idle.contains(&execution.id) {
-                executions.running -= 1;
-                executions.idle.push(IdleRestore {
-                    execution: execution.id,
-                    wrapper: execution.wrapper.map(|wrapper| wrapper.pid),
-                });
+        // Only the execution of an idle restore needs its details, and only
+        // a waiting wrapper has one.
+        let mut wrappers = HashMap::new();
+        if !idle.is_empty() && executions.running > 0 {
+            for execution in self.workspace_executions(id).await? {
+                if idle.contains(&execution.id) {
+                    executions.running -= 1;
+                    wrappers.insert(execution.id, execution.wrapper);
+                }
             }
         }
+        executions.idle.extend(idle.into_iter().map(|execution| {
+            IdleRestore {
+                wrapper: wrappers
+                    .remove(&execution)
+                    .flatten()
+                    .map(|wrapper| wrapper.pid),
+                execution,
+            }
+        }));
         Ok(executions)
     }
 
@@ -893,8 +901,9 @@ impl Manager {
         let initial = self
             .recheck_removal(workspace, removal, Stage::Initial, &[])
             .await?;
-        // Stopping cancels the restores of idle agents, whose records the
-        // removal record keeps and whose wrappers exit on their own.
+        // Stopping cancels the restores of idle agents that wrappers wait to
+        // carry out, which exit on their own, and the others go with the
+        // workspace; the removal record keeps the agents.
         let cancelled = initial.idle_restores;
         self.stop_executions(
             &workspace.id,

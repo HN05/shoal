@@ -215,6 +215,24 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
 }
 
 #[tokio::test]
+async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let idle = create(&manager, &repo, "idle").await;
+    signal_stop(&manager, &idle, "idle-agent");
+    stop(&manager, &idle, "idle-agent", IDLE);
+    let working = create(&manager, &repo, "working").await;
+    signal_stop(&manager, &working, "working-agent");
+    manager.dispatch_queue().await.unwrap();
+    assert!(entry(&manager, "idle-agent").await.waits_for_update);
+    assert!(manager.cleanup_candidacy(&idle.id).await.unwrap().is_ok());
+    assert_eq!(
+        manager.cleanup_candidacy(&working.id).await.unwrap(),
+        Err(crate::model::CleanupReason::Recovering)
+    );
+}
+
+#[tokio::test]
 async fn restores_leave_the_queue_once_resolved_or_cancelled() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
