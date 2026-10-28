@@ -42,7 +42,9 @@ instead of the PR delivery guidance below.
   inventory entries block ownership proof only while their recorded identity is live;
   recovery polls incomplete proof within a bounded wait without weakening it,
   and workspace stopping covers child registration, stopping and completion verification;
-  service termination and its command deadlines cover the drain.
+  service termination and its command deadlines cover the drain. Managed stops
+  signal the daemon and await its ownership lock before removing its service job,
+  including jobs loaded with an older termination limit.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
   after it still matches; missing proofs never establish ownership.

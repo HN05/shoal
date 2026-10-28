@@ -5,7 +5,8 @@ use std::path::Path;
 
 mod control;
 mod definition;
-use control::{command, domain, stop_command};
+mod shutdown;
+use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
 pub use definition::{definition, executable, file};
 
@@ -37,19 +38,15 @@ pub async fn setup(paths: &Paths, executable: &Path, preserve_running: bool) -> 
     let changed = write_definition(&definition)?;
     match platform {
         Platform::Mac => {
-            let target = format!("{}/{LABEL}", domain());
-            if changed
-                && !preserve_running
-                && command(Tool::Launchctl, &["print", &target], false).await?
-            {
-                stop_command(Tool::Launchctl, &["bootout", &target]).await?;
+            if changed && !preserve_running {
+                shutdown::stop(paths, platform).await?;
             }
         }
         Platform::Linux => {
             command(Tool::Systemctl, &["--user", "daemon-reload"], true).await?;
             command(Tool::Systemctl, &["--user", "enable", UNIT], true).await?;
             if changed && !preserve_running {
-                stop_command(Tool::Systemctl, &["--user", "restart", UNIT]).await?;
+                shutdown::stop(paths, platform).await?;
             }
         }
     }
@@ -88,20 +85,7 @@ pub async fn stop(paths: &Paths) -> Result<()> {
         return Ok(());
     }
     check_state_dir(paths, &path, platform)?;
-    match platform {
-        Platform::Mac => {
-            let target = format!("{}/{LABEL}", domain());
-            if command(Tool::Launchctl, &["print", &target], false).await? {
-                stop_command(Tool::Launchctl, &["bootout", &target]).await?;
-            }
-        }
-        Platform::Linux => {
-            if file(paths, Platform::Linux).exists() {
-                stop_command(Tool::Systemctl, &["--user", "stop", UNIT]).await?;
-            }
-        }
-    }
-    Ok(())
+    shutdown::stop(paths, platform).await
 }
 
 /// Whether the OS service runs the daemon of this state directory.

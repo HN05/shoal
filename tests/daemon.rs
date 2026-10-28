@@ -547,6 +547,7 @@ stop() {
 case "$1" in
   print) test -f "$FAKE_PID" ;;
   bootstrap|kickstart|start) start ;;
+  kill) if [ -f "$FAKE_PID" ]; then kill "$(cat "$FAKE_PID")"; fi ;;
   bootout|stop) stop ;;
   restart) stop; start ;;
   enable|daemon-reload) exit 0 ;;

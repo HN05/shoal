@@ -1721,7 +1721,9 @@ stopped itself; one launchd adopted after its parent exited has none and counts
 as unreadable. The reporting wrapper may remain alive
 awaiting acknowledgement; workspace stopping allows for child registration,
 stopping and completion verification; service termination and its command
-deadlines cover that drain. Recovery polls
+deadlines cover that drain. Managed stops signal only the daemon through its
+service manager and wait for its ownership lock before removing the job, so an
+already-loaded service with an older termination limit cannot cut the drain short. Recovery polls
 incomplete proof within a separate bounded wait and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is
