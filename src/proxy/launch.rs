@@ -32,6 +32,9 @@ pub struct Running {
     /// The key the agent names in [`KEY_HEADER`], which the proxy answers
     /// only with.
     pub key: String,
+    /// A directory only the user can read, for what the agent's launch
+    /// must keep off its command line; gone with the proxy.
+    private: tempfile::TempDir,
     #[cfg(feature = "proxy")]
     serving: tokio::task::JoinHandle<std::io::Result<()>>,
     /// What the proxy reports, until [`Running::report_turns`] takes it.
@@ -54,6 +57,11 @@ impl Drop for Running {
 }
 
 impl Running {
+    /// A directory only the user can read, which lasts as the proxy does.
+    pub fn private_dir(&self) -> &std::path::Path {
+        self.private.path()
+    }
+
     /// Tell the daemon what the proxy learns for the agent that `execution`
     /// runs in `workspace`: the retries it waits to make and its upstream's
     /// resets, and, when `ends_turns`, each turn a failure it gave up on
@@ -329,9 +337,14 @@ pub async fn start(
         .await
         .context("start the agent's proxy")?;
     let url = format!("http://{}", proxy.local_addr()?);
+    let private = tempfile::Builder::new()
+        .prefix("shoal-proxy-")
+        .tempdir()
+        .context("make the proxy's private directory")?;
     Ok(Running {
         url,
         key,
+        private,
         serving: tokio::spawn(proxy.serve()),
         events: Some(events),
         reporting: None,

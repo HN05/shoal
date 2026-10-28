@@ -133,19 +133,24 @@ fn proxied_settings_send_api_requests_to_the_proxy() {
     assert_eq!(env(false), Value::Null);
     assert_eq!(env(true), json!({"ANTHROPIC_BASE_URL": crate::proxy::URL}));
     let mut args = Claude.hook_args(true).unwrap();
-    let home = std::path::Path::new("/home");
+    let home = tempfile::tempdir().unwrap();
     let environment = AgentEnvironment {
-        home,
+        home: home.path(),
         configured: &Default::default(),
     };
+    let routing = super::super::Routing {
+        url: "http://127.0.0.1:4000",
+        directory: home.path(),
+        private: home.path(),
+    };
     Claude
-        .route_through_proxy(&mut args, "http://127.0.0.1:4000", &environment, home)
+        .route_through_proxy(&mut args, &routing, &environment)
         .unwrap();
-    assert!(
-        args[1]
-            .to_str()
-            .unwrap()
-            .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#)
+    let settings: Value =
+        serde_json::from_str(&std::fs::read_to_string(&args[1]).unwrap()).unwrap();
+    assert_eq!(
+        settings["env"]["ANTHROPIC_BASE_URL"],
+        "http://127.0.0.1:4000"
     );
 }
 

@@ -98,21 +98,25 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     );
     // Then the wrapper routes them as it does a launch's own.
     let home = tempfile::tempdir().unwrap();
+    let routing = Routing {
+        url: "http://127.0.0.1:4000",
+        directory: home.path(),
+        private: home.path(),
+    };
+    let read = |path: &OsString| -> serde_json::Value {
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    };
     let routed = route_through_proxy(
         IntegrationKind::Claude,
         claude,
-        "http://127.0.0.1:4000",
+        &routing,
         home.path(),
         &BTreeMap::new(),
-        home.path(),
     )
     .unwrap();
-    assert!(
-        routed[3]
-            .to_str()
-            .unwrap()
-            .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#),
-        "{routed:?}"
+    assert_eq!(
+        read(&routed[3])["env"]["ANTHROPIC_BASE_URL"],
+        "http://127.0.0.1:4000"
     );
     // A resume command's own settings stay, joined with the proxy's.
     let own = with(
@@ -122,14 +126,13 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     let routed = route_through_proxy(
         IntegrationKind::Claude,
         own,
-        "http://127.0.0.1:4000",
+        &routing,
         home.path(),
         &BTreeMap::new(),
-        home.path(),
     )
     .unwrap();
     assert_eq!(routed.iter().filter(|arg| *arg == "--settings").count(), 1);
-    let joined: serde_json::Value = serde_json::from_str(routed[2].to_str().unwrap()).unwrap();
+    let joined = read(&routed[2]);
     assert_eq!(joined["model"], "opus", "{joined}");
     assert_eq!(joined["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4000");
     // An agent without a proxy runs its command as configured.

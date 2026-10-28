@@ -82,16 +82,15 @@ pub(in crate::cli) trait Integration: Sync {
         Vec::new()
     }
 
-    /// Fill in the proxy placeholders of `args` with the proxy's `url`, for
-    /// the agent running with `environment` in `directory`.
+    /// Fill in the proxy placeholders of `args` by `routing`, for the agent
+    /// running with `environment`.
     fn route_through_proxy(
         &self,
         args: &mut Vec<OsString>,
-        url: &str,
+        routing: &Routing,
         _environment: &AgentEnvironment,
-        _directory: &Path,
     ) -> Result<()> {
-        crate::proxy::fill_url(args, url);
+        crate::proxy::fill_url(args, routing.url);
         Ok(())
     }
 
@@ -579,19 +578,26 @@ pub(crate) fn routes_through_proxy(kind: IntegrationKind) -> bool {
     integration(kind).routes_through_proxy()
 }
 
-/// `command` of an agent with integration `kind`, running in `directory`
-/// with `configured` added to this process's environment, sent to the proxy
-/// at `url`.
+/// Where a proxied agent's launch goes: its proxy's `url`, the `directory`
+/// it runs in, and a `private` directory only its user can read, for what
+/// must stay off its command line, which any local user can read.
+pub(crate) struct Routing<'a> {
+    pub url: &'a str,
+    pub directory: &'a Path,
+    pub private: &'a Path,
+}
+
+/// `command` of an agent with integration `kind`, running with `configured`
+/// added to this process's environment, sent to its proxy by `routing`.
 pub(crate) fn route_through_proxy(
     kind: IntegrationKind,
     mut command: Vec<OsString>,
-    url: &str,
+    routing: &Routing,
     home: &Path,
     configured: &BTreeMap<String, OsString>,
-    directory: &Path,
 ) -> Result<Vec<OsString>> {
     let environment = AgentEnvironment { home, configured };
-    integration(kind).route_through_proxy(&mut command, url, &environment, directory)?;
+    integration(kind).route_through_proxy(&mut command, routing, &environment)?;
     Ok(command)
 }
 

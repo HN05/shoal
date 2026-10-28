@@ -12770,7 +12770,10 @@ fn proxied_claude() -> Fixture {
     fixture.add("proxied");
     install_test_script(
         home.join("bin/claude"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\nenv > \"$HOME/claude-env\"\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\nenv > \"$HOME/claude-env\"\n\
+         previous=\nfor arg in \"$@\"; do\n\
+         if [ \"$previous\" = --settings ]; then cat \"$arg\" > \"$HOME/claude-settings\"; fi\n\
+         previous=$arg\ndone\n",
     );
     fixture
 }
@@ -12828,10 +12831,14 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let args = fs::read_to_string(home.join("claude-args")).unwrap();
+    let settings = fs::read_to_string(home.join("claude-settings")).unwrap();
     assert!(
-        args.contains("\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:"),
-        "{args}"
+        settings.contains("\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:"),
+        "{settings}"
     );
+    // The settings, which may hold the user's tokens, stay off the command
+    // line.
+    assert!(!args.contains("ANTHROPIC_BASE_URL"), "{args}");
     assert!(!args.contains("sk-test"), "{args}");
     // Its requests name the proxy's key from its private environment, not
     // its command line, which any local user can read.

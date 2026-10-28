@@ -31,12 +31,11 @@ impl Integration for Claude {
     fn route_through_proxy(
         &self,
         args: &mut Vec<OsString>,
-        url: &str,
+        routing: &super::Routing,
         _environment: &AgentEnvironment,
-        directory: &std::path::Path,
     ) -> anyhow::Result<()> {
-        crate::proxy::fill_url(args, url);
-        settings::merge(args, url, directory)
+        crate::proxy::fill_url(args, routing.url);
+        settings::merge(args, routing)
     }
 
     /// Claude Code adds `ANTHROPIC_CUSTOM_HEADERS`, one per line, to each

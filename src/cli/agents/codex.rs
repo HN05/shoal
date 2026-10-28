@@ -36,16 +36,15 @@ impl Integration for Codex {
     fn route_through_proxy(
         &self,
         args: &mut Vec<OsString>,
-        url: &str,
+        routing: &super::Routing,
         environment: &AgentEnvironment,
-        directory: &std::path::Path,
     ) -> Result<()> {
         if !args.iter().any(|arg| arg == PROVIDER) {
             return Ok(());
         }
         let config = super::trust::codex_config(environment)?;
-        let codex_home = config.parent().unwrap_or(directory);
-        provider::route(args, url, codex_home, directory)
+        let codex_home = config.parent().unwrap_or(routing.directory);
+        provider::route(args, routing.url, codex_home, routing.directory)
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {

@@ -8,15 +8,30 @@ fn args(args: &[&str]) -> Vec<OsString> {
     args.iter().map(Into::into).collect()
 }
 
-/// The one `--settings` `merged` leaves, parsed.
+/// The settings of the one `--settings` `merged` leaves, a private file,
+/// parsed.
 fn settings(merged: &[OsString]) -> Value {
+    use std::os::unix::fs::PermissionsExt;
     let at = merged.iter().position(|arg| arg == "--settings").unwrap();
     assert_eq!(
         merged.iter().filter(|arg| *arg == "--settings").count(),
         1,
         "{merged:?}"
     );
-    serde_json::from_str(merged[at + 1].to_str().unwrap()).unwrap()
+    let path = std::path::Path::new(&merged[at + 1]);
+    let mode = std::fs::metadata(path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600, "{}", path.display());
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// `merge` for an agent in `directory`, with its private files in `private`.
+fn merge_in(args: &mut Vec<OsString>, directory: &Path, private: &Path) -> Result<()> {
+    let routing = crate::cli::agents::Routing {
+        url: URL,
+        directory,
+        private,
+    };
+    merge(args, &routing)
 }
 
 #[test]
@@ -45,7 +60,7 @@ fn a_users_settings_join_shoals_and_the_proxy_url_wins() {
             given.push("--settings=mine.json".into());
         }
         given.extend(args(&["--", "--settings", "prompt"]));
-        merge(&mut given, URL, directory.path()).unwrap();
+        merge_in(&mut given, directory.path(), directory.path()).unwrap();
         let merged = &given[..given.iter().position(|arg| arg == "--").unwrap()];
         let settings = settings(merged);
         assert_eq!(settings["env"]["ANTHROPIC_BASE_URL"], URL, "{settings}");
@@ -77,7 +92,7 @@ fn settings_that_cannot_be_read_fail_the_launch() {
         ("{}", ""),
     ] {
         let mut given = args(&["claude", "--settings", "{}", "--settings", value]);
-        let result = merge(&mut given, URL, directory.path());
+        let result = merge_in(&mut given, directory.path(), directory.path());
         match message {
             "" => assert_eq!(settings(&given)["env"]["ANTHROPIC_BASE_URL"], URL),
             message => {
@@ -86,4 +101,26 @@ fn settings_that_cannot_be_read_fail_the_launch() {
             }
         }
     }
+}
+
+#[test]
+fn a_private_settings_files_credentials_stay_off_the_command_line() {
+    let directory = tempfile::tempdir().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    std::fs::write(
+        directory.path().join("private.json"),
+        r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"sk-secret"}}"#,
+    )
+    .unwrap();
+    let mut given = args(&["claude", "--settings", "{}", "--settings", "private.json"]);
+    merge_in(&mut given, directory.path(), private.path()).unwrap();
+    assert!(
+        given
+            .iter()
+            .all(|arg| !arg.to_string_lossy().contains("sk-secret")),
+        "{given:?}"
+    );
+    // The token still reaches Claude Code, from a file only the user reads.
+    assert_eq!(settings(&given)["env"]["ANTHROPIC_AUTH_TOKEN"], "sk-secret");
+    assert!(Path::new(&given[2]).starts_with(private.path()));
 }

@@ -8,21 +8,40 @@ use anyhow::{Context, Result};
 use serde_json::{Map, Value};
 
 /// Merge every `--settings` before a `--` in `args` into the first one's
-/// place, in order, with `url` as its `ANTHROPIC_BASE_URL`. A value that is
-/// not a JSON object names a settings file, relative to `directory`, where
-/// the agent runs.
-pub(super) fn merge(args: &mut Vec<OsString>, url: &str, directory: &Path) -> Result<()> {
+/// place, in order, with the proxy's URL as its `ANTHROPIC_BASE_URL`. A value
+/// that is not a JSON object names a settings file, relative to the
+/// directory the agent runs in. The merge may hold what a private settings
+/// file does, such as a token, so it goes in a file only the user can read
+/// rather than on the command line, which any local user can.
+pub(super) fn merge(args: &mut Vec<OsString>, routing: &super::super::Routing) -> Result<()> {
     let found = occurrences(args);
     if found.is_empty() {
         return Ok(());
     }
     let mut merged = Value::Object(Map::new());
     for found in &found {
-        merge_into(&mut merged, read(&found.value, directory)?);
+        merge_into(&mut merged, read(&found.value, routing.directory)?);
     }
-    set_base_url(&mut merged, url)?;
-    replace(args, &found, &merged);
+    set_base_url(&mut merged, routing.url)?;
+    let path = write_private(routing.private, &merged)?;
+    replace(args, &found, path.as_os_str());
     Ok(())
+}
+
+/// Write `settings` to a file in `private` that only the user can read.
+fn write_private(private: &Path, settings: &Value) -> Result<std::path::PathBuf> {
+    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    let path = private.join("claude-settings.json");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)
+        .with_context(|| format!("write {}", path.display()))?;
+    file.write_all(settings.to_string().as_bytes())
+        .with_context(|| format!("write {}", path.display()))?;
+    Ok(path)
 }
 
 /// Send `settings`' API requests to `url`, as its `env`'s
@@ -40,19 +59,16 @@ fn set_base_url(settings: &mut Value, url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Put `merged` as one `--settings` in the place of the first of `found`,
-/// and drop the rest.
-fn replace(args: &mut Vec<OsString>, found: &[Occurrence], merged: &Value) {
+/// Put `merged`, the path of the merged settings, as one `--settings` in
+/// the place of the first of `found`, and drop the rest.
+fn replace(args: &mut Vec<OsString>, found: &[Occurrence], merged: &std::ffi::OsStr) {
     let Some(first) = found.first().map(|found| found.at.start) else {
         return;
     };
     for found in found.iter().rev() {
         args.drain(found.at.clone());
     }
-    args.splice(
-        first..first,
-        ["--settings".into(), merged.to_string().into()],
-    );
+    args.splice(first..first, ["--settings".into(), merged.to_owned()]);
 }
 
 /// A `--settings` among the arguments, at the ones it takes up.

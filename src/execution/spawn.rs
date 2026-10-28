@@ -110,13 +110,17 @@ impl AgentLaunch {
         };
         let mut configured = environment.clone();
         self.environment.layer(&mut configured, &self.home);
+        let routing = crate::cli::agents::Routing {
+            url: &proxy.url,
+            directory,
+            private: proxy.private_dir(),
+        };
         crate::cli::agents::route_through_proxy(
             self.integration.unwrap_or(crate::ai::IntegrationKind::None),
             command.to_vec(),
-            &proxy.url,
+            &routing,
             &self.home,
             &configured,
-            directory,
         )
     }
 

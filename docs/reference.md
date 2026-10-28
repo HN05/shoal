@@ -859,7 +859,7 @@ settings Shoal passes, which win over its own settings and environment. Claude
 Code takes only its last `--settings`, so the wrapper merges every one the launch
 has, Shoal's and those forwarded or in a configured resume command, JSON or a
 file relative to the workspace, into one: objects key by key, lists such as an
-event's hooks one after another, and the proxy's URL as `ANTHROPIC_BASE_URL`;
+event's hooks one after another, and the proxy's URL as `ANTHROPIC_BASE_URL`, in a file only the user can read, which lasts as the proxy does, so tokens in a private settings file never reach the command line;
 Codex by
 moving the `base_url` of the provider the launch selects, keeping that
 provider's own credentials. Shoal reads the selection as Codex does: the user's

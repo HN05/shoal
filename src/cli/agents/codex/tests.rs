@@ -69,20 +69,20 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
         }
         let mut args = Codex.hook_args(true).unwrap();
         assert_eq!(args.last().unwrap(), PROVIDER);
-        let routing = args.len() - 1;
+        let placeholder = args.len() - 1;
         let configured = BTreeMap::from([("CODEX_HOME".to_owned(), codex.clone().into())]);
         let environment = AgentEnvironment {
             home: home.path(),
             configured: &configured,
         };
+        let routing = super::super::Routing {
+            url: "http://127.0.0.1:4000",
+            directory: home.path(),
+            private: home.path(),
+        };
         Codex
-            .route_through_proxy(
-                &mut args,
-                "http://127.0.0.1:4000",
-                &environment,
-                home.path(),
-            )
-            .map(|()| args.split_off(routing))
+            .route_through_proxy(&mut args, &routing, &environment)
+            .map(|()| args.split_off(placeholder))
     };
     // A provider of the user's keeps its token and only moves.
     let custom = routed(Some("model_provider = 'cliproxy'\n")).unwrap();
