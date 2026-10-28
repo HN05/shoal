@@ -711,6 +711,9 @@ pub struct RunningAgent {
     /// until it reports again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<crate::state::AgentState>,
+    /// Where it runs in a terminal host, when its wrapper runs in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::sessions::Origin>,
 }
 
 /// An agent launch or restore waiting for, or starting in, a `max_agents` slot.

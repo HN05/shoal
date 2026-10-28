@@ -143,9 +143,7 @@ pub struct Availability {
 impl Availability {
     pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Self {
         let sessions = if need == Need::Session {
-            terminal::session_owners(terminal::OwnerKind::Workspace)
-                .await
-                .unwrap_or_default()
+            session_workspaces(paths).await
         } else {
             HashSet::new()
         };
@@ -222,6 +220,22 @@ impl Availability {
 /// Workspaces whose running executions would block setup. Setup exempts
 /// the caller's own execution, so the caller's workspace counts only with
 /// another execution, as its inspection lists them.
+/// The IDs of workspaces with agent sessions, counting the places their
+/// running agents were recorded in.
+async fn session_workspaces(paths: &Paths) -> HashSet<String> {
+    let agents: Vec<crate::model::RunningAgent> =
+        client::request(paths, crate::protocol::ExecutionMethod::ListAgents)
+            .await
+            .unwrap_or_default();
+    let places: Vec<_> = agents
+        .iter()
+        .filter_map(|agent| Some((agent.workspace_id.as_str(), agent.origin.as_ref()?)))
+        .collect();
+    terminal::session_owners(terminal::OwnerKind::Workspace, &places)
+        .await
+        .unwrap_or_default()
+}
+
 async fn busy_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {
     let own = std::env::var(crate::env::EXECUTION_ID).ok();
     let mut busy = HashSet::new();

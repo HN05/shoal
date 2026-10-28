@@ -7,7 +7,7 @@ use std::{ffi::OsStr, ffi::OsString, path::Path};
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, PlaceState, Start, Watched, typed::Typed};
+use super::{ChatStart, Demo, Host, PlaceState, Session, Start, Watched, typed::Typed};
 use crate::sessions::{
     HostName, Origin,
     rex::{Block, Rex as Server, Window},
@@ -130,6 +130,30 @@ impl Host for Rex {
 
     fn names_places(&self) -> bool {
         true
+    }
+
+    /// The block, under its window's name, while it is open.
+    fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
+        Box::pin(session_at(place))
+    }
+
+    fn attaches_places(&self) -> bool {
+        true
+    }
+
+    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let place = session
+                .place
+                .as_ref()
+                .context("the session has no Rex block")?;
+            let server = Server::recorded(&place.data)?;
+            let block = server
+                .block(place.id())
+                .await?
+                .context("the Rex block is gone")?;
+            reveal(&server, &block, place.id(), &session.name).await
+        })
     }
 
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
@@ -341,6 +365,23 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
     server.send(place.id(), typed.text()).await?;
     typed.hand_over()?;
     Ok(place)
+}
+
+/// The session at `place`, named after the window that holds its block
+/// now, while the block is open.
+async fn session_at(place: &Origin) -> Result<Option<Session>> {
+    let server = Server::recorded(&place.data)?;
+    let Some(block) = server.block(place.id()).await? else {
+        return Ok(None);
+    };
+    let name = server.window_label(&block).await?;
+    Ok(Some(Session {
+        name: name.unwrap_or_else(|| place.id().to_owned()),
+        agent: None,
+        clients: 0,
+        host: HostName::Rex.as_str(),
+        place: Some(place.clone()),
+    }))
 }
 
 async fn rename_window(place: &str, label: &str) -> Result<()> {

@@ -43,7 +43,7 @@ pub(crate) mod resume;
 mod review;
 mod secrets;
 mod service;
-mod sessions;
+pub(in crate::cli) mod sessions;
 mod simulators;
 mod skill;
 mod split;

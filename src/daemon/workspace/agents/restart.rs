@@ -65,6 +65,7 @@ impl Manager {
                             workspace_id: execution.workspace_id,
                             agent,
                             restorable,
+                            origin: execution.origin,
                         })
                     })
                     .collect()

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     model::Chat,
-    protocol::{self, Body, ChatMethod, Method, Operation, Request, Response},
+    protocol::{self, Body, ChatMethod, ExecutionMethod, Method, Operation, Request, Response},
     state::WorkspaceState,
 };
 use std::{fs, os::unix::fs::PermissionsExt};
@@ -88,14 +88,19 @@ async fn attach_candidates_child() -> Result<()> {
 }
 
 async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) -> Result<()> {
-    for chats in [false, true] {
+    for _ in 0..3 {
         let (mut stream, _) = listener.accept().await?;
         let request: Request = protocol::read(&mut stream).await?;
-        let body = if chats {
-            assert!(matches!(
-                request.method,
-                Method::Operation(Operation::Chat(ChatMethod::ListChats))
-            ));
+        let body = if matches!(
+            request.method,
+            Method::Operation(Operation::Execution(ExecutionMethod::ListAgents))
+        ) {
+            // No agent runs in a recorded place.
+            Body::RunningAgents(Vec::new())
+        } else if matches!(
+            request.method,
+            Method::Operation(Operation::Chat(ChatMethod::ListChats))
+        ) {
             Body::Chats(vec![Chat {
                 id: "c1".into(),
                 repository_id: "repo".into(),

@@ -263,6 +263,26 @@ impl Rex {
         Ok(true)
     }
 
+    /// The label of `block`'s window.
+    pub async fn window_label(&self, block: &Block) -> Result<Option<String>> {
+        let Some(window) = &block.window else {
+            return Ok(None);
+        };
+        let Some(windows) = self
+            .run_found(&["window", "ls", "-s", &block.session, "--json"])
+            .await?
+        else {
+            return Ok(None);
+        };
+        let windows: Windows =
+            serde_json::from_slice(&windows).context("invalid Rex window list")?;
+        Ok(windows
+            .windows
+            .into_iter()
+            .find(|open| open.window_id == *window)
+            .and_then(|open| open.label))
+    }
+
     /// Name `block`'s window `label`.
     pub async fn rename_window(&self, block: &Block, label: &str) -> Result<()> {
         let window = block.window.as_deref().context("the block has no window")?;
@@ -397,6 +417,7 @@ struct Windows {
 #[derive(Deserialize)]
 struct WindowInfo {
     window_id: String,
+    label: Option<String>,
 }
 
 #[derive(Deserialize)]

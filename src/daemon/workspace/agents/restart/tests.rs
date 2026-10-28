@@ -73,6 +73,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 agent: Some("claude".into()),
                 restorable: true,
                 state: Some(AgentState::Idle),
+                origin: None,
             },
             RunningAgent {
                 execution: gone.plan.id.clone(),
@@ -80,6 +81,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 agent: None,
                 restorable: false,
                 state: None,
+                origin: None,
             },
         ]
     );

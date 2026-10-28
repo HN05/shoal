@@ -351,9 +351,21 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(HashSet::new()) })
     }
 
-    /// Attach this terminal to `session`, one of [`Host::sessions`], until
-    /// the user detaches or the session ends.
-    fn attach<'a>(&'a self, _session: &'a str) -> BoxFuture<'a, Result<()>> {
+    /// The session at `place`, where an agent or chat was recorded running,
+    /// while it is open.
+    fn session_at<'a>(&'a self, _place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    /// Whether the places recorded for agents of this host are sessions
+    /// [`Host::session_at`] finds.
+    fn attaches_places(&self) -> bool {
+        false
+    }
+
+    /// Attach this terminal to `session`, one of [`Host::sessions`] or
+    /// [`Host::session_at`], until the user detaches or the session ends.
+    fn attach<'a>(&'a self, _session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
 
@@ -536,6 +548,9 @@ pub struct Session {
     /// The host keeping the session.
     #[serde(skip)]
     host: &'static str,
+    /// Where it was recorded, for a session found there.
+    #[serde(skip)]
+    place: Option<Origin>,
 }
 
 impl Session {
@@ -1027,21 +1042,38 @@ pub(in crate::cli) async fn start_chat(
     }
 }
 
-/// Every host's running agent sessions for `owner`.
-pub(in crate::cli) async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
+/// Every host's running agent sessions for `owner`, with those still open
+/// at the `places` the daemon recorded for it.
+pub(in crate::cli) async fn sessions(owner: Owner<'_>, places: &[&Origin]) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
     for host in hosts() {
         sessions.extend(host.sessions(owner).await?);
     }
+    let mut seen = HashSet::new();
+    for place in places {
+        if seen.insert((place.host, place.id())) {
+            sessions.extend(kept_by(place).session_at(place).await?);
+        }
+    }
     Ok(sessions)
 }
 
-/// The IDs of the owners of `kind` with at least one agent session in any host.
-pub(in crate::cli) async fn session_owners(kind: OwnerKind) -> Result<HashSet<String>> {
+/// The IDs of the owners of `kind` with at least one agent session in any
+/// host, counting `places` recorded for owners by ID whose hosts attach them.
+pub(in crate::cli) async fn session_owners(
+    kind: OwnerKind,
+    places: &[(&str, &Origin)],
+) -> Result<HashSet<String>> {
     let mut owners = HashSet::new();
     for host in hosts() {
         owners.extend(host.session_owners(kind).await?);
     }
+    owners.extend(
+        places
+            .iter()
+            .filter(|(_, place)| kept_by(place).attaches_places())
+            .map(|(owner, _)| (*owner).to_owned()),
+    );
     Ok(owners)
 }
 
@@ -1049,7 +1081,7 @@ pub(in crate::cli) async fn session_owners(kind: OwnerKind) -> Result<HashSet<St
 /// it, then say how to return to it by `name` when it outlives the attach.
 pub(in crate::cli) async fn attach(owner: Owner<'_>, name: &str, session: &Session) -> Result<i32> {
     let host = named(session.host).context("the session's host is unknown")?;
-    host.attach(&session.name).await?;
+    host.attach(session).await?;
     report_detach(owner, name, &session.name).await?;
     Ok(0)
 }
@@ -1057,7 +1089,7 @@ pub(in crate::cli) async fn attach(owner: Owner<'_>, name: &str, session: &Sessi
 /// Say how to return to `owner`, named `name`, when its `session` still runs
 /// after this terminal left it.
 async fn report_detach(owner: Owner<'_>, name: &str, session: &str) -> Result<()> {
-    if sessions(owner)
+    if sessions(owner, &[])
         .await?
         .iter()
         .any(|running| running.name == session)

@@ -66,13 +66,17 @@ impl StatusView {
             request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
                 .await?;
         let chat = chat_name(&chats, &status.inspection.workspace);
-        let (sessions, sessions_error) =
-            match terminal::sessions(terminal::Owner::Workspace(&status.inspection.workspace.id))
-                .await
-            {
-                Ok(sessions) => (sessions, None),
-                Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-            };
+        let places: Vec<_> = status
+            .inspection
+            .executions
+            .iter()
+            .filter_map(|execution| execution.origin.as_ref())
+            .collect();
+        let owner = terminal::Owner::Workspace(&status.inspection.workspace.id);
+        let (sessions, sessions_error) = match terminal::sessions(owner, &places).await {
+            Ok(sessions) => (sessions, None),
+            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+        };
         Ok(Self {
             status,
             sessions,

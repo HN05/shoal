@@ -172,8 +172,8 @@ impl Host for Zmx {
         Box::pin(session_owners(kind))
     }
 
-    fn attach<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(attach(session))
+    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
+        Box::pin(attach(&session.name))
     }
 
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
@@ -528,6 +528,7 @@ async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
                 .unwrap_or(0),
             name,
             host: HostName::Zmx.as_str(),
+            place: None,
         })
         .collect();
     sessions.sort_by(|a, b| a.name.cmp(&b.name));

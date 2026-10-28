@@ -601,9 +601,10 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
 /// Unique display names, with IDs, sources, and paths as prefix-matched extras.
 /// The running chats with an agent session, by name.
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
-    let attachable = terminal::session_owners(terminal::OwnerKind::Chat).await?;
-    Ok(client::chats(paths)
-        .await?
+    let chats = client::chats(paths).await?;
+    let places = super::commands::sessions::chat_places(&chats);
+    let attachable = terminal::session_owners(terminal::OwnerKind::Chat, &places).await?;
+    Ok(chats
         .into_iter()
         .filter(|chat| attachable.contains(&chat.id))
         .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))

@@ -11,6 +11,7 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     model::{Chat, Workspace},
+    sessions::Origin,
 };
 
 pub(super) async fn attach(
@@ -24,7 +25,7 @@ pub(super) async fn attach(
     );
     ensure!(ctx.interactive(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let sessions = terminal::sessions(target.owner()).await?;
+    let sessions = terminal::sessions(target.owner(), &target.places()).await?;
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
             .iter()
@@ -47,7 +48,8 @@ pub(super) async fn attach(
 
 /// What `shoal attach` returns to.
 enum Target {
-    Workspace(Box<Workspace>),
+    /// A workspace with the places its executions were recorded running in.
+    Workspace(Box<Workspace>, Vec<Origin>),
     Chat(Chat),
 }
 
@@ -79,13 +81,18 @@ impl Target {
     }
 
     async fn inspected(ctx: &Context, id: String) -> Result<Self> {
-        let workspace = client::inspect(&ctx.paths, id).await?.workspace;
-        Ok(Self::Workspace(Box::new(workspace)))
+        let inspection = client::inspect(&ctx.paths, id).await?;
+        let places = inspection
+            .executions
+            .into_iter()
+            .filter_map(|execution| execution.origin)
+            .collect();
+        Ok(Self::Workspace(Box::new(inspection.workspace), places))
     }
 
     /// A workspace or one of `chats`, each with an agent session, from a picker.
     async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
-        let attachable = terminal::session_owners(OwnerKind::Chat).await?;
+        let attachable = terminal::session_owners(OwnerKind::Chat, &chat_places(&chats)).await?;
         let chats: Vec<_> = chats
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id))
@@ -101,22 +108,30 @@ impl Target {
 
     fn owner(&self) -> Owner<'_> {
         match self {
-            Self::Workspace(workspace) => Owner::Workspace(&workspace.id),
+            Self::Workspace(workspace, _) => Owner::Workspace(&workspace.id),
             Self::Chat(chat) => Owner::Chat(&chat.id),
         }
     }
 
     fn name(&self) -> &str {
         match self {
-            Self::Workspace(workspace) => &workspace.name,
+            Self::Workspace(workspace, _) => &workspace.name,
             Self::Chat(chat) => &chat.name,
+        }
+    }
+
+    /// Where the daemon recorded the target running.
+    fn places(&self) -> Vec<&Origin> {
+        match self {
+            Self::Workspace(_, places) => places.iter().collect(),
+            Self::Chat(chat) => chat.origin.iter().collect(),
         }
     }
 
     /// Why there is nothing to attach to, and for a chat where it runs instead.
     fn without_sessions(&self) -> String {
         match self {
-            Self::Workspace(workspace) => format!("{} has no agent sessions", workspace.name),
+            Self::Workspace(workspace, _) => format!("{} has no agent sessions", workspace.name),
             Self::Chat(chat) => match agents::chat_place(&chat.agent) {
                 Some(place) => {
                     format!("{} runs in {place}; it has no session to attach", chat.name)
@@ -128,6 +143,14 @@ impl Target {
             },
         }
     }
+}
+
+/// Where the daemon recorded `chats` running, by chat ID.
+pub(in crate::cli) fn chat_places(chats: &[Chat]) -> Vec<(&str, &Origin)> {
+    chats
+        .iter()
+        .filter_map(|chat| Some((chat.id.as_str(), chat.origin.as_ref()?)))
+        .collect()
 }
 
 /// The only running chat of the registered checkout the current directory
