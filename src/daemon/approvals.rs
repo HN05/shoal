@@ -826,8 +826,22 @@ impl Manager {
             false => None,
         };
         let _announcement = self.gates.lock_announcements().await;
-        let (request, retracted) = self
-            .store
+        let (request, retracted) = self.record_withdrawal(selected).await?;
+        if request.target.is_proposal() {
+            self.prune_proposal_files().await;
+        }
+        if !retracted {
+            self.announce_withdrawal(&request).await;
+        }
+        Ok(request)
+    }
+
+    /// Atomically withdraw the selected request and retract its unread notification.
+    async fn record_withdrawal(
+        &self,
+        selected: ApprovalRequest,
+    ) -> Result<(ApprovalRequest, bool)> {
+        self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let request = withdraw(&tx, &selected)?;
@@ -839,14 +853,7 @@ impl Manager {
                 tx.commit()?;
                 Ok((request, retracted))
             })
-            .await?;
-        if request.target.is_proposal() {
-            self.prune_proposal_files().await;
-        }
-        if !retracted {
-            self.announce_withdrawal(&request).await;
-        }
-        Ok(request)
+            .await
     }
 
     /// Tell the decider of a withdrawn request that it needs no decision:
