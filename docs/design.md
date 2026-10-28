@@ -683,6 +683,31 @@ reused by another owner. zmx has no conditional kill, so ownership checks,
 relabelling and closes hold a lock beside zmx's socket directory, shared by
 every state directory using that server.
 
+Rex is a terminal host as Herdr is: inside a Rex block, Shoal opens a window in
+the caller's session, never a split, and runs agents in place in their block,
+since Rex keeps sessions running without a connected client. A terminal no host
+serves goes to `default_host`, zmx unless set to Rex, whose windows then join the
+session `rex.session_name` names; generic code reads the setting and renders
+the name, and a host only finds or creates a group by label. Shoal remembers
+every place as one host-neutral origin record: the host, its group and place,
+host-defined data, and whether Shoal created the place. Generic code passes the
+record to the host that reads it and never interprets the data, which for Rex
+is how to reach the server and its CLI. Queued entries carry the queuing
+terminal's origin, recovery records the stopped agent's, demos their launch's,
+and the daemon the place each execution and chat runs in, which `attach` and
+`status` ask the host about; the host never calls the daemon. A queued start
+falls back from its origin's group to its host's configured group on the same
+server, then to `default_host`, then to zmx. Rex cannot set a new terminal's
+environment, so Shoal types a launch step that loads the worker and its
+variables from a private file and deletes it, keeping them off screen and out
+of shell history, and the shell stays as in a Herdr tab. Rex blocks carry no
+labels, so the daemon's records of the places Shoal created are the proof of
+ownership, closed through the same removal hook, orphan sweep and pending-close
+retries as zmx sessions; Rex never reuses IDs, so a recorded block that still
+exists is Shoal's, and each state directory knows only its own. A close ends
+only that block, leaving the user's other blocks in its window. Rex's own
+`own_block` arbitrates terminal size between clients and is not ownership.
+
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx
 passes output through unchanged while attached and restores the screen from its

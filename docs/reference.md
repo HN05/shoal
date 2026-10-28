@@ -342,8 +342,9 @@ agent restores only when its workspace is named.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive Herdr pane with `herdr.enabled`, it restores each agent in the
-pane it stopped in once that pane is back at its prompt. Otherwise it restores a
+interactive Herdr pane with `herdr.enabled` or Rex block with `rex.enabled`, it
+restores each agent in the pane or block it stopped in once that is back at its
+prompt. Otherwise it restores a
 single agent in the current terminal and starts several in the background, as
 `shoal add` does: a tab per agent where `herdr.new_tab` allows, labelled as
 `shoal add` labels it, or a detached zmx session per agent on a terminal outside
@@ -708,9 +709,10 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
-zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
-in place. On a terminal outside zmx, a missing zmx refuses the agent as a missing
-agent executable does.
+zmx session (`ZMX_SESSION` is set), in a Herdr pane with `herdr.enabled` or in a
+Rex block with `rex.enabled` runs in place. On a terminal outside zmx, a missing
+zmx refuses the agent as a missing agent executable does. `default_host = "rex"`
+sends these launches to [Rex](#rex) instead.
 
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
@@ -782,6 +784,54 @@ removal closes it immediately. A background tab `shoal resume` opens closes the
 same way; a pane it reuses keeps its tab's behavior. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
+
+#### Rex
+
+Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_SESSION` and
+`REX_BLOCK` are set), `shoal add`, chats, background resumes and demos open a
+new window in the current Rex session, never a split, placed and labelled as a
+Herdr tab would be, and agents run in place in their block. Rex keeps sessions
+running without a connected app, so an agent keeps running when the Mac app or
+the phone disconnects. Rex cannot set a new terminal's environment: Shoal types
+one short command into the window's shell, which loads the worker and its
+variables from a private file and deletes it, so nothing long shows on screen
+or in shell history. The shell stays after the worker exits, as in a Herdr tab.
+
+The `[rex]` table in global or repository config uses normal per-option
+precedence; with `enabled = false` Shoal treats a Rex terminal as a plain
+terminal:
+
+```toml
+[rex]
+enabled = true          # Use Rex windows and blocks
+new_window = true       # Open windows beside the caller
+session_name = "{repo}" # The session for windows Shoal opens outside one
+# window_name = "{repo}: {branch}" # Customize the window name, as tab_name
+# close_when_done = true # Close after done keeps the workspace, or at removal
+```
+
+The top-level `default_host` sets where launches from a terminal outside Herdr
+and Rex run: `"zmx"` (the default) or `"rex"`, which opens their windows in the
+`session_name` session on the local Rex server; `{repo}` is the only
+placeholder, and Shoal reuses the oldest session with that label or creates it.
+Rex has no terminal client, so a focused start there selects the window in the
+connected Mac Rex app and gives the terminal its shell back; without a
+connected app it says to open Rex. A start queued from Rex opens a background
+window in the session it was queued from, then falls back to the
+`session_name` session on the same server, then to `default_host`, then to zmx.
+Shoal finds `rex` in Rex's bin directory, on PATH, then in the Rex app, and
+needs Rex API revision 7 or later.
+
+`shoal attach` and `shoal status` find a workspace's or chat's Rex block by the
+place its agent was recorded in: attach makes the block's window active inside
+Rex and selects it in the Mac app from another terminal; a block that is gone
+leaves nothing to attach. Shoal closes only the blocks it created, and never
+their window's other blocks: completion and removal close them as they close a
+Herdr tab, and daemon startup and `shoal cleanup` close those whose workspace is
+gone. A block you opened stays open, even after an agent ran there. Rex reports
+no agent turn state, so an agent without turn hooks closes its block once its
+execution ends. Rex sends no push notifications to the phone, and a demo's
+screen of a full-screen program shows only its current screen.
 
 Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
@@ -1038,15 +1088,17 @@ printing how to open it, and a workspace process also notifies you.
 `shoal demo [NAME] [--workspace W]` opens a demo: a picker of the running demos
 of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
-variables, otherwise shows it where it runs: Herdr focuses its tab, zmx
-attaches (Ctrl-\ detaches), and the background follows its log. `shoal demo ls` lists the configured and
+variables, otherwise shows it where it runs: Herdr focuses its tab, Rex its
+window (or selects it in the Mac app), zmx attaches (Ctrl-\ detaches), and the
+background follows its log. `shoal demo ls` lists the configured and
 running demos, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
 the screen you are looking at. `shoal demo stop [NAME]` stops one demo, or every
 demo of the workspace.
 
 Each demo runs as a tracked command where queued agents start: a background
-Herdr tab inside Herdr, otherwise a detached zmx session
+Herdr tab inside Herdr, a background Rex window inside Rex, otherwise a
+detached zmx session
 named `<workspace>-<name>`, and without zmx in the background, writing a log in
 the workspace's state directory, which removal deletes, and takes no keys. A command that exits runs again; an exit
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30
@@ -1079,7 +1131,8 @@ On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
 where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
 opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
-`new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
+`new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
+window; on a terminal it runs in a zmx
 session named after the chat, which [`shoal attach <name>`](#agents)
 returns to; inside a zmx session or a Herdr pane it runs in place. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
@@ -1207,9 +1260,10 @@ queue and needs a free slot, or room for its load, as a launch does. A signal
 stop's restore of an idle agent holds no slot and holds nothing back until its
 update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
 The daemon
-starts it as it starts a queued launch: in the Herdr pane the agent stopped in
-once that pane is back at its prompt, otherwise in a background tab where
-`herdr.new_tab` allows, otherwise in a detached zmx session. A restore whose
+starts it as it starts a queued launch: in the Herdr pane or Rex block the agent
+stopped in once that is back at its prompt, otherwise in a background tab or
+window where `herdr.new_tab` or `rex.new_window` allows, otherwise in a detached
+zmx session. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way
