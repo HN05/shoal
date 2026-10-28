@@ -291,51 +291,19 @@ impl Rex {
         Ok(())
     }
 
-    /// Close `block` and nothing else, leaving its window to the user's other
-    /// blocks; a window it leaves empty closes too. A block already gone is
-    /// closed.
+    /// Close `block` and nothing else; Rex removes a window once its last
+    /// block closes, so the user's other blocks in it stay. A block already
+    /// gone is closed.
     pub async fn close(&self, id: &str) -> Result<()> {
-        let Some(block) = self.block(id).await? else {
+        if self.block(id).await?.is_none() {
             return Ok(());
-        };
-        self.run_found(&["block", "close", id]).await?;
-        if let Some(window) = &block.window
-            && self.window_is_empty(&block.session, window).await?
-        {
-            self.run_found(&["window", "close", "-s", &block.session, window])
-                .await?;
         }
+        self.run_found(&["block", "close", id]).await?;
         ensure!(
             self.block(id).await?.is_none(),
             "Rex block {id} is still open after closing it"
         );
         Ok(())
-    }
-
-    /// Whether `window` is still open without any block.
-    async fn window_is_empty(&self, session: &str, window: &str) -> Result<bool> {
-        let Some(windows) = self
-            .run_found(&["window", "ls", "-s", session, "--json"])
-            .await?
-        else {
-            return Ok(false);
-        };
-        let windows: Windows =
-            serde_json::from_slice(&windows).context("invalid Rex window list")?;
-        if !windows.windows.iter().any(|open| open.window_id == window) {
-            return Ok(false);
-        }
-        let Some(blocks) = self
-            .run_found(&["block", "ls", "-s", session, "--json"])
-            .await?
-        else {
-            return Ok(false);
-        };
-        let blocks: Blocks = serde_json::from_slice(&blocks).context("invalid Rex block list")?;
-        Ok(!blocks
-            .blocks
-            .iter()
-            .any(|block| block.window_id.as_deref() == Some(window)))
     }
 }
 
@@ -449,11 +417,6 @@ struct Windows {
 struct WindowInfo {
     window_id: String,
     label: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct Blocks {
-    blocks: Vec<BlockInfo>,
 }
 
 #[derive(Deserialize)]
