@@ -24,7 +24,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, AgentMode},
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
     config::{Config, Effective, named_commands::Commands},
@@ -34,11 +34,13 @@ use crate::{
     tools::Tool,
 };
 
+pub(in crate::cli) use codex::APP as CODEX_APP;
+pub(in crate::cli) use desktop::{App, T3};
 pub(in crate::cli) use launch::input;
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
 pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
-pub(super) use shortcuts::{codex, open_app};
+pub(super) use shortcuts::{open_app, with_app};
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -127,6 +129,12 @@ pub(in crate::cli) trait Integration: Sync {
     fn detached(&self) -> Option<&dyn detached::App> {
         None
     }
+
+    /// The desktop app `default_mode = "app"` and `--app` hand the agent's
+    /// workspace launches to.
+    fn app(&self) -> Option<&'static desktop::App> {
+        None
+    }
 }
 
 /// How an idle agent wakes for an update, which decides whether updates are
@@ -150,8 +158,8 @@ pub(in crate::cli) struct Options {
     /// Why config turns the integration off, if it does; pickers and
     /// completion leave its agents out.
     pub off: Option<&'static str>,
-    /// The program of the desktop app config hands the agent's launches to.
-    pub app: Option<&'static str>,
+    /// The desktop app config hands the agent's launches to.
+    pub app: Option<&'static desktop::App>,
 }
 
 /// An agent without an integration: its configuration says everything.
@@ -168,11 +176,17 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
 }
 
 /// What `settings` set for the integration of AI tools of `kind`, from its
-/// own section.
+/// own section: `default_mode = "app"` hands launches to its desktop app.
 fn tool_options(kind: IntegrationKind, settings: &Effective) -> Options {
-    match kind {
-        IntegrationKind::Codex => codex::options(&settings.codex),
-        IntegrationKind::Claude | IntegrationKind::None => Options::default(),
+    let shortcut = match kind {
+        IntegrationKind::Codex => &settings.codex,
+        IntegrationKind::Claude | IntegrationKind::None => return Options::default(),
+    };
+    Options {
+        app: integration(kind)
+            .app()
+            .filter(|_| shortcut.default_mode == AgentMode::App),
+        ..Options::default()
     }
 }
 
@@ -234,7 +248,7 @@ fn agent_options(settings: &Effective, name: &str) -> Options {
 /// The desktop app a launch with `options` opens: config hands launches to
 /// it, the app cannot take a first message, so a `prompted` launch stays
 /// in the terminal, and a `tracked` launch is never handed to an app.
-fn opens_app(options: Options, prompted: bool, tracked: bool) -> Option<&'static str> {
+fn opens_app(options: Options, prompted: bool, tracked: bool) -> Option<&'static desktop::App> {
     options.app.filter(|_| !prompted && !tracked)
 }
 

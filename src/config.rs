@@ -119,7 +119,7 @@ pub struct Config {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
-    pub codex: repo::Codex,
+    pub codex: repo::Shortcut,
     pub herdr: repo::Herdr,
     pub happy: repo::Happy,
     pub overload: overload::Overload,
@@ -153,9 +153,11 @@ pub struct Config {
     pub proxy: crate::proxy::Proxies,
 }
 
+/// What `shoal <agent>` does without `--cli` or `--app`, from the agent's
+/// section.
 #[derive(Debug, Default, Serialize)]
-pub struct Codex {
-    pub default_mode: crate::agent::CodexMode,
+pub struct Shortcut {
+    pub default_mode: crate::agent::AgentMode,
 }
 
 /// The global `[ports]` range as written, so an omitted bound stays

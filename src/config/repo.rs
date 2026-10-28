@@ -1,4 +1,4 @@
-use crate::agent::{Agent, CodexMode};
+use crate::agent::{Agent, AgentMode};
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ pub struct RepoConfig {
     pub focus: Option<bool>,
     /// Whether a place Shoal opened for a workspace closes once it is done.
     pub close_when_done: Option<bool>,
-    pub codex: Codex,
+    pub codex: Shortcut,
     pub herdr: Herdr,
     pub happy: Happy,
     /// Copy the main checkout's ignored files into the worktree before setup.
@@ -333,8 +333,8 @@ pub struct SimulatorPreferences {
 /// Repository value for the global `[codex]`; `None` keeps the layer below.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Codex {
-    pub default_mode: Option<CodexMode>,
+pub struct Shortcut {
+    pub default_mode: Option<AgentMode>,
 }
 
 /// Repository values for the global `[cleanup]`.

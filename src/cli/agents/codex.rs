@@ -1,24 +1,26 @@
 //! Codex: its hooks deliver updates and report its turn state, its wrapper
 //! wakes it by typing a prompt into its session, `config.toml` records the
-//! directories it trusts, and `codex.default_mode` may hand a launch to the
-//! Codex app.
+//! directories it trusts, and `codex app` opens a workspace in the Codex
+//! app.
 use std::ffi::OsString;
 
 use anyhow::Result;
 use serde_json::Value;
 
 use super::{
-    AgentEnvironment, Integration, Options, Wake,
+    AgentEnvironment, Integration, Wake,
+    desktop::{self, App},
     trust::{CODEX, TrustFile},
 };
-use crate::{
-    agent::{CodexMode, hooks},
-    config,
-    state::AgentState,
-};
+use crate::{agent::hooks, state::AgentState};
 
-/// The program that opens the Codex app.
-pub(super) const APP: &str = "codex";
+/// The Codex app, which `codex app` offers to install when it is missing.
+pub(in crate::cli) const APP: App = App {
+    name: "codex app",
+    program: "codex",
+    bundle: None,
+    args: desktop::app_subcommand,
+};
 
 pub(super) struct Codex;
 
@@ -72,14 +74,9 @@ impl Integration for Codex {
     fn wakes(&self) -> Wake {
         Wake::Prompt
     }
-}
 
-/// What Codex's section sets: `codex.default_mode = "app"` hands launches to
-/// the Codex app.
-pub(super) fn options(config: &config::Codex) -> Options {
-    Options {
-        app: (config.default_mode == CodexMode::App).then_some(APP),
-        ..Options::default()
+    fn app(&self) -> Option<&'static App> {
+        Some(&APP)
     }
 }
 

@@ -714,13 +714,32 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
 enum ExecuteChoice {
     /// An agent, run as `shoal run <name>`.
     Agent(String),
-    /// A desktop app that opens the workspace.
-    App(&'static str),
+    /// A desktop app, opened by the command it builds for a workspace.
+    App(OpenApp),
     Shell,
 }
 
-/// Desktop handoffs the menu offers beside agents.
-const APPS: [(&str, &str); 2] = [("codex app", "codex"), ("t3", "t3")];
+/// The command that opens a desktop app in a workspace.
+type OpenApp = fn(Option<String>) -> Command;
+
+/// Desktop handoffs the menu offers beside agents: each label, app and
+/// command that opens the app.
+const APPS: [(&str, &agents::App, OpenApp); 2] = [
+    ("codex app", &agents::CODEX_APP, |workspace| {
+        Command::Agents(AgentsCommand::Codex {
+            workspace,
+            cli: false,
+            app: true,
+            args: vec![],
+        })
+    }),
+    ("t3", &agents::T3, |workspace| {
+        Command::Agents(AgentsCommand::T3 {
+            workspace,
+            args: vec![],
+        })
+    }),
+];
 
 async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
     let target = workspace
@@ -734,8 +753,8 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
         .map(|name| (ExecuteChoice::Agent(name.clone()), name));
     let apps = APPS
         .into_iter()
-        .filter(|(_, program)| agents::program_available(program, &search_path))
-        .map(|(label, program)| (ExecuteChoice::App(program), label.to_owned()));
+        .filter(|(_, app, _)| app.available(&search_path))
+        .map(|(label, _, command)| (ExecuteChoice::App(command), label.to_owned()));
     let choices: Vec<_> = agents
         .chain(apps)
         .chain([(ExecuteChoice::Shell, "custom shell command".into())])
@@ -751,16 +770,7 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             workspace,
             args: vec![],
         },
-        ExecuteChoice::App("codex") => Command::Agents(AgentsCommand::Codex {
-            workspace,
-            cli: false,
-            app: true,
-            args: vec![],
-        }),
-        ExecuteChoice::App(_) => Command::Agents(AgentsCommand::T3 {
-            workspace,
-            args: vec![],
-        }),
+        ExecuteChoice::App(command) => command(workspace),
         ExecuteChoice::Shell => Command::Run {
             name: None,
             workspace,

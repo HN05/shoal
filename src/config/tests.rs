@@ -14,16 +14,16 @@ impl Config {
 
 #[test]
 fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
-    use crate::agent::CodexMode;
+    use crate::agent::AgentMode;
 
     for text in ["", "[codex]"] {
         let config: Config = toml::from_str(text).unwrap();
         assert_eq!(config.codex.default_mode, None);
         let effective = config.effective(&RepoConfig::default()).unwrap();
-        assert_eq!(effective.codex.default_mode, CodexMode::Cli);
+        assert_eq!(effective.codex.default_mode, AgentMode::Cli);
     }
     let config: Config = toml::from_str("[codex]\ndefault_mode = 'app'").unwrap();
-    assert_eq!(config.codex.default_mode, Some(CodexMode::App));
+    assert_eq!(config.codex.default_mode, Some(AgentMode::App));
     for text in [
         "[codex]\ndefault_mode = 'desktop'",
         "[codex]\ndefaut_mode = 'app'",
@@ -334,7 +334,7 @@ fn repository_values_win_over_global_cleanup_policy() {
 
 #[test]
 fn agent_defaults_come_from_the_repository_before_the_global_config() {
-    use crate::agent::CodexMode;
+    use crate::agent::AgentMode;
 
     let global: Config =
         toml::from_str("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
@@ -344,14 +344,14 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
         effective.default_agent,
         "codex".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.codex.default_mode, CodexMode::App);
+    assert_eq!(effective.codex.default_mode, AgentMode::App);
     let repo = repo::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
         effective.default_agent,
         "claude".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.codex.default_mode, CodexMode::Cli);
+    assert_eq!(effective.codex.default_mode, AgentMode::Cli);
     let effective = Config::default().effective(&repo).unwrap();
     assert_eq!(effective.default_agent, None);
 }

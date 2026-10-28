@@ -38,7 +38,7 @@ where
 #[test]
 fn migrated_enums_preserve_spellings_and_defaults() {
     use crate::{
-        agent::CodexMode,
+        agent::AgentMode,
         config::repo::ConflictPolicy,
         daemon::{
             approvals::{DecisionStatus, Lifetime},
@@ -78,7 +78,7 @@ fn migrated_enums_preserve_spellings_and_defaults() {
         (DirectoryState::Moved, "moved"),
         (DirectoryState::Unverified, "unverified"),
     ]);
-    assert_spellings(&[(CodexMode::Cli, "cli"), (CodexMode::App, "app")]);
+    assert_spellings(&[(AgentMode::Cli, "cli"), (AgentMode::App, "app")]);
     assert_spellings(&[
         (ExecutionKind::Command, "command"),
         (ExecutionKind::Land, "land"),
@@ -92,7 +92,7 @@ fn migrated_enums_preserve_spellings_and_defaults() {
     assert_eq!(Lifetime::default(), Lifetime::Lease);
     assert_eq!(ResourceKind::default(), ResourceKind::Semaphore);
     assert_eq!(ConflictPolicy::default(), ConflictPolicy::Suggest);
-    assert_eq!(CodexMode::default(), CodexMode::Cli);
+    assert_eq!(AgentMode::default(), AgentMode::Cli);
 }
 
 states!(

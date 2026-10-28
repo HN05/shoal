@@ -43,7 +43,7 @@ fn layering_keeps_omitted_options_and_replaces_named_entries() {
         config.default_agent,
         "claude".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(config.codex.default_mode, Some(CodexMode::App));
+    assert_eq!(config.codex.default_mode, Some(AgentMode::App));
     assert_eq!(config.setup_cmd.as_deref(), Some("local/setup"));
     assert_eq!(config.post_setup_cmd.as_deref(), Some("base/attach"));
     assert!(matches!(

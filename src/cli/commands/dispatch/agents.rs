@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 use crate::{
-    agent::CodexMode,
+    agent::AgentMode,
+    ai::IntegrationKind,
     cli::{
         agents,
         args::agents::AgentsCommand,
@@ -21,17 +22,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             app,
             args,
         } => {
-            let mode = if cli {
-                Some(CodexMode::Cli)
-            } else if app {
-                Some(CodexMode::App)
-            } else {
-                None
-            };
-            agents::codex(&ctx, mode, workspace, args).await
+            let mode = mode(cli, app);
+            agents::with_app(&ctx, IntegrationKind::Codex, mode, workspace, args).await
         }
         AgentsCommand::T3 { workspace, args } => {
-            agents::open_app(&ctx, workspace, "t3", args).await
+            agents::open_app(&ctx, workspace, &agents::T3, args).await
         }
         #[cfg(feature = "happy")]
         AgentsCommand::Happy {
@@ -78,5 +73,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             };
             plan::start(&ctx, issue, repository, pick, options).await
         }
+    }
+}
+
+/// The mode `--cli` or `--app` selects; neither keeps the configured one.
+fn mode(cli: bool, app: bool) -> Option<AgentMode> {
+    if cli {
+        Some(AgentMode::Cli)
+    } else if app {
+        Some(AgentMode::App)
+    } else {
+        None
     }
 }

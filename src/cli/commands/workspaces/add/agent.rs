@@ -33,7 +33,7 @@ struct StoredAddAgent {
     #[serde(default)]
     tracked: bool,
     #[serde(default)]
-    codex_mode: Option<crate::agent::CodexMode>,
+    codex_mode: Option<crate::agent::AgentMode>,
 }
 
 /// Codex's CLI meant a tracked launch.
@@ -41,7 +41,7 @@ impl From<StoredAddAgent> for ResolvedAddAgent {
     fn from(stored: StoredAddAgent) -> Self {
         Self {
             agent: stored.agent,
-            tracked: stored.tracked || stored.codex_mode == Some(crate::agent::CodexMode::Cli),
+            tracked: stored.tracked || stored.codex_mode == Some(crate::agent::AgentMode::Cli),
         }
     }
 }

@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::{
     config::{
-        self, Api, Approvals, AutoCleanup, Cleanup, Codex, Config, Done, Issue, Land,
-        MergedCleanup, Ports, Pr, PrCleanup, Ready, Restore, Review, Simulators, Unready,
+        self, Api, Approvals, AutoCleanup, Cleanup, Config, Done, Issue, Land, MergedCleanup,
+        Ports, Pr, PrCleanup, Ready, Restore, Review, Shortcut, Simulators, Unready,
         named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
@@ -35,7 +35,7 @@ pub struct Effective {
     pub max_agents: Option<config::AgentLimit>,
     pub focus: Option<bool>,
     pub close_when_done: bool,
-    pub codex: Codex,
+    pub codex: Shortcut,
     pub herdr: config::Herdr,
     pub happy: config::Happy,
     pub copy_ignored: bool,
@@ -240,7 +240,7 @@ impl Effective {
             happy: config::Happy {
                 enabled: built_in(merged.happy.enabled, "happy.enabled")?,
             },
-            codex: Codex {
+            codex: Shortcut {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
             copy_ignored: built_in(merged.copy_ignored, "copy_ignored")?,
@@ -369,8 +369,8 @@ fn built_in() -> RepoConfig {
         happy: config::repo::Happy {
             enabled: Some(false),
         },
-        codex: config::repo::Codex {
-            default_mode: Some(Codex::default().default_mode),
+        codex: config::repo::Shortcut {
+            default_mode: Some(Shortcut::default().default_mode),
         },
         copy_ignored: Some(true),
         ports: config::repo::PortDefaults {

@@ -4,51 +4,58 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{LaunchOptions, codex::APP, trust::CODEX};
+use super::{LaunchOptions, desktop::App};
 #[cfg(feature = "happy")]
 use crate::happy::Agent;
-use crate::{agent::CodexMode, cli::context::Context, config::named_commands::Commands};
+use crate::{
+    agent::AgentMode, ai::IntegrationKind, cli::context::Context, config::named_commands::Commands,
+};
 
-/// `shoal codex`: `--cli` or `--app` overrides `codex.default_mode`.
-pub(in crate::cli) async fn codex(
+/// `shoal codex`, which runs the agent of integration `kind` or opens its
+/// desktop app: `--cli` or `--app` overrides its `default_mode`.
+pub(in crate::cli) async fn with_app(
     ctx: &Context,
-    mode: Option<CodexMode>,
+    kind: IntegrationKind,
+    mode: Option<AgentMode>,
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    let integration = super::integration(kind);
     // Explicit desktop handoffs read no settings, so no prompt template.
-    if mode == Some(CodexMode::App) {
+    if let Some(app) = integration.app().filter(|_| mode == Some(AgentMode::App)) {
         let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-        return super::launch::open_app(ctx, &workspace, APP, Some(&CODEX), args).await;
+        let trust = integration.trust_file();
+        return super::launch::open_app(ctx, &workspace, app, trust, args).await;
     }
     let options = LaunchOptions {
-        tracked: mode == Some(CodexMode::Cli),
+        tracked: mode == Some(AgentMode::Cli),
         ..Default::default()
     };
-    super::launch::shortcut(ctx, "codex".parse()?, workspace, None, args, options).await
+    let agent = kind.as_str().parse()?;
+    super::launch::shortcut(ctx, agent, workspace, None, args, options).await
 }
 
 /// Whether `shoal codex` can start: the CLI as a tracked agent, or the Codex
 /// app its `--app` opens.
 fn codex_available(installed: &Installed) -> bool {
-    installed.agent("codex") || app_available(APP, installed)
+    installed.agent("codex") || app_available(&super::CODEX_APP, installed)
 }
 
 /// `shoal t3` and other shortcuts that only open an app.
 pub(in crate::cli) async fn open_app(
     ctx: &Context,
     workspace: Option<String>,
-    program: &str,
+    app: &App,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
-    super::launch::open_app(ctx, &workspace, program, None, args).await
+    super::launch::open_app(ctx, &workspace, app, None, args).await
 }
 
-/// Whether the desktop shortcut that runs `program` can start: it starts no
-/// tracked agent, so it needs only the app's program.
-fn app_available(program: &str, installed: &Installed) -> bool {
-    installed.program(program)
+/// Whether the desktop shortcut that opens `app` can start: it starts no
+/// tracked agent, so it needs only the app.
+fn app_available(app: &App, installed: &Installed) -> bool {
+    app.available(installed.search_path)
 }
 
 /// `shoal happy <agent>`.
@@ -91,22 +98,17 @@ impl Installed<'_> {
     fn agent(&self, name: &str) -> bool {
         super::installed(name, self.commands, self.search_path)
     }
-
-    /// Whether `program` is on the search path.
-    fn program(&self, program: &str) -> bool {
-        super::program_available(program, self.search_path)
-    }
 }
 
 /// Each shortcut subcommand with whether it can start anything, so
 /// completion offers only those that can. A tracked agent's shortcut needs
-/// the agent; a desktop shortcut needs only the app's program.
+/// the agent; a desktop shortcut needs only the app.
 pub(in crate::cli) fn shortcuts(installed: &Installed) -> Vec<(&'static str, bool)> {
     vec![
         ("claude", installed.agent("claude")),
         ("codex", codex_available(installed)),
         ("happy", !happy_agents(installed).is_empty()),
-        ("t3", app_available("t3", installed)),
+        ("t3", app_available(&super::desktop::T3, installed)),
     ]
 }
 

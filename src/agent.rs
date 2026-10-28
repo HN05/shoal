@@ -6,7 +6,7 @@ use crate::state::states;
 
 states!(
     #[derive(Default)]
-    CodexMode {
+    AgentMode {
         #[default]
         Cli => "cli",
         App => "app",
