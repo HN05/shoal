@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -20,6 +21,14 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual(env["TERM"], "xterm-256color")
         for name in ("SHOAL_SCOPE_TOKEN", "ZMX_SESSION", "HERDR_ENV", "CODEX_HOME", "GIT_DIR"):
             self.assertNotIn(name, env)
+
+
+class SandboxTests(unittest.TestCase):
+    def test_the_sandbox_has_the_zmx_lock_debug_builds_open(self):
+        with tempfile.TemporaryDirectory() as root:
+            sandbox = Path(root)
+            demo.prepare_zmx_lock(sandbox)
+            self.assertTrue((sandbox / "zmx.shoal-ownership.lock").is_file())
 
 
 if __name__ == "__main__":

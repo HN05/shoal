@@ -135,7 +135,14 @@ def prepare_sandbox(shoal):
     (home / ".zshrc").write_text("PROMPT='shoal-demo %1~ %# '\n")
     (home / ".bashrc").write_text("PS1='shoal-demo \\W \\$ '\n")
     (bin_dir / "shoal").symlink_to(shoal)
+    prepare_zmx_lock(SANDBOX)
     return environment(SANDBOX, bin_dir)
+
+
+def prepare_zmx_lock(sandbox):
+    """Create the ownership lock beside the sandbox's zmx directory. Debug builds
+    only open an existing lock there, leaving the user's own to the installed Shoal."""
+    (sandbox / "zmx.shoal-ownership.lock").touch()
 
 
 def main():

@@ -47,9 +47,16 @@ fn open(path: &Path) -> Result<File> {
     if crate::build::changes_user_files() {
         options.write(true).create(true).truncate(false).mode(0o600);
     }
-    options
-        .open(path)
-        .with_context(|| format!("open terminal ownership lock {}", path.display()))
+    options.open(path).with_context(|| {
+        if crate::build::changes_user_files() {
+            format!("open terminal ownership lock {}", path.display())
+        } else {
+            format!(
+                "open terminal ownership lock {}; development builds leave creating it to the installed Shoal or an isolated sandbox",
+                path.display()
+            )
+        }
+    })
 }
 
 #[cfg(test)]
