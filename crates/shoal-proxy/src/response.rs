@@ -49,7 +49,6 @@ pub(crate) fn event_stream(stream: Bytes) -> Response<Body> {
     response
 }
 
-/// The answer when the proxy could not reach the upstream at all.
 /// The answer to a client that does not name the proxy's key.
 pub(crate) fn forbidden() -> Response<Body> {
     let mut response = Response::new(full(Bytes::from_static(
@@ -59,6 +58,7 @@ pub(crate) fn forbidden() -> Response<Body> {
     response
 }
 
+/// The answer when the proxy could not reach the upstream at all.
 pub(crate) fn bad_gateway(error: &anyhow::Error) -> Response<Body> {
     let mut response = Response::new(full(Bytes::from(format!("shoal-proxy: {error:#}\n"))));
     *response.status_mut() = StatusCode::BAD_GATEWAY;

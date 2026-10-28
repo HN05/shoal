@@ -72,10 +72,17 @@ impl Buffered {
     pub(crate) fn failure_stream(
         &self,
         failure: Failure,
-        error: Option<&serde_json::Value>,
+        error: Option<serde_json::Value>,
     ) -> Option<Bytes> {
-        let request: serde_json::Value = serde_json::from_slice(&self.body).ok()?;
-        if request["stream"] != true {
+        /// Only whether the request streams, so its conversation, which
+        /// may be megabytes, is skipped rather than parsed.
+        #[derive(serde::Deserialize)]
+        struct Streams {
+            #[serde(default)]
+            stream: bool,
+        }
+        let request: Streams = serde_json::from_slice(&self.body).ok()?;
+        if !request.stream {
             return None;
         }
         self.protocol?.failure_stream(failure, error)

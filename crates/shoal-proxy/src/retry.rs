@@ -47,10 +47,10 @@ impl Failure {
     /// The failure an HTTP failure's body names, over the one its status
     /// does: a spent quota, which no wait refills, whatever the status says.
     pub(crate) fn of_error(self, error: Option<&serde_json::Value>) -> Self {
-        let code = error.and_then(|error| error["code"].as_str().or(error["type"].as_str()));
-        match code {
-            Some(crate::stream::QUOTA_EXHAUSTED) => Self::Exhausted,
-            _ => self,
+        if error.is_some_and(crate::stream::spends_quota) {
+            Self::Exhausted
+        } else {
+            self
         }
     }
 }
@@ -194,13 +194,7 @@ pub(crate) fn error_wait(error: &serde_json::Value, now: u64) -> Option<Duration
 /// resets, which its `anthropic-ratelimit-unified-reset` header gives in
 /// Unix seconds.
 pub(crate) fn limit_reset(headers: &HeaderMap, now: u64) -> Option<Duration> {
-    let reset = headers
-        .get("anthropic-ratelimit-unified-reset")?
-        .to_str()
-        .ok()?
-        .trim()
-        .parse()
-        .ok()?;
+    let reset = header_seconds(headers, "anthropic-ratelimit-unified-reset")?;
     Some(until(reset, now))
 }
 
@@ -211,14 +205,12 @@ fn until(at: u64, now: u64) -> Duration {
 
 /// The wait a `Retry-After` header in seconds asks for.
 pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
-    let seconds = headers
-        .get("retry-after")?
-        .to_str()
-        .ok()?
-        .trim()
-        .parse()
-        .ok()?;
-    Some(Duration::from_secs(seconds))
+    header_seconds(headers, "retry-after").map(Duration::from_secs)
+}
+
+/// The whole number of seconds header `name` holds.
+fn header_seconds(headers: &HeaderMap, name: &str) -> Option<u64> {
+    headers.get(name)?.to_str().ok()?.trim().parse().ok()
 }
 
 #[cfg(test)]

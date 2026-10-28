@@ -131,7 +131,7 @@ fn usage_limits_are_rate_limits_whose_own_error_reaches_codex() {
         "resets_in_seconds": 7200,
     });
     let stream = Protocol::OpenAiResponses
-        .failure_stream(Failure::RateLimited, Some(&error))
+        .failure_stream(Failure::RateLimited, Some(error.clone()))
         .unwrap();
     let (_, _, data) = next_event(&stream).unwrap();
     let reported = &data["response"]["error"];

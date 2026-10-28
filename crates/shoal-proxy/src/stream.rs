@@ -68,7 +68,7 @@ impl Protocol {
     /// The upstream's own `error`, from an HTTP failure, is what the agent
     /// hears when there is one, so it sees the upstream's message and reset
     /// time rather than the proxy's.
-    pub(crate) fn failure_stream(self, failure: Failure, error: Option<&Value>) -> Option<Bytes> {
+    pub(crate) fn failure_stream(self, failure: Failure, error: Option<Value>) -> Option<Bytes> {
         let code = match failure {
             Failure::RateLimited => "rate_limit_exceeded",
             Failure::Overloaded | Failure::Unreachable => "server_is_overloaded",
@@ -80,7 +80,7 @@ impl Protocol {
             Self::AnthropicMessages => None,
             Self::OpenAiResponses => {
                 let mut reported = match error {
-                    Some(Value::Object(error)) => error.clone(),
+                    Some(Value::Object(error)) => error,
                     _ => serde_json::Map::new(),
                 };
                 let code = reported
@@ -129,7 +129,14 @@ fn anthropic_failure(error: Option<&str>) -> Failure {
 }
 
 /// The code OpenAI names a spent quota with.
-pub(crate) const QUOTA_EXHAUSTED: &str = "insufficient_quota";
+const QUOTA_EXHAUSTED: &str = "insufficient_quota";
+
+/// Whether an upstream `error` says its account's quota is spent, by the
+/// code OpenAI classifies it with, or its type.
+pub(crate) fn spends_quota(error: &Value) -> bool {
+    let code = error["code"].as_str().or(error["type"].as_str());
+    openai_failure(code) == Failure::Exhausted
+}
 
 fn openai_failure(code: Option<&str>) -> Failure {
     match code {
@@ -166,7 +173,7 @@ pub(crate) async fn open(protocol: Protocol, body: &mut Incoming) -> Result<Open
                 Kind::Preamble => {}
                 Kind::Content => return Ok(Opening::Content(read.freeze())),
                 Kind::Failure(failure) => {
-                    return Ok(Opening::Failure(failure, error_of(&data), read.freeze()));
+                    return Ok(Opening::Failure(failure, error_of(data), read.freeze()));
                 }
             }
         }
@@ -182,11 +189,13 @@ pub(crate) async fn open(protocol: Protocol, body: &mut Incoming) -> Result<Open
 
 /// The error object a failure event carries: a failed response's, an error
 /// event's own, or its data's.
-fn error_of(data: &Value) -> Option<Value> {
-    [&data["response"]["error"], &data["error"], data]
-        .into_iter()
-        .find(|error| error.is_object())
-        .cloned()
+fn error_of(mut data: Value) -> Option<Value> {
+    for pointer in ["/response/error", "/error"] {
+        if data.pointer(pointer).is_some_and(Value::is_object) {
+            return data.pointer_mut(pointer).map(Value::take);
+        }
+    }
+    data.is_object().then_some(data)
 }
 
 /// The first complete event in `buffer`: where it ends, its name and its

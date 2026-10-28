@@ -58,6 +58,20 @@ struct Failed {
     response: Response<Body>,
 }
 
+impl Failed {
+    /// A `failure` the agent hears as the proxy's own 502 for `error`, with
+    /// no wait or error of the upstream's.
+    fn gateway(failure: Failure, error: &anyhow::Error) -> Self {
+        Self {
+            failure,
+            retry_after: None,
+            in_stream: false,
+            error: None,
+            response: bad_gateway(error),
+        }
+    }
+}
+
 impl Forwarder {
     pub(crate) fn new(
         upstream: Upstream,
@@ -146,27 +160,19 @@ impl Forwarder {
             Bound::Unbounded | Bound::GivenUp => return self.send(request).await,
         };
         if remaining.is_zero() {
-            return Attempt::Failed(Failed {
-                failure: Failure::Unreachable,
-                retry_after: None,
-                in_stream: false,
-                error: None,
-                response: bad_gateway(&anyhow::anyhow!(
-                    "the proxy gave up on the upstream's outage"
-                )),
-            });
+            return Attempt::Failed(Failed::gateway(
+                Failure::Unreachable,
+                &anyhow::anyhow!("the proxy gave up on the upstream's outage"),
+            ));
         }
         tokio::select! {
             attempt = self.send(request) => attempt,
-            () = self.clock.deadline(remaining) => Attempt::Failed(Failed {
-                failure: Failure::Unreachable,
-                retry_after: None,
-                in_stream: false,
-                error: None,
-                response: bad_gateway(&anyhow::anyhow!(
+            () = self.clock.deadline(remaining) => Attempt::Failed(Failed::gateway(
+                Failure::Unreachable,
+                &anyhow::anyhow!(
                     "the upstream did not answer before the proxy gave up on its outage"
-                )),
-            }),
+                ),
+            )),
         }
     }
 
@@ -179,13 +185,7 @@ impl Forwarder {
             Ok(response) => response,
             Err(error) => {
                 let error = anyhow::Error::from(error).context("reach the upstream");
-                return Attempt::Failed(Failed {
-                    failure: Failure::Unreachable,
-                    retry_after: None,
-                    in_stream: false,
-                    error: None,
-                    response: bad_gateway(&error),
-                });
+                return Attempt::Failed(Failed::gateway(Failure::Unreachable, &error));
             }
         };
         match (Failure::of_status(response.status()), request.protocol) {
@@ -220,38 +220,35 @@ impl Forwarder {
         Some(wait)
     }
 
-    /// The answer the agent gets for the last `failed` attempt, reported
-    /// when the proxy retries such failures. A streaming request whose
-    /// protocol ends a turn on a failure inside the stream gets one in place
-    /// of an HTTP failure, which the agent would retry itself.
+    /// The answer the agent gets for the last `failed` attempt. A streaming
+    /// request whose protocol ends a turn on a failure inside the stream
+    /// gets one in place of an HTTP failure, which the agent would retry
+    /// itself. Every failure is reported but one no retry fixes that the
+    /// agent hears as the upstream's HTTP failure: that one ends no turn
+    /// the proxy knows of. A spent quota still ends the turn.
     fn give_up(&self, failed: Failed, request: &Buffered) -> Response<Body> {
-        // A spent quota ends the turn like a failure the proxy gave up on,
-        // though it was never retried.
-        if !failed.failure.retryable() && failed.failure != Failure::Exhausted {
-            // One inside the stream still ends the agent's turn, which an
-            // agent without a hook for it learns of only here.
-            if failed.in_stream {
-                self.report(Event::Failed {
-                    failure: failed.failure,
-                    in_stream: true,
-                    wait: None,
-                    subagent: request.sent_by_subagent(),
-                });
-            }
+        let other = failed.failure == Failure::Other;
+        if other && !failed.in_stream {
             return failed.response;
         }
-        let failed = match request.failure_stream(failed.failure, failed.error.as_ref()) {
+        let stream = request.failure_stream(failed.failure, failed.error);
+        let failed = match stream {
             Some(stream) if !failed.in_stream => Failed {
                 in_stream: true,
+                error: None,
                 response: event_stream(stream),
                 ..failed
             },
-            _ => failed,
+            _ => Failed {
+                error: None,
+                ..failed
+            },
         };
         self.report(Event::Failed {
             failure: failed.failure,
             in_stream: failed.in_stream,
-            wait: failed.retry_after,
+            // A failure no retry fixes names no wait to keep to.
+            wait: failed.retry_after.filter(|_| !other),
             subagent: request.sent_by_subagent(),
         });
         failed.response
@@ -304,8 +301,6 @@ async fn failed_status(
     })
 }
 
-/// The first events of `response`'s stream: a failure among them, or an end
-/// before any content, is an attempt that failed; content goes to the agent.
 /// How long the upstream says it refuses requests after `failure`, by its
 /// response's `headers` and its `error`: the latest of `Retry-After`, the
 /// error's reset and, for a rate limit, Anthropic's reset header, since a
@@ -331,6 +326,8 @@ fn named_wait(
     .max()
 }
 
+/// The first events of `response`'s stream: a failure among them, or an end
+/// before any content, is an attempt that failed; content goes to the agent.
 async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Clock) -> Attempt {
     let (mut parts, mut body) = response.into_parts();
     strip_hop_by_hop(&mut parts.headers);
@@ -340,15 +337,10 @@ async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Cl
             Attempt::Answered(Response::from_parts(parts, prefixed(read, body)))
         }
         // An agent that gets it must not take it for a whole answer.
-        Ok(Opening::Ended(_)) => Attempt::Failed(Failed {
-            failure: Failure::ServerError,
-            retry_after: None,
-            in_stream: false,
-            error: None,
-            response: bad_gateway(&anyhow::anyhow!(
-                "the upstream's stream ended before any content"
-            )),
-        }),
+        Ok(Opening::Ended(_)) => Attempt::Failed(Failed::gateway(
+            Failure::ServerError,
+            &anyhow::anyhow!("the upstream's stream ended before any content"),
+        )),
         // The event's error and the response's headers say how long to
         // wait, as an HTTP failure's do.
         Ok(Opening::Failure(failure, error, read)) => Attempt::Failed(Failed {
@@ -358,13 +350,7 @@ async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Cl
             error,
             response: Response::from_parts(parts, full(read)),
         }),
-        Err(error) => Attempt::Failed(Failed {
-            failure: Failure::ServerError,
-            retry_after: None,
-            in_stream: false,
-            error: None,
-            response: bad_gateway(&error),
-        }),
+        Err(error) => Attempt::Failed(Failed::gateway(Failure::ServerError, &error)),
     }
 }
 
