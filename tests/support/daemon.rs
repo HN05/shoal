@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     io::{Read, Seek},
-    os::unix::fs::PermissionsExt,
+    os::unix::{fs::PermissionsExt, process::CommandExt},
     path::Path,
     process::{Child, Command, Stdio},
 };
@@ -19,7 +19,10 @@ pub struct DaemonGuard {
 impl DaemonGuard {
     /// Configure per-test daemon environment on `launch` before calling this.
     pub fn start(root: &Path, launch: &mut Command) -> Self {
-        launch.args(["daemon", "run"]).stdout(Stdio::null());
+        launch
+            .args(["daemon", "run"])
+            .stdout(Stdio::null())
+            .process_group(0);
         let mut starting = None;
         support::wait::wait_for("daemon startup", || {
             let daemon = starting.get_or_insert_with(|| {
@@ -57,9 +60,21 @@ impl DaemonGuard {
     }
 
     pub fn restart(&mut self, root: &Path, launch: &mut Command) {
-        let _ = self.child.kill();
-        self.child.wait().unwrap();
+        self.kill();
         *self = Self::start(root, launch);
+    }
+
+    /// Kill the daemon with the commands it runs in its process group, which
+    /// launchd would otherwise adopt; one with a hidden environment, such as
+    /// `lsof`, fails the setup checks of other tests' daemons. A daemon a test
+    /// launched itself may lead no group.
+    pub fn kill(&mut self) {
+        // While the daemon is unreaped, no other process can take its group ID.
+        if matches!(self.child.try_wait(), Ok(None)) {
+            unsafe { libc::kill(-(self.child.id() as i32), libc::SIGKILL) };
+        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 
     /// What the daemon wrote to stderr so far.
@@ -89,8 +104,7 @@ impl Drop for DaemonGuard {
         if std::thread::panicking() {
             eprintln!("{}", self.report());
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.kill();
     }
 }
 

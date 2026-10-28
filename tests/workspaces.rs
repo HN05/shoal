@@ -6837,8 +6837,7 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
         "first",
     ]);
     let lease = fixture.ok(&["acquire", "sim", "--workspace", "first"]);
-    fixture.daemon.child.kill().unwrap();
-    fixture.daemon.child.wait().unwrap();
+    fixture.daemon.kill();
     fixture.restart();
     assert_eq!(
         fixture.ok(&["acquire", "sim", "--workspace", "first"]),
@@ -7284,8 +7283,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
     );
     fixture.ok(&["rm", "third"]);
     assert_eq!(fixture.ok(&["history", "sim", "--all"]), history);
-    fixture.daemon.child.kill().unwrap();
-    fixture.daemon.child.wait().unwrap();
+    fixture.daemon.kill();
     fixture.restart();
     assert_eq!(fixture.ok(&["history", "sim", "--all"]), history);
     let devices: Value = serde_json::from_str(
@@ -7911,8 +7909,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     assert_eq!(successes.len(), 3);
     let leases = fixture.ok(&["leases", "resource", "--all"]);
     assert_eq!(leases[0]["leases"].as_array().unwrap().len(), 3);
-    fixture.daemon.child.kill().unwrap();
-    fixture.daemon.child.wait().unwrap();
+    fixture.daemon.kill();
     fixture.restart();
     assert_eq!(fixture.ok(&["leases", "resource", "--all"]), leases);
     fixture.ok(&["alerts"]);
@@ -9008,8 +9005,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
         "--mode",
         "write",
     ]);
-    fixture.daemon.child.kill().unwrap();
-    fixture.daemon.child.wait().unwrap();
+    fixture.daemon.kill();
     fixture.restart();
     assert_eq!(
         fixture.ok(&[
@@ -10970,8 +10966,7 @@ fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value {
         .spawn()
         .unwrap();
     let execution = wait_registered_execution(fixture, workspace);
-    fixture.daemon.child.kill().unwrap();
-    fixture.daemon.child.wait().unwrap();
+    fixture.daemon.kill();
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     let group = execution["child"]["pid"].as_i64().unwrap() as i32;
@@ -15605,8 +15600,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
         if interruption == "daemon" {
-            fixture.daemon.child.kill().unwrap();
-            fixture.daemon.child.wait().unwrap();
+            fixture.daemon.kill();
         } else if interruption == "interrupt" {
             assert_eq!(unsafe { libc::kill(land.id() as i32, libc::SIGINT) }, 0);
         } else {
@@ -22399,8 +22393,7 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
     let mut watchers = Vec::new();
     for (tab, daemon_running) in [("w1:t1", true), ("w1:t2", false)] {
         if !daemon_running {
-            fixture.daemon.child.kill().unwrap();
-            fixture.daemon.child.wait().unwrap();
+            fixture.daemon.kill();
         }
         let mut watcher = watch(&fixture, &active, tab);
         wait_until("Herdr tab polling", || tab_gets(&fixture, tab) >= 2);

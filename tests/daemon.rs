@@ -93,8 +93,7 @@ fn daemon_guard_reaps_child_when_a_test_panics() {
 fn daemon_guard_reports_the_daemon_exit_and_log() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let mut daemon = DaemonGuard::start(root.path(), &mut command(root.path()));
-    daemon.child.kill().unwrap();
-    daemon.child.wait().unwrap();
+    daemon.kill();
     let report = daemon.report();
     assert!(report.starts_with("daemon exited (signal: 9"), "{report}");
     assert!(report.contains("shoal daemon listening on"), "{report}");
@@ -337,8 +336,7 @@ fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
 #[test]
 fn socket_is_recovered_after_abrupt_exit() {
     let mut daemon = Daemon::start();
-    daemon.guard.child.kill().unwrap();
-    daemon.guard.child.wait().unwrap();
+    daemon.guard.kill();
     assert!(daemon.root.path().join("state/daemon.sock").exists());
     daemon
         .guard
